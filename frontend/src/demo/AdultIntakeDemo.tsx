@@ -28,6 +28,11 @@ export function AdultIntakeDemo() {
 	const connectionManagerRef = useRef<ConnectionManager | null>(null)
 	const [status, setStatus] = useState<string>('Ready')
 
+	// FIX #1: Shared audio stream (created BEFORE React rendering to prevent race conditions)
+	const [sharedStream, setSharedStream] = useState<MediaStream | null>(null)
+	const [streamError, setStreamError] = useState<string | null>(null)
+	const [streamReady, setStreamReady] = useState(false)
+
 	// Detect mobile on mount
 	useEffect(() => {
 		const checkMobile = () => {
@@ -37,6 +42,54 @@ export function AdultIntakeDemo() {
 		window.addEventListener('resize', checkMobile)
 		return () => window.removeEventListener('resize', checkMobile)
 	}, [])
+
+	// FIX #1: Create shared audio stream EARLY (before overlays render)
+	// This prevents race conditions where VAD initializes before stream is ready
+	useEffect(() => {
+		let mounted = true
+
+		async function initSharedStream() {
+			try {
+				console.log('[AdultIntakeDemo] 🎤 Creating shared audio stream early...')
+				const stream = await navigator.mediaDevices.getUserMedia({
+					audio: {
+						echoCancellation: true,      // Browser AEC (critical for preventing echo)
+						noiseSuppression: true,       // Reduces background noise
+						autoGainControl: true,        // Normalizes microphone volume
+						channelCount: 1,              // Mono audio
+						sampleRate: 16000,            // Match recording sample rate
+					},
+				})
+
+				if (mounted) {
+					setSharedStream(stream)
+					setStreamReady(true)
+					console.log('[AdultIntakeDemo] ✅ Shared stream ready (AEC enabled)')
+				} else {
+					// Component unmounted during async operation, clean up
+					stream.getTracks().forEach(track => track.stop())
+				}
+			} catch (err) {
+				console.error('[AdultIntakeDemo] ❌ Failed to create shared stream:', err)
+				if (mounted) {
+					const errorMsg = err instanceof Error ? err.message : 'Microphone access denied'
+					setStreamError(errorMsg)
+					setStreamReady(true) // Still set ready so overlays can render (they'll show error)
+				}
+			}
+		}
+
+		initSharedStream()
+
+		return () => {
+			mounted = false
+			// Clean up stream on unmount
+			if (sharedStream) {
+				console.log('[AdultIntakeDemo] 🧹 Cleaning up shared stream')
+				sharedStream.getTracks().forEach(track => track.stop())
+			}
+		}
+	}, []) // Only run once on mount
 
 	// Add tab close warning if form has data
 	useEffect(() => {
@@ -157,16 +210,25 @@ export function AdultIntakeDemo() {
 		loadFormAndSchema()
 	}, [])
 
-	// Initialize shared connection manager when schema is loaded
+	// Initialize shared connection manager when schema is loaded AND stream is ready
+	// FIX #1: Wait for stream to be ready before creating connection manager
 	useEffect(() => {
 		if (!schema || !sectionIndex) return
+		if (!streamReady) return // Wait for stream initialization to complete
 		if (connectionManagerRef.current) return // Already initialized
 
 		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
-		const manager = createConnectionManager(state.schema, (newStatus) => {
-			setStatus(newStatus)
-		}, 'English')
-		
+
+		// Pass shared stream to connection manager (prevents duplicate getUserMedia calls)
+		const manager = createConnectionManager(
+			state.schema,
+			(newStatus) => {
+				setStatus(newStatus)
+			},
+			'English',
+			sharedStream || undefined // Pass stream if available (undefined if permission denied)
+		)
+
 		connectionManagerRef.current = manager
 		setConnectionManager(manager)
 
@@ -177,7 +239,7 @@ export function AdultIntakeDemo() {
 			}
 			setConnectionManager(null)
 		}
-	}, [schema, sectionIndex])
+	}, [schema, sectionIndex, streamReady, sharedStream])
 
 	const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/fill'
 
@@ -187,13 +249,16 @@ export function AdultIntakeDemo() {
 			<div ref={formContainerRef} className="form-content"></div>
 
 			{/* Voice Overlay (mobile vs desktop) */}
-			{isFormLoaded && schema && sectionIndex && connectionManager && (
+			{/* FIX #1: Only render overlays when stream is ready (prevents race conditions) */}
+			{isFormLoaded && schema && sectionIndex && connectionManager && streamReady && (
 				isMobile ? (
 					<VoiceOverlayMobile 
 						schema={schema} 
 						sectionIndex={sectionIndex} 
 						wsUrl={wsUrl}
 						connectionManager={connectionManager}
+						sharedStream={sharedStream}
+						streamError={streamError}
 						status={status}
 					/>
 				) : (
@@ -203,6 +268,8 @@ export function AdultIntakeDemo() {
 						wsUrl={wsUrl}
 						connectionManager={connectionManager}
 						status={status}
+						sharedStream={sharedStream}
+						streamError={streamError}
 					/>
 				)
 			)}

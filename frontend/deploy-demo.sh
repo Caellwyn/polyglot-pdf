@@ -23,9 +23,17 @@ fi
 PROD_WS_URL="wss://voice-form-filler-773443099751.us-central1.run.app/ws/fill"
 echo "🔧 Building with WebSocket URL: $PROD_WS_URL"
 
-# Build production demo
+# Check if VAD assets exist, download if not
+if [ ! -d "public/vad-assets" ]; then
+    echo "📦 VAD assets not found, downloading..."
+    ./download-vad-assets.sh
+else
+    echo "✓ VAD assets found"
+fi
+
+# Build production demo with environment variables
 echo "📦 Building production demo..."
-VITE_WS_URL="$PROD_WS_URL" npm run build:demo
+VITE_WS_URL="$PROD_WS_URL" VITE_GCS_BUCKET="$VOICE_GCS_BUCKET" npm run build:demo
 
 # Verify build output exists
 if [ ! -f "dist/demo/demo.html" ]; then
@@ -83,6 +91,19 @@ gcloud storage cp -r dist/shared \
 gcloud storage cp -r dist/demo/bookmarklet \
     gs://$VOICE_GCS_BUCKET/demo/ \
     --cache-control="public, max-age=31536000"
+
+# Upload VAD assets (ONNX models + WASM runtime) - self-hosted for reliability
+# These were previously loaded from CDN, causing slow initialization on cloud
+echo "📦 Uploading VAD assets (~5 MB)..."
+if [ -d "public/vad-assets" ]; then
+    gcloud storage cp -r public/vad-assets \
+        gs://$VOICE_GCS_BUCKET/ \
+        --cache-control="public, max-age=31536000"
+    echo "✓ VAD assets uploaded (self-hosted, no CDN dependency)"
+else
+    echo "⚠️  Warning: VAD assets not found at public/vad-assets/"
+    echo "   Run ./download-vad-assets.sh to download them"
+fi
 
 # Make bucket contents publicly readable (if not already set)
 echo "🌐 Setting public access on bucket..."
