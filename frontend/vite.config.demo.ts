@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 
-// Plugin to serve AudioWorklet file in dev mode
+// Plugin to serve AudioWorklet file and VAD assets in dev mode
 function serveWorkletPlugin() {
 	return {
 		name: 'serve-worklet',
@@ -18,6 +18,26 @@ function serveWorkletPlugin() {
 						return
 					}
 				}
+
+				// Serve ONNX Runtime .mjs files from public directory (fix Vite import restrictions)
+				if (req.url?.startsWith('/vad-assets/')) {
+					const assetPath = resolve(__dirname, 'public', req.url.split('?')[0])
+					if (existsSync(assetPath)) {
+						// Set correct MIME type based on extension
+						if (assetPath.endsWith('.mjs')) {
+							res.setHeader('Content-Type', 'application/javascript')
+						} else if (assetPath.endsWith('.wasm')) {
+							res.setHeader('Content-Type', 'application/wasm')
+						} else if (assetPath.endsWith('.onnx')) {
+							res.setHeader('Content-Type', 'application/octet-stream')
+						} else if (assetPath.endsWith('.js')) {
+							res.setHeader('Content-Type', 'application/javascript')
+						}
+						res.end(readFileSync(assetPath))
+						return
+					}
+				}
+
 				next()
 			})
 		},
