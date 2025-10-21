@@ -7,6 +7,30 @@ import { existsSync, readFileSync } from 'fs'
 function serveWorkletPlugin() {
 	return {
 		name: 'serve-worklet',
+
+		// Handle module resolution for VAD assets
+		resolveId(id: string) {
+			// Intercept VAD asset imports before Vite processes them
+			if (id.startsWith('/vad-assets/')) {
+				// Return the ID as-is to signal we'll handle loading it
+				return id
+			}
+			return null
+		},
+
+		// Load VAD assets from public directory
+		load(id: string) {
+			if (id.startsWith('/vad-assets/')) {
+				const assetPath = resolve(__dirname, 'public', id)
+				if (existsSync(assetPath)) {
+					// Read and return the file content
+					const content = readFileSync(assetPath, 'utf-8')
+					return content
+				}
+			}
+			return null
+		},
+
 		configureServer(server: any) {
 			server.middlewares.use((req: any, res: any, next: any) => {
 				// Serve the AudioWorklet file from dist in dev mode
@@ -19,7 +43,7 @@ function serveWorkletPlugin() {
 					}
 				}
 
-				// Serve ONNX Runtime .mjs files from public directory (fix Vite import restrictions)
+				// Serve VAD assets directly (for fetch requests, not imports)
 				if (req.url?.startsWith('/vad-assets/')) {
 					const assetPath = resolve(__dirname, 'public', req.url.split('?')[0])
 					if (existsSync(assetPath)) {
