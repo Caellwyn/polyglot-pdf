@@ -120,7 +120,6 @@ class LiveAIGemini(ILiveAI):
         self._on_audio = None
         self._on_tool_call = None
         self._system_instruction: Optional[str] = None
-        self._initial_message: str = ""
         self._function_declarations: Optional[List[Dict[str, Any]]] = None
 
         # Whether Gemini should be asked to return transcripts/text
@@ -197,7 +196,6 @@ class LiveAIGemini(ILiveAI):
         on_audio=None,
         on_tool_call=None,
         system_instruction: str | None = None,
-        initial_message: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
     ):
@@ -212,7 +210,6 @@ class LiveAIGemini(ILiveAI):
         self._on_audio = on_audio
         self._on_tool_call = on_tool_call
         self._system_instruction = system_instruction
-        self._initial_message = initial_message
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
         # Honor explicit enable_transcripts flag from the caller (UI/service).
         # If enable_transcripts is False, we will not request TEXT responses from Gemini

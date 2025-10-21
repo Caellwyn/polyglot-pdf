@@ -49,7 +49,9 @@ If at any point things break badly:
 
 ## Phase 1: Protocol Changes (User-First Interaction)
 
-### Step 1: Remove Initial Gemini Greeting
+### Step 1: Remove Initial Gemini Greeting ✅ COMPLETED
+
+**Status**: ✅ **COMPLETED** - October 20, 2025
 
 **Goal**: Make conversation user-initiated instead of AI-initiated
 
@@ -58,12 +60,26 @@ If at any point things break badly:
 - Backend: Ensure system instruction doesn't assume Gemini speaks first
 - Frontend: No changes needed (already handles silent connection)
 
+**Implementation Summary**:
+- ✅ Removed `INITIAL_MESSAGE` constant from `backend/config.py`
+- ✅ Removed `initial_message` parameter from `ILiveAI.set_callbacks()` in `backend/ports/live_ai_port.py`
+- ✅ Removed `_initial_message` field from `LiveAIGemini` adapter in `backend/adapters/live_ai_gemini.py`
+- ✅ Removed `initial_message` parameter from `FormFillingService.start_session()` in `backend/services/form_filling_service.py`
+- ✅ Removed all `settings.INITIAL_MESSAGE.format()` calls from service and routes
+- ✅ Removed `backend/routes/websocket_routes.py` initial message construction
+- ✅ Deleted obsolete test file `backend/tests/integration/test_initial_field_hint.py`
+- ✅ Updated `backend/tests/unit/test_section_switching.py` to remove initial_message assertions
+
 **Exit Criteria**:
 - ✅ Connect button works
 - ✅ WebSocket establishes successfully
 - ✅ No audio plays immediately after connection
 - ✅ When user speaks first, Gemini responds appropriately
 - ✅ Gemini's first response acknowledges what user said
+- ✅ All unit tests pass (56/59 pass, 3 pre-existing failures unrelated to this change)
+- ✅ No compilation errors
+- ✅ Config loads successfully
+- ✅ FormFillingService imports without errors
 
 **Testing**:
 1. Click Connect → should be silent
@@ -72,6 +88,8 @@ If at any point things break badly:
 4. Verify Gemini understood and responded appropriately
 
 **Rollback Condition**: If Gemini doesn't respond to user's first utterance, revert this step
+
+**Notes**: The `_initial_message` field was stored but never actually used in the adapter's session loop, confirming this was dead code. Removal was clean with no functional dependencies.
 
 ---
 

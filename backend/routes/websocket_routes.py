@@ -171,10 +171,9 @@ async def _handle_fill_session(
 ) -> None:
 	log = _log.bind(session_id=session_id)
 	
-	# Build system instruction and initial message BEFORE starting session
-	# System instruction goes in Gemini config, initial message sent after connection
+	# Build system instruction BEFORE starting session
+	# System instruction goes in Gemini config
 	system_instruction = None
-	initial_message = None
 	
 	if schema:
 		# Update schema with fill_language
@@ -194,20 +193,8 @@ async def _handle_fill_session(
 		)
 		
 		# Removed verbose logging - just track session start below
-		
-		# Build initial message with field hint from frontend
-		# Frontend computes this before connection, so no async request needed
-		from backend.config import get_settings
-		settings = get_settings()
-		
-		# Use .format() to replace the {next_field_hint} placeholder in the template
-		if initial_field_hint:
-			initial_message = settings.INITIAL_MESSAGE.format(next_field_hint=initial_field_hint)
-		else:
-			# Fallback if no hint (shouldn't happen unless form is already complete)
-			initial_message = settings.INITIAL_MESSAGE.format(next_field_hint="the first unfilled field")
 	
-	# Start session with system instruction and initial message
+	# Start session with system instruction
 	# This accepts WebSocket and starts Gemini connection
 	await service.start_session(
 		websocket,
@@ -217,7 +204,6 @@ async def _handle_fill_session(
 			schema=schema,  # Form schema for AI context
 			current_values=current_values,  # Pre-filled values for reconnect
 			system_instruction=system_instruction,  # Include in initial Gemini config
-			initial_message=initial_message,  # Sent in session loop
 		)
 	
 	try:
