@@ -22,6 +22,7 @@ import { WebFormStateManager, type FormSchema, type SectionIndex } from '../webF
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { GreetingCarousel } from './GreetingCarousel'
+import { SPOKEN_LANGUAGES } from '../shared/languages'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
@@ -51,6 +52,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
+	const [selectedLanguage, setSelectedLanguage] = useState('English')  // Track selected spoken language
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
 	const offsetRef = useRef({ x: 0, y: 0 })
@@ -298,8 +300,16 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 				const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
 
 				if (isActive) {
-					console.log('[VoiceOverlay] ✅ Connection active, starting recording')
+					console.log('[VoiceOverlay] ✅ WebSocket connected, setting up audio...')
+					// Update status to indicate audio setup in progress
+					setStatus('Setting up audio...')
+
+					// Start recording (this completes the connection)
 					await connectionManager.startRecording()
+
+					// Now fully connected - update status
+					setStatus('connected')
+					console.log('[VoiceOverlay] ✅ Audio ready - fully connected')
 					// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 					break
 				}
@@ -502,7 +512,26 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		return () => clearInterval(interval)
 	}, [currentSection, completedSections])
 
-	// Handle clear form button  
+	// Handle language selection change
+	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+		const newLanguage = event.target.value
+		setSelectedLanguage(newLanguage)
+
+		console.log('[VoiceOverlay] Language changed to:', newLanguage)
+
+		// Update connection manager if connected
+		if (connectionManager && isConnected) {
+			try {
+				await connectionManager.changeFillLanguage(newLanguage)
+				console.log('[VoiceOverlay] ✓ Language updated in Gemini session')
+			} catch (err) {
+				console.error('[VoiceOverlay] Failed to change language:', err)
+				setError(err instanceof Error ? err.message : 'Failed to change language')
+			}
+		}
+	}
+
+	// Handle clear form button
 	const handleClearForm = () => {
 		if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
 			return
@@ -644,6 +673,27 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 						</span>
 					)}
 				</div>
+
+				{/* Language Selection - Shows when connecting or connected */}
+				{!isReady && status !== 'disconnected' && status !== 'paused' && (
+					<div className="vff-language-selector">
+						<label htmlFor="vff-language-select" className="vff-language-label">
+							🌍 Spoken Language
+						</label>
+						<select
+							id="vff-language-select"
+							className="vff-language-select"
+							value={selectedLanguage}
+							onChange={handleLanguageChange}
+						>
+							{SPOKEN_LANGUAGES.map((lang) => (
+								<option key={lang.name} value={lang.name}>
+									{lang.nativeName}
+								</option>
+							))}
+						</select>
+					</div>
+				)}
 
 				{/* Section Navigation */}
 				<div className="vff-section-nav">
@@ -821,6 +871,45 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 					padding: 12px;
 					background: #f5f5f5;
 					border-radius: 8px;
+				}
+
+				.vff-language-selector {
+					margin-bottom: 16px;
+					padding: 12px;
+					background: #f0f9ff;
+					border-radius: 8px;
+					border: 1px solid #bae6fd;
+				}
+
+				.vff-language-label {
+					display: block;
+					font-size: 13px;
+					font-weight: 600;
+					color: #0369a1;
+					margin-bottom: 8px;
+				}
+
+				.vff-language-select {
+					width: 100%;
+					padding: 8px 12px;
+					font-size: 14px;
+					border: 1px solid #7dd3fc;
+					border-radius: 6px;
+					background: white;
+					color: #0c4a6e;
+					cursor: pointer;
+					transition: all 0.2s;
+				}
+
+				.vff-language-select:hover {
+					border-color: #0ea5e9;
+					box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
+				}
+
+				.vff-language-select:focus {
+					outline: none;
+					border-color: #0284c7;
+					box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 				}
 
 				.vff-status-icon {

@@ -1,9 +1,10 @@
 /**
  * Greeting prompts for language carousel
- * Shows "Say 'Hello Gemini' in your native language" in different languages
- * Used to prompt user to initiate conversation in their preferred language
- * 
- * Translations provided for 100+ languages - carousel selects 30 for display
+ * Shows activation phrases in different languages to initiate conversation with Gemini
+ * Used to prompt user to start speaking in their preferred language
+ *
+ * Source: planning_documents/hello_gemini_translations.csv
+ * Updated to match confirmed working activation phrases for Gemini
  */
 
 export interface GreetingPrompt {
@@ -14,38 +15,26 @@ export interface GreetingPrompt {
 
 /**
  * Greeting prompts in various languages
- * Format: Instruction to say "Hello Gemini" in user's native language
- * Curated selection of 30 most widely spoken languages for the carousel
+ * Format: Activation phrase to speak to Gemini (e.g., "Hello Gemini, please speak English")
+ * Curated selection of 18 languages confirmed to work with Gemini
  */
 export const GREETING_PROMPTS: GreetingPrompt[] = [
-  { language: 'English', code: 'en', text: 'Say "Hello Gemini" in your native language' },
-  { language: 'Spanish', code: 'es', text: 'Di \'Hola Géminis\' en tu idioma nativo.' },
-  { language: 'Chinese (Simplified)', code: 'zh-Hans', text: '用你的母语说"你好，双子座"。' },
-  { language: 'Hindi', code: 'hi', text: 'अपनी मूल भाषा में "नमस्ते जेमिनी" कहिए।' },
-  { language: 'Arabic', code: 'ar', text: 'قل "مرحباً يا چيميني" بلغتك الأم.' },
-  { language: 'Portuguese', code: 'pt', text: 'Diga "Olá Gemini" na sua língua nativa.' },
-  { language: 'Bengali', code: 'bn', text: 'আপনার মাতৃভাষায় \'হ্যালো জেমিনি\' বলুন।' },
-  { language: 'Russian', code: 'ru', text: 'Скажи «Привет, Джемини» на своём родном языке.' },
-  { language: 'Japanese', code: 'ja', text: '母国語で「こんにちは、ジェミニ」と言ってください。' },
-  { language: 'Punjabi', code: 'pa', text: 'ਆਪਣੀ ਮਾਂ ਬੋਲੀ ਵਿੱਚ "ਹੈਲੋ ਜੈਮਿਨੀ" ਕਹੋ।' },
-  { language: 'German', code: 'de', text: 'Sag "Hallo Gemini" in deiner Muttersprache.' },
-  { language: 'Javanese', code: 'jv', text: 'Ucapake \'Halo Gemini\' nganggo basa ibumu.' },
-  { language: 'Korean', code: 'ko', text: '모국어로 "안녕하세요 제미나이"라고 말해 주세요.' },
-  { language: 'French', code: 'fr', text: 'Dis "Bonjour Gemini" dans ta langue maternelle.' },
-  { language: 'Turkish', code: 'tr', text: 'Ana dilinde "Merhaba Gemini" de.' },
-  { language: 'Vietnamese', code: 'vi', text: 'Nói "Chào Gemini" bằng tiếng mẹ đẻ của bạn.' },
-  { language: 'Italian', code: 'it', text: 'Di\' "Ciao Gemini" nella tua lingua madre.' },
-  { language: 'Thai', code: 'th', text: 'พูดว่า "สวัสดี Gemini" ในภาษาแม่ของคุณ.' },
-  { language: 'Persian', code: 'fa', text: 'به زبان مادری خود بگویید \'سلام جِمینی\'.' },
-  { language: 'Polish', code: 'pl', text: 'Powiedz „Cześć Gemini" w swoim języku ojczystym.' },
-  { language: 'Ukrainian', code: 'uk', text: 'Скажи «Привіт, Дженімі» своєю рідною мовою.' },
-  { language: 'Urdu', code: 'ur', text: 'اپنی مادری زبان میں \'ہیلو جیمنی\' کہیں۔' },
-  { language: 'Indonesian', code: 'id', text: 'Ucapkan \'Halo Gemini\' dalam bahasa ibumu.' },
-  { language: 'Dutch', code: 'nl', text: 'Zeg "Hallo Gemini" in je moedertaal.' },
-  { language: 'Greek', code: 'el', text: 'Πες «Γεια σου Gemini» στη μητρική σου γλώσσα.' },
-  { language: 'Czech', code: 'cs', text: 'Řekněte „Ahoj Gemini" ve svém rodném jazyce.' },
-  { language: 'Swedish', code: 'sv', text: 'Säg "Hej Gemini" på ditt modersmål.' },
-  { language: 'Romanian', code: 'ro', text: 'Spune "Salut Gemini" în limba ta maternă.' },
-  { language: 'Hebrew', code: 'iw', text: 'אמור "שלום ג\'מיני" בשפת האם שלך.' },
-  { language: 'Swahili', code: 'sw', text: 'Sema \'Habari Gemini\' kwa lugha yako ya asili.' },
+  { language: 'English', code: 'en', text: 'Hello Gemini, please speak English' },
+  { language: 'Español', code: 'es', text: 'Hola Gemini, por favor habla español' },
+  { language: '中文', code: 'zh-Hans', text: '你好 Gemini, 请说中文' },
+  { language: 'Tagalog', code: 'tl', text: 'Kumusta Gemini, pakisabi sa Tagalog' },
+  { language: 'العربية', code: 'ar', text: 'مرحباً يا جيميناي، من فضلك تحدث العربية' },
+  { language: 'Français', code: 'fr', text: 'Bonjour Gemini, veuillez parler français' },
+  { language: '한국어', code: 'ko', text: '안녕하세요 Gemini, 한국어로 말해주세요' },
+  { language: 'Deutsch', code: 'de', text: 'Hallo Gemini, sprich bitte Deutsch' },
+  { language: 'Português', code: 'pt', text: 'Olá Gemini, por favor, fale português' },
+  { language: 'हिन्दी', code: 'hi', text: 'नमस्ते जेमिनी, कृपया हिंदी बोलें' },
+  { language: 'Italiano', code: 'it', text: 'Ciao Gemini, parla italiano per favore' },
+  { language: 'اردو', code: 'ur', text: 'ہیلو جیمنی، برائے مہربانی اردو بولیں' },
+  { language: 'فارسی', code: 'fa', text: 'سلام جیمینی، لطفا فارسی صحبت کن' },
+  { language: 'Nederlands', code: 'nl', text: 'Hallo Gemini, spreek alstublieft Nederlands' },
+  { language: 'Українська', code: 'uk', text: 'Привіт Gemini, будь ласка, говори українською' },
+  { language: 'Svenska', code: 'sv', text: 'Hej Gemini, tala svenska tack' },
+  { language: 'Afrikaans', code: 'af', text: 'Hallo Gemini, praat asseblief Afrikaans' },
+  { language: 'Qhichwa', code: 'qu', text: 'Allillanchu Gemini, ama hina kaychu, Qhichwa rimay' },
 ]
