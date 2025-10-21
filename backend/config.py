@@ -7,7 +7,6 @@ import os
 class Settings(BaseModel):
 	MODEL_LIVE: str = "gemini-live-2.5-flash-preview"
 	MODEL_NATIVE: str = "gemini-live-2.5-flash-preview-native-audio-09-2025"
-	MODEL_LABELING: str = "gemini-2.5-flash-lite"
 	# Whether to use Vertex AI for LLM and embedding operations.
 	VERTEXAI: bool = True
 	USE_NATIVE_AUDIO: bool = True

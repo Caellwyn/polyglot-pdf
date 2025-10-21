@@ -4,7 +4,6 @@ import json
 from copy import deepcopy
 
 from backend.config import Settings, get_settings
-from ..ports.labeling_ai_port import ILabelingAI
 from ..ports.live_ai_port import ILiveAI
 import structlog
 import os
@@ -41,12 +40,10 @@ class FormFillingService:
 
     def __init__(
         self,
-        labeling_ai: Optional[ILabelingAI] = None,
         live_ai: Optional[ILiveAI] = None,
         settings: Optional[Settings] = None,
     ):
-        # AI adapters are optional for unit tests that only exercise form logic
-        self._labeling_ai = labeling_ai
+        # AI adapter is optional for unit tests that only exercise form logic
         self._live_ai = live_ai
         self._settings = settings or get_settings()
         self._websocket = None

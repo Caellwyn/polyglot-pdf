@@ -90,8 +90,8 @@ Voice-driven medical form filling system using Gemini Live API. Designed as a tr
 **✅ UI Enhancements**: Collapsible overlay, cleaned-up controls  
 **🚧 Phase 3**: System instruction refinement for confirmation workflow
 
-### Deprecated Components
-**⚠️ Bookmarklet**: Original arbitrary web form parser is no longer maintained. Parsing unknown web forms is out of scope for MVP. Focus is on pre-mapped, known forms (medical intake, job applications, government forms).
+### Removed Components
+**✅ Bookmarklet**: Removed from codebase. Original arbitrary web form parser was out of scope for MVP. Focus is on pre-mapped, known forms (medical intake, job applications, government forms) with manually-defined schemas.
 
 ---
 
@@ -217,11 +217,10 @@ VITE_API_URL=http://localhost:8000
 - `routes/websocket_routes.py` - WebSocket handlers
 
 ### Frontend (`frontend/`)
-- `src/demo/` - React demo application (active development)
-- `src/bookmarklet/` - DEPRECATED (archived, not maintained)
-- `src/lib/webFormConnection.ts` - WebSocket client logic
-- `src/lib/audioManager.ts` - Recording/playback with VAD
-- `src/webParser/extractFormSchema.ts` - Form schema extraction (for known forms)
+- `src/demo/` - React demo application (main entry point)
+- `src/shared/` - Shared modules (connection, audio, field management)
+- `webFormConnection.ts` - WebSocket client logic
+- `webFormState.ts` - Form state management
 
 ---
 
