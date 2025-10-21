@@ -7,21 +7,22 @@ import { existsSync, readFileSync } from 'fs'
 function serveWorkletPlugin() {
 	return {
 		name: 'serve-worklet',
+		enforce: 'pre', // Run before Vite's built-in plugins
 
 		// Handle module resolution for VAD assets
 		resolveId(id: string) {
 			// Intercept VAD asset imports before Vite processes them
 			if (id.startsWith('/vad-assets/')) {
-				// Return the ID as-is to signal we'll handle loading it
-				return id
+				// Return a special marker to bypass public directory check
+				return '\0vad-asset:' + id
 			}
 			return null
 		},
 
 		// Load VAD assets from public directory
 		load(id: string) {
-			if (id.startsWith('/vad-assets/')) {
-				const assetPath = resolve(__dirname, 'public', id)
+			if (id.startsWith('\0vad-asset:')) {
+				const assetPath = resolve(__dirname, 'public', id.slice('\0vad-asset:'.length))
 				if (existsSync(assetPath)) {
 					// Read and return the file content
 					const content = readFileSync(assetPath, 'utf-8')
