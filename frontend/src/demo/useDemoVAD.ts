@@ -58,8 +58,40 @@ SOFTWARE.
 import { useRef, useEffect } from 'react'
 import * as VAD from "@ricky0123/vad-react"
 
-const VAD_CDN_BASE = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/"
-const ORT_CDN_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/"
+/**
+ * Get VAD asset base URL (self-hosted for reliability)
+ * Development: Uses local public folder
+ * Production: Uses GCS bucket (faster, no CDN dependency)
+ */
+function getVADAssetBase(): string {
+	// Development: use local public folder
+	if (import.meta.env.DEV) {
+		return '/vad-assets/vad-web/'
+	}
+
+	// Production: use GCS bucket
+	const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
+	return `https://storage.googleapis.com/${bucket}/vad-assets/vad-web/`
+}
+
+/**
+ * Get ONNX Runtime WASM base URL (self-hosted for reliability)
+ * Development: Uses local public folder
+ * Production: Uses GCS bucket (faster, no CDN dependency)
+ */
+function getORTAssetBase(): string {
+	// Development: use local public folder
+	if (import.meta.env.DEV) {
+		return '/vad-assets/onnxruntime/'
+	}
+
+	// Production: use GCS bucket
+	const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
+	return `https://storage.googleapis.com/${bucket}/vad-assets/onnxruntime/`
+}
+
+const VAD_ASSET_BASE = getVADAssetBase()
+const ORT_ASSET_BASE = getORTAssetBase()
 
 export interface VADCallbacks {
 	onSpeechStart?: () => void
@@ -124,9 +156,9 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Don't start automatically - wait for user to click "Connect"
 		startOnLoad: false,
 
-		// Serve model + worklet assets directly from the official CDN
-		baseAssetPath: VAD_CDN_BASE,
-		onnxWASMBasePath: ORT_CDN_BASE,
+		// Serve model + worklet assets from self-hosted location (faster, more reliable)
+		baseAssetPath: VAD_ASSET_BASE,
+		onnxWASMBasePath: ORT_ASSET_BASE,
 		
 		// Browser-level audio processing (matches recording stream settings)
 		// These constraints ensure consistency with the recording system
