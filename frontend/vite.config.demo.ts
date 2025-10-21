@@ -3,35 +3,10 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
 
-// Plugin to serve AudioWorklet file and VAD assets in dev mode
+// Plugin to serve AudioWorklet file in dev mode
 function serveWorkletPlugin() {
 	return {
 		name: 'serve-worklet',
-		enforce: 'pre', // Run before Vite's built-in plugins
-
-		// Handle module resolution for VAD assets
-		resolveId(id: string) {
-			// Intercept VAD asset imports before Vite processes them
-			if (id.startsWith('/vad-assets/')) {
-				// Return a special marker to bypass public directory check
-				return '\0vad-asset:' + id
-			}
-			return null
-		},
-
-		// Load VAD assets from public directory
-		load(id: string) {
-			if (id.startsWith('\0vad-asset:')) {
-				const assetPath = resolve(__dirname, 'public', id.slice('\0vad-asset:'.length))
-				if (existsSync(assetPath)) {
-					// Read and return the file content
-					const content = readFileSync(assetPath, 'utf-8')
-					return content
-				}
-			}
-			return null
-		},
-
 		configureServer(server: any) {
 			server.middlewares.use((req: any, res: any, next: any) => {
 				// Serve the AudioWorklet file from dist in dev mode
@@ -43,26 +18,6 @@ function serveWorkletPlugin() {
 						return
 					}
 				}
-
-				// Serve VAD assets directly (for fetch requests, not imports)
-				if (req.url?.startsWith('/vad-assets/')) {
-					const assetPath = resolve(__dirname, 'public', req.url.split('?')[0])
-					if (existsSync(assetPath)) {
-						// Set correct MIME type based on extension
-						if (assetPath.endsWith('.mjs')) {
-							res.setHeader('Content-Type', 'application/javascript')
-						} else if (assetPath.endsWith('.wasm')) {
-							res.setHeader('Content-Type', 'application/wasm')
-						} else if (assetPath.endsWith('.onnx')) {
-							res.setHeader('Content-Type', 'application/octet-stream')
-						} else if (assetPath.endsWith('.js')) {
-							res.setHeader('Content-Type', 'application/javascript')
-						}
-						res.end(readFileSync(assetPath))
-						return
-					}
-				}
-
 				next()
 			})
 		},
