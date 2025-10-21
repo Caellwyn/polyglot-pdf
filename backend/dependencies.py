@@ -1,14 +1,8 @@
 from fastapi import Depends
 from typing import Any
 from backend.config import Settings, get_settings
-from backend.ports.labeling_ai_port import ILabelingAI
-from backend.adapters.labeling_ai_gemini import LabelingAIGemini
 from backend.ports.live_ai_port import ILiveAI
 from backend.adapters.live_ai_gemini import LiveAIGemini
-
-
-def get_labeling_ai(settings: Settings = Depends(get_settings)) -> ILabelingAI:
-    return LabelingAIGemini(model=settings.MODEL_LABELING)
 
 
 def get_live_ai(settings: Settings = Depends(get_settings)) -> ILiveAI:
@@ -29,7 +23,6 @@ def get_live_ai(settings: Settings = Depends(get_settings)) -> ILiveAI:
 
 
 def get_form_filling_service(
-    labeling_ai: ILabelingAI = Depends(get_labeling_ai),
     live_ai: ILiveAI = Depends(get_live_ai),
     settings: Settings = Depends(get_settings),
 ) -> Any:
@@ -37,7 +30,6 @@ def get_form_filling_service(
     from backend.services.form_filling_service import FormFillingService
 
     return FormFillingService(
-        labeling_ai=labeling_ai,
         live_ai=live_ai,
         settings=settings,
     )
