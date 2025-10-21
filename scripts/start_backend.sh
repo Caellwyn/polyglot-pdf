@@ -4,7 +4,6 @@
 
 # Navigate to project root
 cd "$(dirname "$0")/.." || exit 1
-
 # Activate virtual environment
 if [ -f ".venv/Scripts/activate" ]; then
     source .venv/Scripts/activate
@@ -27,4 +26,5 @@ echo "Starting backend server on http://localhost:8000"
 echo "Press Ctrl+C to stop"
 echo ""
 
-uvicorn backend.main:app --reload --port 8000
+# In your script, instead of cd backend:
+python -m uvicorn backend.main:app

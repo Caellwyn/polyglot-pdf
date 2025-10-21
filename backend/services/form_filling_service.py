@@ -105,12 +105,11 @@ class FormFillingService:
         schema: Optional[Dict[str, Any]] = None,
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
-        initial_message: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
         
         Initializes the session and registers callbacks with system instruction
-        and initial message included in the initial Gemini connection config.
+        included in the initial Gemini connection config.
         
         Args:
             websocket: WebSocket connection
@@ -120,7 +119,6 @@ class FormFillingService:
             schema: Form schema (stored for context generation, not for state)
             current_values: Pre-filled values (ignored by backend - client is source of truth)
             system_instruction: System instruction to include in initial Gemini config
-            initial_message: Initial message to send after connection (triggers first response)
         """
         self._websocket = websocket
         self._session_id = session_id
@@ -215,9 +213,9 @@ class FormFillingService:
             
             return metadata
 
-        # system_instruction and initial_message are now passed as parameters
+        # system_instruction is now passed as parameter
         # and included in the initial Gemini connection config (not sent as updates)
-        # DO NOT shadow the parameters here!
+        # DO NOT shadow the parameter here!
 
         async def send_form_update(data: dict | None, applied_fields: list | None = None):
             # Send the form state to the connected websocket client and
@@ -544,8 +542,8 @@ class FormFillingService:
             # forwarded to the websocket client without being logged.
             # `on_audio` is optional and will be ignored by adapters that do not
             # implement it.
-            # System instruction and initial message are passed from caller
-            # and included in the initial Gemini connection config.
+            # System instruction is passed from caller and included in the initial
+            # Gemini connection config.
             try:
                 self._live_ai.set_callbacks(
                     on_form_update=on_form_update,
@@ -553,7 +551,6 @@ class FormFillingService:
                     on_audio=on_audio,
                     on_tool_call=on_tool_call,
                     system_instruction=system_instruction,
-                    initial_message=initial_message,
                     tool_declarations=tool_declarations,
                     enable_transcripts=bool(send_transcript),
                 )
@@ -567,7 +564,6 @@ class FormFillingService:
                         on_transcript=on_transcript,
                         on_tool_call=on_tool_call,
                         system_instruction=system_instruction,
-                        initial_message=initial_message,
                         tool_declarations=tool_declarations,
                     )
                 except TypeError:
@@ -754,16 +750,6 @@ class FormFillingService:
             {}  # Empty values - frontend maintains state
         )
         
-        # Build initial message with next field hint
-        from backend.config import get_settings
-        settings = get_settings()
-        
-        if next_field_hint:
-            initial_message = settings.INITIAL_MESSAGE.format(next_field_hint=next_field_hint)
-        else:
-            # Fallback if no hint provided
-            initial_message = settings.INITIAL_MESSAGE.format(next_field_hint="the next unfilled field")
-        
         # Restart Gemini session (doesn't re-accept WebSocket)
         await self._live_ai.set_callbacks(
             on_form_update=self.handle_form_update,
@@ -771,7 +757,6 @@ class FormFillingService:
             on_audio=self.handle_audio,
             on_tool_call=self.handle_tool_call,
             system_instruction=system_instruction,
-            initial_message=initial_message,
             tool_declarations=self._settings.GEMINI_TOOLS,
             enable_transcripts=self._send_transcript,
         )
@@ -920,15 +905,6 @@ class FormFillingService:
             previous_spoken_names=section_metadata.get("previous_spoken_names", [])
         )
         
-        # Build initial message with field hint
-        from backend.config import get_settings
-        settings = get_settings()
-        
-        if initial_field_hint:
-            initial_message = settings.INITIAL_MESSAGE.format(next_field_hint=initial_field_hint)
-        else:
-            initial_message = settings.INITIAL_MESSAGE.format(next_field_hint="the first unfilled field")
-        
         # Restart session using the same logic as initial connection
         websocket = self._websocket
         session_id = self._session_id
@@ -942,7 +918,6 @@ class FormFillingService:
             schema=section_schema,
             current_values=section_values,
             system_instruction=system_instruction,
-            initial_message=initial_message,
         )
         
         # 3. Notify frontend that section switch is complete

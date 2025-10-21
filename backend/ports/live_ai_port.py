@@ -36,7 +36,6 @@ class ILiveAI(ABC):
         on_audio=None,
         on_tool_call=None,
         system_instruction: str | None = None,
-        initial_message: str | None = None,
         tool_declarations: list[dict] | None = None,
         enable_transcripts: bool = False,
     ):
@@ -47,7 +46,6 @@ class ILiveAI(ABC):
         on_audio: async callable taking raw audio bytes
         on_tool_call: async callable taking (tool_name: str, arguments: dict)
         system_instruction: optional system prompt to send in session config
-        initial_message: optional initial message streamed to the model at session start
         tool_declarations: optional list of function declaration dicts (each with name/parameters)
         """
         raise NotImplementedError()
