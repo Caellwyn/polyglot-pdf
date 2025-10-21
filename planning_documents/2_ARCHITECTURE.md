@@ -110,16 +110,26 @@ GEMINI LIVE API
 
 ---
 
-## Shared Audio Stream Architecture (Echo Prevention)
+## Audio Initialization & Stream Architecture (October 21, 2025)
+
+**Recent Updates**:
+- ✅ **Fixed Race Conditions**: Audio stream now created in parent component BEFORE overlays render
+- ✅ **Self-Hosted VAD Assets**: ONNX models served from GCS bucket (5MB, eliminates CDN dependency)
+- ✅ **AudioContext Pooling**: Reuse contexts instead of creating new ones (fixes mobile reconnection failures)
+- ✅ **Consolidated VAD Control**: Single source of truth for VAD start/stop logic
+- ✅ **Connection Polling**: Replaced hard-coded delays with proper status polling
+- ✅ **Error Visibility**: Comprehensive error messages for audio failures
+
+### Shared Audio Stream Architecture (Echo Prevention)
 
 **Problem**: Dual `getUserMedia()` calls (one for VAD, one for recording) prevented browser echo cancellation from working properly, causing Gemini's TTS to trigger false VAD events (self-interruption/stuttering).
 
 **Solution**: Single shared audio stream with browser-level AEC, distributed to both VAD and recording systems.
 
-### Audio Stream Flow
+### Audio Stream Flow (Updated October 21, 2025)
 
 ```
-VoiceOverlay Component Mount
+AdultIntakeDemo Component Mount (PARENT)
   ↓
 getUserMedia({
   echoCancellation: true,    // Browser AEC (critical!)
@@ -129,15 +139,23 @@ getUserMedia({
   sampleRate: 16000           // Gemini input rate
 })
   ↓
-sharedStreamRef.current = stream  // Single source of truth
+[WAIT FOR STREAM READY] ← FIX #1: Prevent race conditions
   ↓
-  ├──→ useDemoVAD({ sharedStream })
-  │      └──→ ricky0123/vad-web (Silero VAD model)
-  │             └──→ Detects speech → sendActivityStart/End
+Pass stream as prop to overlays
+  ↓
+  ├──→ VoiceOverlay(sharedStream, streamError)
+  │      ├──→ useDemoVAD({ sharedStream })
+  │      │      └──→ ricky0123/vad-web (Silero VAD)
+  │      │             └──→ Self-hosted ONNX from GCS ← FIX #6
+  │      │             └──→ Detects speech → sendActivityStart/End
+  │      │
+  │      └──→ createConnectionManager(sharedStream)
+  │             └──→ createAudioManager(sharedStream)
+  │                    └──→ AudioContext (pooled) ← FIX #5
+  │                           └──→ AudioWorklet → PCM16 → Backend
   │
-  └──→ createConnectionManager(sharedStream)
-         └──→ createAudioManager(sharedStream)
-                └──→ AudioContext → AudioWorklet → PCM16 → Backend
+  └──→ VoiceOverlayMobile(sharedStream, streamError)
+         └──→ Same flow as desktop
 ```
 
 ### Browser Echo Cancellation
@@ -154,31 +172,90 @@ sharedStreamRef.current = stream  // Single source of truth
 - ❌ **Dual streams**: Browser AEC can't correlate microphone with playback → echo leaks through
 - ✅ **Single stream**: Browser AEC has unified reference point → echo properly cancelled
 
-### Implementation Details
+### Implementation Details (Updated October 21, 2025)
+
+**AdultIntakeDemo.tsx** (`frontend/src/demo/AdultIntakeDemo.tsx`):
+```typescript
+// FIX #1: Create stream EARLY in parent component (before overlays render)
+// This prevents race conditions where VAD initializes before stream is ready
+useEffect(() => {
+  let mounted = true
+
+  async function initSharedStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, ... }
+      })
+      if (mounted) {
+        setSharedStream(stream)
+        setStreamReady(true)  // Signal overlays can render
+      } else {
+        stream.getTracks().forEach(track => track.stop())
+      }
+    } catch (err) {
+      if (mounted) {
+        setStreamError(err.message)  // FIX #4: Show errors to user
+        setStreamReady(true)  // Render overlays with error message
+      }
+    }
+  }
+
+  initSharedStream()
+
+  return () => {
+    mounted = false
+    if (sharedStream) {
+      sharedStream.getTracks().forEach(track => track.stop())
+    }
+  }
+}, [])
+
+// Only render overlays when stream is ready
+{streamReady && (
+  <VoiceOverlay sharedStream={sharedStream} streamError={streamError} />
+)}
+```
 
 **VoiceOverlay.tsx** (`frontend/src/demo/VoiceOverlay.tsx`):
 ```typescript
-// Create stream ONCE on component mount
+// FIX #1: Accept shared stream as prop (no longer create our own)
+interface VoiceOverlayProps {
+  sharedStream?: MediaStream | null
+  streamError?: string | null  // FIX #4: Display errors
+}
+
+// Update ref when prop changes (parent manages lifecycle)
 useEffect(() => {
-  const stream = await navigator.mediaDevices.getUserMedia({ 
-    audio: { echoCancellation: true, ... } 
-  })
-  sharedStreamRef.current = stream
-  setVadReady(true)  // Signal VAD can initialize
-  
-  return () => {
-    // Cleanup: Stop all tracks on unmount
-    stream.getTracks().forEach(track => track.stop())
-  }
-}, [])
+  sharedStreamRef.current = sharedStream || null
+}, [sharedStream])
 ```
 
 **useDemoVAD.ts** (`frontend/src/demo/useDemoVAD.ts`):
 ```typescript
-// Accept optional shared stream (prevents duplicate getUserMedia)
+// FIX #6: Self-hosted VAD assets (eliminates CDN dependency)
+function getVADAssetBase(): string {
+  if (import.meta.env.DEV) {
+    return '/vad-assets/vad-web/'  // Local dev
+  }
+  const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
+  return `https://storage.googleapis.com/${bucket}/vad-assets/vad-web/`
+}
+
+function getORTAssetBase(): string {
+  if (import.meta.env.DEV) {
+    return '/vad-assets/onnxruntime/'  // Local dev
+  }
+  const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
+  return `https://storage.googleapis.com/${bucket}/vad-assets/onnxruntime/`
+}
+
 export function useDemoVAD(options?: VADOptions) {
   const vad = VAD.useMicVAD({
-    getStream: options?.sharedStream 
+    // FIX #6: Use self-hosted assets instead of CDN
+    baseAssetPath: getVADAssetBase(),
+    onnxWASMBasePath: getORTAssetBase(),
+
+    getStream: options?.sharedStream
       ? async () => options.sharedStream  // Reuse shared stream
       : async () => getUserMedia(...)     // Fallback (backward compat)
   })
@@ -192,13 +269,35 @@ export function createAudioManager(existingStream?: MediaStream) {
   const nodes = {
     stream: existingStream || null  // Use provided stream if available
   }
-  
+
   async function startRecording(...) {
     if (!nodes.stream) {
       // Only create new stream if not provided
       nodes.stream = await getUserMedia(...)
     }
-    // ... setup AudioContext, AudioWorklet, etc.
+
+    // FIX #5: AudioContext Pooling - reuse contexts instead of creating new ones
+    // Browsers limit AudioContext instances (6-8 desktop, 2-4 mobile)
+    if (!nodes.recordingContext) {
+      console.log('[AudioManager] 🎵 Creating AudioContext for recording (first time)')
+      nodes.recordingContext = new AudioContext({ sampleRate: RECORDING_SAMPLE_RATE })
+    } else {
+      console.log('[AudioManager] ♻️ Reusing existing recording AudioContext')
+      // Resume if suspended (browsers may suspend to save power)
+      if (nodes.recordingContext.state === 'suspended') {
+        await nodes.recordingContext.resume()
+      }
+    }
+
+    if (!nodes.playbackContext) {
+      console.log('[AudioManager] 🎵 Creating AudioContext for playback (first time)')
+      nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
+    } else {
+      console.log('[AudioManager] ♻️ Reusing existing playback AudioContext')
+      if (nodes.playbackContext.state === 'suspended') {
+        await nodes.playbackContext.resume()
+      }
+    }
   }
 }
 ```
@@ -266,6 +365,181 @@ export function createConnectionManager(
 - ✅ Console shows: `[AudioManager] 🔗 Reusing existing microphone stream (shared with VAD)`
 
 **Verified in**: Noisy environments (crowded bar), quiet environments, with headphones, with speakers
+
+### Self-Hosted VAD Assets (October 21, 2025)
+
+**Problem**: VAD library loaded ~5MB of ONNX models from jsdelivr CDN on each page load:
+- Slow initialization on poor connections (10-30 seconds)
+- External CDN dependency (reliability risk)
+- No control over caching
+- Extra DNS lookup + TLS handshake for different domain
+
+**Solution**: Download and self-host VAD assets on GCS bucket
+
+**Assets** (~5MB total):
+- `silero_vad.onnx` (~1.8MB) - Silero VAD model
+- `vad.worklet.bundle.min.js` - VAD worklet processor
+- `ort-wasm-simd-threaded.wasm` (~2-3MB) - ONNX Runtime WASM files
+- Supporting WASM modules
+
+**Setup**:
+```bash
+cd frontend
+./download-vad-assets.sh  # Downloads to public/vad-assets/
+```
+
+**Deployment** (`deploy-demo.sh`):
+```bash
+# Automatically downloads assets if not present
+# Uploads to gs://$VOICE_GCS_BUCKET/vad-assets/
+# 1-year cache headers (assets are content-addressed)
+```
+
+**Benefits**:
+- ✅ **Faster initialization**: Same region as app (500ms vs 10-30s on slow connections)
+- ✅ **No CDN dependency**: Eliminates jsdelivr.net failure point
+- ✅ **Better caching**: 1-year cache, same browser cache as app
+- ✅ **Simplified debugging**: Assets served from known location
+- ✅ **Version control**: Assets versioned with deployment
+
+### Consolidated VAD Control (October 21, 2025)
+
+**Problem**: Three separate code paths trying to start VAD caused race conditions:
+1. `handleConnect()` - Started VAD after connection
+2. `pendingVADStart` useEffect - Waited for VAD loading to finish
+3. Status change useEffect - Auto-started when connected
+
+This led to:
+- VAD stuck in loading state forever
+- `pendingVADStart` flag never cleared
+- Multiple redundant start calls
+- Unclear why VAD was/wasn't running
+
+**Solution**: Single source of truth useEffect with clear conditions
+
+**Implementation** (`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`):
+```typescript
+// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
+useEffect(() => {
+  const isConnected = status === 'connected' || status.startsWith('connected ')
+
+  // VAD should run when ALL conditions met:
+  const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
+
+  if (shouldRunVAD && !vad.userSpeaking) {
+    console.log('[VoiceOverlay] 🎙️ Starting VAD (conditions met)')
+    vad.start()
+  } else if (!shouldRunVAD && vad.userSpeaking) {
+    console.log('[VoiceOverlay] ⏸️ Pausing VAD (conditions not met)')
+    vad.pause()
+  }
+
+  // FIX #4: Display VAD errors to user
+  if (vad.errored) {
+    setError(`Voice detection error: ${vad.errored}`)
+  }
+}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking, vad.start, vad.pause])
+```
+
+**Removed**:
+- ❌ `pendingVADStart` state variable
+- ❌ Separate pendingVADStart useEffect
+- ❌ VAD start calls in handleConnect
+- ❌ VAD start calls in handlePushToTalkToggle
+
+**Benefits**:
+- ✅ **Single code path**: Only one place that starts/stops VAD
+- ✅ **Clear logging**: Exactly why VAD started/stopped
+- ✅ **No stuck states**: All conditions checked every render
+- ✅ **Fewer bugs**: Can't have conflicting start/stop calls
+
+### Connection Polling (October 21, 2025)
+
+**Problem**: Hard-coded `setTimeout(100)` assumed connection ready after 100ms:
+- Local dev: Works fine (WebSocket handshake ~20-50ms)
+- Cloud deployment: Fails almost always (WSS + TLS handshake 500-2000ms)
+- No user feedback when timeout insufficient
+- Silent failures (recording never started)
+
+**Solution**: Poll connection status until ready or timeout
+
+**Implementation** (`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`):
+```typescript
+// FIX #3: Poll for connected status instead of hard-coded delay
+await connectionManager.connect()
+
+const maxWaitMs = 5000
+const startTime = Date.now()
+
+while (Date.now() - startTime < maxWaitMs) {
+  const currentStatus = connectionManager.getStatus()
+  const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
+
+  if (isActive) {
+    console.log('[VoiceOverlay] ✅ Connection active, starting recording')
+    await connectionManager.startRecording()
+    break
+  }
+
+  // Wait 50ms before checking again
+  await new Promise(resolve => setTimeout(resolve, 50))
+}
+
+// Check final status and show error if timed out
+const finalStatus = connectionManager.getStatus()
+if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
+  console.error('[VoiceOverlay] ❌ Connection timeout, final status:', finalStatus)
+  setError('Connection timed out - please try again')  // FIX #4: Show error
+}
+```
+
+**Benefits**:
+- ✅ **Works on cloud**: Waits up to 5 seconds for slow handshakes
+- ✅ **Fast on local**: Exits poll immediately when ready (~50ms)
+- ✅ **User feedback**: Shows timeout error instead of silent failure
+- ✅ **Proper timing**: Adapts to actual network conditions
+
+### Error Visibility (October 21, 2025)
+
+**Problem**: Audio failures were silent:
+- Microphone permission denied → no error shown
+- VAD initialization failed → no error shown
+- getUserMedia failed → console only
+- Users confused why "Connect to Voice" didn't work
+
+**Solution**: Display all audio errors in UI
+
+**Implementation**:
+```typescript
+// FIX #4: Display microphone errors
+try {
+  const stream = await navigator.mediaDevices.getUserMedia(...)
+  setSharedStream(stream)
+} catch (err) {
+  setStreamError(err.message)  // "Permission denied" etc.
+}
+
+// FIX #4: Display VAD errors
+if (vad.errored) {
+  setError(`Voice detection error: ${vad.errored}`)
+}
+
+// FIX #4: Show both stream and connection errors in UI
+{(error || streamError) && (
+  <div className="vff-error">
+    {streamError && (
+      <div><strong>🎤 Microphone Error:</strong> {streamError}</div>
+    )}
+    {error && <div>{error}</div>}
+  </div>
+)}
+```
+
+**Benefits**:
+- ✅ **Clear feedback**: Users know exactly what failed
+- ✅ **Actionable errors**: "Permission denied" → user knows to grant permission
+- ✅ **No confusion**: Silent failures eliminated
+- ✅ **Better debugging**: Errors visible without opening console
 
 ---
 
