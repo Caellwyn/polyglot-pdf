@@ -60,13 +60,13 @@ import * as VAD from "@ricky0123/vad-react"
 
 /**
  * Get VAD asset base URL (self-hosted for reliability)
- * Development: Uses local public folder
+ * Development: Uses CDN (Vite blocks dynamic imports from /public)
  * Production: Uses GCS bucket (faster, no CDN dependency)
  */
 function getVADAssetBase(): string {
-	// Development: use local public folder
+	// Development: use CDN (can't use /public due to Vite restrictions on dynamic imports)
 	if (import.meta.env.DEV) {
-		return '/vad-assets/vad-web/'
+		return 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/'
 	}
 
 	// Production: use GCS bucket
@@ -76,13 +76,13 @@ function getVADAssetBase(): string {
 
 /**
  * Get ONNX Runtime WASM base URL (self-hosted for reliability)
- * Development: Uses local public folder
+ * Development: Uses CDN (Vite blocks dynamic imports from /public)
  * Production: Uses GCS bucket (faster, no CDN dependency)
  */
 function getORTAssetBase(): string {
-	// Development: use local public folder
+	// Development: use CDN (can't use /public due to Vite restrictions on dynamic imports)
 	if (import.meta.env.DEV) {
-		return '/vad-assets/onnxruntime/'
+		return 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
 	}
 
 	// Production: use GCS bucket
