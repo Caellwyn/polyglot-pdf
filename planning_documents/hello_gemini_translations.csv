@@ -1,111 +1,19 @@
-Language,ISO Code,Translation (Original Script),Transliteration (if needed)
-Afrikaans,af,Sê 'Hello Gemini' in jou moedertaal.,
-Albanian,sq,Thuaj 'Përshëndetje Gemini' në gjuhën tënde amtare.,
-Amharic,am,"""ሰላም ጀሚኒ"" በእናት ቋንቋዎ ይበሉ።","(""Selam Jemini"" be'inat qwanqwawo yibelu.)"
-Arabic,ar,"قل ""مرحباً يا چيميني"" بلغتك الأم.","(Qul ""marḥaban yā Jīmīnī"" bilughatik al-umm.)"
-Armenian,hy,Ասա «Բարև Ջեմինի» մայրենի լեզվովդ։,(Asa «Barev Jemini» mayreni lezvovd.)
-Assamese,as,আপোনাৰ মাতৃভাষাত 'হেল্ল' জেমিনি' কওঁক।,(Āpōnāra mātr̥bhāṣāta 'hello Gemini' kaom̐ka.)
-Azerbaijani,az,"Ana dilinizdə ""Salam Gemini"" deyin.",
-Basque,eu,"Esan ""Kaixo Gemini"" zure ama-hizkuntzan.",
-Belarusian,be,Скажыце «Прывітанне Джэміні» на сваёй роднай мове.,(Skažyce «Pryvitannie Džėmini» na svajoj rodnaj movie.)
-Bengali,bn,আপনার মাতৃভাষায় 'হ্যালো জেমিনি' বলুন।,(Āpnār mātr̥bhāṣāẏ 'hyālō Jēmini' baluna.)
-Bosnian,bs,"Recite ""Zdravo Gemini"" na vašem maternjem jeziku.",
-Bulgarian,bg,"Кажете „Здравей, Джемини“ на родния си език.","(Kažete „Zdravey, Dzhemini“ na rodniya si ezik.)"
-Catalan,ca,"Digues ""Hola Gemini"" en la teva llengua materna.",
-Cebuano,ceb,Ingna og 'Hello Gemini' sa imong lumad nga pinulongan.,
-Chinese (Simplified),zh-Hans,用你的母语说“你好，双子座”。,"(Yòng nǐ de mǔyǔ shuō “Nǐ hǎo, Shuāngzǐzuò”.)"
-Chinese (Traditional),zh-Hant,用你的母語說「你好，雙子座」。,"(Yòng nǐ de mǔyǔ shuō “Nǐ hǎo, Shuāngzǐzuò”.)"
-Corsican,co,"Dì ""Salute Gemini"" in a to lingua materna.",
-Croatian,hr,"Reci ""Bok Gemini"" na svom materinjem jeziku.",
-Czech,cs,Řekněte „Ahoj Gemini“ ve svém rodném jazyce.,
-Danish,da,"Sig ""Hej Gemini"" på dit modersmål.",
-Dhivehi,dv,"""ހެލޯ ޖެމިނައި"" ތިމާގެ މާދަރީ ބަހުން ބުނާށެވެ.","(""Helō Jeminaa'i"" timāge mādarī bahun bunāsheve.)"
-Dutch,nl,"Zeg ""Hallo Gemini"" in je moedertaal.",
-English,en,"Say ""Hello Gemini"" in your native language.",
-Esperanto,eo,"Diru ""Saluton Gemini"" en via gepatra lingvo.",
-Estonian,et,"Ütle ""Tere Gemini"" oma emakeeles.",
-Filipino (Tagalog),fil,Sabihin ang 'Hello Gemini' sa iyong katutubong wika.,
-Finnish,fi,"Sano ""Hei Gemini"" äidinkielelläsi.",
-French,fr,"Dis ""Bonjour Gemini"" dans ta langue maternelle.",
-Frisian,fy,"Sis ""Hallo Gemini"" yn dyn memmetaal.",
-Galician,gl,"Di ""Ola Gemini"" na túa lingua nai.",
-Georgian,ka,"თქვი ""გამარჯობა ჯემინი"" შენს მშობლიურ ენაზე.","(Tkvi ""Gamarjoba Jemini"" shens mshobliur enaze.)"
-German,de,"Sag ""Hallo Gemini"" in deiner Muttersprache.",
-Greek,el,Πες «Γεια σου Gemini» στη μητρική σου γλώσσα.,(Pes «Geia sou Gemini» sti mitrikí sou glóssa.)
-Gujarati,gu,તમારી માતૃભાષામાં 'હેલો જેમિની' કહો.,(Tamārī mātrubhāṣāmāṁ 'helō jēminī' kaho.)
-Haitian Creole,ht,"Di ""Bonjou Gemini"" nan lang manman w.",
-Hausa,ha,"Fadi ""Sannu Gemini"" da harshenka na asali.",
-Hawaiian,haw,"E ʻōlelo i ka ""Aloha Gemini"" ma kou ʻōlelo makuahine.",
-Hebrew,iw,"אמור ""שלום ג'מיני"" בשפת האם שלך.","(Emor ""Shalom Jemini"" bi-sfat ha-em shelkha.)"
-Hindi,hi,"अपनी मूल भाषा में ""नमस्ते जेमिनी"" कहिए।","(Apnī mūl bhāṣā meñ ""Namaste Gemini"" kahie.)"
-Hmong,hmn,"Hais tias ""Nyob Zoo Gemini"" hauv koj hom lus.",
-Hungarian,hu,"Mondd, hogy ""Szia Gemini"" az anyanyelveden.",
-Icelandic,is,"Segðu ""Halló Gemini"" á móðurmálinu þínu.",
-Igbo,ig,Kwuo 'Ndewo Gemini' n'asụsụ obodo gị.,
-Indonesian,id,Ucapkan 'Halo Gemini' dalam bahasa ibumu.,
-Irish,ga,"Abair ""Dia duit Gemini"" i do theanga dhúchais.",
-Italian,it,"Di' ""Ciao Gemini"" nella tua lingua madre.",
-Japanese,ja,母国語で「こんにちは、ジェミニ」と言ってください。,"(Bokoku-go de ""Konnichiwa, Jemini"" to itte kudasai.)"
-Javanese,jv,Ucapake 'Halo Gemini' nganggo basa ibumu.,
-Kannada,kn,ನಿಮ್ಮ ಮಾತೃಭಾಷೆಯಲ್ಲಿ 'ನಮಸ್ಕಾರ ಜೆಮಿನಿ' ಎಂದು ಹೇಳಿ.,(Nimma mātrubhāṣeyalli 'Namaskāra Jemini' endu hēḷi.)
-Kazakh,kk,"Ана тіліңізде ""Сәлем Джемини"" деп айтыңыз.","(Ana tılıñızde ""Sälem Jemini"" dep aytıñız.)"
-Khmer,km,និយាយថា «សួស្តី Gemini» ជាភាសាកំណើតរបស់អ្នក។,(Niyiey tha «Suŏsdī Gemini» chea phéasa kamnaet rôbôs anak.)
-Korean,ko,"모국어로 ""안녕하세요 제미나이""라고 말해 주세요.","(Mogugeo-ro ""Annyeonghaseyo Jeminai""rago malhae juseyo.)"
-Krio,kri,Se 'Hello Gemini' na yu yon tɔŋ.,
-Kurdish,ku** (Kurmanji)**,"Bêje ""Silav Gemini"" bi zimanê dayika xwe.",
-Kyrgyz,ky,"Эне тилиңизде ""Салам Жемини"" деп айтыңыз.","(Ene tiliñizde ""Salam Jemini"" dep aytıñız.)"
-Lao,lo,"ເວົ້າວ່າ ""ສະບາຍດີ Gemini"" ເປັນພາສາກຳເນີດຂອງທ່ານ.","(Wao wā ""Sabaidee Gemini"" pen phā sà kāmnœ̄t khō̜ng khāp cào.)"
-Latin,la,"Dic ""Salvē Gemini"" in tua lingua nativa.",
-Latvian,lv,"Saki ""Sveika Gemini"" savā dzimtajā valodā.",
-Lithuanian,lt,"Sakyk ""Sveikas Gemini"" savo gimtąja kalba.",
-Luxembourgish,lb,"Sot ""Hallo Gemini"" an denger Mammesprooch.",
-Macedonian,mk,Кажи „Здраво Џемини“ на твојот мајчин јазик.,(Kaži „Zdravo Džemini“ na tvojot majčin jazik.)
-Malagasy,mg,"Lazao hoe ""Salama Gemini"" amin'ny fitenin-drazanao.",
-Malay,ms,Sebutkan 'Hello Gemini' dalam bahasa ibunda anda.,
-Malayalam,ml,നിങ്ങളുടെ മാതൃഭാഷയിൽ 'ഹലോ ജെമിനി' എന്ന് പറയുക.,(Niṅṅaḷuṭe mātr̥bhāṣayil 'halē jēmini' ennu paṟayuka.)
-Maltese,mt,"Għid ""Hello Gemini"" bil-lingwa nattiva tiegħek.",
-Maori,mi,"Me kī ""Kia ora Gemini"" i tō reo taketake.",
-Marathi,mr,तुमच्या मातृभाषेत 'हॅलो जेमिनी' म्हणा.,(Tumacyā mātrubhāṣēt 'hyālō jēminī' mhaṇā.)
-Meiteilon (Manipuri),mni-Mtei,Hello Gemini' haibasi nahakki mama lon da haibiyu.,
-Mongolian,mn,"Эх хэлээрээ ""Сайн уу, Жэмини"" гэж хэлээрэй.","(Ekh kheleere ""Sain uu, Jemini"" gej heleerei.)"
-Myanmar (Burmese),my,မိခင်ဘာသာစကားနဲ့ 'ဟယ်လို ဂျေမီနီ' လို့ ပြောပါ။,(Mi-khin ba-tha-sa-ka-nè 'ha-lo Je-mi-ni' lo pyeaw ba.)
-Nepali,ne,आफ्नो मातृभाषामा 'नमस्ते जेमिनी' भन्नुहोस्।,(Āfnō mātr̥bhāṣāmā 'Namastē Jēminī' bhannuhōs.)
-Norwegian,no,"Si ""Hei Gemini"" på morsmålet ditt.",
-Nyanja (Chichewa),ny,"Nena kuti ""Moni Gemini"" mu chilankhulo chanu.",
-Odia (Oriya),or,ଆପଣଙ୍କ ମାତୃଭାଷାରେ 'ହେଲୋ ଜେମିନି' କୁହନ୍ତୁ।,(Āpaṇan̄ka mātrubhāṣārē 'hēlō jēmini' kuhantu.)
-Pashto,ps,"په خپله مورنۍ ژبه کې ""سلام جیمني"" ووایاست.","(Pə khpalə mornay zhabə ke ""Salam Jemini"" wawayāst.)"
-Persian (Farsi),fa,به زبان مادری خود بگویید 'سلام جِمینی'.,(Be zabān-e mādarī-ye khod begūyīd 'salām Jemini'.)
-Polish,pl,Powiedz „Cześć Gemini” w swoim języku ojczystym.,
-Portuguese,pt,"Diga ""Olá Gemini"" na sua língua nativa.",
-Punjabi,pa,"ਆਪਣੀ ਮਾਂ ਬੋਲੀ ਵਿੱਚ ""ਹੈਲੋ ਜੈਮਿਨੀ"" ਕਹੋ।","(Āpaṇī māṁ bōlī vicca ""Hailō Jaiminī"" kahō.)"
-Romanian,ro,"Spune ""Salut Gemini"" în limba ta maternă.",
-Russian,ru,"Скажи «Привет, Джемини» на своём родном языке.","(Skaži «Privet, Džemini» na svoyom rodnom yazyke.)"
-Samoan,sm,"Fai mai ""Tālofa Gemini"" i lau gagana moni.",
-Scots Gaelic,gd,"Abair ""Halò Gemini"" sa chànan dùthchasach agad.",
-Serbian,sr,Реци „Здраво Џемини“ на свом матерњем језику.,(Reci „Zdravo Džemini“ na svom maternjem jeziku.)
-Sesotho,st,"Re ""Lumela Gemini"" ka puo ea heno.",
-Shona,sn,"Taura kuti ""Mhoro Gemini"" mumutauro wako wemusha.",
-Sindhi,sd,پنهنجي مادري زبان ۾ ”هيلو جيميني“ چئو.,(Panhje mādrī zabān meñ “Helo Jemini” c̣ayo.)
-Sinhala (Sinhalese),si,ඔබේ මව් භාෂාවෙන් 'හෙලෝ ජෙමිනි' කියන්න.,(Obē mav bhāṣāven 'helō jemini' kiyanna.)
-Slovak,sk,Povedz „Ahoj Gemini“ vo svojom rodnom jazyku.,
-Slovenian,sl,"Reci ""Živjo Gemini"" v svojem maternem jeziku.",
-Somali,so,"Ku dheh ""Salaan Gemini"" afkaaga hooyo.",
-Spanish,es,Di 'Hola Géminis' en tu idioma nativo.,
-Sundanese,su,Ucapkeun 'Halo Gemini' dina basa indung anjeun.,
-Swahili,sw,Sema 'Habari Gemini' kwa lugha yako ya asili.,
-Swedish,sv,"Säg ""Hej Gemini"" på ditt modersmål.",
-Tajik,tg,"Дар забони модарии худ ""Салом Ҷемини"" гӯед.","(Dar zaboni modarii khud ""Salom Jemini"" gūyed.)"
-Tamil,ta,உன் தாய்மொழியில் 'ஹலோ ஜெமினி' என்று சொல்.,(Un tāymoḻiyil 'Halō Jemiṉi' eṉṟu col.)
-Telugu,te,మీ మాతృభాషలో 'హలో జెమిని' అని చెప్పండి.,(Mī mātrubhāṣalō 'halō jemini' ani ceppaṇḍi.)
-Thai,th,"พูดว่า ""สวัสดี Gemini"" ในภาษาแม่ของคุณ.","(Phûut wâa ""Sawatdii Gemini"" nai phaa-sǎa mɛ̂ɛ kɔ̌ɔng khun.)"
-Turkish,tr,"Ana dilinde ""Merhaba Gemini"" de.",
-Ukrainian,uk,"Скажи «Привіт, Дженімі» своєю рідною мовою.","(Skažy «Pryvit, Džeminni» svoyeyu ridnoyu movoyu.)"
-Urdu,ur,اپنی مادری زبان میں 'ہیلو جیمنی' کہیں۔,(Apnī mādrī zabān meñ 'hello Gemini' kaheñ.)
-Uyghur,ug,ئانا تىلىڭىزدا «سالام گېمىنى» دەڭ.,(Ana tilingizda «Salam Gémini» deng.)
-Uzbek,uz,"Ona tilingizda ""Salom Gemini"" deb ayting.",
-Vietnamese,vi,"Nói ""Chào Gemini"" bằng tiếng mẹ đẻ của bạn.",
-Welsh,cy,"Dywedwch ""Helo Gemini"" yn eich iaith frodorol.",
-Xhosa,xh,"Yitsho ""Mholo Gemini"" ngolwimi lwakho lwenkobe.",
-Yiddish,yi,"זאָג ""העלאָ דזשעמיני"" אין דײַן מוטערשפּראַך.","(Zog ""Hello Jemini"" in deyn mutershprakh.)"
-Yoruba,yo,"Sọ pé ""Pẹlẹ o Gemini"" ní èdè ìbílẹ̀ rẹ.",
-Zulu,zu,"Yisho ""Sawubona Gemini"" ngolimi lwakho lwendabuko.",
+Rank,Language,Translated Phrase (Native Script)
+1,English,"Hello Gemini, please speak English"
+2,Spanish,"Hola Gemini, por favor habla español"
+3,Mandarin (Chinese),"你好 Gemini, 请说中文"
+4,Tagalog,"Kumusta Gemini, pakisabi sa Tagalog"
+5,Arabic,مرحباً يا جيميناي، من فضلك تحدث العربية
+6,French,"Bonjour Gemini, veuillez parler français"
+7,Korean,"안녕하세요 Gemini, 한국어로 말해주세요"
+8,German,"Hallo Gemini, sprich bitte Deutsch"
+9,Portuguese,"Olá Gemini, por favor, fale português"
+10,Hindi,"नमस्ते जेमिनी, कृपया हिंदी बोलें"
+11,Italian,"Ciao Gemini, parla italiano per favore"
+12,Urdu,ہیلو جیمنی، برائے مہربانی اردو بولیں
+13,Farsi (Persian),سلام جیمینی، لطفا فارسی صحبت کن
+14,Dutch,"Hallo Gemini, spreek alstublieft Nederlands"
+15,Ukrainian,"Привіт Gemini, будь ласка, говори українською"
+16,Swedish,"Hej Gemini, tala svenska tack"
+17,Afrikaans,"Hallo Gemini, praat asseblief Afrikaans"
+18,Quechua,"Allillanchu Gemini, ama hina kaychu, Qhichwa rimay"
