@@ -10,10 +10,13 @@ echo "📦 Downloading VAD assets for self-hosting..."
 mkdir -p public/vad-assets/vad-web
 mkdir -p public/vad-assets/onnxruntime
 
-# Download VAD model and worklet from vad-web@0.0.28
-echo "⬇️  Downloading Silero VAD model (~1.8 MB)..."
+# Download VAD models and worklet from vad-web@0.0.28
+echo "⬇️  Downloading Silero VAD models (~1.8 MB each)..."
 curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/silero_vad.onnx" \
   -o public/vad-assets/vad-web/silero_vad.onnx
+
+curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/silero_vad_legacy.onnx" \
+  -o public/vad-assets/vad-web/silero_vad_legacy.onnx
 
 echo "⬇️  Downloading VAD worklet..."
 curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/vad.worklet.bundle.min.js" \
