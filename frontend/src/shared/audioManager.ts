@@ -142,17 +142,33 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				console.log('[AudioManager] 🔗 Reusing existing microphone stream (shared with VAD)')
 			}
 
-			// Create audio contexts for recording AND playback
-			// Create playback context NOW so it's ready when Gemini responds
-			// (fixes issue where Gemini speaks but we can't hear her because context isn't created yet)
-		nodes.recordingContext = new AudioContext({ sampleRate: RECORDING_SAMPLE_RATE })
-		nodes.source = nodes.recordingContext.createMediaStreamSource(nodes.stream)
-		
-		if (!nodes.playbackContext) {
-			console.log('[AudioManager] 🎵 Creating AudioContext for playback (eager initialization)')
-			nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
-			playbackTime = 0
-		}
+			// FIX #5: AudioContext Pooling - reuse contexts instead of creating new ones
+			// Browsers limit AudioContext instances (6-8 on desktop, 2-4 on mobile)
+			// Creating new contexts on each startRecording() causes failures on reconnect
+			if (!nodes.recordingContext) {
+				console.log('[AudioManager] 🎵 Creating AudioContext for recording (first time)')
+				nodes.recordingContext = new AudioContext({ sampleRate: RECORDING_SAMPLE_RATE })
+			} else {
+				console.log('[AudioManager] ♻️ Reusing existing recording AudioContext')
+				// Resume if suspended (browsers may suspend contexts to save power)
+				if (nodes.recordingContext.state === 'suspended') {
+					await nodes.recordingContext.resume()
+				}
+			}
+
+			nodes.source = nodes.recordingContext.createMediaStreamSource(nodes.stream)
+
+			if (!nodes.playbackContext) {
+				console.log('[AudioManager] 🎵 Creating AudioContext for playback (eager initialization)')
+				nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
+				playbackTime = 0
+			} else {
+				console.log('[AudioManager] ♻️ Reusing existing playback AudioContext')
+				// Resume if suspended
+				if (nodes.playbackContext.state === 'suspended') {
+					await nodes.playbackContext.resume()
+				}
+			}
 
 		// Load AudioWorklet module
 		// In production (deployed to GCS), worklet is at ../shared/ relative to demo/

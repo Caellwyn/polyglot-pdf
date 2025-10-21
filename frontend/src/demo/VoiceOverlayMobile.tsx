@@ -21,15 +21,19 @@ interface VoiceOverlayMobileProps {
 	wsUrl?: string
 	connectionManager?: ConnectionManager
 	status?: string
+	// FIX #1: Shared audio stream passed from parent (prevents race conditions)
+	sharedStream?: MediaStream | null
+	// FIX #4: Stream error from parent (for error visibility)
+	streamError?: string | null
 }
 
-export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus }: VoiceOverlayMobileProps) {
+export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayMobileProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
 	const [isExpanded, setIsExpanded] = useState(false)
-	const [pendingVADStart, setPendingVADStart] = useState(false)
+	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
 	const [currentSection, setCurrentSection] = useState(1)
 	const [completedSections, setCompletedSections] = useState<Set<number>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
@@ -38,57 +42,20 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
 
-	// Create shared audio stream ONCE on mount (before VAD initialization)
-	// This ensures both VAD and recording use the SAME stream with browser AEC
-	const sharedStreamRef = useRef<MediaStream | null>(null)
-	const [vadReady, setVadReady] = useState(false)
+	// FIX #1: Use shared stream from parent (created before React rendering)
+	// No need to create our own stream - parent already did this to prevent race conditions
+	const sharedStreamRef = useRef<MediaStream | null>(sharedStream || null)
 
 	// Track speech duration to prevent short grunts/noises from interrupting Gemini
 	const speechStartTimeRef = useRef<number | null>(null)
 	const bargeInTriggeredRef = useRef<boolean>(false)  // Track if we triggered barge-in for this speech event
 	const MIN_TURN_DURATION_MS = 450  // Minimum 450ms of speech before triggering barge-in
 
-	// Create stream once on mount
+	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
-		let mounted = true
-		
-		async function initSharedStream() {
-			try {
-				console.log('[VoiceOverlayMobile] 🎤 Creating shared audio stream...')
-				const stream = await navigator.mediaDevices.getUserMedia({
-					audio: {
-						echoCancellation: true,      // Browser AEC (critical!)
-						noiseSuppression: true,       // Reduces background noise
-						autoGainControl: true,        // Normalizes microphone volume
-						channelCount: 1,              // Mono audio
-						sampleRate: 16000,            // Match recording sample rate
-					},
-				})
-				
-				if (mounted) {
-					sharedStreamRef.current = stream
-					setVadReady(true)
-					console.log('[VoiceOverlayMobile] ✅ Shared stream ready (AEC enabled)')
-				} else {
-					// Component unmounted, clean up
-					stream.getTracks().forEach(track => track.stop())
-				}
-			} catch (err) {
-				console.error('[VoiceOverlayMobile] ❌ Failed to create shared stream:', err)
-			}
-		}
-		
-		initSharedStream()
-		
-		return () => {
-			mounted = false
-			// Clean up stream on unmount
-			if (sharedStreamRef.current) {
-				sharedStreamRef.current.getTracks().forEach(track => track.stop())
-				sharedStreamRef.current = null
-			}
-		}
-	}, [])
+		sharedStreamRef.current = sharedStream || null
+		console.log('[VoiceOverlayMobile] 🔗 Using shared stream from parent:', !!sharedStream)
+	}, [sharedStream])
 
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
@@ -169,11 +136,11 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		},
 	}), [pushToTalkMode, connectionManager])
 
-	// Memoize VAD options to prevent re-initialization when stream becomes ready
+	// FIX #1: VAD options with shared stream (stream is already ready from parent)
 	const vadOptions = useMemo(() => ({
-		sharedStream: vadReady ? sharedStreamRef.current : null,
+		sharedStream: sharedStreamRef.current,
 		callbacks: vadCallbacks
-	}), [vadReady, vadCallbacks])
+	}), [vadCallbacks, sharedStream])
 
 	// Integrate professional VAD library with shared stream
 	// Only initialize after stream is ready
@@ -195,17 +162,16 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 
 		// Phase 3: Initialize with section-based state
 		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
-		
-		// Use the section schema (already sliced to section 1)
-		// Pass shared stream for VAD coordination (prevents duplicate getUserMedia)
+
+		// FIX #1: Connection manager receives stream from parent (already created)
 		const manager = createConnectionManager(
-			state.schema, 
+			state.schema,
 			(newStatus) => {
 				setStatus(newStatus)
 				setError(null)
-			}, 
+			},
 			'English',
-			sharedStreamRef.current || undefined // Pass shared stream if ready
+			sharedStream || undefined // Pass shared stream from parent
 		)
 		
 		connectionManagerRef.current = manager
@@ -246,16 +212,32 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		}
 	}, [status, showGreetingCarousel])
 
-	// Auto-start VAD when connection becomes active (for shared manager mode)
+	// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
+	// This replaces 3 separate code paths with one consolidated control flow
 	useEffect(() => {
-		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
-		
-		if (isConnected && !pushToTalkMode && !vad.loading && !vad.errored) {
+		const isConnected = status.toLowerCase() === 'connected' ||
+		                    status.toLowerCase().startsWith('connected ')
+
+		// VAD should run when:
+		// 1. Connected to backend
+		// 2. NOT in push-to-talk mode
+		// 3. VAD library finished loading
+		// 4. No VAD errors occurred
+		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
+
+		if (shouldRunVAD && !vad.userSpeaking) {
+			console.log('[VoiceOverlayMobile] 🎙️ Starting VAD (conditions met)')
 			vad.start()
-		} else if (!isConnected && !vad.loading) {
+		} else if (!shouldRunVAD && vad.userSpeaking) {
+			console.log('[VoiceOverlayMobile] ⏸️ Pausing VAD (conditions not met)')
 			vad.pause()
 		}
-	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.start, vad.pause])
+
+		// FIX #4: Display VAD errors to user
+		if (vad.errored) {
+			setError(`Voice detection error: ${vad.errored}`)
+		}
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking, vad.start, vad.pause])
 
 	// Hook up Gemini audio playback callbacks for greeting carousel dismissal
 	useEffect(() => {
@@ -283,31 +265,38 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			// If paused, just resume (which will restart recording)
 			if (connectionManager.isPaused()) {
 				await connectionManager.resume()
-				setPendingVADStart(true)
+				// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 				return
 			}
 			
 			// Otherwise, full connect
 			await connectionManager.connect()
-			
-			// Wait a moment for connection to fully establish
-			await new Promise(resolve => setTimeout(resolve, 100))
-			
-			// Start recording after successful connection
-			const currentStatus = connectionManager.getStatus()
-			const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
-			
-			if (isActive) {
-				await connectionManager.startRecording()
 
-				// Start VAD only if NOT in push-to-talk mode
-				if (!pushToTalkMode && !vad.loading && !vad.errored) {
-					vad.start()
-				} else if (vad.loading) {
-					setPendingVADStart(true)
+			// FIX #3: Poll for connected status instead of hard-coded delay
+			// On cloud deployments, WSS handshake can take 500-2000ms (not 100ms)
+			const maxWaitMs = 5000
+			const startTime = Date.now()
+
+			while (Date.now() - startTime < maxWaitMs) {
+				const currentStatus = connectionManager.getStatus()
+				const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
+
+				if (isActive) {
+					console.log('[VoiceOverlayMobile] ✅ Connection active, starting recording')
+					await connectionManager.startRecording()
+					// FIX #2: VAD will auto-start via consolidated useEffect when status changes
+					break
 				}
-			} else {
-				console.error('[VoiceOverlay] Connection status not active, status is:', currentStatus)
+
+				// Wait 50ms before checking again
+				await new Promise(resolve => setTimeout(resolve, 50))
+			}
+
+			// Check final status
+			const finalStatus = connectionManager.getStatus()
+			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
+				console.error('[VoiceOverlayMobile] ❌ Connection timeout, final status:', finalStatus)
+				setError('Connection timed out - please try again')
 			}
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
@@ -325,16 +314,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		vad.pause()
 	}
 
-	useEffect(() => {
-		if (!pendingVADStart) return
-		if (vad.loading) return
-		if (vad.errored) {
-			setPendingVADStart(false)
-			return
-		}
-		vad.start()
-		setPendingVADStart(false)
-	}, [pendingVADStart, vad.loading, vad.errored, vad.start])
+	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
 
 	// Handle push-to-talk mode toggle
 	const handlePushToTalkToggle = async () => {
@@ -356,10 +336,8 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			const audioManager = connectionManager?.getAudioManager()
 			audioManager?.muteInput()
 		} else {
-			// Switching to VAD: start VAD
-			if (isCurrentlyConnected && !vad.loading) {
-				vad.start()
-			}
+			// Switching to VAD mode
+			// FIX #2: VAD will auto-start via consolidated useEffect (monitors pushToTalkMode)
 			// Unmute input for normal VAD operation
 			const audioManager = connectionManager?.getAudioManager()
 			audioManager?.unmuteInput()
@@ -537,7 +515,15 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 						)}
 
 						{/* Error */}
-						{error && <div className="vff-error-compact">{error}</div>}
+						{/* FIX #4: Show both connection errors and stream errors */}
+						{(error || streamError) && (
+							<div className="vff-error-compact">
+								{streamError && (
+									<div><strong>🎤 Mic Error:</strong> {streamError}</div>
+								)}
+								{error && <div>{error}</div>}
+							</div>
+						)}
 
 						{/* Info */}
 						<div className="vff-info-compact">
