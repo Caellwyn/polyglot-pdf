@@ -1,19 +1,19 @@
-Rank,Language,Translated Phrase (Native Script)
+Rank,Language (Native Name),Translated Phrase (Native Script)
 1,English,"Hello Gemini, please speak English"
-2,Spanish,"Hola Gemini, por favor habla español"
-3,Mandarin (Chinese),"你好 Gemini, 请说中文"
+2,Español,"Hola Gemini, por favor habla español"
+3,中文 (Zhōngwén),"你好 Gemini, 请说中文"
 4,Tagalog,"Kumusta Gemini, pakisabi sa Tagalog"
-5,Arabic,مرحباً يا جيميناي، من فضلك تحدث العربية
-6,French,"Bonjour Gemini, veuillez parler français"
-7,Korean,"안녕하세요 Gemini, 한국어로 말해주세요"
-8,German,"Hallo Gemini, sprich bitte Deutsch"
-9,Portuguese,"Olá Gemini, por favor, fale português"
-10,Hindi,"नमस्ते जेमिनी, कृपया हिंदी बोलें"
-11,Italian,"Ciao Gemini, parla italiano per favore"
-12,Urdu,ہیلو جیمنی، برائے مہربانی اردو بولیں
-13,Farsi (Persian),سلام جیمینی، لطفا فارسی صحبت کن
-14,Dutch,"Hallo Gemini, spreek alstublieft Nederlands"
-15,Ukrainian,"Привіт Gemini, будь ласка, говори українською"
-16,Swedish,"Hej Gemini, tala svenska tack"
+5,العربية (al-ʿArabīyah),مرحباً يا جيميناي، من فضلك تحدث العربية
+6,Français,"Bonjour Gemini, veuillez parler français"
+7,한국어 (Hangugeo),"안녕하세요 Gemini, 한국어로 말해주세요"
+8,Deutsch,"Hallo Gemini, sprich bitte Deutsch"
+9,Português,"Olá Gemini, por favor, fale português"
+10,हिन्दी (Hindī),"नमस्ते जेमिनी, कृपया हिंदी बोलें"
+11,Italiano,"Ciao Gemini, parla italiano per favore"
+12,اردو (Urdū),ہیلو جیمنی، برائے مہربانی اردو بولیں
+13,فارسی (Fārsī),سلام جیمینی، لطفا فارسی صحبت کن
+14,Nederlands,"Hallo Gemini, spreek alstublieft Nederlands"
+15,Українська (Ukrayins'ka),"Привіт Gemini, будь ласка, говори українською"
+16,Svenska,"Hej Gemini, tala svenska tack"
 17,Afrikaans,"Hallo Gemini, praat asseblief Afrikaans"
-18,Quechua,"Allillanchu Gemini, ama hina kaychu, Qhichwa rimay"
+18,Qhichwa,"Allillanchu Gemini, ama hina kaychu, Qhichwa rimay"
