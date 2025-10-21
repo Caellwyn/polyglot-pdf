@@ -1,0 +1,42 @@
+{
+	"name": "web-form-voice-filler-frontend",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"build:worklet": "esbuild src/shared/audio-processor.worklet.ts --bundle --format=esm --target=es2020 --outfile=dist/shared/audio-processor.worklet.js && node -e \"require('fs').mkdirSync('public/shared', {recursive:true})\" && node -e \"require('fs').copyFileSync('dist/shared/audio-processor.worklet.js', 'public/shared/audio-processor.worklet.js')\"",
+		"build:bookmarklet": "npm run build:worklet && vite build --config vite.config.bookmarklet.ts",
+		"dev:demo": "npm run build:worklet && vite --config vite.config.demo.ts",
+		"build:demo": "npm run build:worklet && vite build --config vite.config.demo.ts",
+		"dev:vad": "npm run build:worklet && vite --config vite.config.vad.ts",
+		"build:vad": "npm run build:worklet && vite build --config vite.config.vad.ts",
+		"preview": "vite preview --port 5173",
+		"preview:demo": "vite preview --config vite.config.demo.ts --port 5174 --outDir dist/demo",
+		"preview:vad": "vite preview --config vite.config.vad.ts --port 5175 --outDir dist/vad-tuning",
+		"test": "vitest --environment jsdom",
+		"parse": "tsx scripts/parse-form.ts"
+	},
+	"dependencies": {
+		"@ricky0123/vad-react": "^0.0.34",
+		"chart.js": "^4.5.1",
+		"chartjs-plugin-annotation": "^3.1.0",
+		"react": "^18.3.1",
+		"react-chartjs-2": "^5.3.0",
+		"react-dom": "^18.3.1"
+	},
+	"devDependencies": {
+		"@testing-library/react": "^14.3.1",
+		"@testing-library/user-event": "^14.5.2",
+		"@types/node": "^20.11.0",
+		"@types/react": "^18.2.66",
+		"@types/react-dom": "^18.2.22",
+		"@vitejs/plugin-react": "^4.3.0",
+		"jsdom": "^27.0.0",
+		"tsx": "^4.20.6",
+		"typescript": "^5.4.0",
+		"vite": "^5.4.0",
+		"vitest": "^1.6.0"
+	}
+}

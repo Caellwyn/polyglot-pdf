@@ -1,0 +1,88 @@
+﻿
+fieldset.fieldset__datetimepicker__wrapper .cp_input_datetime {
+	position: absolute;
+	right: 1em;
+	top: 1em;
+	padding: 0;
+	margin: 0;
+	width: 0;
+	height: 0;
+	background: 
+	transparent;
+	color: #333;
+	border-left: 
+	.66em solid transparent;
+	border-right: .66em 
+	solid transparent;
+	border-top: 1em solid #333;
+	cursor: pointer;
+}
+
+
+input[type='text'].cp_input_datetime {
+	display:none !important;
+	position: absolute;
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker__day {
+	padding: .3125em 0;
+	border: 1px solid transparent;
+	margin-left: .25em;
+	margin-right: .25em;
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker__holder {
+	margin-top: 2em;
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker__header {
+	text-align: center;
+	position: relative;
+	margin-top: .75em;
+	margin-bottom: .75em;
+	margin-right: 1.75em;
+	margin-left: 1.75em;
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker__footer {
+	padding: 10px;
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker {
+	font-size: 12.8px;
+	width: 300px;	
+}
+
+fieldset.fieldset__datetimepicker__wrapper div.picker__month {
+	margin-right: .5em;
+	margin-left: .5em;
+}
+
+fieldset.fieldset__datetimepicker__wrapper  ul.picker__list {
+	margin-left: 0px;
+}
+
+fieldset.fieldset__datetimepicker__wrapper ul.picker__list li {
+	margin-bottom: 0px !important;
+	margin-top: 0px !important;
+	padding-top: .3em;
+	padding-bottom: .3em;
+	font-size: 1.25em;
+}
+
+fieldset.fieldset__datetimepicker__wrapper  input[type="text"].telerikDatePicker {
+    width: 130px;
+}
+
+fieldset.fieldset__datetimepicker__wrapper  input[type="text"].telerikTimePicker {
+    width: 130px;
+}
+
+fieldset.fieldset__datetimepicker__wrapper input[type="text"] {
+
+	width: 105px;
+}
+
+:not(.picker--time) > .picker__holder {
+	overflow:hidden;
+}

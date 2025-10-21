@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ellie Mental Health Adult Intake Form</title>
+    <style>
+        :root {
+            --primary-color: #007BFF;
+            --secondary-color: #6c757d;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --border-color: #dee2e6;
+            --font-color: #343a40;
+            --placeholder-color: #adb5bd;
+            --clinic-primary: #4a90e2;
+            --clinic-secondary: #50c878;
+            --header-bg: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--font-color);
+            line-height: 1.6;
+        }
+
+        /* Clinic Header */
+        .clinic-header {
+            background: var(--header-bg);
+            color: white;
+            padding: 2rem 1rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .clinic-header-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .clinic-logo {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            flex-shrink: 0;
+        }
+
+        .clinic-info h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 600;
+            border: none;
+            padding: 0;
+        }
+
+        .clinic-info p {
+            margin: 0.25rem 0 0 0;
+            font-size: 0.95rem;
+            opacity: 0.95;
+        }
+
+        /* Form Container */
+        .form-container {
+            padding: 1rem;
+        }
+
+        form {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: var(--card-background);
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 600;
+            margin-top: 0;
+        }
+        
+        h2 {
+            font-size: 1.5rem;
+            color: var(--secondary-color);
+            margin-top: 2rem;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            color: var(--font-color);
+            margin-top: 1.5rem;
+        }
+
+        .form-section {
+            margin-bottom: 2.5rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px dashed var(--border-color);
+        }
+        
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+
+        /* Field Groups - Side by Side Layout */
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .field-row-thirds {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .field-group {
+            margin-bottom: 1rem;
+        }
+
+        .field-group-full {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--font-color);
+            font-size: 0.95rem;
+        }
+
+        .label-optional {
+            font-weight: normal;
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+            margin-left: 0.25rem;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="date"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-size: 0.95rem;
+            font-family: inherit;
+            background-color: #fff;
+        }
+        
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="date"]:focus,
+        input[type="number"]:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+            outline: none;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        input[type="checkbox"],
+        input[type="radio"] {
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
+        
+        .checkbox-group, .radio-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 0.75rem;
+            padding: 0.5rem 0;
+        }
+        
+        .checkbox-group label, .radio-group label {
+            font-weight: normal;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+
+        .checkbox-group label:hover, .radio-group label:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+        
+        .radio-group label {
+            margin-right: 0.5rem;
+        }
+
+        /* Tables */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+        }
+        
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 0.875rem;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.02);
+        }
+        
+        td input {
+            border: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        td input[type="text"],
+        td input[type="email"],
+        td input[type="date"],
+        td input[type="number"],
+        td select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        td input[type="text"]:focus,
+        td input[type="email"]:focus,
+        td input[type="date"]:focus,
+        td input[type="number"]:focus,
+        td select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+            background-color: #fff;
+        }
+
+        /* Submit Button */
+        button[type="submit"] {
+            display: block;
+            width: 100%;
+            padding: 1rem 2rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 2rem;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        button[type="submit"]:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        }
+
+        button[type="submit"]:active {
+            transform: translateY(0);
+        }
+
+        /* Helper Text */
+        .helper-text {
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+            margin-top: 0.5rem;
+            font-style: italic;
+        }
+
+        /* Section Instructions */
+        .section-instructions {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .clinic-header {
+                padding: 1.5rem 1rem;
+            }
+
+            .clinic-header-content {
+                gap: 1rem;
+            }
+
+            .clinic-logo {
+                width: 60px;
+                height: 60px;
+                font-size: 2rem;
+            }
+
+            .clinic-info h1 {
+                font-size: 1.5rem;
+            }
+
+            .clinic-info p {
+                font-size: 0.85rem;
+            }
+
+            form {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            h2 {
+                font-size: 1.35rem;
+            }
+
+            h3 {
+                font-size: 1.1rem;
+            }
+
+            .field-row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .field-row-thirds {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            table {
+                font-size: 0.85rem;
+            }
+
+            th, td {
+                padding: 0.625rem;
+            }
+
+            .checkbox-group, .radio-group {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .clinic-header {
+                padding: 1rem 0.75rem;
+            }
+
+            .clinic-logo {
+                width: 50px;
+                height: 50px;
+                font-size: 1.5rem;
+            }
+
+            .clinic-info h1 {
+                font-size: 1.25rem;
+            }
+
+            .clinic-info p {
+                font-size: 0.8rem;
+            }
+
+            form {
+                padding: 1rem;
+                border-radius: 8px;
+            }
+
+            .form-container {
+                padding: 0.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            h2 {
+                font-size: 1.2rem;
+            }
+
+            button[type="submit"] {
+                font-size: 1rem;
+                padding: 0.875rem 1.5rem;
+            }
+        }
+
+        @media (max-width: 320px) {
+            .clinic-header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            table {
+                font-size: 0.75rem;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Clinic Header -->
+    <div class="clinic-header">
+        <div class="clinic-header-content">
+            <div class="clinic-logo">
+                🌿
+            </div>
+            <div class="clinic-info">
+                <h1>Ellie Mental Health</h1>
+                <p>Adult Intake Form - Confidential Patient Information</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-container">
+    <form action="#" method="post">
+        <h1>Adult Intake Form</h1>
+
+        <div class="form-section" id="section-client-info">
+            <h2 id="heading-client-info">Client Information</h2>
+            
+            <div class="field-row-thirds">
+                <div class="field-group">
+                    <label for="firstName">First Name:</label>
+                    <input type="text" id="firstName" name="firstName" placeholder="First">
+                </div>
+                <div class="field-group">
+                    <label for="middleName">Middle Name: <span class="label-optional">(optional)</span></label>
+                    <input type="text" id="middleName" name="middleName" placeholder="Middle">
+                </div>
+                <div class="field-group">
+                    <label for="lastName">Last Name:</label>
+                    <input type="text" id="lastName" name="lastName" placeholder="Last">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label for="preferredName">Preferred Name: <span class="label-optional">(if different from first name)</span></label>
+                <input type="text" id="preferredName" name="preferredName" placeholder="e.g., nickname or chosen name">
+            </div>
+
+            <div class="field-row-thirds">
+                <div class="field-group">
+                    <label for="pronouns">Pronouns:</label>
+                    <input type="text" id="pronouns" name="pronouns" placeholder="e.g., she/her, he/him, they/them">
+                </div>
+                <div class="field-group">
+                    <label for="dob">Date of Birth:</label>
+                    <input type="date" id="dob" name="dob">
+                </div>
+                <div class="field-group">
+                    <label for="age">Age:</label>
+                    <input type="number" id="age" name="age" min="18" max="120" placeholder="18+">
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="genderIdentity">Gender Identity:</label>
+                    <select id="genderIdentity" name="genderIdentity">
+                <option value="">-- Select One --</option>
+                <option value="Agender">Agender</option>
+                <option value="Cisgender Female">Cisgender Female</option>
+                <option value="Cisgender Male">Cisgender Male</option>
+                <option value="Genderfluid">Genderfluid</option>
+                <option value="Genderqueer">Genderqueer</option>
+                <option value="Non-Binary">Non-Binary</option>
+                <option value="Transgender Female">Transgender Female</option>
+                <option value="Transgender Male">Transgender Male</option>
+                <option value="Two-Spirit">Two-Spirit</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+                </div>
+                <div class="field-group">
+                    <label for="sexualOrientation">Sexual Orientation:</label>
+                    <select id="sexualOrientation" name="sexualOrientation">
+                <option value="">-- Select One --</option>
+                <option value="Asexual">Asexual</option>
+                <option value="Bisexual">Bisexual</option>
+                <option value="Gay">Gay</option>
+                <option value="Heterosexual">Heterosexual</option>
+                <option value="Lesbian">Lesbian</option>
+                <option value="Pansexual">Pansexual</option>
+                <option value="Queer">Queer</option>
+                <option value="Unsure">Unsure</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="maritalStatus">Marital Status:</label>
+                    <select id="maritalStatus" name="maritalStatus">
+                <option value="">-- Select One --</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Divorced">Divorced</option>
+                <option value="Separated">Separated</option>
+                <option value="Widowed">Widowed</option>
+                <option value="Civil Union">Civil Union</option>
+                <option value="Partnered">Partnered</option>
+            </select>
+                </div>
+                <div class="field-group">
+                    <label for="partnerSpouseName">Partner/Spouse Name: <span class="label-optional">(if applicable)</span></label>
+                    <input type="text" id="partnerSpouseName" name="partnerSpouseName">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label for="legalCustodian">Legal Custodian: <span class="label-optional">(if applicable)</span></label>
+                <input type="text" id="legalCustodian" name="legalCustodian">
+            </div>
+        </div>
+
+        <div class="form-section" id="section-reasons-counseling">
+            <h2 id="heading-reasons-counseling">Reason(s) for Seeking Counseling</h2>
+            <p>Check all that apply:</p>
+            <div class="checkbox-group" id="group-reasons">
+                <label><input type="checkbox" name="reason[]" value="Fears/Phobias/Worries">Fears/Phobias/Worries</label>
+                <label><input type="checkbox" name="reason[]" value="Family Concerns">Family Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Work Difficulties">Work Difficulties</label>
+                <label><input type="checkbox" name="reason[]" value="Sleeping Concerns">Sleeping Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Pregnancy/Adoption">Pregnancy/Adoption</label>
+                <label><input type="checkbox" name="reason[]" value="Depressed Mood">Depressed Mood</label>
+                <label><input type="checkbox" name="reason[]" value="Sexual Concerns">Sexual Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Gender Identity">Gender Identity</label>
+                <label><input type="checkbox" name="reason[]" value="Mood Swings">Mood Swings</label>
+                <label><input type="checkbox" name="reason[]" value="Legal Concerns">Legal Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Drug/Alcohol Use">Drug/Alcohol Use</label>
+                <label><input type="checkbox" name="reason[]" value="Eating Concerns">Eating Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Court Appearance/Jail Term">Court Appearance/Jail Term</label>
+                <label><input type="checkbox" name="reason[]" value="Divorce/Custody">Divorce/Custody</label>
+                <label><input type="checkbox" name="reason[]" value="Child Protection Investigation">Child Protection Investigation</label>
+                <label><input type="checkbox" name="reason[]" value="Financial Concerns">Financial Concerns</label>
+                <label><input type="checkbox" name="reason[]" value="Loss/Change of Job">Loss/Change of Job</label>
+                <label><input type="checkbox" name="reason[]" value="Move to New Residence">Move to New Residence</label>
+                <label><input type="checkbox" name="reason[]" value="Concerns About Childhood">Concerns About Childhood</label>
+                <label><input type="checkbox" name="reason[]" value="Death/Illness of Close Friend/Family Member">Death/Illness of Close Friend/Family Member</label>
+            </div>
+
+            <label for="mandatedBy">Mandated By:</label>
+            <input type="text" id="mandatedBy" name="mandatedBy">
+
+            <label for="otherReason">Other:</label>
+            <input type="text" id="otherReason" name="otherReason">
+
+            <label for="problemStart">When did this problem(s) begin?</label>
+            <input type="text" id="problemStart" name="problemStart">
+
+            <label for="desiredChanges">What changes do you want to happen as a result of counseling?</label>
+            <textarea id="desiredChanges" name="desiredChanges"></textarea>
+
+            <label for="strengths">What strengths do you possess?</label>
+            <textarea id="strengths" name="strengths"></textarea>
+        </div>
+
+        <div class="form-section" id="section-living-situation">
+            <h2 id="heading-living-situation">Living Situation(s)</h2>
+            <p>During Childhood/Adolescence:</p>
+            <div class="checkbox-group" id="group-childhood-living">
+                <label><input type="checkbox" name="childhoodLiving[]" value="Raised with both parents">Raised with both parents</label>
+                <label><input type="checkbox" name="childhoodLiving[]" value="Parents not married">Parents not married</label>
+                <label><input type="checkbox" name="childhoodLiving[]" value="Parents split, raised by mother">Parents split, raised by mother</label>
+                <label><input type="checkbox" name="childhoodLiving[]" value="Parents split, raised by father">Parents split, raised by father</label>
+                <label><input type="checkbox" name="childhoodLiving[]" value="Raised in foster/adoptive homes">Raised in foster/adoptive homes</label>
+            </div>
+            <label for="childhoodOther">Other:</label>
+            <input type="text" id="childhoodOther" name="childhoodOther">
+
+            <p>Current Living Situation:</p>
+            <div class="checkbox-group" id="group-current-living">
+                <label><input type="checkbox" name="currentLiving[]" value="Living independently in my residence">Living independently in my residence</label>
+                <label><input type="checkbox" name="currentLiving[]" value="With parent(s)">With parent(s)</label>
+                <label><input type="checkbox" name="currentLiving[]" value="With relative/guardian">With relative/guardian</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Temporary housing">Temporary housing</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Nursing home">Nursing home</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Group home">Group home</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Homeless">Homeless</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Jail">Jail</label>
+                <label><input type="checkbox" name="currentLiving[]" value="With foster family">With foster family</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Friend's home">Friend's home</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Hospital">Hospital</label>
+                <label><input type="checkbox" name="currentLiving[]" value="Residential care">Residential care</label>
+            </div>
+            <label for="facilityIdentify">**Identify facility:</label>
+            <input type="text" id="facilityIdentify" name="facilityIdentify">
+
+            <label for="primaryHousehold">Primary Household:</label>
+            <input type="text" id="primaryHousehold" name="primaryHousehold">
+
+            <label for="householdMembers">Total number of people living in current household:</label>
+            <input type="number" id="householdMembers" name="householdMembers" min="1" max="20" placeholder="e.g., 4">
+
+            <p>Household Members:</p>
+            <div class="table-wrapper"><table id="group-household-members">
+                <thead>
+                    <tr>
+                        <th>Household Member Name</th>
+                        <th>Relationship to Client</th>
+                        <th>Age</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" name="member1_name" placeholder="Name"></td>
+                        <td><input type="text" name="member1_relationship" placeholder="Relationship"></td>
+                        <td><input type="number" name="member1_age" min="0" max="120" placeholder="Age"></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" name="member2_name" placeholder="Name"></td>
+                        <td><input type="text" name="member2_relationship" placeholder="Relationship"></td>
+                        <td><input type="number" name="member2_age" min="0" max="120" placeholder="Age"></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" name="member3_name" placeholder="Name"></td>
+                        <td><input type="text" name="member3_relationship" placeholder="Relationship"></td>
+                        <td><input type="number" name="member3_age" min="0" max="120" placeholder="Age"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+
+            <p>Additional Family Members or Other Support Persons:</p>
+            <div class="table-wrapper"><table id="group-support-persons">
+                <thead>
+                    <tr>
+                        <th>Family/Support Person Name</th>
+                        <th>Relationship to Client</th>
+                        <th>Age</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" name="support1_name" placeholder="Name"></td>
+                        <td><input type="text" name="support1_relationship" placeholder="Relationship"></td>
+                        <td><input type="number" name="support1_age" min="0" max="120" placeholder="Age"></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" name="support2_name" placeholder="Name"></td>
+                        <td><input type="text" name="support2_relationship" placeholder="Relationship"></td>
+                        <td><input type="number" name="support2_age" min="0" max="120" placeholder="Age"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+        </div>
+
+        <div class="form-section" id="section-relationships">
+            <h2 id="heading-relationships">Quality of Relationships</h2>
+            <p>How well do you get along with:</p>
+            <div>
+                <label>Spouse/Partner</label>
+                <div class="radio-group" id="group-relationship-spouse">
+                    <label><input type="radio" name="relationship_spouse" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_spouse" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_spouse" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_spouse" value="N/A">N/A</label>
+                </div>
+            </div>
+            <div>
+                <label>Children/Step-children</label>
+                <div class="radio-group" id="group-relationship-children">
+                    <label><input type="radio" name="relationship_children" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_children" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_children" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_children" value="N/A">N/A</label>
+                </div>
+            </div>
+            <div>
+                <label>Parents</label>
+                <div class="radio-group" id="group-relationship-parents">
+                    <label><input type="radio" name="relationship_parents" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_parents" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_parents" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_parents" value="N/A">N/A</label>
+                </div>
+            </div>
+            <div>
+                <label>Siblings</label>
+                <div class="radio-group" id="group-relationship-siblings">
+                    <label><input type="radio" name="relationship_siblings" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_siblings" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_siblings" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_siblings" value="N/A">N/A</label>
+                </div>
+            </div>
+            <div>
+                <label>Employer/Co-Workers</label>
+                <div class="radio-group" id="group-relationship-coworkers">
+                    <label><input type="radio" name="relationship_coworkers" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_coworkers" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_coworkers" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_coworkers" value="N/A">N/A</label>
+                </div>
+            </div>
+            <div>
+                <label>Friends</label>
+                <div class="radio-group" id="group-relationship-friends">
+                    <label><input type="radio" name="relationship_friends" value="Poor">Poor</label>
+                    <label><input type="radio" name="relationship_friends" value="Good">Good</label>
+                    <label><input type="radio" name="relationship_friends" value="Great">Great</label>
+                    <label><input type="radio" name="relationship_friends" value="N/A">N/A</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section" id="section-developmental-issues">
+            <h2 id="heading-developmental-issues">Developmental Issues</h2>
+            <p>Are you aware of any complications during your mother's pregnancy with you?</p>
+            <div class="radio-group" id="group-pregnancy-complications">
+                <label><input type="radio" name="pregnancyComplications" value="Yes">Yes</label>
+                <label><input type="radio" name="pregnancyComplications" value="No">No</label>
+                <label><input type="radio" name="pregnancyComplications" value="Unknown">Unknown</label>
+            </div>
+
+            <p>Are you aware of any developmental concerns from birth to age 5?</p>
+            <div class="radio-group" id="group-dev-concerns-early">
+                <label><input type="radio" name="devConcerns0-5" value="Yes">Yes</label>
+                <label><input type="radio" name="devConcerns0-5" value="No">No</label>
+                <label><input type="radio" name="devConcerns0-5" value="Unknown">Unknown</label>
+            </div>
+
+            <p>Are you aware of any developmental concerns from birth to ages 6-18?</p>
+            <div class="radio-group" id="group-dev-concerns-childhood">
+                <label><input type="radio" name="devConcerns6-18" value="Yes">Yes</label>
+                <label><input type="radio" name="devConcerns6-18" value="No">No</label>
+                <label><input type="radio" name="devConcerns6-18" value="Unknown">Unknown</label>
+            </div>
+        </div>
+
+        <div class="form-section" id="section-functioning">
+            <h2 id="heading-functioning">Functioning</h2>
+            <p>Do you currently have any concerns about your: (check all that apply)</p>
+            <div class="checkbox-group" id="group-functioning-concerns">
+                <label><input type="checkbox" name="functioningConcerns[]" value="Mood">Mood</label>
+                <label><input type="checkbox" name="functioningConcerns[]" value="Appetite">Appetite</label>
+                <label><input type="checkbox" name="functioningConcerns[]" value="Energy">Energy</label>
+                <label><input type="checkbox" name="functioningConcerns[]" value="Falling asleep">Falling asleep</label>
+                <label><input type="checkbox" name="functioningConcerns[]" value="Staying asleep">Staying asleep</label>
+            </div>
+            <label for="functioningDetails">For any items checked above, please indicate when you were first concerned and describe your concerns:</label>
+            <textarea id="functioningDetails" name="functioningDetails" placeholder="Please describe your concerns and when they began..."></textarea>
+
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="uninterruptedSleep">How many hours of uninterrupted sleep do you get per night?</label>
+                    <input type="number" id="uninterruptedSleep" name="uninterruptedSleep" min="0" max="24" step="0.5" placeholder="e.g., 7.5">
+                </div>
+                <div class="field-group">
+                    <label for="technologyHours">How many hours per day do you spend on technology (not school/work related)?</label>
+                    <input type="number" id="technologyHours" name="technologyHours" min="0" max="24" step="0.5" placeholder="e.g., 3">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section" id="section-family-history">
+            <h2 id="heading-family-history">Family History</h2>
+            <p>Is there any history of mental health issues on either side of your family?</p>
+            <div class="radio-group" id="group-family-mental-health">
+                <label><input type="radio" name="familyMentalHealth" value="Yes">Yes</label>
+                <label><input type="radio" name="familyMentalHealth" value="No">No</label>
+                <label><input type="radio" name="familyMentalHealth" value="Unknown">Unknown</label>
+            </div>
+            <label for="mentalHealthHistory">If yes, describe:</label>
+            <textarea id="mentalHealthHistory" name="mentalHealthHistory"></textarea>
+
+            <p>Is there any history of medical/physical health issues on either side of your family?</p>
+            <div class="radio-group" id="group-family-physical-health">
+                <label><input type="radio" name="familyPhysicalHealth" value="Yes">Yes</label>
+                <label><input type="radio" name="familyPhysicalHealth" value="No">No</label>
+                <label><input type="radio" name="familyPhysicalHealth" value="Unknown">Unknown</label>
+            </div>
+            <label for="physicalHealthHistory">If yes, describe:</label>
+            <textarea id="physicalHealthHistory" name="physicalHealthHistory"></textarea>
+        </div>
+
+        <div class="form-section" id="section-substance-history">
+            <h2 id="heading-substance-history">Chemical/Substance History</h2>
+            <p>Do you have any concerns about your use of alcohol or drugs?</p>
+            <div class="radio-group" id="group-substance-concerns">
+                <label><input type="radio" name="substanceConcerns" value="Yes">Yes</label>
+                <label><input type="radio" name="substanceConcerns" value="No">No</label>
+            </div>
+
+            <h3>CAGE Assessment Tool</h3>
+            <p>Have you ever felt that you ought to **cut** down on your drinking or drug use?</p>
+            <div class="radio-group" id="group-cage1">
+                <label><input type="radio" name="cage1" value="Yes">Yes</label>
+                <label><input type="radio" name="cage1" value="No">No</label>
+            </div>
+            <p>Have people **annoyed** you by criticizing your drinking or drug use?</p>
+            <div class="radio-group" id="group-cage2">
+                <label><input type="radio" name="cage2" value="Yes">Yes</label>
+                <label><input type="radio" name="cage2" value="No">No</label>
+            </div>
+            <p>Have you ever felt **guilty** about your drinking or drug use?</p>
+            <div class="radio-group" id="group-cage3">
+                <label><input type="radio" name="cage3" value="Yes">Yes</label>
+                <label><input type="radio" name="cage3" value="No">No</label>
+            </div>
+            <p>Have you ever had a drink or used drugs first thing in the morning (**eye opener**) to steady your nerves, get rid of a hangover, or get the day started?</p>
+            <div class="radio-group" id="group-cage4">
+                <label><input type="radio" name="cage4" value="Yes">Yes</label>
+                <label><input type="radio" name="cage4" value="No">No</label>
+            </div>
+            
+            <p>Do you use:</p>
+            <div class="table-wrapper"><table id="group-substance-use">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Current</th>
+                        <th>Past</th>
+                        <th>Never</th>
+                        <th>Additional Information</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Alcohol</td>
+                        <td><input type="checkbox" name="use_alcohol" value="Current"></td>
+                        <td><input type="checkbox" name="use_alcohol" value="Past"></td>
+                        <td><input type="checkbox" name="use_alcohol" value="Never"></td>
+                        <td><input type="text" name="info_alcohol"></td>
+                    </tr>
+                    <tr>
+                        <td>Street Drugs</td>
+                        <td><input type="checkbox" name="use_streetDrugs" value="Current"></td>
+                        <td><input type="checkbox" name="use_streetDrugs" value="Past"></td>
+                        <td><input type="checkbox" name="use_streetDrugs" value="Never"></td>
+                        <td><input type="text" name="info_streetDrugs"></td>
+                    </tr>
+                    <tr>
+                        <td>Inhalants</td>
+                        <td><input type="checkbox" name="use_inhalants" value="Current"></td>
+                        <td><input type="checkbox" name="use_inhalants" value="Past"></td>
+                        <td><input type="checkbox" name="use_inhalants" value="Never"></td>
+                        <td><input type="text" name="info_inhalants"></td>
+                    </tr>
+                    <tr>
+                        <td>Prescription meds beyond prescribed usage</td>
+                        <td><input type="checkbox" name="use_prescribedMeds" value="Current"></td>
+                        <td><input type="checkbox" name="use_prescribedMeds" value="Past"></td>
+                        <td><input type="checkbox" name="use_prescribedMeds" value="Never"></td>
+                        <td><input type="text" name="info_prescribedMeds"></td>
+                    </tr>
+                    <tr>
+                        <td>Other</td>
+                        <td><input type="checkbox" name="use_otherSubstance" value="Current"></td>
+                        <td><input type="checkbox" name="use_otherSubstance" value="Past"></td>
+                        <td><input type="checkbox" name="use_otherSubstance" value="Never"></td>
+                        <td><input type="text" name="info_otherSubstance"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+
+            <h3>Caffeine Use</h3>
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="caffeineCups">Number of cups/cans per day:</label>
+                    <input type="number" id="caffeineCups" name="caffeineCups" min="0" max="20" placeholder="e.g., 2">
+                </div>
+                <div class="field-group">
+                    <label for="caffeineTime">Time of day:</label>
+                    <input type="text" id="caffeineTime" name="caffeineTime" placeholder="e.g., Morning and afternoon">
+                </div>
+            </div>
+            
+            <h3>Tobacco/Nicotine Use</h3>
+            <div class="radio-group" id="group-tobacco-use">
+                <label><input type="radio" name="tobaccoUse" value="Yes">Yes</label>
+                <label><input type="radio" name="tobaccoUse" value="No">No</label>
+                <label><input type="radio" name="tobaccoUse" value="Unsure">Unsure</label>
+            </div>
+            <label for="tobaccoAmount">If yes, amount per day:</label>
+            <input type="text" id="tobaccoAmount" name="tobaccoAmount">
+
+            <p>Does someone in your life (close friend or family member):</p>
+            <div class="table-wrapper"><table id="group-someone-else-substance">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Current</th>
+                        <th>Past</th>
+                        <th>Never</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Use alcohol in excess</td>
+                        <td><input type="checkbox" name="someone_alcohol" value="Current"></td>
+                        <td><input type="checkbox" name="someone_alcohol" value="Past"></td>
+                        <td><input type="checkbox" name="someone_alcohol" value="Never"></td>
+                    </tr>
+                    <tr>
+                        <td>Use street drugs</td>
+                        <td><input type="checkbox" name="someone_streetDrugs" value="Current"></td>
+                        <td><input type="checkbox" name="someone_streetDrugs" value="Past"></td>
+                        <td><input type="checkbox" name="someone_streetDrugs" value="Never"></td>
+                    </tr>
+                    <tr>
+                        <td>Use inhalants</td>
+                        <td><input type="checkbox" name="someone_inhalants" value="Current"></td>
+                        <td><input type="checkbox" name="someone_inhalants" value="Past"></td>
+                        <td><input type="checkbox" name="someone_inhalants" value="Never"></td>
+                    </tr>
+                    <tr>
+                        <td>Use prescription meds beyond prescribed usage</td>
+                        <td><input type="checkbox" name="someone_prescribedMeds" value="Current"></td>
+                        <td><input type="checkbox" name="someone_prescribedMeds" value="Past"></td>
+                        <td><input type="checkbox" name="someone_prescribedMeds" value="Never"></td>
+                    </tr>
+                    <tr>
+                        <td>Have legal issues</td>
+                        <td><input type="checkbox" name="someone_legalIssues" value="Current"></td>
+                        <td><input type="checkbox" name="someone_legalIssues" value="Past"></td>
+                        <td><input type="checkbox" name="someone_legalIssues" value="Never"></td>
+                    </tr>
+                    <tr>
+                        <td>Other:</td>
+                        <td colspan="3"><input type="text" name="someone_other"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+        </div>
+        
+        <div class="form-section" id="section-legal-history">
+            <h2 id="heading-legal-history">Legal History</h2>
+            <p>Do you have a history of legal charges?</p>
+            <div class="radio-group" id="group-legal-charges">
+                <label><input type="radio" name="legalCharges" value="Yes">Yes</label>
+                <label><input type="radio" name="legalCharges" value="No">No</label>
+            </div>
+            <label for="legalChargesDesc">If yes, describe:</label>
+            <textarea id="legalChargesDesc" name="legalChargesDesc"></textarea>
+            
+            <p>Are you currently on probation/parole?</p>
+            <div class="radio-group" id="group-current-probation">
+                <label><input type="radio" name="currentProbation" value="Yes">Yes</label>
+                <label><input type="radio" name="currentProbation" value="No">No</label>
+            </div>
+            <p>Have you ever been on probation/parole?</p>
+            <div class="radio-group" id="group-past-probation">
+                <label><input type="radio" name="pastProbation" value="Yes">Yes</label>
+                <label><input type="radio" name="pastProbation" value="No">No</label>
+            </div>
+            <p>Have you ever been court-ordered into chemical health or mental health treatment?</p>
+            <div class="radio-group" id="group-court-ordered-treatment">
+                <label><input type="radio" name="courtOrderedTreatment" value="Yes">Yes</label>
+                <label><input type="radio" name="courtOrderedTreatment" value="No">No</label>
+            </div>
+        </div>
+        
+        <div class="form-section" id="section-mh-treatment-history">
+            <h2 id="heading-mh-treatment-history">Mental Health Treatment History</h2>
+            <p>Previous and/or current mental health treatment?</p>
+            <div class="radio-group" id="group-mh-treatment">
+                <label><input type="radio" name="mentalHealthTreatment" value="Yes">Yes</label>
+                <label><input type="radio" name="mentalHealthTreatment" value="No">No</label>
+            </div>
+            <p>(may include in-home services, outpatient, day treatment, psychiatric hospitalization, psychiatric partial-hospitalization, case manager, other supportive services)</p>
+            <div class="table-wrapper"><table id="group-mh-providers">
+                <thead>
+                    <tr>
+                        <th>Agency/Provider</th>
+                        <th>Dates</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" name="provider1_agency"></td>
+                        <td><input type="text" name="provider1_dates"></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" name="provider2_agency"></td>
+                        <td><input type="text" name="provider2_dates"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+        </div>
+        
+        <div class="form-section" id="section-trauma-history">
+            <h2 id="heading-trauma-history">Trauma History</h2>
+            <p>Have you ever experienced or witnessed any of the following traumatic or upsetting events?</p>
+            <div class="table-wrapper"><table id="group-trauma-events">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>During Childhood (age 0-17)</th>
+                        <th>During Adulthood (age 18+)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>None</td>
+                        <td><input type="checkbox" name="trauma_none_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_none_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Physical Abuse</td>
+                        <td><input type="checkbox" name="trauma_physical_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_physical_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Domestic Violence/Abuse</td>
+                        <td><input type="checkbox" name="trauma_domestic_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_domestic_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Neglect</td>
+                        <td><input type="checkbox" name="trauma_neglect_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_neglect_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Emotional Abuse</td>
+                        <td><input type="checkbox" name="trauma_emotional_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_emotional_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Sexual Abuse/Molestation</td>
+                        <td><input type="checkbox" name="trauma_sexual_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_sexual_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Community Violence</td>
+                        <td><input type="checkbox" name="trauma_community_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_community_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>Been involved with Child or Adult Protective Services (CPS)</td>
+                        <td><input type="checkbox" name="trauma_cps_child" value="Yes"></td>
+                        <td><input type="checkbox" name="trauma_cps_adult" value="Yes"></td>
+                    </tr>
+                    <tr>
+                        <td>As a child, were you placed outside your home?</td>
+                        <td><input type="checkbox" name="trauma_placedOut_child" value="Yes"></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table></div>
+        </div>
+        
+        <div class="form-section" id="section-safety-risk">
+            <h2 id="heading-safety-risk">Safety/Risk Issues</h2>
+            <p>Do you have any of the following safety/risk concerns?</p>
+            <div class="checkbox-group" id="group-risk-concerns">
+                <label><input type="checkbox" name="risk_concerns[]" value="Dangerous behaviors to self">Dangerous behaviors to self</label>
+                <label><input type="checkbox" name="risk_concerns[]" value="Dangerous behaviors to others">Dangerous behaviors to others</label>
+                <label><input type="checkbox" name="risk_concerns[]" value="Destruction of property">Destruction of property</label>
+                <label><input type="checkbox" name="risk_concerns[]" value="Risk of wandering/running away">Risk of wandering/running away</label>
+                <label><input type="checkbox" name="risk_concerns[]" value="Need for excessive supervision">Need for excessive supervision</label>
+                <label><input type="checkbox" name="risk_concerns[]" value="None reported">None reported</label>
+            </div>
+        </div>
+        
+        <div class="form-section" id="section-spirituality">
+            <h2 id="heading-spirituality">Spirituality/Religion</h2>
+            <p>Are you currently engaged in any spiritual/religious activities?</p>
+            <div class="radio-group" id="group-spiritual-activities">
+                <label><input type="radio" name="spiritualActivities" value="Yes">Yes</label>
+                <label><input type="radio" name="spiritualActivities" value="No">No</label>
+                <label><input type="radio" name="spiritualActivities" value="Unsure">Unsure</label>
+            </div>
+            <label for="spiritualDesc">If yes, describe:</label>
+            <textarea id="spiritualDesc" name="spiritualDesc"></textarea>
+        </div>
+        
+        <div class="form-section" id="section-medical">
+            <h2 id="heading-medical">Medical</h2>
+            <div class="section-instructions">
+                <strong>Patient Care Communication:</strong> With your permission, Ellie Mental Health will coordinate your mental health services with your primary care physician.
+            </div>
+            
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="pcpName">Primary Care Physician:</label>
+                    <input type="text" id="pcpName" name="pcpName" placeholder="Dr. Name">
+                </div>
+                <div class="field-group">
+                    <label for="pcpClinic">Name of Clinic:</label>
+                    <input type="text" id="pcpClinic" name="pcpClinic" placeholder="Clinic/Practice Name">
+                </div>
+            </div>
+            
+            <div class="field-row">
+                <div class="field-group">
+                    <label for="psychiatristName">Psychiatrist/Medication-Prescribing Provider:</label>
+                    <input type="text" id="psychiatristName" name="psychiatristName" placeholder="Dr. Name">
+                </div>
+                <div class="field-group">
+                    <label for="psychiatristClinic">Name of Clinic:</label>
+                    <input type="text" id="psychiatristClinic" name="psychiatristClinic" placeholder="Clinic/Practice Name">
+                </div>
+            </div>
+
+            <p>Do you have an Advanced Directive?</p>
+            <div class="radio-group" id="group-advanced-directive">
+                <label><input type="radio" name="advancedDirective" value="Yes">Yes</label>
+                <label><input type="radio" name="advancedDirective" value="No">No</label>
+            </div>
+            
+            <h3>Health Issues</h3>
+            <div class="table-wrapper"><table id="group-health-issues">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Yes</th>
+                        <th>No</th>
+                        <th>Unknown</th>
+                        <th>If yes, age first noted</th>
+                        <th>If yes, still occurring?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Seizures (convulsions) or Spells</td>
+                        <td><input type="checkbox" name="seizures" value="Yes"></td>
+                        <td><input type="checkbox" name="seizures" value="No"></td>
+                        <td><input type="checkbox" name="seizures" value="Unknown"></td>
+                        <td><input type="text" name="seizures_age"></td>
+                        <td><input type="text" name="seizures_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Head Injury</td>
+                        <td><input type="checkbox" name="headInjury" value="Yes"></td>
+                        <td><input type="checkbox" name="headInjury" value="No"></td>
+                        <td><input type="checkbox" name="headInjury" value="Unknown"></td>
+                        <td><input type="text" name="headInjury_age"></td>
+                        <td><input type="text" name="headInjury_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Chronic Pain</td>
+                        <td><input type="checkbox" name="chronicPain" value="Yes"></td>
+                        <td><input type="checkbox" name="chronicPain" value="No"></td>
+                        <td><input type="checkbox" name="chronicPain" value="Unknown"></td>
+                        <td><input type="text" name="chronicPain_age"></td>
+                        <td><input type="text" name="chronicPain_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Trouble with Hearing</td>
+                        <td><input type="checkbox" name="hearingTrouble" value="Yes"></td>
+                        <td><input type="checkbox" name="hearingTrouble" value="No"></td>
+                        <td><input type="checkbox" name="hearingTrouble" value="Unknown"></td>
+                        <td><input type="text" name="hearingTrouble_age"></td>
+                        <td><input type="text" name="hearingTrouble_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Trouble with Vision</td>
+                        <td><input type="checkbox" name="visionTrouble" value="Yes"></td>
+                        <td><input type="checkbox" name="visionTrouble" value="No"></td>
+                        <td><input type="checkbox" name="visionTrouble" value="Unknown"></td>
+                        <td><input type="text" name="visionTrouble_age"></td>
+                        <td><input type="text" name="visionTrouble_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Poisoning or Overdose History</td>
+                        <td><input type="checkbox" name="overdoseHistory" value="Yes"></td>
+                        <td><input type="checkbox" name="overdoseHistory" value="No"></td>
+                        <td><input type="checkbox" name="overdoseHistory" value="Unknown"></td>
+                        <td><input type="text" name="overdoseHistory_age"></td>
+                        <td><input type="text" name="overdoseHistory_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Serious or Chronic Illness</td>
+                        <td><input type="checkbox" name="chronicIllness" value="Yes"></td>
+                        <td><input type="checkbox" name="chronicIllness" value="No"></td>
+                        <td><input type="checkbox" name="chronicIllness" value="Unknown"></td>
+                        <td><input type="text" name="chronicIllness_age"></td>
+                        <td><input type="text" name="chronicIllness_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Hospitalizations</td>
+                        <td><input type="checkbox" name="hospitalizations" value="Yes"></td>
+                        <td><input type="checkbox" name="hospitalizations" value="No"></td>
+                        <td><input type="checkbox" name="hospitalizations" value="Unknown"></td>
+                        <td><input type="text" name="hospitalizations_age"></td>
+                        <td><input type="text" name="hospitalizations_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Allergies</td>
+                        <td><input type="checkbox" name="allergies" value="Yes"></td>
+                        <td><input type="checkbox" name="allergies" value="No"></td>
+                        <td><input type="checkbox" name="allergies" value="Unknown"></td>
+                        <td><input type="text" name="allergies_age"></td>
+                        <td><input type="text" name="allergies_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Infectious/Contagious Diseases</td>
+                        <td><input type="checkbox" name="infectiousDiseases" value="Yes"></td>
+                        <td><input type="checkbox" name="infectiousDiseases" value="No"></td>
+                        <td><input type="checkbox" name="infectiousDiseases" value="Unknown"></td>
+                        <td><input type="text" name="infectiousDiseases_age"></td>
+                        <td><input type="text" name="infectiousDiseases_still"></td>
+                    </tr>
+                    <tr>
+                        <td>Surgeries</td>
+                        <td><input type="checkbox" name="surgeries" value="Yes"></td>
+                        <td><input type="checkbox" name="surgeries" value="No"></td>
+                        <td><input type="checkbox" name="surgeries" value="Unknown"></td>
+                        <td><input type="text" name="surgeries_age"></td>
+                        <td><input type="text" name="surgeries_still"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+            <label for="familyMedicalConcerns">Family medical concerns that impact you:</label>
+            <textarea id="familyMedicalConcerns" name="familyMedicalConcerns"></textarea>
+            
+            <label for="otherFamilyStressors">Other family concerns/stressors impacting you:</label>
+            <textarea id="otherFamilyStressors" name="otherFamilyStressors"></textarea>
+            
+            <h3>Medications</h3>
+            <div class="table-wrapper"><table id="group-medications">
+                <thead>
+                    <tr>
+                        <th>Medication</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Dosage</th>
+                        <th>Frequency</th>
+                        <th>Prescribed By</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" name="med1_name"></td>
+                        <td><input type="text" name="med1_start"></td>
+                        <td><input type="text" name="med1_end"></td>
+                        <td><input type="text" name="med1_dosage"></td>
+                        <td><input type="text" name="med1_frequency"></td>
+                        <td><input type="text" name="med1_prescribedBy"></td>
+                        <td><input type="text" name="med1_note"></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" name="med2_name"></td>
+                        <td><input type="text" name="med2_start"></td>
+                        <td><input type="text" name="med2_end"></td>
+                        <td><input type="text" name="med2_dosage"></td>
+                        <td><input type="text" name="med2_frequency"></td>
+                        <td><input type="text" name="med2_prescribedBy"></td>
+                        <td><input type="text" name="med2_note"></td>
+                    </tr>
+                </tbody>
+            </table></div>
+        </div>
+        
+        <div class="form-section" id="section-demographics">
+            <h2 id="heading-demographics">Demographics</h2>
+            <label for="highestEducation">Highest education completed:</label>
+            <select id="highestEducation" name="education">
+                <option value="">-- Select One --</option>
+                <option value="K-8th Grade">K-8th Grade</option>
+                <option value="High School">High School (no diploma)</option>
+                <option value="High School Graduate">High School Graduate (or GED)</option>
+                <option value="Some College">Some College (no degree)</option>
+                <option value="Associate's Degree">Associate's Degree</option>
+                <option value="Bachelor's Degree">Bachelor's Degree</option>
+                <option value="Master's Degree">Master's Degree</option>
+                <option value="Doctoral Degree">Doctoral Degree</option>
+                <option value="Professional Degree">Professional Degree (e.g., JD, MD)</option>
+            </select>
+            
+            <p>Racial Orientation:</p>
+            <div class="checkbox-group" id="group-race">
+                <label><input type="checkbox" name="race[]" value="American Indian or Alaska Native">American Indian or Alaska Native</label>
+                <label><input type="checkbox" name="race[]" value="Asian">Asian</label>
+                <label><input type="checkbox" name="race[]" value="Black or African American">Black or African American</label>
+                <label><input type="checkbox" name="race[]" value="Hispanic or Latino">Hispanic or Latino</label>
+                <label><input type="checkbox" name="race[]" value="Middle Eastern or North African">Middle Eastern or North African</label>
+                <label><input type="checkbox" name="race[]" value="Native Hawaiian or Other Pacific Islander">Native Hawaiian or Other Pacific Islander</label>
+                <label><input type="checkbox" name="race[]" value="White">White</label>
+                <label><input type="checkbox" name="race[]" value="Other">Other</label>
+            </div>
+            <label for="primaryLanguage">Primary language:</label>
+            <input type="text" id="primaryLanguage" name="primaryLanguage">
+            
+            <label for="occupation">Occupation:</label>
+            <input type="text" id="occupation" name="occupation">
+            
+            <label for="employer">Employer:</label>
+            <input type="text" id="employer" name="employer">
+            
+            <p>Gross Household Income:</p>
+            <select id="income" name="income">
+                <option value="">-- Select One --</option>
+                <option value="$0-14,999">$0-14,999</option>
+                <option value="$15,000-19,999">$15,000-19,999</option>
+                <option value="$20,000-29,999">$20,000-29,999</option>
+                <option value="$30,000-39,999">$30,000-39,999</option>
+                <option value="$40,000-59,999">$40,000-59,999</option>
+                <option value="$60,000+">$60,000+</option>
+            </select>
+            
+            <h3>Household Military History</h3>
+            <div class="radio-group" id="group-military-history">
+                <label><input type="radio" name="militaryHistory" value="Active">Active</label>
+                <label><input type="radio" name="militaryHistory" value="Past">Past</label>
+                <label><input type="radio" name="militaryHistory" value="None">None</label>
+            </div>
+            <label for="militaryActiveWho">If Active, who?</label>
+            <input type="text" id="militaryActiveWho" name="militaryActiveWho">
+            
+            <label for="militaryImpact">Describe impact on you:</label>
+            <textarea id="militaryImpact" name="militaryImpact"></textarea>
+        </div>
+
+        <button type="submit">Submit</button>
+    </form>
+    </div>
+
+</body>
+</html>

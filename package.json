@@ -1,0 +1,9 @@
+{
+  "name": "web-form-voice-filler",
+  "version": "1.0.0",
+  "description": "Voice-driven web form filling application using Gemini Live API",
+  "private": true,
+  "dependencies": {
+    "pip": "^0.0.1"
+  }
+}

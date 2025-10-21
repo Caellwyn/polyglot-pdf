@@ -1,0 +1,19 @@
+{
+  "bundle": {
+    "path": "dist/bookmarklet/bookmarklet.bundle.js",
+    "size": 74652,
+    "sizeKB": "72.90",
+    "sha256": "833eb99fe4ff9c12f40fca1ba5c9014a3294bea86d78ed58684abc5091e59939",
+    "integrity": "sha384-6aVdukRbq/gXK6mxzNmLajt1a90HBBD5WgjpuGYpR4wZTt5bsWje5KvuvTL5SIqM"
+  },
+  "cdn": {
+    "url": "https://storage.googleapis.com/voice-form-filler-474017-bookmarklet/bookmarklet/bookmarklet.bundle.js"
+  },
+  "loader": {
+    "raw": "(function() {\n\tif (window.VoiceFormFiller && window.VoiceFormFiller.isActive()) {\n\t\tconsole.log('[Bookmarklet] Already active');\n\t\treturn;\n\t}\n\t\n\tvar script = document.createElement('script');\n\tscript.src = 'https://storage.googleapis.com/voice-form-filler-474017-bookmarklet/bookmarklet/bookmarklet.bundle.js?v=' + Date.now();\n\tscript.crossOrigin = 'anonymous';\n\tscript.onload = function() {\n\t\tif (window.VoiceFormFiller) {\n\t\t\twindow.VoiceFormFiller.inject();\n\t\t} else {\n\t\t\talert('Voice Form Filler failed to load. Check console for errors.');\n\t\t}\n\t};\n\tscript.onerror = function() {\n\t\talert('Failed to load Voice Form Filler from CDN. Check your connection.');\n\t};\n\tdocument.head.appendChild(script);\n})();",
+    "minified": "(function(){if(window.VoiceFormFiller && window.VoiceFormFiller.isActive()){console.log('[Bookmarklet] Already active');return;}var script = document.createElement('script');script.src = 'https://storage.googleapis.com/voice-form-filler-474017-bookmarklet/bookmarklet/bookmarklet.bundle.js?v=' + Date.now();script.crossOrigin = 'anonymous';script.onload = function(){if(window.VoiceFormFiller){window.VoiceFormFiller.inject();}else{alert('Voice Form Filler failed to load. Check console for errors.');}};script.onerror = function(){alert('Failed to load Voice Form Filler from CDN. Check your connection.');};document.head.appendChild(script);})();",
+    "minifiedSize": 648,
+    "bookmarklet": "javascript:(function()%7Bif(window.VoiceFormFiller%20%26%26%20window.VoiceFormFiller.isActive())%7Bconsole.log('%5BBookmarklet%5D%20Already%20active')%3Breturn%3B%7Dvar%20script%20%3D%20document.createElement('script')%3Bscript.src%20%3D%20'https%3A%2F%2Fstorage.googleapis.com%2Fvoice-form-filler-474017-bookmarklet%2Fbookmarklet%2Fbookmarklet.bundle.js%3Fv%3D'%20%2B%20Date.now()%3Bscript.crossOrigin%20%3D%20'anonymous'%3Bscript.onload%20%3D%20function()%7Bif(window.VoiceFormFiller)%7Bwindow.VoiceFormFiller.inject()%3B%7Delse%7Balert('Voice%20Form%20Filler%20failed%20to%20load.%20Check%20console%20for%20errors.')%3B%7D%7D%3Bscript.onerror%20%3D%20function()%7Balert('Failed%20to%20load%20Voice%20Form%20Filler%20from%20CDN.%20Check%20your%20connection.')%3B%7D%3Bdocument.head.appendChild(script)%3B%7D)()%3B",
+    "bookmarkletSize": 815
+  }
+}

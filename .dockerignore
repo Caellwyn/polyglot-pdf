@@ -1,0 +1,42 @@
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+backend.log
+
+# Frontend (not needed for backend deployment)
+frontend/
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+planning_documents/
+
+# Tests (optional - include if you want to run tests in container)
+backend/tests/
+
+# Output files
+outputs/

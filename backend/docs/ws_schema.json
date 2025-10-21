@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDF Voice Filler - WebSocket Message Schema",
+  "description": "Schema describing JSON message shapes used by the project's WebSocket endpoints (/echo, /audio, /fill). Binary frames (audio, pdf bytes) have guidance in the companion markdown file.",
+  "oneOf": [
+    {
+      "title": "Echo / Ping",
+      "type": "object",
+      "properties": {
+        "type": { "const": "ping" },
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "PDF Voice Filler - WebSocket Message Schema",
+          "description": "Schema describing JSON message shapes used by the project's WebSocket endpoints (/echo, /audio, /fill). Binary frames (audio, pdf bytes) have guidance in the companion markdown file.",
+          "oneOf": [
+            {
+              "title": "Echo / Ping",
+              "type": "object",
+              "properties": {
+                "type": { "const": "ping" },
+                {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "title": "PDF Voice Filler - WebSocket Message Schema",
+                  "description": "Schema describing JSON message shapes used by the project's WebSocket endpoints (/echo, /audio, /fill). Binary frames (audio, pdf bytes) have guidance in the companion markdown file.",
+                  "oneOf": [
+                    {
+                      "title": "Echo / Ping",
+                      "type": "object",
+                      "properties": {
+                        "type": { "const": "ping" },
+                        "id": { "type": "string" },
+                        "payload": { }
+                      },
+                      "required": ["type"]
+                    },
+                    {
+                      "title": "Start / Session control",
+                      "type": "object",
+                      "properties": {
+                        "type": { "enum": ["start_session", "close_session", "get_status"] },
+                        "session_id": { "type": "string" },
+                        "metadata": { "type": "object" }
+                      },
+                      "required": ["type"]
+                    },
+                    {
+                      "title": "Audio chunk (JSON metadata)",
+                      "type": "object",
+                      "properties": {
+                        "type": { "const": "audio_chunk" },
+                        "session_id": { "type": "string" },
+                        "seq": { "type": "integer", "minimum": 0 },
+                        "encoding": { "type": "string" },
+                        "samples_ms": { "type": "integer" }
+                      },
+                      "required": ["type", "session_id", "seq"]
+                    },
+                    {
+                      "title": "Tool call (from client) / Tool response (from server)",
+                      "type": "object",
+                      "properties": {
+                        "type": { "enum": ["tool_call", "tool_response"] },
+                        "session_id": { "type": "string" },
+                        "tool": { "type": "string" },
+                        "call_id": { "type": "string" },
+                        "arguments": { "type": ["object", "string"] },
+                        "response": { "type": ["object", "string"] }
+                      },
+                      "required": ["type", "session_id", "tool"]
+                    },
+                    {
+                      "title": "Form update (client or server)",
+                      "type": "object",
+                      "properties": {
+                        "type": { "const": "form_update" },
+                        "session_id": { "type": "string" },
+                        "updates": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field_id": { "type": "string" },
+                              "value": { }
+                            },
+                            "required": ["field_id"]
+                          }
+                        }
+                      },
+                      "required": ["type", "session_id", "updates"]
+                    }
+                  ]
+                }

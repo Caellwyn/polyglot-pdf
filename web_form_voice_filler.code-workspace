@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python-envs.defaultEnvManager": "ms-python.python:venv",
+		"python-envs.defaultPackageManager": "ms-python.python:pip",
+		"terminal.integrated.env.windows": {
+			"VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+			"PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
+		}
+	}
+}

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thank You - Voice Form Filler Demo</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #50c878;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --font-color: #343a40;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--font-color);
+        }
+
+        .thank-you-container {
+            max-width: 600px;
+            margin: 2rem;
+            background: var(--card-background);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 3rem;
+            text-align: center;
+        }
+
+        .success-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 2rem;
+            background: linear-gradient(135deg, var(--secondary-color) 0%, #3da35d 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px rgba(80, 200, 120, 0.3);
+        }
+
+        .success-icon svg {
+            width: 60px;
+            height: 60px;
+            stroke: white;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin: 0 0 1rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #6c757d;
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .message-box {
+            background: #f8f9fa;
+            border-left: 4px solid var(--primary-color);
+            padding: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+            border-radius: 8px;
+        }
+
+        .message-box p {
+            margin: 0.75rem 0;
+            line-height: 1.8;
+        }
+
+        .message-box p:first-child {
+            margin-top: 0;
+        }
+
+        .message-box p:last-child {
+            margin-bottom: 0;
+        }
+
+        .privacy-notice {
+            background: #e8f5e9;
+            border-left: 4px solid var(--secondary-color);
+            padding: 1rem 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .privacy-notice strong {
+            color: var(--secondary-color);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .cta-buttons {
+            margin-top: 2.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 0.875rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #357abd 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.4);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .footer-note {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #dee2e6;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .footer-note a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-note a:hover {
+            text-decoration: underline;
+        }
+
+        /* Decorative elements */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: var(--secondary-color);
+            opacity: 0.7;
+            border-radius: 50%;
+        }
+
+        @media (max-width: 640px) {
+            .thank-you-container {
+                padding: 2rem 1.5rem;
+                margin: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1.1rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="thank-you-container">
+        <!-- Company Logo -->
+        <a href="https://www.caellwynai.com" target="_blank" rel="noopener noreferrer" style="display: inline-block; margin-bottom: 2rem;">
+            <img src="logo_with_text.png" alt="Caellwyn AI" style="max-width: 400px; height: auto;">
+        </a>
+
+        <!-- Success Icon -->
+        <div class="success-icon">
+            <svg viewBox="0 0 52 52">
+                <polyline points="14 27 22 35 38 19"/>
+            </svg>
+        </div>
+
+        <!-- Main Message -->
+        <h1>Demo Complete! 🎉</h1>
+        <p class="subtitle">Thank you for exploring Voice Form Filler</p>
+
+        <!-- Information Box -->
+        <div class="message-box">
+            <p><strong>📝 What just happened?</strong></p>
+            <p>If this were a real form, it would have been submitted to the clinic's system. However, this is a demonstration environment designed to showcase the capabilities of voice-powered form filling.</p>
+            <p>The Voice Form Filler technology uses Google's Gemini Live API to enable natural conversation while filling out complex forms — making healthcare intake faster and more accessible.</p>
+        </div>
+
+        <!-- Privacy Notice -->
+        <div class="privacy-notice">
+            <strong>🔒 Your Privacy Matters</strong>
+            <p>All form data entered during this demo has been deleted and was never stored on any server. We do not retain, analyze, or share any field values you provided.</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-note">
+            <p>Built with ❤️ using React, TypeScript, and Google Gemini Live API</p>
+            <p>Questions? <a href="mailto:josh@caellwynai.com">Get in touch</a></p>
+        </div>
+    </div>
+</body>
+</html>

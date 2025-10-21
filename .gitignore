@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+.env
+backend/.env
+backend/__pycache__
+__pycache__/
+*.pyc
+*.pyo
+.vscode/
+# example data files
+example_pdfs/
+example_webforms/
+.pytest_cache/
+# Logs
+.logs/
+.frontend/dist/

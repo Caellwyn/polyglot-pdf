@@ -1,0 +1,69 @@
+from typing import Annotated
+from fastapi import Depends, FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (if it exists)
+load_dotenv()
+
+from .config import Settings, get_settings
+from .routes import websocket_routes
+from .routes.vad_config_routes import vad_config_websocket
+from .utils.logging import configure_logging
+
+
+configure_logging()
+
+app = FastAPI(title="Web Form Voice Filler API", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",  # Added for dev server port conflicts
+        "http://127.0.0.1:5175",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(websocket_routes.router)
+
+
+@app.websocket("/ws/vad-config")
+async def vad_config_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for VAD configuration updates from tuning lab"""
+    await vad_config_websocket(websocket)
+
+
+@app.get("/health")
+async def health(settings: Annotated[Settings, Depends(get_settings)]):
+    return {
+        "status": "ok",
+        "models": {
+            "live": settings.MODEL_LIVE,
+            "native": settings.MODEL_NATIVE,
+            "labeling": settings.MODEL_LABELING,
+        },
+        "audio": {
+            "in_rate": settings.AUDIO_IN_RATE,
+            "out_rate": settings.AUDIO_OUT_RATE,
+        },
+        "limits": {
+            "max_upload_mb": settings.MAX_UPLOAD_MB,
+            "ws_chunk_ms": settings.WS_CHUNK_MS,
+        },
+        "env": {
+            "gemini_api_key_present": bool(settings.GEMINI_API_KEY),
+        },
+    }
+
+
+@app.get("/version")
+async def version():
+    return {"version": app.version}
+

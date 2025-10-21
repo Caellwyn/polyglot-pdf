@@ -1,0 +1,1803 @@
+# Gemini Upgrade System Instruction - Token Analysis
+Generated: 2025-10-11 20:39:47
+Form: Ellie Mental Health Adult Intake Form
+Total Fields: 174
+Schema Source: frontend/public/adult_intake_demo_schema.json
+
+## Message Statistics
+- Total Characters: 35,520
+- Fields JSON Characters: 34,363
+- Estimated Tokens (div4): 12,734
+- Actual tokens will vary based on:
+  * JSON structure (brackets, quotes, commas)
+  * Field metadata (options arrays, etc.)
+  * Gemini's tokenizer may differ from GPT tokenizer
+
+## Purpose
+This is the exact system instruction sent to Gemini Live API when upgrading
+from warmup mode to full form-filling mode. It contains:
+1. Form context (title, progress)
+2. Complete field metadata (174 fields with id, name, type, options)
+3. Behavior instructions (workflow, constraints, language handling)
+
+## Token Budget Context
+- Warmup system instruction: ~100 tokens
+- This upgrade message: ~8,880 tokens (estimated)
+- Per-session token cap: 50,000 tokens
+- Remaining budget after upgrade: ~41,000 tokens for conversation
+
+## Full Message Below
+================================================================================
+
+Task: Fill Ellie Mental Health Adult Intake Form ONLY
+Progress: 0/174 complete, 174 remaining
+
+FORM FIELDS:
+[
+  {
+    "order": 1,
+    "id": "firstName",
+    "name": "First Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 2,
+    "id": "middleName",
+    "name": "Middle Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 3,
+    "id": "lastName",
+    "name": "Last Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 4,
+    "id": "preferredName",
+    "name": "Preferred Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 5,
+    "id": "pronouns",
+    "name": "Pronouns",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 6,
+    "id": "dob",
+    "name": "DOB",
+    "type": "date",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 7,
+    "id": "age",
+    "name": "Age",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 8,
+    "id": "genderIdentity",
+    "name": "Gender Identity",
+    "type": "select",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Agender",
+      "Cisgender Female",
+      "Cisgender Male",
+      "Genderfluid",
+      "Genderqueer",
+      "Non-Binary",
+      "Transgender Female",
+      "Transgender Male",
+      "Two-Spirit",
+      "Other",
+      "Prefer not to say"
+    ]
+  },
+  {
+    "order": 9,
+    "id": "sexualOrientation",
+    "name": "Sexual Orientation",
+    "type": "select",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Asexual",
+      "Bisexual",
+      "Gay",
+      "Heterosexual",
+      "Lesbian",
+      "Pansexual",
+      "Queer",
+      "Unsure",
+      "Other",
+      "Prefer not to say"
+    ]
+  },
+  {
+    "order": 10,
+    "id": "maritalStatus",
+    "name": "Marital Status",
+    "type": "select",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Single",
+      "Married",
+      "Divorced",
+      "Separated",
+      "Widowed",
+      "Civil Union",
+      "Partnered"
+    ]
+  },
+  {
+    "order": 11,
+    "id": "partnerSpouseName",
+    "name": "Partner/Spouse Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 12,
+    "id": "legalCustodian",
+    "name": "Legal Custodian",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 13,
+    "id": "reason[]",
+    "name": "Reasons for Seeking Counseling",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Fears/Phobias/Worries",
+      "Family Concerns",
+      "Work Difficulties",
+      "Sleeping Concerns",
+      "Pregnancy/Adoption",
+      "Depressed Mood",
+      "Sexual Concerns",
+      "Gender Identity",
+      "Mood Swings",
+      "Legal Concerns",
+      "Drug/Alcohol Use",
+      "Eating Concerns",
+      "Court Appearance/Jail Term",
+      "Divorce/Custody",
+      "Child Protection Investigation",
+      "Financial Concerns",
+      "Loss/Change of Job",
+      "Move to New Residence",
+      "Concerns About Childhood",
+      "Death/Illness of Close Friend/Family Member"
+    ]
+  },
+  {
+    "order": 14,
+    "id": "mandatedBy",
+    "name": "Mandated By",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 15,
+    "id": "otherReason",
+    "name": "Other Reason",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 16,
+    "id": "problemStart",
+    "name": "When did this problem(s) begin?",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 17,
+    "id": "desiredChanges",
+    "name": "What changes do you want to happen as a result of counseling?",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 18,
+    "id": "strengths",
+    "name": "What strengths do you possess?",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 19,
+    "id": "childhoodLiving[]",
+    "name": "Childhood/Adolescence Living Situation",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Raised with both parents",
+      "Parents not married",
+      "Parents split, raised by mother",
+      "Parents split, raised by father",
+      "Raised in foster/adoptive homes"
+    ]
+  },
+  {
+    "order": 20,
+    "id": "childhoodOther",
+    "name": "Childhood Other",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 21,
+    "id": "currentLiving[]",
+    "name": "Current Living Situation",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Living independently in my residence",
+      "With parent(s)",
+      "With relative/guardian",
+      "Temporary housing",
+      "Nursing home",
+      "Group home",
+      "Homeless",
+      "Jail",
+      "With foster family",
+      "Friend's home",
+      "Hospital",
+      "Residential care"
+    ]
+  },
+  {
+    "order": 22,
+    "id": "facilityIdentify",
+    "name": "Identify facility",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 23,
+    "id": "primaryHousehold",
+    "name": "Primary Household",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 24,
+    "id": "householdMembers",
+    "name": "Total number of people living in current household",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 25,
+    "id": "member1_name",
+    "name": "Household Member Name 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 26,
+    "id": "member1_relationship",
+    "name": "Household Member Relationship 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 27,
+    "id": "member1_age",
+    "name": "Household Member Age 1",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 28,
+    "id": "member2_name",
+    "name": "Household Member Name 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 29,
+    "id": "member2_relationship",
+    "name": "Household Member Relationship 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 30,
+    "id": "member2_age",
+    "name": "Household Member Age 2",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 31,
+    "id": "member3_name",
+    "name": "Household Member Name 3",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 32,
+    "id": "member3_relationship",
+    "name": "Household Member Relationship 3",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 33,
+    "id": "member3_age",
+    "name": "Household Member Age 3",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 34,
+    "id": "support1_name",
+    "name": "Support Person Name 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 35,
+    "id": "support1_relationship",
+    "name": "Support Person Relationship 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 36,
+    "id": "support1_age",
+    "name": "Support Person Age 1",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 37,
+    "id": "support2_name",
+    "name": "Support Person Name 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 38,
+    "id": "support2_relationship",
+    "name": "Support Person Relationship 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 39,
+    "id": "support2_age",
+    "name": "Support Person Age 2",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 40,
+    "id": "relationship_spouse",
+    "name": "Quality of Relationship with Spouse/Partner",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 41,
+    "id": "relationship_children",
+    "name": "Quality of Relationship with Children/Step-children",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 42,
+    "id": "relationship_parents",
+    "name": "Quality of Relationship with Parents",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 43,
+    "id": "relationship_siblings",
+    "name": "Quality of Relationship with Siblings",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 44,
+    "id": "relationship_coworkers",
+    "name": "Quality of Relationship with Employer/Co-Workers",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 45,
+    "id": "relationship_friends",
+    "name": "Quality of Relationship with Friends",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Poor",
+      "Good",
+      "Great",
+      "N/A"
+    ]
+  },
+  {
+    "order": 46,
+    "id": "pregnancyComplications",
+    "name": "Complications during pregnancy",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 47,
+    "id": "devConcerns0-5",
+    "name": "Developmental concerns from birth to age 5",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 48,
+    "id": "devConcerns6-18",
+    "name": "Developmental concerns from birth to ages 6-18",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 49,
+    "id": "functioningConcerns[]",
+    "name": "Current functioning concerns",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Mood",
+      "Appetite",
+      "Energy",
+      "Falling asleep",
+      "Staying asleep"
+    ]
+  },
+  {
+    "order": 50,
+    "id": "functioningDetails",
+    "name": "Details of functioning concerns",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 51,
+    "id": "uninterruptedSleep",
+    "name": "Uninterrupted sleep per night",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 52,
+    "id": "technologyHours",
+    "name": "Technology hours per day",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 53,
+    "id": "familyMentalHealth",
+    "name": "Family history of mental health issues",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 54,
+    "id": "mentalHealthHistory",
+    "name": "Description of mental health history",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 55,
+    "id": "familyPhysicalHealth",
+    "name": "Family history of medical/physical health issues",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 56,
+    "id": "physicalHealthHistory",
+    "name": "Description of physical health history",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 57,
+    "id": "substanceConcerns",
+    "name": "Concerns about substance use",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 58,
+    "id": "cage1",
+    "name": "CAGE - Cut Down",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 59,
+    "id": "cage2",
+    "name": "CAGE - Annoyed",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 60,
+    "id": "cage3",
+    "name": "CAGE - Guilty",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 61,
+    "id": "cage4",
+    "name": "CAGE - Eye Opener",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 62,
+    "id": "use_alcohol",
+    "name": "Alcohol Use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 63,
+    "id": "info_alcohol",
+    "name": "Alcohol Information",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 64,
+    "id": "use_streetDrugs",
+    "name": "Street Drugs Use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 65,
+    "id": "info_streetDrugs",
+    "name": "Street Drugs Information",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 66,
+    "id": "use_inhalants",
+    "name": "Inhalants Use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 67,
+    "id": "info_inhalants",
+    "name": "Inhalants Information",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 68,
+    "id": "use_prescribedMeds",
+    "name": "Prescription meds beyond prescribed usage",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 69,
+    "id": "info_prescribedMeds",
+    "name": "Prescribed Meds Information",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 70,
+    "id": "use_otherSubstance",
+    "name": "Other Substance Use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 71,
+    "id": "info_otherSubstance",
+    "name": "Other Substance Information",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 72,
+    "id": "caffeineCups",
+    "name": "Caffeine Cups/Cans per day",
+    "type": "number",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 73,
+    "id": "caffeineTime",
+    "name": "Caffeine Time of day",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 74,
+    "id": "tobaccoUse",
+    "name": "Tobacco/Nicotine Use",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unsure"
+    ]
+  },
+  {
+    "order": 75,
+    "id": "tobaccoAmount",
+    "name": "Tobacco amount per day",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 76,
+    "id": "someone_alcohol",
+    "name": "Someone else's alcohol use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 77,
+    "id": "someone_streetDrugs",
+    "name": "Someone else's street drugs use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 78,
+    "id": "someone_inhalants",
+    "name": "Someone else's inhalants use",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 79,
+    "id": "someone_prescribedMeds",
+    "name": "Someone else's prescription meds beyond prescribed usage",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 80,
+    "id": "someone_legalIssues",
+    "name": "Someone else's legal issues",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Current",
+      "Past",
+      "Never"
+    ]
+  },
+  {
+    "order": 81,
+    "id": "someone_other",
+    "name": "Someone else's other issues",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 82,
+    "id": "legalCharges",
+    "name": "History of legal charges",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 83,
+    "id": "legalChargesDesc",
+    "name": "Description of legal charges",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 84,
+    "id": "currentProbation",
+    "name": "Currently on probation/parole",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 85,
+    "id": "pastProbation",
+    "name": "Ever been on probation/parole",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 86,
+    "id": "courtOrderedTreatment",
+    "name": "Court-ordered treatment history",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 87,
+    "id": "mentalHealthTreatment",
+    "name": "Previous mental health treatment",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 88,
+    "id": "provider1_agency",
+    "name": "Mental Health Provider Agency 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 89,
+    "id": "provider1_dates",
+    "name": "Mental Health Provider Dates 1",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 90,
+    "id": "provider2_agency",
+    "name": "Mental Health Provider Agency 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 91,
+    "id": "provider2_dates",
+    "name": "Mental Health Provider Dates 2",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 92,
+    "id": "trauma_none_child",
+    "name": "No Childhood Trauma",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 93,
+    "id": "trauma_none_adult",
+    "name": "No Adulthood Trauma",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 94,
+    "id": "trauma_physical_child",
+    "name": "Physical Abuse in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 95,
+    "id": "trauma_physical_adult",
+    "name": "Physical Abuse in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 96,
+    "id": "trauma_domestic_child",
+    "name": "Domestic Violence/Abuse in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 97,
+    "id": "trauma_domestic_adult",
+    "name": "Domestic Violence/Abuse in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 98,
+    "id": "trauma_neglect_child",
+    "name": "Neglect in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 99,
+    "id": "trauma_neglect_adult",
+    "name": "Neglect in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 100,
+    "id": "trauma_emotional_child",
+    "name": "Emotional Abuse in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 101,
+    "id": "trauma_emotional_adult",
+    "name": "Emotional Abuse in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 102,
+    "id": "trauma_sexual_child",
+    "name": "Sexual Abuse/Molestation in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 103,
+    "id": "trauma_sexual_adult",
+    "name": "Sexual Abuse/Molestation in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 104,
+    "id": "trauma_community_child",
+    "name": "Community Violence in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 105,
+    "id": "trauma_community_adult",
+    "name": "Community Violence in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 106,
+    "id": "trauma_cps_child",
+    "name": "Involvement with Child Protective Services (CPS) in Childhood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 107,
+    "id": "trauma_cps_adult",
+    "name": "Involvement with Adult Protective Services (APS) in Adulthood",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 108,
+    "id": "trauma_placedOut_child",
+    "name": "Placed outside home as a child",
+    "type": "checkbox",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 109,
+    "id": "risk_concerns[]",
+    "name": "Safety/risk concerns",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Dangerous behaviors to self",
+      "Dangerous behaviors to others",
+      "Destruction of property",
+      "Risk of wandering/running away",
+      "Need for excessive supervision",
+      "None reported"
+    ]
+  },
+  {
+    "order": 110,
+    "id": "spiritualActivities",
+    "name": "Engaged in spiritual/religious activities",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unsure"
+    ]
+  },
+  {
+    "order": 111,
+    "id": "spiritualDesc",
+    "name": "Description of spiritual/religious activities",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 112,
+    "id": "pcpName",
+    "name": "Primary Care Physician Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 113,
+    "id": "pcpClinic",
+    "name": "Primary Care Physician Clinic",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 114,
+    "id": "psychiatristName",
+    "name": "Psychiatrist/Medication-Prescribing Provider Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 115,
+    "id": "psychiatristClinic",
+    "name": "Psychiatrist Clinic Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 116,
+    "id": "advancedDirective",
+    "name": "Advanced Directive",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No"
+    ]
+  },
+  {
+    "order": 117,
+    "id": "seizures",
+    "name": "Seizures or Spells",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 118,
+    "id": "seizures_age",
+    "name": "Seizures Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 119,
+    "id": "seizures_still",
+    "name": "Seizures Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 120,
+    "id": "headInjury",
+    "name": "Head Injury",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 121,
+    "id": "headInjury_age",
+    "name": "Head Injury Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 122,
+    "id": "headInjury_still",
+    "name": "Head Injury Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 123,
+    "id": "chronicPain",
+    "name": "Chronic Pain",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 124,
+    "id": "chronicPain_age",
+    "name": "Chronic Pain Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 125,
+    "id": "chronicPain_still",
+    "name": "Chronic Pain Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 126,
+    "id": "hearingTrouble",
+    "name": "Trouble with Hearing",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 127,
+    "id": "hearingTrouble_age",
+    "name": "Hearing Trouble Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 128,
+    "id": "hearingTrouble_still",
+    "name": "Hearing Trouble Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 129,
+    "id": "visionTrouble",
+    "name": "Trouble with Vision",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 130,
+    "id": "visionTrouble_age",
+    "name": "Vision Trouble Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 131,
+    "id": "visionTrouble_still",
+    "name": "Vision Trouble Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 132,
+    "id": "overdoseHistory",
+    "name": "Poisoning or Overdose History",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 133,
+    "id": "overdoseHistory_age",
+    "name": "Overdose History Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 134,
+    "id": "overdoseHistory_still",
+    "name": "Overdose History Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 135,
+    "id": "chronicIllness",
+    "name": "Serious or Chronic Illness",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 136,
+    "id": "chronicIllness_age",
+    "name": "Chronic Illness Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 137,
+    "id": "chronicIllness_still",
+    "name": "Chronic Illness Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 138,
+    "id": "hospitalizations",
+    "name": "Hospitalizations",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 139,
+    "id": "hospitalizations_age",
+    "name": "Hospitalizations Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 140,
+    "id": "hospitalizations_still",
+    "name": "Hospitalizations Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 141,
+    "id": "allergies",
+    "name": "Allergies",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 142,
+    "id": "allergies_age",
+    "name": "Allergies Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 143,
+    "id": "allergies_still",
+    "name": "Allergies Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 144,
+    "id": "infectiousDiseases",
+    "name": "Infectious/Contagious Diseases",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 145,
+    "id": "infectiousDiseases_age",
+    "name": "Infectious Diseases Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 146,
+    "id": "infectiousDiseases_still",
+    "name": "Infectious Diseases Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 147,
+    "id": "surgeries",
+    "name": "Surgeries",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Yes",
+      "No",
+      "Unknown"
+    ]
+  },
+  {
+    "order": 148,
+    "id": "surgeries_age",
+    "name": "Surgeries Age First Noted",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 149,
+    "id": "surgeries_still",
+    "name": "Surgeries Still Occurring",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 150,
+    "id": "familyMedicalConcerns",
+    "name": "Family medical concerns that impact you",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 151,
+    "id": "otherFamilyStressors",
+    "name": "Other family concerns/stressors impacting you",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 152,
+    "id": "med1_name",
+    "name": "Medication 1 Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 153,
+    "id": "med1_start",
+    "name": "Medication 1 Start Date",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 154,
+    "id": "med1_end",
+    "name": "Medication 1 End Date",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 155,
+    "id": "med1_dosage",
+    "name": "Medication 1 Dosage",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 156,
+    "id": "med1_frequency",
+    "name": "Medication 1 Frequency",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 157,
+    "id": "med1_prescribedBy",
+    "name": "Medication 1 Prescribed By",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 158,
+    "id": "med1_note",
+    "name": "Medication 1 Note",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 159,
+    "id": "med2_name",
+    "name": "Medication 2 Name",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 160,
+    "id": "med2_start",
+    "name": "Medication 2 Start Date",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 161,
+    "id": "med2_end",
+    "name": "Medication 2 End Date",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 162,
+    "id": "med2_dosage",
+    "name": "Medication 2 Dosage",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 163,
+    "id": "med2_frequency",
+    "name": "Medication 2 Frequency",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 164,
+    "id": "med2_prescribedBy",
+    "name": "Medication 2 Prescribed By",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 165,
+    "id": "med2_note",
+    "name": "Medication 2 Note",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 166,
+    "id": "highestEducation",
+    "name": "Highest education completed",
+    "type": "select",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "K-8th Grade",
+      "High School (no diploma)",
+      "High School Graduate (or GED)",
+      "Some College (no degree)",
+      "Associate's Degree",
+      "Bachelor's Degree",
+      "Master's Degree",
+      "Doctoral Degree",
+      "Professional Degree"
+    ]
+  },
+  {
+    "order": 167,
+    "id": "race[]",
+    "name": "Racial Orientation",
+    "type": "checkbox",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "American Indian or Alaska Native",
+      "Asian",
+      "Black or African American",
+      "Hispanic or Latino",
+      "Middle Eastern or North African",
+      "Native Hawaiian or Other Pacific Islander",
+      "White",
+      "Other"
+    ]
+  },
+  {
+    "order": 168,
+    "id": "primaryLanguage",
+    "name": "Primary language",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 169,
+    "id": "occupation",
+    "name": "Occupation",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 170,
+    "id": "employer",
+    "name": "Employer",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 171,
+    "id": "income",
+    "name": "Gross Household Income",
+    "type": "select",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "$0-14,999",
+      "$15,000-19,999",
+      "$20,000-29,999",
+      "$30,000-39,999",
+      "$40,000-59,999",
+      "$60,000+"
+    ]
+  },
+  {
+    "order": 172,
+    "id": "militaryHistory",
+    "name": "Household Military History",
+    "type": "radio",
+    "required": false,
+    "filled": false,
+    "allowed_values": [
+      "Active",
+      "Past",
+      "None"
+    ]
+  },
+  {
+    "order": 173,
+    "id": "militaryActiveWho",
+    "name": "Military Active Who",
+    "type": "text",
+    "required": false,
+    "filled": false
+  },
+  {
+    "order": 174,
+    "id": "militaryImpact",
+    "name": "Describe impact of military history",
+    "type": "textarea",
+    "required": false,
+    "filled": false
+  }
+]
+
+CRITICAL RULES:
+• Display to user: 'name' field ('Phone Number')
+• Tool calls: 'id' field ('phone')
+• Skip where 'filled'=true
+• Ask ONE field at a time (follow 'order')
+• ALWAYS confirm each field after receiving value
+
+VALUE LANGUAGE:
+• ALL field values → English (converse in user's language, fill in English)
+• Radio/select: use ONLY allowed_values from definitions
+
+• Always replay to user in the language they last used to speak to you.
+WORKFLOW:
+1. User provides value → call update_form_fields immediately (translate to English)
+2. Confirm: 'Got it, [field] is [value]'
+3. Sanity check obvious errors (1800s birthdate, 2-digit phone, wrong city/ZIP, logical single or comparative field value errors) - explain and re-ask
+4. Use tool response hint → ask next field
+
+CONSTRAINTS:
+• Manual edits (notified): acknowledge silently, skip field
+• Never guess - ask for clarification if unclear
+• User may provide multiple fields at once
+• Tool format: {'field_id': 'value'} - all values in English
+• REDIRECT all off-topic queries to form filling
+
+================================================================================
+End of message

@@ -1,0 +1,461 @@
+/**
+	cp.datepicker.js provides an JavaScript Date picker control.
+ */
+var cp = cp || {};
+
+cp.datetimepicker = (function($) {
+	// These are the publicly-accessible methods
+	if (!$) { return; }
+		return {
+			createTimePicker: createTimePicker,
+			createDatePicker: createDatePicker,
+		};
+
+
+		// getOptionsFromHtmlAttributes parses through any attribute in the user-specific HTML date or time picker and
+		// overwrites the values in "options" with values corresponding to "data-cp-datetimepicker-{optionName}".  The
+		// "optionName" portion of the attribute should correspond to a property of the pickadate or pickatime
+		// options element.
+		function getOptionsFromHtmlAttributes($inputElement, originalOptions) {
+			$($inputElement[0].attributes).each(function() {
+				if (this.name.match('^data-cp-datetimepicker-')) {
+					var optionName = this.name.replace('data-cp-datetimepicker-', '');
+					var originalValue = originalOptions[optionName];
+					if (!originalValue) {
+						// We only want to set the option value if it was not already set in the JavaScript options.
+						// That is, the JavaScript options should always win over the HTML5 options.
+
+						var optionVal = this.value;
+						if (parseInt(optionVal)) {
+							optionVal = parseInt(optionVal);
+						}
+
+						originalOptions[optionName] = optionVal;
+					}
+				}
+			});
+			return originalOptions;
+		}
+
+		// createTimePicker creates a new time picker object out of the DOM object specified by timeTextboxSelector.
+		// The timeTextboxSelector object must be an HTML INPUT element.
+		function createTimePicker(timeTextboxSelector, options) {
+
+			// The actualy Input Time component will be a hidden field.  The DOM object in the source HTML
+			// will be the editable text field for the user.
+
+			options = options || {};
+
+			var $inputTextBox = $(timeTextboxSelector);
+
+			if (!($inputTextBox) || $inputTextBox.length === 0) {
+				// We got passed a bad selector
+				console.log('ERR: cp.datetimepicker :: Could not find element: ' + timeTextboxSelector);
+				return;
+			}
+
+			// Set any options that were specified directly from within the HTML tag.
+			options = getOptionsFromHtmlAttributes($inputTextBox, options);
+
+			//Wrap fieldSetSelector inside div if wrapInsideDiv is true
+			var fieldSetSelector = '<fieldset class="fieldset__datetimepicker__wrapper">';
+
+			if (options.wrapInsideDiv) {
+				fieldSetSelector = '<div class="t-widget t-timepicker">' + fieldSetSelector + '</div>';
+			}
+
+			$fieldset = $(fieldSetSelector);
+			$inputTextBox.wrap($fieldset);
+
+			var $hiddenTimeInput = $('<input type="text" class="cp_input_datetime" tabindex="-1"/>');
+			$hiddenTimeInput.attr('data-cp-time-textbox-selector', timeTextboxSelector);
+
+			$hiddenTimeInput.attr('aria-hidden', true);
+
+			$hiddenTimeInput.insertAfter($inputTextBox);
+
+			// We need to force "editable" in the options, otherwise things start to break.
+			options.editable = true;
+			$hiddenTimeInput.pickatime(options);
+
+			var pickerObject = $hiddenTimeInput.pickatime('picker');	// reference to the pickatime object
+			$inputTextBox.attr("role", "combobox");
+			$inputTextBox.attr("aria-haspopup", "listbox");
+			$inputTextBox.attr("aria-expanded", "false");
+			$inputTextBox.attr("aria-controls", pickerObject.$root.attr("id"));
+
+			// Bugfix - https://civicplus.tpondemand.com/entity/182182-211-agenda-center-module-main-page
+			// Move aria-owns from the hidden <input> to the interactive one
+			$inputTextBox.attr("aria-owns", pickerObject.$node.attr("aria-owns"));
+			pickerObject.$node.removeAttr("aria-owns");
+
+			$inputTextBox.on({
+				change: function() {
+					var inputTime = this.value;
+					pickerObject.set('customSelect', insertColonIfOverFourChars(inputTime), options);
+				},
+				keydown: function(e) {
+					if (e.keyCode === 40) {
+						e.preventDefault();
+						pickerObject.open(true);
+					}
+				},
+				focus: function(e) {
+					if (e.relatedTarget !== pickerObject.$holder[0]) {
+						// If the previously focused control was the picker object, don't open it again after closing it
+						pickerObject.open(false);
+					}
+					// We have to set the tab-index of the "clear" button, so tabbing through fields works properly.
+					$('.picker__button--clear').attr('tabindex', -1);
+				},
+				blur: function(e) {
+					// If user shifts focus from the input element to its datepicker, then we do not want to close the datepicker.
+					if (!e.relatedTarget?.closest(".picker")) {
+						pickerObject.close(true);
+					}
+				}
+			});
+
+			pickerObject.on({
+				open: function() {
+					$inputTextBox.attr("aria-expanded", "true");
+				},
+				close: function() {
+					$inputTextBox.attr("aria-expanded", "false");
+					$inputTextBox.focus();
+				},
+				set: function(e) {
+					var inputVal = $inputTextBox.val();
+					var selectedVal = autoTimeFormat(inputVal);
+					if (typeof e.clear === "object" || (typeof e.select !== "undefined" && (!isNaN(e.select) || !isNaN(e.select.pick))) || (e.customSelect && !selectedVal.match(/^([1-9]|1[012])(:[0-5]\d) [APap][mM]$/))) {
+						selectedVal = this.get('value') === '' ? '12:00 AM' : this.get('value');
+					}
+					$inputTextBox.val(selectedVal);
+					$inputTextBox.attr('value', selectedVal);
+					// closing the selection area if the user had picked a time.
+					if (!e.relatedTarget?.closest(".picker")) {
+						pickerObject.close(true);
+						$inputTextBox.attr("aria-expanded", "false");
+					}
+				}
+			});
+
+			// Priming initialization if there was a value specified for the input
+			if ($inputTextBox.val() !== '') {
+				pickerObject.set('select', $inputTextBox.val(), options);
+			}
+
+			$(pickerObject.$root).find('.picker__list').attr('aria-label', 'Time List');
+
+			return pickerObject;
+		}
+
+		// createDatePicker creates a new date picker object using the element specified by "dateTextboxSelector".
+		// The dateTextboxSelector object must be an HTML INPUT element.
+		function createDatePicker(dateTextboxSelector, options) {
+			// The actualy Input Date component will be a hidden field.  The DOM object in the source HTML
+			// will be the editable text field for the user.
+			options = options || {};
+
+			var $inputTextBox = $(dateTextboxSelector);
+
+			if (!($inputTextBox) || $inputTextBox.length === 0) {
+				// We got passed a bad selector
+				console.log('ERR: cp.datetimepicker :: Could not find element: ' + dateTextboxSelector);
+				return;
+			}
+
+			// Set any options that were specified directly from within the HTML tag.
+			options = getOptionsFromHtmlAttributes($inputTextBox, options);
+			var dateAsString = $inputTextBox.val();
+			if (options.format == 'dd/mm/yyyy' && dateAsString.length > 0) {
+				var splitDate = autoCompleteDate(dateAsString, options.format).split('/');
+				$inputTextBox.val(splitDate[1] + '/' + splitDate[0] + '/' + splitDate[2]);
+			}
+
+			if (options.useNativeControls) {
+				$inputTextBox.prop('type', 'date');
+				return;
+			}
+
+			var $hiddenDateInput = $('<input type="text" class="cp_input_datetime" tabindex="-1"/>');
+			$hiddenDateInput.attr('data-cp-date-textbox-selector', dateTextboxSelector);
+
+			$hiddenDateInput.attr('aria-hidden', true);
+			var fieldsetSelector = '<fieldset class="fieldset__datetimepicker__wrapper"></fieldset>';
+			if (options.wrapInsideDiv)
+				fieldsetSelector = '<div class="t-widget t-datepicker">' + fieldsetSelector + '</div>';
+
+			$fieldset = $(fieldsetSelector);
+			$fieldset.attr("data-cp-datetimepicker-selector", dateTextboxSelector);
+			$inputTextBox.wrap($fieldset);
+			$hiddenDateInput.insertAfter($inputTextBox);
+
+			// We have to force the editable option, otherwise things start to break.
+			options.editable = true;
+
+			$hiddenDateInput.pickadate(options);
+
+			var pickerObject = $hiddenDateInput.pickadate('picker');	// reference to the pickadate object
+			$inputTextBox.attr("role", "combobox");
+			$inputTextBox.attr("aria-haspopup", "dialog");
+			$inputTextBox.attr("aria-expanded", "false");
+			$inputTextBox.attr("aria-controls", pickerObject.$root.attr("id"));
+
+			// Bugfix - https://civicplus.tpondemand.com/entity/182182-211-agenda-center-module-main-page
+			// Move aria-owns from the hidden <input> to the interactive one
+			$inputTextBox.attr("aria-owns", pickerObject.$node.attr("aria-owns"));
+			pickerObject.$node.removeAttr("aria-owns");
+
+			// Add handler to make sure datepicker is visible when shown
+			pickerObject && pickerObject.on('open', function() {
+				$inputTextBox.attr("aria-expanded", "true");
+				// Add a slight delay to ensure that the flyout has been added to the dom and the flyoutHeight is nonzero
+				setTimeout(function() {
+					// Get the position of the datepicker flyout relative to the top of the document
+					var flyoutTop = pickerObject.$holder[0].getBoundingClientRect().top;
+
+					// Get the height of the datepicker flyout
+					var flyoutHeight = pickerObject.$holder[0].offsetHeight;
+
+					// Get the height of the viewport
+					var viewportHeight = window.innerHeight;
+
+					// Calculate the amount of scrolling needed to make the entire datepicker flyout visible
+					var scrollAmount = flyoutTop + flyoutHeight - viewportHeight;
+
+					// If the datepicker flyout is not fully visible, scroll the viewport down to make it visible
+					if (scrollAmount > 0) {
+						window.scrollTo(0, scrollAmount + window.scrollY);
+					}
+				}, 50);
+			});
+
+			function focusInput() {
+				$inputTextBox.off("focus", openPicker);
+				$inputTextBox.focus();
+				$inputTextBox.on("focus", openPicker);
+			}
+
+			pickerObject.on('close', function() {
+				//Trigger the change event on the picker object's element.
+				window.parent.$(dateTextboxSelector).change();
+				$inputTextBox.attr("aria-expanded", "false");
+				focusInput();
+			});
+
+			// setDate is a helper function that should only be called from within this module.
+			function setDate(dateAsString, placeholder) {
+				if (dateAsString === '') {
+					pickerObject.set('clear', null, null);
+				} else {
+					if (pickerObject.component.settings.format == 'dd/mm/yyyy') {
+						var splitDate = autoCompleteDate(dateAsString, pickerObject.component.settings.format).split('/');
+						var date = splitDate[1] + '/' + splitDate[0] + '/' + splitDate[2];
+						var epochDate = Date.parse(date);
+					} else {
+						var epochDate = Date.parse(autoCompleteDate(dateAsString, pickerObject.component.settings.format));
+					}
+					if (!epochDate) {
+						return;
+					} else {
+						var parsedDate = new Date(epochDate);
+						pickerObject.set('select',
+							[parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate()]);
+					}
+				}
+			}
+
+			var intervalID;
+
+			//Moves the date picker further up the DOM so it isn't overlapped https://civicplus.tpondemand.com/entity/22312
+			function adjustDTPicker() {
+				if (intervalID === 0) {
+					return;
+				}
+
+				var elemPicker = $('.picker--opened')[0];
+				if (elemPicker) {
+					$(elemPicker).appendTo('#cpDatePickerWrapper');
+					elemPicker.style.fontSize = 'inherit';
+				}
+
+				clearInterval(intervalID);
+
+				$('.cpDatePickerElevate').each(function() {
+					var $dateInput = $(this);
+					if ($dateInput.is(':focus')) {
+						adjustFlyoutPosition($dateInput, $('#cpDatePickerWrapper'));
+					}
+				});
+
+				intervalID = 0;
+			}
+
+			if ($('#cpDatePickerWrapper').length > 0) {
+				$(window).resize(function() {
+					$('.cpDatePickerElevate').each(function() {
+						var $dateInput = $(this);
+						if ($dateInput.is(':focus')) {
+							adjustFlyoutPosition($dateInput, $('#cpDatePickerWrapper'));
+						}
+					});
+				});
+			}
+
+			function openPicker() {
+				// We have to set the tab-index of the "today", "close", and "clear" buttons, so tabbing through fields works properly.
+				$('.picker__button--close').attr('tabindex', -1);
+				$('.picker__button--today').attr('tabindex', -1);
+				$('.picker__button--clear').attr('tabindex', -1);
+				pickerObject.$holder.find('[tabindex="-1"]').attr('tabindex', 0);
+				pickerObject.open(false);
+				if ($('#cpDatePickerWrapper').length > 0)
+					intervalID = setInterval(adjustDTPicker, 50);
+			}
+
+			$inputTextBox.on({
+				change: function() {
+					setDate(this.value);
+				},
+				focus: openPicker,
+				click: openPicker,
+				keydown: function(e) {
+					if (e.keyCode === 9) {
+						pickerObject.$holder.find('[tabindex="0"]').attr('tabindex', -1);
+					}
+					if (e.keyCode === 40) {
+						e.preventDefault();
+						pickerObject.open();
+					}
+				},
+				blur: function(e) {
+					// If user shifts focus from the input element to its datepicker, then we do not want to close the datepicker.
+					if (!e.relatedTarget?.closest(".picker")) {
+						pickerObject.close(true);
+						$inputTextBox.attr("aria-expanded", "false");
+					}
+				},
+			});
+
+			pickerObject.on('set', function() {
+				$inputTextBox.val(this.get('value'));
+				$inputTextBox.attr('value', this.get('value'));
+			});
+
+			// Priming initialization if there was a value specified for the input
+			if ($inputTextBox.val() !== '') {
+				setDate($inputTextBox.val());
+			}
+
+
+			return pickerObject;
+		}
+
+		function insertColonIfOverFourChars(inputString) {
+			if (inputString != null && inputString.length > 3 && inputString.indexOf(":") < 0) {
+				inputString = inputString.slice(0, 2) + ":" + inputString.slice(2, inputString.length);
+			}
+			return inputString;
+		}
+
+		function autoCompleteDate(dateAsString, formatString) {
+			try {
+				var fdts = null;
+				var currentDate = new Date();
+
+				//guard clauses
+				if (formatString == null || formatString.length === 0) {
+					formatString === "mm/dd/yyyy";
+				}
+				if ((dateAsString == null || dateAsString.length == 0 || dateAsString.indexOf(".") != -1) && formatString.toLowerCase == "dd/mm/yyyy") {
+					return ('0' + currentDate.getDate()).slice(-2) + '/' + ('0' + (currentDate.getMonth() + 1)).slice(-2) + '/' + currentDate.getFullYear();
+				} else if (dateAsString == null || dateAsString.length == 0 || dateAsString.indexOf(".") != -1) {
+					return ('0' + (currentDate.getMonth() + 1)).slice(-2) + '/' + ('0' + currentDate.getDate()).slice(-2) + '/' + currentDate.getFullYear();
+				}
+
+				fdts = dateAsString.split("/");
+
+				if (fdts != null) {
+					//switch mm/dd/yyyy to be dd/mm/yyyy for logic further down
+					if (formatString.toLowerCase() !== "dd/mm/yyyy") {
+						var day = fdts[1];
+						var month = fdts[0];
+						fdts[0] = day;
+						fdts[1] = month;
+					}
+
+					if (fdts[0] == null || fdts[0] === '0' || fdts[0].length < 1 || fdts[0].length > 2) {
+						fdts[0] = currentDate.getDate();
+					}
+					if (fdts[1] == null || fdts[1] === '0' || fdts[1].length < 1 || fdts[1].length > 2) {
+						fdts[1] = currentDate.getMonth() + 1;
+					}
+					if (fdts[2] == null || (fdts[2].length !== 2 && fdts[2].length !== 4)) {
+						//For last year's date it also adds time at the end of date so extracting year
+						fdts[2] = !isNaN(fdts[2].substr(0, 4)) ? fdts[2].substr(0, 4) : currentDate.getFullYear();
+					} else if (fdts[2].length === 2) {
+						var yr = fdts[2];
+						var crDate = new Date();
+						var crCtry = crDate.getFullYear();
+						var pstCnry = crCtry - 100;
+						crCtry = crCtry + ' ';
+						pstCnry = pstCnry + ' ';
+						crCtry = crCtry.substr(0, 2);
+						pstCnry = pstCnry.substr(0, 2);
+						if (yr >= 32)
+							yr = pstCnry + yr;
+						else
+							yr = crCtry + yr;
+						fdts[2] = yr;
+					}
+				}
+				if (formatString.toLowerCase() === "dd/mm/yyyy") {
+					dateAsString = ('0' + fdts[0]).slice(-2) + '/' + ('0' + fdts[1]).slice(-2) + '/' + fdts[2];
+				} else {
+					dateAsString = ('0' + fdts[1]).slice(-2) + '/' + ('0' + fdts[0]).slice(-2) + '/' + fdts[2];
+				}
+				return dateAsString;
+			} catch (e) {
+				return "";
+			}
+		}
+
+		function autoTimeFormat(inputString) {
+
+			const regex1 = /^(0?[1-9]|1[0-2]) ?([ap]m)$/i; //eg: 5AM -> 5:00 AM
+			const regex2 = /^(\d{1,2})(\d{2}) ?([ap]m)$/i; //eg: 500AM -> 5:00 AM
+			const regex3 = /^(\d{1,2})(?::(\d{2}))?\s*([ap]m)?$/i; //eg: 05:00 am or 5:00 am -> 5:00 AM
+
+			if (regex1.test(inputString)) {
+				return inputString.replace(regex1, (match, hour, period) => {
+					const hourNum = parseInt(hour);
+					const formattedHour = hourNum === 12 ? 12 : hourNum % 12; // Convert to 12-hour format
+					const formattedMinute = "00"; // Add 00 as minutes
+					const formattedPeriod = period.toUpperCase(); // Convert period to uppercase
+					return `${formattedHour}:${formattedMinute} ${formattedPeriod}`;
+				});
+			}
+			else if (regex2.test(inputString)) {
+				return inputString.replace(regex2, (match, hour, minute, period) => {
+					const hourNum = parseInt(hour);
+					const formattedHour = hourNum === 12 ? 12 : hourNum % 12; // Convert to 12-hour format
+					const formattedMinute = minute.padStart(2, "0"); // Pad minute with zero if necessary
+					const formattedPeriod = period.toUpperCase(); // Convert period to uppercase
+					return `${formattedHour}:${formattedMinute} ${formattedPeriod}`;
+				});
+			}
+			else if (regex3.test(inputString)) {
+				 return inputString.replace(regex3, (match, hour, minute, period) => {
+					const hourNum = parseInt(hour);
+					const formattedHour = hourNum === 12 ? 12 : hourNum % 12; // Convert to 12-hour format
+					const formattedMinute = minute ? minute : "00"; // Set minute to "00" if not provided
+					const formattedPeriod = period ? period.toUpperCase() : ""; // Convert period to uppercase if provided
+					return `${formattedHour}:${formattedMinute} ${formattedPeriod}`;
+				});
+			}
+			else {
+				return inputString;
+			}
+		}
+})(jQuery);

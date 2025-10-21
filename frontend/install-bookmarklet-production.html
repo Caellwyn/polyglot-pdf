@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Voice Form Filler - Install Bookmarklet</title>
+	<style>
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
+		
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			line-height: 1.6;
+			color: #333;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			min-height: 100vh;
+			padding: 40px 20px;
+		}
+		
+		.container {
+			max-width: 800px;
+			margin: 0 auto;
+			background: white;
+			border-radius: 16px;
+			box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+			overflow: hidden;
+		}
+		
+		.header {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			padding: 40px;
+			text-align: center;
+		}
+		
+		.header h1 {
+			font-size: 36px;
+			margin-bottom: 10px;
+		}
+		
+		.header p {
+			font-size: 18px;
+			opacity: 0.9;
+		}
+		
+		.content {
+			padding: 40px;
+		}
+		
+		.bookmarklet-box {
+			background: #f8f9fa;
+			border: 2px dashed #667eea;
+			border-radius: 12px;
+			padding: 30px;
+			margin: 30px 0;
+			text-align: center;
+		}
+		
+		.bookmarklet-link {
+			display: inline-block;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			text-decoration: none;
+			padding: 16px 32px;
+			border-radius: 8px;
+			font-size: 18px;
+			font-weight: 600;
+			cursor: move;
+			transition: transform 0.2s;
+			margin: 10px 0;
+		}
+		
+		.bookmarklet-link:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+		}
+		
+		.instructions {
+			margin: 30px 0;
+		}
+		
+		.step {
+			display: flex;
+			align-items: flex-start;
+			margin: 20px 0;
+			padding: 20px;
+			background: #f8f9fa;
+			border-radius: 8px;
+		}
+		
+		.step-number {
+			background: #667eea;
+			color: white;
+			width: 36px;
+			height: 36px;
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-weight: bold;
+			margin-right: 16px;
+			flex-shrink: 0;
+		}
+		
+		.step-content h3 {
+			margin-bottom: 8px;
+			color: #667eea;
+		}
+		
+		.step-content p {
+			color: #666;
+		}
+		
+		.alert {
+			background: #fff3cd;
+			border-left: 4px solid #ffc107;
+			padding: 16px;
+			margin: 20px 0;
+			border-radius: 4px;
+		}
+		
+		.alert-info {
+			background: #d1ecf1;
+			border-left-color: #17a2b8;
+		}
+		
+		.alert h4 {
+			margin-bottom: 8px;
+			color: #856404;
+		}
+		
+		.alert-info h4 {
+			color: #0c5460;
+		}
+		
+		.badge {
+			display: inline-block;
+			background: #10b981;
+			color: white;
+			padding: 4px 12px;
+			border-radius: 12px;
+			font-size: 14px;
+			margin: 0 4px;
+		}
+		
+		code {
+			background: #f4f4f4;
+			padding: 2px 6px;
+			border-radius: 4px;
+			font-family: 'Courier New', monospace;
+			font-size: 14px;
+		}
+		
+		.tech-details {
+			margin-top: 40px;
+			padding-top: 40px;
+			border-top: 2px solid #e0e0e0;
+		}
+		
+		.tech-details h3 {
+			color: #667eea;
+			margin-bottom: 16px;
+		}
+		
+		.tech-row {
+			display: flex;
+			justify-content: space-between;
+			padding: 12px 0;
+			border-bottom: 1px solid #e0e0e0;
+		}
+		
+		.tech-label {
+			font-weight: 600;
+			color: #666;
+		}
+		
+		.tech-value {
+			font-family: monospace;
+			font-size: 13px;
+			color: #333;
+			word-break: break-all;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<h1>🎤 Voice Form Filler</h1>
+			<p>Fill web forms with your voice - One-click installation</p>
+		</div>
+		
+		<div class="content">
+			<div class="alert alert-info">
+				<h4>✨ What is this?</h4>
+				<p>Voice Form Filler is a bookmarklet that adds voice-controlled form filling to any website. Simply speak, and watch the fields fill automatically!</p>
+			</div>
+			
+			<div class="bookmarklet-box">
+				<h2 style="margin-bottom: 16px;">📌 Drag this button to your bookmarks bar</h2>
+				<a href="javascript:(function()%7Bif(window.VoiceFormFiller%20%26%26%20window.VoiceFormFiller.isActive())%7Bconsole.log('%5BBookmarklet%5D%20Already%20active')%3Breturn%3B%7Dvar%20script%20%3D%20document.createElement('script')%3Bscript.src%20%3D%20'https%3A%2F%2Fstorage.googleapis.com%2Fvoice-form-filler-474017-bookmarklet%2Fbookmarklet%2Fbookmarklet.bundle.js%3Fv%3D'%20%2B%20Date.now()%3Bscript.crossOrigin%20%3D%20'anonymous'%3Bscript.onload%20%3D%20function()%7Bif(window.VoiceFormFiller)%7Bwindow.VoiceFormFiller.inject()%3B%7Delse%7Balert('Voice%20Form%20Filler%20failed%20to%20load.%20Check%20console%20for%20errors.')%3B%7D%7D%3Bscript.onerror%20%3D%20function()%7Balert('Failed%20to%20load%20Voice%20Form%20Filler%20from%20CDN.%20Check%20your%20connection.')%3B%7D%3Bdocument.head.appendChild(script)%3B%7D)()%3B" 
+				   class="bookmarklet-link"
+				   onclick="alert('Drag this button to your bookmarks bar instead of clicking it!'); return false;">
+					🎤 Voice Form Filler
+				</a>
+				<p style="margin-top: 16px; color: #666;">
+					<small><strong>Chrome users:</strong> Drag the button above to your bookmarks bar</small>
+				</p>
+			</div>
+			
+			<div class="instructions">
+				<h2 style="margin-bottom: 24px;">📖 Installation Instructions</h2>
+				
+				<div class="step">
+					<div class="step-number">1</div>
+					<div class="step-content">
+						<h3>Show your bookmarks bar</h3>
+						<p>Press <code>Ctrl+Shift+B</code> (Windows) or <code>Cmd+Shift+B</code> (Mac) in Chrome to show the bookmarks bar if it's hidden.</p>
+					</div>
+				</div>
+				
+				<div class="step">
+					<div class="step-number">2</div>
+					<div class="step-content">
+						<h3>Drag the button</h3>
+						<p>Click and drag the <strong>🎤 Voice Form Filler</strong> button above to your bookmarks bar. Release to install.</p>
+					</div>
+				</div>
+				
+				<div class="step">
+					<div class="step-number">3</div>
+					<div class="step-content">
+						<h3>Navigate to any form</h3>
+						<p>Go to any website with a form (job application, contact form, survey, etc.)</p>
+					</div>
+				</div>
+				
+				<div class="step">
+					<div class="step-number">4</div>
+					<div class="step-content">
+						<h3>Click the bookmark</h3>
+						<p>Click the "Voice Form Filler" bookmark in your bookmarks bar. A purple overlay will appear.</p>
+					</div>
+				</div>
+				
+				<div class="step">
+					<div class="step-number">5</div>
+					<div class="step-content">
+						<h3>Connect and speak!</h3>
+						<p>Click "Connect to Voice" in the overlay, allow microphone access, and start speaking. The AI will fill the form fields for you!</p>
+					</div>
+				</div>
+			</div>
+			
+			<div class="alert">
+				<h4>⚠️ Important Notes</h4>
+				<ul style="margin-left: 20px; margin-top: 8px;">
+					<li style="margin-bottom: 4px;">Requires Chrome 114+ with microphone access</li>
+					<li style="margin-bottom: 4px;">Currently loads from localhost (dev mode)</li>
+					<li style="margin-bottom: 4px;">For production, the bundle will be hosted on Google Cloud Storage</li>
+					<li>Works on most websites (some may block due to CSP security policies)</li>
+				</ul>
+			</div>
+			
+			<div class="tech-details">
+				<h3>🔧 Technical Details</h3>
+				
+				<div class="tech-row">
+					<span class="tech-label">Bundle Size:</span>
+					<span class="tech-value">49.30 KB <span class="badge">16.22 KB gzipped</span></span>
+				</div>
+				
+				<div class="tech-row">
+					<span class="tech-label">Bookmarklet Size:</span>
+					<span class="tech-value">815 bytes <span class="badge">✓ &lt; 2KB</span></span>
+				</div>
+				
+				<div class="tech-row">
+					<span class="tech-label">SHA-256 Checksum:</span>
+					<span class="tech-value" style="font-size: 11px;">63f21ecb1f402d9e6b49631fa0cf6b5b02e8d7470910eba7f4c606d6c91a214e</span>
+				</div>
+				
+				<div class="tech-row">
+					<span class="tech-label">Integrity (SRI):</span>
+					<span class="tech-value" style="font-size: 11px;">Disabled for development (enables hot-reload)</span>
+				</div>
+				
+				<div class="tech-row">
+					<span class="tech-label">CDN URL:</span>
+					<span class="tech-value" style="font-size: 11px;">https://storage.googleapis.com/voice-form-filler-474017-bookmarklet/bookmarklet.bundle.js</span>
+				</div>
+				
+				<div class="tech-row">
+					<span class="tech-label">Security:</span>
+					<span class="tech-value">Subresource Integrity (SRI) + CORS <span class="badge">✓ Enabled</span></span>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>

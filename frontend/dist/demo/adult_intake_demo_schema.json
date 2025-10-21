@@ -1,0 +1,2726 @@
+{
+  "source": "web",
+  "form_metadata": {
+    "title": "Ellie Mental Health Adult Intake Form",
+    "url": "https://demo.yourdomain.com/adult-intake"
+  },
+  "fields": [
+    {
+      "id": "firstName",
+      "name": "First Name",
+      "spoken_name": "First Name",
+      "spoken_aliases": [
+        "given name",
+        "first"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": "group-full-name",
+      "group_label": "Client's Full Legal Name",
+      "type": "text"
+    },
+    {
+      "id": "middleName",
+      "name": "Middle Name",
+      "spoken_name": "Middle Name",
+      "spoken_aliases": [
+        "middle"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": "group-full-name",
+      "group_label": "Client's Full Legal Name",
+      "type": "text"
+    },
+    {
+      "id": "lastName",
+      "name": "Last Name",
+      "spoken_name": "Last Name",
+      "spoken_aliases": [
+        "surname",
+        "family name",
+        "last"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": "group-full-name",
+      "group_label": "Client's Full Legal Name",
+      "type": "text"
+    },
+    {
+      "id": "preferredName",
+      "name": "Preferred Name",
+      "spoken_name": "Preferred Name",
+      "spoken_aliases": [
+        "preferred",
+        "nickname",
+        "chosen name"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "pronouns",
+      "name": "Pronouns",
+      "spoken_name": "Pronouns",
+      "spoken_aliases": [
+        "pronoun"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "dob",
+      "name": "DOB",
+      "spoken_name": "Date of Birth",
+      "spoken_aliases": [
+        "dob",
+        "birth date"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "date",
+      "format": "YYYY-MM-DD",
+      "min": "1900-01-01",
+      "max": "2007-10-13",
+      "placeholder": "1984-10-27",
+      "description": "Convert spoken dates to YYYY-MM-DD format. Must be 18+ years old."
+    },
+    {
+      "id": "age",
+      "name": "Age",
+      "spoken_name": "Age",
+      "spoken_aliases": [
+        "years old"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "number",
+      "min": 0,
+      "max": 120,
+      "description": "Age in years"
+    },
+    {
+      "id": "genderIdentity",
+      "name": "Gender Identity",
+      "spoken_name": "Gender Identity",
+      "spoken_aliases": [
+        "gender"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "options": [
+        "Agender",
+        "Cisgender Female",
+        "Cisgender Male",
+        "Genderfluid",
+        "Genderqueer",
+        "Non-Binary",
+        "Transgender Female",
+        "Transgender Male",
+        "Two-Spirit",
+        "Other",
+        "Prefer not to say"
+      ],
+      "type": "select"
+    },
+    {
+      "id": "sexualOrientation",
+      "name": "Sexual Orientation",
+      "spoken_name": "Sexual Orientation",
+      "spoken_aliases": [
+        "orientation"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "options": [
+        "Asexual",
+        "Bisexual",
+        "Gay",
+        "Heterosexual",
+        "Lesbian",
+        "Pansexual",
+        "Queer",
+        "Unsure",
+        "Other",
+        "Prefer not to say"
+      ],
+      "type": "select"
+    },
+    {
+      "id": "maritalStatus",
+      "name": "Marital Status",
+      "spoken_name": "Marital Status",
+      "spoken_aliases": [
+        "married",
+        "status"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "options": [
+        "Single",
+        "Married",
+        "Divorced",
+        "Separated",
+        "Widowed",
+        "Civil Union",
+        "Partnered"
+      ],
+      "type": "select"
+    },
+    {
+      "id": "partnerSpouseName",
+      "name": "Partner/Spouse Name",
+      "spoken_name": "Partner Spouse Name",
+      "spoken_aliases": [
+        "spouse name"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "legalCustodian",
+      "name": "Legal Custodian",
+      "spoken_name": "Legal Custodian",
+      "spoken_aliases": [
+        "custodian"
+      ],
+      "section_id": "section-client-info",
+      "section_label": "Client Information",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "reason[]",
+      "name": "Reasons for Seeking Counseling",
+      "spoken_name": "Reasons for Counseling",
+      "spoken_aliases": [
+        "reasons",
+        "issues",
+        "why here"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": "group-reasons",
+      "group_label": "Reason(s) for Seeking Counseling",
+      "group_kind": "checkbox",
+      "options": [
+        "Fears/Phobias/Worries",
+        "Family Concerns",
+        "Work Difficulties",
+        "Sleeping Concerns",
+        "Pregnancy/Adoption",
+        "Depressed Mood",
+        "Sexual Concerns",
+        "Gender Identity",
+        "Mood Swings",
+        "Legal Concerns",
+        "Drug/Alcohol Use",
+        "Eating Concerns",
+        "Court Appearance/Jail Term",
+        "Divorce/Custody",
+        "Child Protection Investigation",
+        "Financial Concerns",
+        "Loss/Change of Job",
+        "Move to New Residence",
+        "Concerns About Childhood",
+        "Death/Illness of Close Friend/Family Member"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "mandatedBy",
+      "name": "Mandated By",
+      "spoken_name": "Mandated By",
+      "spoken_aliases": [
+        "mandated"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "otherReason",
+      "name": "Other Reason",
+      "spoken_name": "Other Reason",
+      "spoken_aliases": [
+        "other"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "problemStart",
+      "name": "When did this problem(s) begin?",
+      "spoken_name": "Problem Start",
+      "spoken_aliases": [
+        "when problem started",
+        "onset"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "desiredChanges",
+      "name": "What changes do you want to happen as a result of counseling?",
+      "spoken_name": "Desired Changes",
+      "spoken_aliases": [
+        "goals",
+        "what you want"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "strengths",
+      "name": "What strengths do you possess?",
+      "spoken_name": "Strengths",
+      "spoken_aliases": [
+        "your strengths",
+        "what you're good at"
+      ],
+      "section_id": "section-reasons-counseling",
+      "section_label": "Reason(s) for Seeking Counseling",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "childhoodLiving[]",
+      "name": "Childhood/Adolescence Living Situation",
+      "spoken_name": "Childhood Living",
+      "spoken_aliases": [
+        "childhood home"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-childhood-living",
+      "group_label": "Childhood/Adolescence Living Situation",
+      "group_kind": "checkbox",
+      "options": [
+        "Raised with both parents",
+        "Parents not married",
+        "Parents split, raised by mother",
+        "Parents split, raised by father",
+        "Raised in foster/adoptive homes"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "childhoodOther",
+      "name": "Childhood Other",
+      "spoken_name": "Childhood Living Other",
+      "spoken_aliases": [
+        "childhood other"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "currentLiving[]",
+      "name": "Current Living Situation",
+      "spoken_name": "Current Living Situation",
+      "spoken_aliases": [
+        "where you live"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-current-living",
+      "group_label": "Current Living Situation",
+      "group_kind": "checkbox",
+      "options": [
+        "Living independently in my residence",
+        "With parent(s)",
+        "With relative/guardian",
+        "Temporary housing",
+        "Nursing home",
+        "Group home",
+        "Homeless",
+        "Jail",
+        "With foster family",
+        "Friend's home",
+        "Hospital",
+        "Residential care"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "facilityIdentify",
+      "name": "Identify facility",
+      "spoken_name": "Identify Facility",
+      "spoken_aliases": [
+        "facility"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "primaryHousehold",
+      "name": "Primary Household",
+      "spoken_name": "Primary Household",
+      "spoken_aliases": [
+        "main household"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "householdMembers",
+      "name": "Total number of people living in current household",
+      "spoken_name": "Household Members Total",
+      "spoken_aliases": [
+        "total people in home"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": null,
+      "group_label": null,
+      "type": "number"
+    },
+    {
+      "id": "member1_name",
+      "name": "Household Member Name 1",
+      "spoken_name": "Household Member 1 Name",
+      "spoken_aliases": [
+        "member 1"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member1_relationship",
+      "name": "Household Member Relationship 1",
+      "spoken_name": "Household Member 1 Relationship",
+      "spoken_aliases": [
+        "member 1 relationship"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member1_age",
+      "name": "Household Member Age 1",
+      "spoken_name": "Household Member 1 Age",
+      "spoken_aliases": [
+        "member 1 age",
+        "first member age"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "number"
+    },
+    {
+      "id": "member2_name",
+      "name": "Household Member Name 2",
+      "spoken_name": "Household Member 2 Name",
+      "spoken_aliases": [
+        "member 2"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member2_relationship",
+      "name": "Household Member Relationship 2",
+      "spoken_name": "Household Member 2 Relationship",
+      "spoken_aliases": [
+        "member 2 relationship"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member2_age",
+      "name": "Household Member Age 2",
+      "spoken_name": "Household Member 2 Age",
+      "spoken_aliases": [
+        "member 2 age",
+        "second member age"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "number"
+    },
+    {
+      "id": "member3_name",
+      "name": "Household Member Name 3",
+      "spoken_name": "Household Member 3 Name",
+      "spoken_aliases": [
+        "member 3"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member3_relationship",
+      "name": "Household Member Relationship 3",
+      "spoken_name": "Household Member 3 Relationship",
+      "spoken_aliases": [
+        "member 3 relationship"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "text"
+    },
+    {
+      "id": "member3_age",
+      "name": "Household Member Age 3",
+      "spoken_name": "Household Member 3 Age",
+      "spoken_aliases": [
+        "member 3 age",
+        "third member age"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-household-members",
+      "group_label": "Household Members",
+      "type": "number"
+    },
+    {
+      "id": "support1_name",
+      "name": "Support Person Name 1",
+      "spoken_name": "Support Person 1 Name",
+      "spoken_aliases": [
+        "support 1"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "text"
+    },
+    {
+      "id": "support1_relationship",
+      "name": "Support Person Relationship 1",
+      "spoken_name": "Support Person 1 Relationship",
+      "spoken_aliases": [
+        "support 1 relationship"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "text"
+    },
+    {
+      "id": "support1_age",
+      "name": "Support Person Age 1",
+      "spoken_name": "Support Person 1 Age",
+      "spoken_aliases": [
+        "support 1 age",
+        "first support person age"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "number"
+    },
+    {
+      "id": "support2_name",
+      "name": "Support Person Name 2",
+      "spoken_name": "Support Person 2 Name",
+      "spoken_aliases": [
+        "support 2"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "text"
+    },
+    {
+      "id": "support2_relationship",
+      "name": "Support Person Relationship 2",
+      "spoken_name": "Support Person 2 Relationship",
+      "spoken_aliases": [
+        "support 2 relationship"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "text"
+    },
+    {
+      "id": "support2_age",
+      "name": "Support Person Age 2",
+      "spoken_name": "Support Person 2 Age",
+      "spoken_aliases": [
+        "support 2 age",
+        "second support person age"
+      ],
+      "section_id": "section-living-situation",
+      "section_label": "Living Situation(s)",
+      "group_id": "group-support-persons",
+      "group_label": "Additional Family Members or Other Support Persons",
+      "type": "number"
+    },
+    {
+      "id": "relationship_spouse",
+      "name": "Quality of Relationship with Spouse/Partner",
+      "spoken_name": "Relationship with Spouse",
+      "spoken_aliases": [
+        "how well with spouse",
+        "partner relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-spouse",
+      "group_label": "Spouse/Partner Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "relationship_children",
+      "name": "Quality of Relationship with Children/Step-children",
+      "spoken_name": "Relationship with Children",
+      "spoken_aliases": [
+        "how well with kids",
+        "children relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-children",
+      "group_label": "Children/Step-children Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "relationship_parents",
+      "name": "Quality of Relationship with Parents",
+      "spoken_name": "Relationship with Parents",
+      "spoken_aliases": [
+        "how well with parents",
+        "parents relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-parents",
+      "group_label": "Parents Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "relationship_siblings",
+      "name": "Quality of Relationship with Siblings",
+      "spoken_name": "Relationship with Siblings",
+      "spoken_aliases": [
+        "how well with siblings",
+        "siblings relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-siblings",
+      "group_label": "Siblings Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "relationship_coworkers",
+      "name": "Quality of Relationship with Employer/Co-Workers",
+      "spoken_name": "Relationship with Co-workers",
+      "spoken_aliases": [
+        "how well at work",
+        "work relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-coworkers",
+      "group_label": "Employer/Co-Workers Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "relationship_friends",
+      "name": "Quality of Relationship with Friends",
+      "spoken_name": "Relationship with Friends",
+      "spoken_aliases": [
+        "how well with friends",
+        "friends relationship"
+      ],
+      "section_id": "section-relationships",
+      "section_label": "Quality of Relationships",
+      "group_id": "group-relationship-friends",
+      "group_label": "Friends Relationship",
+      "group_kind": "radio",
+      "options": [
+        "Poor",
+        "Good",
+        "Great",
+        "N/A"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "pregnancyComplications",
+      "name": "Complications during pregnancy",
+      "spoken_name": "Pregnancy Complications",
+      "spoken_aliases": [
+        "mother's pregnancy"
+      ],
+      "section_id": "section-developmental-issues",
+      "section_label": "Developmental Issues",
+      "group_id": "group-pregnancy-complications",
+      "group_label": "Pregnancy Complications",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "devConcerns0-5",
+      "name": "Developmental concerns from birth to age 5",
+      "spoken_name": "Early Developmental Concerns",
+      "spoken_aliases": [
+        "dev concerns birth to 5"
+      ],
+      "section_id": "section-developmental-issues",
+      "section_label": "Developmental Issues",
+      "group_id": "group-dev-concerns-early",
+      "group_label": "Early Developmental Concerns",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "devConcerns6-18",
+      "name": "Developmental concerns from birth to ages 6-18",
+      "spoken_name": "Childhood Developmental Concerns",
+      "spoken_aliases": [
+        "dev concerns 6 to 18"
+      ],
+      "section_id": "section-developmental-issues",
+      "section_label": "Developmental Issues",
+      "group_id": "group-dev-concerns-childhood",
+      "group_label": "Childhood Developmental Concerns",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "functioningConcerns[]",
+      "name": "Current functioning concerns",
+      "spoken_name": "Functioning Concerns",
+      "spoken_aliases": [
+        "current concerns"
+      ],
+      "section_id": "section-functioning",
+      "section_label": "Functioning",
+      "group_id": "group-functioning-concerns",
+      "group_label": "Current Functioning Concerns",
+      "group_kind": "checkbox",
+      "options": [
+        "Mood",
+        "Appetite",
+        "Energy",
+        "Falling asleep",
+        "Staying asleep"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "functioningDetails",
+      "name": "Details of functioning concerns",
+      "spoken_name": "Functioning Details",
+      "spoken_aliases": [
+        "describe concerns"
+      ],
+      "section_id": "section-functioning",
+      "section_label": "Functioning",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "uninterruptedSleep",
+      "name": "Uninterrupted sleep per night",
+      "spoken_name": "Uninterrupted Sleep",
+      "spoken_aliases": [
+        "sleep hours",
+        "hours of sleep"
+      ],
+      "section_id": "section-functioning",
+      "section_label": "Functioning",
+      "group_id": null,
+      "group_label": null,
+      "type": "number"
+    },
+    {
+      "id": "technologyHours",
+      "name": "Technology hours per day",
+      "spoken_name": "Technology Hours",
+      "spoken_aliases": [
+        "screen time",
+        "tech time"
+      ],
+      "section_id": "section-functioning",
+      "section_label": "Functioning",
+      "group_id": null,
+      "group_label": null,
+      "type": "number"
+    },
+    {
+      "id": "familyMentalHealth",
+      "name": "Family history of mental health issues",
+      "spoken_name": "Family Mental Health History",
+      "spoken_aliases": [
+        "family mental health"
+      ],
+      "section_id": "section-family-history",
+      "section_label": "Family History",
+      "group_id": "group-family-mental-health",
+      "group_label": "Family Mental Health History",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "mentalHealthHistory",
+      "name": "Description of mental health history",
+      "spoken_name": "Mental Health History",
+      "spoken_aliases": [
+        "describe mental history"
+      ],
+      "section_id": "section-family-history",
+      "section_label": "Family History",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "familyPhysicalHealth",
+      "name": "Family history of medical/physical health issues",
+      "spoken_name": "Family Physical Health History",
+      "spoken_aliases": [
+        "family physical health"
+      ],
+      "section_id": "section-family-history",
+      "section_label": "Family History",
+      "group_id": "group-family-physical-health",
+      "group_label": "Family Physical Health History",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "physicalHealthHistory",
+      "name": "Description of physical health history",
+      "spoken_name": "Physical Health History",
+      "spoken_aliases": [
+        "describe physical history"
+      ],
+      "section_id": "section-family-history",
+      "section_label": "Family History",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "substanceConcerns",
+      "name": "Concerns about substance use",
+      "spoken_name": "Substance Use Concerns",
+      "spoken_aliases": [
+        "drug alcohol concerns"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-concerns",
+      "group_label": "Concerns about substance use",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "cage1",
+      "name": "CAGE - Cut Down",
+      "spoken_name": "CAGE Cut Down",
+      "spoken_aliases": [
+        "cut down on use"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-cage1",
+      "group_label": "CAGE Assessment Question 1",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "cage2",
+      "name": "CAGE - Annoyed",
+      "spoken_name": "CAGE Annoyed",
+      "spoken_aliases": [
+        "people annoyed"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-cage2",
+      "group_label": "CAGE Assessment Question 2",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "cage3",
+      "name": "CAGE - Guilty",
+      "spoken_name": "CAGE Guilty",
+      "spoken_aliases": [
+        "felt guilty"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-cage3",
+      "group_label": "CAGE Assessment Question 3",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "cage4",
+      "name": "CAGE - Eye Opener",
+      "spoken_name": "CAGE Eye Opener",
+      "spoken_aliases": [
+        "drink first thing"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-cage4",
+      "group_label": "CAGE Assessment Question 4",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "use_alcohol",
+      "name": "Alcohol Use",
+      "spoken_name": "Alcohol Use",
+      "spoken_aliases": [
+        "use alcohol"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "info_alcohol",
+      "name": "Alcohol Information",
+      "spoken_name": "Alcohol Use Information",
+      "spoken_aliases": [
+        "alcohol info"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "type": "text"
+    },
+    {
+      "id": "use_streetDrugs",
+      "name": "Street Drugs Use",
+      "spoken_name": "Street Drug Use",
+      "spoken_aliases": [
+        "use drugs"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "info_streetDrugs",
+      "name": "Street Drugs Information",
+      "spoken_name": "Street Drug Use Information",
+      "spoken_aliases": [
+        "drug info"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "type": "text"
+    },
+    {
+      "id": "use_inhalants",
+      "name": "Inhalants Use",
+      "spoken_name": "Inhalant Use",
+      "spoken_aliases": [
+        "use inhalants"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "info_inhalants",
+      "name": "Inhalants Information",
+      "spoken_name": "Inhalant Use Information",
+      "spoken_aliases": [
+        "inhalant info"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "type": "text"
+    },
+    {
+      "id": "use_prescribedMeds",
+      "name": "Prescription meds beyond prescribed usage",
+      "spoken_name": "Prescription Drug Misuse",
+      "spoken_aliases": [
+        "use meds",
+        "prescription use"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "info_prescribedMeds",
+      "name": "Prescribed Meds Information",
+      "spoken_name": "Prescription Drug Misuse Information",
+      "spoken_aliases": [
+        "prescribed meds info"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "type": "text"
+    },
+    {
+      "id": "use_otherSubstance",
+      "name": "Other Substance Use",
+      "spoken_name": "Other Substance Use",
+      "spoken_aliases": [
+        "use other"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "info_otherSubstance",
+      "name": "Other Substance Information",
+      "spoken_name": "Other Substance Use Information",
+      "spoken_aliases": [
+        "other substance info"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-substance-use",
+      "group_label": "Substance Use History",
+      "type": "text"
+    },
+    {
+      "id": "caffeineCups",
+      "name": "Caffeine Cups/Cans per day",
+      "spoken_name": "Caffeine Cups per day",
+      "spoken_aliases": [
+        "caffeine amount",
+        "cups of coffee",
+        "cans of coffee"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": null,
+      "group_label": null,
+      "type": "number"
+    },
+    {
+      "id": "caffeineTime",
+      "name": "Caffeine Time of day",
+      "spoken_name": "Caffeine Time",
+      "spoken_aliases": [
+        "caffeine when"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "tobaccoUse",
+      "name": "Tobacco/Nicotine Use",
+      "spoken_name": "Tobacco Use",
+      "spoken_aliases": [
+        "use tobacco",
+        "nicotine"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-tobacco-use",
+      "group_label": "Tobacco/Nicotine Use",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unsure"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "tobaccoAmount",
+      "name": "Tobacco amount per day",
+      "spoken_name": "Tobacco Amount",
+      "spoken_aliases": [
+        "amount per day"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "someone_alcohol",
+      "name": "Someone else's alcohol use",
+      "spoken_name": "Someone Else's Alcohol Use",
+      "spoken_aliases": [
+        "family alcohol"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "someone_streetDrugs",
+      "name": "Someone else's street drugs use",
+      "spoken_name": "Someone Else's Street Drug Use",
+      "spoken_aliases": [
+        "family drug use"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "someone_inhalants",
+      "name": "Someone else's inhalants use",
+      "spoken_name": "Someone Else's Inhalant Use",
+      "spoken_aliases": [
+        "family inhalant use"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "someone_prescribedMeds",
+      "name": "Someone else's prescription meds beyond prescribed usage",
+      "spoken_name": "Someone Else's Prescription Misuse",
+      "spoken_aliases": [
+        "family med use"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "someone_legalIssues",
+      "name": "Someone else's legal issues",
+      "spoken_name": "Someone Else's Legal Issues",
+      "spoken_aliases": [
+        "family legal issues"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "group_kind": "checkbox",
+      "options": [
+        "Current",
+        "Past",
+        "Never"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "someone_other",
+      "name": "Someone else's other issues",
+      "spoken_name": "Someone Else's Other Issues",
+      "spoken_aliases": [
+        "family other"
+      ],
+      "section_id": "section-substance-history",
+      "section_label": "Chemical/Substance History",
+      "group_id": "group-someone-else-substance",
+      "group_label": "Someone Else's Substance Use",
+      "type": "text"
+    },
+    {
+      "id": "legalCharges",
+      "name": "History of legal charges",
+      "spoken_name": "History of Legal Charges",
+      "spoken_aliases": [
+        "legal history"
+      ],
+      "section_id": "section-legal-history",
+      "section_label": "Legal History",
+      "group_id": "group-legal-charges",
+      "group_label": "Legal Charges History",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "legalChargesDesc",
+      "name": "Description of legal charges",
+      "spoken_name": "Legal Charges Description",
+      "spoken_aliases": [
+        "describe legal charges"
+      ],
+      "section_id": "section-legal-history",
+      "section_label": "Legal History",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "currentProbation",
+      "name": "Currently on probation/parole",
+      "spoken_name": "Current Probation",
+      "spoken_aliases": [
+        "on probation now"
+      ],
+      "section_id": "section-legal-history",
+      "section_label": "Legal History",
+      "group_id": "group-current-probation",
+      "group_label": "Current Probation/Parole Status",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "pastProbation",
+      "name": "Ever been on probation/parole",
+      "spoken_name": "Past Probation",
+      "spoken_aliases": [
+        "past parole"
+      ],
+      "section_id": "section-legal-history",
+      "section_label": "Legal History",
+      "group_id": "group-past-probation",
+      "group_label": "Past Probation/Parole Status",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "courtOrderedTreatment",
+      "name": "Court-ordered treatment history",
+      "spoken_name": "Court Ordered Treatment",
+      "spoken_aliases": [
+        "court ordered"
+      ],
+      "section_id": "section-legal-history",
+      "section_label": "Legal History",
+      "group_id": "group-court-ordered-treatment",
+      "group_label": "Court-Ordered Treatment History",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "mentalHealthTreatment",
+      "name": "Previous mental health treatment",
+      "spoken_name": "Mental Health Treatment History",
+      "spoken_aliases": [
+        "previous treatment"
+      ],
+      "section_id": "section-mh-treatment-history",
+      "section_label": "Mental Health Treatment History",
+      "group_id": "group-mh-treatment",
+      "group_label": "Mental Health Treatment History",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "provider1_agency",
+      "name": "Mental Health Provider Agency 1",
+      "spoken_name": "Mental Health Agency 1",
+      "spoken_aliases": [
+        "provider 1"
+      ],
+      "section_id": "section-mh-treatment-history",
+      "section_label": "Mental Health Treatment History",
+      "group_id": "group-mh-providers",
+      "group_label": "Mental Health Providers",
+      "type": "text"
+    },
+    {
+      "id": "provider1_dates",
+      "name": "Mental Health Provider Dates 1",
+      "spoken_name": "Mental Health Dates 1",
+      "spoken_aliases": [
+        "provider 1 dates"
+      ],
+      "section_id": "section-mh-treatment-history",
+      "section_label": "Mental Health Treatment History",
+      "group_id": "group-mh-providers",
+      "group_label": "Mental Health Providers",
+      "type": "text"
+    },
+    {
+      "id": "provider2_agency",
+      "name": "Mental Health Provider Agency 2",
+      "spoken_name": "Mental Health Agency 2",
+      "spoken_aliases": [
+        "provider 2"
+      ],
+      "section_id": "section-mh-treatment-history",
+      "section_label": "Mental Health Treatment History",
+      "group_id": "group-mh-providers",
+      "group_label": "Mental Health Providers",
+      "type": "text"
+    },
+    {
+      "id": "provider2_dates",
+      "name": "Mental Health Provider Dates 2",
+      "spoken_name": "Mental Health Dates 2",
+      "spoken_aliases": [
+        "provider 2 dates"
+      ],
+      "section_id": "section-mh-treatment-history",
+      "section_label": "Mental Health Treatment History",
+      "group_id": "group-mh-providers",
+      "group_label": "Mental Health Providers",
+      "type": "text"
+    },
+    {
+      "id": "trauma_none_child",
+      "name": "No Childhood Trauma",
+      "spoken_name": "No Childhood Trauma",
+      "spoken_aliases": [
+        "no childhood trauma"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_none_adult",
+      "name": "No Adulthood Trauma",
+      "spoken_name": "No Adult Trauma",
+      "spoken_aliases": [
+        "no adult trauma"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_physical_child",
+      "name": "Physical Abuse in Childhood",
+      "spoken_name": "Physical Abuse in Childhood",
+      "spoken_aliases": [
+        "physical abuse child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_physical_adult",
+      "name": "Physical Abuse in Adulthood",
+      "spoken_name": "Physical Abuse in Adulthood",
+      "spoken_aliases": [
+        "physical abuse adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_domestic_child",
+      "name": "Domestic Violence/Abuse in Childhood",
+      "spoken_name": "Domestic Violence Childhood",
+      "spoken_aliases": [
+        "domestic abuse child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_domestic_adult",
+      "name": "Domestic Violence/Abuse in Adulthood",
+      "spoken_name": "Domestic Violence Adulthood",
+      "spoken_aliases": [
+        "domestic abuse adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_neglect_child",
+      "name": "Neglect in Childhood",
+      "spoken_name": "Neglect in Childhood",
+      "spoken_aliases": [
+        "childhood neglect"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_neglect_adult",
+      "name": "Neglect in Adulthood",
+      "spoken_name": "Neglect in Adulthood",
+      "spoken_aliases": [
+        "adult neglect"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_emotional_child",
+      "name": "Emotional Abuse in Childhood",
+      "spoken_name": "Emotional Abuse in Childhood",
+      "spoken_aliases": [
+        "emotional abuse child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_emotional_adult",
+      "name": "Emotional Abuse in Adulthood",
+      "spoken_name": "Emotional Abuse in Adulthood",
+      "spoken_aliases": [
+        "emotional abuse adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_sexual_child",
+      "name": "Sexual Abuse/Molestation in Childhood",
+      "spoken_name": "Sexual Abuse in Childhood",
+      "spoken_aliases": [
+        "sexual abuse child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_sexual_adult",
+      "name": "Sexual Abuse/Molestation in Adulthood",
+      "spoken_name": "Sexual Abuse in Adulthood",
+      "spoken_aliases": [
+        "sexual abuse adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_community_child",
+      "name": "Community Violence in Childhood",
+      "spoken_name": "Community Violence in Childhood",
+      "spoken_aliases": [
+        "community violence child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_community_adult",
+      "name": "Community Violence in Adulthood",
+      "spoken_name": "Community Violence in Adulthood",
+      "spoken_aliases": [
+        "community violence adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_cps_child",
+      "name": "Involvement with Child Protective Services (CPS) in Childhood",
+      "spoken_name": "CPS in Childhood",
+      "spoken_aliases": [
+        "cps child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_cps_adult",
+      "name": "Involvement with Adult Protective Services (APS) in Adulthood",
+      "spoken_name": "APS in Adulthood",
+      "spoken_aliases": [
+        "aps adult"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "trauma_placedOut_child",
+      "name": "Placed outside home as a child",
+      "spoken_name": "Placed Outside Home",
+      "spoken_aliases": [
+        "foster care child"
+      ],
+      "section_id": "section-trauma-history",
+      "section_label": "Trauma History",
+      "group_id": "group-trauma-events",
+      "group_label": "Traumatic/Upsetting Events",
+      "group_kind": "checkbox",
+      "type": "checkbox"
+    },
+    {
+      "id": "risk_concerns[]",
+      "name": "Safety/risk concerns",
+      "spoken_name": "Safety Risk Concerns",
+      "spoken_aliases": [
+        "risk concerns"
+      ],
+      "section_id": "section-safety-risk",
+      "section_label": "Safety/Risk Issues",
+      "group_id": "group-risk-concerns",
+      "group_label": "Safety/Risk Concerns",
+      "group_kind": "checkbox",
+      "options": [
+        "Dangerous behaviors to self",
+        "Dangerous behaviors to others",
+        "Destruction of property",
+        "Risk of wandering/running away",
+        "Need for excessive supervision",
+        "None reported"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "spiritualActivities",
+      "name": "Engaged in spiritual/religious activities",
+      "spoken_name": "Spiritual Activities",
+      "spoken_aliases": [
+        "spiritual activities"
+      ],
+      "section_id": "section-spirituality",
+      "section_label": "Spirituality/Religion",
+      "group_id": "group-spiritual-activities",
+      "group_label": "Spiritual/Religious Activities",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No",
+        "Unsure"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "spiritualDesc",
+      "name": "Description of spiritual/religious activities",
+      "spoken_name": "Spiritual Activities Description",
+      "spoken_aliases": [
+        "describe spiritual"
+      ],
+      "section_id": "section-spirituality",
+      "section_label": "Spirituality/Religion",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "pcpName",
+      "name": "Primary Care Physician Name",
+      "spoken_name": "PCP Name",
+      "spoken_aliases": [
+        "doctor name"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "pcpClinic",
+      "name": "Primary Care Physician Clinic",
+      "spoken_name": "PCP Clinic Name",
+      "spoken_aliases": [
+        "doctor clinic"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "psychiatristName",
+      "name": "Psychiatrist/Medication-Prescribing Provider Name",
+      "spoken_name": "Psychiatrist Name",
+      "spoken_aliases": [
+        "med provider"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "psychiatristClinic",
+      "name": "Psychiatrist Clinic Name",
+      "spoken_name": "Psychiatrist Clinic",
+      "spoken_aliases": [
+        "psych clinic"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "advancedDirective",
+      "name": "Advanced Directive",
+      "spoken_name": "Advanced Directive",
+      "spoken_aliases": [
+        "living will"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-advanced-directive",
+      "group_label": "Advanced Directive",
+      "group_kind": "radio",
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "seizures",
+      "name": "Seizures or Spells",
+      "spoken_name": "Seizures",
+      "spoken_aliases": [
+        "convulsions"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "seizures_age",
+      "name": "Seizures Age First Noted",
+      "spoken_name": "Seizures Age",
+      "spoken_aliases": [
+        "seizures when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "seizures_still",
+      "name": "Seizures Still Occurring",
+      "spoken_name": "Seizures Still Occurring",
+      "spoken_aliases": [
+        "still have seizures"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "headInjury",
+      "name": "Head Injury",
+      "spoken_name": "Head Injury",
+      "spoken_aliases": [
+        "tbi"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "headInjury_age",
+      "name": "Head Injury Age First Noted",
+      "spoken_name": "Head Injury Age",
+      "spoken_aliases": [
+        "head injury when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "headInjury_still",
+      "name": "Head Injury Still Occurring",
+      "spoken_name": "Head Injury Still Occurring",
+      "spoken_aliases": [
+        "still have head injury issues"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "chronicPain",
+      "name": "Chronic Pain",
+      "spoken_name": "Chronic Pain",
+      "spoken_aliases": [
+        "pain"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "chronicPain_age",
+      "name": "Chronic Pain Age First Noted",
+      "spoken_name": "Chronic Pain Age",
+      "spoken_aliases": [
+        "chronic pain when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "chronicPain_still",
+      "name": "Chronic Pain Still Occurring",
+      "spoken_name": "Chronic Pain Still Occurring",
+      "spoken_aliases": [
+        "still have chronic pain"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "hearingTrouble",
+      "name": "Trouble with Hearing",
+      "spoken_name": "Hearing Trouble",
+      "spoken_aliases": [
+        "hearing"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "hearingTrouble_age",
+      "name": "Hearing Trouble Age First Noted",
+      "spoken_name": "Hearing Trouble Age",
+      "spoken_aliases": [
+        "hearing trouble when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "hearingTrouble_still",
+      "name": "Hearing Trouble Still Occurring",
+      "spoken_name": "Hearing Trouble Still Occurring",
+      "spoken_aliases": [
+        "still have hearing trouble"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "visionTrouble",
+      "name": "Trouble with Vision",
+      "spoken_name": "Vision Trouble",
+      "spoken_aliases": [
+        "vision"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "visionTrouble_age",
+      "name": "Vision Trouble Age First Noted",
+      "spoken_name": "Vision Trouble Age",
+      "spoken_aliases": [
+        "vision trouble when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "visionTrouble_still",
+      "name": "Vision Trouble Still Occurring",
+      "spoken_name": "Vision Trouble Still Occurring",
+      "spoken_aliases": [
+        "still have vision trouble"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "overdoseHistory",
+      "name": "Poisoning or Overdose History",
+      "spoken_name": "Overdose History",
+      "spoken_aliases": [
+        "poisoning",
+        "od"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "overdoseHistory_age",
+      "name": "Overdose History Age First Noted",
+      "spoken_name": "Overdose History Age",
+      "spoken_aliases": [
+        "overdose when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "overdoseHistory_still",
+      "name": "Overdose History Still Occurring",
+      "spoken_name": "Overdose History Still Occurring",
+      "spoken_aliases": [
+        "still have overdose issues"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "chronicIllness",
+      "name": "Serious or Chronic Illness",
+      "spoken_name": "Chronic Illness",
+      "spoken_aliases": [
+        "serious illness"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "chronicIllness_age",
+      "name": "Chronic Illness Age First Noted",
+      "spoken_name": "Chronic Illness Age",
+      "spoken_aliases": [
+        "illness when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "chronicIllness_still",
+      "name": "Chronic Illness Still Occurring",
+      "spoken_name": "Chronic Illness Still Occurring",
+      "spoken_aliases": [
+        "still have chronic illness"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "hospitalizations",
+      "name": "Hospitalizations",
+      "spoken_name": "Hospitalizations",
+      "spoken_aliases": [
+        "been to hospital"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "hospitalizations_age",
+      "name": "Hospitalizations Age First Noted",
+      "spoken_name": "Hospitalizations Age",
+      "spoken_aliases": [
+        "hospitalizations when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "hospitalizations_still",
+      "name": "Hospitalizations Still Occurring",
+      "spoken_name": "Hospitalizations Still Occurring",
+      "spoken_aliases": [
+        "still have hospitalizations"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "allergies",
+      "name": "Allergies",
+      "spoken_name": "Allergies",
+      "spoken_aliases": [
+        "allergic to"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "allergies_age",
+      "name": "Allergies Age First Noted",
+      "spoken_name": "Allergies Age",
+      "spoken_aliases": [
+        "allergies when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "allergies_still",
+      "name": "Allergies Still Occurring",
+      "spoken_name": "Allergies Still Occurring",
+      "spoken_aliases": [
+        "still have allergies"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "infectiousDiseases",
+      "name": "Infectious/Contagious Diseases",
+      "spoken_name": "Infectious Diseases",
+      "spoken_aliases": [
+        "contagious diseases"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "infectiousDiseases_age",
+      "name": "Infectious Diseases Age First Noted",
+      "spoken_name": "Infectious Diseases Age",
+      "spoken_aliases": [
+        "infectious diseases when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "infectiousDiseases_still",
+      "name": "Infectious Diseases Still Occurring",
+      "spoken_name": "Infectious Diseases Still Occurring",
+      "spoken_aliases": [
+        "still have infectious diseases"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "surgeries",
+      "name": "Surgeries",
+      "spoken_name": "Surgeries",
+      "spoken_aliases": [
+        "had surgery"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "group_kind": "checkbox",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "surgeries_age",
+      "name": "Surgeries Age First Noted",
+      "spoken_name": "Surgeries Age",
+      "spoken_aliases": [
+        "surgeries when"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "surgeries_still",
+      "name": "Surgeries Still Occurring",
+      "spoken_name": "Surgeries Still Occurring",
+      "spoken_aliases": [
+        "still have surgery issues"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-health-issues",
+      "group_label": "Health Issues",
+      "type": "text"
+    },
+    {
+      "id": "familyMedicalConcerns",
+      "name": "Family medical concerns that impact you",
+      "spoken_name": "Family Medical Concerns",
+      "spoken_aliases": [
+        "family medical"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "otherFamilyStressors",
+      "name": "Other family concerns/stressors impacting you",
+      "spoken_name": "Other Family Stressors",
+      "spoken_aliases": [
+        "family stressors"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    },
+    {
+      "id": "med1_name",
+      "name": "Medication 1 Name",
+      "spoken_name": "Medication 1",
+      "spoken_aliases": [
+        "med 1"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_start",
+      "name": "Medication 1 Start Date",
+      "spoken_name": "Medication 1 Start",
+      "spoken_aliases": [
+        "med 1 start"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_end",
+      "name": "Medication 1 End Date",
+      "spoken_name": "Medication 1 End",
+      "spoken_aliases": [
+        "med 1 end"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_dosage",
+      "name": "Medication 1 Dosage",
+      "spoken_name": "Medication 1 Dosage",
+      "spoken_aliases": [
+        "med 1 dosage"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_frequency",
+      "name": "Medication 1 Frequency",
+      "spoken_name": "Medication 1 Frequency",
+      "spoken_aliases": [
+        "med 1 frequency"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_prescribedBy",
+      "name": "Medication 1 Prescribed By",
+      "spoken_name": "Medication 1 Prescriber",
+      "spoken_aliases": [
+        "med 1 prescribed by"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med1_note",
+      "name": "Medication 1 Note",
+      "spoken_name": "Medication 1 Note",
+      "spoken_aliases": [
+        "med 1 note"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_name",
+      "name": "Medication 2 Name",
+      "spoken_name": "Medication 2",
+      "spoken_aliases": [
+        "med 2"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_start",
+      "name": "Medication 2 Start Date",
+      "spoken_name": "Medication 2 Start",
+      "spoken_aliases": [
+        "med 2 start"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_end",
+      "name": "Medication 2 End Date",
+      "spoken_name": "Medication 2 End",
+      "spoken_aliases": [
+        "med 2 end"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_dosage",
+      "name": "Medication 2 Dosage",
+      "spoken_name": "Medication 2 Dosage",
+      "spoken_aliases": [
+        "med 2 dosage"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_frequency",
+      "name": "Medication 2 Frequency",
+      "spoken_name": "Medication 2 Frequency",
+      "spoken_aliases": [
+        "med 2 frequency"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_prescribedBy",
+      "name": "Medication 2 Prescribed By",
+      "spoken_name": "Medication 2 Prescriber",
+      "spoken_aliases": [
+        "med 2 prescribed by"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "med2_note",
+      "name": "Medication 2 Note",
+      "spoken_name": "Medication 2 Note",
+      "spoken_aliases": [
+        "med 2 note"
+      ],
+      "section_id": "section-medical",
+      "section_label": "Medical",
+      "group_id": "group-medications",
+      "group_label": "Medications",
+      "type": "text"
+    },
+    {
+      "id": "highestEducation",
+      "name": "Highest education completed",
+      "spoken_name": "Highest Education",
+      "spoken_aliases": [
+        "education level"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "options": [
+        "K-8th Grade",
+        "High School (no diploma)",
+        "High School Graduate (or GED)",
+        "Some College (no degree)",
+        "Associate's Degree",
+        "Bachelor's Degree",
+        "Master's Degree",
+        "Doctoral Degree",
+        "Professional Degree"
+      ],
+      "type": "select"
+    },
+    {
+      "id": "race[]",
+      "name": "Racial Orientation",
+      "spoken_name": "Racial Orientation",
+      "spoken_aliases": [
+        "race",
+        "ethnicity"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": "group-race",
+      "group_label": "Racial Orientation",
+      "group_kind": "checkbox",
+      "options": [
+        "American Indian or Alaska Native",
+        "Asian",
+        "Black or African American",
+        "Hispanic or Latino",
+        "Middle Eastern or North African",
+        "Native Hawaiian or Other Pacific Islander",
+        "White",
+        "Other"
+      ],
+      "type": "checkbox"
+    },
+    {
+      "id": "primaryLanguage",
+      "name": "Primary language",
+      "spoken_name": "Primary Language",
+      "spoken_aliases": [
+        "main language"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "occupation",
+      "name": "Occupation",
+      "spoken_name": "Occupation",
+      "spoken_aliases": [
+        "job"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "employer",
+      "name": "Employer",
+      "spoken_name": "Employer",
+      "spoken_aliases": [
+        "company"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "income",
+      "name": "Gross Household Income",
+      "spoken_name": "Gross Household Income",
+      "spoken_aliases": [
+        "income",
+        "household income"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "options": [
+        "$0-14,999",
+        "$15,000-19,999",
+        "$20,000-29,999",
+        "$30,000-39,999",
+        "$40,000-59,999",
+        "$60,000+"
+      ],
+      "type": "select"
+    },
+    {
+      "id": "militaryHistory",
+      "name": "Household Military History",
+      "spoken_name": "Military History",
+      "spoken_aliases": [
+        "military"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": "group-military-history",
+      "group_label": "Household Military History",
+      "group_kind": "radio",
+      "options": [
+        "Active",
+        "Past",
+        "None"
+      ],
+      "type": "radio"
+    },
+    {
+      "id": "militaryActiveWho",
+      "name": "Military Active Who",
+      "spoken_name": "Who is Active in Military",
+      "spoken_aliases": [
+        "who is military"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "type": "text"
+    },
+    {
+      "id": "militaryImpact",
+      "name": "Describe impact of military history",
+      "spoken_name": "Military Impact",
+      "spoken_aliases": [
+        "impact of military"
+      ],
+      "section_id": "section-demographics",
+      "section_label": "Demographics",
+      "group_id": null,
+      "group_label": null,
+      "type": "textarea"
+    }
+  ]
+}
