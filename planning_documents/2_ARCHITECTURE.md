@@ -994,34 +994,10 @@ useEffect(() => {
 
 ---
 
-## Form Schema Extraction
-
-**Parser**: `frontend/src/webParser/extractFormSchema.ts`
-
-**Extraction**:
-
-- Traditional `<select>` dropdowns → options extracted from DOM
-- Radio button groups → grouped by `name`, all option values collected
-- React/JS dropdowns (`role="combobox"`) → options NOT in static HTML
-
-**Form-Specific Enhancements**: `frontend/src/webParser/formEnhancements.ts`
-
-For demo/training forms with JS-rendered controls, provides:
-
-- Predefined option lists (Yes/No, states, countries, school types)
-- Field constraints (date formats, min/max values)
-- URL pattern matching (e.g., `recruiting.paylocity.com/Recruiting/Jobs/Apply/3612061`)
-
-Enhancements apply ONLY when URL matches pattern + options not already extracted from DOM.
-
-**Tab Order**: Field array index = DOM/tab order (preserved during extraction)
-
----
-
 ## Frontend Module Organization
 
 **Shared Core Modules** (`frontend/src/shared/`):
-- `connection.ts` - WebSocket connection management (warmup → upgrade flow)
+- `connection.ts` - WebSocket connection management and session lifecycle
 - `audioManager.ts` - Microphone recording & AI audio playback (16kHz/24kHz PCM16)
 - `fieldManager.ts` - Form field updates & manual edit detection
 - `config.ts` - Backend URL configuration (local dev / cloud switching)
@@ -1029,37 +1005,49 @@ Enhancements apply ONLY when URL matches pattern + options not already extracted
 - `languages.ts` - Supported fill languages (80+ languages)
 - `security.ts` - XSS prevention utilities
 - `audio-processor.worklet.ts` - AudioWorklet for PCM16 conversion
+- `greetingPrompts.ts` - Greeting carousel messages
 
-**Bookmarklet** (`frontend/src/bookmarklet/`):
-- `index.ts` - Main entry point (IIFE bundle for `<script>` injection)
-- `inject.ts` - DOM injection logic
-- `overlay.ts` - Voice control panel UI
-- `parser.ts` - Runtime form schema extraction
-- `lifecycle.ts` - Bookmarklet lifecycle management
-- Other bookmarklet-specific utilities
-
-**Demo** (`frontend/src/demo/`):
+**Demo Application** (`frontend/src/demo/`):
 - `main.tsx` - React entry point
-- `AdultIntakeDemo.tsx` - Demo component (loads pre-defined schema)
+- `AdultIntakeDemo.tsx` - Demo component with pre-defined form schema
 - `VoiceOverlay.tsx` - Desktop voice UI
 - `VoiceOverlayMobile.tsx` - Mobile voice UI (FAB design)
+- `GreetingCarousel.tsx` - Visual welcome component
 - `useDemoVAD.ts` - Voice activity detection hook (@ricky0123/vad-react)
 
-**Independence**: Demo and Bookmarklet are completely independent. Each imports from `shared/` but has zero cross-dependencies. Demo can be built/deployed without bookmarklet folder present.
+**Core State Management**:
+- `webFormState.ts` - Form state management (sessionStorage)
+- `webFormConnection.ts` - WebSocket message handling and connection logic
+
+**VAD Tuning** (`frontend/src/vad-tuning/`):
+- Development tools for tuning voice activity detection parameters
 
 ---
 
 ## Key Files
 
-**Backend**: `config.py`, `services/form_filling_service.py`, `routes/websocket_routes.py`
+**Backend**:
+- `config.py` - System configuration and settings
+- `services/form_filling_service.py` - Core business logic
+- `routes/websocket_routes.py` - WebSocket endpoint handlers
+- `adapters/live_ai_gemini.py` - Gemini Live API integration
 
-**Frontend Core**: `webFormState.ts`, `webFormConnection.ts`, `webParser/extractFormSchema.ts`, `webParser/formEnhancements.ts`
+**Frontend State & Connection**:
+- `webFormState.ts` - Form state management
+- `webFormConnection.ts` - WebSocket message handling
 
-**Frontend Shared**: `shared/connection.ts`, `shared/audioManager.ts`, `shared/fieldManager.ts`, `shared/config.ts`
+**Frontend Shared Modules**:
+- `shared/connection.ts` - Connection manager
+- `shared/audioManager.ts` - Audio recording/playback
+- `shared/fieldManager.ts` - Form field updates
+- `shared/config.ts` - Backend URL configuration
 
-**Bookmarklet**: `bookmarklet/index.ts`, `bookmarklet/inject.ts`, `bookmarklet/overlay.ts`
-
-**Demo**: `demo/main.tsx`, `demo/AdultIntakeDemo.tsx`, `demo/VoiceOverlay.tsx`
+**Demo Application**:
+- `demo/main.tsx` - React entry point
+- `demo/AdultIntakeDemo.tsx` - Main demo component
+- `demo/VoiceOverlay.tsx` - Desktop UI
+- `demo/VoiceOverlayMobile.tsx` - Mobile UI
+- `demo/useDemoVAD.ts` - VAD integration
 
 ---
 

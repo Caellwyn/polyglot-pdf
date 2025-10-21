@@ -163,7 +163,6 @@ async def _handle_fill_session(
 	schema: dict | None = None,  # For web forms
 	current_values: dict | None = None,  # For reconnect
 	fill_language: str = "English",  # Language for AI to use
-	skip_start_session: bool = False,  # Skip start_session if already initialized (warmup upgrade)
 	section_number: int | None = None,  # Phase 3: Current section (1-indexed)
 	section_label: str | None = None,  # Phase 3: Section label
 	total_sections: int | None = None,  # Phase 3: Total sections
@@ -177,10 +176,10 @@ async def _handle_fill_session(
 	system_instruction = None
 	initial_message = None
 	
-	if schema and not skip_start_session:
+	if schema:
 		# Update schema with fill_language
 		service.update_schema(schema, current_values or {}, fill_language)
-		
+
 		# Build full form context system instruction
 		# Phase 3: Include section metadata
 		# EXPERIMENTAL: Pass next_field_hint to system instruction for initiation directive
@@ -210,10 +209,9 @@ async def _handle_fill_session(
 	
 	# Start session with system instruction and initial message
 	# This accepts WebSocket and starts Gemini connection
-	if not skip_start_session:
-		await service.start_session(
-			websocket,
-			session_id,
+	await service.start_session(
+		websocket,
+		session_id,
 			send_transcript=send_transcript,
 			accept_connection=accept_connection,
 			schema=schema,  # Form schema for AI context
