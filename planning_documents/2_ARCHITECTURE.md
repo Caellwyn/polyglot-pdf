@@ -1,7 +1,13 @@
 # Architecture - Stateless Design
 
-**Last Updated**: October 18, 2025  
-**Status**: Production Ready (with Token Optimization, VAD Indicators, Section Switching, Shared Audio Stream, Delayed Barge-In, and User-First Protocol)
+**Last Updated**: October 21, 2025
+**Status**: Production Ready (User-First Protocol - Simplified)
+
+**Recent Changes** (October 21, 2025):
+- ❌ **Removed**: VAD warmup feature (no longer needed with user-first protocol)
+- ❌ **Removed**: Activity watchdog and inactivity recovery system (over-engineered for user-first model)
+- ❌ **Removed**: Backend initial message protocols (fully user-initiated now)
+- ✅ **Retained**: User speaks first, greeting carousel, delayed barge-in (450ms), shared audio stream
 
 ---
 

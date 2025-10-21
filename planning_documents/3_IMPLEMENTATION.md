@@ -1,7 +1,13 @@
 # Implementation Guide
 
-Last Updated: October 18, 2025  
-Status: Phase 2 COMPLETE + Token Optimization + Delayed Barge-In + Audio Fallback + User-First Protocol
+Last Updated: October 21, 2025
+Status: Phase 2 COMPLETE + Token Optimization + Delayed Barge-In + User-First Protocol (Simplified)
+
+**Recent Changes** (October 21, 2025):
+- ❌ **Removed**: VAD warmup feature - no longer needed, user speaks first
+- ❌ **Removed**: Activity watchdog and escalation levels - over-engineered for MVP
+- ❌ **Removed**: Backend initial message and fallback logic - fully user-initiated protocol
+- ✅ **Simplified**: Cleaner overlay code, greeting carousel only for visual guidance
 
 ---
 
