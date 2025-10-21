@@ -10,27 +10,27 @@ echo "📦 Downloading VAD assets for self-hosting..."
 mkdir -p public/vad-assets/vad-web
 mkdir -p public/vad-assets/onnxruntime
 
-# Download VAD models and worklet from vad-web@0.0.28
+# Download VAD models and worklet from vad-web@0.0.28 (using unpkg.com)
 echo "⬇️  Downloading Silero VAD models (~1.8 MB each)..."
-curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/silero_vad.onnx" \
+curl -L "https://unpkg.com/@ricky0123/vad-web@0.0.28/dist/silero_vad.onnx" \
   -o public/vad-assets/vad-web/silero_vad.onnx
 
-curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/silero_vad_legacy.onnx" \
+curl -L "https://unpkg.com/@ricky0123/vad-web@0.0.28/dist/silero_vad_legacy.onnx" \
   -o public/vad-assets/vad-web/silero_vad_legacy.onnx
 
 echo "⬇️  Downloading VAD worklet..."
-curl -L "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/vad.worklet.bundle.min.js" \
+curl -L "https://unpkg.com/@ricky0123/vad-web@0.0.28/dist/vad.worklet.bundle.min.js" \
   -o public/vad-assets/vad-web/vad.worklet.bundle.min.js
 
-# Download ONNX Runtime WASM files from onnxruntime-web@1.23.0
+# Download ONNX Runtime WASM files from onnxruntime-web@1.23.0 (using unpkg.com)
 echo "⬇️  Downloading ONNX Runtime WASM files (~2-3 MB)..."
-curl -L "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.wasm" \
+curl -L "https://unpkg.com/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.wasm" \
   -o public/vad-assets/onnxruntime/ort-wasm-simd-threaded.wasm
 
-curl -L "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.jsep.wasm" \
+curl -L "https://unpkg.com/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.jsep.wasm" \
   -o public/vad-assets/onnxruntime/ort-wasm-simd-threaded.jsep.wasm
 
-curl -L "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.jsep.mjs" \
+curl -L "https://unpkg.com/onnxruntime-web@1.23.0/dist/ort-wasm-simd-threaded.jsep.mjs" \
   -o public/vad-assets/onnxruntime/ort-wasm-simd-threaded.jsep.mjs
 
 echo ""
