@@ -595,56 +595,9 @@ class LiveAIGemini(ILiveAI):
                 # Store session reference for potential direct sends
                 self._current_session = session
                 
-                self._log.info("gemini_session_established", 
+                self._log.info("gemini_session_established",
                              instance_id=self._instance_id,
                              message="Gemini Live session active and ready - waiting for user to speak")
-
-                # ============================================================================
-                # INITIAL MESSAGE DISABLED - User initiates conversation with greeting
-                # ============================================================================
-                # The 09-2025 model doesn't reliably respond to text-only messages.
-                # Instead, we show a multilingual greeting carousel and wait for user to speak.
-                # This allows natural language detection and highlights translation capability.
-                #
-                # if self._initial_message:
-                #     try:
-                #         import time
-                #         await asyncio.sleep(0.5)
-                #         t0 = time.time()
-                #         is_section_switch = "Section" in self._initial_message and "moving to" in self._initial_message.lower()
-                #         fallback_delay = 1.5 if is_section_switch else 3.0
-                #         self._log.info("📤 INITIAL_MESSAGE_SENDING", 
-                #                      length=len(self._initial_message),
-                #                      timestamp_ms=int(t0 * 1000),
-                #                      is_section_switch=is_section_switch,
-                #                      fallback_delay_sec=fallback_delay)
-                #         await session.send_realtime_input(activity_start=types.ActivityStart())
-                #         await session.send_client_content(
-                #             turns={"role": "user", "parts": [{"text": self._initial_message}]},
-                #             turn_complete=True
-                #         )
-                #         await session.send_realtime_input(activity_end=types.ActivityEnd())
-                #         self._log.info("📤 INITIAL_MESSAGE_SENT_WITH_ACTIVITY_SIGNALS")
-                #         async def fallback_resend():
-                #             await asyncio.sleep(fallback_delay)
-                #             if not gemini_has_responded:
-                #                 self._log.warning("⚠️ INITIAL_MESSAGE_FALLBACK", 
-                #                                  delay_sec=fallback_delay,
-                #                                  is_section_switch=is_section_switch,
-                #                                  message="No response, resending initial message")
-                #                 try:
-                #                     await session.send_realtime_input(activity_start=types.ActivityStart())
-                #                     await session.send_client_content(
-                #                         turns={"role": "user", "parts": [{"text": self._initial_message}]},
-                #                         turn_complete=True
-                #                     )
-                #                     await session.send_realtime_input(activity_end=types.ActivityEnd())
-                #                 except Exception as e:
-                #                     self._log.error("❌ FALLBACK_RESEND_FAILED", error=str(e))
-                #         asyncio.create_task(fallback_resend())
-                #     except Exception as e:
-                #         self._log.exception("❌ INITIAL_MESSAGE_FAILED", error=str(e))
-                # ============================================================================
 
                 # Start heartbeat task to keep session alive during idle periods
                 # Sends a small silence packet every 30 seconds to prevent timeout

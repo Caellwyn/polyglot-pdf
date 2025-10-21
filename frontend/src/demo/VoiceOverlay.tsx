@@ -60,19 +60,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const speechStartTimeRef = useRef<number | null>(null)
 	const bargeInTriggeredRef = useRef<boolean>(false)  // Track if we triggered barge-in for this speech event
 	const MIN_TURN_DURATION_MS = 450  // Minimum 450ms of speech before triggering barge-in
-	
-	// VAD warmup period - prevents false positives during initial calibration
-	// During warmup: VAD runs (calibrates), but we block barge-in signals and keep privacy gate closed
-	const vadWarmupActiveRef = useRef<boolean>(false)
-	
-	// Activity watchdog - prevents conversational deadlock with progressive escalation
-	const lastActivityTimeRef = useRef<number>(Date.now())
-	const activityWatchdogRef = useRef<NodeJS.Timeout | null>(null)
-	const escalationLevelRef = useRef<number>(0)  // Track escalation level (0-3)
-	const waitingForFarewellRef = useRef<boolean>(false)  // Track if we're waiting for Level 3 farewell to complete
-	const INACTIVITY_TIMEOUT_MS = 6000  // 6 seconds before each escalation
-	const MAX_ESCALATION_LEVEL = 3  // 3 levels = disconnect (18 seconds total)
-	
+
 	// Create stream once on mount
 	useEffect(() => {
 		let mounted = true
@@ -120,16 +108,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		onSpeechStart: () => {
 			// In push-to-talk mode, ignore VAD
 			if (pushToTalkMode) return
-			
-			// ============================================================
-			// TEMPORARILY DISABLED: VAD Warmup Check (for debugging)
-			// ============================================================
-			// // During warmup, ignore speech events (let VAD calibrate)
-			// if (vadWarmupActiveRef.current) {
-			// 	console.log('[VFF VAD] 🔇 Speech detected during warmup - ignoring (calibrating...)')
-			// 	return
-			// }
-			
+
 			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
 			
 			// Record speech start time
@@ -169,12 +148,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		onSpeechEnd: (audio: Float32Array) => {
 			// In push-to-talk mode, ignore VAD
 			if (pushToTalkMode) return
-			
-			// During warmup, ignore speech events
-			if (vadWarmupActiveRef.current) {
-				return
-			}
-			
+
 			// Calculate speech duration
 			const speechDuration = speechStartTimeRef.current 
 				? Date.now() - speechStartTimeRef.current 
@@ -190,18 +164,11 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 			// This prevents sending incomplete turns to Gemini
 			if (bargeInTriggeredRef.current) {
 				console.log(`[VFF VAD] ✅ Valid turn detected (${speechDuration}ms) - completing turn`)
-				
+
 				// Send activity_end to signal user is done speaking
 				connectionManager?.onVADSpeechEnd()
-				
-				// User completed a valid turn - reset escalation to 0 and restart timer
-				onUserTurnComplete()
 			} else {
 				console.log(`[VFF VAD] ⚠️ Turn too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no barge-in triggered, discarding`)
-				
-				// Short noise - didn't interrupt Gemini, so nothing to clean up
-				// Just restart watchdog to continue monitoring
-				startActivityWatchdog()
 			}
 			
 			// Clear state
@@ -258,9 +225,6 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		setConnectionManager(manager)
 
 		return () => {
-			// Stop activity watchdog on unmount
-			stopActivityWatchdog()
-			
 			// Only cleanup if we created the manager (not shared)
 			if (!sharedConnectionManager) {
 				if (connectionManagerRef.current) {
@@ -306,276 +270,23 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		}
 	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.start, vad.pause])
 
-	// Hook up Gemini audio playback and turn completion callbacks for activity watchdog
+	// Hook up Gemini audio playback callbacks for greeting carousel dismissal
 	useEffect(() => {
-		let debounceTimeout: NodeJS.Timeout | null = null
-		let turnCompleteReceived = false  // Track if backend signaled turn is complete
-		
-		// Set global callback when backend signals turn is complete (all chunks sent)
-		window.vffOnTurnComplete = () => {
-			console.log('[VFF Watchdog] 📨 Backend signals turn complete (all chunks sent)')
-			turnCompleteReceived = true
-			// Don't start timer yet - wait for audio playback to finish
-		}
-		
-		// Set global callback when Gemini STARTS speaking (STOP timer entirely)
+		// Set global callback when Gemini starts speaking
 		window.vffOnAudioPlaybackStart = () => {
-			console.log('[VFF Watchdog] 🔊 Gemini started speaking - STOPPING timer')
-			turnCompleteReceived = false  // Reset for new turn
-			
-			// Hide greeting carousel when Gemini responds
+			// Hide greeting carousel when Gemini starts the conversation
 			if (showGreetingCarousel) {
 				console.log('[VoiceOverlay] 🌍 Gemini speaking - hiding greeting carousel')
 				setShowGreetingCarousel(false)
 				carouselDismissedRef.current = true
 			}
-			
-			// Stop the watchdog interval entirely while Gemini is speaking
-			// Don't clear escalationLevelRef - we want to track escalation across turns
-			if (activityWatchdogRef.current) {
-				clearInterval(activityWatchdogRef.current)
-				activityWatchdogRef.current = null
-			}
 		}
-		
-		// Set global callback when Gemini STOPS speaking (START timer after audio queue empties)
-		window.vffOnAudioPlaybackEnd = () => {
-			// ============================================================
-			// TEMPORARILY DISABLED: VAD Warmup Completion (for debugging)
-			// ============================================================
-			// // End VAD warmup after Gemini's first greeting completes
-			// if (vadWarmupActiveRef.current) {
-			// 	console.log('[VFF VAD] ✅ Warmup complete - VAD now active')
-			// 	vadWarmupActiveRef.current = false
-			// 	connectionManager?.getAudioManager()?.setVADWarmupMode(false)
-			// }
-			
-			if (debounceTimeout) {
-				clearTimeout(debounceTimeout)
-			}
-			
-			// Use different debounce based on whether turn is actually complete
-			// If turn_complete received: short debounce (no more chunks coming)
-			// If turn still in progress: long debounce (more chunks likely coming)
-			let silenceThreshold: number
-			if (waitingForFarewellRef.current) {
-				silenceThreshold = 100  // Farewell: very short
-			} else if (turnCompleteReceived) {
-				silenceThreshold = 200  // Turn complete: short debounce
-			} else {
-				silenceThreshold = 2000  // Turn in progress: long debounce (allow pauses)
-			}
-			
-			// Only log when turn is complete or farewell (not for every chunk during normal speaking)
-			if (waitingForFarewellRef.current || turnCompleteReceived) {
-				console.log(`[VFF Watchdog] 🔊 Audio playback paused - debouncing ${silenceThreshold}ms (turnComplete=${turnCompleteReceived})`)
-			}
-			
-			debounceTimeout = setTimeout(() => {
-				// Normal case: Gemini finished speaking, START activity timer again
-				if (!waitingForFarewellRef.current) {
-					console.log('[VFF Watchdog] 🔊 Gemini finished speaking - STARTING timer')
-					turnCompleteReceived = false  // Reset for next turn
-					// Restart the watchdog interval (starts fresh 6-second countdown)
-					startActivityWatchdog()
-				} else {
-					// Farewell case: 100ms of audio silence = she's done, close Gemini session
-					console.log('[VFF Watchdog] 🚪 Farewell complete (100ms audio silence) - ending Gemini session')
-					waitingForFarewellRef.current = false
-					
-					// Stop watchdog
-					stopActivityWatchdog()
-					
-					// Pause VAD
-					vad.pause()
-					
-					// Close Gemini session only (keeps WebSocket alive)
-					if (connectionManager) {
-						connectionManager.endGeminiSession()
-					}
-					
-					// Update UI
-					setStatus('Ready')
-					console.log('[VFF Watchdog] ✅ Gemini session closed, ready to reconnect')
-				}
-				
-				debounceTimeout = null
-			}, silenceThreshold)
-		}
-		
+
 		return () => {
 			// Clean up on unmount
-			if (debounceTimeout) {
-				clearTimeout(debounceTimeout)
-			}
-			delete window.vffOnAudioPlaybackEnd
 			delete window.vffOnAudioPlaybackStart
-			delete window.vffOnTurnComplete
 		}
-	}, [connectionManager, vad]) // Include deps for disconnect logic
-
-	// Called when user speaks (resets escalation to 0, restarts timer)
-	const onUserTurnComplete = () => {
-		console.log('[VFF Watchdog] 🗣️ User turn complete - resetting escalation to 0')
-		escalationLevelRef.current = 0
-		lastActivityTimeRef.current = Date.now()
-	}
-	
-	// Called when timer runs out (increments escalation, restarts timer)
-	const onInactivityTimeout = () => {
-		// Don't escalate past maximum
-		if (escalationLevelRef.current >= MAX_ESCALATION_LEVEL) {
-			console.log(`[VFF Watchdog] ⏸️ Already at max escalation level ${MAX_ESCALATION_LEVEL} - waiting for farewell to complete`)
-			return
-		}
-		
-		escalationLevelRef.current++
-		console.log(`[VFF Watchdog] ⏱️ Inactivity timeout - escalation level ${escalationLevelRef.current}/${MAX_ESCALATION_LEVEL}`)
-		lastActivityTimeRef.current = Date.now()
-		
-		// Handle escalation
-		if (escalationLevelRef.current === 1) {
-			handleEscalationLevel1()
-		} else if (escalationLevelRef.current === 2) {
-			handleEscalationLevel2()
-		} else if (escalationLevelRef.current >= MAX_ESCALATION_LEVEL) {
-			handleEscalationLevel3()
-		}
-	}
-
-	// Start activity watchdog
-	const startActivityWatchdog = () => {
-		console.log('[VFF Watchdog] 🟢 Starting activity monitoring')
-		// Clear any existing watchdog
-		if (activityWatchdogRef.current) {
-			clearInterval(activityWatchdogRef.current)
-		}
-
-		// Reset counters
-		escalationLevelRef.current = 0
-		lastActivityTimeRef.current = Date.now()
-
-		// Start periodic check
-		activityWatchdogRef.current = setInterval(() => {
-			const timeSinceActivity = Date.now() - lastActivityTimeRef.current
-
-			if (timeSinceActivity >= INACTIVITY_TIMEOUT_MS) {
-				onInactivityTimeout()
-			}
-		}, 1000) // Check every second
-	}
-
-	// Stop activity watchdog
-	const stopActivityWatchdog = () => {
-		if (activityWatchdogRef.current) {
-			clearInterval(activityWatchdogRef.current)
-			activityWatchdogRef.current = null
-		}
-		escalationLevelRef.current = 0
-	}
-
-	// Escalation Level 1: Re-prompt for current field
-	const handleEscalationLevel1 = () => {
-		if (!connectionManager) return
-		
-		console.log('[VFF Watchdog] 📝 Level 1: Field re-prompt')
-		
-		// Get LAST field hint from sessionStorage (the field Gemini last asked for)
-		// This ensures we re-prompt for the SAME field, not move to the next one
-		const lastHint = sessionStorage.getItem('vff_last_field_hint')
-		
-		if (lastHint) {
-			// Re-use the exact same field hint Gemini last used
-			console.log('[VFF Watchdog] Re-prompting for last field:', lastHint)
-			connectionManager.sendRecoveryPrompt(1, lastHint)
-		} else {
-			// Fallback: compute next unfilled field (should rarely happen)
-			const stateJson = sessionStorage.getItem('vff_state')
-			if (!stateJson) {
-				connectionManager.sendRecoveryPrompt(1)
-				return
-			}
-
-			const state = JSON.parse(stateJson)
-			const nextField = computeNextField(state)
-			
-			if (nextField) {
-				const hint = formatNextFieldHint(nextField)
-				connectionManager.sendRecoveryPrompt(1, hint)
-			} else {
-				connectionManager.sendRecoveryPrompt(1)
-			}
-		}
-	}
-
-	// Escalation Level 2: "Are you still there?"
-	const handleEscalationLevel2 = () => {
-		if (!connectionManager) return
-		
-		console.log('[VFF Watchdog] 👋 Level 2: Are you still there?')
-		
-		// Backend config has the actual prompt wording
-		connectionManager.sendRecoveryPrompt(2)
-	}
-	
-	// Escalation Level 3: Close session gracefully
-	const handleEscalationLevel3 = () => {
-		if (!connectionManager) {
-			console.warn('[VFF Watchdog] Cannot handle Level 3 - no connection manager')
-			return
-		}
-		
-		// Check if connection is actually open before attempting Level 3
-		const isConnected = status.toLowerCase() === 'connected' || 
-		                    status.toLowerCase().startsWith('connected ') || 
-		                    status.toLowerCase() === 'switching_section'
-		
-		if (!isConnected) {
-			console.warn('[VFF Watchdog] Cannot handle Level 3 - not connected (status: ' + status + ')')
-			// Clean up and set status to Ready
-			stopActivityWatchdog()
-			vad.pause()
-			setStatus('Ready')
-			return
-		}
-		
-		console.log('[VFF Watchdog] 🚪 Level 3: Closing Gemini session due to inactivity')
-		
-		// Set flag to wait for farewell completion
-		waitingForFarewellRef.current = true
-		
-		// Send goodbye via backend config prompt
-		// This tells Gemini to say farewell, then backend closes Gemini session (not WebSocket)
-		connectionManager.sendRecoveryPrompt(3)
-		
-		// CRITICAL: Set timeout fallback in case audio silence detection fails
-		// This prevents infinite waiting if Gemini gets stuck
-		// Normal path: audio stops → 100ms silence → disconnect (fast and clean)
-		// Fallback path: 15 second timeout → force disconnect (safety net)
-		setTimeout(() => {
-			if (waitingForFarewellRef.current) {
-				console.log('[VFF Watchdog] ⏱️ Farewell timeout - forcing disconnect after 15s (audio silence detection failed)')
-				waitingForFarewellRef.current = false
-				
-				// Stop watchdog
-				stopActivityWatchdog()
-				
-				// Pause VAD
-				vad.pause()
-				
-				// Full disconnect
-				if (connectionManager) {
-					connectionManager.disconnect()
-				}
-				
-				// Update UI
-				setStatus('Ready')
-				console.log('[VFF Watchdog] ✅ Session closed (timeout fallback) and ready to reconnect')
-			}
-		}, 15000) // 15 second fallback timeout
-		
-		// Note: Actual disconnect happens in useEffect when turn_complete message arrives
-	}
+	}, [showGreetingCarousel])
 
 	// Handle connect button
 	const handleConnect = async () => {
@@ -606,36 +317,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 			
 			if (isActive) {
 				await connectionManager.startRecording()
-				
-				// ============================================================
-				// TEMPORARILY DISABLED: VAD Warmup Mode (for debugging)
-				// ============================================================
-				// // Enable VAD warmup mode - will auto-disable after Gemini's first greeting
-				// vadWarmupActiveRef.current = true
-				// connectionManager.getAudioManager()?.setVADWarmupMode(true)
-				// console.log('[VFF VAD] 🔇 Warmup mode enabled - ignoring speech events until Gemini finishes greeting')
-				// 
-				// // Safety timeout: disable warmup mode if Gemini doesn't respond within 30s
-				// // This prevents warmup noise from running indefinitely if Gemini stays silent
-				// setTimeout(() => {
-				// 	if (vadWarmupActiveRef.current) {
-				// 		console.warn('[VFF VAD] ⏰ Warmup timeout - Gemini did not respond within 30s, disabling warmup mode')
-				// 		vadWarmupActiveRef.current = false
-				// 		connectionManager.getAudioManager()?.setVADWarmupMode(false)
-				// 	}
-				// }, 30000)
-				
-				// ============================================================
-				// TEMPORARILY DISABLED: Activity Watchdog (for debugging)
-				// ============================================================
-				// // Start activity watchdog AFTER a delay
-				// // This gives Gemini time to send initial greeting (typically 2-5 seconds)
-				// // Without this delay, watchdog would trigger Level 1 before Gemini speaks
-				// setTimeout(() => {
-				// 	startActivityWatchdog()
-				// 	console.log('[VFF Watchdog] 🟢 Activity monitoring started (15s grace period elapsed)')
-				// }, 15000) // 15 second grace period after connect
-				
+
 				// Start VAD detection only if NOT in push-to-talk mode
 				if (!pushToTalkMode && !vad.loading && !vad.errored) {
 					vad.start()
@@ -649,17 +331,13 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 			console.error('[VoiceOverlay] Connection error:', err)
 			setError(err instanceof Error ? err.message : 'Connection failed')
 			setStatus('Connection failed')
-			stopActivityWatchdog()  // Stop watchdog on error
 		}
 	}
 
 	// Handle disconnect button (now "pause")
 	const handleDisconnect = () => {
 		if (!connectionManager) return
-		
-		// Stop activity watchdog
-		stopActivityWatchdog()
-		
+
 		// Pause instead of disconnect (keeps connection warm)
 		connectionManager.pause()
 		
