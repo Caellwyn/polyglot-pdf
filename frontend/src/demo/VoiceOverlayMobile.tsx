@@ -266,14 +266,27 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 
 		console.log('[VoiceOverlayMobile] Language changed to:', newLanguage)
 
-		// Update connection manager if connected
+		// Send initiating message if connected
 		const isCurrentlyConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 		if (connectionManager && isCurrentlyConnected) {
 			try {
-				await connectionManager.changeFillLanguage(newLanguage)
-				console.log('[VoiceOverlayMobile] ✓ Language updated in Gemini session')
+				// Compute next field hint for the initiating message
+				const state = WebFormStateManager.load()
+				if (!state) {
+					console.error('[VoiceOverlayMobile] No state found for next field hint')
+					return
+				}
+
+				// Compute next unfilled field
+				const nextField = computeNextField(state.schema, state.current_values)
+				const nextFieldHint = nextField
+					? formatNextFieldHint(nextField, state.schema)
+					: 'all fields are complete'
+
+				// Send spoken language change message via connection manager
+				connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
 			} catch (err) {
-				console.error('[VoiceOverlayMobile] Failed to change language:', err)
+				console.error('[VoiceOverlayMobile] Failed to change spoken language:', err)
 				setError(err instanceof Error ? err.message : 'Failed to change language')
 			}
 		}

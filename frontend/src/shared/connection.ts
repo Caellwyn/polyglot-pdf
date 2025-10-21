@@ -42,6 +42,7 @@ export interface ConnectionManager {
 	isRecording: () => boolean
 	isPaused: () => boolean
 	changeFillLanguage: (language: string) => Promise<void>
+	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
 	// Phase 3: Section management
 	startSection: (sectionNumber: number) => Promise<void>
 	switchSection: (target: number | string) => Promise<void>
@@ -557,7 +558,7 @@ export function createConnectionManager(
 		async changeFillLanguage(language: string) {
 			// Update stored language
 			fillLanguage = language
-			
+
 			if (connection && connection.getStatus() === 'connected') {
 				// Send language change message to backend
 				await connection.changeFillLanguage(language)
@@ -565,7 +566,21 @@ export function createConnectionManager(
 				console.log('[VFF Connection] Language preference saved, will be used on next connect')
 			}
 		},
-		
+
+		changeSpokenLanguage(language: string, nextFieldHint: string) {
+			// Send spoken language change message to backend
+			if (connection && connection.getStatus() === 'connected') {
+				connection.send({
+					type: 'change_spoken_language',
+					spoken_language: language,
+					next_field_hint: nextFieldHint
+				})
+				console.log('[VFF Connection] ✓ Sent spoken language change to backend:', language)
+			} else {
+				console.warn('[VFF Connection] Cannot change spoken language - not connected')
+			}
+		},
+
 		// Phase 3: Section management methods
 		async startSection(sectionNumber: number) {
 			if (!connection) {
