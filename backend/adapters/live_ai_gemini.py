@@ -257,19 +257,42 @@ class LiveAIGemini(ILiveAI):
 
     async def send_text_message(self, text: str):
         """Send a text message to the live session (e.g., next field hints).
-        
+
         Messages are queued and sent asynchronously without blocking.
         Used for providing context to Gemini after tool responses.
         """
         if self._text_queue is None:
             # If the queue isn't started, drop message (no-op) for safety
             return
-        
+
         # Log text message for debugging
-        self._log.debug("TEXT_MESSAGE_QUEUED", 
+        self._log.debug("TEXT_MESSAGE_QUEUED",
                       message=text)
-        
+
         await self._text_queue.put(text)
+
+    async def send_client_content(self, text: str):
+        """Send client content to Gemini to initiate a response.
+
+        Uses session.send_client_content() to prompt Gemini to speak.
+        This is different from send_text_message which queues text hints.
+
+        Used for initiating conversation in a specific language or context.
+
+        Args:
+            text: Message to send to Gemini (e.g., language change instruction)
+        """
+        if self._current_session is None:
+            self._log.warning("⚠️ SEND_CLIENT_CONTENT_NO_SESSION")
+            return
+
+        try:
+            self._log.info("SEND_CLIENT_CONTENT", message=text)
+            await self._current_session.send_client_content(
+                turns={"parts": [{"text": text}]}
+            )
+        except Exception as exc:
+            self._log.error("send_client_content_failed", error=str(exc), message=text)
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).

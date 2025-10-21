@@ -365,6 +365,27 @@ async def _handle_fill_session(
 						await service.change_fill_language(new_language)
 						await websocket.send_json({"type": "language_changed", "language": new_language})
 					continue
+				elif mtype == "change_spoken_language":
+					# Frontend requests to change the spoken conversation language
+					# Backend sends initiating message to Gemini to switch language and greet user
+					spoken_language = obj.get("spoken_language")
+					next_field_hint = obj.get("next_field_hint")
+					if not spoken_language or not isinstance(spoken_language, str):
+						await websocket.send_json({"type": "error", "code": "invalid_spoken_language", "reason": "spoken_language_string_required"})
+					elif not next_field_hint or not isinstance(next_field_hint, str):
+						await websocket.send_json({"type": "error", "code": "invalid_next_field_hint", "reason": "next_field_hint_required"})
+					else:
+						try:
+							# Send initiating message to Gemini
+							await service.send_initiating_message(spoken_language, next_field_hint)
+							await websocket.send_json({"type": "spoken_language_changed", "language": spoken_language})
+							_log.info("spoken_language_changed",
+							         session_id=session_id,
+							         spoken_language=spoken_language)
+						except Exception as e:
+							_log.error("change_spoken_language_failed", session_id=session_id, error=str(e))
+							await websocket.send_json({"type": "error", "code": "spoken_language_change_failed", "message": str(e)})
+					continue
 				elif mtype == "end_gemini_session":
 					# Frontend requests to close Gemini session (Level 3 farewell)
 					# Backend closes Gemini connection but keeps WebSocket alive
