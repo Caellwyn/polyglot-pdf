@@ -813,9 +813,55 @@ MAX_CONNECTIONS_PER_IP = 3
 
 ---
 
-## Recent Improvements (October 18, 2025)
+## Recent Improvements
 
-### 1. Fixed VAD Infinite Reinitialization
+### October 22, 2025: Spoken Language Selection & Initiation
+
+**Feature**: Users can now select their preferred spoken language from a dropdown, and Gemini will proactively initiate the conversation in that language.
+
+**Components Added**:
+
+1. **Language Dropdown UI**:
+   - Appears immediately when "Connect to Voice" is pressed
+   - Shows 18 confirmed working languages with native names
+   - Visible during connection setup (gives user something to do while audio initializes)
+   - Persists across section switches
+   - Implementation: `frontend/src/shared/languages.ts`, both overlay components
+
+2. **Greeting Carousel Updates**:
+   - Updated to show actual activation phrases (e.g., "Hello Gemini, please speak English")
+   - Reduced from 30 to 18 confirmed working languages
+   - Source data: `planning_documents/hello_gemini_translations.csv`
+   - Implementation: `frontend/src/shared/greetingPrompts.ts`
+
+3. **Backend Initiation System**:
+   - New WebSocket message handler: `change_spoken_language`
+   - New service method: `send_initiating_message()`
+   - Uses `session.send_client_content()` to prompt Gemini response
+   - Template configurable in `backend/config.py` as `INITIATING_MESSAGE`
+   - Language persists in `FormFillingService._spoken_language`
+
+4. **Connection Status Improvements**:
+   - Status now shows "Setting up audio..." between WebSocket and audio ready
+   - Only shows "connected" when BOTH WebSocket AND audio are active
+   - Prevents users from speaking before system is ready
+
+**Benefits**:
+- ✅ Eliminates language barrier anxiety (user selects upfront)
+- ✅ Gemini initiates conversation (removes "speak first" pressure)
+- ✅ Language persists across sections (no re-selection needed)
+- ✅ Better UX during connection (dropdown provides activity)
+- ✅ Clear status feedback (user knows when ready)
+
+**Files Changed**:
+- Backend: `config.py`, `websocket_routes.py`, `form_filling_service.py`, `live_ai_gemini.py`
+- Frontend: `connection.ts`, `languages.ts`, `greetingPrompts.ts`, both overlay components
+
+---
+
+### October 18, 2025: User-First Protocol Improvements
+
+#### 1. Fixed VAD Infinite Reinitialization
 
 **Problem**: VAD hook was re-initializing on every render due to changing dependencies (`sharedStream` and `callbacks` objects).
 
@@ -825,7 +871,7 @@ MAX_CONNECTIONS_PER_IP = 3
 - `frontend/src/demo/VoiceOverlay.tsx` - Added `useMemo` for `vadCallbacks` and `vadOptions`
 - `frontend/src/demo/VoiceOverlayMobile.tsx` - Same stabilization
 
-### 2. Delayed Barge-In (450ms Validation)
+#### 2. Delayed Barge-In (450ms Validation)
 
 **Problem**: Short noises (throat clears, coughs <450ms) were triggering immediate barge-in, interrupting Gemini unnecessarily.
 
@@ -846,7 +892,7 @@ MAX_CONNECTIONS_PER_IP = 3
 - `frontend/src/demo/VoiceOverlay.tsx` - Added `bargeInTriggeredRef`, delayed barge-in logic
 - `frontend/src/demo/VoiceOverlayMobile.tsx` - Same implementation
 
-### 3. Context-Aware Audio Playback Fallback
+#### 3. Context-Aware Audio Playback Fallback
 
 **Problem**: Gemini's audio sometimes didn't play after connection or section switching, causing silent gaps.
 
