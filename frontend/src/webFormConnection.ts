@@ -1003,29 +1003,27 @@ export class WebFormConnection {
   }
   
   /**
-   * Send VAD activity start signal (user started speaking)
-   * Tells Gemini to interrupt current generation
+   * DEPRECATED: No longer needed with Gemini's automatic VAD
+   *
+   * Gemini's automatic VAD detects speech starts automatically when audio
+   * flows in. We only need to send audio_stream_end when speech pauses.
    */
   sendActivityStart(): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    
-    this.send({
-      type: 'vad_activity_start',
-      timestamp: Date.now(),
-    });
+    // No-op: Automatic VAD handles speech detection
+    // This method is kept for backward compatibility but does nothing
   }
   
   /**
-   * Send VAD activity end signal (user stopped speaking)
-   * Tells Gemini user has finished their turn
+   * Send audio stream end signal (user stopped speaking)
+   *
+   * Flushes Gemini's cached audio buffer by sending audio_stream_end.
+   * Gemini's automatic VAD will then process the turn and respond.
    */
   sendActivityEnd(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
-    
+
     this.send({
       type: 'vad_activity_end',
       timestamp: Date.now(),

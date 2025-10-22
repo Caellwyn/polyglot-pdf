@@ -295,39 +295,24 @@ class LiveAIGemini(ILiveAI):
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message=text)
 
-    async def send_activity_start(self):
-        """Send activity_start signal to Gemini (user started speaking).
-        
-        This is a client-driven VAD signal that tells Gemini to interrupt
-        current generation because the user is now speaking.
-        """
-        if self._current_session is None:
-            self._log.warning("⚠️ ACTIVITY_START_NO_SESSION")
-            return
-        
-        try:
-            from google.genai import types
-            # No logging - too noisy, visible on frontend
-            await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
-        except Exception as e:
-            self._log.error("❌ ACTIVITY_START_FAILED", error=str(e))
+    async def send_audio_stream_end(self):
+        """Send audio_stream_end signal to Gemini (user stopped speaking).
 
-    async def send_activity_end(self):
-        """Send activity_end signal to Gemini (user stopped speaking).
-        
-        This is a client-driven VAD signal that tells Gemini the user
-        has finished speaking and it's safe to respond.
+        This flushes Gemini's cached audio buffer and allows automatic VAD
+        to process the turn. Should be called when frontend VAD detects
+        speech end.
+
+        Reference: Gemini Live API docs lines 358-395
         """
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             return
-        
+
         try:
-            from google.genai import types
-            # No logging - too noisy, visible on frontend
-            await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
+            # Signal end of audio stream - Gemini's automatic VAD will process
+            await self._current_session.send_realtime_input(audio_stream_end=True)
         except Exception as e:
-            self._log.error("❌ ACTIVITY_END_FAILED", error=str(e))
+            self._log.error("❌ AUDIO_STREAM_END_FAILED", error=str(e))
 
     async def finalize(self):
         """Stop the background task and clear resources."""
@@ -624,28 +609,6 @@ class LiveAIGemini(ILiveAI):
                 self._log.info("gemini_session_established",
                              instance_id=self._instance_id,
                              message="Gemini Live session active and ready - waiting for user to speak")
-
-                # Start heartbeat task to keep session alive during idle periods
-                # Sends a small silence packet every 30 seconds to prevent timeout
-                async def heartbeat():
-                    while True:
-                        try:
-                            # Wait 30 seconds between heartbeats
-                            await asyncio.sleep(30)
-                            if self._current_session is not None:
-                                # Send 20ms of silence (320 bytes at 16kHz PCM16)
-                                silence = bytes(320)  # 160 samples * 2 bytes/sample = 320 bytes
-                                await session.send_realtime_input(
-                                    audio=types.Blob(data=silence, mime_type="audio/pcm;rate=16000")
-                                )
-                                self._log.debug("heartbeat_sent")
-                        except asyncio.CancelledError:
-                            # Task was cancelled, exit cleanly
-                            break
-                        except Exception as e:
-                            self._log.warning("heartbeat_failed", error=str(e))
-
-                heartbeat_task = asyncio.create_task(heartbeat())
 
                 try:
                     event_count = 0
@@ -1061,19 +1024,6 @@ class LiveAIGemini(ILiveAI):
                                      message="Session closed and cleaned up")
                     except Exception:
                         pass
-
-                # Clean up heartbeat task
-                try:
-                    heartbeat_task.cancel()
-                except Exception:
-                    pass
-
-                try:
-                    await asyncio.wait_for(heartbeat_task, timeout=1.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-                except Exception:
-                    pass
 
             # Connect may return either an async context manager (usable with
             # `async with`) or an awaitable/coroutine yielding a session. Handle

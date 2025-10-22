@@ -343,16 +343,11 @@ async def _handle_fill_session(
 							_log.error("recovery_prompt_failed", error=str(e), level=level)
 							await websocket.send_json({"type": "error", "code": "recovery_prompt_failed", "message": str(e)})
 					continue
-				elif mtype == "vad_activity_start":
-					# Frontend VAD detected user started speaking
-					# Send activity_start to Gemini to interrupt current generation
-					await service.send_activity_start()
-					# No acknowledgment needed - fire-and-forget signal
-					continue
 				elif mtype == "vad_activity_end":
 					# Frontend VAD detected user stopped speaking
-					# Send activity_end to Gemini to allow model to respond
-					await service.send_activity_end()
+					# Send audio_stream_end to flush Gemini's audio buffer
+					# (Gemini's automatic VAD will then process the turn)
+					await service.send_audio_stream_end()
 					# No acknowledgment needed - fire-and-forget signal
 					continue
 				elif mtype == "change_fill_language":
