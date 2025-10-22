@@ -66,36 +66,43 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			if (pushToTalkMode) return
 
 			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
-			
+
 			// Record speech start time
 			speechStartTimeRef.current = Date.now()
 			bargeInTriggeredRef.current = false  // Reset flag
-			
+
 			// Hide greeting carousel when user starts speaking
 			if (showGreetingCarousel) {
 				console.log('[VoiceOverlayMobile] 🌍 User speaking - hiding greeting carousel')
 				setShowGreetingCarousel(false)
 				carouselDismissedRef.current = true
 			}
-			
+
 			// Privacy Gate: Open audio flow (sends pre-buffer + live audio)
 			const audioManager = connectionManager?.getAudioManager()
 			if (audioManager) {
-				audioManager.setVADActive(true) // Opens gate, flushes 400ms pre-buffer
+				audioManager.setVADActive(true) // Opens gate, flushes 600ms pre-buffer
 			}
-			
+
+			// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
+			// This gives instant barge-in feel while we wait to confirm speech duration
+			if (audioManager && audioManager.isSpeaking()) {
+				audioManager.pauseAudioContext()
+				console.log('[VFF VAD] 🔇 Tentative pause - waiting to confirm speech duration')
+			}
+
 			// Schedule delayed barge-in - only trigger if speech lasts ≥450ms
 			// This prevents throat clears/grunts from interrupting Gemini
 			setTimeout(() => {
-				const speechDuration = speechStartTimeRef.current 
-					? Date.now() - speechStartTimeRef.current 
+				const speechDuration = speechStartTimeRef.current
+					? Date.now() - speechStartTimeRef.current
 					: 0
-				
+
 				// Only trigger barge-in if speech is still active AND duration met
 				if (speechStartTimeRef.current !== null && speechDuration >= MIN_TURN_DURATION_MS) {
 					console.log(`[VFF VAD] ✅ Valid speech detected (${speechDuration}ms) - triggering barge-in`)
 					bargeInTriggeredRef.current = true
-					
+
 					// Trigger VAD-based barge-in (interrupts Gemini if speaking)
 					connectionManager?.onVADSpeechStart()
 				}
@@ -106,27 +113,33 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			if (pushToTalkMode) return
 
 			// Calculate speech duration
-			const speechDuration = speechStartTimeRef.current 
-				? Date.now() - speechStartTimeRef.current 
+			const speechDuration = speechStartTimeRef.current
+				? Date.now() - speechStartTimeRef.current
 				: 0
-			
+
 			// Privacy Gate: Always close audio flow (send silence for privacy)
 			const audioManager = connectionManager?.getAudioManager()
 			if (audioManager) {
 				audioManager.setVADActive(false) // Closes gate, switches to silence
 			}
-			
-			// Only send activity_end if we actually triggered barge-in
+
+			// Only send audio_stream_end if we actually triggered barge-in
 			// This prevents sending incomplete turns to Gemini
 			if (bargeInTriggeredRef.current) {
 				console.log(`[VFF VAD] ✅ Valid turn detected (${speechDuration}ms) - completing turn`)
 
-				// Send activity_end to signal user is done speaking
+				// Send audio_stream_end to signal user is done speaking
 				connectionManager?.onVADSpeechEnd()
 			} else {
 				console.log(`[VFF VAD] ⚠️ Turn too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no barge-in triggered, discarding`)
+
+				// FALSE POSITIVE: Resume audio playback (speech was too short)
+				if (audioManager) {
+					audioManager.resumeAudioContext()
+					console.log('[VFF VAD] 🔊 Resuming audio - false positive')
+				}
 			}
-			
+
 			// Clear state
 			speechStartTimeRef.current = null
 			bargeInTriggeredRef.current = false

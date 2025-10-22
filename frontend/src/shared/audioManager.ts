@@ -15,8 +15,10 @@ export interface AudioManager {
 	startRecording: (onAudioData: (data: ArrayBuffer) => void) => Promise<void>
 	stopRecording: () => void
 	playAudio: (audioData: ArrayBuffer) => Promise<void>
-	flushAudioQueue: () => void // Stop all queued audio immediately
-	resumePlayback: () => void // Resume audio after barge-in
+	flushAudioQueue: () => void // Stop all queued audio immediately (full barge-in)
+	resumePlayback: () => void // Resume audio after barge-in (unblock new chunks)
+	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
+	resumeAudioContext: () => void // Resume audio context (resume after false positive)
 	isRecording: () => boolean
 	isSpeaking: () => boolean // Is Gemini currently speaking?
 	muteInput: () => void // Mute mic input (send silence)
@@ -430,6 +432,41 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
+	 * Pause audio context (tentative pause during VAD uncertainty)
+	 *
+	 * Suspends the playback AudioContext, which immediately pauses all audio.
+	 * Audio can be resumed seamlessly with resumeAudioContext().
+	 * Used for instant barge-in feedback before confirming speech duration.
+	 */
+	async function pauseAudioContext(): Promise<void> {
+		if (nodes.playbackContext && nodes.playbackContext.state === 'running') {
+			try {
+				await nodes.playbackContext.suspend()
+				console.log('[AudioManager] 🔇 Audio context paused (tentative barge-in)')
+			} catch (e) {
+				console.error('[AudioManager] Failed to pause audio context:', e)
+			}
+		}
+	}
+
+	/**
+	 * Resume audio context (resume after false positive)
+	 *
+	 * Resumes the playback AudioContext, continuing audio where it left off.
+	 * Used when VAD detects short noise that doesn't meet barge-in threshold.
+	 */
+	async function resumeAudioContext(): Promise<void> {
+		if (nodes.playbackContext && nodes.playbackContext.state === 'suspended') {
+			try {
+				await nodes.playbackContext.resume()
+				console.log('[AudioManager] 🔊 Audio context resumed (false positive)')
+			} catch (e) {
+				console.error('[AudioManager] Failed to resume audio context:', e)
+			}
+		}
+	}
+
+	/**
 	 * Check if currently recording
 	 */
 	function isRecording(): boolean {
@@ -528,6 +565,8 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		playAudio,
 		flushAudioQueue,
 		resumePlayback,
+		pauseAudioContext,
+		resumeAudioContext,
 		isRecording,
 		isSpeaking,
 		muteInput,
