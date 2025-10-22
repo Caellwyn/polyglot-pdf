@@ -289,7 +289,8 @@ class LiveAIGemini(ILiveAI):
         try:
             self._log.info("SEND_CLIENT_CONTENT", message=text)
             await self._current_session.send_client_content(
-                turns={"parts": [{"text": text}]}
+                turns={"parts": [{"text": text}],},
+                turn_complete=True
             )
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message=text)
