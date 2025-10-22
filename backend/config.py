@@ -231,8 +231,14 @@ class Settings(BaseModel):
     "Always follow these rules strictly to ensure accurate form completion."
 )
 
-	
-	
+	# === INITIATING MESSAGE TEMPLATE ===
+	# Used to prompt Gemini to initiate conversation in a specific language
+	# Triggered by: language selection change, section switching
+	# Placeholders: {spoken_language}, {next_field_hint}
+	INITIATING_MESSAGE: str = (
+		"Speak {spoken_language} for the rest of this session, or until instructed otherwise. "
+		"IMMEDIATELY greet the user warmly in this language, tell them the active section, and ask them for {next_field_hint}"
+	)
 
 def get_settings() -> Settings:
 	"""Load and return validated settings.

@@ -51,6 +51,7 @@ class FormFillingService:
         # Web session state - schema only (no field caching)
         self._schema: Optional[Dict[str, Any]] = None  # Schema for context only
         self._fill_language: str = "English"  # Default fill language
+        self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
         # Pending form state requests (for async request/response pattern)
         self._pending_form_state_request: Optional[Dict[str, Any]] = None
         self._pending_next_field_request: Optional[Dict[str, Any]] = None
@@ -652,13 +653,45 @@ class FormFillingService:
         # No logging - too noisy, visible on frontend
         await self._live_ai.send_activity_end()
 
+    async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
+        """
+        Send initiating message to Gemini to prompt conversation in specific language.
+
+        This is triggered when user changes spoken language or when switching sections.
+        Uses session.send_client_content() to initiate Gemini's response.
+
+        Args:
+            spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
+            next_field_hint: Next unfilled field hint (e.g., "firstName (First Name)")
+        """
+        if self._live_ai is None:
+            # No-op when live AI is not configured (used in unit tests)
+            return
+
+        # Store spoken language for section switching (persists across sections)
+        self._spoken_language = spoken_language
+
+        # Format initiating message template
+        message = self._settings.INITIATING_MESSAGE.format(
+            spoken_language=spoken_language,
+            next_field_hint=next_field_hint
+        )
+
+        _log.info("send_initiating_message",
+                 session_id=self._session_id,
+                 spoken_language=spoken_language,
+                 message=message)
+
+        # Send to Gemini via session.send_client_content()
+        await self._live_ai.send_client_content(message)
+
     async def send_recovery_prompt(self, level: int, next_field_hint: str | None = None):
         """
         Send recovery prompt to Gemini when conversation stalls (activity watchdog).
-        
+
         Translates frontend level (1, 2, 3) into configured prompt from backend/config.py.
         These prompts are SCRIPTS for Gemini to read aloud, not commands.
-        
+
         Args:
             level: Escalation level (1=field re-prompt, 2=are you there, 3=goodbye)
             next_field_hint: Optional hint for level 1 (e.g., "firstName (First Name)")
@@ -666,11 +699,11 @@ class FormFillingService:
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
-        
+
         # Only log Level 3 (farewell) - other levels are too noisy
         if level == 3:
             _log.info("🚪 recovery_prompt_level_3_farewell", session_id=self._session_id)
-        
+
         # Get configured prompt based on level
         if level == 1:
             # Level 1: Re-prompt for same field
@@ -682,7 +715,7 @@ class FormFillingService:
         else:
             _log.warning("send_recovery_prompt_invalid_level", level=level)
             return
-        
+
         # Send as context hint (same mechanism as completion_message)
         await self.send_context_hint(prompt)
 
@@ -931,7 +964,20 @@ class FormFillingService:
                 })
                 _log.info("section_switched_confirmation_sent", session_id=session_id)
             except Exception as exc:
-                _log.error("failed_to_send_section_switched", 
+                _log.error("failed_to_send_section_switched",
+                          session_id=session_id,
+                          error=str(exc))
+
+        # 4. Send initiating message to Gemini with current spoken language
+        # This prompts Gemini to greet the user in the selected language and ask for the first field
+        if initial_field_hint:
+            try:
+                await self.send_initiating_message(self._spoken_language, initial_field_hint)
+                _log.info("section_switch_initiating_message_sent",
+                         session_id=session_id,
+                         spoken_language=self._spoken_language)
+            except Exception as exc:
+                _log.error("failed_to_send_section_switch_initiating_message",
                           session_id=session_id,
                           error=str(exc))
 
