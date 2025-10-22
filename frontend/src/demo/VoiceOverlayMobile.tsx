@@ -14,6 +14,7 @@ import { WebFormStateManager, type FormSchema, type SectionIndex } from '../webF
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { GreetingCarousel } from './GreetingCarousel'
+import { SPOKEN_LANGUAGES } from '../shared/languages'
 
 interface VoiceOverlayMobileProps {
 	schema: FormSchema
@@ -41,6 +42,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
+	const [selectedLanguage, setSelectedLanguage] = useState('English')  // Track selected spoken language
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
@@ -237,7 +239,10 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		if (vad.errored) {
 			setError(`Voice detection error: ${vad.errored}`)
 		}
-	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking, vad.start, vad.pause])
+		// NOTE: vad.start and vad.pause intentionally excluded from deps
+		// They are stable callbacks that shouldn't trigger re-renders
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 	// Hook up Gemini audio playback callbacks for greeting carousel dismissal
 	useEffect(() => {
@@ -256,6 +261,39 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			delete window.vffOnAudioPlaybackStart
 		}
 	}, [showGreetingCarousel])
+
+	// Handle language selection change
+	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+		const newLanguage = event.target.value
+		setSelectedLanguage(newLanguage)
+
+		console.log('[VoiceOverlayMobile] Language changed to:', newLanguage)
+
+		// Send initiating message if connected
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+		if (connectionManager && isCurrentlyConnected) {
+			try {
+				// Compute next field hint for the initiating message
+				const state = WebFormStateManager.load()
+				if (!state) {
+					console.error('[VoiceOverlayMobile] No state found for next field hint')
+					return
+				}
+
+				// Compute next unfilled field
+				const nextField = computeNextField(state.schema, state.current_values)
+				const nextFieldHint = nextField
+					? formatNextFieldHint(nextField, state.schema)
+					: 'all fields are complete'
+
+				// Send spoken language change message via connection manager
+				connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
+			} catch (err) {
+				console.error('[VoiceOverlayMobile] Failed to change spoken language:', err)
+				setError(err instanceof Error ? err.message : 'Failed to change language')
+			}
+		}
+	}
 
 	const handleConnect = async () => {
 		if (!connectionManager) return
@@ -282,8 +320,16 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 				const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
 
 				if (isActive) {
-					console.log('[VoiceOverlayMobile] ✅ Connection active, starting recording')
+					console.log('[VoiceOverlayMobile] ✅ WebSocket connected, setting up audio...')
+					// Update status to indicate audio setup in progress
+					setStatus('Setting up audio...')
+
+					// Start recording (this completes the connection)
 					await connectionManager.startRecording()
+
+					// Now fully connected - update status
+					setStatus('connected')
+					console.log('[VoiceOverlayMobile] ✅ Audio ready - fully connected')
 					// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 					break
 				}
@@ -462,6 +508,27 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 							<div className="vff-status-dot" style={{ background: statusColor }}></div>
 							<span className="vff-status-text">{status}</span>
 						</div>
+
+						{/* Language Selection - Shows when connecting or connected */}
+						{!isReady && status !== 'disconnected' && status !== 'paused' && (
+							<div className="vff-language-selector-mobile">
+								<label htmlFor="vff-language-select-mobile" className="vff-language-label-mobile">
+									🌍 Spoken Language
+								</label>
+								<select
+									id="vff-language-select-mobile"
+									className="vff-language-select-mobile"
+									value={selectedLanguage}
+									onChange={handleLanguageChange}
+								>
+									{SPOKEN_LANGUAGES.map((lang) => (
+										<option key={lang.name} value={lang.name}>
+											{lang.nativeName}
+										</option>
+									))}
+								</select>
+							</div>
+						)}
 
 						{/* Push-to-Talk Toggle */}
 						{(isConnected || isPausedState) && (
@@ -684,6 +751,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 					padding: 8px 12px;
 					background: #f9fafb;
 					border-radius: 8px;
+					margin-bottom: 12px;
 				}
 
 				.vff-status-dot {
@@ -696,6 +764,45 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 					font-size: 12px;
 					font-weight: 500;
 					color: #374151;
+				}
+
+				.vff-language-selector-mobile {
+					margin-bottom: 12px;
+					padding: 10px;
+					background: #f0f9ff;
+					border-radius: 8px;
+					border: 1px solid #bae6fd;
+				}
+
+				.vff-language-label-mobile {
+					display: block;
+					font-size: 12px;
+					font-weight: 600;
+					color: #0369a1;
+					margin-bottom: 6px;
+				}
+
+				.vff-language-select-mobile {
+					width: 100%;
+					padding: 6px 10px;
+					font-size: 13px;
+					border: 1px solid #7dd3fc;
+					border-radius: 6px;
+					background: white;
+					color: #0c4a6e;
+					cursor: pointer;
+					transition: all 0.2s;
+				}
+
+				.vff-language-select-mobile:hover {
+					border-color: #0ea5e9;
+					box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
+				}
+
+				.vff-language-select-mobile:focus {
+					outline: none;
+					border-color: #0284c7;
+					box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 				}
 
 				.vff-ptt-toggle-mobile {

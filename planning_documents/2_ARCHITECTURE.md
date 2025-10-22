@@ -1,9 +1,16 @@
 # Architecture - Stateless Design
 
-**Last Updated**: October 21, 2025
+**Last Updated**: October 22, 2025
 **Status**: Production Ready (User-First Protocol - Simplified)
 
-**Recent Changes** (October 21, 2025):
+**Recent Changes** (October 22, 2025):
+- ✅ **Added**: Spoken language selection with 18 confirmed working languages
+- ✅ **Added**: Gemini-initiated conversation in selected language (via `send_client_content()`)
+- ✅ **Added**: Language persistence across section switches
+- ✅ **Updated**: Greeting carousel with confirmed activation phrases
+- ✅ **Improved**: Connection status accuracy (WebSocket + audio readiness)
+
+**Previous Changes** (October 21, 2025):
 - ❌ **Removed**: VAD warmup feature (no longer needed with user-first protocol)
 - ❌ **Removed**: Activity watchdog and inactivity recovery system (over-engineered for user-first model)
 - ❌ **Removed**: Backend initial message protocols (fully user-initiated now)
@@ -88,6 +95,117 @@ GEMINI LIVE API
 - Mobile carousel: `frontend/src/demo/VoiceOverlayMobile.tsx:284-295, 131-134, 316-319`
 - Greeting component: `frontend/src/demo/GreetingCarousel.tsx` (shared)
 - Collapse feature: Both overlay files, collapse button in header, CSS transitions
+
+---
+
+## Spoken Language Selection & Initiation (October 22, 2025)
+
+**Design Philosophy**: Enable users to select their preferred spoken conversation language and have Gemini proactively initiate the conversation in that language, reducing cognitive load and language barriers.
+
+### Components
+
+**1. Greeting Carousel with Confirmed Activation Phrases**:
+- Updated to show actual activation phrases that work with Gemini Live API
+- Rotates through 18 confirmed working languages
+- Phrases follow format: "Hello Gemini, please speak [Language]"
+- Source data: `planning_documents/hello_gemini_translations.csv`
+- Implementation: `frontend/src/shared/greetingPrompts.ts`
+
+**2. Spoken Language Dropdown**:
+- Appears immediately when "Connect to Voice" is pressed
+- Shows 18 confirmed languages with native names (e.g., "Español", "Français", "한국어")
+- Visible during connection setup (gives user something to do while audio initializes)
+- Persists across section switches
+- Implementation:
+  - `frontend/src/shared/languages.ts` - `SPOKEN_LANGUAGES` constant
+  - `frontend/src/demo/VoiceOverlay.tsx` - Desktop UI
+  - `frontend/src/demo/VoiceOverlayMobile.tsx` - Mobile UI
+
+**3. Language Initiation System**:
+- **Trigger Events**:
+  - User changes language dropdown (while connected)
+  - User switches to a new section (auto-initiates with stored language)
+- **Backend Flow**:
+  1. Frontend sends `change_spoken_language` WebSocket message with:
+     - `spoken_language`: Selected language (e.g., "Spanish", "French")
+     - `next_field_hint`: Next unfilled field (e.g., "firstName (First Name)")
+  2. Backend calls `send_initiating_message()` in FormFillingService
+  3. Service formats `INITIATING_MESSAGE` template (tunable in `backend/config.py`)
+  4. Sends to Gemini via `session.send_client_content()` (async, non-blocking)
+  5. Gemini responds with greeting in selected language
+
+**INITIATING_MESSAGE Template** (`backend/config.py`):
+```
+"Speak {spoken_language} for the rest of this session, or until instructed otherwise.
+ Greet the user warmly in this language, tell them the active section, and ask them for {next_field_hint}"
+```
+
+**4. Connection Status Improvements**:
+- Status now accurately reflects connection state:
+  - "connecting" → WebSocket handshake
+  - "Setting up audio..." → Between WebSocket connection and audio recording ready
+  - "connected" → Both WebSocket AND audio recording are active
+- Prevents users from speaking before system is ready to capture audio
+- Implementation: Updated handleConnect in both overlay components
+
+### Supported Spoken Languages (18 Confirmed)
+
+Languages verified to work with Gemini Live API:
+- English, Spanish (Español), Chinese (中文), Tagalog
+- Arabic (العربية), French (Français), Korean (한국어)
+- German (Deutsch), Portuguese (Português), Hindi (हिन्दी)
+- Italian (Italiano), Urdu (اردو), Persian (فارسی)
+- Dutch (Nederlands), Ukrainian (Українська), Swedish (Svenska)
+- Afrikaans, Quechua (Qhichwa)
+
+### Language Persistence Across Sections
+
+**Behavior**:
+- Spoken language is stored in `FormFillingService._spoken_language`
+- Persists when user switches sections
+- Section switch triggers automatic initiating message in stored language
+- User can change language at any time via dropdown
+
+**Code Flow**:
+```
+User selects language → changeSpokenLanguage()
+  → Backend stores language → send_initiating_message()
+    → Gemini greets in selected language
+
+User switches section → switch_to_section()
+  → Uses stored _spoken_language → send_initiating_message()
+    → Gemini continues in same language
+```
+
+### Implementation Details
+
+**Backend**:
+- `backend/config.py` - `INITIATING_MESSAGE` template (Settings class)
+- `backend/routes/websocket_routes.py` - `change_spoken_language` message handler
+- `backend/services/form_filling_service.py`:
+  - `send_initiating_message()` method
+  - `_spoken_language` instance variable (persists across sections)
+  - `switch_to_section()` calls initiating message with stored language
+- `backend/adapters/live_ai_gemini.py` - `send_client_content()` method
+
+**Frontend**:
+- `frontend/src/shared/connection.ts`:
+  - `changeSpokenLanguage()` method in ConnectionManager interface
+  - Sends WebSocket message with language and next_field_hint
+- `frontend/src/shared/languages.ts` - `SPOKEN_LANGUAGES` constant
+- `frontend/src/shared/greetingPrompts.ts` - Updated carousel phrases
+- `frontend/src/demo/VoiceOverlay.tsx` & `VoiceOverlayMobile.tsx`:
+  - Language dropdown UI
+  - `handleLanguageChange()` event handler
+  - Status indicator improvements
+
+**Benefits**:
+- ✅ Reduces language barrier anxiety (user selects upfront)
+- ✅ Gemini initiates conversation (removes "speak first" pressure)
+- ✅ Language persists across sections (no need to re-select)
+- ✅ Confirmed working phrases (sourced from testing)
+- ✅ Better UX during connection (dropdown appears immediately)
+- ✅ Clear status feedback (user knows when system is ready)
 
 ---
 
@@ -1282,10 +1400,10 @@ useEffect(() => {
 - `fieldManager.ts` - Form field updates & manual edit detection
 - `config.ts` - Backend URL configuration (local dev / cloud switching)
 - `metrics.ts` - VAD tuning & barge-in performance tracking
-- `languages.ts` - Supported fill languages (80+ languages)
+- `languages.ts` - Supported languages (18 spoken languages + 80+ fill languages)
 - `security.ts` - XSS prevention utilities
 - `audio-processor.worklet.ts` - AudioWorklet for PCM16 conversion
-- `greetingPrompts.ts` - Greeting carousel messages
+- `greetingPrompts.ts` - Greeting carousel activation phrases (18 confirmed languages)
 
 **Demo Application** (`frontend/src/demo/`):
 - `main.tsx` - React entry point

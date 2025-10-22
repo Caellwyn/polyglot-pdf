@@ -1,6 +1,33 @@
 /**
+ * Spoken languages confirmed to work with Gemini Live API
+ *
+ * Source: planning_documents/hello_gemini_translations.csv
+ * These are the languages verified to work for voice conversation with Gemini
+ */
+export const SPOKEN_LANGUAGES = [
+	{ name: "English", nativeName: "English" },
+	{ name: "Spanish", nativeName: "Español" },
+	{ name: "Chinese", nativeName: "中文 (Zhōngwén)" },
+	{ name: "Tagalog", nativeName: "Tagalog" },
+	{ name: "Arabic", nativeName: "العربية (al-ʿArabīyah)" },
+	{ name: "French", nativeName: "Français" },
+	{ name: "Korean", nativeName: "한국어 (Hangugeo)" },
+	{ name: "German", nativeName: "Deutsch" },
+	{ name: "Portuguese", nativeName: "Português" },
+	{ name: "Hindi", nativeName: "हिन्दी (Hindī)" },
+	{ name: "Italian", nativeName: "Italiano" },
+	{ name: "Urdu", nativeName: "اردو (Urdū)" },
+	{ name: "Persian", nativeName: "فارسی (Fārsī)" },
+	{ name: "Dutch", nativeName: "Nederlands" },
+	{ name: "Ukrainian", nativeName: "Українська (Ukrayins'ka)" },
+	{ name: "Swedish", nativeName: "Svenska" },
+	{ name: "Afrikaans", nativeName: "Afrikaans" },
+	{ name: "Quechua", nativeName: "Qhichwa" },
+] as const;
+
+/**
  * Supported languages for form field filling
- * 
+ *
  * These are the languages that Gemini can use to fill form field values.
  * The user can converse with Gemini in any language, but form values will
  * be filled in the selected language.
