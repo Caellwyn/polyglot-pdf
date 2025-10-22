@@ -625,33 +625,23 @@ class FormFillingService:
         _log.info("send_manual_field_update", field_id=field_id, field_name=field_name, session_id=self._session_id)
         await self._live_ai.send_text_message(message)
 
-    async def send_activity_start(self):
+    async def send_audio_stream_end(self):
         """
-        Send activity_start signal to Gemini (user started speaking).
-        
-        This is a client-driven VAD signal that tells Gemini to interrupt
-        current generation because the user is now speaking.
-        """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-        
-        # No logging - too noisy, visible on frontend
-        await self._live_ai.send_activity_start()
+        Send audio_stream_end signal to Gemini (user stopped speaking).
 
-    async def send_activity_end(self):
-        """
-        Send activity_end signal to Gemini (user stopped speaking).
-        
-        This is a client-driven VAD signal that tells Gemini the user
-        has finished speaking and it's safe to respond.
+        This flushes Gemini's cached audio buffer and allows automatic VAD
+        to process the turn. Called when frontend VAD detects speech end.
+
+        Note: We use Gemini's automatic VAD, so we only need to signal when
+        the audio stream pauses. No activity_start needed - Gemini's VAD
+        handles speech detection automatically.
         """
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
-        
+
         # No logging - too noisy, visible on frontend
-        await self._live_ai.send_activity_end()
+        await self._live_ai.send_audio_stream_end()
 
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
         """

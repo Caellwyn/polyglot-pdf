@@ -400,35 +400,36 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		if (!isCurrentlyConnected) return
 		
 		setIsHoldingPushToTalk(true)
-		
+
 		// UNMUTE: Allow real audio through
 		const audioManager = connectionManager?.getAudioManager()
 		audioManager?.unmuteInput()
-		
+
 		// BARGE-IN: Stop Gemini's audio if she's talking
 		if (audioManager?.isSpeaking()) {
 			audioManager.flushAudioQueue()
 		}
-		
-		// Notify Gemini user is speaking
-		connectionManager?.sendActivityStart()
+
+		// No need to send activity_start - Gemini's automatic VAD will detect
+		// the incoming audio stream and start processing automatically
 	}
 
 	const handlePushToTalkRelease = () => {
 		if (!pushToTalkMode) return
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' || 
-		                            status.toLowerCase().startsWith('connected ') || 
-		                            status.toLowerCase() === 'switching_section' || 
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
+		                            status.toLowerCase().startsWith('connected ') ||
+		                            status.toLowerCase() === 'switching_section' ||
 		                            status.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) return
-		
+
 		setIsHoldingPushToTalk(false)
-		
+
 		// MUTE: Send silence instead of real audio
 		const audioManager = connectionManager?.getAudioManager()
 		audioManager?.muteInput()
-		
-		// Notify Gemini user stopped speaking
+
+		// Send audio_stream_end to flush Gemini's audio buffer
+		// (sendActivityEnd now sends audio_stream_end on backend)
 		connectionManager?.sendActivityEnd()
 	}
 
