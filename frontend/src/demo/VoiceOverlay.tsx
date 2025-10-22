@@ -252,7 +252,10 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		if (vad.errored) {
 			setError(`Voice detection error: ${vad.errored}`)
 		}
-	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking, vad.start, vad.pause])
+		// NOTE: vad.start and vad.pause intentionally excluded from deps
+		// They are stable callbacks that shouldn't trigger re-renders
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 	// Hook up Gemini audio playback callbacks for greeting carousel dismissal
 	useEffect(() => {
