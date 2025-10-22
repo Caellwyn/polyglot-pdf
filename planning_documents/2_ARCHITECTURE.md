@@ -1,16 +1,23 @@
 # Architecture - Stateless Design
 
 **Last Updated**: October 22, 2025
-**Status**: Production Ready (User-First Protocol - Simplified)
+**Status**: Production Ready (User-First Protocol - activity_start/activity_end Pattern)
 
 **Recent Changes** (October 22, 2025):
+- ✅ **Reverted**: Back to `activity_start`/`activity_end` pattern (more consistent Gemini responses)
+- ❌ **Removed**: `audio_stream_end` approach (caused inconsistent responses)
+- ✅ **Updated**: Two-stage barge-in with tentative pause (instant UX feedback)
+- ✅ **Fixed**: Audio context resume after full barge-in (was staying suspended)
+- ✅ **Improved**: False positive recovery (short noises resume audio seamlessly)
+
+**Previous Changes** (October 22, 2025):
 - ✅ **Added**: Spoken language selection with 18 confirmed working languages
 - ✅ **Added**: Gemini-initiated conversation in selected language (via `send_client_content()`)
 - ✅ **Added**: Language persistence across section switches
 - ✅ **Updated**: Greeting carousel with confirmed activation phrases
 - ✅ **Improved**: Connection status accuracy (WebSocket + audio readiness)
 
-**Recent Changes** (October 22, 2025):
+**Previous Changes** (October 22, 2025):
 - ❌ **Removed**: Backend heartbeat silence streaming (connection stays alive without it)
 - ❌ **Removed**: Frontend continuous silence when VAD inactive (audio only sent during speech)
 - ❌ **Removed**: All energy-based VAD (calibration, baseline, thresholds)
@@ -810,54 +817,111 @@ t=250ms+: Live audio flows → "-llo" captured in real-time
 
 **User Assumption**: "Light off = mic not listening" - now architecturally true!
 
-### Delayed Barge-In (Noise Filtering)
+### Delayed Barge-In with Tentative Pause (Two-Stage Interruption)
 
 **Problem**: Short noises (throat clears, coughs, grunts <450ms) were triggering immediate barge-in, interrupting Gemini unnecessarily even though they didn't contain valid speech.
 
-**Solution**: Only trigger barge-in after speech has lasted ≥450ms (MIN_TURN_DURATION_MS).
+**Solution**: Two-stage barge-in system that provides instant UX feedback while preventing false interruptions.
 
 **Implementation** (`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`):
 
-**On Speech Start** (`onSpeechStart`):
-1. Record timestamp
-2. Reset `bargeInTriggeredRef` flag
-3. Open audio gate (start buffering to Gemini)
-4. **Schedule delayed barge-in** via `setTimeout(450ms)`
-5. **DO NOT** trigger barge-in immediately
+**Stage 1: Instant Tentative Pause** (on speech detection):
+1. VAD detects speech start
+2. Record timestamp
+3. Reset `bargeInTriggeredRef` flag
+4. **If Gemini is speaking**: Immediately pause audio context (`pauseAudioContext()`)
+   - Audio stops instantly (instant UX feedback)
+   - Audio context is suspended, not destroyed (can resume seamlessly)
+5. **Schedule delayed turn start** via `setTimeout(450ms)` to confirm valid speech
 
-**Delayed Barge-In Logic** (after 450ms):
+**Stage 2: Full Turn Start** (after 450ms delay, if speech continues):
 - Check if speech is **still active** (`speechStartTimeRef !== null`)
 - Check if duration **meets threshold** (`≥450ms`)
-- If both true: Trigger barge-in + set `bargeInTriggeredRef = true`
-- If false: Do nothing (speech ended before threshold)
+- If both true:
+  - Send `activity_start` signal to Gemini (marks beginning of user turn)
+  - Open audio gate (`setVADActive(true)`) → flushes 600ms pre-buffer to Gemini
+  - Pre-buffer captures the beginning of speech to prevent clipping
+  - Live audio continues streaming to Gemini
+  - Trigger full barge-in: flush audio queue (`flushAudioQueue()`) if Gemini is speaking
+  - Set `bargeInTriggeredRef = true` to mark this as a confirmed turn
+- If false: Do nothing (speech ended before threshold, no turn started)
 
 **On Speech End** (`onSpeechEnd`):
-1. Close audio gate (stop sending audio)
-2. Check `bargeInTriggeredRef` flag
-3. **If barge-in was triggered** (valid speech):
-   - Send `audio_stream_end` to flush Gemini's audio buffer
-   - Gemini's automatic VAD processes the turn
-   - Reset escalation to 0
-   - Log: "Valid turn detected"
-4. **If barge-in was NOT triggered** (short noise):
-   - **Do NOT** send `audio_stream_end` (no turn to complete)
-   - Restart watchdog timer
-   - Log: "Turn too short - no barge-in triggered, discarding"
+1. Check `bargeInTriggeredRef` flag
+2. **If turn was started** (valid speech ≥450ms):
+   - Close audio gate (`setVADActive(false)`) → stop sending audio
+   - Call `connectionManager.onVADSpeechEnd()`:
+     - Unblocks new audio chunks (`resumePlayback()`)
+     - **Resumes audio context** (`resumeAudioContext()`) if it was suspended
+     - Sends `activity_end` signal to flush Gemini's audio buffer
+   - Gemini processes the turn and responds
+   - Log: "Valid turn completed - closing turn"
+3. **If turn was NOT started** (short noise <450ms):
+   - Resume audio context (`resumeAudioContext()`) → audio continues where it left off
+   - **Do NOT** close audio gate (gate was never opened)
+   - **Do NOT** send `activity_end` (no turn to complete)
+   - Log: "Speech too short - no turn started, false positive"
+
+**Signal Pattern** (`activity_start` / `activity_end`):
+- **Why this pattern**: More consistent Gemini responses compared to `audio_stream_end` only
+- **Reference**: Gemini Live API docs lines 419-435 (manual VAD mode)
+- **Flow**: `activity_start` → audio chunks (pre-buffer + live) → `activity_end` signals complete turn to Gemini
+- **Critical**: `activity_start` MUST be sent BEFORE audio chunks flow (proper turn framing)
+
+**Critical Fixes** (October 22, 2025):
+- **Problem 1**: After full barge-in, audio context remained suspended even after speech ended, preventing Gemini's response from playing.
+- **Solution 1**: `onVADSpeechEnd()` now calls BOTH `resumePlayback()` (unblocks chunks) AND `resumeAudioContext()` (resumes suspended context).
+- **Problem 2**: Using only `audio_stream_end` caused inconsistent Gemini responses.
+- **Solution 2**: Reverted to `activity_start`/`activity_end` pattern for explicit turn signaling.
+- **Problem 3**: `activity_start` and audio chunks were sent immediately, causing incomplete turns for short speech (<450ms).
+- **Solution 3**: DELAY both `activity_start` AND opening audio gate until 450ms threshold confirmed. This ensures either nothing is sent (false positive) OR complete turn is sent (activity_start → audio → activity_end).
+- **Problem 4**: `activity_start` signal never reached Gemini - incorrect code path in VoiceOverlay components.
+- **Solution 4**: Fixed VoiceOverlay.tsx and VoiceOverlayMobile.tsx to call `connectionManager.sendActivityStart()` directly instead of accessing non-existent internal `connection` property.
+- **Problem 5**: Gemini received activity signals but didn't respond - automatic VAD conflicted with manual signals.
+- **Solution 5**: Set `DISABLE_GEMINI_VAD = True` in backend config to disable Gemini's automatic activity detection when using manual `activity_start`/`activity_end` signals.
+
+**Implementation Details** (Critical):
+- **Frontend Signal Path**: `connectionManager.sendActivityStart()` → `connection.sendActivityStart()` → WebSocket JSON message `{type: 'vad_activity_start'}`
+- **Backend Signal Path**: WebSocket routes → `service.send_activity_start()` → `adapter.send_activity_start()` → `session.send_realtime_input(activity_start=types.ActivityStart())`
+- **Gemini Configuration**: `automatic_activity_detection: { disabled: true }` - tells Gemini to respect manual turn boundaries instead of using its own VAD
+- **Why disable Gemini VAD**: When manual signals are sent, Gemini's automatic VAD must be disabled or it will ignore the signals and wait for its own VAD to detect speech boundaries
 
 **Benefits**:
 
-- ✅ **No unnecessary interruptions**: Throat clears don't interrupt Gemini
+- ✅ **Instant feedback**: Audio pauses immediately when user speaks (responsive UX)
+- ✅ **False positive recovery**: Short noises resume audio seamlessly without interruption
+- ✅ **No incomplete turns**: Gemini never receives `activity_start` without matching `activity_end`
+- ✅ **No unnecessary interruptions**: Throat clears don't trigger turn start or audio transmission
 - ✅ **Smooth TTS playback**: Gemini continues speaking through brief noises
-- ✅ **Fast barge-in for real speech**: 450ms is barely noticeable to users
-- ✅ **Clean audio flow**: Short noises open/close gate without signaling
-- ✅ **No deadlock risk**: Only send `audio_stream_end` for valid speech turns
-- ✅ **Gemini automatic VAD**: Handles both speech detection and interruption
+- ✅ **Fast turn start for real speech**: 450ms is barely noticeable to users
+- ✅ **Clean audio flow**: Short noises pause/resume without sending any data to Gemini
+- ✅ **Proper turn framing**: Always follows pattern: activity_start → audio chunks → activity_end
+- ✅ **Pre-buffer captures speech start**: 600ms rolling buffer prevents clipping
+- ✅ **Audio resumes after barge-in**: Context properly resumed for Gemini's response
 
 **Scenarios**:
 
-- **Throat clear (200ms)**: VAD detects → Gate opens → 200ms later speech ends → Gate closes → Delayed barge-in timer never fires → ✅ No interruption
-- **Real speech (1500ms)**: VAD detects → Gate opens → 450ms later **barge-in triggered** → 1500ms total speech ends → Gate closes → `audio_stream_end` sent → ✅ Clean turn
-- **Quick word (300ms)**: VAD detects → Gate opens → 300ms later speech ends (before 450ms) → Gate closes → Delayed barge-in never fires → ✅ No interruption
+- **Throat clear (200ms)**:
+  - VAD detects → Audio pauses (tentative, context suspended)
+  - 200ms later speech ends → Timer still pending (hasn't reached 450ms)
+  - No `activity_start` sent → No audio gate opened → No audio chunks sent
+  - Audio context resumed → Audio continues where it left off
+  - ✅ No interruption, seamless audio continuation, Gemini unaware
+
+- **Real speech (1500ms)**:
+  - VAD detects → Audio pauses (tentative, context suspended)
+  - 450ms later → Timer fires → `activity_start` sent → Audio gate opens
+  - Pre-buffer (600ms) flushed → Live audio streams → Full barge-in (queue flushed)
+  - 1500ms total speech ends → Audio gate closes → `activity_end` sent
+  - Audio context resumed → Gemini processes turn and responds → New audio plays successfully
+  - ✅ Complete turn with proper framing and working audio response
+
+- **Quick word (300ms)**:
+  - VAD detects → Audio pauses (tentative, context suspended)
+  - 300ms later speech ends → Timer hasn't fired (300ms < 450ms)
+  - No `activity_start` sent → No audio gate opened → No audio chunks sent
+  - Audio context resumed → Audio continues where it left off
+  - ✅ No interruption, seamless recovery, Gemini unaware
 
 ### Minimum Turn Duration Validation (DEPRECATED - See Delayed Barge-In)
 
@@ -869,10 +933,11 @@ t=250ms+: Live audio flows → "-llo" captured in real-time
 
 **Implementation** (`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`):
 
-- `onSpeechStart`: Record timestamp, open audio gate
+- `onSpeechStart`: Record timestamp, tentatively pause audio (if Gemini speaking)
+- **After 450ms**: If speech still active → send `activity_start`, open audio gate
 - `onSpeechEnd`: Calculate duration
-  - If duration ≥800ms → send `audio_stream_end` (valid turn)
-  - If duration <800ms → ignore (let Gemini's VAD handle timeout)
+  - If duration ≥450ms → close gate, send `activity_end` (complete turn)
+  - If duration <450ms → resume audio context (false positive, no turn started)
   - **Always close gate** (privacy protection even for short noises)
 
 **Benefits**:

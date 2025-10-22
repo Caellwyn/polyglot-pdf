@@ -1,7 +1,7 @@
 # Voice Form Filler - Project Overview
 
-**Last Updated**: October 18, 2025  
-**Status**: Demo Ready (Phase 2 Complete + User-First Protocol)  
+**Last Updated**: October 22, 2025  
+**Status**: Demo Ready (Phase 2 Complete + User-First Protocol + Activity Signal Fix)  
 **Focus**: Medical intake translation & accessibility tool
 
 ---
@@ -88,7 +88,20 @@ Voice-driven medical form filling system using Gemini Live API. Designed as a tr
 **✅ Production Demo**: Adult intake form (174 fields) working end-to-end  
 **✅ User-First Protocol**: Silent connection with greeting carousel, user speaks first  
 **✅ UI Enhancements**: Collapsible overlay, cleaned-up controls  
+**✅ Activity Signal Fix**: Manual activity_start/end signals with Gemini VAD disabled (Oct 22, 2025)  
 **🚧 Phase 3**: System instruction refinement for confirmation workflow
+
+### Recent Critical Fixes (October 22, 2025)
+
+**Activity Signal Implementation**:
+- **Problem**: Gemini not responding to user speech despite receiving audio
+- **Root Cause 1**: VoiceOverlay components calling non-existent `connection` property instead of `connectionManager.sendActivityStart()`
+- **Root Cause 2**: Gemini's automatic VAD conflicting with manual activity signals
+- **Solution 1**: Fixed frontend to call `connectionManager.sendActivityStart()` directly
+- **Solution 2**: Set `DISABLE_GEMINI_VAD = True` to disable automatic activity detection
+- **Result**: Complete signal chain working: Frontend → WebSocket → Service → Adapter → Gemini
+- **Configuration**: `automatic_activity_detection: { disabled: true }` in Gemini session config
+- **Impact**: Gemini now properly responds to user speech with transcriptions and form updates
 
 ### Removed Components
 **✅ Bookmarklet**: Removed from codebase. Original arbitrary web form parser was out of scope for MVP. Focus is on pre-mapped, known forms (medical intake, job applications, government forms) with manually-defined schemas.

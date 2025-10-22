@@ -295,12 +295,6 @@ class FormFillingService:
                     if self._ws_audio_chunk_count == 1:
                         _log.info("📡 [WebSocket Audio] Sending first audio chunk to client", 
                                  session_id=self._session_id, bytes=len(data))
-                    elif self._ws_audio_chunk_count % 10 == 0:
-                        # Log every 10th chunk at INFO level
-                        _log.info("📡 [WebSocket Audio] Chunk sent to client",
-                                 session_id=self._session_id,
-                                 chunk_number=self._ws_audio_chunk_count,
-                                 bytes=len(data))
                     
                     await self._websocket.send_bytes(data)
                 except Exception as e:
@@ -576,6 +570,10 @@ class FormFillingService:
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
+        # Log first audio chunk to verify flow
+        if not hasattr(self, '_first_service_audio_logged'):
+            _log.info("🎤 [Service] First audio chunk forwarding to LiveAI", bytes=len(audio_chunk))
+            self._first_service_audio_logged = True
         await self._live_ai.stream_audio(audio_chunk)
 
     async def send_context_hint(self, hint_text: str):
@@ -625,23 +623,33 @@ class FormFillingService:
         _log.info("send_manual_field_update", field_id=field_id, field_name=field_name, session_id=self._session_id)
         await self._live_ai.send_text_message(message)
 
-    async def send_audio_stream_end(self):
+    async def send_activity_start(self):
         """
-        Send audio_stream_end signal to Gemini (user stopped speaking).
+        Send activity_start signal to Gemini (user started speaking).
 
-        This flushes Gemini's cached audio buffer and allows automatic VAD
-        to process the turn. Called when frontend VAD detects speech end.
-
-        Note: We use Gemini's automatic VAD, so we only need to signal when
-        the audio stream pauses. No activity_start needed - Gemini's VAD
-        handles speech detection automatically.
+        Signals the beginning of user speech before sending audio chunks.
+        Called when frontend VAD detects speech start.
         """
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
 
-        # No logging - too noisy, visible on frontend
-        await self._live_ai.send_audio_stream_end()
+        _log.info("🎤 [Service] Sending activity_start to Gemini", session_id=self._session_id)
+        await self._live_ai.send_activity_start()
+
+    async def send_activity_end(self):
+        """
+        Send activity_end signal to Gemini (user stopped speaking).
+
+        Signals the end of user speech and flushes Gemini's cached audio buffer.
+        Called when frontend VAD detects speech end.
+        """
+        if self._live_ai is None:
+            # No-op when live AI is not configured (used in unit tests)
+            return
+
+        _log.info("🤐 [Service] Sending activity_end to Gemini", session_id=self._session_id)
+        await self._live_ai.send_activity_end()
 
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
         """

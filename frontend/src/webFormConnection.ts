@@ -1002,28 +1002,39 @@ export class WebFormConnection {
     });
   }
   
-  /**
-   * DEPRECATED: No longer needed with Gemini's automatic VAD
-   *
-   * Gemini's automatic VAD detects speech starts automatically when audio
-   * flows in. We only need to send audio_stream_end when speech pauses.
-   */
-  sendActivityStart(): void {
-    // No-op: Automatic VAD handles speech detection
-    // This method is kept for backward compatibility but does nothing
-  }
   
   /**
-   * Send audio stream end signal (user stopped speaking)
-   *
-   * Flushes Gemini's cached audio buffer by sending audio_stream_end.
-   * Gemini's automatic VAD will then process the turn and respond.
+   * Send activity_start signal to Gemini (user started speaking).
+   * Signals the beginning of user speech before sending audio chunks.
    */
-  sendActivityEnd(): void {
+  sendActivityStart(): void {
+    console.log(`[WebFormConnection] 📤 sendActivityStart() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error(`[WebFormConnection] ❌ Cannot send activity_start - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
     }
 
+    console.log('[WebFormConnection] 📤 Sending activity_start message to backend')
+    this.send({
+      type: 'vad_activity_start',
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Send activity_end signal to Gemini (user stopped speaking).
+   * Signals the end of user speech and flushes Gemini's cached audio buffer.
+   */
+  sendActivityEnd(): void {
+    console.log(`[WebFormConnection] 📤 sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error(`[WebFormConnection] ❌ Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
+      return;
+    }
+
+    console.log('[WebFormConnection] 📤 Sending activity_end message to backend')
     this.send({
       type: 'vad_activity_end',
       timestamp: Date.now(),

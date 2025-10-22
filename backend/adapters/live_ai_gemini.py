@@ -245,14 +245,19 @@ class LiveAIGemini(ILiveAI):
         if self._audio_queue is None:
             # If the queue isn't started, drop audio (no-op) to keep behavior
             # safe for unit tests where live AI is not configured.
+            self._log.warn("⚠️ AUDIO_QUEUE_NOT_STARTED", message="Audio dropped - queue not initialized")
             return
         try:
+            # Log first audio chunk to verify queueing
+            if not hasattr(self, '_first_adapter_audio_logged'):
+                self._log.info("🎤 [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
+                self._first_adapter_audio_logged = True
             # Non-blocking put - drops frame if queue is full instead of blocking
             self._audio_queue.put_nowait(audio_chunk)
         except asyncio.QueueFull:
             # Queue backed up - drop this audio frame to avoid blocking
             # Audio is resilient to dropped frames (slight quality degradation vs blocking control msgs)
-            # Silent drop - this is expected behavior during normal operation
+            self._log.warn("⚠️ AUDIO_QUEUE_FULL", message="Dropping audio frame - queue backed up")
             pass
 
     async def send_text_message(self, text: str):
@@ -295,24 +300,45 @@ class LiveAIGemini(ILiveAI):
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message=text)
 
-    async def send_audio_stream_end(self):
-        """Send audio_stream_end signal to Gemini (user stopped speaking).
+    async def send_activity_start(self):
+        """Send activity_start signal to Gemini (user started speaking).
 
-        This flushes Gemini's cached audio buffer and allows automatic VAD
-        to process the turn. Should be called when frontend VAD detects
-        speech end.
+        Signals the beginning of user speech. Should be called when frontend
+        VAD detects speech start, before sending audio chunks.
 
-        Reference: Gemini Live API docs lines 358-395
+        Reference: Gemini Live API docs lines 419-435
         """
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
+            self._log.warning("⚠️ ACTIVITY_START called but session is None")
             return
 
         try:
-            # Signal end of audio stream - Gemini's automatic VAD will process
-            await self._current_session.send_realtime_input(audio_stream_end=True)
+            self._log.info("🎤 [Adapter] Sending ACTIVITY_START to Gemini")
+            await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
+            self._log.info("✅ [Adapter] ACTIVITY_START sent successfully")
         except Exception as e:
-            self._log.error("❌ AUDIO_STREAM_END_FAILED", error=str(e))
+            self._log.error("❌ ACTIVITY_START_FAILED", error=str(e))
+
+    async def send_activity_end(self):
+        """Send activity_end signal to Gemini (user stopped speaking).
+
+        Signals the end of user speech and flushes Gemini's cached audio buffer.
+        Should be called when frontend VAD detects speech end.
+
+        Reference: Gemini Live API docs lines 419-435
+        """
+        if self._current_session is None:
+            # Session not active - silently ignore (session loss already logged elsewhere)
+            self._log.warning("⚠️ ACTIVITY_END called but session is None")
+            return
+
+        try:
+            self._log.info("🤐 [Adapter] Sending ACTIVITY_END to Gemini")
+            await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
+            self._log.info("✅ [Adapter] ACTIVITY_END sent successfully")
+        except Exception as e:
+            self._log.error("❌ ACTIVITY_END_FAILED", error=str(e))
 
     async def finalize(self):
         """Stop the background task and clear resources."""
@@ -545,6 +571,7 @@ class LiveAIGemini(ILiveAI):
 
                 # Start a task to forward queued audio into the session
                 async def audio_sender():
+                    chunk_count = 0
                     while True:
                         # Use a sentinel (None) to allow graceful shutdown without
                         # relying solely on task cancellation. This wakes the
@@ -552,16 +579,22 @@ class LiveAIGemini(ILiveAI):
                         chunk = await self._audio_queue.get()
                         if chunk is None:
                             # Sentinel received: exit the send loop cleanly
+                            self._log.info("🛑 [Sender] Audio sender stopping", total_chunks_sent=chunk_count)
                             break
                         try:
+                            chunk_count += 1
+                            # Log first chunk only (verify sender is working)
+                            if chunk_count == 1:
+                                self._log.info("🎤 [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
+                            
                             await session.send_realtime_input(
                                 audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
                             )
                         except Exception as e:
-                            self._log.error("audio_send_failed", error=str(e))
+                            self._log.error("❌ AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
                             # swallow for robustness
                             pass
-
+                
                 sender_task = asyncio.create_task(audio_sender())
                 # Record the running sender so external finalizers can
                 # cancel/await it reliably.
@@ -645,11 +678,6 @@ class LiveAIGemini(ILiveAI):
                                                              chunk_number=1)
                                                 # Mark that Gemini has responded (cancel fallback resend)
                                                 gemini_has_responded = True
-                                            elif self._audio_chunk_count % 10 == 0:
-                                                # Log every 10th chunk at INFO level
-                                                self._log.info("🎵 [Gemini Audio] Chunk received",
-                                                             chunk_number=self._audio_chunk_count,
-                                                             bytes=len(audio_bytes))
                                             
                                             await self._on_audio(audio_bytes)
                                             continue
