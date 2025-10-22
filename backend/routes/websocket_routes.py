@@ -476,6 +476,11 @@ async def _handle_fill_session(
 					await websocket.send_json({"type": "section_completed_ack"})
 					continue
 				else:
+					# Log unknown message type for debugging
+					_log.warning("unknown_control_message_type", 
+					           message_type=mtype,
+					           session_id=session_id,
+					           available_keys=list(obj.keys()) if isinstance(obj, dict) else None)
 					await websocket.send_json({"type": "error", "code": "unknown_control"})
 					continue
 
