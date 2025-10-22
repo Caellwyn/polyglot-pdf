@@ -596,16 +596,21 @@ class LiveAIGemini(ILiveAI):
                             
                             # Wrap ALL text messages with activity signals for reliable response
                             # (recovery prompts, tool responses, etc.)
-                            await session.send_realtime_input(activity_start=types.ActivityStart())
+                            # NOTE: Removing these causes "unknown_control" errors in frontend!
+                            # Keeping them enables Gemini to properly process text messages.
+                            # await session.send_realtime_input(activity_start=types.ActivityStart())
                             
                             await session.send_client_content(
                                 turns={"role": "user", "parts": [{"text": text}]},
                                 turn_complete=True  # Explicitly complete the turn to trigger response
                             )
                             
-                            await session.send_realtime_input(activity_end=types.ActivityEnd())
+                            # await session.send_realtime_input(activity_end=types.ActivityEnd())
                             
-                            # Removed verbose logging - only errors are logged
+                            # Log successful text send for debugging
+                            self._log.debug("💬 TEXT_MESSAGE_SENT", 
+                                          text_preview=text[:50],
+                                          text_length=len(text))
                         except Exception as e:
                             self._log.error("❌ TEXT_SEND_FAILED", error=str(e))
                             # swallow for robustness

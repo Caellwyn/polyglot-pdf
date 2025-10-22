@@ -237,7 +237,7 @@ class Settings(BaseModel):
 	# Placeholders: {spoken_language}, {next_field_hint}
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language} for the rest of this session, or until instructed otherwise. "
-		"Greet the user warmly in this language, tell them the active section, and ask them for {next_field_hint}"
+		"IMMEDIATELY greet the user warmly in this language, tell them the active section, and ask them for {next_field_hint}"
 	)
 
 def get_settings() -> Settings:
