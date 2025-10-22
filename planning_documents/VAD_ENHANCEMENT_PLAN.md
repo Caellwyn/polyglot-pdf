@@ -1,9 +1,16 @@
 # VAD Enhancement Plan - Echo Cancellation & Barge-In Improvements
 
-**Created**: October 16, 2025  
-**Updated**: October 16, 2025  
-**Status**: Phase 1 Complete ✅ | Activity Watchdog Enhanced ✅  
+**Created**: October 16, 2025
+**Updated**: October 22, 2025
+**Status**: Phase 1 Complete ✅ | Activity Watchdog Enhanced ✅ | Energy-based VAD Removed ✅
 **Priority**: High (fixes stuttering/echo feedback issues)
+
+**Latest Update (October 22, 2025)**:
+- ✅ Removed all energy-based VAD (calibration, baseline, thresholds)
+- ✅ Removed continuous silence streaming when VAD inactive
+- ✅ Removed VAD warmup mode
+- ✅ Now using only RickyVAD (@ricky0123/vad-web) for speech detection
+- ✅ Audio sent ONLY when VAD detects actual speech (no keepalive silence)
 
 ---
 

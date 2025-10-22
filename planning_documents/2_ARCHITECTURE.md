@@ -10,6 +10,14 @@
 - ✅ **Updated**: Greeting carousel with confirmed activation phrases
 - ✅ **Improved**: Connection status accuracy (WebSocket + audio readiness)
 
+**Recent Changes** (October 22, 2025):
+- ❌ **Removed**: Backend heartbeat silence streaming (connection stays alive without it)
+- ❌ **Removed**: Frontend continuous silence when VAD inactive (audio only sent during speech)
+- ❌ **Removed**: All energy-based VAD (calibration, baseline, thresholds)
+- ❌ **Removed**: VAD warmup mode completely
+- ✅ **Changed**: activity_start/activity_end → audio_stream_end pattern for Gemini's automatic VAD
+- ✅ **Retained**: RickyVAD only, pre-buffer (600ms), delayed barge-in (450ms)
+
 **Previous Changes** (October 21, 2025):
 - ❌ **Removed**: VAD warmup feature (no longer needed with user-first protocol)
 - ❌ **Removed**: Activity watchdog and inactivity recovery system (over-engineered for user-first model)
@@ -665,12 +673,13 @@ if (vad.errored) {
 
 **Architecture**: VAD-only barge-in system (moved from dual energy+VAD detection in October 2025)
 
-**Client VAD**: Silero VAD detects speech → Opens audio gate → Flushes pre-buffer → Sends activity_start → Barge-in if Gemini speaking
+**Client VAD**: RickyVAD (@ricky0123/vad-web) detects speech → Opens audio gate → Flushes pre-buffer → Barge-in if Gemini speaking
 
-**Backend**: Forwards to Gemini via send_realtime_input()
+**Backend**: Forwards audio to Gemini via send_realtime_input(), sends audio_stream_end when speech pauses
 
 **Gemini VAD**: Automatic activity detection configured via `backend/config.py`:
 - `VAD_START_SENSITIVITY`: "LOW" | "HIGH" | "UNSPECIFIED" - How quickly Gemini detects speech start
+- No manual activity_start/activity_end signals - Gemini's automatic VAD handles detection
 - `VAD_END_SENSITIVITY`: "LOW" | "HIGH" | "UNSPECIFIED" - How quickly Gemini detects speech end
 - `VAD_PREFIX_PADDING_MS`: Milliseconds of audio before speech start to include (optional)
 - `VAD_SILENCE_DURATION_MS`: Milliseconds of silence before ending speech (optional)
@@ -696,11 +705,12 @@ Microphone → AudioWorklet → Circular Pre-Buffer (400ms)
               │                                           │
          VAD Inactive                                VAD Active
               │                                           │
-    Send Silence Chunks                    1. Flush 400ms Pre-Buffer
-    (Privacy Protection)                   2. Send Live Audio Chunks
-              │                            3. Send activity_start
-              ↓                                           ↓
+    Send Nothing                           1. Flush 600ms Pre-Buffer
+    (No Audio Flow)                        2. Send Live Audio Chunks
+              │                                           ↓
           WebSocket → Backend → Gemini Live API
+                                                          │
+                                           When Speech Ends: audio_stream_end
 ```
 
 #### Implementation Details
@@ -785,12 +795,12 @@ t=250ms+: Live audio flows → "-llo" captured in real-time
 
 #### Benefits
 
-✅ **Privacy Protection**: Non-speech audio never sent to Gemini (medical conversations, personal calls, etc.)  
-✅ **User Expectation Alignment**: VAD light off = no audio transmitted  
-✅ **No Speech Clipping**: 400ms pre-buffer captures speech start  
-✅ **Seamless Barge-In**: Pre-buffer → activity_start coordination  
-✅ **WebSocket Keepalive**: Silence chunks maintain connection  
-✅ **Clean Architecture**: VAD controls audio flow, not just signaling  
+✅ **Privacy Protection**: Non-speech audio never sent to Gemini (medical conversations, personal calls, etc.)
+✅ **User Expectation Alignment**: VAD light off = no audio transmitted
+✅ **No Speech Clipping**: 600ms pre-buffer captures speech start
+✅ **Seamless Barge-In**: Pre-buffer flush + automatic VAD detection
+✅ **No Keepalive Needed**: Connection stays alive without audio flow
+✅ **Clean Architecture**: VAD controls audio flow, audio only sent during actual speech  
 
 #### Visual Feedback
 
@@ -825,11 +835,12 @@ t=250ms+: Live audio flows → "-llo" captured in real-time
 1. Close audio gate (stop sending audio)
 2. Check `bargeInTriggeredRef` flag
 3. **If barge-in was triggered** (valid speech):
-   - Send `activity_end` to Gemini
+   - Send `audio_stream_end` to flush Gemini's audio buffer
+   - Gemini's automatic VAD processes the turn
    - Reset escalation to 0
    - Log: "Valid turn detected"
 4. **If barge-in was NOT triggered** (short noise):
-   - **Do NOT** send `activity_end` (no turn to complete)
+   - **Do NOT** send `audio_stream_end` (no turn to complete)
    - Restart watchdog timer
    - Log: "Turn too short - no barge-in triggered, discarding"
 
@@ -839,28 +850,28 @@ t=250ms+: Live audio flows → "-llo" captured in real-time
 - ✅ **Smooth TTS playback**: Gemini continues speaking through brief noises
 - ✅ **Fast barge-in for real speech**: 450ms is barely noticeable to users
 - ✅ **Clean audio flow**: Short noises open/close gate without signaling
-- ✅ **No deadlock risk**: Only send `activity_end` if we sent `activity_start`
-- ✅ **Symmetrical protocol**: Barge-in and turn completion always paired
+- ✅ **No deadlock risk**: Only send `audio_stream_end` for valid speech turns
+- ✅ **Gemini automatic VAD**: Handles both speech detection and interruption
 
 **Scenarios**:
 
 - **Throat clear (200ms)**: VAD detects → Gate opens → 200ms later speech ends → Gate closes → Delayed barge-in timer never fires → ✅ No interruption
-- **Real speech (1500ms)**: VAD detects → Gate opens → 450ms later **barge-in triggered** → 1500ms total speech ends → Gate closes → `activity_end` sent → ✅ Clean turn
+- **Real speech (1500ms)**: VAD detects → Gate opens → 450ms later **barge-in triggered** → 1500ms total speech ends → Gate closes → `audio_stream_end` sent → ✅ Clean turn
 - **Quick word (300ms)**: VAD detects → Gate opens → 300ms later speech ends (before 450ms) → Gate closes → Delayed barge-in never fires → ✅ No interruption
 
 ### Minimum Turn Duration Validation (DEPRECATED - See Delayed Barge-In)
 
 **Note**: This section describes the old approach (validation on `onSpeechEnd`). The new approach (Delayed Barge-In) prevents interruption in the first place by validating duration on `onSpeechStart`.
 
-~~**Problem**: Short grunts, coughs, or background noises trigger `activity_start` → `activity_end` cycle without sufficient audio for Gemini to process as a valid turn, causing conversational deadlock.~~
+~~**Problem**: Short grunts, coughs, or background noises trigger speech detection without sufficient audio for Gemini to process as a valid turn.~~
 
-~~**Solution**: Frontend tracks speech duration and only sends `activity_end` if speech lasted ≥800ms.~~
+~~**Solution**: Frontend tracks speech duration and only sends `audio_stream_end` if speech lasted ≥800ms.~~
 
 **Implementation** (`VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`):
 
 - `onSpeechStart`: Record timestamp, open audio gate
 - `onSpeechEnd`: Calculate duration
-  - If duration ≥800ms → send `activity_end` (valid turn)
+  - If duration ≥800ms → send `audio_stream_end` (valid turn)
   - If duration <800ms → ignore (let Gemini's VAD handle timeout)
   - **Always close gate** (privacy protection even for short noises)
 
@@ -1017,26 +1028,21 @@ fallback_delay = 1.5 if is_section_switch else 3.0
 
 ---
 
-## Session Keep-Alive (Heartbeat)
+## Session Keep-Alive
 
-**Problem**: Gemini Live API sessions timeout after periods of inactivity (user pauses, manual form filling), causing `"send_activity_end_no_session"` errors.
+**Status**: ❌ **REMOVED** (October 22, 2025)
 
-**Solution**: Periodic heartbeat sends silence packets to keep session alive.
+**Previous Implementation**: Backend heartbeat sent 320 bytes of silence every 30 seconds to maintain connection.
 
-**Implementation** (`backend/adapters/live_ai_gemini.py`):
+**Why Removed**:
+- Gemini Live API WebSocket/gRPC connections stay alive without audio flow
+- Heartbeat silence kept Gemini's audio buffer active, interfering with text-only interactions
+- Conflicts with `send_client_content()` for language selection and other text messages
 
-- Heartbeat task runs concurrently with audio/text senders
-- Sends 320 bytes of silence (20ms at 16kHz PCM16) every 30 seconds
-- Automatically cancelled on session end
-
-**Benefits**:
-
-- Users can pause for minutes without losing session
-- Minimal overhead: 10.7 bytes/second
-- No token cost (silence doesn't trigger AI processing)
-- Transparent to user experience
-
-**Cleanup**: Heartbeat task properly cancelled via `asyncio.wait_for()` with 1s timeout during session teardown.
+**Current Behavior**:
+- No keepalive needed - connection stays active between user interactions
+- Audio only flows when VAD detects actual speech
+- Text messages (`send_client_content`) work cleanly without audio interference
 
 ---
 
