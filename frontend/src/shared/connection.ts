@@ -513,25 +513,12 @@ export function createConnectionManager(
 			
 			console.log('[VFF Connection] Requesting microphone access...')
 			
-			await audioManager.startRecording(
-				(audioData) => {
-					// Send audio to backend
-					if (connection && connection.getStatus() === 'connected') {
-						connection.sendAudio(audioData)
-					}
-				},
-				{
-					// Energy callbacks for dashboard visualization only
-					// Barge-in is now handled by VAD callbacks (onVADSpeechStart/onVADSpeechEnd)
-					onEnergyChange: (energy, isActive, reason) => {
-						// Energy monitoring for visualization/debugging only
-						// No barge-in logic here anymore
-					},
-					onCalibrationComplete: (baselineEnergy) => {
-						console.log('[VFF Connection] 🎤 Audio calibration complete, baseline:', baselineEnergy)
-					}
+			await audioManager.startRecording((audioData) => {
+				// Send audio to backend
+				if (connection && connection.getStatus() === 'connected') {
+					connection.sendAudio(audioData)
 				}
-			)
+			})
 		},
 
 		stopRecording() {
