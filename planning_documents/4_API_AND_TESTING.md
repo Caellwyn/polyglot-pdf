@@ -1,7 +1,43 @@
 # API & Testing Guide
 
-**Last Updated**: October 10, 2025  
+**Last Updated**: October 22, 2025  
 **Purpose**: Gemini API best practices and essential testing procedures
+
+---
+
+## Critical Configuration: Manual Activity Signals (Oct 22, 2025)
+
+**When using manual `activity_start`/`activity_end` signals, Gemini's automatic VAD MUST be disabled.**
+
+**Backend Configuration** (`backend/config.py`):
+```python
+DISABLE_GEMINI_VAD: bool = True  # Required for manual activity signals
+```
+
+**Why**: Gemini Live API has two modes for activity detection:
+1. **Automatic VAD** (Gemini detects speech): `automatic_activity_detection: {}`
+2. **Manual signals** (client controls turns): `automatic_activity_detection: { disabled: true }`
+
+**These modes are mutually exclusive.** If automatic VAD is enabled while sending manual signals:
+- Gemini ignores the `activity_start`/`activity_end` signals
+- Gemini waits for its own VAD to detect speech boundaries
+- Result: No response despite receiving audio and signals
+
+**Signal Chain** (when properly configured):
+1. Frontend: `connectionManager.sendActivityStart()` → WebSocket JSON `{type: 'vad_activity_start'}`
+2. Backend: WebSocket routes → `service.send_activity_start()` → `adapter.send_activity_start()`
+3. Adapter: `session.send_realtime_input(activity_start=types.ActivityStart())`
+4. Gemini: Processes turn between `activity_start` and `activity_end` signals
+
+**Logging Verification**:
+- ✅ `[WebSocket] Received vad_activity_start from frontend`
+- ✅ `[Service] Sending activity_start to Gemini`
+- ✅ `[Adapter] Sending ACTIVITY_START to Gemini`
+- ✅ `[Adapter] ACTIVITY_START sent successfully`
+
+**Common Bugs**:
+- **Frontend accessing wrong property**: Must call `connectionManager.sendActivityStart()` NOT `(connectionManager as any).connection.sendActivityStart()`
+- **VAD conflict**: If `DISABLE_GEMINI_VAD = False`, Gemini won't respond to manual signals
 
 ---
 

@@ -1002,30 +1002,39 @@ export class WebFormConnection {
     });
   }
   
+  
   /**
-   * Send VAD activity start signal (user started speaking)
-   * Tells Gemini to interrupt current generation
+   * Send activity_start signal to Gemini (user started speaking).
+   * Signals the beginning of user speech before sending audio chunks.
    */
   sendActivityStart(): void {
+    console.log(`[WebFormConnection] 📤 sendActivityStart() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error(`[WebFormConnection] ❌ Cannot send activity_start - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
     }
-    
+
+    console.log('[WebFormConnection] 📤 Sending activity_start message to backend')
     this.send({
       type: 'vad_activity_start',
       timestamp: Date.now(),
     });
   }
-  
+
   /**
-   * Send VAD activity end signal (user stopped speaking)
-   * Tells Gemini user has finished their turn
+   * Send activity_end signal to Gemini (user stopped speaking).
+   * Signals the end of user speech and flushes Gemini's cached audio buffer.
    */
   sendActivityEnd(): void {
+    console.log(`[WebFormConnection] 📤 sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error(`[WebFormConnection] ❌ Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
     }
-    
+
+    console.log('[WebFormConnection] 📤 Sending activity_end message to backend')
     this.send({
       type: 'vad_activity_end',
       timestamp: Date.now(),

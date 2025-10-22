@@ -10,7 +10,7 @@ class Settings(BaseModel):
 	# Whether to use Vertex AI for LLM and embedding operations.
 	VERTEXAI: bool = True
 	USE_NATIVE_AUDIO: bool = True
-	DISABLE_GEMINI_VAD: bool = False  # Disable Gemini's built-in VAD when using our VAD
+	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
 	# LLM normalizer settings
 	ENABLE_LLM_FIELD_NORMALIZATION: bool = True
 	LLM_NORMALIZER_MODEL: str = "gemini-2.5-flash-lite"

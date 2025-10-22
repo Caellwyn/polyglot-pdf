@@ -11,27 +11,20 @@
 const RECORDING_SAMPLE_RATE = 16000 // Gemini input
 const PLAYBACK_SAMPLE_RATE = 24000  // Gemini output
 
-export type EnergyChangeReason = 'attack' | 'release' | 'debounce_timeout' | 'tts_bleed_guard' | 'calibration'
-
-export interface AudioEnergyCallback {
-	onEnergyChange?: (energy: number, isActive: boolean, reason?: EnergyChangeReason) => void
-	onCalibrationComplete?: (baselineEnergy: number) => void
-}
-
 export interface AudioManager {
-	startRecording: (onAudioData: (data: ArrayBuffer) => void, energyCallbacks?: AudioEnergyCallback) => Promise<void>
+	startRecording: (onAudioData: (data: ArrayBuffer) => void) => Promise<void>
 	stopRecording: () => void
 	playAudio: (audioData: ArrayBuffer) => Promise<void>
-	flushAudioQueue: () => void // Stop all queued audio immediately
-	resumePlayback: () => void // Resume audio after barge-in
+	flushAudioQueue: () => void // Stop all queued audio immediately (full barge-in)
+	resumePlayback: () => void // Resume audio after barge-in (unblock new chunks)
+	pauseAudioContext: () => void // Pause audio context (tentative pause for VAD)
+	resumeAudioContext: () => void // Resume audio context (resume after false positive)
 	isRecording: () => boolean
 	isSpeaking: () => boolean // Is Gemini currently speaking?
-	getUserSpeaking: () => boolean // Is user mic currently active?
 	muteInput: () => void // Mute mic input (send silence)
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
-	setVADWarmupMode: (enabled: boolean) => void // Send low-level static during VAD warmup (helps Gemini initiate conversation)
 	destroy: () => void
 }
 
@@ -61,14 +54,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let recording = false
 	let playbackTime = 0
 	let playbackChunkCount = 0 // Track playback chunks for debugging
-	let warmupNoiseLogged = false // Track if we've logged warmup noise (log once)
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
-	let energyCallbacks: AudioEnergyCallback | null = null
 	let inputMuted = false // Track if input should be muted (send silence)
-	
+
 	// Privacy gate: VAD-controlled audio flow
-	let vadActive = false // When false, send silence/noise; when true, send real audio
-	let vadWarmupMode = false // When true, send low-level static instead of silence (helps Gemini respond)
+	let vadActive = false // When false, don't send audio; when true, send real audio
 	
 	// Circular pre-buffer for speech start capture
 	// Purpose: Captures audio BEFORE VAD detects speech to prevent clipping
@@ -82,43 +72,20 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	
 	// Track active audio sources for flushing
 	const activeAudioSources: AudioBufferSourceNode[] = []
-	
+
 	// Barge-in state: block new audio playback during user interruption
 	let playbackBlocked = false
-	
+
 	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
 	let isFlushing = false
-	
-	// Energy monitoring state with hysteresis & debouncing
-	let baselineEnergy = 0
-	let calibrationSamples: number[] = []
-	let userIsSpeaking = false
+
+	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
-	let smoothedRMS = 0 // EMA smoothing for RMS
-	
-	// Hysteresis thresholds (prevents flapping)
-	const ATTACK_MULTIPLIER = 2.5  // Start speech detection
-	const RELEASE_MULTIPLIER = 1.7 // End speech detection
-	const TTS_BLEED_BOOST = 1.4    // Extra margin when Gemini is speaking
-	
-	// Debounce timings (prevents spurious triggers)
-	const MIN_SPEECH_DURATION_MS = 45    // Must be above attack for 60ms (reduced for faster barge-in)
-	const MIN_SILENCE_DURATION_MS = 200  // Must be below release for 200ms
-	let speechStartTime = 0
-	let silenceStartTime = 0
-	
-	// Baseline adaptation
-	const BASELINE_EMA_ALPHA = 0.9       // Slow baseline updates (only during non-speech)
-	const RMS_SMOOTHING_BETA = 0.6       // RMS smoothing across frames
-	const MIN_BASELINE_FLOOR = 0.5       // Prevent baseline from going to zero
-	
-	const CALIBRATION_DURATION_MS = 2000
-	const FRAME_SIZE_MS = 20 // Approximate frame duration
 
 	/**
 	 * Start recording audio from microphone
 	 */
-	async function startRecording(onAudioData: (data: ArrayBuffer) => void, callbacks?: AudioEnergyCallback): Promise<void> {
+	async function startRecording(onAudioData: (data: ArrayBuffer) => void): Promise<void> {
 		if (recording) {
 			return
 		}
@@ -188,152 +155,43 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			)
 
 			onAudioDataCallback = onAudioData
-			energyCallbacks = callbacks || null
-
-			// Reset energy monitoring state
-			baselineEnergy = 0
-			calibrationSamples = []
-			userIsSpeaking = false
-			smoothedRMS = 0
-			speechStartTime = 0
-			silenceStartTime = 0
-			const calibrationStartTime = Date.now()
 
 			// Handle messages from AudioWorklet
 			nodes.workletNode.port.onmessage = (event: MessageEvent) => {
 				if (!recording || !onAudioDataCallback) return
 
-				const { type, pcmData, energy } = event.data
+				const { type, pcmData } = event.data
 				if (type !== 'audio') return
 
-				// Update smoothed RMS from worklet
-				smoothedRMS = energy
-
-				// Calibration phase: collect baseline samples
-				if (baselineEnergy === 0) {
-					const elapsed = Date.now() - calibrationStartTime
-					if (elapsed < CALIBRATION_DURATION_MS) {
-						calibrationSamples.push(smoothedRMS)
-					} else {
-						// Calibration complete: calculate baseline as average, apply floor
-						const sum = calibrationSamples.reduce((a, b) => a + b, 0)
-						baselineEnergy = Math.max((sum / calibrationSamples.length) || MIN_BASELINE_FLOOR, MIN_BASELINE_FLOOR)
-						smoothedRMS = baselineEnergy // Initialize smoothed RMS to baseline
-						
-						if (energyCallbacks?.onCalibrationComplete) {
-							energyCallbacks.onCalibrationComplete(baselineEnergy)
-						}
-					}
-				}
-
-				// Adaptive threshold detection with hysteresis & debouncing
-				if (baselineEnergy > 0) {
-					const now = Date.now()
-					
-					// TTS bleed guard: raise attack threshold when Gemini is speaking
-					const attackBoost = geminiIsSpeaking ? TTS_BLEED_BOOST : 1.0
-					const attackThreshold = baselineEnergy * ATTACK_MULTIPLIER * attackBoost
-					const releaseThreshold = baselineEnergy * RELEASE_MULTIPLIER
-					
-					// Hysteresis state machine
-					if (!userIsSpeaking) {
-						// Currently silent - check for speech attack
-						if (smoothedRMS > attackThreshold) {
-							if (speechStartTime === 0) {
-								// First frame above attack threshold
-								speechStartTime = now
-							} else if (now - speechStartTime >= MIN_SPEECH_DURATION_MS) {
-								// Sustained above attack for minimum duration
-								userIsSpeaking = true
-								silenceStartTime = 0
-								
-								const reason: EnergyChangeReason = geminiIsSpeaking ? 'tts_bleed_guard' : 'attack'
-								if (energyCallbacks?.onEnergyChange) {
-									energyCallbacks.onEnergyChange(smoothedRMS, true, reason)
-								}
-							}
-						} else {
-							// Dropped below attack, reset speech timer
-							speechStartTime = 0
-						}
-					} else {
-						// Currently speaking - check for speech release
-						if (smoothedRMS < releaseThreshold) {
-							if (silenceStartTime === 0) {
-								// First frame below release threshold
-								silenceStartTime = now
-							} else if (now - silenceStartTime >= MIN_SILENCE_DURATION_MS) {
-								// Sustained below release for minimum duration
-								userIsSpeaking = false
-								speechStartTime = 0
-								
-								if (energyCallbacks?.onEnergyChange) {
-									energyCallbacks.onEnergyChange(smoothedRMS, false, 'release')
-								}
-							}
-						} else {
-							// Still above release, reset silence timer
-							silenceStartTime = 0
-						}
-					}
-					
-					// Update baseline during non-speech periods only (slow EMA)
-					if (!userIsSpeaking && smoothedRMS < releaseThreshold) {
-						const newBaseline = (BASELINE_EMA_ALPHA * baselineEnergy) + ((1 - BASELINE_EMA_ALPHA) * smoothedRMS)
-						baselineEnergy = Math.max(newBaseline, MIN_BASELINE_FLOOR)
-					}
-				}
-
 				// Privacy Gate: VAD-controlled audio flow with pre-buffering
-				// When VAD inactive: send silence (privacy protection)
+				// When VAD inactive: DON'T send audio (Gemini's automatic VAD requires no keepalive)
 				// When VAD active: send real audio
 				// On transition to active: flush pre-buffer first (prevents speech clipping)
-				
+
 				const pcmChunk = new Int16Array(pcmData)
-				
+
 				// Always update pre-buffer with recent audio (rolling window)
 				audioPreBuffer.push(pcmChunk)
 				preBufferSampleCount += pcmChunk.length
-				
-				// Trim pre-buffer to maintain 400ms window
+
+				// Trim pre-buffer to maintain 600ms window
 				while (preBufferSampleCount > PREBUFFER_SIZE_SAMPLES) {
 					const removed = audioPreBuffer.shift()
 					if (removed) {
 						preBufferSampleCount -= removed.length
 					}
 				}
-				
+
 				// Determine what to send based on VAD state and mute status
 				if (inputMuted) {
-					// Input muted: send silence regardless of VAD state
+					// Push-to-talk mode: muted, send silence to keep connection alive
 					const silenceBuffer = new Int16Array(pcmChunk.length) // zeros
 					onAudioDataCallback(silenceBuffer.buffer)
-				} else if (!vadActive) {
-					// VAD inactive: send silence/noise for privacy
-					if (vadWarmupMode) {
-						// During warmup: send low-level noise so Gemini knows mic is active
-						// Use random noise instead of tone - tone might sound "musical" and delay response
-						if (!warmupNoiseLogged) {
-							console.log('[AudioManager] 🔊 Sending warmup noise to Gemini (VAD inactive, warmup mode enabled)')
-							warmupNoiseLogged = true
-						}
-						
-						// Generate random noise at ~-30dB (louder than before to be more noticeable)
-						const noiseBuffer = new Int16Array(pcmChunk.length)
-						for (let i = 0; i < noiseBuffer.length; i++) {
-							// Amplitude 300 = ~-30dB, loud enough to signal presence, quiet enough to not sound like speech
-							noiseBuffer[i] = Math.floor((Math.random() * 2 - 1) * 300)
-						}
-						onAudioDataCallback(noiseBuffer.buffer)
-					} else {
-						// Normal privacy mode: complete silence
-						const silenceBuffer = new Int16Array(pcmChunk.length) // zeros
-						onAudioDataCallback(silenceBuffer.buffer)
-					}
-				} else {
+				} else if (vadActive) {
 					// VAD active: send real audio
 					onAudioDataCallback(pcmData)
 				}
+				// else: VAD inactive - don't send anything (no keepalive needed)
 			}
 
 			// Connect audio nodes
@@ -574,6 +432,41 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
+	 * Pause audio context (tentative pause during VAD uncertainty)
+	 *
+	 * Suspends the playback AudioContext, which immediately pauses all audio.
+	 * Audio can be resumed seamlessly with resumeAudioContext().
+	 * Used for instant barge-in feedback before confirming speech duration.
+	 */
+	async function pauseAudioContext(): Promise<void> {
+		if (nodes.playbackContext && nodes.playbackContext.state === 'running') {
+			try {
+				await nodes.playbackContext.suspend()
+				console.log('[AudioManager] 🔇 Audio context paused (tentative barge-in)')
+			} catch (e) {
+				console.error('[AudioManager] Failed to pause audio context:', e)
+			}
+		}
+	}
+
+	/**
+	 * Resume audio context (resume after false positive)
+	 *
+	 * Resumes the playback AudioContext, continuing audio where it left off.
+	 * Used when VAD detects short noise that doesn't meet barge-in threshold.
+	 */
+	async function resumeAudioContext(): Promise<void> {
+		if (nodes.playbackContext && nodes.playbackContext.state === 'suspended') {
+			try {
+				await nodes.playbackContext.resume()
+				console.log('[AudioManager] 🔊 Audio context resumed (false positive)')
+			} catch (e) {
+				console.error('[AudioManager] Failed to resume audio context:', e)
+			}
+		}
+	}
+
+	/**
 	 * Check if currently recording
 	 */
 	function isRecording(): boolean {
@@ -610,13 +503,6 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 */
 	function isSpeaking(): boolean {
 		return geminiIsSpeaking
-	}
-
-	/**
-	 * Check if user mic is currently active (speaking detected)
-	 */
-	function getUserSpeaking(): boolean {
-		return userIsSpeaking
 	}
 
 	function muteInput(): void {
@@ -673,37 +559,20 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		}
 	}
 
-	/**
-	 * VAD Warmup Mode: Send low-level static instead of silence during VAD warmup
-	 * 
-	 * During VAD warmup phase:
-	 * - Normal behavior: vadActive=false → send silence → Gemini hears nothing
-	 * - Problem: Gemini doesn't know anyone is there, may not initiate conversation
-	 * - Solution: Send low-level static (~-40dB) → Gemini knows mic is active
-	 * 
-	 * Call this with true when connecting, false after Gemini's first audio.
-	 * 
-	 * @param enabled - true to send warmup noise, false for normal privacy behavior
-	 */
-	function setVADWarmupMode(enabled: boolean): void {
-		vadWarmupMode = enabled
-		console.log(`[AudioManager] VAD warmup mode ${enabled ? 'enabled' : 'disabled'}`)
-	}
-
 	return {
 		startRecording,
 		stopRecording,
 		playAudio,
 		flushAudioQueue,
 		resumePlayback,
+		pauseAudioContext,
+		resumeAudioContext,
 		isRecording,
 		isSpeaking,
-		getUserSpeaking,
 		muteInput,
 		unmuteInput,
 		getStream,
 		setVADActive,
-		setVADWarmupMode,
 		destroy,
 	}
 }
