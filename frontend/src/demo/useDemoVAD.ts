@@ -194,8 +194,8 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? 0.85,
 
 	// Timing parameters
-	minSpeechMs: sensitivity.minSpeechMs ?? 400,
-	redemptionMs: sensitivity.redemptionMs ?? 500,
+	minSpeechMs: sensitivity.minSpeechMs ?? 250,
+	redemptionMs: sensitivity.redemptionMs ?? 400,
 		
 		// Model files - use default CDN (library will handle this automatically)
 		// The library uses jsdelivr CDN by default for model files

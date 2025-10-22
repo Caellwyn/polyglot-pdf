@@ -29,7 +29,8 @@ export interface ConnectionManager {
 	disconnect: () => void  // True disconnect (cleanup everything)
 	getStatus: () => ConnectionStatus
 	sendAudio: (audioData: ArrayBuffer) => void
-	sendActivityEnd: () => void    // Send audio_stream_end to flush Gemini's audio buffer
+	sendActivityStart: () => void  // Send activity_start signal (user started speaking)
+	sendActivityEnd: () => void    // Send activity_end signal (user stopped speaking)
 	sendPrompt: (prompt: string) => void  // Send text prompt to Gemini (for recovery, nudges, etc.)
 	sendRecoveryPrompt: (level: number, nextFieldHint?: string) => void  // Send recovery prompt (activity watchdog)
 	endGeminiSession: () => void  // End Gemini session only (keep WebSocket alive)
@@ -466,6 +467,12 @@ export function createConnectionManager(
 			}
 		},
 
+		sendActivityStart() {
+			if (connection) {
+				connection.sendActivityStart()
+			}
+		},
+
 		sendActivityEnd() {
 			if (connection) {
 				connection.sendActivityEnd()
@@ -623,15 +630,17 @@ export function createConnectionManager(
 		},
 		
 		// VAD-based barge-in: Called when VAD detects speech start
-		// NOTE: VoiceOverlay calls audioManager.setVADActive(true) BEFORE this,
-		// which flushes the 400ms pre-buffer. Gemini's automatic VAD will detect
-		// the incoming audio and interrupt generation automatically - no need to
-		// send activity_start signal.
+		// Sends activity_start signal before audio chunks begin streaming
 		onVADSpeechStart() {
 			if (!audioManager) return
 
 			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
+
+			// Send activity_start signal to Gemini (user started speaking)
+			if (connection) {
+				connection.sendActivityStart()
+			}
 
 			const geminiSpeaking = audioManager.isSpeaking()
 
@@ -643,8 +652,6 @@ export function createConnectionManager(
 				metrics.recordMicActivity()
 
 				// IMMEDIATELY flush audio queue (instant UX feedback)
-				// Gemini's automatic VAD will detect the incoming user audio and
-				// interrupt generation - no manual activity_start signal needed
 				audioManager.flushAudioQueue()
 				metrics.recordTTSPaused()
 				metrics.recordCancelSent()
@@ -652,7 +659,7 @@ export function createConnectionManager(
 		},
 		
 		// VAD-based speech end: Called when VAD detects speech end
-		// Sends audio_stream_end to flush Gemini's audio buffer
+		// Sends activity_end signal to flush Gemini's audio buffer
 		onVADSpeechEnd() {
 			if (!audioManager) return
 
@@ -662,17 +669,19 @@ export function createConnectionManager(
 			const geminiSpeaking = audioManager.isSpeaking()
 
 			// Resume audio playback if Gemini stopped (allow Gemini to respond)
+			// CRITICAL: This unblocks new audio chunks AND resumes the audio context
+			// if it was suspended during tentative pause
 			if (!geminiSpeaking) {
 				audioManager.resumePlayback()
+				audioManager.resumeAudioContext() // Resume context if it was paused
 			}
 
-			// Send audio_stream_end to flush Gemini's cached audio buffer
-			// Gemini's automatic VAD will then process the turn and respond
+			// Send activity_end signal to flush Gemini's cached audio buffer
 			if (connection) {
 				connection.sendActivityEnd()
 			}
 
-			console.log('[VFF Connection] 🎤 VAD speech ended - sent audio_stream_end')
+			console.log('[VFF Connection] 🎤 VAD speech ended - sent activity_end, audio playback resumed')
 		},
 	}
 }

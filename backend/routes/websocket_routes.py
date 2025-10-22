@@ -245,7 +245,12 @@ async def _handle_fill_session(
 				if drop_audio:
 					continue
 				# Process audio in background to avoid blocking control messages
-				asyncio.create_task(service.stream_audio(msg["bytes"]))
+				audio_bytes = msg["bytes"]
+				# Log first audio frame to verify flow (throttle to avoid spam)
+				if 'first_audio_logged' not in locals():
+					_log.info("🎤 [WebSocket] First audio frame received", bytes=len(audio_bytes))
+					first_audio_logged = True
+				asyncio.create_task(service.stream_audio(audio_bytes))
 				continue
 
 			if "text" in msg and msg["text"] is not None:
@@ -343,11 +348,18 @@ async def _handle_fill_session(
 							_log.error("recovery_prompt_failed", error=str(e), level=level)
 							await websocket.send_json({"type": "error", "code": "recovery_prompt_failed", "message": str(e)})
 					continue
+				elif mtype == "vad_activity_start":
+					# Frontend VAD detected user started speaking
+					# Send activity_start signal before audio chunks
+					_log.info("🎤 [WebSocket] Received vad_activity_start from frontend", session_id=session_id)
+					await service.send_activity_start()
+					# No acknowledgment needed - fire-and-forget signal
+					continue
 				elif mtype == "vad_activity_end":
 					# Frontend VAD detected user stopped speaking
-					# Send audio_stream_end to flush Gemini's audio buffer
-					# (Gemini's automatic VAD will then process the turn)
-					await service.send_audio_stream_end()
+					# Send activity_end signal to flush Gemini's audio buffer
+					_log.info("🤐 [WebSocket] Received vad_activity_end from frontend", session_id=session_id)
+					await service.send_activity_end()
 					# No acknowledgment needed - fire-and-forget signal
 					continue
 				elif mtype == "change_fill_language":
@@ -479,6 +491,7 @@ async def _handle_fill_session(
 					await websocket.send_json({"type": "error", "code": "unknown_control"})
 					continue
 
+			# If we get here, message was neither bytes nor text
 			await websocket.send_json({"type": "error", "code": "bad_frame"})
 	except WebSocketDisconnect:
 		pass
