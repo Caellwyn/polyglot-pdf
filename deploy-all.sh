@@ -146,6 +146,8 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     
     # Build production demo with environment variables
     print_info "📦 Building production demo..."
+    # Note: Vite automatically uses .env.production in build mode
+    # We still pass VITE_WS_URL to override if needed
     VITE_WS_URL="$PROD_WS_URL" VITE_GCS_BUCKET="$VOICE_GCS_BUCKET" npm run build:demo
     
     # Verify build output exists
