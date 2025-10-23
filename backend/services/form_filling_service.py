@@ -968,16 +968,19 @@ class FormFillingService:
 
         # 4. Send initiating message to Gemini with current spoken language
         # This prompts Gemini to greet the user in the selected language and ask for the first field
-        if initial_field_hint:
-            try:
-                await self.send_initiating_message(self._spoken_language, initial_field_hint)
-                _log.info("section_switch_initiating_message_sent",
-                         session_id=session_id,
-                         spoken_language=self._spoken_language)
-            except Exception as exc:
-                _log.error("failed_to_send_section_switch_initiating_message",
-                          session_id=session_id,
-                          error=str(exc))
+        # CRITICAL: Always send initiating message to ensure Gemini speaks first in new section
+        try:
+            # Use provided hint, or fallback to generic prompt if section is complete
+            hint = initial_field_hint or "the first unfilled field in this section"
+            await self.send_initiating_message(self._spoken_language, hint)
+            _log.info("section_switch_initiating_message_sent",
+                     session_id=session_id,
+                     spoken_language=self._spoken_language,
+                     has_hint=bool(initial_field_hint))
+        except Exception as exc:
+            _log.error("failed_to_send_section_switch_initiating_message",
+                      session_id=session_id,
+                      error=str(exc))
 
     def handle_update_fields_tool_call(
         self, session_id: str, updates: Dict[str, Any]
@@ -1388,6 +1391,7 @@ class FormFillingService:
         self._pending_field_value_request = {
             "request_id": request_id,
             "future": future,
+            "spoken_name": spoken_name,  # Store for error messages
         }
         
         # Send request to frontend
@@ -1409,30 +1413,77 @@ class FormFillingService:
         try:
             result = await asyncio.wait_for(future, timeout=2.0)
             if result.get("found"):
-                return {
-                    "found": True,
-                    "value": result.get("value"),
-                    "message": f"The value for '{spoken_name}' is: {result.get('value')}",
-                }
+                value = result.get("value")
+                
+                # Field exists - distinguish between filled and empty
+                if value is not None and str(value).strip() != '':
+                    # Field has a value
+                    return {
+                        "found": True,
+                        "value": str(value),
+                        "message": f"The field '{spoken_name}' is filled with: {value}",
+                    }
+                else:
+                    # Field exists but is empty/unfilled
+                    return {
+                        "found": True,
+                        "value": None,
+                        "message": f"The field '{spoken_name}' exists but has not been filled yet. Ask the user if they would like to fill it now.",
+                    }
             else:
-                return {
-                    "found": False,
-                    "message": f"Could not find field '{spoken_name}'. It may not have been filled yet.",
-                }
+                # Field not found in schema - provide helpful suggestions
+                # Build list of available spoken names from schema and previous sections
+                available_names = self._get_available_spoken_names()
+                
+                # Try fuzzy matching to suggest alternatives
+                suggestions = self._find_similar_field_names(spoken_name, available_names)
+                
+                if suggestions:
+                    # Provide "did you mean?" suggestions
+                    if len(suggestions) == 1:
+                        suggestion_text = f"Did you mean '{suggestions[0]}'? Try asking about that field instead."
+                    else:
+                        suggestion_list = ', '.join(f"'{s}'" for s in suggestions[:3])
+                        suggestion_text = f"Did you mean one of these: {suggestion_list}? Try asking about one of those fields instead."
+                    
+                    return {
+                        "found": False,
+                        "message": f"Could not find a field called '{spoken_name}'. {suggestion_text}",
+                        "suggestions": suggestions[:3],  # Include for potential tool extensions
+                    }
+                else:
+                    # No close matches - list available fields
+                    if len(available_names) <= 5:
+                        available_list = ', '.join(f"'{n}'" for n in available_names)
+                        available_text = f"Available fields are: {available_list}."
+                    else:
+                        available_list = ', '.join(f"'{n}'" for n in available_names[:5])
+                        available_text = f"Available fields include: {available_list} (and {len(available_names) - 5} more)."
+                    
+                    return {
+                        "found": False,
+                        "message": f"Could not find a field called '{spoken_name}'. {available_text} Please ask about one of these fields by name.",
+                    }
         except asyncio.TimeoutError:
             _log.error("get_field_value_timeout", 
                       session_id=self._session_id,
                       spoken_name=spoken_name,
                       request_id=request_id)
             self._pending_field_value_request = None
-            return {"found": False, "message": "Request timed out."}
+            return {
+                "found": False, 
+                "message": f"Request timed out while looking up '{spoken_name}'. Please try again or ask about a different field."
+            }
         except Exception as exc:
             _log.error("get_field_value_error", 
                       session_id=self._session_id,
                       spoken_name=spoken_name,
                       error=str(exc))
             self._pending_field_value_request = None
-            return {"found": False, "message": "Error retrieving field value."}
+            return {
+                "found": False, 
+                "message": f"Error retrieving field '{spoken_name}'. Please try asking again or ask about a different field."
+            }
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """
@@ -1494,6 +1545,78 @@ class FormFillingService:
             future.set_result(section_info)
         
         self._pending_section_switch = None
+
+    def _get_available_spoken_names(self) -> List[str]:
+        """
+        Get list of all available spoken field names from current schema.
+        
+        Returns:
+            List of spoken names that can be queried via get_field_value
+        """
+        available_names = []
+        
+        if self._schema:
+            for field in self._schema.get("fields", []):
+                # Use field name as spoken name (this is what frontend maps)
+                field_name = field.get("name")
+                if field_name:
+                    available_names.append(field_name)
+        
+        return available_names
+    
+    def _find_similar_field_names(self, query: str, available_names: List[str], max_suggestions: int = 3) -> List[str]:
+        """
+        Find similar field names using fuzzy matching.
+        
+        Uses rapidfuzz for high-quality fuzzy matching (same library used for PDF field normalization).
+        
+        Args:
+            query: User's query string (e.g., "phone")
+            available_names: List of valid field names
+            max_suggestions: Maximum number of suggestions to return
+            
+        Returns:
+            List of suggested field names, sorted by similarity
+        """
+        if not available_names:
+            return []
+        
+        try:
+            from rapidfuzz import fuzz, process
+            
+            # Use rapidfuzz to find best matches
+            # extractOne returns (match, score, index) or None
+            results = process.extract(
+                query, 
+                available_names, 
+                scorer=fuzz.token_sort_ratio,  # Robust to word order
+                limit=max_suggestions
+            )
+            
+            # Filter by minimum score threshold (52% - same as fuzzy_field_matcher.py)
+            # Return matches with score >= 52
+            suggestions = [match for match, score, _ in results if score >= 52]
+            
+            return suggestions
+            
+        except ImportError:
+            # Fallback if rapidfuzz not available: simple substring matching
+            query_lower = query.lower().strip()
+            matches = []
+            
+            for name in available_names:
+                name_lower = name.lower().strip()
+                
+                # Exact match
+                if name_lower == query_lower:
+                    matches.append((name, 0))
+                # Substring match
+                elif query_lower in name_lower or name_lower in query_lower:
+                    matches.append((name, 1))
+            
+            # Sort by priority and return
+            matches.sort(key=lambda x: x[1])
+            return [name for name, _ in matches[:max_suggestions]]
 
     async def handle_complete_section(self) -> Dict[str, Any]:
         """

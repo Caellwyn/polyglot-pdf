@@ -225,9 +225,19 @@ async def _handle_fill_session(
 					           idle_seconds=int(time.time() - last_rx),
 					           timeout_threshold=idle_timeout)
 					try:
-						await websocket.close(code=1001, reason="Idle timeout")
-					except Exception:
-						pass
+						# Send idle_timeout message to frontend (graceful shutdown)
+						# This tells frontend to stop auto-reconnecting and show "Reconnect" button
+						await websocket.send_json({
+							"type": "idle_timeout",
+							"idle_seconds": int(time.time() - last_rx),
+							"message": "Connection timed out due to inactivity"
+						})
+						# Give frontend time to receive message before closing
+						await asyncio.sleep(0.5)
+						# Close WebSocket with idle timeout code
+						await websocket.close(code=1000, reason="Idle timeout")
+					except Exception as e:
+						log.warning("idle_timeout_cleanup_error", error=str(e))
 					break
 		
 		watchdog = asyncio.create_task(watchdog_task())
@@ -297,6 +307,21 @@ async def _handle_fill_session(
 					else:
 						service.handle_form_state_response(request_id, field_values)
 						# No acknowledgment needed - this completes the async request cycle
+					continue
+				elif mtype == "field_value_response":
+					# Frontend responds to a previous get_field_value request from backend
+					request_id = obj.get("request_id")
+					value = obj.get("value")
+					found = obj.get("found", False)
+					if not request_id:
+						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
+					else:
+						# Synchronous handler will resolve the waiting future in the service
+						try:
+							service.handle_field_value_response(request_id, value, bool(found))
+						except Exception as e:
+							_log.error("field_value_response_handling_failed", error=str(e), request_id=request_id)
+					# No acknowledgment needed - completes async cycle
 					continue
 				elif mtype == "next_field_hint_response":
 					# Frontend responds to get_next_field_hint request from backend

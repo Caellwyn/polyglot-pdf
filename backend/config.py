@@ -78,19 +78,19 @@ class Settings(BaseModel):
 			"name": "get_form_status",
 			"description": (
 				"Use this tool when you need to check which fields are already filled or what values they contain. "
-				"IMPORTANT: Before calling this tool, acknowledge the user with a phrase like 'One moment while I check the form'"
+				"IMPORTANT: Before calling this tool, acknowledge the user with a phrase like 'One moment while I check the form' "
 				"to cover the brief latency while fetching data from the client."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"field_ids": {
-						"type": "ARRAY",
+						"type": "array",
 						"description": "List of specific field IDs to check. These must be field IDs from the schema.",
-						"items": {"type": "STRING"}
+						"items": {"type": "string"}
 					}
 				},
-				"required": ['field_ids']
+				"required": ["field_ids"]
 			}
 		},
 		{
@@ -116,15 +116,18 @@ class Settings(BaseModel):
 			"description": (
 				"Look up a field value by spoken name from current or previous sections. "
 				"Use when user asks 'what's my [field]?', 'what did I enter for [field]?', or similar queries. "
-				"This allows checking fields without switching sections. "
-				"Examples: 'what's my phone number?', 'what date of birth did I give?'"
+				"CRITICAL: Use the EXACT field name from the schema or previous sections list. "
+				"Examples: If schema shows 'Phone Number' → use get_field_value('Phone Number'). "
+				"If previous sections shows 'Date of Birth' → use get_field_value('Date of Birth'). "
+				"DO NOT abbreviate or paraphrase - use the exact name shown in context. "
+				"If user asks for 'phone', look for 'Phone Number' or 'Primary Phone' in the context and use that exact name."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"spoken_name": {
 						"type": "string",
-						"description": "Spoken name or alias of the field (e.g., 'phone number', 'date of birth', 'primary phone')"
+						"description": "EXACT spoken name from schema or previous sections (e.g., 'Phone Number', 'Date of Birth', 'Primary Insurance'). Must match exactly."
 					}
 				},
 				"required": ["spoken_name"]
@@ -217,8 +220,11 @@ class Settings(BaseModel):
     
     "NAVIGATION:\n"
     "• User says 'go to section X' or 'skip' → call switch_section\n"
-    "• User asks 'what's my X?' → call get_field_value('X') with exact spoken name\n"
-    "  Example: 'what's my phone number?' → get_field_value('phone number')\n\n"
+    "• User asks 'what's my X?' → Look in 'Previous sections:' list for exact field name, call get_field_value\n"
+    "  Example: Previous sections shows 'Phone Number' → use get_field_value('Phone Number')\n"
+    "  Example: User asks 'what's my phone?' → Match to 'Phone Number' from context → get_field_value('Phone Number')\n"
+    "• CRITICAL: Use EXACT field name from schema/previous sections - do not abbreviate or paraphrase\n"
+    "• If no exact match, tell user you're not sure which field they mean and ask them to clarify\n\n"
     
     "CONFIRMATION:\n{confirmation_policy}\n\n"
     
@@ -226,8 +232,11 @@ class Settings(BaseModel):
     "You: 'What are your strengths?'\n"
     "User: 'Confidence and empathy'\n"
     "You: [IMMEDIATELY call update_form_fields({{'strengths': 'Confidence and empathy'}})] \n"
-    "Tool Response Received: {{success: true}}\n"
+    "If Tool Response Received: {{success: true}}:\n"
     "You: 'Got it, I've recorded confidence and empathy as your strengths. [Ask next field]'\n\n"
+	"If Tool Response Received: {{validation_errors: [...]}}:\n"
+    "You: 'I see these options: [list]. Which did you mean?'\n"
+	"Or: 'Could you please clarify that for me?'\n\n"
     "Always follow these rules strictly to ensure accurate form completion."
 )
 
