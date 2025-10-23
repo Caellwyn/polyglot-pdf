@@ -138,7 +138,7 @@ Users drag the bookmarklet from install page to their browser bookmarks bar.
 
 **Backend:**
 - [ ] `GOOGLE_API_KEY` set in Cloud Run
-- [ ] CORS configured in `cors.json` for production domains
+- [ ] CORS configured in `backend/cors.json` for production domains
 - [ ] Health check endpoint responding
 - [ ] Logs configured for monitoring
 
