@@ -21,11 +21,6 @@ htmlcov/
 
 # Logs
 *.log
-backend.log
-
-# Frontend (not needed for backend deployment)
-frontend/
-node_modules/
 
 # Git
 .git/
@@ -33,10 +28,10 @@ node_modules/
 
 # Documentation
 *.md
-planning_documents/
 
 # Tests (optional - include if you want to run tests in container)
-backend/tests/
+tests/
 
-# Output files
-outputs/
+# Environment files
+.env
+.env.example

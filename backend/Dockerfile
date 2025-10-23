@@ -5,13 +5,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Copy requirements first (for Docker caching)
-COPY backend/requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy entire backend folder
-COPY backend/ ./backend/
+COPY . .
 
 # Set Python path so imports work
 ENV PYTHONPATH=/app
@@ -24,4 +24,4 @@ EXPOSE 8080
 
 # Start the FastAPI server
 # Cloud Run will inject PORT env var
-CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT}
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}

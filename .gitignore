@@ -7,10 +7,23 @@ __pycache__/
 *.pyc
 *.pyo
 .vscode/
+
 # example data files
 example_pdfs/
 example_webforms/
+
+# Test artifacts
 .pytest_cache/
-# Logs
+
+# Logs (generated files)
 .logs/
+*.log
+backend.log
+
+# Build outputs
 .frontend/dist/
+frontend/dist/
+
+# Temporary files
+tmp_*
+*.tmp
