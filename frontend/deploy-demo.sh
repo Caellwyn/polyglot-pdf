@@ -94,15 +94,16 @@ gcloud storage cp -r dist/demo/bookmarklet \
 
 # Upload VAD assets (ONNX models + WASM runtime) - self-hosted for reliability
 # These were previously loaded from CDN, causing slow initialization on cloud
-echo "📦 Uploading VAD assets (~5 MB)..."
-if [ -d "public/vad-assets" ]; then
-    gcloud storage cp -r public/vad-assets \
+echo "📦 Uploading VAD assets (~12 MB)..."
+if [ -d "dist/demo/vad-assets" ]; then
+    gcloud storage cp -r dist/demo/vad-assets \
         gs://$VOICE_GCS_BUCKET/ \
         --cache-control="public, max-age=31536000"
     echo "✓ VAD assets uploaded (self-hosted, no CDN dependency)"
 else
-    echo "⚠️  Warning: VAD assets not found at public/vad-assets/"
-    echo "   Run ./download-vad-assets.sh to download them"
+    echo "⚠️  Warning: VAD assets not found at dist/demo/vad-assets/"
+    echo "   Run ./download-vad-assets.sh to download them first"
+    echo "   They should be copied to dist/ during the build process"
 fi
 
 # Make bucket contents publicly readable (if not already set)
