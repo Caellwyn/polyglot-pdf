@@ -7,16 +7,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { VADConfig, VAD_PRESETS } from './types'
+import { DEFAULT_VAD_CONFIG } from '../demo/useDemoVAD'
 
 const LOCAL_STORAGE_KEY = 'vad-tuning-config'
 
-// Default config matches current useDemoVAD.ts settings
-const DEFAULT_CONFIG: VADConfig = {
-	positiveSpeechThreshold: 0.95,
-	negativeSpeechThreshold: 0.75,
-	minSpeechMs: 250,
-	redemptionMs: 400,
-}
+// Import production defaults from useDemoVAD (single source of truth)
+const DEFAULT_CONFIG: VADConfig = DEFAULT_VAD_CONFIG
 
 export interface UseVADConfigResult {
 	config: VADConfig

@@ -93,6 +93,18 @@ function getORTAssetBase(): string {
 const VAD_ASSET_BASE = getVADAssetBase()
 const ORT_ASSET_BASE = getORTAssetBase()
 
+/**
+ * Default VAD configuration values
+ * These represent the production-tuned settings after optimization
+ * Export for use in vad-tuning dashboard as baseline
+ */
+export const DEFAULT_VAD_CONFIG = {
+	positiveSpeechThreshold: 0.85,
+	negativeSpeechThreshold: 0.65,
+	minSpeechMs: 250,
+	redemptionMs: 400,
+} as const
+
 export interface VADCallbacks {
 	onSpeechStart?: () => void
 	onSpeechEnd?: (audio: Float32Array) => void
@@ -194,12 +206,12 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 	// Previous values were too aggressive, causing speech clipping and missed words
 	// 0.85 = 85% confidence (standard threshold, balances accuracy vs false positives)
 	// 0.65 = 65% to end (better hysteresis, prevents choppy cutoffs)
-	positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? 0.85,
-	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? 0.65,
+	positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? DEFAULT_VAD_CONFIG.positiveSpeechThreshold,
+	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? DEFAULT_VAD_CONFIG.negativeSpeechThreshold,
 
 	// Timing parameters
-	minSpeechMs: sensitivity.minSpeechMs ?? 250,
-	redemptionMs: sensitivity.redemptionMs ?? 400,
+	minSpeechMs: sensitivity.minSpeechMs ?? DEFAULT_VAD_CONFIG.minSpeechMs,
+	redemptionMs: sensitivity.redemptionMs ?? DEFAULT_VAD_CONFIG.redemptionMs,
 		
 		// Model files - use default CDN (library will handle this automatically)
 		// The library uses jsdelivr CDN by default for model files

@@ -61,13 +61,14 @@ export interface VADConfigPreset {
 }
 
 // Preset configurations for different scenarios
+// NOTE: "Default" preset matches production settings from useDemoVAD.ts
 export const VAD_PRESETS: VADConfigPreset[] = [
 	{
 		name: 'Default',
-		description: 'Balanced settings for general use',
+		description: 'Production-tuned settings (from useDemoVAD.ts)',
 		config: {
-			positiveSpeechThreshold: 0.95,
-			negativeSpeechThreshold: 0.75,
+			positiveSpeechThreshold: 0.85,
+			negativeSpeechThreshold: 0.65,
 			minSpeechMs: 250,
 			redemptionMs: 400,
 		}
