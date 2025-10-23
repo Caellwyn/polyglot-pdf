@@ -592,35 +592,41 @@ class FormFillingService:
         # No logging - too verbose for recovery prompts
         await self._live_ai.send_text_message(hint_text)
 
-    async def send_manual_field_update(self, field_id: str, field_name: str, value: Any):
+    async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
         """
         Notify Gemini when user manually updates a field.
-        
+
         Keeps Gemini's context synchronized with manual user edits so it doesn't
         ask about fields the user has already filled.
-        
+
         Args:
             field_id: Technical field identifier
             field_name: Human-readable field label
             value: The value the user entered
+            next_field_hint: Optional hint for next field to direct user
         """
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
-        
+
         # Skip notification if value is empty/falsy (e.g., user clicked in/out without typing)
         # This prevents unnecessary model responses for fields that weren't actually filled
         if not value or (isinstance(value, str) and not value.strip()):
-            _log.debug("send_manual_field_update_skipped", field_id=field_id, field_name=field_name, 
+            _log.debug("send_manual_field_update_skipped", field_id=field_id, field_name=field_name,
                       reason="empty_value", session_id=self._session_id)
             return
-        
-        # Format as natural language notification
+
+        # Format as natural language notification with next field guidance
         value_str = str(value)
         message = f"User manually updated field '{field_name}' with value: {value_str}"
-        
+
+        # Add next field guidance if provided
+        if next_field_hint:
+            message += f"\n\n{next_field_hint}"
+
         # REDACT: Do not log field values (PHI)
-        _log.info("send_manual_field_update", field_id=field_id, field_name=field_name, session_id=self._session_id)
+        _log.info("send_manual_field_update", field_id=field_id, field_name=field_name,
+                 has_next_hint=bool(next_field_hint), session_id=self._session_id)
         await self._live_ai.send_text_message(message)
 
     async def send_activity_start(self):

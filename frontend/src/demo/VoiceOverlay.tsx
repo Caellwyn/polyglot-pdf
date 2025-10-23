@@ -564,7 +564,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 				}
 
 				// Compute next unfilled field
-				const nextField = computeNextField(state.schema, state.current_values)
+				const nextField = computeNextField(state)
 				const nextFieldHint = nextField
 					? formatNextFieldHint(nextField, state.schema)
 					: 'all fields are complete'
