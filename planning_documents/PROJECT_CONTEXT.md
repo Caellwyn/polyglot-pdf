@@ -239,6 +239,16 @@ cd frontend
 - **Solution**: Fixed frontend to call correct methods, disabled Gemini's automatic VAD
 - **Configuration**: Set `DISABLE_GEMINI_VAD = True` when using manual signals
 
+### October 23, 2025 - Race Condition Fix
+- **Problem**: Messages sent to Gemini before session ready were dropped
+- **Solution**: Queue messages until `setupComplete` received, then flush in order
+- **Impact**: Section switching and language changes now work reliably from first attempt
+
+### October 23, 2025 - Next Field Guidance
+- **Problem**: Gemini didn't always know which field to ask about next
+- **Solution**: Include `next_field_hint` in all communications (handshake, manual updates, etc.)
+- **Impact**: Users always directed to next unfilled field, regardless of interaction method
+
 ---
 
 ## Philosophy
