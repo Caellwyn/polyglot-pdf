@@ -134,6 +134,10 @@ class LiveAIGemini(ILiveAI):
         self._current_session: Optional[Any] = None  # Store active Gemini session for text messages
         self._intentional_shutdown: bool = False  # Track intentional finalize() to prevent auto-retry
 
+        # Session readiness flag and message queue for race condition handling
+        self._session_ready: bool = False  # True when Gemini session is ready to receive messages
+        self._pending_client_content: List[str] = []  # Queue for send_client_content() calls before session ready
+
         # Lock to avoid concurrent start/stop races
         self._task_lock = asyncio.Lock()
         
@@ -286,21 +290,32 @@ class LiveAIGemini(ILiveAI):
 
         Used for initiating conversation in a specific language or context.
 
+        If session is not ready yet, the message is queued and will be sent
+        automatically once the session becomes ready.
+
         Args:
             text: Message to send to Gemini (e.g., language change instruction)
         """
+        # Check if session is ready - if not, queue the message
+        if not self._session_ready:
+            self._log.info("📋 CLIENT_CONTENT_QUEUED (session not ready yet)",
+                          message=text[:100],
+                          queue_size=len(self._pending_client_content) + 1)
+            self._pending_client_content.append(text)
+            return
+
         if self._current_session is None:
             self._log.warning("⚠️ SEND_CLIENT_CONTENT_NO_SESSION")
             return
 
         try:
-            self._log.info("SEND_CLIENT_CONTENT", message=text)
+            self._log.info("SEND_CLIENT_CONTENT", message=text[:100])
             await self._current_session.send_client_content(
                 turns={"parts": [{"text": text}],},
                 turn_complete=True
             )
         except Exception as exc:
-            self._log.error("send_client_content_failed", error=str(exc), message=text)
+            self._log.error("send_client_content_failed", error=str(exc), message=text[:100])
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).
@@ -346,7 +361,11 @@ class LiveAIGemini(ILiveAI):
         """Stop the background task and clear resources."""
         # Set flag to prevent auto-retry after intentional shutdown
         self._intentional_shutdown = True
-        
+
+        # Reset session ready flag and clear any pending messages
+        self._session_ready = False
+        self._pending_client_content.clear()
+
         async with self._task_lock:
             if self._bg_task is not None:
                 self._bg_task.cancel()
@@ -640,10 +659,30 @@ class LiveAIGemini(ILiveAI):
                 self._current_text_sender_task = text_sender_task
                 # Store session reference for potential direct sends
                 self._current_session = session
-                
+
                 self._log.info("gemini_session_established",
                              instance_id=self._instance_id,
                              message="Gemini Live session active and ready - waiting for user to speak")
+
+                # Mark session as ready and send any queued client content messages
+                self._session_ready = True
+                if self._pending_client_content:
+                    self._log.info("📤 SENDING_QUEUED_CLIENT_CONTENT",
+                                  queued_count=len(self._pending_client_content))
+                    for queued_msg in self._pending_client_content:
+                        try:
+                            self._log.info("SEND_CLIENT_CONTENT (from queue)", message=queued_msg[:100])
+                            await session.send_client_content(
+                                turns={"parts": [{"text": queued_msg}],},
+                                turn_complete=True
+                            )
+                        except Exception as exc:
+                            self._log.error("queued_client_content_send_failed",
+                                          error=str(exc),
+                                          message=queued_msg[:100])
+                    # Clear the queue after sending
+                    self._pending_client_content.clear()
+                    self._log.info("✅ QUEUED_CLIENT_CONTENT_SENT")
 
                 try:
                     event_count = 0

@@ -339,10 +339,11 @@ async def _handle_fill_session(
 					field_id = obj.get("field_id")
 					field_name = obj.get("field_name")
 					value = obj.get("value")
+					next_field_hint = obj.get("next_field_hint")  # Optional hint for next field
 					if not field_id or field_name is None:
 						await websocket.send_json({"type": "error", "code": "invalid_update", "reason": "field_id_and_name_required"})
 					else:
-						await service.send_manual_field_update(field_id, field_name, value)
+						await service.send_manual_field_update(field_id, field_name, value, next_field_hint)
 						# No acknowledgment needed - fire-and-forget notification
 					continue
 				elif mtype == "completion_message":

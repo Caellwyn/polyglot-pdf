@@ -1,15 +1,17 @@
 /**
  * WebFormState - Client-side state manager for web form filling
- * 
+ *
  * Manages form state in sessionStorage for stateless backend architecture.
  * Handles reconnects by preserving schema + current values.
- * 
+ *
  * Features:
  * - Persistent state across page reloads (sessionStorage)
  * - Optimistic updates for user edits
  * - Confirmed flag preservation for AI-filled fields
  * - Schema caching for reconnects
  */
+
+import { computeNextField, formatNextFieldHint } from './navigation'
 
 export interface FieldValue {
   value: string | boolean | null;
@@ -217,6 +219,7 @@ export class WebFormStateManager {
     section_label?: string;
     total_sections?: number;
     previous_spoken_names?: string[];
+    initial_field_hint?: string;
   } {
     const payload: any = {
       type: "handshake",
@@ -224,23 +227,29 @@ export class WebFormStateManager {
       current_values: state.current_values,
       fill_language: fillLanguage,
     };
-    
+
+    // Compute initial field hint for Gemini to know where to start
+    const nextField = computeNextField(state);
+    if (nextField) {
+      payload.initial_field_hint = formatNextFieldHint(nextField, state.schema);
+    }
+
     // Phase 3: Add section metadata if this is a section-based session
     if (state.section_index) {
       payload.section_number = state.current_section;
       payload.total_sections = state.section_index.total_sections;
-      
+
       // Get section label
       const section = state.section_index.sections.find(s => s.section_number === state.current_section);
       if (section) {
         payload.section_label = section.section_label;
       }
-      
+
       // Get previous spoken names from completed sections (as array, not Map!)
       const spokenNameMap = this.getSpokenNameMap(state);
       payload.previous_spoken_names = Array.from(spokenNameMap.keys());
     }
-    
+
     return payload;
   }
   
