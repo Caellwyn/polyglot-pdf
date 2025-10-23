@@ -1022,12 +1022,16 @@ export class WebFormConnection {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
-    
+
+    // Compute next field hint after this manual update
+    const nextFieldHint = this.computeNextFieldHintString();
+
     this.send({
       type: 'manual_field_update',
       field_id: fieldId,
       field_name: fieldName,
       value: value,
+      next_field_hint: nextFieldHint,  // Include next field guidance
     });
   }
   
