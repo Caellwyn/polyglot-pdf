@@ -21,7 +21,7 @@ export interface AudioManager {
 	resumeAudioContext: () => void // Resume audio context (resume after false positive)
 	isRecording: () => boolean
 	isSpeaking: () => boolean // Is Gemini currently speaking?
-	muteInput: () => void // Mute mic input (send silence)
+	muteInput: () => void // Mute mic input (send silence - push-to-talk mode only)
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
@@ -525,16 +525,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
-	 * Privacy Gate: Control audio flow based on VAD state
+	 * Set VAD activity state (controls audio flow to backend)
 	 * 
 	 * When VAD detects speech start:
 	 * 1. Flush pre-buffer (last 400ms of audio) to prevent clipping
 	 * 2. Enable live audio flow
 	 * 
 	 * When VAD detects speech end:
-	 * - Disable live audio (send silence for privacy)
+	 * - Disable live audio flow (no audio sent, no keepalive needed)
 	 * 
-	 * @param active - true to enable audio flow, false to send silence
+	 * @param active - true to enable audio flow, false to stop sending audio
 	 */
 	function setVADActive(active: boolean): void {
 		const wasActive = vadActive
@@ -555,8 +555,9 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			
 			console.log('[AudioManager] Pre-buffer flushed, now sending live audio')
 		} else if (!active && wasActive) {
-			// VAD deactivated: switch to sending silence (privacy)
-			console.log('[AudioManager] VAD deactivated - sending silence')
+			// VAD deactivated: stop sending audio (no keepalive needed)
+			// Audio flow stops automatically - see line ~195
+			console.log('[AudioManager] VAD deactivated - stopping audio stream')
 		}
 	}
 

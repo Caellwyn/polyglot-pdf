@@ -41,7 +41,9 @@ export function getDevConfig(): DevConfig {
 /**
  * Get backend WebSocket URL
  * Uses environment variable set during build (VITE_WS_URL)
- * Falls back to localhost for local development
+ * 
+ * Development (npm run dev): Defaults to localhost
+ * Production (npm run build:demo): MUST set VITE_WS_URL during build
  */
 export function getBackendUrl(): string {
 	const config = getDevConfig()
@@ -58,8 +60,14 @@ export function getBackendUrl(): string {
 		return import.meta.env.VITE_WS_URL
 	}
 	
-	// Default to localhost for local development
-	return 'ws://localhost:8000/ws/fill'
+	// Development mode: use localhost
+	if (import.meta.env.DEV) {
+		return 'ws://localhost:8000/ws/fill'
+	}
+	
+	// Production fallback (should not reach here if build is correct)
+	console.warn('[VFF Config] ⚠️ VITE_WS_URL not set during build - using production URL')
+	return getCloudBackendUrl()
 }
 
 /**

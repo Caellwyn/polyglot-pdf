@@ -1,12 +1,16 @@
 node_modules/
 .venv/
 .env
+.env.local
 backend/.env
 backend/__pycache__
 __pycache__/
 *.pyc
 *.pyo
 .vscode/
+
+# Allow .env.production (contains production defaults, safe to commit)
+!.env.production
 
 # example data files
 example_pdfs/
