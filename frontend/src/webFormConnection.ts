@@ -26,6 +26,7 @@ export type ConnectionStatus =
   | "connected"
   | "switching_section"
   | "reconnecting"
+  | "idle_timeout"
   | "error";
 
 export interface ConnectionCallbacks {
@@ -52,6 +53,7 @@ export class WebFormConnection {
   private enableAutoReconnect = false; // Only enable after first successful connection
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
+  private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
   
   // Fill language for form fields
   private fillLanguage: string = "English";
@@ -68,6 +70,12 @@ export class WebFormConnection {
   async connect(wsUrl: string = "ws://localhost:8000/ws/fill", timeoutMs: number = 10000): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
+    }
+    
+    // Clear idle timeout flag on reconnect (user manually clicked reconnect)
+    if (this.idleTimedOut) {
+      console.log('[WebFormConnection] 🔄 Clearing idle timeout flag for manual reconnect');
+      this.idleTimedOut = false;
     }
     
     // Store the URL we're connecting to
@@ -241,6 +249,15 @@ export class WebFormConnection {
           if (this.callbacks.onSessionRestarted) {
             this.callbacks.onSessionRestarted();
           }
+          break;
+        
+        case "idle_timeout":
+          // Backend is closing connection due to inactivity
+          // Set flag to prevent auto-reconnect, require manual reconnect
+          console.log('[WebFormConnection] ⏱️ Idle timeout received from backend:', message);
+          this.idleTimedOut = true;
+          this.setStatus("idle_timeout");
+          // WebSocket will close shortly, handleClose() will see idleTimedOut flag
           break;
           
         default:
@@ -712,17 +729,21 @@ export class WebFormConnection {
       const fieldId = spokenNameMap.get(spokenName.toLowerCase());
       
       if (!fieldId) {
+        // Field doesn't exist in schema
         this.sendFieldValueResponse(requestId, null, false);
         return;
       }
       
-      // Get value from current_values
+      // Field exists - get value from current_values
       const value = currentState.current_values[fieldId];
       
       if (value !== undefined && value !== null && String(value).trim() !== '') {
+        // Field has a value
         this.sendFieldValueResponse(requestId, value, true);
       } else {
-        this.sendFieldValueResponse(requestId, null, false);
+        // Field exists but is empty/unfilled - send found=true with null value
+        // This lets backend distinguish "field exists but empty" from "field doesn't exist"
+        this.sendFieldValueResponse(requestId, null, true);
       }
       
     } catch (error) {
@@ -898,6 +919,14 @@ export class WebFormConnection {
     // Don't auto-reconnect during intentional section switches
     if (this.isSectionSwitching) {
       return; // Keep current status, will be updated after reconnect
+    }
+    
+    // Don't auto-reconnect if connection was closed due to idle timeout
+    // User must manually click "Reconnect" button to resume
+    if (this.idleTimedOut) {
+      console.log('[WebFormConnection] ⏱️ Idle timeout - no auto-reconnect, user must manually reconnect');
+      this.setStatus("idle_timeout");
+      return;
     }
     
     // Attempt reconnect if not intentionally disconnected
