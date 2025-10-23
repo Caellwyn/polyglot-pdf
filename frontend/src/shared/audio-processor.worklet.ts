@@ -64,6 +64,21 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 				(1 - this.RMS_SMOOTHING_BETA) * this.smoothedRMS
 		}
 
+		// FIX #3 (Oct 22, 2025): Audio quality diagnostics
+		// Sample 0.1% of frames to detect audio corruption without spamming logs
+		if (Math.random() < 0.001) {
+			const clippedCount = inputData.filter(s => Math.abs(s) > 0.99).length
+			console.log('[AudioWorklet] Quality check:', {
+				samples: inputData.length,
+				rms: instantRMS.toFixed(4),
+				energy: instantEnergy.toFixed(2),
+				firstSample: inputData[0].toFixed(4),
+				lastSample: inputData[inputData.length - 1].toFixed(4),
+				clippedSamples: clippedCount,
+				clippingRate: (clippedCount / inputData.length * 100).toFixed(2) + '%'
+			})
+		}
+
 		// Convert Float32Array to Int16Array (PCM 16-bit)
 		const pcmData = new Int16Array(inputData.length)
 		for (let i = 0; i < inputData.length; i++) {

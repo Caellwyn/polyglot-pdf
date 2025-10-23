@@ -54,12 +54,25 @@ export function AdultIntakeDemo() {
 				const stream = await navigator.mediaDevices.getUserMedia({
 					audio: {
 						echoCancellation: true,      // Browser AEC (critical for preventing echo)
-						noiseSuppression: true,       // Reduces background noise
+						noiseSuppression: true,       // FIX #4: Keep enabled (disable only as last resort)
 						autoGainControl: true,        // Normalizes microphone volume
 						channelCount: 1,              // Mono audio
 						sampleRate: 16000,            // Match recording sample rate
 					},
 				})
+				
+				// FIX #4 (Oct 22, 2025): Log actual stream settings for diagnostics
+				const audioTrack = stream.getAudioTracks()[0]
+				if (audioTrack) {
+					const settings = audioTrack.getSettings()
+					console.log('[AdultIntakeDemo] 🔍 Actual audio settings:', {
+						sampleRate: settings.sampleRate,
+						channelCount: settings.channelCount,
+						echoCancellation: settings.echoCancellation,
+						noiseSuppression: settings.noiseSuppression,
+						autoGainControl: settings.autoGainControl,
+					})
+				}
 
 				if (mounted) {
 					setSharedStream(stream)
