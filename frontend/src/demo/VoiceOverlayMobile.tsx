@@ -42,7 +42,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
-	const [selectedLanguage, setSelectedLanguage] = useState('English')  // Track selected spoken language
+	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
@@ -532,8 +532,12 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 					<div className="vff-panel-body">
 						{/* Status */}
 						<div className="vff-status-compact">
-							<div className="vff-status-dot" style={{ background: statusColor }}></div>
-							<span className="vff-status-text">{status}</span>
+							<div className="vff-status-dot" style={{ 
+								background: status === 'idle_timeout' ? '#6b7280' : statusColor 
+							}}></div>
+							<span className="vff-status-text">
+								{status === 'idle_timeout' ? 'Idle timeout' : status}
+							</span>
 						</div>
 
 						{/* Language Selection - Shows when connecting or connected */}
@@ -548,6 +552,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 									value={selectedLanguage}
 									onChange={handleLanguageChange}
 								>
+									<option value="">Select language...</option>
 									{SPOKEN_LANGUAGES.map((lang) => (
 										<option key={lang.name} value={lang.name}>
 											{lang.nativeName}
@@ -557,58 +562,20 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 							</div>
 						)}
 
-						{/* Push-to-Talk Toggle */}
-						{(isConnected || isPausedState) && (
-							<div className="vff-ptt-toggle-mobile">
-								<div className="vff-toggle-label-row">
-									<span className="vff-toggle-mode-label">🎤 Auto</span>
-									<label className="vff-toggle-switch">
-										<input
-											type="checkbox"
-											checked={pushToTalkMode}
-											onChange={handlePushToTalkToggle}
-											onKeyDown={(e) => {
-												// Prevent spacebar from toggling checkbox
-												if (e.code === 'Space') {
-													e.preventDefault()
-												}
-											}}
-										/>
-										<span className="vff-toggle-slider"></span>
-									</label>
-									<span className="vff-toggle-mode-label">⌨️ PTT</span>
-								</div>
-							</div>
-						)}						{/* Push-to-Talk Button (only in PTT mode when connected) */}
-						{pushToTalkMode && isConnected && (
-							<button
-								className={`vff-action-btn vff-ptt-btn ${isHoldingPushToTalk ? 'active' : ''}`}
-								onTouchStart={handlePushToTalkPress}
-								onTouchEnd={handlePushToTalkRelease}
-								onMouseDown={handlePushToTalkPress}
-								onMouseUp={handlePushToTalkRelease}
-								onMouseLeave={handlePushToTalkRelease}
-							>
-								{isHoldingPushToTalk ? '🔴 Speaking...' : '⚫ Hold to Speak'}
-							</button>
-						)}
-
-						{/* Action Button */}
-						{!isConnected && !isPausedState ? (
-							<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
-								🎙️ Connect
-							</button>
-						) : isPausedState ? (
-							<button className="vff-action-btn vff-resume-btn" onClick={handleConnect}>
-								▶️ Resume
-							</button>
-						) : (
-							<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
-								⏸️ Pause
-							</button>
-						)}
-
-						{/* Error */}
+					{/* Action Button */}
+					{!isConnected && !isPausedState ? (
+						<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
+							{status === 'idle_timeout' ? '🔄 Reconnect' : '🎙️ Connect'}
+						</button>
+					) : isPausedState ? (
+						<button className="vff-action-btn vff-resume-btn" onClick={handleConnect}>
+							▶️ Resume
+						</button>
+					) : (
+						<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
+							⏸️ Pause
+						</button>
+					)}						{/* Error */}
 						{/* FIX #4: Show both connection errors and stream errors */}
 						{(error || streamError) && (
 							<div className="vff-error-compact">

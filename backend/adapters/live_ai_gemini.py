@@ -216,11 +216,13 @@ class LiveAIGemini(ILiveAI):
         # even if an on_transcript callback is present.
         self._enable_transcripts = bool(enable_transcripts)
 
+        # CRITICAL FIX: Reset intentional shutdown flag BEFORE checking task status
+        # This prevents section-switching crashes where finalize() sets the flag
+        # but the new session immediately exits thinking it was intentionally shut down
+        self._intentional_shutdown = False
+
         # Start background task if not already running
         if self._bg_task is None or self._bg_task.done():
-            # Reset intentional shutdown flag when starting a new session
-            self._intentional_shutdown = False
-            
             # Lazily create audio and text queues
             # Audio queue has max size to prevent blocking - drops frames if backed up
             self._audio_queue = asyncio.Queue(maxsize=100)  # ~2 seconds of audio at 50fps

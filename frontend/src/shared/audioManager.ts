@@ -63,9 +63,10 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	// Circular pre-buffer for speech start capture
 	// Purpose: Captures audio BEFORE VAD detects speech to prevent clipping
 	// Size must be >= minSpeechMs + redemptionMs from VAD config
-	// Current VAD defaults: minSpeechMs=150ms, redemptionMs=300ms
-	// Pre-buffer: 500ms = 150 + 300 + 50ms safety margin
-	const PREBUFFER_DURATION_MS = 600
+	// Current VAD defaults: minSpeechMs=250ms, redemptionMs=400ms
+	// FIX #2 (Oct 22, 2025): Increased from 600ms to 700ms
+	// Pre-buffer: 700ms = 250 + 400 + 50ms safety margin
+	const PREBUFFER_DURATION_MS = 700
 	const PREBUFFER_SIZE_SAMPLES = Math.ceil((PREBUFFER_DURATION_MS / 1000) * RECORDING_SAMPLE_RATE)
 	const audioPreBuffer: Int16Array[] = [] // Rolling buffer of PCM16 chunks
 	let preBufferSampleCount = 0 // Track total samples in buffer

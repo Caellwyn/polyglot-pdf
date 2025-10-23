@@ -52,7 +52,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
-	const [selectedLanguage, setSelectedLanguage] = useState('English')  // Track selected spoken language
+	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
 	const offsetRef = useRef({ x: 0, y: 0 })
@@ -709,9 +709,11 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 				{/* Status */}
 				<div className="vff-status">
 					<span className="vff-status-icon">
-						{isConnected ? '🟢' : '⚪'}
+						{isConnected ? '🟢' : status === 'idle_timeout' ? '⏱️' : '⚪'}
 					</span>
-					<span className="vff-status-text">{status}</span>
+					<span className="vff-status-text">
+						{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
+					</span>
 					{/* VAD speech detection indicator */}
 					{vad.userSpeaking && !pushToTalkMode && (
 						<span className="vff-vad-indicator" title="Voice detected">
@@ -733,6 +735,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 							value={selectedLanguage}
 							onChange={handleLanguageChange}
 						>
+							<option value="">Select language...</option>
 							{SPOKEN_LANGUAGES.map((lang) => (
 								<option key={lang.name} value={lang.name}>
 									{lang.nativeName}
@@ -816,7 +819,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 							className="vff-button vff-connect" 
 							onClick={handleConnect}
 						>
-							Connect to Voice
+							{status === 'idle_timeout' ? 'Reconnect to Voice' : 'Connect to Voice'}
 						</button>
 					) : isPausedState ? (
 						<button 

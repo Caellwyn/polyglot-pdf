@@ -190,8 +190,12 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 	// Allow overrides from options.sensitivity for live tuning during tests.
 	// Use safer, more permissive defaults here to make it easier to get started
 	// during manual testing. Users can tighten these later via the dashboard.
-	positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? 0.98,
-	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? 0.85,
+	// FIX #1 (Oct 22, 2025): Lowered from 0.98/0.85 to 0.90/0.70
+	// Previous values were too aggressive, causing speech clipping and missed words
+	// 0.85 = 85% confidence (standard threshold, balances accuracy vs false positives)
+	// 0.65 = 65% to end (better hysteresis, prevents choppy cutoffs)
+	positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? 0.85,
+	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? 0.65,
 
 	// Timing parameters
 	minSpeechMs: sensitivity.minSpeechMs ?? 250,
