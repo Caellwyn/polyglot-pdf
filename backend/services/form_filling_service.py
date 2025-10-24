@@ -104,10 +104,6 @@ class FormFillingService:
         
         if accept_connection:
             await self._websocket.accept()
-
-
-        if accept_connection:
-            await self._websocket.accept()
         
         # Initialize callback handler
         self._callback_handler = CallbackHandler(
