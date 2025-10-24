@@ -12,6 +12,7 @@ from .field_utils import (
 )
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
+from .request_coordinator import RequestCoordinator
 import structlog
 import os
 from datetime import datetime
@@ -59,10 +60,6 @@ class FormFillingService:
         self._schema: Optional[Dict[str, Any]] = None  # Schema for context only
         self._fill_language: str = "English"  # Default fill language
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
-        # Pending form state requests (for async request/response pattern)
-        self._pending_form_state_request: Optional[Dict[str, Any]] = None
-        self._pending_next_field_request: Optional[Dict[str, Any]] = None
-        self._pending_field_value_request: Optional[Dict[str, Any]] = None
         # Store callbacks for reuse during section switching
         self._on_form_update = None
         self._on_transcript = None
@@ -71,6 +68,10 @@ class FormFillingService:
         self._send_transcript = False
         # Audio handler for streaming and activity signals
         self._audio_handler: Optional[AudioHandler] = None
+        # Request coordinator for async request/response pattern
+        self._request_coordinator: Optional[RequestCoordinator] = None
+        # Section switch state
+        self._pending_section_switch: Optional[Dict[str, Any]] = None
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -113,6 +114,9 @@ class FormFillingService:
         
         # Initialize audio handler
         self._audio_handler = AudioHandler(self._live_ai, session_id=session_id)
+        
+        # Initialize request coordinator
+        self._request_coordinator = RequestCoordinator(websocket=websocket, session_id=session_id)
         
         # Store schema for context generation
         self._schema = schema
@@ -967,8 +971,7 @@ class FormFillingService:
         """
         Request current form state from the frontend client.
         
-        This implements the async request/response pattern for stateless architecture.
-        Backend sends a request to frontend and waits for response.
+        Delegates to RequestCoordinator.
         
         Args:
             field_ids: Specific field IDs to request, or None/empty for all fields
@@ -976,155 +979,58 @@ class FormFillingService:
         Returns:
             Dictionary of field_id -> value from the client
         """
-        import asyncio
-        
-        if not self._websocket:
-            _log.warning("request_form_state_no_websocket", session_id=self._session_id)
+        if not self._request_coordinator:
+            _log.warning("request_form_state_no_coordinator", session_id=self._session_id)
             return {}
         
-        # Generate request ID for matching response
-        import uuid
-        request_id = str(uuid.uuid4())
-        
-        # Create future to await response
-        future = asyncio.Future()
-        self._pending_form_state_request = {
-            "request_id": request_id,
-            "future": future,
-        }
-        
-        # Send request to frontend
-        try:
-            await self._websocket.send_json({
-                "type": "get_form_state",
-                "request_id": request_id,
-                "field_ids": field_ids or [],
-            })
-        except Exception as exc:
-            _log.error("failed_to_send_form_state_request", session_id=self._session_id, error=str(exc))
-            self._pending_form_state_request = None
-            return {}
-        
-        # Wait for response with timeout
-        try:
-            result = await asyncio.wait_for(future, timeout=5.0)
-            return result
-        except asyncio.TimeoutError:
-            _log.error("form_state_request_timeout", session_id=self._session_id, request_id=request_id)
-            self._pending_form_state_request = None
-            return {}
-        except Exception as exc:
-            _log.error("form_state_request_error", session_id=self._session_id, error=str(exc))
-            self._pending_form_state_request = None
-            return {}
+        return await self._request_coordinator.request_form_state(field_ids)
 
     def handle_form_state_response(self, request_id: str, field_values: Dict[str, Any]) -> None:
         """
         Handle form_state_response message from frontend.
         
-        This completes the async request/response cycle by resolving the pending future.
+        Delegates to RequestCoordinator.
         
         Args:
             request_id: ID matching the original request
             field_values: Dictionary of field_id -> value from client
         """
-        if not self._pending_form_state_request:
-            _log.warning("unexpected_form_state_response", session_id=self._session_id, request_id=request_id)
+        if not self._request_coordinator:
+            _log.warning("handle_form_state_response_no_coordinator", session_id=self._session_id)
             return
         
-        if self._pending_form_state_request.get("request_id") != request_id:
-            _log.warning("mismatched_form_state_response", 
-                        session_id=self._session_id,
-                        expected=self._pending_form_state_request.get("request_id"),
-                        received=request_id)
-            return
-        
-        # Resolve the future with the field values
-        future = self._pending_form_state_request.get("future")
-        if future and not future.done():
-            future.set_result(field_values)
-        
-        self._pending_form_state_request = None
+        self._request_coordinator.handle_form_state_response(request_id, field_values)
 
     async def request_next_field_hint(self) -> Optional[str]:
         """
         Request next field hint from the frontend client.
         
-        This implements the async request/response pattern for getting navigation hints.
-        The frontend computes the next unfilled field and formats a hint for Gemini.
+        Delegates to RequestCoordinator.
         
         Returns:
-            Formatted hint string (e.g., "Next field to fill is #3: 'email' (type: text, required)")
-            or None if request fails or no unfilled fields remain
+            Formatted hint string or None if request fails or no unfilled fields remain
         """
-        import asyncio
-        
-        if not self._websocket:
-            _log.warning("request_next_field_hint_no_websocket", session_id=self._session_id)
+        if not self._request_coordinator:
+            _log.warning("request_next_field_hint_no_coordinator", session_id=self._session_id)
             return None
         
-        # Generate request ID for matching response
-        import uuid
-        request_id = str(uuid.uuid4())
-        
-        # Create future to await response
-        future = asyncio.Future()
-        self._pending_next_field_request = {
-            "request_id": request_id,
-            "future": future,
-        }
-        
-        # Send request to frontend
-        try:
-            await self._websocket.send_json({
-                "type": "get_next_field_hint",
-                "request_id": request_id,
-            })
-        except Exception as exc:
-            _log.error("failed_to_send_next_field_request", session_id=self._session_id, error=str(exc))
-            self._pending_next_field_request = None
-            return None
-        
-        # Wait for response with timeout
-        try:
-            result = await asyncio.wait_for(future, timeout=2.0)
-            return result
-        except asyncio.TimeoutError:
-            _log.error("next_field_request_timeout", session_id=self._session_id, request_id=request_id)
-            self._pending_next_field_request = None
-            return None
-        except Exception as exc:
-            _log.error("next_field_request_error", session_id=self._session_id, error=str(exc))
-            self._pending_next_field_request = None
-            return None
+        return await self._request_coordinator.request_next_field_hint()
 
     def handle_next_field_hint_response(self, request_id: str, hint: Optional[str]) -> None:
         """
         Handle next_field_hint_response message from frontend.
         
-        This completes the async request/response cycle by resolving the pending future.
+        Delegates to RequestCoordinator.
         
         Args:
             request_id: ID matching the original request
             hint: Formatted hint string or None if form is complete
         """
-        if not hasattr(self, '_pending_next_field_request') or not self._pending_next_field_request:
-            _log.warning("unexpected_next_field_response", session_id=self._session_id, request_id=request_id)
+        if not self._request_coordinator:
+            _log.warning("handle_next_field_hint_response_no_coordinator", session_id=self._session_id)
             return
         
-        if self._pending_next_field_request.get("request_id") != request_id:
-            _log.warning("mismatched_next_field_response", 
-                        session_id=self._session_id,
-                        expected=self._pending_next_field_request.get("request_id"),
-                        received=request_id)
-            return
-        
-        # Resolve the future with the hint
-        future = self._pending_next_field_request.get("future")
-        if future and not future.done():
-            future.set_result(hint)
-        
-        self._pending_next_field_request = None
+        self._request_coordinator.handle_next_field_hint_response(request_id, hint)
 
     def get_form_status_for_ai(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1161,37 +1067,35 @@ class FormFillingService:
         Returns:
             Success response for AI
         """
-        if not self._websocket:
-            _log.warning("switch_section_no_websocket", session_id=self._session_id)
+        if not self._request_coordinator:
+            _log.warning("switch_section_no_coordinator", session_id=self._session_id)
             return {"success": False, "message": "No connection to frontend."}
         
+        # Need to notify frontend to prepare for section switch first
         import asyncio
-        import uuid
-        
-        # Generate request ID for async request/response
-        request_id = str(uuid.uuid4())
-        
-        # Create future to await section info
-        future = asyncio.Future()
-        self._pending_section_switch = {
-            "request_id": request_id,
-            "future": future,
-        }
-        
         try:
             # Request section info from frontend (non-blocking send)
             asyncio.create_task(self._websocket.send_json({
                 "type": "prepare_section_switch",
                 "identifier": section_identifier,
-                "request_id": request_id,
+                "request_id": "temp",  # Will be overridden by coordinator
             }))
             _log.info("section_switch_info_requested", 
                      session_id=self._session_id,
                      identifier=section_identifier)
-            
-            # Wait for frontend to send section info (5s timeout for large forms)
-            section_info = await asyncio.wait_for(future, timeout=5.0)
-            
+        except Exception as exc:
+            _log.error("failed_to_send_prepare_section_switch", 
+                      session_id=self._session_id,
+                      error=str(exc))
+            return {"success": False, "message": "Failed to request section switch."}
+        
+        # Wait for frontend to send section info via coordinator
+        section_info = await self._request_coordinator.request_section_info(section_identifier)
+        
+        if not section_info:
+            return {"success": False, "message": "Section switch request failed or timed out."}
+        
+        try:
             # Switch Gemini session to new section
             await self.switch_to_section(
                 section_schema=section_info["schema"],
@@ -1205,16 +1109,11 @@ class FormFillingService:
                 "message": f"Switched to section {section_info['metadata']['section_number']}: {section_info['metadata']['section_label']}",
             }
             
-        except asyncio.TimeoutError:
-            _log.error("section_switch_timeout", session_id=self._session_id)
-            self._pending_section_switch = None
-            return {"success": False, "message": "Section switch timed out."}
         except Exception as exc:
             _log.error("section_switch_failed", 
                       session_id=self._session_id,
                       identifier=section_identifier,
                       error=str(exc))
-            self._pending_section_switch = None
             return {"success": False, "message": f"Failed to switch section: {str(exc)}"}
 
     async def handle_get_field_value(self, spoken_name: str) -> Dict[str, Any]:
@@ -1230,175 +1129,99 @@ class FormFillingService:
         Returns:
             Dictionary with field value or not found message
         """
-        import asyncio
-        import uuid
-        
-        if not self._websocket:
-            _log.warning("get_field_value_no_websocket", session_id=self._session_id)
+        if not self._request_coordinator:
+            _log.warning("get_field_value_no_coordinator", session_id=self._session_id)
             return {"found": False, "message": "No connection to frontend."}
         
-        # Generate request ID for matching response
-        request_id = str(uuid.uuid4())
+        # Request field value from frontend via coordinator
+        result = await self._request_coordinator.request_field_value(spoken_name)
         
-        # Create future to await response
-        future = asyncio.Future()
-        self._pending_field_value_request = {
-            "request_id": request_id,
-            "future": future,
-            "spoken_name": spoken_name,  # Store for error messages
-        }
-        
-        # Send request to frontend
-        try:
-            await self._websocket.send_json({
-                "type": "get_field_value",
-                "request_id": request_id,
-                "spoken_name": spoken_name,
-            })
-        except Exception as exc:
-            _log.error("failed_to_send_get_field_value", 
-                      session_id=self._session_id,
-                      spoken_name=spoken_name,
-                      error=str(exc))
-            self._pending_field_value_request = None
-            return {"found": False, "message": "Failed to request field value."}
-        
-        # Wait for response with timeout
-        try:
-            result = await asyncio.wait_for(future, timeout=2.0)
-            if result.get("found"):
-                value = result.get("value")
-                
-                # Field exists - distinguish between filled and empty
-                if value is not None and str(value).strip() != '':
-                    # Field has a value
-                    return {
-                        "found": True,
-                        "value": str(value),
-                        "message": f"The field '{spoken_name}' is filled with: {value}",
-                    }
-                else:
-                    # Field exists but is empty/unfilled
-                    return {
-                        "found": True,
-                        "value": None,
-                        "message": f"The field '{spoken_name}' exists but has not been filled yet. Ask the user if they would like to fill it now.",
-                    }
+        # Build user-friendly response based on result
+        if result.get("found"):
+            value = result.get("value")
+            
+            # Field exists - distinguish between filled and empty
+            if value is not None and str(value).strip() != '':
+                # Field has a value
+                return {
+                    "found": True,
+                    "value": str(value),
+                    "message": f"The field '{spoken_name}' is filled with: {value}",
+                }
             else:
-                # Field not found in schema - provide helpful suggestions
-                # Build list of available spoken names from schema and previous sections
-                available_names = self._get_available_spoken_names()
-                
-                # Try fuzzy matching to suggest alternatives
-                suggestions = self._find_similar_field_names(spoken_name, available_names)
-                
-                if suggestions:
-                    # Provide "did you mean?" suggestions
-                    if len(suggestions) == 1:
-                        suggestion_text = f"Did you mean '{suggestions[0]}'? Try asking about that field instead."
-                    else:
-                        suggestion_list = ', '.join(f"'{s}'" for s in suggestions[:3])
-                        suggestion_text = f"Did you mean one of these: {suggestion_list}? Try asking about one of those fields instead."
-                    
-                    return {
-                        "found": False,
-                        "message": f"Could not find a field called '{spoken_name}'. {suggestion_text}",
-                        "suggestions": suggestions[:3],  # Include for potential tool extensions
-                    }
+                # Field exists but is empty/unfilled
+                return {
+                    "found": True,
+                    "value": None,
+                    "message": f"The field '{spoken_name}' exists but has not been filled yet. Ask the user if they would like to fill it now.",
+                }
+        else:
+            # Field not found in schema - provide helpful suggestions
+            # Build list of available spoken names from schema and previous sections
+            available_names = self._get_available_spoken_names()
+            
+            # Try fuzzy matching to suggest alternatives
+            suggestions = self._find_similar_field_names(spoken_name, available_names)
+            
+            if suggestions:
+                # Provide "did you mean?" suggestions
+                if len(suggestions) == 1:
+                    suggestion_text = f"Did you mean '{suggestions[0]}'? Try asking about that field instead."
                 else:
-                    # No close matches - list available fields
-                    if len(available_names) <= 5:
-                        available_list = ', '.join(f"'{n}'" for n in available_names)
-                        available_text = f"Available fields are: {available_list}."
-                    else:
-                        available_list = ', '.join(f"'{n}'" for n in available_names[:5])
-                        available_text = f"Available fields include: {available_list} (and {len(available_names) - 5} more)."
-                    
-                    return {
-                        "found": False,
-                        "message": f"Could not find a field called '{spoken_name}'. {available_text} Please ask about one of these fields by name.",
-                    }
-        except asyncio.TimeoutError:
-            _log.error("get_field_value_timeout", 
-                      session_id=self._session_id,
-                      spoken_name=spoken_name,
-                      request_id=request_id)
-            self._pending_field_value_request = None
-            return {
-                "found": False, 
-                "message": f"Request timed out while looking up '{spoken_name}'. Please try again or ask about a different field."
-            }
-        except Exception as exc:
-            _log.error("get_field_value_error", 
-                      session_id=self._session_id,
-                      spoken_name=spoken_name,
-                      error=str(exc))
-            self._pending_field_value_request = None
-            return {
-                "found": False, 
-                "message": f"Error retrieving field '{spoken_name}'. Please try asking again or ask about a different field."
-            }
+                    suggestion_list = ', '.join(f"'{s}'" for s in suggestions[:3])
+                    suggestion_text = f"Did you mean one of these: {suggestion_list}? Try asking about one of those fields instead."
+                
+                return {
+                    "found": False,
+                    "message": f"Could not find a field called '{spoken_name}'. {suggestion_text}",
+                    "suggestions": suggestions[:3],  # Include for potential tool extensions
+                }
+            else:
+                # No close matches - list available fields
+                if len(available_names) <= 5:
+                    available_list = ', '.join(f"'{n}'" for n in available_names)
+                    available_text = f"Available fields are: {available_list}."
+                else:
+                    available_list = ', '.join(f"'{n}'" for n in available_names[:5])
+                    available_text = f"Available fields include: {available_list} (and {len(available_names) - 5} more)."
+                
+                return {
+                    "found": False,
+                    "message": f"Could not find a field called '{spoken_name}'. {available_text} Please ask about one of these fields by name.",
+                }
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """
         Handle field_value_response message from frontend.
         
-        Completes the async request/response cycle for get_field_value.
+        Delegates to RequestCoordinator.
         
         Args:
             request_id: ID matching the original request
             value: The field value from client
             found: Whether the field was found
         """
-        if not hasattr(self, '_pending_field_value_request') or not self._pending_field_value_request:
-            _log.warning("unexpected_field_value_response", 
-                        session_id=self._session_id,
-                        request_id=request_id)
+        if not self._request_coordinator:
+            _log.warning("handle_field_value_response_no_coordinator", session_id=self._session_id)
             return
         
-        if self._pending_field_value_request.get("request_id") != request_id:
-            _log.warning("mismatched_field_value_response", 
-                        session_id=self._session_id,
-                        expected=self._pending_field_value_request.get("request_id"),
-                        received=request_id)
-            return
-        
-        # Resolve the future with the response
-        future = self._pending_field_value_request.get("future")
-        if future and not future.done():
-            future.set_result({"value": value, "found": found})
-        
-        self._pending_field_value_request = None
+        self._request_coordinator.handle_field_value_response(request_id, value, found)
 
     def handle_section_info_response(self, request_id: str, section_info: Dict[str, Any]) -> None:
         """
         Handle section_info_response message from frontend.
         
-        Completes the async request/response cycle for section switching.
+        Delegates to RequestCoordinator.
         
         Args:
             request_id: ID matching the original request
             section_info: Dictionary with schema, current_values, metadata, initial_field_hint
         """
-        if not hasattr(self, '_pending_section_switch') or not self._pending_section_switch:
-            _log.warning("unexpected_section_info_response", 
-                        session_id=self._session_id,
-                        request_id=request_id)
+        if not self._request_coordinator:
+            _log.warning("handle_section_info_response_no_coordinator", session_id=self._session_id)
             return
         
-        if self._pending_section_switch.get("request_id") != request_id:
-            _log.warning("mismatched_section_info_response", 
-                        session_id=self._session_id,
-                        expected=self._pending_section_switch.get("request_id"),
-                        received=request_id)
-            return
-        
-        # Resolve the future with the section info
-        future = self._pending_section_switch.get("future")
-        if future and not future.done():
-            future.set_result(section_info)
-        
-        self._pending_section_switch = None
+        self._request_coordinator.handle_section_info_response(request_id, section_info)
 
     def _get_available_spoken_names(self) -> List[str]:
         """
