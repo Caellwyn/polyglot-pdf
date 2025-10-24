@@ -5,6 +5,11 @@ from copy import deepcopy
 
 from backend.config import Settings, get_settings
 from ..ports.live_ai_port import ILiveAI
+from .field_utils import (
+    build_fields_from_schema,
+    get_available_spoken_names,
+    find_similar_field_names,
+)
 import structlog
 import os
 from datetime import datetime
@@ -68,33 +73,10 @@ class FormFillingService:
         
         Used by web sessions to construct field objects for tool responses.
         Backend doesn't persist these - they're rebuilt each time.
+        
+        Delegates to field_utils.build_fields_from_schema for the actual logic.
         """
-        from backend.models.form_models import FormField, Rect
-        
-        fields = []
-        schema = self._schema or {}
-        
-        for field_data in schema.get("fields", []):
-            # Build FormField-like object from schema
-            # Web forms don't have physical rectangles, use dummy rect
-            dummy_rect = Rect(x0=0, y0=0, x1=100, y1=20)
-            
-            field = FormField(
-                id=field_data.get("id"),
-                name=field_data.get("name"),
-                spoken_name=field_data.get("name"),  # Use same for web
-                spoken_aliases=[],
-                page_index=field_data.get("page_index", 0),
-                rect=dummy_rect,  # Web forms need dummy rect for validation
-                field_type=field_data.get("type", "text"),
-                type=field_data.get("type", "text"),
-                value=field_data.get("value"),
-                options=field_data.get("allowed_values") or field_data.get("options") or [],
-                meta={},  # Backend doesn't track meta for web
-            )
-            fields.append(field)
-        
-        return fields
+        return build_fields_from_schema(self._schema or {})
 
     async def start_session(
         self,
@@ -1558,17 +1540,10 @@ class FormFillingService:
         
         Returns:
             List of spoken names that can be queried via get_field_value
+            
+        Delegates to field_utils.get_available_spoken_names for the actual logic.
         """
-        available_names = []
-        
-        if self._schema:
-            for field in self._schema.get("fields", []):
-                # Use field name as spoken name (this is what frontend maps)
-                field_name = field.get("name")
-                if field_name:
-                    available_names.append(field_name)
-        
-        return available_names
+        return get_available_spoken_names(self._schema)
     
     def _find_similar_field_names(self, query: str, available_names: List[str], max_suggestions: int = 3) -> List[str]:
         """
@@ -1583,46 +1558,10 @@ class FormFillingService:
             
         Returns:
             List of suggested field names, sorted by similarity
+            
+        Delegates to field_utils.find_similar_field_names for the actual logic.
         """
-        if not available_names:
-            return []
-        
-        try:
-            from rapidfuzz import fuzz, process
-            
-            # Use rapidfuzz to find best matches
-            # extractOne returns (match, score, index) or None
-            results = process.extract(
-                query, 
-                available_names, 
-                scorer=fuzz.token_sort_ratio,  # Robust to word order
-                limit=max_suggestions
-            )
-            
-            # Filter by minimum score threshold (52% - same as fuzzy_field_matcher.py)
-            # Return matches with score >= 52
-            suggestions = [match for match, score, _ in results if score >= 52]
-            
-            return suggestions
-            
-        except ImportError:
-            # Fallback if rapidfuzz not available: simple substring matching
-            query_lower = query.lower().strip()
-            matches = []
-            
-            for name in available_names:
-                name_lower = name.lower().strip()
-                
-                # Exact match
-                if name_lower == query_lower:
-                    matches.append((name, 0))
-                # Substring match
-                elif query_lower in name_lower or name_lower in query_lower:
-                    matches.append((name, 1))
-            
-            # Sort by priority and return
-            matches.sort(key=lambda x: x[1])
-            return [name for name, _ in matches[:max_suggestions]]
+        return find_similar_field_names(query, available_names, max_suggestions)
 
     async def handle_complete_section(self) -> Dict[str, Any]:
         """
