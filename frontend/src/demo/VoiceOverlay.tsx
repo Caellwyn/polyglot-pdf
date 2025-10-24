@@ -723,17 +723,18 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 					)}
 				</div>
 
-				{/* Language Selection - Shows when connecting or connected */}
-				{!isReady && status !== 'disconnected' && status !== 'paused' && (
+				{/* Language Selection - Always visible for accessibility */}
+				{status !== 'disconnected' && (
 					<div className="vff-language-selector">
 						<label htmlFor="vff-language-select" className="vff-language-label">
-							🌍 Spoken Language
+							🗣️💬 Language / Idioma / Langue
 						</label>
 						<select
 							id="vff-language-select"
 							className="vff-language-select"
 							value={selectedLanguage}
 							onChange={handleLanguageChange}
+							disabled={!isConnected}
 						>
 							<option value="">Select language...</option>
 							{SPOKEN_LANGUAGES.map((lang) => (
@@ -815,22 +816,22 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 				{/* Controls */}
 				<div className="vff-controls">
 					{!isConnected && !isPausedState ? (
-						<button 
-							className="vff-button vff-connect" 
+						<button
+							className="vff-button vff-connect"
 							onClick={handleConnect}
 						>
-							{status === 'idle_timeout' ? 'Reconnect to Voice' : 'Connect to Voice'}
+							{status === 'idle_timeout' ? '🗣️ Reconnect' : '🗣️ Connect'}
 						</button>
 					) : isPausedState ? (
-						<button 
-							className="vff-button vff-resume" 
+						<button
+							className="vff-button vff-resume"
 							onClick={handleConnect}
 						>
 							▶️ Resume
 						</button>
 					) : (
-						<button 
-							className="vff-button vff-pause" 
+						<button
+							className="vff-button vff-pause"
 							onClick={handleDisconnect}
 						>
 							⏸️ Pause
