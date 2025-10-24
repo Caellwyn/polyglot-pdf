@@ -149,6 +149,15 @@ class LiveAIGemini(ILiveAI):
         self._session_prompt_tokens: int = 0
         self._session_candidate_tokens: int = 0
 
+        # Cumulative cost tracking
+        self._session_total_cost: float = 0.0
+
+        # Cumulative modality tracking
+        self._session_text_input_tokens: int = 0
+        self._session_audio_input_tokens: int = 0
+        self._session_text_output_tokens: int = 0
+        self._session_audio_output_tokens: int = 0
+
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
             adapter="LiveAIGemini",
@@ -489,6 +498,11 @@ class LiveAIGemini(ILiveAI):
         self._session_total_tokens = 0
         self._session_prompt_tokens = 0
         self._session_candidate_tokens = 0
+        self._session_total_cost = 0.0
+        self._session_text_input_tokens = 0
+        self._session_audio_input_tokens = 0
+        self._session_text_output_tokens = 0
+        self._session_audio_output_tokens = 0
 
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
@@ -1044,27 +1058,37 @@ class LiveAIGemini(ILiveAI):
                                             self._session_prompt_tokens += prompt_tokens
                                             self._session_candidate_tokens += response_tokens
                                             self._session_total_tokens += total_tokens
+                                            self._session_total_cost += total_cost
+                                            self._session_text_input_tokens += text_input_tokens
+                                            self._session_audio_input_tokens += audio_input_tokens
+                                            self._session_text_output_tokens += text_output_tokens
+                                            self._session_audio_output_tokens += audio_output_tokens
 
                                             # Log detailed token breakdown
                                             self._log.info(
                                                 "gemini_tokens",
-                                                # Totals
+                                                # This event's totals
                                                 prompt_tokens=prompt_tokens,
                                                 response_tokens=response_tokens,
                                                 total_tokens=total_tokens,
-                                                session_total=self._session_total_tokens,
-                                                # Input breakdown
+                                                # This event's modality breakdown
                                                 text_input=text_input_tokens,
                                                 audio_input=audio_input_tokens,
-                                                # Output breakdown
                                                 text_output=text_output_tokens,
                                                 audio_output=audio_output_tokens,
-                                                # Costs
+                                                # This event's costs
                                                 text_input_cost=round(text_input_cost, 8),
                                                 audio_input_cost=round(audio_input_cost, 8),
                                                 text_output_cost=round(text_output_cost, 8),
                                                 audio_output_cost=round(audio_output_cost, 8),
-                                                total_cost_usd=round(total_cost, 8)
+                                                total_cost_usd=round(total_cost, 8),
+                                                # Session cumulative totals
+                                                session_total_tokens=self._session_total_tokens,
+                                                session_total_cost_usd=round(self._session_total_cost, 8),
+                                                session_text_input=self._session_text_input_tokens,
+                                                session_audio_input=self._session_audio_input_tokens,
+                                                session_text_output=self._session_text_output_tokens,
+                                                session_audio_output=self._session_audio_output_tokens,
                                             )
                                         except Exception as e:
                                             self._log.warning("token_extraction_error", error=str(e), exc_info=True)
