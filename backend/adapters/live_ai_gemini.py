@@ -1015,24 +1015,23 @@ class LiveAIGemini(ILiveAI):
                                             text_input_tokens = 0
                                             audio_input_tokens = 0
                                             for detail in prompt_details:
-                                                # Access via attributes (ModalityTokenCount has modality and token_count)
-                                                modality = getattr(detail, "modality", None)
-                                                count = getattr(detail, "token_count", 0)
-                                                if modality == types.Modality.TEXT or str(modality) == "TEXT":
-                                                    text_input_tokens += count
-                                                elif modality == types.Modality.AUDIO or str(modality) == "AUDIO":
-                                                    audio_input_tokens += count
+                                                match detail:
+                                                    case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        if modality == types.Modality.TEXT:
+                                                            text_input_tokens += count
+                                                        elif modality == types.Modality.AUDIO:
+                                                            audio_input_tokens += count
 
                                             # Parse output modalities
                                             text_output_tokens = 0
                                             audio_output_tokens = 0
                                             for detail in response_details:
-                                                modality = getattr(detail, "modality", None)
-                                                count = getattr(detail, "token_count", 0)
-                                                if modality == types.Modality.TEXT or str(modality) == "TEXT":
-                                                    text_output_tokens += count
-                                                elif modality == types.Modality.AUDIO or str(modality) == "AUDIO":
-                                                    audio_output_tokens += count
+                                                match detail:
+                                                    case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        if modality == types.Modality.TEXT:
+                                                            text_output_tokens += count
+                                                        elif modality == types.Modality.AUDIO:
+                                                            audio_output_tokens += count
 
                                             # Calculate costs by modality
                                             text_input_cost = text_input_tokens * GEMINI_PRICING["text_input"]
