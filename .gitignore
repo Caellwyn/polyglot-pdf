@@ -23,6 +23,7 @@ example_webforms/
 .logs/
 *.log
 backend.log
+backend/logs/
 
 # Build outputs
 .frontend/dist/
