@@ -5,13 +5,13 @@ Tests the stateless web form architecture where sessions are connection-scoped.
 """
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
-from backend.services.form_filling_service import FormFillingService
-from backend.config import Settings
+from services.form_filling_service import FormFillingService
+from config import Settings
 
 
 def create_form_field(field_data: dict):
     """Helper to create FormField from schema field_data."""
-    from backend.models.form_models import FormField, Rect
+    from models.form_models import FormField, Rect
     return FormField(
         id=field_data.get("id"),
         name=field_data.get("name"),
