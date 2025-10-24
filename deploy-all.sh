@@ -106,7 +106,9 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --image gcr.io/$VOICE_PROJECT_NAME/voice-form-filler \
         --region us-central1 \
         --platform managed \
-        --allow-unauthenticated
+        --allow-unauthenticated \
+        --timeout=300 \
+        --cpu-boost
     
     BACKEND_URL="https://voice-form-filler-773443099751.us-central1.run.app"
     print_success "✅ Backend deployed successfully!"
