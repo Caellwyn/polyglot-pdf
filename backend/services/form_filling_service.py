@@ -10,6 +10,7 @@ from .field_utils import (
     get_available_spoken_names,
     find_similar_field_names,
 )
+from .validation_handler import ValidationHandler
 import structlog
 import os
 from datetime import datetime
@@ -973,94 +974,17 @@ class FormFillingService:
     def handle_update_fields_tool_call(
         self, session_id: str, updates: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Apply updates from the AI for web sessions (validation only, no persistence)."""
-
+        """Apply updates from the AI for web sessions (validation only, no persistence).
+        
+        Delegates to ValidationHandler for field matching and validation.
+        """
         # Build field list on-demand from schema for validation
         # Values are not persisted - this is just for acknowledgment
-        try:
-            fields = self._build_fields_from_schema()
-            
-            # Step 1: Match field IDs (exact or fuzzy)
-            matched_updates = {}  # field_id -> value (with actual field IDs)
-            unknown_fields = []
-            field_map = {}  # field_id -> field object
-            
-            for field_key, value in (updates or {}).items():
-                # Try exact match by field ID first
-                matched_field = next((f for f in fields if f.id == field_key), None)
-                
-                # If no exact match, try fuzzy matching by name
-                if not matched_field:
-                    from backend.utils.fuzzy_field_matcher import fuzzy_match_hint
-                    match_result = fuzzy_match_hint(field_key, fields)
-                    if match_result.status == "resolved" and match_result.top_candidate:
-                        matched_field = match_result.top_candidate.field
-                        _log.debug("fuzzy_matched_field", 
-                                  model_key=field_key, 
-                                  matched_id=matched_field.id,
-                                  matched_name=matched_field.name,
-                                  score=match_result.top_candidate.score,
-                                  session_id=session_id)
-                
-                if matched_field:
-                    matched_updates[matched_field.id] = value
-                    field_map[matched_field.id] = matched_field
-                else:
-                    unknown_fields.append(field_key)
-            
-            # Step 2: Validate matched fields against schema constraints
-            from backend.utils.field_validator import validate_updates
-            
-            # Convert field objects to dicts for validator
-            field_dicts = []
-            for field_obj in fields:
-                field_dict = {
-                    "id": field_obj.id,
-                    "name": field_obj.name,
-                    "type": field_obj.type,
-                }
-                # Add constraint fields if present
-                if hasattr(field_obj, 'min') and field_obj.min is not None:
-                    field_dict["min"] = field_obj.min
-                if hasattr(field_obj, 'max') and field_obj.max is not None:
-                    field_dict["max"] = field_obj.max
-                if hasattr(field_obj, 'format') and field_obj.format:
-                    field_dict["format"] = field_obj.format
-                if hasattr(field_obj, 'pattern') and field_obj.pattern:
-                    field_dict["pattern"] = field_obj.pattern
-                if hasattr(field_obj, 'minLength') and field_obj.minLength is not None:
-                    field_dict["minLength"] = field_obj.minLength
-                if hasattr(field_obj, 'maxLength') and field_obj.maxLength is not None:
-                    field_dict["maxLength"] = field_obj.maxLength
-                if hasattr(field_obj, 'options') and field_obj.options:
-                    field_dict["options"] = field_obj.options
-                
-                field_dicts.append(field_dict)
-            
-            validation_result = validate_updates(field_dicts, matched_updates)
-            
-            applied_fields = validation_result["valid_fields"]
-            validation_errors = validation_result["validation_errors"]
-            form_state = validation_result["form_state"]
-            
-            result = {
-                "applied_fields": applied_fields,
-                "unknown_fields": unknown_fields,
-                "validation_errors": validation_errors,
-                "form_state": form_state,
-            }
-            
-            # Log validation failures concisely
-            if validation_errors or unknown_fields:
-                _log.warning("validation_failures", 
-                           error_count=len(validation_errors), 
-                           unknown_count=len(unknown_fields))
-            
-            return result
-            
-        except Exception as exc:
-            _log.exception("update_validation_error", session_id=session_id, error=str(exc))
-            return None
+        fields = self._build_fields_from_schema()
+        
+        # Use ValidationHandler to match and validate fields
+        validator = ValidationHandler(session_id=session_id)
+        return validator.validate_field_updates(fields, updates)
 
     def update_form_state(self, field_updates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
