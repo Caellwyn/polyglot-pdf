@@ -3,8 +3,8 @@ node_modules/
 .env
 .env.local
 backend/.env
-backend/__pycache__
-__pycache__/
+
+*__pycache__*
 *.pyc
 *.pyo
 .vscode/
@@ -23,6 +23,7 @@ example_webforms/
 .logs/
 *.log
 backend.log
+backend/logs/
 
 # Build outputs
 .frontend/dist/

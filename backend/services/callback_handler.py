@@ -10,9 +10,10 @@ from fastapi import WebSocket
 import structlog
 
 from .request_coordinator import RequestCoordinator
-from backend.utils.tool_call_logger import append_tool_call_log
+from backend.utils.dev_file_logger import get_dev_logger
 
 _log = structlog.get_logger().bind(module="callback_handler")
+_dev_log = get_dev_logger()
 
 
 class CallbackHandler:
@@ -169,13 +170,8 @@ class CallbackHandler:
         Returns:
             Tool response dictionary for Gemini
         """
-        # Dev logging: Clear, readable output for debugging
-        from backend.utils.dev_logger import log_tool_call
-        log_tool_call(tool_name, arguments, session_id=self._session_id)
-
-        _log.info("=" * 80)
-        _log.info("GEMINI TOOL CALL", tool=tool_name, arg_keys=list(arguments.keys()) if isinstance(arguments, dict) else "non-dict")
-        _log.info("=" * 80)
+        # Dev logging: Log tool call to daily file
+        _dev_log.log_tool_call(tool_name, arguments, session_id=self._session_id)
         
         if self._session_id is None:
             _log.error("tool_call_no_session", tool_name=tool_name)
@@ -241,14 +237,7 @@ class CallbackHandler:
                      next_hint_length=len(next_field_hint) if next_field_hint else 0)
         else:
             await self.send_form_update(result.get("form_state"), applied_fields)
-            _log.warning("field_update_errors", 
-                        validation_errors=len(validation_errors),
-                        unknown_fields=len(unknown_fields),
-                        applied=len(applied_fields))
-        
-        # Log without field values
-        self._log_tool_call_result(result)
-        
+
         # Build and return tool response
         tool_response = self._build_update_fields_response(
             validation_errors,
@@ -256,10 +245,9 @@ class CallbackHandler:
             applied_fields,
             next_field_hint
         )
-        
-        # Dev logging
-        from backend.utils.dev_logger import log_tool_response
-        log_tool_response("update_form_fields", tool_response, session_id=self._session_id)
+
+        # Dev logging: Log tool response to daily file
+        _dev_log.log_tool_response("update_form_fields", tool_response, session_id=self._session_id)
         
         return tool_response
     
@@ -364,23 +352,7 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE (EMPTY TOOL CALL)", success=False, returning_error=True)
         _log.info("-" * 80)
         return error_response
-    
-    def _log_tool_call_result(self, result: Dict[str, Any]) -> None:
-        """Log tool call result without exposing field values."""
-        try:
-            append_tool_call_log({
-                "event": "tool_call_update_applied",
-                "session_id": self._session_id,
-                "applied_count": len(result.get("applied_fields", [])),
-                "applied_field_ids": result.get("applied_fields", []),
-                "unknown_count": len(result.get("unknown_fields", [])),
-                "unknown_field_ids": result.get("unknown_fields", []),
-                "validation_error_count": len(result.get("validation_errors", [])),
-                "validation_error_field_ids": [e.get("field_id") or e.get("field_name") for e in result.get("validation_errors", [])],
-            })
-        except Exception:
-            pass
-    
+
     def _build_update_fields_response(
         self,
         validation_errors: list,

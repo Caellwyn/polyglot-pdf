@@ -17,7 +17,6 @@ from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
-from backend.utils.tool_call_logger import append_tool_call_log
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
