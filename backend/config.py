@@ -259,3 +259,13 @@ def get_settings() -> Settings:
 
 # (LLM normalizer settings live on Settings; no module-level duplicates.)
 
+# ============================================================================
+# Gemini Pricing for Token Tracking
+# ============================================================================
+# Pricing for Gemini 2.0 Flash (per token)
+# Updated: October 2025
+GEMINI_PRICING = {
+	"prompt_tokens": 0.000001875,    # Input tokens
+	"candidate_tokens": 0.0000075,   # Output tokens
+}
+

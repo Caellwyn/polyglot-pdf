@@ -18,6 +18,7 @@ from google.genai import types
 import structlog
 
 from backend.utils.json_recovery import extract_json_from_part
+from backend.utils.dev_file_logger import get_dev_logger
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
@@ -844,16 +845,16 @@ class LiveAIGemini(ILiveAI):
                                                                 # and surrounding server_content for debugging.
                                                                 if not parsed_arguments:
                                                                     # Dev logging: Show empty tool call for debugging
-                                                                    from backend.utils.dev_logger import log_raw_tool_event
-                                                                    log_raw_tool_event(
-                                                                        "empty_tool_arguments",
-                                                                        {
-                                                                            "tool_name": tool_name,
+                                                                    dev_logger = get_dev_logger()
+                                                                    dev_logger.log_invalid_tool_call(
+                                                                        tool_name=tool_name or "unknown",
+                                                                        arguments={
                                                                             "call_id": call_id,
                                                                             "payload_type": type(payload).__name__,
                                                                             "payload_repr": repr(payload)[:500] if payload else None,
                                                                             "part_type": type(part).__name__,
-                                                                        }
+                                                                        },
+                                                                        error="Empty tool arguments after parsing attempts",
                                                                     )
 
                                                             response_payload = None
@@ -871,10 +872,14 @@ class LiveAIGemini(ILiveAI):
                                                                     self._log.info("tool_callback_completed", tool=tool_name, response_ok=bool(response_payload))
                                                                 except Exception as e:
                                                                     self._log.exception("tool_callback_error", tool=tool_name, error=str(e))
-                                                                    
+
                                                                     # Dev logging: Log tool errors
-                                                                    from backend.utils.dev_logger import log_tool_error
-                                                                    log_tool_error(tool_name, e, parsed_arguments)
+                                                                    dev_logger = get_dev_logger()
+                                                                    dev_logger.log_error(
+                                                                        error_type="tool_callback_error",
+                                                                        error_message=str(e),
+                                                                        context={"tool_name": tool_name, "arguments": parsed_arguments}
+                                                                    )
                                                             elif tool_name == "update_form_fields" and self._on_form_update:
                                                                 await self._on_form_update(parsed_arguments)
 
