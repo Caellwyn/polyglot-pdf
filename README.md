@@ -1,41 +1,54 @@
-# AI-Powered Web Form Voice Filler
+# AI-Powered Voice Form Filler
 
-An intelligent web form filling application using Google Gemini Live API for voice-based interaction. Users can fill web forms naturally using voice conversation with an AI assistant that understands form context and guides the process.
+A multilingual voice-driven medical form filling system using Google Gemini Live API. Enables patients to complete complex medical intake forms in their native language through natural conversation, with emphasis on accuracy, privacy, and user control.
 
 ## ✨ Features
 
-- 🎤 **Voice-Based Form Filling** - Natural conversation with AI to fill form fields
-- 🌐 **Web Form Support** - Works with any HTML form on any webpage
-- 🤖 **Intelligent Field Understanding** - AI understands field labels, types, and context
-- ⚡ **Real-Time Form Updates** - See form values populate as you speak
+### Voice & Language
+- 🎤 **Natural Voice Interaction** - Conversational AI guides users field-by-field
+- 🌍 **18+ Spoken Languages** - Converse in Spanish, Tagalog, French, Hindi, and more
+- 🔄 **Real-Time Language Switching** - Change conversation language mid-session
+- 🎯 **Next Field Guidance** - AI always knows which field to ask about next
+
+### Form Intelligence
+- 📋 **Section-Based Navigation** - Handle complex multi-section forms (174+ fields tested)
 - 🔍 **Smart Field Matching** - Fuzzy matching handles variations in field labels
-- ✅ **Type Validation** - Proper handling of text, checkbox, radio, and select fields
-- 🔌 **WebSocket Real-Time Communication** - Live synchronization between AI and UI
-- 💾 **Stateless Architecture** - Client manages all state for better scalability
+- ✅ **Type Validation** - Proper handling of text, checkbox, radio, select, date, time fields
+- 🔄 **Manual Edit Sync** - AI aware of fields filled manually (hybrid voice/keyboard workflow)
+- ⚡ **Real-Time Updates** - See form values populate as you speak
+
+### Privacy & Accuracy
+- 🔒 **HIPAA-Compliant** - Zero PHI storage, stateless backend, ephemeral audio processing
+- ✔️ **Confirmation Required** - Verbal readback before moving to next field
+- 🎓 **Sanity Checking** - Validates logical errors (1800s birthdate, 2-digit phone)
+- 🔌 **WebSocket Real-Time** - Low-latency communication with <50ms barge-in
 
 ## 📊 Current Status
 
-**Status**: Production Ready ✅  
-**Last Updated**: January 2025
+**Status**: Production Demo Ready ✅
+**Last Updated**: October 23, 2025
 
 ### Architecture Highlights
 
-- **Stateless Backend** - Client is single source of truth for form state
-- **WebSocket Proxy** - Backend proxies messages between client and Gemini
-- **sessionStorage** - Client state persists across reconnects
-- **2 Tools** - `update_form_fields` and `get_form_status`
+- **Stateless Backend** - Client is single source of truth (HIPAA compliance)
+- **Message Queuing** - Race condition fix ensures messages sent when Gemini ready
+- **Next Field Guidance** - Every message includes hint for next unfilled field
+- **Section-Based Flow** - Handles complex multi-section forms with context preservation
+- **5 Tool Functions** - `update_form_fields`, `get_form_status`, `get_field_value`, `switch_section`, `complete_section`
 
 ### Completed Features
 
-- ✅ Web form parsing from live HTML pages
-- ✅ Gemini Live API integration with function calling
-- ✅ WebSocket-based real-time communication
-- ✅ Voice interaction with AI assistant
-- ✅ Stateless client-side state management
-- ✅ Field type detection (text, checkbox, radio, select)
-- ✅ Fuzzy field matching for robust label recognition
-- ✅ Comprehensive test coverage (9/9 core tests passing)
-- ✅ Auto-reconnect with state preservation
+- ✅ Multi-section form support (174-field adult intake form working)
+- ✅ 18+ spoken languages with real-time switching
+- ✅ Gemini Live API native audio integration
+- ✅ WebSocket-based real-time communication with auto-reconnect
+- ✅ Manual VAD with <50ms barge-in latency
+- ✅ Hybrid voice/keyboard workflow (manual edit detection)
+- ✅ Field type detection (text, checkbox, radio, select, date, time, etc.)
+- ✅ Fuzzy field matching with 52% similarity threshold
+- ✅ Next field guidance in all operations (handshake, section switch, manual updates)
+- ✅ Race condition fix for session initialization
+- ✅ Comprehensive test coverage (backend + frontend)
 
 ## 🚀 Quick Start
 
@@ -93,11 +106,13 @@ Frontend available at: <http://localhost:5173>
 
 ### Quick Test
 
-1. Open <http://localhost:5173/test-demo.html>
-2. Click "Connect" (grant microphone permission)
-3. Click "Start Recording"
-4. Say: "My name is John Doe, email john@example.com"
-5. Watch fields auto-fill!
+1. Open <http://localhost:5174/test-demo-new.html> (note: port may be 5173 or 5174)
+2. Click "Connect to Voice" (grant microphone permission if prompted)
+3. Select a language from the dropdown (e.g., "Spanish")
+4. Gemini will greet you in that language and ask for the first field
+5. Speak naturally: "My ID is 12345" or manually type values
+6. Watch fields auto-fill with confirmation!
+7. Try switching sections or changing languages mid-session
 
 ## 🚢 Production Deployment
 
@@ -189,12 +204,12 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 
 ### Planning Documents (`planning_documents/`)
 
+- **PROJECT_CONTEXT.md** - Project vision, design principles, and recent critical fixes
+- **TECHNICAL_GUIDE.md** - Complete technical reference with recent improvements
+- **0_gemini_live_documentation.md** - Gemini Live API reference and best practices
 - **AI_ONBOARDING.md** - Complete codebase overview for AI assistants and new developers
 - **WEB_STATELESS_ARCHITECTURE.md** - Detailed architecture specification
-- **live_api_best_practices.md** - Gemini Live API guidelines and best practices
 - **MANUAL_TESTING_GUIDE.md** - Step-by-step manual testing procedures
-- **function_calling_live_api_example_code.py** - Code examples for Gemini function calling
-- **tool_declaration_example.py** - Tool declaration reference
 
 ### Key Concepts
 
@@ -211,8 +226,18 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 - Tool calls for field updates
 
 **Tool Declarations:**
-1. `update_form_fields` - Update field values (AI validates against schema)
-2. `get_form_status` - Get form schema structure for AI context
+1. `update_form_fields` - Update field values with validation and confirmation
+2. `get_form_status` - Get overall form completion status
+3. `get_field_value` - Query specific field value (with fuzzy matching)
+4. `switch_section` - Navigate to different form section
+5. `complete_section` - Mark current section complete and advance
+
+**Recent Improvements (Oct 2025):**
+- ✅ **Race Condition Fix** - Messages queued until Gemini session ready (~2s delay)
+- ✅ **Next Field Guidance** - All communications include hint for next unfilled field
+- ✅ **Language Change Fix** - Corrected `computeNextField()` parameters
+- ✅ **Manual Edit Awareness** - Gemini notified when user types manually with next field hint
+- ✅ **Fuzzy Field Query** - `get_field_value` with suggestions for misspelled names
 
 ## 🏗️ Architecture
 
@@ -297,6 +322,17 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 **AI Goes Silent After Tool Call:**
 - Check model version: Use `gemini-live-2.5-flash-preview-native-audio-09-2025`
 - Check backend logs for FunctionResponse format errors
+- Verify `next_field_hint` is being sent (check logs for `has_next_hint=True`)
+
+**Language Change Not Working:**
+- ✅ **Fixed Oct 23**: `computeNextField()` parameters corrected
+- Wait for "Gemini session established" log before changing language
+- Check that dropdown selection triggers `changeSpokenLanguage()`
+
+**Section Switching Issues:**
+- ✅ **Fixed Oct 23**: Race condition - messages now queued until session ready
+- Check backend logs for `📋 CLIENT_CONTENT_QUEUED` and `📤 SENDING_QUEUED_CLIENT_CONTENT`
+- Verify `initial_field_hint` included in section switch
 
 ### Debug Tools
 
