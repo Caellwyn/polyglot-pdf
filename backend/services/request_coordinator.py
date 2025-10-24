@@ -232,9 +232,9 @@ class RequestCoordinator:
         # Send request to frontend
         try:
             await self._websocket.send_json({
-                "type": "get_section_info",
+                "type": "prepare_section_switch",
                 "request_id": request_id,
-                "section_identifier": section_identifier,
+                "identifier": section_identifier,
             })
         except Exception as exc:
             _log.error("failed_to_send_section_info_request",

@@ -268,7 +268,7 @@ class TestRequestSectionInfo:
     
     @pytest.mark.asyncio
     async def test_request_section_info_sends_message(self):
-        """Should send get_section_info message."""
+        """Should send prepare_section_switch message."""
         mock_ws = AsyncMock()
         coordinator = RequestCoordinator(websocket=mock_ws)
         
@@ -291,8 +291,8 @@ class TestRequestSectionInfo:
         
         assert mock_ws.send_json.called
         sent_message = mock_ws.send_json.call_args[0][0]
-        assert sent_message["type"] == "get_section_info"
-        assert sent_message["section_identifier"] == "3"
+        assert sent_message["type"] == "prepare_section_switch"
+        assert sent_message["identifier"] == "3"
         assert "request_id" in sent_message
         assert result == section_data
     

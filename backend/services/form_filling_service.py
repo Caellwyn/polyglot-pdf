@@ -70,8 +70,6 @@ class FormFillingService:
         self._audio_handler: Optional[AudioHandler] = None
         # Request coordinator for async request/response pattern
         self._request_coordinator: Optional[RequestCoordinator] = None
-        # Section switch state
-        self._pending_section_switch: Optional[Dict[str, Any]] = None
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -224,34 +222,12 @@ class FormFillingService:
                 if applied_fields is not None:
                     payload["applied_fields"] = applied_fields
                 
-                # Generate request ID for next field hint
-                import uuid
-                request_id = str(uuid.uuid4())
-                payload["request_next_field_hint"] = True
-                payload["request_id"] = request_id
-                
-                # Create future for the hint response
-                import asyncio
-                future = asyncio.Future()
-                self._pending_next_field_request = {
-                    "request_id": request_id,
-                    "future": future,
-                }
-                
                 await self._websocket.send_json({"type": "form_updated", "data": payload})
                 
-                # Wait for response with hint
-                try:
-                    hint = await asyncio.wait_for(future, timeout=2.0)
+                # Request next field hint via coordinator
+                if self._request_coordinator:
+                    hint = await self._request_coordinator.request_next_field_hint()
                     return hint
-                except asyncio.TimeoutError:
-                    _log.error("next_field_hint_timeout_after_update", session_id=self._session_id)
-                    self._pending_next_field_request = None
-                    return None
-                except Exception as exc:
-                    _log.error("next_field_hint_error_after_update", session_id=self._session_id, error=str(exc))
-                    self._pending_next_field_request = None
-                    return None
             return None
 
         async def on_form_update(data: dict):
@@ -1071,25 +1047,11 @@ class FormFillingService:
             _log.warning("switch_section_no_coordinator", session_id=self._session_id)
             return {"success": False, "message": "No connection to frontend."}
         
-        # Need to notify frontend to prepare for section switch first
-        import asyncio
-        try:
-            # Request section info from frontend (non-blocking send)
-            asyncio.create_task(self._websocket.send_json({
-                "type": "prepare_section_switch",
-                "identifier": section_identifier,
-                "request_id": "temp",  # Will be overridden by coordinator
-            }))
-            _log.info("section_switch_info_requested", 
-                     session_id=self._session_id,
-                     identifier=section_identifier)
-        except Exception as exc:
-            _log.error("failed_to_send_prepare_section_switch", 
-                      session_id=self._session_id,
-                      error=str(exc))
-            return {"success": False, "message": "Failed to request section switch."}
+        # Request section info from frontend via coordinator
+        _log.info("section_switch_info_requested", 
+                 session_id=self._session_id,
+                 identifier=section_identifier)
         
-        # Wait for frontend to send section info via coordinator
         section_info = await self._request_coordinator.request_section_info(section_identifier)
         
         if not section_info:
