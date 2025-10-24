@@ -11,6 +11,7 @@ from .field_utils import (
     find_similar_field_names,
 )
 from .validation_handler import ValidationHandler
+from .audio_handler import AudioHandler
 import structlog
 import os
 from datetime import datetime
@@ -68,6 +69,8 @@ class FormFillingService:
         self._on_audio = None
         self._on_tool_call = None
         self._send_transcript = False
+        # Audio handler for streaming and activity signals
+        self._audio_handler: Optional[AudioHandler] = None
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -107,6 +110,9 @@ class FormFillingService:
         self._websocket = websocket
         self._session_id = session_id
         self._send_transcript = send_transcript  # Store for reuse in section switching
+        
+        # Initialize audio handler
+        self._audio_handler = AudioHandler(self._live_ai, session_id=session_id)
         
         # Store schema for context generation
         self._schema = schema
@@ -550,95 +556,31 @@ class FormFillingService:
                     pass
 
     async def stream_audio(self, audio_chunk: bytes):
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-        # Log first audio chunk to verify flow
-        if not hasattr(self, '_first_service_audio_logged'):
-            _log.info("🎤 [Service] First audio chunk forwarding to LiveAI", bytes=len(audio_chunk))
-            self._first_service_audio_logged = True
-        await self._live_ai.stream_audio(audio_chunk)
+        """Stream audio chunk to Gemini. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.stream_audio(audio_chunk)
 
     async def send_context_hint(self, hint_text: str):
-        """
-        Send a context hint (e.g., next field to fill) to Gemini as a text message.
-        
-        This is sent asynchronously after tool responses, allowing frontend to
-        provide navigation guidance without blocking tool call latency.
-        
-        Args:
-            hint_text: Text message to send to Gemini (e.g., "Next unfilled field is 'email'")
-        """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-        # No logging - too verbose for recovery prompts
-        await self._live_ai.send_text_message(hint_text)
+        """Send context hint to Gemini. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.send_context_hint(hint_text)
 
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
-        """
-        Notify Gemini when user manually updates a field.
-
-        Keeps Gemini's context synchronized with manual user edits so it doesn't
-        ask about fields the user has already filled.
-
-        Args:
-            field_id: Technical field identifier
-            field_name: Human-readable field label
-            value: The value the user entered
-            next_field_hint: Optional hint for next field to direct user
-        """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-
-        # Skip notification if value is empty/falsy (e.g., user clicked in/out without typing)
-        # This prevents unnecessary model responses for fields that weren't actually filled
-        if not value or (isinstance(value, str) and not value.strip()):
-            _log.debug("send_manual_field_update_skipped", field_id=field_id, field_name=field_name,
-                      reason="empty_value", session_id=self._session_id)
-            return
-
-        # Format as natural language notification with next field guidance
-        value_str = str(value)
-        message = f"User manually updated field '{field_name}' with value: {value_str}"
-
-        # Add next field guidance if provided
-        if next_field_hint:
-            message += f"\n\n{next_field_hint}"
-
-        # REDACT: Do not log field values (PHI)
-        _log.info("send_manual_field_update", field_id=field_id, field_name=field_name,
-                 has_next_hint=bool(next_field_hint), session_id=self._session_id)
-        await self._live_ai.send_text_message(message)
+        """Notify Gemini of manual field update. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.send_manual_field_update(
+                field_id, field_name, value, next_field_hint
+            )
 
     async def send_activity_start(self):
-        """
-        Send activity_start signal to Gemini (user started speaking).
-
-        Signals the beginning of user speech before sending audio chunks.
-        Called when frontend VAD detects speech start.
-        """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-
-        _log.info("🎤 [Service] Sending activity_start to Gemini", session_id=self._session_id)
-        await self._live_ai.send_activity_start()
+        """Send activity_start signal. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.send_activity_start()
 
     async def send_activity_end(self):
-        """
-        Send activity_end signal to Gemini (user stopped speaking).
-
-        Signals the end of user speech and flushes Gemini's cached audio buffer.
-        Called when frontend VAD detects speech end.
-        """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
-            return
-
-        _log.info("🤐 [Service] Sending activity_end to Gemini", session_id=self._session_id)
-        await self._live_ai.send_activity_end()
+        """Send activity_end signal. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.send_activity_end()
 
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
         """
