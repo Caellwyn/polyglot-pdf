@@ -10,10 +10,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire backend folder
-COPY . .
+# Copy entire backend folder contents into /app/backend to preserve package structure
+COPY . /app/backend
 
-# Set Python path so imports work
+# Set Python path so 'backend' is importable as a package
 ENV PYTHONPATH=/app
 
 # Cloud Run sets PORT env var, default to 8080
@@ -22,6 +22,6 @@ ENV PORT=8080
 # Expose port for documentation (Cloud Run ignores this)
 EXPOSE 8080
 
-# Start the FastAPI server
+# Start the FastAPI server using module syntax to support relative imports
 # Cloud Run will inject PORT env var
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
+CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT}
