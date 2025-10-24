@@ -540,17 +540,18 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 							</span>
 						</div>
 
-						{/* Language Selection - Shows when connecting or connected */}
-						{!isReady && status !== 'disconnected' && status !== 'paused' && (
+						{/* Language Selection - Always visible for accessibility */}
+						{status !== 'disconnected' && (
 							<div className="vff-language-selector-mobile">
 								<label htmlFor="vff-language-select-mobile" className="vff-language-label-mobile">
-									🌍 Spoken Language
+									🗣️💬 Language / Idioma / Langue
 								</label>
 								<select
 									id="vff-language-select-mobile"
 									className="vff-language-select-mobile"
 									value={selectedLanguage}
 									onChange={handleLanguageChange}
+									disabled={!isConnected}
 								>
 									<option value="">Select language...</option>
 									{SPOKEN_LANGUAGES.map((lang) => (
@@ -565,7 +566,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 					{/* Action Button */}
 					{!isConnected && !isPausedState ? (
 						<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
-							{status === 'idle_timeout' ? '🔄 Reconnect' : '🎙️ Connect'}
+							{status === 'idle_timeout' ? '🗣️ Reconnect' : '🗣️ Connect'}
 						</button>
 					) : isPausedState ? (
 						<button className="vff-action-btn vff-resume-btn" onClick={handleConnect}>
