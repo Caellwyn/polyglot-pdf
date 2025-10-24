@@ -1,8 +1,85 @@
 # Voice Form Filler - Logging Overhaul Plan
 
-**Last Updated**: October 14, 2025  
-**Purpose**: Production-ready logging for compliance, token tracking, and performance metrics  
+**Last Updated**: October 24, 2025
+**Purpose**: Production-ready logging for compliance, token tracking, and performance metrics
 **Target**: Cloud Logging → BigQuery pipeline
+
+---
+
+## 📊 Progress Update - October 24, 2025
+
+### ✅ Completed (Phase 1 - Token Tracking Infrastructure)
+
+**Backend Infrastructure**:
+- ✅ Created `backend/utils/structured_logger.py` - Production JSON logger for Cloud Run/BigQuery
+- ✅ Created `backend/utils/dev_file_logger.py` - Development logger with daily `.jsonl` rotation
+- ✅ Created `backend/utils/log_schemas.py` - TypedDict event schemas
+- ✅ Removed legacy logging utilities (`dev_logger.py`, `tool_call_logger.py`)
+- ✅ Updated all backend services to use new logging
+
+**Token Tracking (PRIORITY #1)**:
+- ✅ Implemented real-time token extraction from Gemini API `usage_metadata`
+- ✅ **TEXT vs AUDIO modality breakdown** using `prompt_tokens_details` and `response_tokens_details`
+- ✅ Cost calculation with accurate pricing (audio 6x more expensive than text)
+- ✅ Cumulative session tracking (tokens and costs)
+- ✅ Hardened against `None` values from API
+- ✅ Pattern matching using `types.ModalityTokenCount`
+
+**Pricing Configuration**:
+```python
+GEMINI_PRICING = {
+    "text_input": $0.0000005,   # $0.50 per million
+    "audio_input": $0.000003,   # $3.00 per million (6x!)
+    "text_output": $0.000002,   # $2.00 per million
+    "audio_output": $0.000012,  # $12.00 per million (6x!)
+}
+```
+
+**Development Tooling**:
+- ✅ Daily log rotation: `backend/logs/gemini_YYYY-MM-DD.jsonl`
+- ✅ JSON Lines format for easy DataFrame analysis
+- ✅ Environment flag: `VFF_DEV_LOGGING=true`
+- ✅ Errors always output to terminal
+
+**Key Insights**:
+- Audio output tokens dominate costs (often 80%+ of total)
+- Real-time cost visibility enables optimization decisions
+- API can return `None` for token counts - defensive coding required
+
+### 🚧 In Progress / Next Steps
+
+**Phase 2 - Session Lifecycle** (NEXT):
+- [ ] Generate `form_session_id` on first blur/connect
+- [ ] Log `ws_connect`, `ws_disconnect`, `session_start`, `session_complete`
+- [ ] Session duration and completion tracking
+
+**Phase 3 - Frontend Logger**:
+- [ ] Client-side logger in sessionStorage (PHI allowed - stays local)
+- [ ] Field change tracking with old/new values
+- [ ] Sanitized event batching to backend (NO values)
+- [ ] Manual field update detection and logging
+
+**Phase 4 - Remaining Backend**:
+- [ ] Field interaction logging (`field_voice_attempt`, validation results)
+- [ ] Error categorization and tracking
+- [ ] Remove remaining console.log spam (~268 frontend instances)
+
+**Phase 5 - BigQuery Integration**:
+- [ ] Set up Cloud Logging → BigQuery sink
+- [ ] Create datasets and tables
+- [ ] Validate PHI-free logging with queries
+
+**Phase 6 - Compliance & Audit** (Later):
+- [ ] 6-year audit trail
+- [ ] IP hashing
+- [ ] Separate audit dataset
+
+### 📝 Lessons Learned
+
+1. **API Documentation Gaps**: Official docs had camelCase field names, Python SDK uses snake_case
+2. **None Handling Critical**: API returns `None` for some token counts in edge cases
+3. **Modality Breakdown Essential**: Audio costs 6x more - need separate tracking
+4. **Development Logs Valuable**: Full Gemini message logs critical for debugging
 
 ---
 
@@ -453,21 +530,24 @@ Frontend:
 - [ ] Set retention: 30d (Cloud Logging), 90d (BigQuery raw), 2yr (aggregates)
 
 ### Step 2: Remove Legacy Logging
-- [ ] Backend: Remove all `print()`, emoji logs, verbose debug
-- [ ] Frontend: Remove console.log spam
+- [x] Backend: Remove all `print()`, emoji logs, verbose debug ✅ Oct 24
+- [ ] Frontend: Remove console.log spam (~268 instances)
 - [ ] Verify: Clean console output
 
 ### Step 3: Backend Logger
-- [ ] Create `backend/utils/logger.py`: Structured JSON logger
-- [ ] Create `backend/utils/log_schemas.py`: TypedDict definitions
+- [x] Create `backend/utils/structured_logger.py`: Structured JSON logger ✅ Oct 24
+- [x] Create `backend/utils/log_schemas.py`: TypedDict definitions ✅ Oct 24
+- [x] Create `backend/utils/dev_file_logger.py`: Development file logger ✅ Oct 24
 - [ ] Initialize in `main.py`: Single instance via dependency injection
-- [ ] Update `form_filling_service.py`: Add logger parameter, remove legacy logs
+- [x] Update services: Remove legacy logs, add new logging ✅ Oct 24
 
-### Step 4: Token Tracking (PRIORITY)
-- [ ] Add `session_tokens`, `form_tokens` counters to `FormFillingService`
-- [ ] Log after EVERY Gemini API call: Extract `response.usage_metadata`
-- [ ] Include: prompt/candidate/total tokens, api_call_type, cumulative, cost
-- [ ] Log at: `start_session()`, `send_realtime_input()`, `handle_tool_call()`, `send_client_content()`
+### Step 4: Token Tracking (PRIORITY) ✅ COMPLETED Oct 24
+- [x] Add session token counters to `LiveAIGemini` adapter ✅ Oct 24
+- [x] Extract `usage_metadata` after EVERY Gemini API response ✅ Oct 24
+- [x] **Modality breakdown**: TEXT vs AUDIO tokens from `*_tokens_details` ✅ Oct 24
+- [x] Include: prompt/response/total tokens, modality breakdown, cumulative, cost ✅ Oct 24
+- [x] Cost calculation with accurate pricing (audio 6x text) ✅ Oct 24
+- [x] Harden against `None` values from API ✅ Oct 24
 - [ ] Frontend: Store `vff_form_tokens_total` in sessionStorage, pass in handshake
 
 ### Step 5: Session Lifecycle
