@@ -996,36 +996,79 @@ class LiveAIGemini(ILiveAI):
                                     # ========================================
                                     # TOKEN TRACKING (extract usage metadata)
                                     # ========================================
-                                    usage_metadata = getattr(event, "usage_metadata", None)
-                                    if usage_metadata:
+                                    # The server periodically sends messages with UsageMetadata
+                                    if hasattr(event, 'usage_metadata') and event.usage_metadata:
                                         try:
-                                            prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0)
-                                            candidate_tokens = getattr(usage_metadata, "candidates_token_count", 0)
-                                            total_tokens = getattr(usage_metadata, "total_token_count", 0)
+                                            usage = event.usage_metadata
+
+                                            # Extract token counts (Python SDK uses snake_case)
+                                            prompt_tokens = getattr(usage, "prompt_token_count", 0)
+                                            response_tokens = getattr(usage, "response_token_count", 0)
+                                            total_tokens = getattr(usage, "total_token_count", 0)
+
+                                            # Extract modality breakdowns (TEXT vs AUDIO)
+                                            # Python SDK: prompt_tokens_details, response_tokens_details
+                                            prompt_details = getattr(usage, "prompt_tokens_details", []) or []
+                                            response_details = getattr(usage, "response_tokens_details", []) or []
+
+                                            # Parse input modalities using pattern matching
+                                            text_input_tokens = 0
+                                            audio_input_tokens = 0
+                                            for detail in prompt_details:
+                                                # Access via attributes (ModalityTokenCount has modality and token_count)
+                                                modality = getattr(detail, "modality", None)
+                                                count = getattr(detail, "token_count", 0)
+                                                if modality == types.Modality.TEXT or str(modality) == "TEXT":
+                                                    text_input_tokens += count
+                                                elif modality == types.Modality.AUDIO or str(modality) == "AUDIO":
+                                                    audio_input_tokens += count
+
+                                            # Parse output modalities
+                                            text_output_tokens = 0
+                                            audio_output_tokens = 0
+                                            for detail in response_details:
+                                                modality = getattr(detail, "modality", None)
+                                                count = getattr(detail, "token_count", 0)
+                                                if modality == types.Modality.TEXT or str(modality) == "TEXT":
+                                                    text_output_tokens += count
+                                                elif modality == types.Modality.AUDIO or str(modality) == "AUDIO":
+                                                    audio_output_tokens += count
+
+                                            # Calculate costs by modality
+                                            text_input_cost = text_input_tokens * GEMINI_PRICING["text_input"]
+                                            audio_input_cost = audio_input_tokens * GEMINI_PRICING["audio_input"]
+                                            text_output_cost = text_output_tokens * GEMINI_PRICING["text_output"]
+                                            audio_output_cost = audio_output_tokens * GEMINI_PRICING["audio_output"]
+                                            total_cost = text_input_cost + audio_input_cost + text_output_cost + audio_output_cost
 
                                             # Update cumulative counters
                                             self._session_prompt_tokens += prompt_tokens
-                                            self._session_candidate_tokens += candidate_tokens
+                                            self._session_candidate_tokens += response_tokens
                                             self._session_total_tokens += total_tokens
 
-                                            # Calculate cost
-                                            prompt_cost = prompt_tokens * GEMINI_PRICING["prompt_tokens"]
-                                            candidate_cost = candidate_tokens * GEMINI_PRICING["candidate_tokens"]
-                                            total_cost = prompt_cost + candidate_cost
-
-                                            # Log with structured logger (production logs)
-                                            # Note: We don't have form/session IDs here in the adapter
-                                            # The service layer will need to log these with proper context
+                                            # Log detailed token breakdown
                                             self._log.info(
                                                 "gemini_tokens",
+                                                # Totals
                                                 prompt_tokens=prompt_tokens,
-                                                candidate_tokens=candidate_tokens,
+                                                response_tokens=response_tokens,
                                                 total_tokens=total_tokens,
                                                 session_total=self._session_total_tokens,
-                                                cost_usd=round(total_cost, 6)
+                                                # Input breakdown
+                                                text_input=text_input_tokens,
+                                                audio_input=audio_input_tokens,
+                                                # Output breakdown
+                                                text_output=text_output_tokens,
+                                                audio_output=audio_output_tokens,
+                                                # Costs
+                                                text_input_cost=round(text_input_cost, 8),
+                                                audio_input_cost=round(audio_input_cost, 8),
+                                                text_output_cost=round(text_output_cost, 8),
+                                                audio_output_cost=round(audio_output_cost, 8),
+                                                total_cost_usd=round(total_cost, 8)
                                             )
                                         except Exception as e:
-                                            self._log.warning("token_extraction_error", error=str(e))
+                                            self._log.warning("token_extraction_error", error=str(e), exc_info=True)
 
                                 except Exception:
                                     self._log.exception("event_handling_error")

@@ -262,10 +262,16 @@ def get_settings() -> Settings:
 # ============================================================================
 # Gemini Pricing for Token Tracking
 # ============================================================================
-# Pricing for Gemini 2.0 Flash (per token)
+# Pricing for Gemini 2.0 Flash (per token, converted from per-million rates)
+# Source: https://ai.google.dev/pricing
 # Updated: October 2025
 GEMINI_PRICING = {
-	"prompt_tokens": 0.000001875,    # Input tokens
-	"candidate_tokens": 0.0000075,   # Output tokens
+	# Input pricing (per token)
+	"text_input": 0.50 / 1_000_000,      # $0.50 per million = $0.0000005 per token
+	"audio_input": 3.00 / 1_000_000,     # $3.00 per million = $0.000003 per token
+
+	# Output pricing (per token, includes thinking tokens)
+	"text_output": 2.00 / 1_000_000,     # $2.00 per million = $0.000002 per token
+	"audio_output": 12.00 / 1_000_000,   # $12.00 per million = $0.000012 per token
 }
 
