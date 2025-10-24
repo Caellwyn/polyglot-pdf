@@ -18,6 +18,9 @@ from google.genai import types
 import structlog
 
 from backend.utils.json_recovery import extract_json_from_part
+from backend.utils.dev_file_logger import get_dev_logger
+from backend.utils.structured_logger import get_logger as get_structured_logger
+from backend.config import GEMINI_PRICING
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
@@ -140,11 +143,25 @@ class LiveAIGemini(ILiveAI):
 
         # Lock to avoid concurrent start/stop races
         self._task_lock = asyncio.Lock()
-        
+
+        # Token tracking for cost analysis
+        self._session_total_tokens: int = 0
+        self._session_prompt_tokens: int = 0
+        self._session_candidate_tokens: int = 0
+
+        # Cumulative cost tracking
+        self._session_total_cost: float = 0.0
+
+        # Cumulative modality tracking
+        self._session_text_input_tokens: int = 0
+        self._session_audio_input_tokens: int = 0
+        self._session_text_output_tokens: int = 0
+        self._session_audio_output_tokens: int = 0
+
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
-            adapter="LiveAIGemini", 
-            model=self._model_name, 
+            adapter="LiveAIGemini",
+            model=self._model_name,
             vertexai=self._vertexai,
             instance_id=self._instance_id  # Track which instance is logging
         )
@@ -476,6 +493,16 @@ class LiveAIGemini(ILiveAI):
         dispatch simple transcript/tool events to callbacks. It's intentionally
         conservative so tests and local dev don't require full protocol coverage.
         """
+
+        # Reset token counters for this session
+        self._session_total_tokens = 0
+        self._session_prompt_tokens = 0
+        self._session_candidate_tokens = 0
+        self._session_total_cost = 0.0
+        self._session_text_input_tokens = 0
+        self._session_audio_input_tokens = 0
+        self._session_text_output_tokens = 0
+        self._session_audio_output_tokens = 0
 
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
@@ -844,16 +871,16 @@ class LiveAIGemini(ILiveAI):
                                                                 # and surrounding server_content for debugging.
                                                                 if not parsed_arguments:
                                                                     # Dev logging: Show empty tool call for debugging
-                                                                    from backend.utils.dev_logger import log_raw_tool_event
-                                                                    log_raw_tool_event(
-                                                                        "empty_tool_arguments",
-                                                                        {
-                                                                            "tool_name": tool_name,
+                                                                    dev_logger = get_dev_logger()
+                                                                    dev_logger.log_invalid_tool_call(
+                                                                        tool_name=tool_name or "unknown",
+                                                                        arguments={
                                                                             "call_id": call_id,
                                                                             "payload_type": type(payload).__name__,
                                                                             "payload_repr": repr(payload)[:500] if payload else None,
                                                                             "part_type": type(part).__name__,
-                                                                        }
+                                                                        },
+                                                                        error="Empty tool arguments after parsing attempts",
                                                                     )
 
                                                             response_payload = None
@@ -871,10 +898,14 @@ class LiveAIGemini(ILiveAI):
                                                                     self._log.info("tool_callback_completed", tool=tool_name, response_ok=bool(response_payload))
                                                                 except Exception as e:
                                                                     self._log.exception("tool_callback_error", tool=tool_name, error=str(e))
-                                                                    
+
                                                                     # Dev logging: Log tool errors
-                                                                    from backend.utils.dev_logger import log_tool_error
-                                                                    log_tool_error(tool_name, e, parsed_arguments)
+                                                                    dev_logger = get_dev_logger()
+                                                                    dev_logger.log_error(
+                                                                        error_type="tool_callback_error",
+                                                                        error_message=str(e),
+                                                                        context={"tool_name": tool_name, "arguments": parsed_arguments}
+                                                                    )
                                                             elif tool_name == "update_form_fields" and self._on_form_update:
                                                                 await self._on_form_update(parsed_arguments)
 
@@ -975,6 +1006,106 @@ class LiveAIGemini(ILiveAI):
                                         self._log.info("tool_responses_sent_successfully", waiting_for_model_response=True)
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
+
+                                    # ========================================
+                                    # TOKEN TRACKING (extract usage metadata)
+                                    # ========================================
+                                    # The server periodically sends messages with UsageMetadata
+                                    if hasattr(event, 'usage_metadata') and event.usage_metadata:
+                                        try:
+                                            usage = event.usage_metadata
+
+                                            # Extract token counts (Python SDK uses snake_case)
+                                            # Handle None values defensively - API may return None for some fields
+                                            prompt_tokens = prompt_token_count if (prompt_token_count := getattr(usage, "prompt_token_count", None)) is not None else 0
+                                            response_tokens = response_token_count if (response_token_count := getattr(usage, "response_token_count", None)) is not None else 0
+                                            total_tokens = total_token_count if (total_token_count := getattr(usage, "total_token_count", None)) is not None else 0
+
+                                            # Debug log if we got unexpected None values
+                                            if not total_tokens and (prompt_tokens or response_tokens):
+                                                self._log.debug(
+                                                    "usage_metadata_partial",
+                                                    prompt=prompt_tokens,
+                                                    response=response_tokens,
+                                                    total=total_tokens
+                                                )
+
+                                            # Extract modality breakdowns (TEXT vs AUDIO)
+                                            # Python SDK: prompt_tokens_details, response_tokens_details
+                                            prompt_details = getattr(usage, "prompt_tokens_details", None) or []
+                                            response_details = getattr(usage, "response_tokens_details", None) or []
+
+                                            # Parse input modalities using pattern matching
+                                            text_input_tokens = 0
+                                            audio_input_tokens = 0
+                                            for detail in prompt_details:
+                                                match detail:
+                                                    case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        # Handle None count values
+                                                        safe_count = count if count is not None else 0
+                                                        if modality == types.Modality.TEXT:
+                                                            text_input_tokens += safe_count
+                                                        elif modality == types.Modality.AUDIO:
+                                                            audio_input_tokens += safe_count
+
+                                            # Parse output modalities
+                                            text_output_tokens = 0
+                                            audio_output_tokens = 0
+                                            for detail in response_details:
+                                                match detail:
+                                                    case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        # Handle None count values
+                                                        safe_count = count if count is not None else 0
+                                                        if modality == types.Modality.TEXT:
+                                                            text_output_tokens += safe_count
+                                                        elif modality == types.Modality.AUDIO:
+                                                            audio_output_tokens += safe_count
+
+                                            # Calculate costs by modality
+                                            text_input_cost = text_input_tokens * GEMINI_PRICING["text_input"]
+                                            audio_input_cost = audio_input_tokens * GEMINI_PRICING["audio_input"]
+                                            text_output_cost = text_output_tokens * GEMINI_PRICING["text_output"]
+                                            audio_output_cost = audio_output_tokens * GEMINI_PRICING["audio_output"]
+                                            total_cost = text_input_cost + audio_input_cost + text_output_cost + audio_output_cost
+
+                                            # Update cumulative counters
+                                            self._session_prompt_tokens += prompt_tokens
+                                            self._session_candidate_tokens += response_tokens
+                                            self._session_total_tokens += total_tokens
+                                            self._session_total_cost += total_cost
+                                            self._session_text_input_tokens += text_input_tokens
+                                            self._session_audio_input_tokens += audio_input_tokens
+                                            self._session_text_output_tokens += text_output_tokens
+                                            self._session_audio_output_tokens += audio_output_tokens
+
+                                            # Log detailed token breakdown
+                                            self._log.info(
+                                                "gemini_tokens",
+                                                # This event's totals
+                                                prompt_tokens=prompt_tokens,
+                                                response_tokens=response_tokens,
+                                                total_tokens=total_tokens,
+                                                # This event's modality breakdown
+                                                text_input=text_input_tokens,
+                                                audio_input=audio_input_tokens,
+                                                text_output=text_output_tokens,
+                                                audio_output=audio_output_tokens,
+                                                # This event's costs
+                                                text_input_cost=round(text_input_cost, 8),
+                                                audio_input_cost=round(audio_input_cost, 8),
+                                                text_output_cost=round(text_output_cost, 8),
+                                                audio_output_cost=round(audio_output_cost, 8),
+                                                total_cost_usd=round(total_cost, 8),
+                                                # Session cumulative totals
+                                                session_total_tokens=self._session_total_tokens,
+                                                session_total_cost_usd=round(self._session_total_cost, 8),
+                                                session_text_input=self._session_text_input_tokens,
+                                                session_audio_input=self._session_audio_input_tokens,
+                                                session_text_output=self._session_text_output_tokens,
+                                                session_audio_output=self._session_audio_output_tokens,
+                                            )
+                                        except Exception as e:
+                                            self._log.warning("token_extraction_error", error=str(e), exc_info=True)
 
                                 except Exception:
                                     self._log.exception("event_handling_error")
