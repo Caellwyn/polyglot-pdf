@@ -508,6 +508,95 @@ except Exception as e:
 - ✅ Empty field vs. non-existent field
 - ✅ Multiple similar field names
 
+### Race Condition Fix: Message Queuing (October 23, 2025)
+
+**Problem Solved**: Messages sent to Gemini immediately after session creation were being dropped because the session wasn't ready yet. This affected section switching and language changes on initial connection.
+
+**Root Cause**:
+- `send_client_content()` called immediately after `start_session()`
+- Gemini's `setupComplete` arrives ~2 seconds later
+- Messages sent before `setupComplete` were dropped with warning: `⚠️ SEND_CLIENT_CONTENT_NO_SESSION`
+
+**Solution**:
+
+1. **Session Readiness Tracking**:
+   - Added `_session_ready` flag (starts `False`, set `True` when session established)
+   - Added `_pending_client_content` queue for messages sent before ready
+
+2. **Message Queuing**:
+   - `send_client_content()` checks if session is ready
+   - Queues messages if not ready (logs: `📋 CLIENT_CONTENT_QUEUED`)
+   - Sends immediately if ready
+
+3. **Automatic Flushing**:
+   - After `setupComplete`, set `_session_ready = True`
+   - Send all queued messages in order (logs: `📤 SENDING_QUEUED_CLIENT_CONTENT`)
+   - Clear queue after sending (logs: `✅ QUEUED_CLIENT_CONTENT_SENT`)
+
+4. **Cleanup**:
+   - Reset `_session_ready = False` in `finalize()`
+   - Clear pending queue
+
+**Implementation**:
+- `backend/adapters/live_ai_gemini.py`: Added flag, queue, and flushing logic
+
+**Affected Scenarios**:
+- ✅ Section switching: Initiating message now reliably sent
+- ✅ Language changes on initial load: No longer lost if user clicks quickly
+- ✅ Any `send_client_content()` calls during session startup
+
+### Next Field Hint Enhancement (October 23, 2025)
+
+**Problem Solved**: Gemini didn't always know which field to ask about next, leading to generic responses or silence after field updates.
+
+**Issues Fixed**:
+
+1. **Initial Connection**:
+   - Handshake didn't include `initial_field_hint`
+   - Gemini had to guess where to start
+
+2. **Manual Field Updates**:
+   - No `next_field_hint` sent with manual update notification
+   - Gemini acknowledged update but didn't guide user to next field
+
+3. **Language Change Bug**:
+   - `computeNextField()` called with wrong parameters
+   - Returned `null`, fallback was "all fields are complete"
+   - Gemini thought there was nothing to do
+
+**Solution**:
+
+1. **Handshake Enhancement** (`frontend/src/webFormState.ts`):
+   - `getHandshakePayload()` now computes `initial_field_hint` on page load
+   - Uses `computeNextField()` and `formatNextFieldHint()`
+   - Gemini knows exactly where to start from first connection
+
+2. **Manual Field Update Enhancement** (`frontend/src/webFormConnection.ts`):
+   - `sendManualFieldUpdate()` now computes `next_field_hint` after each manual edit
+   - Backend appends hint to notification message
+   - Gemini guides user to next field after manual updates
+
+3. **Language Change Fix**:
+   - Changed `computeNextField(state.schema, state.current_values)` → `computeNextField(state)`
+   - Fixed in both `VoiceOverlay.tsx` and `VoiceOverlayMobile.tsx`
+   - Now correctly finds next unfilled field
+
+**Implementation**:
+- `frontend/src/webFormState.ts`: Added imports and initial hint computation
+- `frontend/src/webFormConnection.ts`: Added next hint to manual updates
+- `backend/routes/websocket_routes.py`: Extract and pass next_field_hint
+- `backend/services/form_filling_service.py`: Accept and append next_field_hint
+- `frontend/src/demo/VoiceOverlay.tsx`: Fixed computeNextField parameters
+- `frontend/src/demo/VoiceOverlayMobile.tsx`: Fixed computeNextField parameters
+
+**Result**:
+All Gemini communications now include next field guidance:
+- ✅ Initial connection (handshake)
+- ✅ Section switching (already working)
+- ✅ Language changes (already working)
+- ✅ Tool responses (already working)
+- ✅ Manual field updates (new)
+
 ---
 
 ## Common Gotchas
