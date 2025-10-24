@@ -1,6 +1,6 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Last Updated**: October 23, 2025  
+**Last Updated**: October 24, 2025
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 ---
@@ -427,6 +427,179 @@ npx vite --port 5173
 - [ ] Gemini model name verified
 - [ ] Monitoring alerts set up
 - [ ] Budget alerts configured
+
+---
+
+## Logging Architecture
+
+### Overview
+
+**Design Principle**: HIPAA-compliant structured logging with zero PHI in production, detailed debugging in development.
+
+**Dual-Mode System**:
+- **Production**: Structured JSON logs → stdout → Cloud Run → BigQuery
+- **Development**: Daily `.jsonl` files with full Gemini message logs
+
+### Backend Logging (`backend/utils/`)
+
+**Three-Layer Architecture**:
+
+1. **`structured_logger.py`** - Production logging
+   ```python
+   from backend.utils.structured_logger import get_logger
+
+   logger = get_logger(client_id="demo")
+   logger.log_ws_connect(form_id, form_version, form_session_id, ws_session_id)
+   logger.log_gemini_api_response(form_id, form_version, form_session_id, ws_session_id, metadata)
+   ```
+   - Outputs to stdout in Cloud Run format
+   - NO PHI - only metadata (field IDs, counts, timestamps)
+   - Ready for BigQuery ingestion
+
+2. **`dev_file_logger.py`** - Development debugging
+   ```python
+   from backend.utils.dev_file_logger import get_dev_logger
+
+   dev_logger = get_dev_logger()
+   dev_logger.log_tool_call(tool_name, arguments, session_id)
+   dev_logger.log_tool_response(tool_name, response, session_id)
+   ```
+   - Only active when `VFF_DEV_LOGGING=true`
+   - Daily rotation: `backend/logs/gemini_YYYY-MM-DD.jsonl`
+   - Includes full Gemini messages (tool calls, responses)
+   - Errors always output to terminal
+
+3. **`log_schemas.py`** - TypedDict event schemas
+   ```python
+   class TokenUsageMetadata(TypedDict, total=False):
+       prompt_token_count: int
+       candidates_token_count: int
+       text_input_tokens: int
+       audio_input_tokens: int
+       ...
+   ```
+
+### Token Tracking (October 2025)
+
+**Real-time cost visibility** with TEXT vs AUDIO modality breakdown:
+
+**Pricing (per token)**:
+```python
+GEMINI_PRICING = {
+    "text_input": $0.50 / 1M   = $0.0000005
+    "audio_input": $3.00 / 1M  = $0.000003  # 6x text!
+    "text_output": $2.00 / 1M  = $0.000002
+    "audio_output": $12.00 / 1M = $0.000012 # 6x text!
+}
+```
+
+**Log Output**:
+```json
+{
+  "event": "gemini_tokens",
+  "total_tokens": 1730,
+  "prompt_tokens": 1250,
+  "response_tokens": 480,
+
+  "text_input": 1200,
+  "audio_input": 50,
+  "text_output": 20,
+  "audio_output": 460,
+
+  "total_cost_usd": 0.00631000,
+  "audio_output_cost": 0.00552000,
+  "text_input_cost": 0.00060000,
+
+  "session_total_tokens": 5420,
+  "session_total_cost_usd": 0.01850000
+}
+```
+
+**Key Insight**: Audio output typically dominates costs (6-12x more expensive than text).
+
+### Frontend Logging (Planned)
+
+**Client-Side Detailed Log**:
+- sessionStorage with PHI allowed (stays local)
+- Field change tracking: `{timestamp, fieldId, oldValue, newValue, source: "ai"|"manual"}`
+- Sanitized events batched and sent to backend (NO values)
+- Auto-clears on tab close
+
+### Log File Structure
+
+```
+backend/logs/
+├── gemini_2025-10-24.jsonl    # Today's dev logs
+├── gemini_2025-10-23.jsonl    # Yesterday
+└── gemini_2025-10-22.jsonl    # Older (manual cleanup)
+```
+
+**Format**: JSON Lines (one event per line)
+```jsonl
+{"timestamp": "2025-10-24T12:34:56Z", "direction": "send", "message_type": "tool_response", ...}
+{"timestamp": "2025-10-24T12:34:57Z", "direction": "receive", "message_type": "tool_call", ...}
+```
+
+**Analysis**:
+```python
+import pandas as pd
+df = pd.read_json('backend/logs/gemini_2025-10-24.jsonl', lines=True)
+```
+
+### Security Guarantees
+
+**Backend (Production)**:
+- ❌ NEVER logs field values
+- ✅ Logs: field IDs, session IDs, timestamps, token counts, costs
+- ✅ Structured JSON ready for BigQuery filtering
+
+**Backend (Development)**:
+- ⚠️  May log tool arguments (contains field values)
+- ✅ Only when `VFF_DEV_LOGGING=true`
+- ✅ Files stored locally, not in version control
+
+**Frontend**:
+- ✅ PHI allowed (stays in browser sessionStorage)
+- ✅ Auto-clears on tab close
+- ✅ Only metadata sent to backend
+
+### Environment Variables
+
+```bash
+# Development - detailed Gemini message logging
+VFF_DEV_LOGGING=true
+
+# Production - structured JSON only
+VFF_DEV_LOGGING=false  # or unset
+```
+
+### Usage Examples
+
+**Tracking session costs**:
+```python
+# In live_ai_gemini.py - automatic per API response
+# Logs show cumulative burn rate
+session_total_cost_usd=0.01850000  # Running total
+```
+
+**Debugging tool calls** (dev mode only):
+```bash
+# View today's tool calls
+grep "tool_call" backend/logs/gemini_$(date +%Y-%m-%d).jsonl | jq .
+```
+
+**Production monitoring**:
+```sql
+-- BigQuery query (future)
+SELECT
+  form_id,
+  SUM(total_cost_usd) as total_cost,
+  AVG(audio_output_tokens) as avg_audio_output
+FROM logs
+WHERE timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+GROUP BY form_id
+ORDER BY total_cost DESC
+```
 
 ---
 

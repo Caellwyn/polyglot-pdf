@@ -1,6 +1,6 @@
 # Voice Form Filler - Project Context & Guidelines
 
-**Last Updated**: October 22, 2025  
+**Last Updated**: October 24, 2025
 **Purpose**: AI onboarding guide for understanding the project and development practices
 
 ---
@@ -77,7 +77,9 @@ Voice-driven medical form filling system using Gemini Live API. A translation an
 - ✅ Maintain stateless backend (client = source of truth)
 - ✅ Prioritize accuracy over speed
 - ✅ Use `textContent` or `escapeHtml()` for display
-- ✅ On Backend: Log metadata only: `{fieldId, fieldType, filled: boolean, timestamp}`
+- ✅ **Backend Logging**: Use structured logger (NO field values - metadata only)
+- ✅ **Frontend Logging**: Client-side detailed logs in sessionStorage (PHI allowed - stays local)
+- ✅ **Dev Mode**: Set `VFF_DEV_LOGGING=true` for detailed Gemini message logs in `backend/logs/`
 
 ---
 
@@ -223,6 +225,18 @@ cd frontend
 ---
 
 ## Recent Critical Fixes
+
+### October 24, 2025 - Production Logging Infrastructure
+- **Problem**: Debugging production issues was difficult, no visibility into token costs
+- **Solution**: Implemented comprehensive structured logging with HIPAA compliance
+- **Components**:
+  - `structured_logger.py`: Production JSON logs → Cloud Run → BigQuery
+  - `dev_file_logger.py`: Daily `.jsonl` files for development debugging
+  - Token tracking with TEXT/AUDIO modality breakdown and cost calculation
+  - Session cumulative metrics (tokens, costs by modality)
+- **Impact**: Real-time visibility into API costs, production-ready error tracking
+- **Pricing**: Audio tokens cost 6x more than text (input/output)
+- **Security**: Zero PHI in backend logs, frontend logs stay client-side only
 
 ### October 22, 2025 - Idle Timeout
 - **Problem**: WebSocket timeouts causing reconnect loops
