@@ -1016,14 +1016,24 @@ class LiveAIGemini(ILiveAI):
                                             usage = event.usage_metadata
 
                                             # Extract token counts (Python SDK uses snake_case)
-                                            prompt_tokens = getattr(usage, "prompt_token_count", 0)
-                                            response_tokens = getattr(usage, "response_token_count", 0)
-                                            total_tokens = getattr(usage, "total_token_count", 0)
+                                            # Handle None values defensively - API may return None for some fields
+                                            prompt_tokens = prompt_token_count if (prompt_token_count := getattr(usage, "prompt_token_count", None)) is not None else 0
+                                            response_tokens = response_token_count if (response_token_count := getattr(usage, "response_token_count", None)) is not None else 0
+                                            total_tokens = total_token_count if (total_token_count := getattr(usage, "total_token_count", None)) is not None else 0
+
+                                            # Debug log if we got unexpected None values
+                                            if not total_tokens and (prompt_tokens or response_tokens):
+                                                self._log.debug(
+                                                    "usage_metadata_partial",
+                                                    prompt=prompt_tokens,
+                                                    response=response_tokens,
+                                                    total=total_tokens
+                                                )
 
                                             # Extract modality breakdowns (TEXT vs AUDIO)
                                             # Python SDK: prompt_tokens_details, response_tokens_details
-                                            prompt_details = getattr(usage, "prompt_tokens_details", []) or []
-                                            response_details = getattr(usage, "response_tokens_details", []) or []
+                                            prompt_details = getattr(usage, "prompt_tokens_details", None) or []
+                                            response_details = getattr(usage, "response_tokens_details", None) or []
 
                                             # Parse input modalities using pattern matching
                                             text_input_tokens = 0
@@ -1031,10 +1041,12 @@ class LiveAIGemini(ILiveAI):
                                             for detail in prompt_details:
                                                 match detail:
                                                     case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        # Handle None count values
+                                                        safe_count = count if count is not None else 0
                                                         if modality == types.Modality.TEXT:
-                                                            text_input_tokens += count
+                                                            text_input_tokens += safe_count
                                                         elif modality == types.Modality.AUDIO:
-                                                            audio_input_tokens += count
+                                                            audio_input_tokens += safe_count
 
                                             # Parse output modalities
                                             text_output_tokens = 0
@@ -1042,10 +1054,12 @@ class LiveAIGemini(ILiveAI):
                                             for detail in response_details:
                                                 match detail:
                                                     case types.ModalityTokenCount(modality=modality, token_count=count):
+                                                        # Handle None count values
+                                                        safe_count = count if count is not None else 0
                                                         if modality == types.Modality.TEXT:
-                                                            text_output_tokens += count
+                                                            text_output_tokens += safe_count
                                                         elif modality == types.Modality.AUDIO:
-                                                            audio_output_tokens += count
+                                                            audio_output_tokens += safe_count
 
                                             # Calculate costs by modality
                                             text_input_cost = text_input_tokens * GEMINI_PRICING["text_input"]
