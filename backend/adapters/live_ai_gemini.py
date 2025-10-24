@@ -1042,7 +1042,7 @@ class LiveAIGemini(ILiveAI):
                                                 match detail:
                                                     case types.ModalityTokenCount(modality=modality, token_count=count):
                                                         # Handle None count values
-                                                        safe_count = count or 0
+                                                        safe_count = count if count is not None else 0
                                                         if modality == types.Modality.TEXT:
                                                             text_input_tokens += safe_count
                                                         elif modality == types.Modality.AUDIO:
