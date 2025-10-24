@@ -19,6 +19,8 @@ import structlog
 
 from backend.utils.json_recovery import extract_json_from_part
 from backend.utils.dev_file_logger import get_dev_logger
+from backend.utils.structured_logger import get_logger as get_structured_logger
+from backend.config import GEMINI_PRICING
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
@@ -141,11 +143,16 @@ class LiveAIGemini(ILiveAI):
 
         # Lock to avoid concurrent start/stop races
         self._task_lock = asyncio.Lock()
-        
+
+        # Token tracking for cost analysis
+        self._session_total_tokens: int = 0
+        self._session_prompt_tokens: int = 0
+        self._session_candidate_tokens: int = 0
+
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
-            adapter="LiveAIGemini", 
-            model=self._model_name, 
+            adapter="LiveAIGemini",
+            model=self._model_name,
             vertexai=self._vertexai,
             instance_id=self._instance_id  # Track which instance is logging
         )
@@ -477,6 +484,11 @@ class LiveAIGemini(ILiveAI):
         dispatch simple transcript/tool events to callbacks. It's intentionally
         conservative so tests and local dev don't require full protocol coverage.
         """
+
+        # Reset token counters for this session
+        self._session_total_tokens = 0
+        self._session_prompt_tokens = 0
+        self._session_candidate_tokens = 0
 
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
@@ -980,6 +992,40 @@ class LiveAIGemini(ILiveAI):
                                         self._log.info("tool_responses_sent_successfully", waiting_for_model_response=True)
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
+
+                                    # ========================================
+                                    # TOKEN TRACKING (extract usage metadata)
+                                    # ========================================
+                                    usage_metadata = getattr(event, "usage_metadata", None)
+                                    if usage_metadata:
+                                        try:
+                                            prompt_tokens = getattr(usage_metadata, "prompt_token_count", 0)
+                                            candidate_tokens = getattr(usage_metadata, "candidates_token_count", 0)
+                                            total_tokens = getattr(usage_metadata, "total_token_count", 0)
+
+                                            # Update cumulative counters
+                                            self._session_prompt_tokens += prompt_tokens
+                                            self._session_candidate_tokens += candidate_tokens
+                                            self._session_total_tokens += total_tokens
+
+                                            # Calculate cost
+                                            prompt_cost = prompt_tokens * GEMINI_PRICING["prompt_tokens"]
+                                            candidate_cost = candidate_tokens * GEMINI_PRICING["candidate_tokens"]
+                                            total_cost = prompt_cost + candidate_cost
+
+                                            # Log with structured logger (production logs)
+                                            # Note: We don't have form/session IDs here in the adapter
+                                            # The service layer will need to log these with proper context
+                                            self._log.info(
+                                                "gemini_tokens",
+                                                prompt_tokens=prompt_tokens,
+                                                candidate_tokens=candidate_tokens,
+                                                total_tokens=total_tokens,
+                                                session_total=self._session_total_tokens,
+                                                cost_usd=round(total_cost, 6)
+                                            )
+                                        except Exception as e:
+                                            self._log.warning("token_extraction_error", error=str(e))
 
                                 except Exception:
                                     self._log.exception("event_handling_error")
