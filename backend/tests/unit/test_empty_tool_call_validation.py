@@ -41,7 +41,7 @@ async def test_empty_updates_dict_rejected():
         # We'll test by directly calling the service with empty updates
         
         # Simulate the on_tool_call handler receiving empty updates
-        with patch('backend.services.form_filling_service._append_tool_call_log'):
+        with patch('backend.utils.tool_call_logger.append_tool_call_log'):
             with patch('backend.utils.dev_logger.log_tool_call'):
                 # Call with empty updates object
                 result = service.handle_update_fields_tool_call("test_123", {})

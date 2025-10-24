@@ -2,9 +2,12 @@ from fastapi import WebSocket
 from typing import Any, Dict, Optional, List
 import json
 from copy import deepcopy
+import structlog
+import os
+from datetime import datetime
 
 from backend.config import Settings, get_settings
-from ..ports.live_ai_port import ILiveAI
+from backend.ports.live_ai_port import ILiveAI
 from .field_utils import (
     build_fields_from_schema,
     get_available_spoken_names,
@@ -13,31 +16,8 @@ from .field_utils import (
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
-import structlog
-import os
-from datetime import datetime
-
-
-def _ensure_logs_dir():
-    try:
-        logs_dir = os.path.join(os.getcwd(), ".logs")
-        os.makedirs(logs_dir, exist_ok=True)
-        return logs_dir
-    except Exception:
-        return None
-
-
-def _append_tool_call_log(entry: dict):
-    try:
-        logs_dir = _ensure_logs_dir()
-        if not logs_dir:
-            return
-        path = os.path.join(logs_dir, "gemini_tool_calls.log")
-        ts = datetime.utcnow().isoformat() + "Z"
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(ts + " " + json.dumps(entry, default=str) + "\n")
-    except Exception:
-        pass
+from .callback_handler import CallbackHandler
+from backend.utils.tool_call_logger import append_tool_call_log
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
@@ -70,6 +50,8 @@ class FormFillingService:
         self._audio_handler: Optional[AudioHandler] = None
         # Request coordinator for async request/response pattern
         self._request_coordinator: Optional[RequestCoordinator] = None
+        # Callback handler for Gemini Live AI events
+        self._callback_handler: Optional[CallbackHandler] = None
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -123,397 +105,40 @@ class FormFillingService:
         if accept_connection:
             await self._websocket.accept()
 
-        def _ordered_fields() -> list[Any]:
-            """Build field list from schema on-demand (no caching)."""
-            from backend.models.form_models import FormField, Rect
-            fields = []
-            
-            # Use instance variable for schema
-            current_schema = self._schema or {}
-            for field_data in current_schema.get("fields", []):
-                # Build FormField-like object from schema
-                # Web forms don't have physical rectangles, use dummy rect
-                dummy_rect = Rect(x0=0, y0=0, x1=100, y1=20)
-                
-                field = FormField(
-                    id=field_data.get("id"),
-                    name=field_data.get("name"),
-                    spoken_name=field_data.get("name"),  # Use same for web
-                    spoken_aliases=[],
-                    page_index=field_data.get("page_index", 0),
-                    rect=dummy_rect,  # Web forms need dummy rect for validation
-                    value=field_data.get("value"),
-                    field_type=field_data.get("type"),
-                    options=field_data.get("options", []),
-                    normalized_options=field_data.get("options", []),
-                    group_id=None,
-                    section_id=None,
-                    meta=field_data.get("meta", {}),
-                )
-                
-                # Note: We don't apply current_values here - backend is stateless
-                # Client sends values in form_state messages which are proxied to Gemini
-                # Field values remain at schema defaults (usually None/empty)
-                
-                fields.append(field)
-            
-            return fields
 
-        def build_form_metadata() -> list[Dict[str, Any]]:
-            """Build field metadata with optional current values from client.
-            
-            Backend doesn't store values - they're passed through from client
-            when provided in current_values parameter.
-            """
-            metadata: list[Dict[str, Any]] = []
-            filled_count = 0
-            
-            for idx, field in enumerate(_ordered_fields(), start=1):
-                # Prefer the spoken_name produced by the LLM normalizer for
-                # AI-facing labels. Fall back to the field name or id.
-                ai_label = getattr(field, "spoken_name", None) or field.name or field.id
-                field_id = field.id
-                
-                # Check if client provided a current value for this field
-                has_value = False
-                value_status = "(empty)"
-                if current_values and field_id in current_values:
-                    value = current_values.get(field_id)
-                    if value:  # Non-empty value
-                        has_value = True
-                        value_status = f"(FILLED: '{value}')"
-                        filled_count += 1
-                
-                metadata.append(
-                    {
-                        "order": idx,
-                        "display_name": ai_label,
-                        "field_id": field_id,
-                        "type": field.field_type or field.type,
-                        "page_index": field.page_index,
-                        "allowed_values": list(field.options or []),
-                        "status": value_status,  # Show if already filled
-                    }
-                )
-            
-            # Log pre-filled status for debugging
-            if filled_count > 0:
-                _log.info("prefilled_fields_detected", 
-                         session_id=session_id,
-                         filled=filled_count, 
-                         total=len(metadata))
-            
-            return metadata
-
-        # system_instruction is now passed as parameter
-        # and included in the initial Gemini connection config (not sent as updates)
-        # DO NOT shadow the parameter here!
-
-        async def send_form_update(data: dict | None, applied_fields: list | None = None):
-            # Send the form state to the connected websocket client and
-            # include the list of fields that were actually applied when
-            # available. This helps the frontend decide which fields to mark
-            # confirmed instead of naïvely treating every field in the
-            # payload as confirmed.
-            # 
-            # Also request next_field_hint in the same message to reduce round trips
-            if self._websocket and data is not None:
-                payload = {"form_state": data}
-                if applied_fields is not None:
-                    payload["applied_fields"] = applied_fields
-                
-                await self._websocket.send_json({"type": "form_updated", "data": payload})
-                
-                # Request next field hint via coordinator
-                if self._request_coordinator:
-                    hint = await self._request_coordinator.request_next_field_hint()
-                    return hint
-            return None
-
-        async def on_form_update(data: dict):
-            # Legacy callback path: just forward updates to the websocket.
-            await send_form_update(data)
-
-        async def on_transcript(text: str):
-            # Send transcript to client if requested
-            if self._websocket and send_transcript:
-                await self._websocket.send_json({"type": "transcript", "data": text})
-            
-            # ALWAYS signal turn complete for activity watchdog (regardless of send_transcript setting)
-            # Transcript arrives after all audio chunks, indicating Gemini finished speaking
-            # This is critical for Level 3 farewell disconnect timing
-            if self._websocket:
-                try:
-                    await self._websocket.send_json({"type": "turn_complete"})
-                except Exception as e:
-                    _log.warning("failed_to_send_turn_complete", error=str(e), session_id=session_id)
-
-        async def on_audio(data: bytes):
-            """Forward raw audio bytes from Gemini to the connected websocket client.
-
-            The client is expected to handle raw PCM audio playback. We send the
-            bytes as a binary WebSocket frame to avoid logging or JSON encoding.
-            """
-            if self._websocket:
-                try:
-                    # Track audio chunks being sent to client
-                    if not hasattr(self, '_ws_audio_chunk_count'):
-                        self._ws_audio_chunk_count = 0
-                    self._ws_audio_chunk_count += 1
-                    
-                    if self._ws_audio_chunk_count == 1:
-                        _log.info("📡 [WebSocket Audio] Sending first audio chunk to client", 
-                                 session_id=self._session_id, bytes=len(data))
-                    
-                    await self._websocket.send_bytes(data)
-                except Exception as e:
-                    # Swallow errors to avoid crashing the session loop; the
-                    # websocket may have closed concurrently.
-                    _log.warning("websocket_audio_send_failed", error=str(e), session_id=self._session_id)
-
-        async def on_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            """Handle tool calls originating from the live AI session."""
-            
-            # Dev logging: Clear, readable output for debugging
-            from backend.utils.dev_logger import log_tool_call
-            log_tool_call(tool_name, arguments, session_id=self._session_id)
-
-            _log.info("=" * 80)
-            _log.info("GEMINI TOOL CALL", tool=tool_name, arg_keys=list(arguments.keys()) if isinstance(arguments, dict) else "non-dict")
-            _log.info("=" * 80)
-            
-            if self._session_id is None:
-                _log.error("tool_call_no_session", tool_name=tool_name)
-                return None
-
-            normalized = (tool_name or "").lower()
-
-            if normalized in {"update_form_fields"}:
-                updates_payload: Dict[str, Any] = {}
-                raw_updates: Any = arguments
-                if isinstance(arguments, dict) and "updates" in arguments:
-                    raw_updates = arguments["updates"]
-
-                if isinstance(raw_updates, str):
-                    try:
-                        updates_payload = json.loads(raw_updates)
-                    except json.JSONDecodeError:
-                        updates_payload = {}
-                elif isinstance(raw_updates, dict):
-                    updates_payload = raw_updates
-                elif isinstance(raw_updates, list):
-                    updates_payload = {}
-                    for item in raw_updates:
-                        if isinstance(item, dict):
-                            name = item.get("display_name") or item.get("name") or item.get("id")
-                            value = item.get("value")
-                            if name is not None:
-                                updates_payload[str(name)] = value
-
-                # Some models wrap values in nested objects (e.g., {"Full Name": {"value": "Jane"}})
-                normalized_updates: Dict[str, Any] = {}
-                for key, value in updates_payload.items():
-                    if isinstance(value, dict) and "value" in value:
-                        normalized_updates[key] = value.get("value")
-                    else:
-                        normalized_updates[key] = value
-                
-                # Validate: Reject empty tool calls
-                if not normalized_updates:
-                    _log.warning("empty_tool_call_rejected", session_id=self._session_id)
-                    error_response = {
-                        "success": False,
-                        "applied_fields": [],
-                        "validation_errors": [],
-                        "unknown_fields": [],
-                        "message": "ERROR: update_form_fields called with empty updates. You must provide at least one field to update. If the user hasn't provided information yet, ask them for the specific field value instead of calling this tool with no data."
-                    }
-                    _log.info("-" * 80)
-                    _log.info("GEMINI TOOL RESPONSE (EMPTY TOOL CALL)", success=False, returning_error=True)
-                    _log.info("-" * 80)
-                    return error_response
-                
-                result = self.handle_update_fields_tool_call(self._session_id, normalized_updates)
-                
-                if result is not None:
-                    validation_errors = result.get("validation_errors", [])
-                    unknown_fields = result.get("unknown_fields", [])
-                    applied_fields = result.get("applied_fields", [])
-                    
-                    # Only request next field hint if ALL fields were valid
-                    next_field_hint = None
-                    if not validation_errors and not unknown_fields and applied_fields:
-                        # All fields valid - request next hint
-                        next_field_hint = await send_form_update(result.get("form_state"), applied_fields)
-                        _log.info("field_update_success", applied=len(applied_fields), next_hint_length=len(next_field_hint) if next_field_hint else 0)
-                    else:
-                        # Validation errors present - send form update without requesting hint
-                        await send_form_update(result.get("form_state"), applied_fields)
-                        _log.warning("field_update_errors", 
-                                   validation_errors=len(validation_errors),
-                                   unknown_fields=len(unknown_fields),
-                                   applied=len(applied_fields))
-                    
-                    try:
-                        # Redact field values from log - only log field names/IDs and counts
-                        _append_tool_call_log({
-                            "event": "tool_call_update_applied",
-                            "session_id": self._session_id,
-                            "applied_count": len(result.get("applied_fields", [])),
-                            "applied_field_ids": result.get("applied_fields", []),
-                            "unknown_count": len(result.get("unknown_fields", [])),
-                            "unknown_field_ids": result.get("unknown_fields", []),
-                            "validation_error_count": len(result.get("validation_errors", [])),
-                            "validation_error_field_ids": [e.get("field_id") or e.get("field_name") for e in result.get("validation_errors", [])],
-                            # DO NOT LOG: arguments (contains field values), validation_errors (contains values)
-                        })
-                    except Exception:
-                        pass
-                    
-                    # Build tool response with validation errors if present
-                    validation_errors = result.get("validation_errors", [])
-                    unknown_fields = result.get("unknown_fields", [])
-                    applied_fields = result.get("applied_fields", [])
-                    
-                    # If there are validation or unknown field errors, include them in response
-                    if validation_errors or unknown_fields:
-                        error_lines = []
-                        
-                        # Format validation errors concisely with constraint info
-                        for err in validation_errors:
-                            field_name = err.get("field_name", err.get("field_id"))
-                            value = err.get("value")
-                            constraint = err.get("constraint", "")
-                            constraint_value = err.get("constraint_value")
-                            valid_options = err.get("valid_options")
-                            
-                            # Build concise error: field: value -> constraint: constraint_value
-                            parts = [f"{field_name}: '{value}'"]
-                            
-                            if constraint_value is not None:
-                                parts.append(f"{constraint}={constraint_value}")
-                            elif valid_options:
-                                # Show first 3 options as examples
-                                opts_sample = ", ".join(valid_options[:3])
-                                if len(valid_options) > 3:
-                                    opts_sample += f"... ({len(valid_options)} total)"
-                                parts.append(f"valid={opts_sample}")
-                            
-                            error_lines.append(" | ".join(parts))
-                        
-                        # Format unknown fields
-                        for field_id in unknown_fields:
-                            error_lines.append(f"{field_id}: unknown field")
-                        
-                        # Concise response (NO next_field_hint when there are errors)
-                        message_parts = []
-                        if error_lines:
-                            message_parts.append("ERRORS: " + "; ".join(error_lines))
-                        if applied_fields:
-                            message_parts.append(f"OK: {', '.join(applied_fields)}")
-                        
-                        tool_response = {
-                            "success": False,  # Always false when there are errors
-                            "applied_fields": applied_fields,
-                            "validation_errors": validation_errors,
-                            "unknown_fields": unknown_fields,
-                            "message": "\n".join(message_parts)
-                        }
-                    else:
-                        # All fields valid - include next_field_hint
-                        tool_response = {
-                            "success": True,
-                            "applied_fields": applied_fields,
-                            "message": next_field_hint or "Fields updated successfully.",
-                        }
-                    
-                    # REDACT: Don't log tool_response content (contains field values/errors with values)
-                    _log.info("-" * 80)
-                    _log.info("GEMINI TOOL RESPONSE", success=tool_response.get("success"), 
-                             applied_count=len(tool_response.get("applied_fields", [])),
-                             has_errors=bool(tool_response.get("validation_errors") or tool_response.get("unknown_fields")))
-                    _log.info("-" * 80)
-                    
-                    # Dev logging: Show full response for debugging
-                    from backend.utils.dev_logger import log_tool_response
-                    log_tool_response(tool_name, tool_response, session_id=self._session_id)
-                    
-                    return tool_response
-                else:
-                    # No updates applied: still forward an empty response and an
-                    # empty applied_fields list so the client doesn't incorrectly
-                    # mark fields confirmed.
-                    await send_form_update({}, [])
-                    return {
-                        "form_state": {},
-                        "applied_fields": [],
-                        "unknown_fields": list(normalized_updates.keys()),
-                    }
-
-            if normalized in {"get_form_status", "get_form_state"}:
-                # Request current form state from frontend (stateless architecture)
-                field_ids = arguments.get("field_ids", []) if isinstance(arguments, dict) else []
-                form_values = await self.request_form_state_from_client(field_ids)
-                response = {
-                    "field_values": form_values,
-                    "message": f"Retrieved {len(form_values)} field value(s) from client.",
-                }
-                # REDACT: Don't log response (contains field values)
-                _log.info("-" * 80)
-                _log.info("GEMINI TOOL RESPONSE", tool="get_form_status", field_count=len(form_values))
-                _log.info("-" * 80)
-                return response
-
-            if normalized == "switch_section":
-                # Navigate to different section by number or name
-                section_identifier = arguments.get("section_identifier", "") if isinstance(arguments, dict) else str(arguments)
-                response = await self.handle_switch_section(section_identifier)
-                # REDACT: Response may contain section metadata but should be safe
-                _log.info("-" * 80)
-                _log.info("GEMINI TOOL RESPONSE", tool="switch_section", 
-                         success=response.get("success"), section=section_identifier)
-                _log.info("-" * 80)
-                return response
-
-            if normalized == "get_field_value":
-                # Look up field value by spoken name from any section
-                spoken_name = arguments.get("spoken_name", "") if isinstance(arguments, dict) else str(arguments)
-                response = await self.handle_get_field_value(spoken_name)
-                # REDACT: Don't log response (contains field value)
-                _log.info("-" * 80)
-                _log.info("GEMINI TOOL RESPONSE", tool="get_field_value", 
-                         spoken_name=spoken_name, found=response.get("found"))
-                _log.info("-" * 80)
-                return response
-
-            if normalized == "complete_section":
-                # Mark current section complete and advance to next
-                response = await self.handle_complete_section()
-                # REDACT: Response should be safe (just status)
-                _log.info("-" * 80)
-                _log.info("GEMINI TOOL RESPONSE", tool="complete_section", success=response.get("success"))
-                _log.info("-" * 80)
-                return response
-
-            # Unknown tool: acknowledge with empty payload so the model can continue.
-            return {}
-
+        if accept_connection:
+            await self._websocket.accept()
+        
+        # Initialize callback handler
+        self._callback_handler = CallbackHandler(
+            websocket=websocket,
+            session_id=session_id,
+            request_coordinator=self._request_coordinator,
+            send_transcript=send_transcript,
+        )
+        
+        # Inject tool handler methods into callback handler
+        self._callback_handler.set_tool_handlers(
+            handle_update_fields=self.handle_update_fields_tool_call,
+            handle_switch_section=self.handle_switch_section,
+            handle_get_field_value=self.handle_get_field_value,
+            handle_complete_section=self.handle_complete_section,
+            request_form_state_from_client=self.request_form_state_from_client,
+        )
+        
         # Use web form tool declarations (stateless)
         tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
 
         if self._live_ai is not None:
-            # Register callbacks including audio so incoming Gemini audio is
-            # forwarded to the websocket client without being logged.
-            # `on_audio` is optional and will be ignored by adapters that do not
-            # implement it.
+            # Register callbacks with Gemini Live AI
             # System instruction is passed from caller and included in the initial
             # Gemini connection config.
             try:
                 self._live_ai.set_callbacks(
-                    on_form_update=on_form_update,
-                    on_transcript=on_transcript,
-                    on_audio=on_audio,
-                    on_tool_call=on_tool_call,
+                    on_form_update=self._callback_handler.on_form_update,
+                    on_transcript=self._callback_handler.on_transcript,
+                    on_audio=self._callback_handler.on_audio,
+                    on_tool_call=self._callback_handler.on_tool_call,
                     system_instruction=system_instruction,
                     tool_declarations=tool_declarations,
                     enable_transcripts=bool(send_transcript),
@@ -521,12 +146,11 @@ class FormFillingService:
             except TypeError:
                 # Adapter does not accept on_audio (older implementations); fall
                 # back to previous behavior.
-                # Call the older signature without on_audio/enable_transcripts
                 try:
                     self._live_ai.set_callbacks(
-                        on_form_update=on_form_update,
-                        on_transcript=on_transcript,
-                        on_tool_call=on_tool_call,
+                        on_form_update=self._callback_handler.on_form_update,
+                        on_transcript=self._callback_handler.on_transcript,
+                        on_tool_call=self._callback_handler.on_tool_call,
                         system_instruction=system_instruction,
                         tool_declarations=tool_declarations,
                     )
