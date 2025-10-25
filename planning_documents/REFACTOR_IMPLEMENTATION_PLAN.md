@@ -498,6 +498,34 @@ Comprehensive testing across languages, forms, and use cases.
 
 ## Key Architecture Decisions
 
+### Stateless Backend with Frontend Data Flow
+
+**Data Flow**:
+```
+FRONTEND (Source of Truth)
+├── Downloads: PDF file (large) + FormSchema JSON (small)
+├── Maintains: All form state in sessionStorage
+├── Renders: Dynamic form from schema
+└── Sends: Only Gemini-required sections → Backend
+
+BACKEND (Stateless Passthrough)
+├── Stores: Schemas only (no user data)
+├── Processes: Schema sections + current values → Gemini
+└── Returns: Tool call results → Frontend
+```
+
+**Why Frontend Downloads PDF + Schema Directly?**
+- **Efficiency**: PDFs can be large (1-5MB), no need to route through backend
+- **Stateless Backend**: Backend never stores or serves user data (HIPAA compliance)
+- **Frontend Needs Both**: Schema for rendering, PDF for user reference/download
+- **Backend Only Needs Context**: Sends only current section + values to Gemini
+
+**Benefits**:
+- Backend remains stateless processing passthrough
+- Frontend is source of truth for all state (consistent with existing architecture)
+- Reduced backend load (no large file serving)
+- Maintains privacy guarantees (no PII/PHI in backend)
+
 ### Why PDF-First?
 
 The system starts with existing, validated USCIS PDFs rather than designing forms from scratch. Benefits:
