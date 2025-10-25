@@ -1,54 +1,74 @@
-# AI-Powered Voice Form Filler
+# Polyglot PDF Form System
 
-A multilingual voice-driven medical form filling system using Google Gemini Live API. Enables patients to complete complex medical intake forms in their native language through natural conversation, with emphasis on accuracy, privacy, and user control.
+A comprehensive multilingual form system with voice interaction, PDF generation, and admin UI. Create schemas visually, fill forms via voice or keyboard in 18+ languages, and generate PDFs with embedded metadata for session resumption.
 
 ## ✨ Features
 
-### Voice & Language
-- 🎤 **Natural Voice Interaction** - Conversational AI guides users field-by-field
-- 🌍 **18+ Spoken Languages** - Converse in Spanish, Tagalog, French, Hindi, and more
-- 🔄 **Real-Time Language Switching** - Change conversation language mid-session
-- 🎯 **Next Field Guidance** - AI always knows which field to ask about next
+### Schema Management
+- 🎨 **Visual Schema Builder** - Admin UI for creating forms without code
+- 📝 **Numbered Paragraphs** - Limited-length text boxes numbered for easy voice navigation
+- 📑 **Section-Based Forms** - Organize related fields together for better UX
+- 🔄 **Schema Versioning** - Track changes and maintain compatibility
 
-### Form Intelligence
-- 📋 **Section-Based Navigation** - Handle complex multi-section forms (174+ fields tested)
-- 🔍 **Smart Field Matching** - Fuzzy matching handles variations in field labels
-- ✅ **Type Validation** - Proper handling of text, checkbox, radio, select, date, time fields
-- 🔄 **Manual Edit Sync** - AI aware of fields filled manually (hybrid voice/keyboard workflow)
-- ⚡ **Real-Time Updates** - See form values populate as you speak
+### Form Filling Experience
+- 🎤 **Voice Interaction** - Fill forms naturally in 18+ spoken languages
+- ⌨️ **Hybrid Input** - Seamlessly switch between voice, keyboard, and mouse
+- 📊 **Smart Progress Tracking** - "Question 4 of 10 in Section 2 of 12"
+- 🎯 **Paragraph Navigation** - Say "go to paragraph 4" or "change paragraph 2 to..."
+- 🔍 **Section Navigation** - Jump between sections via voice or UI controls
+
+### PDF Integration
+- 📄 **PDF Generation** - Professional PDFs with all form data
+- 🔐 **Embedded Metadata** - Hidden schema_name and session_id for validation
+- 📤 **Upload & Resume** - Upload previous PDF to continue where you left off
+- 🔄 **Round-Trip Integrity** - Data preserved through PDF generation/extraction cycle
 
 ### Privacy & Accuracy
-- 🔒 **HIPAA-Compliant** - Zero PHI storage, stateless backend, ephemeral audio processing
-- ✔️ **Confirmation Required** - Verbal readback before moving to next field
-- 🎓 **Sanity Checking** - Validates logical errors (1800s birthdate, 2-digit phone)
-- 🔌 **WebSocket Real-Time** - Low-latency communication with <50ms barge-in
+- 🔒 **HIPAA-Compliant** - Zero PHI storage, stateless backend
+- ✔️ **Voice Confirmation** - Verbal readback before moving to next field
+- 🎓 **Validation** - Sanity checking for logical errors
+- 🌍 **Multilingual** - Converse in native language, form fills in any language
+
+## 🎯 Project Vision
+
+**Transform form-filling into a natural conversation** while maintaining accuracy, privacy, and user control. Enable organizations to create custom forms easily and allow users to complete them in their native language using voice, keyboard, or both.
+
+### Primary Use Cases
+1. **Medical Intake Forms** - Patients complete complex forms in their language
+2. **Government Services** - Accessible forms for diverse populations
+3. **Job Applications** - Multilingual application process
+4. **Any Multi-Page Form** - Where voice guidance improves completion rates
+
+### Key Design Principles
+- **User-First**: Users control the pace and method (voice/keyboard/both)
+- **Privacy**: Zero PII/PHI storage on backend, stateless architecture
+- **Accuracy**: Confirmation required, validation enforced
+- **Accessibility**: Works in 18+ spoken languages, voice-only operation possible
+- **Flexibility**: Admin UI allows non-developers to create forms
 
 ## 📊 Current Status
 
-**Status**: Production Demo Ready ✅
-**Last Updated**: October 23, 2025
+**Status**: Planning Phase - Major Refactor
+**Last Updated**: October 25, 2025
 
-### Architecture Highlights
-
-- **Stateless Backend** - Client is single source of truth (HIPAA compliance)
-- **Message Queuing** - Race condition fix ensures messages sent when Gemini ready
-- **Next Field Guidance** - Every message includes hint for next unfilled field
-- **Section-Based Flow** - Handles complex multi-section forms with context preservation
-- **5 Tool Functions** - `update_form_fields`, `get_form_status`, `get_field_value`, `switch_section`, `complete_section`
-
-### Completed Features
-
-- ✅ Multi-section form support (174-field adult intake form working)
+### Existing System (Voice Form Filler)
+- ✅ Gemini Live API voice integration working
 - ✅ 18+ spoken languages with real-time switching
-- ✅ Gemini Live API native audio integration
-- ✅ WebSocket-based real-time communication with auto-reconnect
-- ✅ Manual VAD with <50ms barge-in latency
-- ✅ Hybrid voice/keyboard workflow (manual edit detection)
-- ✅ Field type detection (text, checkbox, radio, select, date, time, etc.)
-- ✅ Fuzzy field matching with 52% similarity threshold
-- ✅ Next field guidance in all operations (handshake, section switch, manual updates)
-- ✅ Race condition fix for session initialization
-- ✅ Comprehensive test coverage (backend + frontend)
+- ✅ 174-field adult intake form tested and working
+- ✅ Stateless backend architecture (HIPAA compliant)
+- ✅ WebSocket real-time communication with <50ms barge-in
+- ✅ Hybrid voice/keyboard workflow
+- ✅ Comprehensive test coverage
+
+### Planned Enhancements (In Progress)
+- 🔄 Admin UI for schema creation and management
+- 🔄 PDF generation with embedded metadata
+- 🔄 PDF upload and data extraction for session resumption
+- 🔄 Numbered paragraph fields for voice navigation
+- 🔄 Enhanced section-based navigation
+- 🔄 Session management and validation system
+
+See `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for detailed roadmap.
 
 ## 🚀 Quick Start
 
@@ -62,7 +82,7 @@ A multilingual voice-driven medical form filling system using Google Gemini Live
 
 ```bash
 # Clone repository (if not already done)
-cd web_form_voice_filler
+cd polyglot-pdf
 
 # Backend setup
 python -m venv .venv
@@ -104,142 +124,19 @@ npm run dev
 ```
 Frontend available at: <http://localhost:5173>
 
-### Quick Test
+### Quick Test (Current Voice System)
 
-1. Open <http://localhost:5174/test-demo-new.html> (note: port may be 5173 or 5174)
+1. Open <http://localhost:5173/test-demo-new.html>
 2. Click "Connect to Voice" (grant microphone permission if prompted)
 3. Select a language from the dropdown (e.g., "Spanish")
-4. Gemini will greet you in that language and ask for the first field
+4. Gemini will greet you and ask for the first field
 5. Speak naturally: "My ID is 12345" or manually type values
 6. Watch fields auto-fill with confirmation!
 7. Try switching sections or changing languages mid-session
 
-## 🚢 Production Deployment
-
-### Backend (Google Cloud Run)
-
-```bash
-# Set your GCP project
-export VOICE_PROJECT_NAME=your-project-id
-
-# Deploy backend
-cd backend
-./deploy-backend.sh
-```
-
-**Environment Variables (Cloud Run):**
-- `GOOGLE_API_KEY` - Gemini API key (required)
-- Set via: `gcloud run services update voice-form-filler --set-env-vars GOOGLE_API_KEY=xxx`
-
-### Frontend Bookmarklet
-
-```bash
-# Build production bookmarklet
-cd frontend
-npm run build:bookmarklet
-
-# Output: dist/bookmarklet/bookmarklet.bundle.js (50.25 kB / 16.21 kB gzipped)
-```
-
-**Deploy to Firebase Hosting or CDN:**
-1. Upload `dist/bookmarklet/bookmarklet.bundle.js` to hosting
-2. Update bookmarklet URL in `install-bookmarklet-production.html`
-3. Deploy install page
-
-**Bookmarklet Installation:**
-Users drag the bookmarklet from install page to their browser bookmarks bar.
-
-### Production Checklist
-
-**Backend:**
-- [ ] `GOOGLE_API_KEY` set in Cloud Run
-- [ ] CORS configured in `backend/cors.json` for production domains
-- [ ] Health check endpoint responding
-- [ ] Logs configured for monitoring
-
-**Frontend:**
-- [ ] Bookmarklet built with `npm run build:bookmarklet`
-- [ ] Production backend URL configured (no localhost references)
-- [ ] Bundle uploaded to CDN/hosting
-- [ ] Install page deployed and tested
-- [ ] VAD parameters tuned (MIN_SPEECH_DURATION_MS=45ms for fast barge-in)
-
-**Performance Optimizations (Oct 2025)**:
-- ✅ Barge-in latency: 55% faster (100ms → 45ms debounce)
-- ✅ Bundle size: 50.25 kB (16.21 kB gzipped), 5% reduction from debug removal
-- ✅ Near-instant interruption: User can cut off AI mid-sentence
-- ✅ Hallucination prevention: Tool calls rejected within 150ms grace period
-
-**Testing:**
-- [ ] Test bookmarklet on real web forms
-- [ ] Verify barge-in works (interrupt AI mid-speech)
-- [ ] Check microphone permissions flow
-- [ ] Validate WebSocket connection stability
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-# All tests
-python -m pytest backend/tests -v
-
-# Unit tests only
-python -m pytest backend/tests/unit -q
-
-# Contract tests
-python -m pytest backend/tests/contract -q
-```
-
-### Frontend Tests
-```bash
-cd frontend
-npm test
-```
-
-### Manual Testing
-
-See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures.
-
-## 📚 Documentation
-
-### Planning Documents (`planning_documents/`)
-
-- **PROJECT_CONTEXT.md** - Project vision, design principles, and recent critical fixes
-- **TECHNICAL_GUIDE.md** - Complete technical reference with recent improvements
-- **0_gemini_live_documentation.md** - Gemini Live API reference and best practices
-- **AI_ONBOARDING.md** - Complete codebase overview for AI assistants and new developers
-- **WEB_STATELESS_ARCHITECTURE.md** - Detailed architecture specification
-- **MANUAL_TESTING_GUIDE.md** - Step-by-step manual testing procedures
-
-### Key Concepts
-
-**Stateless Architecture:**
-- Client holds all form state in sessionStorage
-- Backend stores only schema for AI context
-- Better scalability and simpler reconnect logic
-- See `WEB_STATELESS_ARCHITECTURE.md` for details
-
-**WebSocket Protocol:**
-- Mixed binary (audio) and JSON (control) frames
-- Schema sent once at handshake
-- Audio streaming for voice interaction
-- Tool calls for field updates
-
-**Tool Declarations:**
-1. `update_form_fields` - Update field values with validation and confirmation
-2. `get_form_status` - Get overall form completion status
-3. `get_field_value` - Query specific field value (with fuzzy matching)
-4. `switch_section` - Navigate to different form section
-5. `complete_section` - Mark current section complete and advance
-
-**Recent Improvements (Oct 2025):**
-- ✅ **Race Condition Fix** - Messages queued until Gemini session ready (~2s delay)
-- ✅ **Next Field Guidance** - All communications include hint for next unfilled field
-- ✅ **Language Change Fix** - Corrected `computeNextField()` parameters
-- ✅ **Manual Edit Awareness** - Gemini notified when user types manually with next field hint
-- ✅ **Fuzzy Field Query** - `get_field_value` with suggestions for misspelled names
-
 ## 🏗️ Architecture
+
+### Current Architecture (Voice Form Filler)
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -270,10 +167,22 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 ┌─────────────────────────────────────────────┐
 │        Gemini Live API                       │
 │  - Voice interaction                         │
-│  - Function calling (2 tools)                │
+│  - Function calling (5 tools)                │
 │  - Audio responses                           │
 └─────────────────────────────────────────────┘
 ```
+
+### Target Architecture (Polyglot PDF System)
+
+**New Components to be Added:**
+- Admin UI for schema creation
+- PDF generation service with metadata embedding
+- PDF upload and extraction service
+- Session management system
+- Schema CRUD API
+- Enhanced form renderer with numbered paragraphs
+
+See `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for detailed architecture plans.
 
 ## 🛠️ Tech Stack
 
@@ -282,6 +191,7 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 - google-genai 1.38.0 - Gemini Live API integration
 - Pydantic - Data validation and settings
 - pytest - Testing framework
+- PDF Library - TBD (ReportLab, WeasyPrint, or similar)
 
 **Frontend:**
 - React 18+ - UI framework
@@ -294,6 +204,66 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 - soundfile 0.12.1 - Audio I/O
 - WebSockets 13-15 - Real-time communication
 
+## 🧪 Testing
+
+### Backend Tests
+```bash
+# All tests
+python -m pytest backend/tests -v
+
+# Unit tests only
+python -m pytest backend/tests/unit -q
+
+# Contract tests
+python -m pytest backend/tests/contract -q
+```
+
+### Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+### Manual Testing
+
+See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures (to be updated for new features).
+
+## 📚 Documentation
+
+### Planning Documents (`planning_documents/`)
+
+- **REFACTOR_IMPLEMENTATION_PLAN.md** - Detailed phase-by-phase implementation plan with testable deliverables
+- **PROJECT_CONTEXT.md** - Project vision, design principles, and development guidelines
+- **TECHNICAL_GUIDE.md** - Complete technical reference (updated after code changes)
+- **0_gemini_live_documentation.md** - Gemini Live API reference and best practices
+- **5_LOGGING_OVERHAUL_PLAN.md** - Logging infrastructure specification
+
+### Key Concepts
+
+**Stateless Architecture:**
+- Client holds all form state in sessionStorage
+- Backend stores only schemas (not user data)
+- Better scalability and simpler reconnect logic
+- HIPAA compliant by design
+
+**PDF Metadata System:**
+- Embedded schema_name identifies form structure
+- Embedded session_id validates authenticity
+- Allows PDF upload to resume sessions
+- Metadata hidden from casual users, extractable programmatically
+
+**Numbered Paragraphs:**
+- Limited-length text fields with visible numbers
+- Voice navigation: "go to paragraph 4"
+- Easier editing: "change paragraph 2 to..."
+- Concatenated on PDF generation for clean output
+
+**Section-Based Organization:**
+- Related fields grouped logically
+- Token-efficient for AI processing
+- Progress tracking: "Q4 of 10 in Section 2 of 12"
+- Reduces user overwhelm
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -301,7 +271,7 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 **Connection Errors:**
 - Check `GOOGLE_API_KEY` or `GEMINI_API_KEY` is set
 - Verify backend is running on port 8000
-- Check for zombie processes (see Quick Start section)
+- Check for zombie processes
 
 **Microphone Not Working:**
 - Use HTTPS or localhost (required for getUserMedia)
@@ -318,21 +288,6 @@ See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures
 - Check sessionStorage in DevTools (Application tab)
 - Verify webFormState.ts persistence logic
 - Clear sessionStorage and reconnect if corrupted
-
-**AI Goes Silent After Tool Call:**
-- Check model version: Use `gemini-live-2.5-flash-preview-native-audio-09-2025`
-- Check backend logs for FunctionResponse format errors
-- Verify `next_field_hint` is being sent (check logs for `has_next_hint=True`)
-
-**Language Change Not Working:**
-- ✅ **Fixed Oct 23**: `computeNextField()` parameters corrected
-- Wait for "Gemini session established" log before changing language
-- Check that dropdown selection triggers `changeSpokenLanguage()`
-
-**Section Switching Issues:**
-- ✅ **Fixed Oct 23**: Race condition - messages now queued until session ready
-- Check backend logs for `📋 CLIENT_CONTENT_QUEUED` and `📤 SENDING_QUEUED_CLIENT_CONTENT`
-- Verify `initial_field_hint` included in section switch
 
 ### Debug Tools
 
@@ -362,19 +317,82 @@ sessionStorage.clear()
 
 ### Development Workflow
 
-1. Create feature branch from `main`
-2. Make changes with tests
-3. Run test suite: `pytest backend/tests -v`
-4. Run frontend tests: `npm test -C frontend`
-5. Update documentation if needed
-6. Submit pull request
+1. Read `planning_documents/PROJECT_CONTEXT.md` first
+2. Review `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for current phase
+3. Create feature branch from current development branch
+4. Make changes with tests
+5. Run test suite: `pytest backend/tests -v`
+6. Run frontend tests: `npm test -C frontend`
+7. Update documentation if needed
+8. Submit pull request
 
 ### Code Standards
 
 - Python: Follow PEP 8, use type hints
 - TypeScript: Follow project ESLint config
-- Add tests for new features
+- Add tests for new features (target: 80% backend, 70% frontend coverage)
 - Update planning documents for architectural changes
+- Never log PII/PHI in backend logs
+- Use structured logging with metadata only
+
+### Critical Rules
+
+**Never Do:**
+- ❌ Store user data (PII/PHI) in backend
+- ❌ Log field values (log IDs, types, counts only)
+- ❌ Use `.innerHTML` with user/AI content (XSS risk)
+- ❌ Create new summary documents (update existing docs in place)
+- ❌ Modify `.venv` or example files
+
+**Always Do:**
+- ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
+- ✅ Create unit tests before making changes
+- ✅ Maintain stateless backend (client = source of truth)
+- ✅ Update `TECHNICAL_GUIDE.md` after code changes
+- ✅ Use `textContent` or `escapeHtml()` for display
+
+## 🚢 Production Deployment
+
+**Note:** Deployment procedures are being updated for the new PDF-based architecture. Current instructions are for the existing voice form filler system.
+
+### Backend (Google Cloud Run)
+
+```bash
+# Set your GCP project
+export VOICE_PROJECT_NAME=your-project-id
+
+# Deploy backend
+cd backend
+./deploy-backend.sh
+```
+
+**Environment Variables (Cloud Run):**
+- `GOOGLE_API_KEY` - Gemini API key (required)
+- Set via: `gcloud run services update voice-form-filler --set-env-vars GOOGLE_API_KEY=xxx`
+
+### Production Checklist
+
+**Backend:**
+- [ ] `GOOGLE_API_KEY` set in Cloud Run
+- [ ] CORS configured in `backend/cors.json` for production domains
+- [ ] Health check endpoint responding
+- [ ] Structured logging configured
+- [ ] Session storage configured (file-based for MVP, DB for production)
+- [ ] PDF generation tested on production OS
+
+**Frontend:**
+- [ ] Production backend URL configured (no localhost references)
+- [ ] Environment-specific configs set
+- [ ] Bundle optimized and tested (<500KB gzipped target)
+- [ ] VAD parameters tuned (MIN_SPEECH_DURATION_MS=45ms for fast barge-in)
+
+**Testing:**
+- [ ] Test form creation via admin UI
+- [ ] Test PDF generation with various schemas
+- [ ] Test PDF upload/extraction round-trip
+- [ ] Verify voice commands work on production
+- [ ] Check microphone permissions flow
+- [ ] Validate WebSocket connection stability
 
 ## 📝 License
 
@@ -388,4 +406,6 @@ sessionStorage.clear()
 
 ---
 
-**For AI Assistants**: Read `planning_documents/AI_ONBOARDING.md` first before making changes to this codebase.
+**For AI Assistants**: Read `planning_documents/PROJECT_CONTEXT.md` and `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` before making changes to this codebase.
+
+**For Developers**: This project is currently in a major refactor phase. The existing voice form filler is functional, and we're building new PDF and admin UI features around it. See the implementation plan for the roadmap.
