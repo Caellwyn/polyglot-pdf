@@ -13,7 +13,6 @@ backend/.env
 !.env.production
 
 # example data files
-example_pdfs/
 example_webforms/
 
 # Test artifacts
