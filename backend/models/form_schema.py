@@ -64,9 +64,10 @@ class SignatureMethod(str, Enum):
 
 class TextareaSize(str, Enum):
     """Textarea size presets"""
-    SMALL = "small"
-    MEDIUM = "medium"
-    LARGE = "large"
+    SMALL = "small"    # 2 rows - for short responses
+    MEDIUM = "medium"  # 5 rows - for moderate responses
+    LARGE = "large"    # 10 rows - for long responses
+    XLARGE = "xlarge"  # 20+ rows - for very long narratives (Part B questions)
 
 
 class ConditionalOperator(str, Enum):
@@ -78,6 +79,15 @@ class ConditionalOperator(str, Enum):
     LESS_THAN = "less_than"
     IS_CHECKED = "is_checked"
     IS_EMPTY = "is_empty"
+    IS_NOT_EMPTY = "is_not_empty"  # Added for completeness
+    IN = "in"  # Value in list
+    NOT_IN = "not_in"  # Value not in list
+
+
+class SupplementType(str, Enum):
+    """Types of supplement pages for overflow content"""
+    SUPPLEMENT_A = "supplement_a"  # Additional children (I-589)
+    SUPPLEMENT_B = "supplement_b"  # Additional information/narratives (I-589)
 
 
 class GroupKind(str, Enum):
@@ -138,6 +148,18 @@ class ValidationRules(BaseModel):
     pattern: Optional[str] = Field(None, description="Regex pattern")
     custom_error: Optional[str] = Field(None, description="Custom error message")
 
+    # Date-specific constraints
+    date_constraint: Optional[Literal["past_only", "future_only", "within_5_years"]] = Field(
+        None,
+        description="Date-specific validation (e.g., birth date must be in past)"
+    )
+
+    # Format presets (common validation patterns)
+    format_preset: Optional[Literal["ssn", "a_number", "phone", "email", "zip"]] = Field(
+        None,
+        description="Predefined format validation"
+    )
+
 
 class ConditionalDisplay(BaseModel):
     """Conditional display logic"""
@@ -153,6 +175,7 @@ class FieldHelp(BaseModel):
     instructions: Optional[str] = Field(None, description="Longer instructions below field")
     warning: Optional[str] = Field(None, description="Legal warning or important note")
     example: Optional[str] = Field(None, description="Example value")
+    legal_reference: Optional[str] = Field(None, description='Legal reference (e.g., "INA 241(b)(3)", "18 USC 1546(a)")')
 
 
 class FieldOption(BaseModel):
@@ -160,6 +183,10 @@ class FieldOption(BaseModel):
     value: str
     label: str
     spoken_label: Optional[str] = Field(None, description="Alternative label for voice input")
+    label_translations: Optional[Dict[str, str]] = Field(
+        None,
+        description='Multi-language labels (e.g., {"es": "Soltero", "zh": "单身"})'
+    )
 
 
 class TableColumn(BaseModel):
@@ -182,6 +209,10 @@ class MultiEntryConfig(BaseModel):
     overflow_instruction: Optional[str] = Field(
         None,
         description='Instructions when max reached (e.g., "Use Supplement A")'
+    )
+    overflow_to_supplement: Optional[SupplementType] = Field(
+        None,
+        description="Which supplement to use for overflow entries"
     )
 
 
@@ -260,6 +291,24 @@ class FormField(BaseModel):
     columns: Optional[List[TableColumn]] = None
     multi_entry: Optional[MultiEntryConfig] = None
 
+    # Multi-language support
+    name_translations: Optional[Dict[str, str]] = Field(
+        None,
+        description='Translations of field name for multi-language support (e.g., {"es": "Nombre Completo"})'
+    )
+
+    # Auto-fill logic
+    auto_fill_na: Optional[bool] = Field(
+        False,
+        description="If true, auto-fill with NA when first similar field in group is set to NA"
+    )
+
+    # Supplement overflow
+    overflow_to_supplement: Optional[SupplementType] = Field(
+        None,
+        description="Which supplement to overflow to (for long narratives or repeating fields)"
+    )
+
     @field_validator('options')
     @classmethod
     def validate_options(cls, v, info):
@@ -282,8 +331,23 @@ class FormSection(BaseModel):
     order: int = Field(description="Display order")
     fields: List[str] = Field(description="Field IDs in this section")
     page_number: Optional[int] = Field(None, description="PDF page number (PDF only)")
+    page_numbers: Optional[List[int]] = Field(None, description="PDF page numbers if section spans multiple pages")
     required: Optional[bool] = Field(True, description="Can this section be skipped?")
     show_if: Optional[ConditionalDisplay] = None
+
+
+class FormPart(BaseModel):
+    """Form part definition (hierarchical grouping above sections)
+
+    Example: I-589 has Part A, Part B, Part C, etc.
+    Each part contains one or more sections.
+    """
+    id: str = Field(description='e.g., "part_a", "part_b"')
+    label: str = Field(description='e.g., "Part A: Information About Applicant"')
+    description: Optional[str] = None
+    order: int = Field(description="Display order")
+    section_ids: List[str] = Field(description="Section IDs in this part")
+    required: Optional[bool] = Field(True, description="Can this part be skipped?")
 
 
 class FormSupplement(BaseModel):
@@ -317,15 +381,25 @@ class FormSchema(BaseModel):
     source: FormSource
     form_metadata: FormMetadata
 
-    # Structure
+    # Structure (hierarchical: parts contain sections, or just sections if no parts)
     sections: List[FormSection]
     fields: List[FormField]
+    parts: Optional[List[FormPart]] = Field(
+        None,
+        description="Optional hierarchical grouping (e.g., Part A, Part B). If absent, use flat section structure."
+    )
 
     # Optional components
     supplements: Optional[List[FormSupplement]] = None
 
     # Extraction metadata (for PDF forms)
     extraction_info: Optional[ExtractionInfo] = None
+
+    # Legal warnings (form-level)
+    legal_warnings: Optional[List[str]] = Field(
+        None,
+        description="Form-level legal warnings (e.g., perjury statements)"
+    )
 
     @field_validator('extraction_info')
     @classmethod
@@ -355,6 +429,22 @@ class FormSchema(BaseModel):
         if not section:
             return []
         return [self.get_field(fid) for fid in section.fields if self.get_field(fid)]
+
+    def get_part(self, part_id: str) -> Optional[FormPart]:
+        """Get a part by ID"""
+        if not self.parts:
+            return None
+        for part in self.parts:
+            if part.id == part_id:
+                return part
+        return None
+
+    def get_sections_in_part(self, part_id: str) -> List[FormSection]:
+        """Get all sections in a specific part"""
+        part = self.get_part(part_id)
+        if not part:
+            return []
+        return [self.get_section(sid) for sid in part.section_ids if self.get_section(sid)]
 
     def validate_field_value(self, field_id: str, value: Any) -> tuple[bool, Optional[str]]:
         """
@@ -403,6 +493,45 @@ class FormSchema(BaseModel):
                 return False, f"{field.name} must be a valid number"
 
         return True, None
+
+    def validate_all_references(self) -> Dict[str, List[str]]:
+        """
+        Validate all references (field IDs, section IDs, part IDs) are valid
+
+        Returns:
+            Dict with keys: 'errors', 'warnings' containing lists of validation messages
+        """
+        errors = []
+        warnings = []
+
+        # Validate section field references
+        all_field_ids = {f.id for f in self.fields}
+        for section in self.sections:
+            for field_id in section.fields:
+                if field_id not in all_field_ids:
+                    errors.append(f"Section '{section.id}' references non-existent field '{field_id}'")
+
+        # Validate part section references
+        all_section_ids = {s.id for s in self.sections}
+        if self.parts:
+            for part in self.parts:
+                for section_id in part.section_ids:
+                    if section_id not in all_section_ids:
+                        errors.append(f"Part '{part.id}' references non-existent section '{section_id}'")
+
+        # Validate conditional display references
+        for field in self.fields:
+            if field.show_if and field.show_if.field not in all_field_ids:
+                errors.append(f"Field '{field.id}' show_if references non-existent field '{field.show_if.field}'")
+
+        # Validate supplement references
+        if self.supplements:
+            for supplement in self.supplements:
+                for field_id in supplement.fields:
+                    if field_id not in all_field_ids:
+                        errors.append(f"Supplement '{supplement.id}' references non-existent field '{field_id}'")
+
+        return {"errors": errors, "warnings": warnings}
 
 
 # ============================================================================
@@ -468,3 +597,156 @@ class ToolResponse(BaseModel):
     field: Optional[str] = None
     message: str
     data: Optional[Any] = None
+
+
+# ============================================================================
+# Helper Functions for Creating Fields
+# ============================================================================
+
+def create_text_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    required: bool = False,
+    help_inline: Optional[str] = None,
+    placeholder: Optional[str] = None,
+    **kwargs
+) -> FormField:
+    """Helper to create a simple text field"""
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.TEXT,
+        section_id=section_id,
+        validation=ValidationRules(required=required) if required else None,
+        help=FieldHelp(inline=help_inline) if help_inline else None,
+        placeholder=placeholder,
+        **kwargs
+    )
+
+
+def create_date_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    required: bool = False,
+    date_precision: DatePrecision = DatePrecision.FULL,
+    date_constraint: Optional[str] = None,
+    **kwargs
+) -> FormField:
+    """Helper to create a date field"""
+    validation = ValidationRules(required=required)
+    if date_constraint:
+        validation.date_constraint = date_constraint
+
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.DATE,
+        section_id=section_id,
+        date_precision=date_precision,
+        format=DateFormat.MM_DD_YYYY if date_precision == DatePrecision.FULL else DateFormat.MO_YR,
+        validation=validation,
+        **kwargs
+    )
+
+
+def create_radio_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    options: List[tuple],  # [(value, label, spoken_label), ...]
+    required: bool = False,
+    **kwargs
+) -> FormField:
+    """Helper to create a radio button field"""
+    field_options = [
+        FieldOption(value=v, label=l, spoken_label=sl if len(opt) > 2 else None)
+        for opt in options
+        for v, l, *rest in [opt + (None,)]  # Pad tuple if spoken_label missing
+        for sl in [rest[0] if rest else None]
+    ]
+
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.RADIO,
+        section_id=section_id,
+        options=field_options,
+        validation=ValidationRules(required=required) if required else None,
+        **kwargs
+    )
+
+
+def create_textarea_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    size: TextareaSize = TextareaSize.MEDIUM,
+    required: bool = False,
+    overflow_to_supplement: Optional[SupplementType] = None,
+    **kwargs
+) -> FormField:
+    """Helper to create a textarea field"""
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.TEXTAREA,
+        section_id=section_id,
+        textarea_size=size,
+        validation=ValidationRules(required=required) if required else None,
+        overflow_to_supplement=overflow_to_supplement,
+        **kwargs
+    )
+
+
+def create_select_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    options: List[tuple],  # [(value, label), ...]
+    required: bool = False,
+    **kwargs
+) -> FormField:
+    """Helper to create a select dropdown field"""
+    field_options = [FieldOption(value=v, label=l) for v, l in options]
+
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.SELECT,
+        section_id=section_id,
+        options=field_options,
+        validation=ValidationRules(required=required) if required else None,
+        **kwargs
+    )
+
+
+def create_checkbox_field(
+    field_id: str,
+    name: str,
+    spoken_name: str,
+    section_id: str,
+    required: bool = False,
+    **kwargs
+) -> FormField:
+    """Helper to create a single checkbox field"""
+    return FormField(
+        id=field_id,
+        name=name,
+        spoken_name=spoken_name,
+        type=FieldType.CHECKBOX,
+        section_id=section_id,
+        validation=ValidationRules(required=required) if required else None,
+        **kwargs
+    )
