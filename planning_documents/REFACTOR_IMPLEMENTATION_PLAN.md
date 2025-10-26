@@ -23,6 +23,27 @@ This plan outlines the transformation from a web-form-first system to a **PDF-dr
 
 ---
 
+## Schema Design Clarifications (Oct 26, 2025)
+
+**Web Form Structure:**
+1. **Children Fields Grouping**: Group all children fields together in web form view for better UX
+2. **Auto-Fill NA Logic**: When user fills one expandable field with "NA", auto-fill all remaining similar fields with "NA" (user can override)
+3. **Auto-Mapping to Supplements**: Web form never explicitly shows supplements - auto-map to Supplement A (children) and Supplement B (narratives) during PDF export
+
+**Narrative Handling:**
+1. **Multiple Supplement Copies**: Support very long narratives by generating multiple Supplement B copies as needed
+2. **Arbitrary Length**: Final PDFs can be arbitrarily long with many supplements (max ~100 pages)
+3. **Formatting**: Use double newline (`\n\n`) for paragraph separation in narratives for readability in final PDF
+
+**AI Context Management:**
+1. **Deferred Concern**: Token efficiency for long narratives is separate from schema design
+2. **Current Approach**: If narratives in one section, all context available to Gemini
+3. **Future Optimization**: Address token management after schema pipeline is built
+
+**Focus**: Stay focused on schema model and ground truth schema for I-589, build PDF-schema pipeline first.
+
+---
+
 ## Implementation Phases
 
 ### **Phase 1: PDF → Schema Foundation** (Weeks 1-2)
@@ -125,16 +146,29 @@ Build dynamic form renderer, pagination, and session persistence.
   - `multi-entry` → Dynamic list component (add/remove rows)
 - Apply validation rules from schema to components
 - Handle conditional field visibility (if supported in schema)
+- **Web Form Auto-Mapping to Supplements**:
+  - Children fields grouped together in web form view
+  - Auto-map overflow children to Supplement A (web form doesn't explicitly show supplement sections)
+  - Narrative fields auto-map to Supplement B as needed
+  - Backend generates supplements automatically during PDF export
+- **Smart NA Auto-Fill Logic**:
+  - When user fills one expandable field with "NA", auto-fill all remaining similar fields with "NA"
+  - Reduces repetitive data entry for optional fields
+  - User can override auto-filled values if needed
 
 **Deliverables**:
 - `frontend/src/components/FormRenderer/` - Component library
 - `frontend/src/utils/schemaMapper.ts` - Mapping logic
+- `frontend/src/utils/autoFillLogic.ts` - NA auto-fill implementation
 - Unit tests for all field type mappings
+- Unit tests for auto-fill logic
 
 **Success Criteria**:
 - All schema field types render correctly
 - Validation rules enforced on frontend
 - Schema updates automatically reflect in form
+- Children fields grouped and mapped to Supplement A automatically
+- NA auto-fill works seamlessly for expandable fields
 
 ---
 
@@ -351,9 +385,9 @@ Integrate Gemini Live with new tools, implement frontend validation.
 
 ### **Phase 5: PDF Export & Print** (Week 7)
 
-Generate completed PDFs from form data.
+Generate completed PDFs from form data with dynamic supplement generation.
 
-**Goal**: Export filled forms to printable, official-looking PDFs.
+**Goal**: Export filled forms to printable, official-looking PDFs with support for very long narratives.
 
 **Implementation Options** (Decision deferred to this phase):
 
@@ -376,17 +410,29 @@ Generate completed PDFs from form data.
 - Map form data to original PDF field positions
 - Fill in all fields programmatically
 - Handle multi-page forms (children, employment, dynamic sections)
+- **Dynamic Supplement Generation**:
+  - **Supplement A (Children)**: Auto-generate copies for overflow children (>4)
+  - **Supplement B (Narratives)**: Auto-generate multiple copies for very long narratives
+  - Support arbitrarily long narratives (up to ~100 pages max)
+  - Each supplement includes header fields (A-Number, Date, Name, Signature)
+  - Track supplement page numbers in final PDF
+- **Narrative Formatting**:
+  - Use double newline (`\n\n`) for paragraph separation in narratives
+  - Ensure readability and proper spacing in final PDF
+  - Handle text overflow across multiple Supplement B pages
 - Ensure generated PDF is fillable (not flattened)
-- Add metadata to PDF (session_id, schema_name, completion_date)
+- Add metadata to PDF (session_id, schema_name, completion_date, supplement_count)
 - Create print-optimized layout
 - Support downloading completed PDF
 
 **Deliverables** (Option A):
 - `frontend/src/utils/pdfWriter.ts` - pdf-lib integration
+- `frontend/src/utils/supplementGenerator.ts` - Supplement A/B generation logic
 - Frontend download button with progress indicator
 
 **Deliverables** (Option B):
 - `backend/pdf_generator.py` - Form data → PDF converter (stateless)
+- `backend/supplement_generator.py` - Supplement A/B generation logic
 - API endpoint: `POST /api/pdf/generate` (does NOT store PDF, returns immediately)
 - Frontend download button with progress indicator
 
@@ -394,7 +440,11 @@ Generate completed PDFs from form data.
 - Generated PDF matches original USCIS form layout
 - All fields populated correctly (>99% accuracy)
 - PDF opens in Adobe Reader, Chrome, Preview without issues
-- Export completes in <10 seconds for 100-field form
+- Export completes in <10 seconds for 100-field form (excluding very long narratives)
+- Supplement A auto-generated for >4 children
+- Supplement B auto-generated for narratives requiring >1 page
+- Narratives formatted with double newline for readability
+- Final PDFs can be up to ~100 pages with multiple supplements
 - **Backend remains stateless** (if Option B chosen, PDF generated on-demand, never stored)
 
 ---
@@ -535,6 +585,22 @@ Comprehensive testing across languages, forms, and use cases.
 ---
 
 ## Key Architecture Decisions
+
+### AI Context Management (Deferred)
+
+**Note**: Token efficiency for long narratives is a separate concern from schema design and will be addressed in a future phase.
+
+**Current Approach**:
+- If narratives are grouped in one section, Gemini will have all narrative context available
+- Long narratives may consume many tokens, but this doesn't affect schema structure
+- Gemini manages its own context - we cannot directly control it
+- Focus remains on building ground truth schema and PDF-schema pipeline first
+
+**Future Optimization** (Post-MVP):
+- Implement narrative chunking strategies if needed
+- Explore context window optimization techniques
+- Monitor token usage and implement cost controls
+- Consider alternative approaches if long narratives cause issues
 
 ### Stateless Backend with Frontend Data Flow
 
