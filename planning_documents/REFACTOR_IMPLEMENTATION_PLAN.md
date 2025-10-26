@@ -225,26 +225,43 @@ Update WebSocket handlers and design Gemini tool definitions.
 
 **Goal**: Function calling interface for Gemini to interact with forms.
 
+**Tool Call Flow Architecture**:
+- **Blocking Responses**: Every Gemini tool_call is blocking and expects a response
+- **Frontend Validation**: Frontend validates tool calls BEFORE sending to backend:
+  - `field_update` is not empty
+  - `field_update` references actual field_ids from schema
+  - `field_update` values respect field constraints (type, format, single value for radios, etc.)
+- **Backend Passthrough**: Backend receives validated tool calls, processes them, returns results
+- **Response Types**:
+  - `field_query` → Returns field value
+  - `field_update` → Returns validation confirmation message
+  - `section_change` → **Special case**: Ends current Gemini session, starts new one (no response sent)
+
 **Tasks**:
 - Design Gemini function calling tools:
   - `update_field(field_id, value)` - Update single field
   - `update_multiple_fields(updates)` - Batch update
   - `get_field_info(field_id)` - Query field metadata
   - `validate_field(field_id, value)` - Pre-validate before update
-  - `navigate_to_section(section_id)` - Change current section
+  - `navigate_to_section(section_id)` - Change current section (special handling)
 - Create tool definition JSON for Gemini API
 - Implement tool execution handlers in backend
+- Implement frontend tool validation layer
 - Add error handling and retry logic
 
 **Deliverables**:
 - `backend/gemini_tools.py` - Tool definitions and handlers
+- `frontend/src/utils/toolValidator.ts` - Frontend tool validation
 - `backend/config/gemini_tool_schema.json` - Gemini function calling schema
 - Unit tests for each tool handler
+- Unit tests for frontend validation
 
 **Success Criteria**:
 - All tools execute successfully in test environment
+- Frontend validation catches invalid tool calls before backend
 - Tools handle edge cases (invalid field_id, type mismatch)
 - Tool responses include validation feedback
+- Section change correctly restarts Gemini session
 
 ---
 
@@ -338,19 +355,39 @@ Generate completed PDFs from form data.
 
 **Goal**: Export filled forms to printable, official-looking PDFs.
 
-**Tasks**:
-- Implement PDF generation from completed form state:
-  - Map form data back to original PDF field positions
-  - Fill in all fields programmatically
-  - Handle multi-page forms (children, employment)
+**Implementation Options** (Decision deferred to this phase):
+
+**Option A: Frontend PDF Writing (pdf-lib)**:
+- Frontend uses pdf-lib to write field data directly in browser
+- User downloads PDF directly from browser
+- Backend uninvolved in PDF generation (remains stateless)
+- Pros: No backend load, works offline, user owns PDF immediately
+- Cons: Larger frontend bundle, limited to browser capabilities
+
+**Option B: Backend PDF Writing (Python library)**:
+- Frontend sends form data to backend for PDF generation
+- Backend uses PyMuPDF or similar to fill PDF fields
+- Backend returns filled PDF as download (does NOT store it)
+- Backend remains stateless (generates PDF on-demand, no persistence)
+- Pros: More powerful PDF manipulation, smaller frontend bundle
+- Cons: Backend processing time, requires server request
+
+**Tasks** (common to both options):
+- Map form data to original PDF field positions
+- Fill in all fields programmatically
+- Handle multi-page forms (children, employment, dynamic sections)
 - Ensure generated PDF is fillable (not flattened)
 - Add metadata to PDF (session_id, schema_name, completion_date)
 - Create print-optimized layout
 - Support downloading completed PDF
 
-**Deliverables**:
-- `backend/pdf_generator.py` - Form data → PDF converter
-- API endpoint: `POST /api/sessions/{id}/export-pdf`
+**Deliverables** (Option A):
+- `frontend/src/utils/pdfWriter.ts` - pdf-lib integration
+- Frontend download button with progress indicator
+
+**Deliverables** (Option B):
+- `backend/pdf_generator.py` - Form data → PDF converter (stateless)
+- API endpoint: `POST /api/pdf/generate` (does NOT store PDF, returns immediately)
 - Frontend download button with progress indicator
 
 **Success Criteria**:
@@ -358,6 +395,7 @@ Generate completed PDFs from form data.
 - All fields populated correctly (>99% accuracy)
 - PDF opens in Adobe Reader, Chrome, Preview without issues
 - Export completes in <10 seconds for 100-field form
+- **Backend remains stateless** (if Option B chosen, PDF generated on-demand, never stored)
 
 ---
 
@@ -512,7 +550,17 @@ BACKEND (Stateless Passthrough)
 ├── Stores: Schemas only (no user data)
 ├── Processes: Schema sections + current values → Gemini
 └── Returns: Tool call results → Frontend
+
+GEMINI (Ephemeral Session Storage)
+├── Stores: Field values in session-based context storage
+├── Context: Exists only for duration of voice session
+└── Cleared: When session ends or times out
 ```
+
+**Field Value Storage Locations**:
+1. **Frontend (sessionStorage)**: Primary source of truth, persists until tab close
+2. **Gemini Session Context**: Temporary storage during voice interaction only
+3. **Backend**: NEVER stores field values (schemas only)
 
 **Why Frontend Downloads PDF + Schema Directly?**
 - **Efficiency**: PDFs can be large (1-5MB), no need to route through backend
@@ -520,11 +568,21 @@ BACKEND (Stateless Passthrough)
 - **Frontend Needs Both**: Schema for rendering, PDF for user reference/download
 - **Backend Only Needs Context**: Sends only current section + values to Gemini
 
+**Security Model**:
+- **Field values** stored only in:
+  - User's browser (sessionStorage - auto-clears on tab close)
+  - Gemini's ephemeral session context (cleared when session ends)
+- **Backend** stores only:
+  - Form schemas (template structure, no user data)
+  - Session metadata (session_id, timestamps - no field values)
+- **No PII/PHI in backend** logs or storage (HIPAA compliant)
+
 **Benefits**:
 - Backend remains stateless processing passthrough
 - Frontend is source of truth for all state (consistent with existing architecture)
 - Reduced backend load (no large file serving)
 - Maintains privacy guarantees (no PII/PHI in backend)
+- User owns their data (in sessionStorage and downloadable PDF)
 
 ### Why PDF-First?
 
