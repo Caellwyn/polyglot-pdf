@@ -4,8 +4,18 @@
  * Unified schema supporting both web forms and PDF forms.
  * Designed to handle USCIS immigration forms with complex structures.
  *
- * @version 1.0.0
- * @date 2025-10-25
+ * @version 1.1.0
+ * @date 2025-10-26
+ *
+ * Version 1.1.0 Enhancements:
+ * - Added 'static_text' field type for informational content
+ * - Extended ConditionalDisplay to support AND/OR logic for complex conditions
+ * - Enhanced TableColumn with conditional display, options, and format support
+ * - Changed FormSection.page_number to page_numbers array for multi-page sections
+ * - Added FormPart interface for hierarchical form organization
+ * - Added read_only, default_value, and overflow_to_supplement to FormField
+ * - Added format_preset validation option for common formats (SSN, A-Number, etc.)
+ * - Made FormSupplement fields optional for flexibility
  */
 
 /**
@@ -37,6 +47,7 @@ export type FieldType =
   | 'radio'          // Radio button group
   | 'checkbox'       // Single checkbox or checkbox group
   | 'signature'      // Signature capture field
+  | 'static_text'    // Read-only informational text (not user input)
   | 'address_group'  // Composite address field group
   | 'table';         // Repeating row structure
 
@@ -97,6 +108,11 @@ export interface PDFPosition {
 }
 
 /**
+ * Common format presets for validation
+ */
+export type FormatPreset = 'ssn' | 'a_number' | 'zip' | 'phone' | 'email' | 'date';
+
+/**
  * Validation rules for a field
  */
 export interface ValidationRules {
@@ -106,16 +122,23 @@ export interface ValidationRules {
   min?: number;           // For numeric fields
   max?: number;           // For numeric fields
   pattern?: string;       // Regex pattern
+  format_preset?: FormatPreset;  // Predefined format validation
   custom_error?: string;  // Custom error message
 }
 
 /**
  * Conditional display logic
+ * Supports both simple single-field conditions and complex AND/OR logic
  */
 export interface ConditionalDisplay {
-  field: string;                    // Field ID to check
-  operator: ConditionalOperator;
-  value: string | number | boolean;
+  // Simple condition (for single field check)
+  field?: string;                    // Field ID to check
+  operator?: ConditionalOperator;
+  value?: string | number | boolean;
+
+  // Complex conditions (for multiple field checks)
+  condition?: 'AND' | 'OR';          // Logical operator for combining rules
+  rules?: ConditionalDisplay[];      // Array of conditions to combine
 }
 
 /**
@@ -145,9 +168,21 @@ export interface TableColumn {
   id: string;
   label: string;
   type: FieldType;
-  width?: number;         // Percentage or pixels
+  width?: number;                  // Percentage or pixels
   validation?: ValidationRules;
   help?: FieldHelp;
+
+  // Conditional display for columns
+  show_if?: ConditionalDisplay;    // Column appears based on other column values
+
+  // Options for select/radio/checkbox columns
+  options?: FieldOption[];
+
+  // Format for date columns
+  format?: DateFormat;
+
+  // PDF mapping for this column's cells
+  pdf_field_name?: string;
 }
 
 /**
@@ -207,6 +242,11 @@ export interface FormField {
   pdf_position?: PDFPosition;     // Position in original PDF
   pdf_field_name?: string;        // Original PDF field name
 
+  // Behavior modifiers
+  read_only?: boolean;            // Field cannot be edited (e.g., for government-only sections)
+  default_value?: string;         // Default or pre-filled value
+  overflow_to_supplement?: string; // ID of supplement to use for overflow content
+
   // Type-specific properties
 
   // Date fields
@@ -249,7 +289,7 @@ export interface FormSection {
   description?: string;
   order: number;              // Display order
   fields: string[];           // Field IDs in this section
-  page_number?: number;       // PDF page number (PDF only)
+  page_numbers?: number[];    // PDF page numbers (PDF only) - sections can span multiple pages
   required?: boolean;         // Can this section be skipped?
   show_if?: ConditionalDisplay;
 }
@@ -259,11 +299,24 @@ export interface FormSection {
  */
 export interface FormSupplement {
   id: string;                 // e.g., "supplement_a"
-  name: string;               // e.g., "Supplement A - Additional Children"
-  purpose: string;            // What this supplement is for
+  label?: string;             // Alternative to name (for compatibility)
+  name?: string;              // e.g., "Supplement A - Additional Children" (preferred)
+  purpose?: string;           // What this supplement is for
   trigger_condition?: string; // When to use this supplement
-  fields: string[];           // Field IDs available in supplement
+  fields?: string[];          // Field IDs available in supplement
   page_number?: number;       // PDF page number
+}
+
+/**
+ * Form part definition (optional organizational layer above sections)
+ * Used for complex forms like I-589 that have major divisions
+ */
+export interface FormPart {
+  id: string;                 // e.g., "part_a"
+  label: string;              // e.g., "Part A: Information About Applicant"
+  order: number;              // Display order
+  section_ids: string[];      // Section IDs within this part
+  description?: string;       // Optional description of this part
 }
 
 /**
@@ -275,6 +328,7 @@ export interface FormSchema {
   form_metadata: FormMetadata;
 
   // Structure
+  parts?: FormPart[];         // Optional: High-level organizational structure
   sections: FormSection[];
   fields: FormField[];
 
