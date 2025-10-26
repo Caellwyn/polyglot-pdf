@@ -23,6 +23,27 @@ This plan outlines the transformation from a web-form-first system to a **PDF-dr
 
 ---
 
+## Schema Design Clarifications (Oct 26, 2025)
+
+**Web Form Structure:**
+1. **Children Fields Grouping**: Group all children fields together in web form view for better UX
+2. **Auto-Fill NA Logic**: When user fills one expandable field with "NA", auto-fill all remaining similar fields with "NA" (user can override)
+3. **Auto-Mapping to Supplements**: Web form never explicitly shows supplements - auto-map to Supplement A (children) and Supplement B (narratives) during PDF export
+
+**Narrative Handling:**
+1. **Multiple Supplement Copies**: Support very long narratives by generating multiple Supplement B copies as needed
+2. **Arbitrary Length**: Final PDFs can be arbitrarily long with many supplements (max ~100 pages)
+3. **Formatting**: Use double newline (`\n\n`) for paragraph separation in narratives for readability in final PDF
+
+**AI Context Management:**
+1. **Deferred Concern**: Token efficiency for long narratives is separate from schema design
+2. **Current Approach**: If narratives in one section, all context available to Gemini
+3. **Future Optimization**: Address token management after schema pipeline is built
+
+**Focus**: Stay focused on schema model and ground truth schema for I-589, build PDF-schema pipeline first.
+
+---
+
 ## Implementation Phases
 
 ### **Phase 1: PDF → Schema Foundation** (Weeks 1-2)
@@ -125,16 +146,29 @@ Build dynamic form renderer, pagination, and session persistence.
   - `multi-entry` → Dynamic list component (add/remove rows)
 - Apply validation rules from schema to components
 - Handle conditional field visibility (if supported in schema)
+- **Web Form Auto-Mapping to Supplements**:
+  - Children fields grouped together in web form view
+  - Auto-map overflow children to Supplement A (web form doesn't explicitly show supplement sections)
+  - Narrative fields auto-map to Supplement B as needed
+  - Backend generates supplements automatically during PDF export
+- **Smart NA Auto-Fill Logic**:
+  - When user fills one expandable field with "NA", auto-fill all remaining similar fields with "NA"
+  - Reduces repetitive data entry for optional fields
+  - User can override auto-filled values if needed
 
 **Deliverables**:
 - `frontend/src/components/FormRenderer/` - Component library
 - `frontend/src/utils/schemaMapper.ts` - Mapping logic
+- `frontend/src/utils/autoFillLogic.ts` - NA auto-fill implementation
 - Unit tests for all field type mappings
+- Unit tests for auto-fill logic
 
 **Success Criteria**:
 - All schema field types render correctly
 - Validation rules enforced on frontend
 - Schema updates automatically reflect in form
+- Children fields grouped and mapped to Supplement A automatically
+- NA auto-fill works seamlessly for expandable fields
 
 ---
 
@@ -225,26 +259,43 @@ Update WebSocket handlers and design Gemini tool definitions.
 
 **Goal**: Function calling interface for Gemini to interact with forms.
 
+**Tool Call Flow Architecture**:
+- **Blocking Responses**: Every Gemini tool_call is blocking and expects a response
+- **Frontend Validation**: Frontend validates tool calls BEFORE sending to backend:
+  - `field_update` is not empty
+  - `field_update` references actual field_ids from schema
+  - `field_update` values respect field constraints (type, format, single value for radios, etc.)
+- **Backend Passthrough**: Backend receives validated tool calls, processes them, returns results
+- **Response Types**:
+  - `field_query` → Returns field value
+  - `field_update` → Returns validation confirmation message
+  - `section_change` → **Special case**: Ends current Gemini session, starts new one (no response sent)
+
 **Tasks**:
 - Design Gemini function calling tools:
   - `update_field(field_id, value)` - Update single field
   - `update_multiple_fields(updates)` - Batch update
   - `get_field_info(field_id)` - Query field metadata
   - `validate_field(field_id, value)` - Pre-validate before update
-  - `navigate_to_section(section_id)` - Change current section
+  - `navigate_to_section(section_id)` - Change current section (special handling)
 - Create tool definition JSON for Gemini API
 - Implement tool execution handlers in backend
+- Implement frontend tool validation layer
 - Add error handling and retry logic
 
 **Deliverables**:
 - `backend/gemini_tools.py` - Tool definitions and handlers
+- `frontend/src/utils/toolValidator.ts` - Frontend tool validation
 - `backend/config/gemini_tool_schema.json` - Gemini function calling schema
 - Unit tests for each tool handler
+- Unit tests for frontend validation
 
 **Success Criteria**:
 - All tools execute successfully in test environment
+- Frontend validation catches invalid tool calls before backend
 - Tools handle edge cases (invalid field_id, type mismatch)
 - Tool responses include validation feedback
+- Section change correctly restarts Gemini session
 
 ---
 
@@ -334,30 +385,67 @@ Integrate Gemini Live with new tools, implement frontend validation.
 
 ### **Phase 5: PDF Export & Print** (Week 7)
 
-Generate completed PDFs from form data.
+Generate completed PDFs from form data with dynamic supplement generation.
 
-**Goal**: Export filled forms to printable, official-looking PDFs.
+**Goal**: Export filled forms to printable, official-looking PDFs with support for very long narratives.
 
-**Tasks**:
-- Implement PDF generation from completed form state:
-  - Map form data back to original PDF field positions
-  - Fill in all fields programmatically
-  - Handle multi-page forms (children, employment)
+**Implementation Options** (Decision deferred to this phase):
+
+**Option A: Frontend PDF Writing (pdf-lib)**:
+- Frontend uses pdf-lib to write field data directly in browser
+- User downloads PDF directly from browser
+- Backend uninvolved in PDF generation (remains stateless)
+- Pros: No backend load, works offline, user owns PDF immediately
+- Cons: Larger frontend bundle, limited to browser capabilities
+
+**Option B: Backend PDF Writing (Python library)**:
+- Frontend sends form data to backend for PDF generation
+- Backend uses PyMuPDF or similar to fill PDF fields
+- Backend returns filled PDF as download (does NOT store it)
+- Backend remains stateless (generates PDF on-demand, no persistence)
+- Pros: More powerful PDF manipulation, smaller frontend bundle
+- Cons: Backend processing time, requires server request
+
+**Tasks** (common to both options):
+- Map form data to original PDF field positions
+- Fill in all fields programmatically
+- Handle multi-page forms (children, employment, dynamic sections)
+- **Dynamic Supplement Generation**:
+  - **Supplement A (Children)**: Auto-generate copies for overflow children (>4)
+  - **Supplement B (Narratives)**: Auto-generate multiple copies for very long narratives
+  - Support arbitrarily long narratives (up to ~100 pages max)
+  - Each supplement includes header fields (A-Number, Date, Name, Signature)
+  - Track supplement page numbers in final PDF
+- **Narrative Formatting**:
+  - Use double newline (`\n\n`) for paragraph separation in narratives
+  - Ensure readability and proper spacing in final PDF
+  - Handle text overflow across multiple Supplement B pages
 - Ensure generated PDF is fillable (not flattened)
-- Add metadata to PDF (session_id, schema_name, completion_date)
+- Add metadata to PDF (session_id, schema_name, completion_date, supplement_count)
 - Create print-optimized layout
 - Support downloading completed PDF
 
-**Deliverables**:
-- `backend/pdf_generator.py` - Form data → PDF converter
-- API endpoint: `POST /api/sessions/{id}/export-pdf`
+**Deliverables** (Option A):
+- `frontend/src/utils/pdfWriter.ts` - pdf-lib integration
+- `frontend/src/utils/supplementGenerator.ts` - Supplement A/B generation logic
+- Frontend download button with progress indicator
+
+**Deliverables** (Option B):
+- `backend/pdf_generator.py` - Form data → PDF converter (stateless)
+- `backend/supplement_generator.py` - Supplement A/B generation logic
+- API endpoint: `POST /api/pdf/generate` (does NOT store PDF, returns immediately)
 - Frontend download button with progress indicator
 
 **Success Criteria**:
 - Generated PDF matches original USCIS form layout
 - All fields populated correctly (>99% accuracy)
 - PDF opens in Adobe Reader, Chrome, Preview without issues
-- Export completes in <10 seconds for 100-field form
+- Export completes in <10 seconds for 100-field form (excluding very long narratives)
+- Supplement A auto-generated for >4 children
+- Supplement B auto-generated for narratives requiring >1 page
+- Narratives formatted with double newline for readability
+- Final PDFs can be up to ~100 pages with multiple supplements
+- **Backend remains stateless** (if Option B chosen, PDF generated on-demand, never stored)
 
 ---
 
@@ -497,6 +585,70 @@ Comprehensive testing across languages, forms, and use cases.
 ---
 
 ## Key Architecture Decisions
+
+### AI Context Management (Deferred)
+
+**Note**: Token efficiency for long narratives is a separate concern from schema design and will be addressed in a future phase.
+
+**Current Approach**:
+- If narratives are grouped in one section, Gemini will have all narrative context available
+- Long narratives may consume many tokens, but this doesn't affect schema structure
+- Gemini manages its own context - we cannot directly control it
+- Focus remains on building ground truth schema and PDF-schema pipeline first
+
+**Future Optimization** (Post-MVP):
+- Implement narrative chunking strategies if needed
+- Explore context window optimization techniques
+- Monitor token usage and implement cost controls
+- Consider alternative approaches if long narratives cause issues
+
+### Stateless Backend with Frontend Data Flow
+
+**Data Flow**:
+```
+FRONTEND (Source of Truth)
+├── Downloads: PDF file (large) + FormSchema JSON (small)
+├── Maintains: All form state in sessionStorage
+├── Renders: Dynamic form from schema
+└── Sends: Only Gemini-required sections → Backend
+
+BACKEND (Stateless Passthrough)
+├── Stores: Schemas only (no user data)
+├── Processes: Schema sections + current values → Gemini
+└── Returns: Tool call results → Frontend
+
+GEMINI (Ephemeral Session Storage)
+├── Stores: Field values in session-based context storage
+├── Context: Exists only for duration of voice session
+└── Cleared: When session ends or times out
+```
+
+**Field Value Storage Locations**:
+1. **Frontend (sessionStorage)**: Primary source of truth, persists until tab close
+2. **Gemini Session Context**: Temporary storage during voice interaction only
+3. **Backend**: NEVER stores field values (schemas only)
+
+**Why Frontend Downloads PDF + Schema Directly?**
+- **Efficiency**: PDFs can be large (1-5MB), no need to route through backend
+- **Stateless Backend**: Backend never stores or serves user data (HIPAA compliance)
+- **Frontend Needs Both**: Schema for rendering, PDF for user reference/download
+- **Backend Only Needs Context**: Sends only current section + values to Gemini
+
+**Security Model**:
+- **Field values** stored only in:
+  - User's browser (sessionStorage - auto-clears on tab close)
+  - Gemini's ephemeral session context (cleared when session ends)
+- **Backend** stores only:
+  - Form schemas (template structure, no user data)
+  - Session metadata (session_id, timestamps - no field values)
+- **No PII/PHI in backend** logs or storage (HIPAA compliant)
+
+**Benefits**:
+- Backend remains stateless processing passthrough
+- Frontend is source of truth for all state (consistent with existing architecture)
+- Reduced backend load (no large file serving)
+- Maintains privacy guarantees (no PII/PHI in backend)
+- User owns their data (in sessionStorage and downloadable PDF)
 
 ### Why PDF-First?
 
