@@ -314,12 +314,30 @@
   "supplements": [
     {
       "id": "supplement_a",
-      "label": "Supplement A - Additional Children",
+      "name": "Supplement A - Additional Children",
+      "purpose": "To list additional children who could not fit in Part A.II.",
+      "trigger_condition": "When applicant has more children than space allows in Part A.II (Children's Table).",
+      "fields": [
+        "supplement_a_a_number",
+        "supplement_a_last_name",
+        "supplement_a_first_name",
+        "supplement_a_middle_name",
+        "supplement_a_children_table"
+      ],
       "page_number": 11
     },
     {
       "id": "supplement_b",
-      "label": "Supplement B - Additional Information/Continuation",
+      "name": "Supplement B - Additional Information/Continuation",
+      "purpose": "To provide additional details or continuation for any question that did not fit in the allotted space.",
+      "trigger_condition": "When an answer to any question (e.g., in Parts A.III, B, or C) exceeds the space provided.",
+      "fields": [
+        "supplement_b_a_number",
+        "supplement_b_last_name",
+        "supplement_b_first_name",
+        "supplement_b_middle_name",
+        "supplement_b_continuation_table"
+      ],
       "page_number": 12
     }
   ],
@@ -2896,6 +2914,348 @@
       "format": "mm/dd/yyyy",
       "read_only": true,
       "pdf_field_name": "DateTimeField29[0]"
+    },
+    {
+      "id": "supplement_a_a_number",
+      "name": "Supplement A - A-Number",
+      "spoken_name": "supplement A A-Number",
+      "type": "text",
+      "section_id": "supplement_a_section",
+      "help": {
+        "inline": "(if any)"
+      },
+      "validation": {
+        "format_preset": "a_number"
+      }
+    },
+    {
+      "id": "supplement_a_last_name",
+      "name": "Supplement A - Last Name",
+      "spoken_name": "supplement A last name",
+      "type": "text",
+      "section_id": "supplement_a_section"
+    },
+    {
+      "id": "supplement_a_first_name",
+      "name": "Supplement A - First Name",
+      "spoken_name": "supplement A first name",
+      "type": "text",
+      "section_id": "supplement_a_section"
+    },
+    {
+      "id": "supplement_a_middle_name",
+      "name": "Supplement A - Middle Name",
+      "spoken_name": "supplement A middle name",
+      "type": "text",
+      "section_id": "supplement_a_section"
+    },
+    {
+      "id": "supplement_a_children_table",
+      "name": "Supplement A - Additional Children",
+      "spoken_name": "additional children table",
+      "type": "table",
+      "section_id": "supplement_a_section",
+      "columns": [
+        {
+          "id": "a_number",
+          "label": "A-Number",
+          "type": "text",
+          "help": "(if any)",
+          "validation": {
+            "format_preset": "a_number"
+          }
+        },
+        {
+          "id": "passport_id",
+          "label": "Passport/ID Card Number",
+          "type": "text",
+          "help": "(if any)"
+        },
+        {
+          "id": "marital_status",
+          "label": "Marital Status",
+          "type": "select",
+          "options": [
+            {
+              "value": "single",
+              "label": "Single"
+            },
+            {
+              "value": "married",
+              "label": "Married"
+            },
+            {
+              "value": "divorced",
+              "label": "Divorced"
+            },
+            {
+              "value": "widowed",
+              "label": "Widowed"
+            }
+          ]
+        },
+        {
+          "id": "ssn",
+          "label": "U.S. Social Security Number",
+          "type": "text",
+          "help": "(if any)",
+          "validation": {
+            "format_preset": "ssn"
+          }
+        },
+        {
+          "id": "last_name",
+          "label": "Complete Last Name",
+          "type": "text"
+        },
+        {
+          "id": "first_name",
+          "label": "First Name",
+          "type": "text"
+        },
+        {
+          "id": "middle_name",
+          "label": "Middle Name",
+          "type": "text"
+        },
+        {
+          "id": "dob",
+          "label": "Date of Birth",
+          "type": "date",
+          "format": "mm/dd/yyyy"
+        },
+        {
+          "id": "city_country_of_birth",
+          "label": "City and Country of Birth",
+          "type": "text"
+        },
+        {
+          "id": "nationality",
+          "label": "Nationality (Citizenship)",
+          "type": "text"
+        },
+        {
+          "id": "race_ethnic_tribal_group",
+          "label": "Race, Ethnic, or Tribal Group",
+          "type": "text"
+        },
+        {
+          "id": "sex",
+          "label": "Sex",
+          "type": "radio",
+          "options": [
+            {
+              "value": "male",
+              "label": "Male"
+            },
+            {
+              "value": "female",
+              "label": "Female"
+            }
+          ]
+        },
+        {
+          "id": "in_us",
+          "label": "Is this child in the U.S.?",
+          "type": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "id": "location_not_in_us",
+          "label": "Specify location",
+          "type": "text",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "no"
+          }
+        },
+        {
+          "id": "place_of_last_entry",
+          "label": "Place of last entry",
+          "type": "text",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "date_of_last_entry",
+          "label": "Date of last entry",
+          "type": "date",
+          "format": "mm/dd/yyyy",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "i94_number",
+          "label": "I-94 Number",
+          "type": "text",
+          "help": "(if any)",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "status_when_admitted",
+          "label": "Status when last admitted",
+          "type": "text",
+          "help": "(Visa type, if any)",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "current_status",
+          "label": "Current status",
+          "type": "text",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "status_expiration_date",
+          "label": "Status expiration date",
+          "type": "date",
+          "format": "mm/dd/yyyy",
+          "help": "(if any)",
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "in_proceedings",
+          "label": "In Immigration Court proceedings?",
+          "type": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ],
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        },
+        {
+          "id": "include_in_application",
+          "label": "Include in this application?",
+          "type": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ],
+          "show_if": {
+            "field": "in_us",
+            "operator": "equals",
+            "value": "yes"
+          }
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 1,
+        "initial_rows": 4,
+        "add_button_label": "Add Another Child",
+        "can_add_rows": true
+      }
+    },
+    {
+      "id": "supplement_b_a_number",
+      "name": "Supplement B - A-Number",
+      "spoken_name": "supplement B A-Number",
+      "type": "text",
+      "section_id": "supplement_b_section",
+      "help": {
+        "inline": "(if any)"
+      },
+      "validation": {
+        "format_preset": "a_number"
+      }
+    },
+    {
+      "id": "supplement_b_last_name",
+      "name": "Supplement B - Last Name",
+      "spoken_name": "supplement B last name",
+      "type": "text",
+      "section_id": "supplement_b_section"
+    },
+    {
+      "id": "supplement_b_first_name",
+      "name": "Supplement B - First Name",
+      "spoken_name": "supplement B first name",
+      "type": "text",
+      "section_id": "supplement_b_section"
+    },
+    {
+      "id": "supplement_b_middle_name",
+      "name": "Supplement B - Middle Name",
+      "spoken_name": "supplement B middle name",
+      "type": "text",
+      "section_id": "supplement_b_section"
+    },
+    {
+      "id": "supplement_b_continuation_table",
+      "name": "Supplement B - Additional Information",
+      "spoken_name": "additional information table",
+      "type": "table",
+      "section_id": "supplement_b_section",
+      "columns": [
+        {
+          "id": "part_number",
+          "label": "Part Number",
+          "type": "text"
+        },
+        {
+          "id": "question_number",
+          "label": "Question Number",
+          "type": "text"
+        },
+        {
+          "id": "additional_information",
+          "label": "Additional Information",
+          "type": "textarea"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 1,
+        "initial_rows": 3,
+        "add_button_label": "Add Continuation",
+        "can_add_rows": true
+      }
     }
   ]
 }
+
