@@ -255,6 +255,226 @@ def extract_complete_metadata(doc):
     )
 
 
+def detect_table_patterns(fields):
+    """
+    Detect repeating field patterns that indicate table structures.
+    Groups fields by logical table rows (same Y position, similar naming pattern).
+    Returns list of table groups (each group is a list of row lists).
+    """
+    from collections import defaultdict
+
+    # Group fields by section and Y position
+    section_rows = defaultdict(lambda: defaultdict(list))
+
+    for field in fields:
+        section_id = field.section_id
+        # Round Y to nearest 20 pixels to group fields in same row
+        y_key = round(field.pdf_position.y / 20) * 20
+        section_rows[section_id][y_key].append(field)
+
+    # Now identify table patterns within each section
+    table_groups = []
+    non_repeating_fields = []
+
+    for section_id, rows_dict in section_rows.items():
+        # Sort rows by Y position
+        sorted_rows = sorted(rows_dict.items(), key=lambda x: x[0])
+
+        # Look for consecutive rows with similar structure (same field count and types)
+        current_table_rows = []
+        prev_row_signature = None
+
+        for y_pos, row_fields in sorted_rows:
+            # Create a signature for this row (number of fields and their types)
+            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x)
+            row_signature = tuple([f.type for f in row_fields_sorted])
+
+            # Check if this row matches the pattern of a potential table
+            # Tables should have 3+ fields in a row
+            if len(row_fields_sorted) >= 3:
+                if prev_row_signature == row_signature:
+                    # This row matches the previous one - part of the same table
+                    current_table_rows.append(row_fields_sorted)
+                elif current_table_rows:
+                    # Previous rows formed a table, but this one is different
+                    # Save the current table and start fresh
+                    if len(current_table_rows) >= 2:  # Need at least 2 rows
+                        table_groups.append((section_id, current_table_rows))
+                    else:
+                        # Not enough rows, treat as individual fields
+                        for row in current_table_rows:
+                            non_repeating_fields.extend(row)
+                    current_table_rows = [row_fields_sorted]
+                    prev_row_signature = row_signature
+                else:
+                    # Start of a potential new table
+                    current_table_rows = [row_fields_sorted]
+                    prev_row_signature = row_signature
+            else:
+                # Not enough fields for a table row
+                # Save any accumulated table
+                if current_table_rows and len(current_table_rows) >= 2:
+                    table_groups.append((section_id, current_table_rows))
+                elif current_table_rows:
+                    for row in current_table_rows:
+                        non_repeating_fields.extend(row)
+
+                # Add current row fields as non-repeating
+                non_repeating_fields.extend(row_fields)
+                current_table_rows = []
+                prev_row_signature = None
+
+        # Don't forget the last table
+        if current_table_rows and len(current_table_rows) >= 2:
+            table_groups.append((section_id, current_table_rows))
+        elif current_table_rows:
+            for row in current_table_rows:
+                non_repeating_fields.extend(row)
+
+    return table_groups, non_repeating_fields
+
+
+def analyze_table_structure(table_rows, section_id):
+    """
+    Analyze a list of table rows to extract table structure.
+    table_rows is a list of lists, where each inner list is a row of fields.
+    Returns columns list and multi_entry config.
+    """
+    if not table_rows:
+        return None, None
+
+    num_rows = len(table_rows)
+
+    # Use the first row as the column template
+    first_row_fields = table_rows[0]
+
+    # Create columns from first row
+    columns = []
+    for field in first_row_fields:
+        # Extract a clean column ID from the field ID
+        # Remove section prefix and extract meaningful part
+        parts = field.id.split('_')
+        # Try to get the last meaningful part(s)
+        if len(parts) > 3:
+            col_id = '_'.join(parts[-2:])  # Take last 2 parts
+        else:
+            col_id = parts[-1] if parts else field.id
+
+        # Create column definition
+        column = {
+            'id': col_id,
+            'label': field.name,
+            'type': field.type,
+            'pdf_field_name': field.pdf_field_name,
+        }
+
+        # Add optional attributes
+        if field.help:
+            column['help'] = field.help
+        if field.validation:
+            column['validation'] = field.validation
+        if field.options:
+            column['options'] = field.options
+        if hasattr(field, 'format') and field.format:
+            column['format'] = field.format
+        if hasattr(field, 'show_if') and field.show_if:
+            column['show_if'] = field.show_if
+
+        columns.append(column)
+
+    # Create multi_entry configuration
+    multi_entry = {
+        'initial_rows': num_rows,
+        'min_entries': 0,  # Default, could be inferred
+    }
+
+    # Detect if this is a supplement table
+    if 'supplement' in section_id:
+        multi_entry['overflow_instruction'] = 'Use this supplement for additional entries.'
+
+    return columns, multi_entry
+
+
+def create_table_field(table_rows, section_id):
+    """
+    Create a single table field from a list of table rows.
+    table_rows is a list of lists, where each inner list is a row of fields.
+    """
+    from .models import TableColumn, MultiEntryConfig
+
+    # Analyze the table structure
+    columns_data, multi_entry_data = analyze_table_structure(table_rows, section_id)
+
+    if not columns_data:
+        return None
+
+    # Get the first field from first row as template
+    first_field = table_rows[0][0]
+
+    # Generate table ID
+    # Try to extract a meaningful name from field IDs
+    # Look for common prefix in all first-row field IDs
+    field_ids = [f.id for f in table_rows[0]]
+    common_parts = []
+    id_parts = [fid.split('_') for fid in field_ids]
+
+    # Find common prefix
+    if id_parts:
+        for i in range(len(id_parts[0])):
+            parts_at_i = [parts[i] if i < len(parts) else None for parts in id_parts]
+            if len(set(parts_at_i)) == 1 and parts_at_i[0]:
+                common_parts.append(parts_at_i[0])
+            else:
+                break
+
+    # Generate meaningful table ID
+    if len(common_parts) >= 2:
+        table_id = '_'.join(common_parts) + '_table'
+    else:
+        table_id = f"{section_id}_table"
+
+    # Generate table name from first field
+    table_name = first_field.name
+
+    # Create the table field
+    table_field = FormField(
+        id=table_id,
+        name=table_name,
+        spoken_name=table_name.split()[0] if table_name else 'table',
+        type=FieldType.TABLE,
+        section_id=section_id,
+        columns=columns_data,
+        multi_entry=multi_entry_data,
+    )
+
+    return table_field
+
+
+def detect_and_consolidate_tables(fields):
+    """
+    Main function to detect tables and replace repeating fields with table fields.
+    Returns list of fields with tables consolidated.
+    """
+    # Detect table patterns
+    table_groups, non_repeating = detect_table_patterns(fields)
+
+    result_fields = list(non_repeating)
+
+    # Process each table group
+    for section_id, table_rows in table_groups:
+        # Try to create a table field
+        table_field = create_table_field(table_rows, section_id)
+
+        if table_field:
+            result_fields.append(table_field)
+        else:
+            # If table creation failed, keep individual fields
+            for row in table_rows:
+                result_fields.extend(row)
+
+    return result_fields
+
+
 def extract_schema(pdf_path: str) -> FormSchema:
     """
     Extracts form schema from a PDF file.
@@ -458,8 +678,14 @@ def extract_schema(pdf_path: str) -> FormSchema:
             # Add suffix to make unique
             field.id = f"{original_id}_{field_id_counts[original_id]}"
 
+    # --- Table Detection and Consolidation ---
+    # Detect repeating field patterns and consolidate into table fields
+    print(f"  Detecting tables in {len(fields)} fields...")
+    fields_with_tables = detect_and_consolidate_tables(fields)
+    print(f"  After table consolidation: {len(fields_with_tables)} fields")
+
     # Add field ids to the consolidated section's field list
-    for field in fields:
+    for field in fields_with_tables:
         for section_data in all_sections_temp:
             if section_data["id"] == field.section_id:
                 if field.id not in section_data["fields"]:
@@ -471,7 +697,7 @@ def extract_schema(pdf_path: str) -> FormSchema:
     radio_groups = defaultdict(list)
     
     # First, separate radio buttons from other fields
-    for field in fields:
+    for field in fields_with_tables:
         if field.type == FieldType.RADIO:
             # Group radio buttons by their original PDF field name
             radio_groups[field.pdf_field_name].append(field)
@@ -532,7 +758,9 @@ def extract_schema(pdf_path: str) -> FormSchema:
     # Track all pages where section fields appear
     section_pages = defaultdict(set)
     for field in grouped_fields:
-        section_pages[field.section_id].add(field.pdf_position.page)
+        # Table fields might not have pdf_position, skip them
+        if hasattr(field, 'pdf_position') and field.pdf_position:
+            section_pages[field.section_id].add(field.pdf_position.page)
 
     # Update sections with page_numbers array
     for section_data in all_sections_temp:
