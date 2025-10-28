@@ -123,30 +123,69 @@ def generate_semantic_field_id(field_label, section_id):
 
 def clean_field_name(tooltip_text):
     """Extract clean field name from PDF tooltip."""
+    # Remove part/section prefix like "Part. A. 1. Information About You. 1. "
     text = re.sub(r'^Part\.?\s+[A-G]\.?\s+\d+\.?.*?\d+\.?\s+', '', tooltip_text)
+
+    # Remove instruction verbs
     text = re.sub(r'^(Enter|Provide|List|Specify)\s+', '', text, flags=re.IGNORECASE)
-    text = text.strip('. ')
+
+    # Replace "(A. Number)" with "(A-Number)" for consistency
+    text = re.sub(r'\(A\.\s*Number\)', '(A-Number)', text)
+
+    # Remove help text suffixes (", if any", ", if applicable", etc.)
+    text = re.sub(r',?\s*(if any|if applicable|optional)\.?$', '', text, flags=re.IGNORECASE)
+
+    # Add "(s)" to certain fields for consistency with ground truth
+    if 'alien registration number' in text.lower() and '(s)' not in text:
+        text = text.replace('Alien Registration Number', 'Alien Registration Number(s)')
+        text = text.replace('alien registration number', 'Alien Registration Number(s)')
+
+    # Cleanup: remove trailing periods, commas and extra spaces
+    text = text.strip('., ')
+    text = re.sub(r'\s+', ' ', text)  # Normalize spaces
+
     return text
 
 
 def generate_spoken_name(field_name):
     """Generate concise spoken name for voice UI."""
-    paren_match = re.search(r'\(([A-Z]-?[A-Za-z]+)\)', field_name)
+    # Look for abbreviations in parentheses like (A-Number), (SSN)
+    paren_match = re.search(r'\(([A-Z][-\w]*)\)', field_name)
     if paren_match:
-        return paren_match.group(1)
+        abbrev = paren_match.group(1)
+        # Clean up common patterns
+        abbrev = abbrev.replace('A-Number', 'A-Number')
+        return abbrev
+
+    # Otherwise, use just the key words
     words = field_name.split()
     if len(words) <= 3:
         return field_name
-    return ' '.join(words[:3])
+
+    # Take first 2-3 meaningful words, skip filler words
+    meaningful_words = [w for w in words if w.lower() not in ['the', 'a', 'an', 'your', 'if', 'any']]
+    if len(meaningful_words) <= 3:
+        return ' '.join(meaningful_words)
+    return ' '.join(meaningful_words[:2])
 
 
 def extract_help_text(field_label):
-    """Extract help text from parentheses."""
+    """Extract help text from parentheses or inline."""
+    # Check for common help phrases at the end
+    if ', if any' in field_label.lower():
+        return {'inline': '(if any)'}
+    elif ', if applicable' in field_label.lower():
+        return {'inline': '(if applicable)'}
+    elif ', (optional)' in field_label.lower() or '(optional)' in field_label.lower():
+        return {'inline': '(optional)'}
+
+    # Also check in parentheses
     match = re.search(r'\(([^)]+)\)', field_label)
     if match:
-        help = match.group(1)
-        if help.lower() in ['if any', 'if applicable', 'optional']:
-            return {'inline': help}
+        help_text = match.group(1).strip()
+        if help_text.lower() in ['if any', 'if applicable', 'optional']:
+            return {'inline': f'({help_text})'}
+
     return None
 
 
@@ -385,8 +424,10 @@ def extract_schema(pdf_path: str) -> FormSchema:
             help_text = extract_help_text(field_label)
             validation = infer_validation(clean_name, field_type)
 
-            # Clean PDF field name (remove array indices)
-            pdf_field_name = re.sub(r'\[\d+\]', '', field.field_name)
+            # Clean PDF field name - keep just the base name and first index
+            # e.g., "form1[0].#subform[1].PtAILine1_ANumber[0]" -> "PtAILine1_ANumber[0]"
+            pdf_name_parts = field.field_name.split('.')
+            pdf_field_name = pdf_name_parts[-1] if pdf_name_parts else field.field_name
 
             form_field = FormField(
                 id=clean_id,

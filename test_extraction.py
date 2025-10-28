@@ -19,7 +19,13 @@ if __name__ == "__main__":
     schema_data = extract_schema(pdf_file_path)
 
     # Convert to dict for JSON serialization
-    schema_dict = schema_data.model_dump(exclude_none=True)
+    # Exclude pdf_position and auto_fill_na from fields
+    schema_dict = schema_data.model_dump(
+        exclude_none=True,
+        exclude={
+            'fields': {'__all__': {'pdf_position', 'auto_fill_na'}}
+        }
+    )
 
     with open(output_schema_path, "w") as f:
         json.dump(schema_dict, f, indent=2)
