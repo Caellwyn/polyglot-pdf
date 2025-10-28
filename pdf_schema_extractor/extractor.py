@@ -357,8 +357,8 @@ if __name__ == "__main__":
     # This is an example of how to use the function.
     # The user will need to provide the correct paths.
     # I will need to find the correct path to the PDF.
-    pdf_file_path = "path/to/your/i-589_asylum_application.pdf"
-    output_schema_path = "path/to/your/extracted_schema.json"
+    pdf_file_path = "C:\\Users\\caell\\OneDrive\\AILearning\\polyglot-pdf\\example_pdfs\\i-589\\i-589-asylum-application.pdf"
+    output_schema_path = "C:\\Users\\caell\\OneDrive\\AILearning\\polyglot-pdf\\pdf_schema_extractor\\test_schemas\\extracted_schema.json"
     
     print(f"Extracting schema from {pdf_file_path}...")
     schema_data = extract_schema(pdf_file_path)
