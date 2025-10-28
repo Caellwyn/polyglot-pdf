@@ -79,6 +79,7 @@ Comprehensive multilingual form system with voice interaction, PDF generation, a
 4. **Update docs in place** - Never create new summary documents
 5. **No code in planning docs** - Schema examples OK, but no implementation code (prevents anchoring)
 6. **TECHNICAL_GUIDE.md reflects reality** - Only update after code changes, not before
+7. **Create New Branches** For each new feature, first create a new git branch
 
 ### Never Do
 - ❌ Write implementation code in planning documents
