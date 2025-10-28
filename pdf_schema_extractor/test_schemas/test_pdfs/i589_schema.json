@@ -238,12 +238,15 @@
         9
       ],
       "fields": [
-        "part_d_applicant_declaration_read_by_interpreter",
-        "part_d_applicant_declaration_prepared_by",
         "part_d_applicant_legal_warning",
         "part_d_applicant_signature",
         "part_d_applicant_printed_name",
-        "part_d_applicant_date"
+        "part_d_applicant_native_name",
+        "part_d_applicant_date",
+        "part_d_family_assisted",
+        "part_d_family_assisted_details",
+        "part_d_other_preparer",
+        "part_d_pro_bono_list"
       ]
     },
     {
@@ -254,8 +257,6 @@
         9
       ],
       "fields": [
-        "part_e_preparer_did_not_use",
-        "part_e_preparer_used",
         "part_e_preparer_last_name",
         "part_e_preparer_first_name",
         "part_e_preparer_middle_name",
@@ -269,7 +270,10 @@
         "part_e_preparer_email",
         "part_e_preparer_declaration",
         "part_e_preparer_signature",
-        "part_e_preparer_date"
+        "part_e_preparer_date",
+        "part_e_g28_attached",
+        "part_e_attorney_bar_number",
+        "part_e_attorney_uscis_account"
       ]
     },
     {
@@ -281,6 +285,11 @@
       ],
       "fields": [
         "part_f_read_only_note",
+        "part_f_oath_truthful",
+        "part_f_oath_corrections",
+        "part_f_applicant_signature",
+        "part_f_applicant_native_name",
+        "part_f_applicant_date",
         "part_f_oath_sworn",
         "part_f_oath_language",
         "part_f_oath_language_other",
@@ -302,6 +311,11 @@
       ],
       "fields": [
         "part_g_read_only_note",
+        "part_g_oath_truthful",
+        "part_g_oath_corrections",
+        "part_g_applicant_signature",
+        "part_g_applicant_native_name",
+        "part_g_applicant_date",
         "part_g_oath_sworn",
         "part_g_oath_language",
         "part_g_oath_language_other",
@@ -821,7 +835,7 @@
           },
           {
             "date": "DateTimeField4[0]",
-            "place": "TextField4[4]",
+            "place": "TextField4G[4]",
             "status": "TextField4[5]",
             "date_status_expires": "DateTimeField4[1]"
           }
@@ -2139,7 +2153,7 @@
       "pdf_field_name": "TextField25[0]",
       "overflow_to_supplement": "supplement_b",
       "show_if": {
-        "field": "part_b_q3a_group_membership",
+        "field": "part_b_q3b_continue_membership",
         "operator": "equals",
         "value": "yes"
       }
@@ -2426,34 +2440,6 @@
       }
     },
     {
-      "id": "part_d_applicant_declaration_read_by_interpreter",
-      "name": "Applicant Declaration - Interpreted",
-      "spoken_name": "applicant declaration interpreted",
-      "type": "checkbox",
-      "section_id": "part_d_signature",
-      "options": [
-        {
-          "value": "yes",
-          "label": "This application was read to me in a language in which I am fluent.",
-          "pdf_field_name": "CheckBox6[0]"
-        }
-      ]
-    },
-    {
-      "id": "part_d_applicant_declaration_prepared_by",
-      "name": "Applicant Declaration - Prepared by",
-      "spoken_name": "applicant declaration prepared by",
-      "type": "checkbox",
-      "section_id": "part_d_signature",
-      "options": [
-        {
-          "value": "yes",
-          "label": "I have requested this application be prepared for me.",
-          "pdf_field_name": "CheckBox7[0]"
-        }
-      ]
-    },
-    {
       "id": "part_d_applicant_legal_warning",
       "name": "Applicant Legal Warning",
       "spoken_name": "applicant legal warning",
@@ -2484,6 +2470,17 @@
       "pdf_field_name": "TextField33[0]"
     },
     {
+      "id": "part_d_applicant_native_name",
+      "name": "Write your name in your native alphabet",
+      "spoken_name": "applicant native name",
+      "type": "text",
+      "section_id": "part_d_signature",
+      "validation": {
+        "required": false
+      },
+      "pdf_field_name": "TextField_NativeName[0]"
+    },
+    {
       "id": "part_d_applicant_date",
       "name": "Date",
       "spoken_name": "applicant signature date",
@@ -2497,30 +2494,87 @@
       "pdf_field_name": "DateTimeField25[0]"
     },
     {
-      "id": "part_e_preparer_did_not_use",
-      "name": "I did not use a preparer.",
-      "spoken_name": "did not use a preparer",
-      "type": "checkbox",
-      "section_id": "part_e_declaration",
+      "id": "part_d_family_assisted",
+      "name": "Did your spouse, parent, or child(ren) assist you in completing this application?",
+      "spoken_name": "family assisted",
+      "type": "radio",
+      "section_id": "part_d_signature",
       "options": [
         {
-          "value": "true",
-          "label": "I am filing this application without a preparer.",
-          "pdf_field_name": "CheckBox8[0]"
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Radio_FamilyAssist[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "Radio_FamilyAssist[1]"
         }
       ]
     },
     {
-      "id": "part_e_preparer_used",
-      "name": "I used a preparer.",
-      "spoken_name": "used a preparer",
-      "type": "checkbox",
-      "section_id": "part_e_declaration",
+      "id": "part_d_family_assisted_details",
+      "name": "Family Assistance Details",
+      "spoken_name": "family assistance details",
+      "type": "table",
+      "section_id": "part_d_signature",
+      "columns": [
+        {
+          "id": "name",
+          "label": "Name",
+          "type": "text"
+        },
+        {
+          "id": "relationship",
+          "label": "Relationship",
+          "type": "text"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 1,
+        "initial_rows": 2
+      },
+      "show_if": {
+        "field": "part_d_family_assisted",
+        "operator": "equals",
+        "value": "yes"
+      }
+    },
+    {
+      "id": "part_d_other_preparer",
+      "name": "Did someone other than your spouse, parent, or child(ren) prepare this application?",
+      "spoken_name": "other preparer",
+      "type": "radio",
+      "section_id": "part_d_signature",
       "options": [
         {
-          "value": "true",
-          "label": "I am filing this application with a preparer.",
-          "pdf_field_name": "CheckBox9[0]"
+          "value": "yes",
+          "label": "Yes (If \"Yes,\" complete Part E.)",
+          "pdf_field_name": "Radio_OtherPreparer[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "Radio_OtherPreparer[1]"
+        }
+      ]
+    },
+    {
+      "id": "part_d_pro_bono_list",
+      "name": "Have you been provided with a list of persons who may be available to assist you, at little or no cost, with your asylum claim?",
+      "spoken_name": "pro bono list",
+      "type": "radio",
+      "section_id": "part_d_signature",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Radio_ProBono[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "Radio_ProBono[1]"
         }
       ]
     },
@@ -2532,9 +2586,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField34[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2545,9 +2599,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField35[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2558,9 +2612,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField36[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2571,9 +2625,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField37[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2584,9 +2638,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField38[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2597,9 +2651,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField39[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2610,9 +2664,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField40[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2623,9 +2677,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField41[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2639,9 +2693,9 @@
       },
       "pdf_field_name": "TextField42[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2652,9 +2706,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField43[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2665,9 +2719,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "TextField44[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2678,9 +2732,9 @@
       "section_id": "part_e_declaration",
       "default_value": "By signing below, I declare under penalty of perjury that I have prepared this application at the request of the applicant...",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2691,9 +2745,9 @@
       "section_id": "part_e_declaration",
       "pdf_field_name": "Signature2[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
       }
     },
     {
@@ -2705,9 +2759,57 @@
       "format": "mm/dd/yyyy",
       "pdf_field_name": "DateTimeField26[0]",
       "show_if": {
-        "field": "part_e_preparer_used",
+        "field": "part_d_other_preparer",
         "operator": "equals",
-        "value": "true"
+        "value": "yes"
+      }
+    },
+    {
+      "id": "part_e_g28_attached",
+      "name": "Form G-28 is attached",
+      "spoken_name": "G-28 attached",
+      "type": "checkbox",
+      "section_id": "part_e_declaration",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Select this box if Form G-28 is attached."
+        }
+      ],
+      "show_if": {
+        "field": "part_d_other_preparer",
+        "operator": "equals",
+        "value": "yes"
+      }
+    },
+    {
+      "id": "part_e_attorney_bar_number",
+      "name": "Attorney State Bar Number",
+      "spoken_name": "attorney bar number",
+      "type": "text",
+      "section_id": "part_e_declaration",
+      "help": {
+        "inline": "(if applicable)"
+      },
+      "show_if": {
+        "field": "part_d_other_preparer",
+        "operator": "equals",
+        "value": "yes"
+      }
+    },
+    {
+      "id": "part_e_attorney_uscis_account",
+      "name": "Attorney or Accredited Representative USCIS Online Account Number",
+      "spoken_name": "attorney USCIS account number",
+      "type": "text",
+      "section_id": "part_e_declaration",
+      "help": {
+        "inline": "(if any)"
+      },
+      "show_if": {
+        "field": "part_d_other_preparer",
+        "operator": "equals",
+        "value": "yes"
       }
     },
     {
@@ -2718,6 +2820,60 @@
       "section_id": "part_f_interview",
       "default_value": "You, the applicant, must appear for an interview with an asylum officer. ... Failure to appear may result in the dismissal of your application or referral to an Immigration Judge.",
       "read_only": true
+    },
+    {
+      "id": "part_f_oath_truthful",
+      "name": "Applicant Oath",
+      "spoken_name": "applicant interview oath",
+      "type": "radio",
+      "section_id": "part_f_interview",
+      "options": [
+        {
+          "value": "all_true",
+          "label": "all true"
+        },
+        {
+          "value": "not_all_true",
+          "label": "not all true"
+        }
+      ]
+    },
+    {
+      "id": "part_f_oath_corrections",
+      "name": "Corrections",
+      "spoken_name": "interview corrections",
+      "type": "text",
+      "section_id": "part_f_interview",
+      "help": {
+        "inline": "correction(s) numbered __ to __"
+      },
+      "show_if": {
+        "field": "part_f_oath_truthful",
+        "operator": "equals",
+        "value": "not_all_true"
+      }
+    },
+    {
+      "id": "part_f_applicant_signature",
+      "name": "Signature of Applicant (at interview)",
+      "spoken_name": "applicant interview signature",
+      "type": "signature",
+      "section_id": "part_f_interview"
+    },
+    {
+      "id": "part_f_applicant_native_name",
+      "name": "Write Your Name in Your Native Alphabet (at interview)",
+      "spoken_name": "applicant interview native name",
+      "type": "text",
+      "section_id": "part_f_interview"
+    },
+    {
+      "id": "part_f_applicant_date",
+      "name": "Date (at interview)",
+      "spoken_name": "applicant interview date",
+      "type": "date",
+      "section_id": "part_f_interview",
+      "format": "mm/dd/yyyy"
     },
     {
       "id": "part_f_oath_sworn",
@@ -2842,6 +2998,60 @@
       "section_id": "part_g_hearing",
       "default_value": "You, the applicant, must appear for a hearing before an Immigration Judge. ... Failure to appear may result in a finding that you have abandoned your application.",
       "read_only": true
+    },
+    {
+      "id": "part_g_oath_truthful",
+      "name": "Applicant Oath (Hearing)",
+      "spoken_name": "applicant hearing oath",
+      "type": "radio",
+      "section_id": "part_g_hearing",
+      "options": [
+        {
+          "value": "all_true",
+          "label": "all true"
+        },
+        {
+          "value": "not_all_true",
+          "label": "not all true"
+        }
+      ]
+    },
+    {
+      "id": "part_g_oath_corrections",
+      "name": "Corrections (Hearing)",
+      "spoken_name": "hearing corrections",
+      "type": "text",
+      "section_id": "part_g_hearing",
+      "help": {
+        "inline": "correction(s) numbered __ to __"
+      },
+      "show_if": {
+        "field": "part_g_oath_truthful",
+        "operator": "equals",
+        "value": "not_all_true"
+      }
+    },
+    {
+      "id": "part_g_applicant_signature",
+      "name": "Signature of Applicant (at hearing)",
+      "spoken_name": "applicant hearing signature",
+      "type": "signature",
+      "section_id": "part_g_hearing"
+    },
+    {
+      "id": "part_g_applicant_native_name",
+      "name": "Write Your Name in Your Native Alphabet (at hearing)",
+      "spoken_name": "applicant hearing native name",
+      "type": "text",
+      "section_id": "part_g_hearing"
+    },
+    {
+      "id": "part_g_applicant_date",
+      "name": "Date (at hearing)",
+      "spoken_name": "applicant hearing date",
+      "type": "date",
+      "section_id": "part_g_hearing",
+      "format": "mm/dd/yyyy"
     },
     {
       "id": "part_g_oath_sworn",
@@ -3258,4 +3468,3 @@
     }
   ]
 }
-
