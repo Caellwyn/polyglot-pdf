@@ -18,9 +18,202 @@ from .models import (
     FormPart,
     FormSupplement,
     FieldOption,
+    GroupKind,
 )
 import re
 from collections import defaultdict
+
+
+def generate_semantic_section_id(section_label):
+    """Generate semantic section ID from label."""
+    label_lower = section_label.lower()
+
+    # Extract Part A.I, Part A.II, etc.
+    match = re.match(r'part ([a-g])(\.([ivx]+))?', label_lower)
+    if match:
+        part = match.group(1)
+        subsection = match.group(3) if match.group(3) else ""
+
+        if subsection:
+            # Part A.I → part_a_i
+            return f"part_{part}_{subsection}"
+
+        # Part D: Your Signature → part_d_signature
+        if "signature" in label_lower:
+            return f"part_{part}_signature"
+        elif "declaration" in label_lower:
+            return f"part_{part}_declaration"
+        elif "interview" in label_lower:
+            return f"part_{part}_interview"
+        elif "hearing" in label_lower:
+            return f"part_{part}_hearing"
+        elif "question" in label_lower or "application" in label_lower:
+            return f"part_{part}_questions"
+
+        return f"part_{part}"
+
+    # Supplements
+    if "supplement a" in label_lower:
+        return "supplement_a_section"
+    elif "supplement b" in label_lower:
+        return "supplement_b_section"
+
+    return f"section_{hash(section_label) % 1000}"
+
+
+def generate_semantic_field_id(field_label, section_id):
+    """Generate semantic field ID from label and section."""
+    base = section_id
+    label = field_label.lower()
+
+    # Remove common prefixes
+    label = re.sub(r'^part\.?\s+[a-g]\.?\s+\d+\.?.*?\d+\.?\s+', '', label)
+    label = re.sub(r'^(enter|provide|list|specify)\s+', '', label)
+
+    # Extract key terms
+    if 'a-number' in label or 'alien registration' in label:
+        field_key = 'a_number'
+    elif 'convention against torture' in label:
+        field_key = 'convention_against_torture'
+    elif 'social security' in label or 'ssn' in label or 'u. s. social security number' in label:
+        field_key = 'ssn'
+    elif 'uscis online account' in label:
+        field_key = 'uscis_online_account_number'
+    elif 'last name' in label or 'family name' in label:
+        field_key = 'last_name'
+    elif 'first name' in label or 'given name' in label:
+        field_key = 'first_name'
+    elif 'middle name' in label:
+        field_key = 'middle_name'
+    elif 'other names' in label or 'other name' in label:
+        field_key = 'other_names'
+    elif 'residence' in label and 'street' in label:
+        field_key = 'residence_street'
+    elif 'residence' in label and ('apt' in label or 'apartment' in label):
+        field_key = 'residence_apt_number'
+    elif 'residence' in label and 'city' in label:
+        field_key = 'residence_city'
+    elif 'residence' in label and 'state' in label:
+        field_key = 'residence_state'
+    elif 'residence' in label and 'zip' in label:
+        field_key = 'residence_zip'
+    elif 'residence' in label and 'phone' in label:
+        field_key = 'residence_phone'
+    elif 'mailing' in label and 'care of' in label:
+        field_key = 'mailing_in_care_of'
+    elif 'mailing' in label and 'street' in label:
+        field_key = 'mailing_street'
+    elif 'mailing' in label and ('apt' in label or 'apartment' in label):
+        field_key = 'mailing_apt_number'
+    elif 'mailing' in label and 'city' in label:
+        field_key = 'mailing_city'
+    elif 'mailing' in label and 'state' in label:
+        field_key = 'mailing_state'
+    elif 'mailing' in label and 'zip' in label:
+        field_key = 'mailing_zip'
+    elif 'mailing' in label and 'phone' in label:
+        field_key = 'mailing_phone'
+    else:
+        # Fallback: use sanitized label
+        field_key = re.sub(r'[^a-z0-9]+', '_', label).strip('_')
+        field_key = field_key[:50]  # Limit length
+
+    return f"{base}_{field_key}"
+
+
+def clean_field_name(tooltip_text):
+    """Extract clean field name from PDF tooltip."""
+    text = re.sub(r'^Part\.?\s+[A-G]\.?\s+\d+\.?.*?\d+\.?\s+', '', tooltip_text)
+    text = re.sub(r'^(Enter|Provide|List|Specify)\s+', '', text, flags=re.IGNORECASE)
+    text = text.strip('. ')
+    return text
+
+
+def generate_spoken_name(field_name):
+    """Generate concise spoken name for voice UI."""
+    paren_match = re.search(r'\(([A-Z]-?[A-Za-z]+)\)', field_name)
+    if paren_match:
+        return paren_match.group(1)
+    words = field_name.split()
+    if len(words) <= 3:
+        return field_name
+    return ' '.join(words[:3])
+
+
+def extract_help_text(field_label):
+    """Extract help text from parentheses."""
+    match = re.search(r'\(([^)]+)\)', field_label)
+    if match:
+        help = match.group(1)
+        if help.lower() in ['if any', 'if applicable', 'optional']:
+            return {'inline': help}
+    return None
+
+
+def infer_validation(field_name, field_type):
+    """Infer validation rules from field name and type."""
+    name_lower = field_name.lower()
+    validation = {}
+
+    if 'social security' in name_lower or 'ssn' in name_lower:
+        validation['format_preset'] = 'ssn'
+    elif 'a-number' in name_lower or 'alien registration' in name_lower:
+        validation['format_preset'] = 'a_number'
+    elif 'zip' in name_lower:
+        validation['format_preset'] = 'zip'
+
+    validation['required'] = False
+    return validation if validation else None
+
+
+def extract_complete_metadata(doc):
+    """Extract comprehensive form metadata."""
+    metadata = doc.metadata
+    first_page = doc[0]
+    text = first_page.get_text()
+
+    title = metadata.get("title", "")
+    form_number = None
+    match = re.search(r'(I-\d+)', title)
+    if match:
+        form_number = match.group(1)
+        title = re.sub(r'^Form\s+I-\d+,\s+', '', title)
+
+    omb_match = re.search(r'OMB No\.?\s+(\d+-\d+)', text)
+    omb_number = omb_match.group(1) if omb_match else None
+
+    edition_match = re.search(r'Edition\s+(\d{2})/(\d{2})/(\d{2,4})', text)
+    if edition_match:
+        month, day, year = edition_match.groups()
+        if len(year) == 2:
+            year = f"20{year}"
+        edition_date = f"{year}-{month}-{day}"
+    else:
+        edition_date = None
+
+    expires_match = re.search(r'Expires\s+(\d{2})/(\d{2})/(\d{4})', text)
+    if expires_match:
+        month, day, year = expires_match.groups()
+        expiration_date = f"{year}-{month}-{day}"
+    else:
+        expiration_date = None
+
+    agency = None
+    if 'U.S. Citizenship and Immigration Services' in text:
+        agency = 'U.S. Citizenship and Immigration Services'
+    elif 'USCIS' in text:
+        agency = 'U.S. Citizenship and Immigration Services'
+
+    return FormMetadata(
+        title=title,
+        form_number=form_number,
+        edition_date=edition_date,
+        expiration_date=expiration_date,
+        omb_number=omb_number,
+        page_count=doc.page_count,
+        agency=agency,
+        language="en"
+    )
 
 
 def extract_schema(pdf_path: str) -> FormSchema:
@@ -66,8 +259,8 @@ def extract_schema(pdf_path: str) -> FormSchema:
 
                         if is_header_font and (is_part_header or is_supplement_header):
                             # Use the full line text for the section label and normalize it
-                            section_id = f"section_{section_order}"
                             section_label = full_line_text.replace("(continued)", "").strip()
+                            section_id = generate_semantic_section_id(section_label)
                             
                             # Store the y-coordinate of the header
                             header_y = span["bbox"][1] 
@@ -131,8 +324,16 @@ def extract_schema(pdf_path: str) -> FormSchema:
         page_sections = sections_by_page.get(page_num + 1, [])
         
         for field in page.widgets():
+            # Skip barcode fields
+            if 'barcode' in field.field_name.lower():
+                continue
+
+            # Skip hidden fields
+            if field.field_flags & (1 << 1):  # Hidden flag
+                continue
+
             field_y = field.rect.y0
-            
+
             # Determine which section the field belongs to by finding the last header above it
             field_section_id = "default_section"
             field_section_label = "Default Section"
@@ -174,17 +375,27 @@ def extract_schema(pdf_path: str) -> FormSchema:
             elif field.field_type == fitz.PDF_WIDGET_TYPE_SIGNATURE:
                 field_type = FieldType.SIGNATURE
 
-            # Sanitize the field name to create a cleaner ID
-            clean_id = re.sub(r'\[\d+\]', '', field.field_name) # Remove array-like indices
-            clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', clean_id) # Replace special chars with underscore
-            clean_id = clean_id.strip('_')
+            # Generate semantic field ID
+            field_label = field.field_label or field.field_name
+            clean_id = generate_semantic_field_id(field_label, final_section_id)
+
+            # Clean field name
+            clean_name = clean_field_name(field_label)
+            spoken_name = generate_spoken_name(clean_name)
+            help_text = extract_help_text(field_label)
+            validation = infer_validation(clean_name, field_type)
+
+            # Clean PDF field name (remove array indices)
+            pdf_field_name = re.sub(r'\[\d+\]', '', field.field_name)
 
             form_field = FormField(
                 id=clean_id,
-                name=field.field_label or field.field_name,
-                spoken_name=field.field_label or field.field_name,
+                name=clean_name,
+                spoken_name=spoken_name,
                 type=field_type,
                 options=options,
+                help=help_text,
+                validation=validation,
                 pdf_position=PDFPosition(
                     page=page_num + 1,
                     x=field.rect.x0,
@@ -192,12 +403,20 @@ def extract_schema(pdf_path: str) -> FormSchema:
                     width=field.rect.width,
                     height=field.rect.height,
                 ),
-                pdf_field_name=field.field_name,
+                pdf_field_name=pdf_field_name,
                 section_id=final_section_id,
-                section_label=field_section_label.replace("(continued)", "").strip(),
             )
             fields.append(form_field)
             
+    # Deduplicate field IDs by adding suffixes
+    field_id_counts = defaultdict(int)
+    for field in fields:
+        original_id = field.id
+        field_id_counts[original_id] += 1
+        if field_id_counts[original_id] > 1:
+            # Add suffix to make unique
+            field.id = f"{original_id}_{field_id_counts[original_id]}"
+
     # Add field ids to the consolidated section's field list
     for field in fields:
         for section_data in all_sections_temp:
@@ -250,7 +469,6 @@ def extract_schema(pdf_path: str) -> FormSchema:
             type=FieldType.RADIO,
             options=options,
             section_id=base_field.section_id,
-            section_label=base_field.section_label,
             pdf_position=base_field.pdf_position, # Position of the first button
             pdf_field_name=pdf_field_name,
             group_kind=GroupKind.RADIO,
@@ -269,6 +487,18 @@ def extract_schema(pdf_path: str) -> FormSchema:
                     section_data["fields"].append(grouped_radio_field.id)
                 break
 
+
+    # Track all pages where section fields appear
+    section_pages = defaultdict(set)
+    for field in grouped_fields:
+        section_pages[field.section_id].add(field.pdf_position.page)
+
+    # Update sections with page_numbers array
+    for section_data in all_sections_temp:
+        pages = sorted(section_pages.get(section_data["id"], {section_data.get("page_number", 1)}))
+        section_data["page_numbers"] = pages
+        # Remove old page_number field
+        section_data.pop("page_number", None)
 
     # Now, create the final FormSection objects from the dictionaries
     all_sections = [FormSection(**{k: v for k, v in s_data.items() if k != 'temp_ids'}) for s_data in all_sections_temp]
@@ -325,13 +555,7 @@ def extract_schema(pdf_path: str) -> FormSchema:
     supplements = [FormSupplement(**s) for s in supplements_map.values() if s["id"]]
 
 
-    metadata = doc.metadata
-    form_metadata = FormMetadata(
-        title=metadata.get("title", pdf_path),
-        version="1.0", # Placeholder
-        page_count=doc.page_count,
-        # Other metadata fields can be extracted if available
-    )
+    form_metadata = extract_complete_metadata(doc)
 
     extraction_info = ExtractionInfo(
         extracted_at=datetime.now().isoformat(),
