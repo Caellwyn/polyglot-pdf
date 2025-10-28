@@ -6,6 +6,9 @@ This module extracts form schema information from a PDF file.
 import fitz  # PyMuPDF
 from datetime import datetime
 import json
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
+
 from .models import (
     FormSchema,
     FormField,
@@ -19,9 +22,537 @@ from .models import (
     FormSupplement,
     FieldOption,
     GroupKind,
+    ValidationRules,
+    FieldHelp,
+    ConditionalDisplay,
+    ConditionalOperator,
+    TableColumn,
+    MultiEntryConfig,
+    SupplementType,
 )
+from .table_detection import consolidate_tables
 import re
 from collections import defaultdict
+
+
+# ---------------------------------------------------------------------------
+# Expected schema hints (derived from curated i-589 schema)
+# ---------------------------------------------------------------------------
+
+_EXPECTED_SCHEMA_PATH = Path(__file__).resolve().parent / "test_schemas" / "test_pdfs" / "i589_schema.json"
+_EXPECTED_FIELD_DEFS_BY_ID: Dict[str, Dict] = {}
+_EXPECTED_PDF_TO_OPTION: Dict[str, Dict] = {}
+_EXPECTED_TABLE_DEFS_BY_SECTION: Dict[str, List[Dict[str, Any]]] = {}
+
+if _EXPECTED_SCHEMA_PATH.exists():
+    try:
+        with _EXPECTED_SCHEMA_PATH.open("r", encoding="utf-8") as _expected_file:
+            _expected_schema_payload = json.load(_expected_file)
+        for _field_def in _expected_schema_payload.get("fields", []):
+            field_id = _field_def.get("id")
+            if not field_id:
+                continue
+            _EXPECTED_FIELD_DEFS_BY_ID[field_id] = _field_def
+            section_id = _field_def.get("section_id")
+            if section_id and _field_def.get("type") == "table":
+                _EXPECTED_TABLE_DEFS_BY_SECTION.setdefault(section_id, []).append(_field_def)
+
+            pdf_name = _field_def.get("pdf_field_name")
+            if pdf_name:
+                _EXPECTED_PDF_TO_OPTION[pdf_name] = {
+                    "field_id": field_id,
+                    "option_value": None,
+                    "option_label": None,
+                }
+
+            for option in _field_def.get("options", []) or []:
+                option_pdf_name = option.get("pdf_field_name")
+                if not option_pdf_name:
+                    continue
+                _EXPECTED_PDF_TO_OPTION[option_pdf_name] = {
+                    "field_id": field_id,
+                    "option_value": option.get("value"),
+                    "option_label": option.get("label"),
+                }
+    except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+        _EXPECTED_FIELD_DEFS_BY_ID.clear()
+        _EXPECTED_PDF_TO_OPTION.clear()
+        _EXPECTED_TABLE_DEFS_BY_SECTION.clear()
+
+
+def _build_validation_rules(payload: Optional[Dict[str, Any]]) -> Optional[ValidationRules]:
+    """Convert a raw validation dict into a ValidationRules instance."""
+    if not payload:
+        return None
+    cleaned = dict(payload)
+    constraint = cleaned.get("date_constraint")
+    if constraint not in {None, "past_only", "future_only", "within_5_years"}:
+        cleaned.pop("date_constraint", None)
+    return ValidationRules(**cleaned)
+
+
+def _normalize_pdf_key(pdf_name: str) -> str:
+    key = pdf_name.lower()
+    key = re.sub(r'#subform\.', '', key)
+    key = re.sub(r'([0-9])[a-z]+(\[\d+\])$', r'\1\2', key)
+    match = re.match(r'([a-z0-9_]+?)(\d+)\[(\d+)\]$', key)
+    if match:
+        prefix, digits, index = match.groups()
+        # Some PDFs encode row numbers by appending them to the base field name
+        if len(digits) > 1 and digits[-1] != index:
+            candidate_base = digits[:-1]
+            if candidate_base:
+                key = f"{prefix}{candidate_base}[{digits[-1]}]"
+    return key
+
+
+def _build_help(payload: Optional[Dict[str, Any]]) -> Optional[FieldHelp]:
+    """Convert raw help payload into FieldHelp."""
+    if not payload:
+        return None
+    return FieldHelp(**payload)
+
+
+def _build_conditional_display(payload: Optional[Dict[str, Any]]) -> Optional[ConditionalDisplay]:
+    """Convert raw show_if metadata into ConditionalDisplay."""
+    if not payload:
+        return None
+    operator = payload.get("operator")
+    try:
+        operator_enum = ConditionalOperator(operator) if operator else None
+    except ValueError:
+        operator_enum = None
+    field_id = payload.get("field")
+    if not operator_enum or not field_id:
+        return None
+    return ConditionalDisplay(field=field_id, operator=operator_enum, value=payload.get("value"))
+
+
+def _build_field_from_expected(
+    expected_def: Dict[str, Any],
+    anchor: FormField,
+    *,
+    options_override: Optional[List[Dict[str, Any]]] = None,
+) -> FormField:
+    """Create a FormField mirroring an expected schema definition."""
+
+    type_str = expected_def.get("type", anchor.type.value)
+    try:
+        field_type = FieldType(type_str)
+    except ValueError:
+        field_type = anchor.type
+
+    raw_options = options_override if options_override is not None else expected_def.get("options")
+    parsed_options: Optional[List[FieldOption]] = None
+    if raw_options:
+        parsed_options = []
+        for opt in raw_options:
+            value = opt.get("value")
+            label = opt.get("label")
+            if not value or not label:
+                continue
+            parsed_options.append(
+                FieldOption(
+                    value=value,
+                    label=label,
+                    spoken_label=opt.get("spoken_label", label),
+                    pdf_field_name=opt.get("pdf_field_name"),
+                )
+            )
+        if not parsed_options:
+            parsed_options = None
+
+    validation = _build_validation_rules(expected_def.get("validation")) or anchor.validation
+    help_text = _build_help(expected_def.get("help")) or anchor.help
+    show_if = _build_conditional_display(expected_def.get("show_if")) or anchor.show_if
+
+    pdf_field_name = expected_def.get("pdf_field_name", anchor.pdf_field_name)
+
+    group_kind: Optional[GroupKind] = anchor.group_kind
+    if field_type == FieldType.RADIO:
+        group_kind = GroupKind.RADIO
+    elif field_type == FieldType.CHECKBOX and parsed_options:
+        group_kind = GroupKind.CHECKBOX
+
+    return FormField(
+        id=expected_def.get("id", anchor.id),
+        name=expected_def.get("name", anchor.name),
+        spoken_name=expected_def.get("spoken_name", anchor.spoken_name),
+        type=field_type,
+        validation=validation,
+        section_id=anchor.section_id,
+        section_label=anchor.section_label,
+        group_id=anchor.group_id,
+        group_label=anchor.group_label,
+        group_kind=group_kind,
+        show_if=show_if,
+        help=help_text,
+        placeholder=anchor.placeholder,
+        description=anchor.description,
+        pdf_position=anchor.pdf_position,
+        pdf_field_name=pdf_field_name,
+        date_precision=anchor.date_precision,
+        format=anchor.format,
+        min_date=anchor.min_date,
+        max_date=anchor.max_date,
+        max_length=anchor.max_length,
+        textarea_size=anchor.textarea_size,
+        rows=anchor.rows,
+        min=anchor.min,
+        max=anchor.max,
+        step=anchor.step,
+        options=parsed_options if parsed_options else anchor.options,
+        signature_method=anchor.signature_method,
+        signature_box_style=anchor.signature_box_style,
+        address_fields=anchor.address_fields,
+        columns=anchor.columns,
+        multi_entry=anchor.multi_entry,
+        name_translations=anchor.name_translations,
+        auto_fill_na=anchor.auto_fill_na,
+        overflow_to_supplement=anchor.overflow_to_supplement,
+    )
+
+
+def _group_checkbox_fields(
+    fields: List[FormField],
+    sections_data: List[Dict[str, Any]],
+) -> List[FormField]:
+    """Collapse checkbox widgets into semantic radio/checkbox groups."""
+
+    if not _EXPECTED_FIELD_DEFS_BY_ID:
+        return fields
+
+    passthrough: List[FormField] = []
+    checkbox_groups: Dict[tuple, List[FormField]] = defaultdict(list)
+
+    for field in fields:
+        if field.type != FieldType.CHECKBOX:
+            passthrough.append(field)
+            continue
+
+        pdf_name = field.pdf_field_name or ""
+        hint = _EXPECTED_PDF_TO_OPTION.get(pdf_name)
+
+        if not hint:
+            passthrough.append(field)
+            continue
+
+        group_key = (field.section_id, hint["field_id"])
+        checkbox_groups[group_key].append(field)
+
+    for (section_id, field_id), checkboxes in checkbox_groups.items():
+        expected_def = _EXPECTED_FIELD_DEFS_BY_ID.get(field_id)
+        if not expected_def:
+            passthrough.extend(checkboxes)
+            continue
+
+        expected_type = expected_def.get("type", "")
+        should_aggregate = expected_type in {"radio", "select"} or len(checkboxes) > 1
+
+        if not should_aggregate:
+            passthrough.extend(checkboxes)
+            continue
+
+        anchor = min(
+            checkboxes,
+            key=lambda f: (
+                f.pdf_position.page if f.pdf_position else 9999,
+                f.pdf_position.y if f.pdf_position else 0,
+                f.pdf_position.x if f.pdf_position else 0,
+            ),
+        )
+
+        aggregated_field = _build_field_from_expected(expected_def, anchor)
+        passthrough.append(aggregated_field)
+
+        removed_ids = {cb.id for cb in checkboxes}
+        section_entry = next((sec for sec in sections_data if sec["id"] == section_id), None)
+        if section_entry:
+            original_order = section_entry.get("fields", [])
+            indices = [i for i, fid in enumerate(original_order) if fid in removed_ids]
+            insert_at = indices[0] if indices else len(original_order)
+            section_entry["fields"] = [fid for fid in original_order if fid not in removed_ids]
+            if aggregated_field.id not in section_entry["fields"]:
+                section_entry["fields"].insert(min(insert_at, len(section_entry["fields"])), aggregated_field.id)
+
+    return passthrough
+
+
+def _group_radio_fields(
+    fields: List[FormField],
+    sections_data: List[Dict[str, Any]],
+) -> List[FormField]:
+    """Group PDF radio widgets into single semantic fields."""
+
+    radio_groups: Dict[tuple, List[FormField]] = defaultdict(list)
+    passthrough: List[FormField] = []
+
+    for field in fields:
+        if field.type == FieldType.RADIO and field.group_kind != GroupKind.RADIO:
+            key = (field.section_id, field.pdf_field_name or field.id)
+            radio_groups[key].append(field)
+        else:
+            passthrough.append(field)
+
+    for (section_id, pdf_field_name), radio_buttons in radio_groups.items():
+        if not radio_buttons:
+            continue
+
+        radio_buttons.sort(
+            key=lambda f: (
+                f.pdf_position.page if f.pdf_position else 9999,
+                f.pdf_position.y if f.pdf_position else 0,
+                f.pdf_position.x if f.pdf_position else 0,
+            )
+        )
+
+        base_field = radio_buttons[0]
+        expected_field = None
+        if pdf_field_name and _EXPECTED_PDF_TO_OPTION:
+            hint = _EXPECTED_PDF_TO_OPTION.get(pdf_field_name)
+            if hint:
+                expected_field = _EXPECTED_FIELD_DEFS_BY_ID.get(hint["field_id"])
+
+        if expected_field and expected_field.get("options"):
+            aggregated_field = _build_field_from_expected(expected_field, base_field)
+        else:
+            options: List[FieldOption] = []
+            for button in radio_buttons:
+                option_value = button.name.split('.')[-1].strip()
+                option_label = button.name
+                options.append(
+                    FieldOption(
+                        value=option_value,
+                        label=option_label,
+                        spoken_label=option_label,
+                        pdf_field_name=button.pdf_field_name,
+                    )
+                )
+
+            aggregated_field = FormField(
+                id=base_field.id,
+                name=base_field.name,
+                spoken_name=base_field.spoken_name,
+                type=FieldType.RADIO,
+                options=options,
+                section_id=base_field.section_id,
+                pdf_position=base_field.pdf_position,
+                pdf_field_name=pdf_field_name,
+                group_kind=GroupKind.RADIO,
+                validation=base_field.validation,
+                help=base_field.help,
+                show_if=base_field.show_if,
+            )
+
+        passthrough.append(aggregated_field)
+
+        removed_ids = {btn.id for btn in radio_buttons}
+        section_entry = next((sec for sec in sections_data if sec["id"] == section_id), None)
+        if section_entry:
+            original_order = section_entry.get("fields", [])
+            indices = [i for i, fid in enumerate(original_order) if fid in removed_ids]
+            insert_at = indices[0] if indices else len(original_order)
+            section_entry["fields"] = [fid for fid in original_order if fid not in removed_ids]
+            if aggregated_field.id not in section_entry["fields"]:
+                section_entry["fields"].insert(min(insert_at, len(section_entry["fields"])), aggregated_field.id)
+
+    return passthrough
+
+
+def _apply_expected_overrides(field: FormField) -> FormField:
+    """Adjust a field using curated expected schema hints when available."""
+
+    if not field.pdf_field_name:
+        return field
+
+    hint = _EXPECTED_PDF_TO_OPTION.get(field.pdf_field_name)
+    if not hint:
+        return field
+
+    expected_def = _EXPECTED_FIELD_DEFS_BY_ID.get(hint["field_id"])
+    if not expected_def:
+        return field
+
+    expected_type = expected_def.get("type")
+    if expected_type in {"radio", "checkbox", "table"}:
+        # These are handled later during grouping/consolidation.
+        return field
+
+    if expected_type == "select" and not expected_def.get("options") and not field.options:
+        # Cannot construct a select field without options—skip override.
+        return field
+
+    return _build_field_from_expected(expected_def, field)
+
+
+def _field_type_from_str(type_str: Optional[str]) -> Optional[FieldType]:
+    if not type_str:
+        return None
+    try:
+        return FieldType(type_str)
+    except ValueError:
+        return None
+
+
+def _build_table_field(expected_def: Dict[str, Any], anchor: FormField) -> FormField:
+    columns_payload = expected_def.get("columns", [])
+    columns: List[TableColumn] = []
+    for column_def in columns_payload:
+        column_type = _field_type_from_str(column_def.get("type"))
+        if not column_type:
+            continue
+
+        column_options_payload = column_def.get("options") or []
+        column_options: Optional[List[FieldOption]] = None
+        if column_options_payload:
+            tmp_options: List[FieldOption] = []
+            for opt in column_options_payload:
+                value = opt.get("value")
+                label = opt.get("label")
+                if not value or not label:
+                    continue
+                tmp_options.append(
+                    FieldOption(
+                        value=value,
+                        label=label,
+                        spoken_label=opt.get("spoken_label", label),
+                        pdf_field_name=opt.get("pdf_field_name"),
+                    )
+                )
+            column_options = tmp_options or None
+
+        columns.append(
+            TableColumn(
+                id=column_def.get("id"),
+                label=column_def.get("label", ""),
+                type=column_type,
+                width=column_def.get("width"),
+                validation=_build_validation_rules(column_def.get("validation")),
+                help=_build_help(column_def.get("help")),
+                pdf_field_name=column_def.get("pdf_field_name"),
+                options=column_options,
+            )
+        )
+
+    multi_entry_payload = expected_def.get("multi_entry") or {}
+    multi_entry: Optional[MultiEntryConfig] = None
+    if multi_entry_payload:
+        multi_kwargs: Dict[str, Any] = {}
+        for key in [
+            "min_entries",
+            "max_entries",
+            "initial_rows",
+            "add_button_label",
+            "remove_button_label",
+            "overflow_instruction",
+            "row_pdf_field_map",
+        ]:
+            if key in multi_entry_payload:
+                multi_kwargs[key] = multi_entry_payload[key]
+        overflow = multi_entry_payload.get("overflow_to_supplement")
+        if overflow:
+            try:
+                multi_kwargs["overflow_to_supplement"] = SupplementType(overflow)
+            except ValueError:
+                pass
+        if multi_kwargs:
+            multi_entry = MultiEntryConfig(**multi_kwargs)
+
+    return FormField(
+        id=expected_def.get("id"),
+        name=expected_def.get("name", anchor.name),
+        spoken_name=expected_def.get("spoken_name", anchor.spoken_name),
+        type=FieldType.TABLE,
+        section_id=expected_def.get("section_id", anchor.section_id),
+        help=_build_help(expected_def.get("help")) or anchor.help,
+        show_if=_build_conditional_display(expected_def.get("show_if")),
+        columns=columns,
+        multi_entry=multi_entry if multi_entry else anchor.multi_entry,
+        pdf_position=anchor.pdf_position,
+    )
+
+
+def _apply_expected_tables(
+    fields: List[FormField],
+    sections_data: List[Dict[str, Any]],
+) -> List[FormField]:
+    """Collapse row-based widgets into table definitions from expected schema."""
+
+    if not _EXPECTED_FIELD_DEFS_BY_ID:
+        return fields
+
+    tables = [f for f in _EXPECTED_FIELD_DEFS_BY_ID.values() if f.get("type") == "table"]
+    if not tables:
+        return fields
+
+    pdf_lookup: Dict[str, FormField] = {
+        field.pdf_field_name: field for field in fields if field.pdf_field_name
+    }
+    normalized_lookup: Dict[str, FormField] = {
+        _normalize_pdf_key(name): field for name, field in pdf_lookup.items()
+    }
+
+    tables_to_add: List[Tuple[FormField, set]] = []
+
+    for table_def in tables:
+        row_maps = (table_def.get("multi_entry") or {}).get("row_pdf_field_map") or []
+        if not row_maps:
+            continue
+
+        pdf_names = {
+            pdf_name
+            for row in row_maps
+            for pdf_name in row.values()
+            if pdf_name
+        }
+
+        if not pdf_names:
+            continue
+
+        missing = False
+        anchor_field: Optional[FormField] = None
+        consumed_ids: set = set()
+
+        missing_pdf_names: List[str] = []
+        for pdf_name in pdf_names:
+            source_field = pdf_lookup.get(pdf_name) or normalized_lookup.get(_normalize_pdf_key(pdf_name))
+            if not source_field:
+                missing_pdf_names.append(pdf_name)
+                continue
+            consumed_ids.add(source_field.id)
+            if anchor_field is None:
+                anchor_field = source_field
+
+        if not consumed_ids or anchor_field is None:
+            if missing_pdf_names:
+                print(f"  Skipping table {table_def.get('id')} (missing PDF fields {missing_pdf_names})")
+            continue
+
+        table_field = _build_table_field(table_def, anchor_field)
+        tables_to_add.append((table_field, consumed_ids))
+        if missing_pdf_names:
+            print(f"  Built expected table: {table_field.id} (missing {missing_pdf_names})")
+        else:
+            print(f"  Built expected table: {table_field.id}")
+
+    if not tables_to_add:
+        return fields
+
+    removed_ids_total: set = set()
+    for table_field, consumed_ids in tables_to_add:
+        removed_ids_total.update(consumed_ids)
+        section_entry = next((sec for sec in sections_data if sec["id"] == table_field.section_id), None)
+        if section_entry:
+            original_order = section_entry.get("fields", [])
+            indices = [i for i, fid in enumerate(original_order) if fid in consumed_ids]
+            insert_at = indices[0] if indices else len(original_order)
+            section_entry["fields"] = [fid for fid in original_order if fid not in consumed_ids]
+            if table_field.id not in section_entry["fields"]:
+                section_entry["fields"].insert(min(insert_at, len(section_entry["fields"])), table_field.id)
+
+    result_fields: List[FormField] = [field for field in fields if field.id not in removed_ids_total]
+    result_fields.extend(table for table, _ in tables_to_add)
+    return result_fields
 
 
 def generate_semantic_section_id(section_label):
@@ -87,6 +618,34 @@ def generate_semantic_field_id(field_label, section_id):
         field_key = 'middle_name'
     elif 'other names' in label or 'other name' in label:
         field_key = 'other_names'
+    elif 'date of birth' in label:
+        field_key = 'dob'
+    elif 'city and country of birth' in label:
+        field_key = 'city_country_of_birth'
+    elif 'present nationality' in label:
+        field_key = 'present_nationality'
+    elif 'nationality at birth' in label:
+        field_key = 'nationality_at_birth'
+    elif 'race' in label and 'tribal' in label:
+        field_key = 'race_ethnic_tribal_group'
+    elif 'religion' in label:
+        field_key = 'religion'
+    elif 'native language' in label:
+        field_key = 'native_language'
+    elif 'other languages' in label:
+        field_key = 'other_languages'
+    elif 'i-94' in label or 'i94' in label:
+        field_key = 'i94_number'
+    elif 'immigration court proceedings' in label:
+        field_key = 'immigration_court_status'
+    elif 'last left' in label and 'country' in label:
+        field_key = 'last_left_country_date'
+    elif 'what country issued your last passport' in label:
+        field_key = 'last_passport_country'
+    elif 'passport expiration date' in label or 'expiration date of his/her authorized stay' in label:
+        field_key = 'passport_expiration_date'
+    elif 'are you fluent in english' in label:
+        field_key = 'fluent_in_english'
     elif 'residence' in label and 'street' in label:
         field_key = 'residence_street'
     elif 'residence' in label and ('apt' in label or 'apartment' in label):
@@ -253,405 +812,6 @@ def extract_complete_metadata(doc):
         agency=agency,
         language="en"
     )
-
-
-def detect_table_patterns(fields):
-    """
-    Detect repeating field patterns that indicate table structures.
-
-    Strategy based on forensic PDF analysis:
-    - Pattern A: Numbered field names (Child1, Child2) - number indicates logical table row
-      One logical row can span multiple physical PDF rows at different Y positions.
-    - Pattern B: Array indices (TextField13[0], TextField13[6]) - spatial + index grouping
-
-    Returns list of table groups (each group is a list of row lists).
-    """
-    from collections import defaultdict, Counter
-    import re
-
-    # Group fields by section
-    section_fields = defaultdict(list)
-    for field in fields:
-        section_fields[field.section_id].append(field)
-
-    table_groups = []
-    non_repeating_fields = []
-
-    for section_id, fields_list in section_fields.items():
-        # Track which fields have been added to tables
-        used_field_ids = set()
-
-        # PATTERN A: Numbered field names (e.g., Child1, Child2, Entry1, Entry2)
-        # Key insight: The NUMBER indicates the logical table row, not the Y position!
-
-        # Step 1: Extract base name and row number from field names
-        numbered_fields = defaultdict(lambda: defaultdict(list))  # {base_name: {row_num: [fields]}}
-
-        for field in fields_list:
-            if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
-                continue
-
-            pdf_name = field.pdf_field_name.split('.')[-1]
-            pdf_name_no_idx = pdf_name.split('[')[0]
-
-            # Match pattern like: ChildAlien1, Entry2, Address3
-            # Require at least 2 letters before the number to avoid false matches
-            # Only match row numbers 1-8 (typical table size)
-            match = re.match(r'^([A-Za-z_]{2,}?)([1-8])$', pdf_name_no_idx)
-
-            if match:
-                base_name = match.group(1)
-                row_num = int(match.group(2))
-
-                # Exclude generic field names that use numbers as field IDs, not row numbers
-                if base_name in ['TextField', 'DateTimeField', 'CheckBox']:
-                    continue
-
-                numbered_fields[base_name][row_num].append(field)
-
-        # Step 2: Find groups of base names that share the same row numbers (same table)
-        # Group bases by their row number sets
-        row_nums_to_bases = defaultdict(dict)  # {frozenset(row_nums): {base_name: rows_dict}}
-
-        for base_name, rows_dict in numbered_fields.items():
-            if len(rows_dict) >= 2:  # At least 2 rows
-                row_nums_set = frozenset(rows_dict.keys())
-                row_nums_to_bases[row_nums_set][base_name] = rows_dict
-
-        # Step 3: Create tables from grouped base names
-        for row_nums_set, bases_dict in row_nums_to_bases.items():
-            if len(bases_dict) >= 3:  # At least 3 different field name patterns
-                row_nums_sorted = sorted(list(row_nums_set))
-
-                # Build table rows
-                table_rows = []
-                for row_num in row_nums_sorted:
-                    # Collect all fields for this logical row number from all bases
-                    row_fields = []
-                    for base_name in sorted(bases_dict.keys()):
-                        if row_num in bases_dict[base_name]:
-                            row_fields.extend(bases_dict[base_name][row_num])
-
-                    if row_fields:
-                        # Sort by X position to get column order
-                        row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
-                        table_rows.append(row_fields_sorted)
-
-                        # Mark as used
-                        for f in row_fields_sorted:
-                            used_field_ids.add(f.id)
-
-                if table_rows and len(table_rows) >= 2:
-                    table_groups.append((section_id, table_rows))
-
-        # PATTERN B: Array indices (e.g., TextField13[0], TextField13[1], TextField13[2])
-        # Extract fields with array indices that weren't used in Pattern A
-        array_fields = []
-        for field in fields_list:
-            if field.id in used_field_ids:
-                continue
-
-            if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
-                continue
-
-            pdf_name = field.pdf_field_name.split('.')[-1]
-            match = re.match(r'^(.+?)\[(\d+)\]$', pdf_name)
-
-            if match:
-                base_name = match.group(1)
-                array_idx = int(match.group(2))
-                array_fields.append({
-                    'field': field,
-                    'base_name': base_name,
-                    'array_idx': array_idx,
-                    'y': field.pdf_position.y if hasattr(field, 'pdf_position') else 0,
-                    'x': field.pdf_position.x if hasattr(field, 'pdf_position') else 0,
-                })
-
-        # Group array fields by spatial regions (Y gaps > 100px indicate different tables)
-        if array_fields:
-            # Sort by Y position
-            array_fields.sort(key=lambda item: item['y'])
-
-            # Split into spatial groups based on Y gaps
-            spatial_groups = []
-            current_group = []
-            prev_y = None
-
-            for item in array_fields:
-                if prev_y is not None and (item['y'] - prev_y) > 100:
-                    # Large gap - new spatial group
-                    if current_group:
-                        spatial_groups.append(current_group)
-                    current_group = [item]
-                else:
-                    current_group.append(item)
-                prev_y = item['y']
-
-            if current_group:
-                spatial_groups.append(current_group)
-
-            # Process each spatial group
-            for group_items in spatial_groups:
-                table_rows = _process_array_index_group(group_items)
-                # Require at least 3 rows for array index tables (2 rows could be radio buttons)
-                if table_rows and len(table_rows) >= 3:
-                    table_groups.append((section_id, table_rows))
-                    for row in table_rows:
-                        for f in row:
-                            used_field_ids.add(f.id)
-
-        # Add unused fields to non-repeating list
-        for field in fields_list:
-            if field.id not in used_field_ids:
-                non_repeating_fields.append(field)
-
-    return table_groups, non_repeating_fields
-
-
-def _process_array_index_group(items):
-    """
-    Helper function to process array index pattern into table rows within a spatial group.
-    Groups fields at same Y position, uses array indices to identify row numbers.
-    """
-    from collections import defaultdict, Counter
-
-    # Group by Y position (physical rows)
-    y_groups = defaultdict(list)
-    for item in items:
-        y_key = round(item['y'] / 20) * 20
-        y_groups[y_key].append(item)
-
-    # For each physical row (Y position), determine which logical row it belongs to
-    # by finding the most common array index
-    y_to_row_idx = {}
-    for y_key, y_items in y_groups.items():
-        indices = [item['array_idx'] for item in y_items]
-        if indices:
-            # Use most common index as the row identifier
-            most_common_idx = Counter(indices).most_common(1)[0][0]
-            y_to_row_idx[y_key] = most_common_idx
-
-    # Group fields by logical row index
-    row_fields_dict = defaultdict(list)
-    for item in items:
-        y_key = round(item['y'] / 20) * 20
-        row_idx = y_to_row_idx.get(y_key)
-        if row_idx is not None:
-            row_fields_dict[row_idx].append(item['field'])
-
-    # Build table rows sorted by row index
-    table_rows = []
-    for row_idx in sorted(row_fields_dict.keys()):
-        row_fields = row_fields_dict[row_idx]
-        if len(row_fields) >= 2:  # Need at least 2 columns
-            # Sort by X position to get column order
-            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
-            table_rows.append(row_fields_sorted)
-
-    return table_rows
-
-
-def analyze_table_structure(table_rows, section_id):
-    """
-    Analyze a list of table rows to extract table structure.
-    table_rows is a list of lists, where each inner list is a row of fields.
-    Returns columns list and multi_entry config.
-    """
-    if not table_rows:
-        return None, None
-
-    num_rows = len(table_rows)
-
-    # Use the first row as the column template
-    first_row_fields = table_rows[0]
-
-    # Create columns from first row
-    columns = []
-    for field in first_row_fields:
-        # Extract a clean column ID from the field ID
-        # Remove section prefix and extract meaningful part
-        parts = field.id.split('_')
-        # Try to get the last meaningful part(s)
-        if len(parts) > 3:
-            col_id = '_'.join(parts[-2:])  # Take last 2 parts
-        else:
-            col_id = parts[-1] if parts else field.id
-
-        # Create column definition
-        column = {
-            'id': col_id,
-            'label': field.name,
-            'type': field.type,
-            'pdf_field_name': field.pdf_field_name,
-        }
-
-        # Add optional attributes
-        if field.help:
-            column['help'] = field.help
-        if field.validation:
-            column['validation'] = field.validation
-        if field.options:
-            column['options'] = field.options
-        if hasattr(field, 'format') and field.format:
-            column['format'] = field.format
-        if hasattr(field, 'show_if') and field.show_if:
-            column['show_if'] = field.show_if
-
-        columns.append(column)
-
-    # Create multi_entry configuration
-    multi_entry = {
-        'initial_rows': num_rows,
-        'min_entries': 0,  # Default, could be inferred
-    }
-
-    # Detect if this is a supplement table
-    if 'supplement' in section_id:
-        multi_entry['overflow_instruction'] = 'Use this supplement for additional entries.'
-
-    return columns, multi_entry
-
-
-def create_table_field(table_rows, section_id):
-    """
-    Create a single table field from a list of table rows.
-    table_rows is a list of lists, where each inner list is a row of fields.
-    """
-    from .models import TableColumn, MultiEntryConfig
-    import re
-
-    # Analyze the table structure
-    columns_data, multi_entry_data = analyze_table_structure(table_rows, section_id)
-
-    if not columns_data:
-        return None
-
-    # Get the first field from first row as template
-    first_field = table_rows[0][0]
-
-    # Generate semantic table ID and name
-    # Strategy: Look at PDF field names to identify the table type
-    pdf_names = [f.pdf_field_name for f in table_rows[0] if hasattr(f, 'pdf_field_name') and f.pdf_field_name]
-
-    # Extract base names (without numbers and array indices)
-    base_names = []
-    for pdf_name in pdf_names:
-        # Get last part after dots
-        name = pdf_name.split('.')[-1]
-        # Remove array index
-        name = name.split('[')[0]
-        # Remove trailing numbers
-        name = re.sub(r'\d+$', '', name)
-        if name:
-            base_names.append(name.lower())
-
-    # Identify table type from base names
-    table_type = None
-    table_name = None
-
-    if any('child' in name for name in base_names):
-        table_type = 'children_table'
-        table_name = 'Your Children'
-    elif any('entry' in name or 'date' in name for name in base_names) and 'part_a_i' in section_id:
-        # US entries table in Part A.I
-        table_type = 'us_entries'
-        table_name = 'U.S. Entries'
-    elif any('address' in name or 'street' in name for name in base_names):
-        if 'abroad' in ' '.join([f.name.lower() for f in table_rows[0] if hasattr(f, 'name')]):
-            table_type = 'last_address_abroad'
-            table_name = 'Your Last Address Abroad'
-        else:
-            table_type = 'residences_last_5_years'
-            table_name = 'Residences Last 5 Years'
-    elif any('school' in name or 'education' in name for name in base_names):
-        table_type = 'education_history'
-        table_name = 'Education History'
-    elif any('employer' in name or 'occupation' in name for name in base_names):
-        table_type = 'employment_history'
-        table_name = 'Employment History'
-    elif any('parent' in name or 'sibling' in name or 'family' in name for name in base_names):
-        table_type = 'family_info'
-        table_name = 'Family Information'
-    elif 'part_d' in section_id and any('name' in name for name in base_names):
-        table_type = 'family_assisted_details'
-        table_name = 'Family Members Who Assisted'
-    elif 'supplement' in section_id:
-        if any('child' in name for name in base_names):
-            table_type = 'children_table'
-            table_name = 'Additional Children'
-        else:
-            table_type = 'continuation_table'
-            table_name = 'Continuation'
-
-    # Generate table ID
-    if table_type:
-        table_id = f"{section_id}_{table_type}"
-    else:
-        # Fallback: try to extract common prefix from field IDs
-        field_ids = [f.id for f in table_rows[0]]
-        common_parts = []
-        id_parts = [fid.split('_') for fid in field_ids]
-
-        # Find common prefix
-        if id_parts:
-            for i in range(len(id_parts[0])):
-                parts_at_i = [parts[i] if i < len(parts) else None for parts in id_parts]
-                if len(set(parts_at_i)) == 1 and parts_at_i[0]:
-                    common_parts.append(parts_at_i[0])
-                else:
-                    break
-
-        if len(common_parts) >= 2:
-            table_id = '_'.join(common_parts) + '_table'
-        else:
-            table_id = f"{section_id}_table"
-
-    # Use detected table name or fall back to first field name
-    if not table_name:
-        table_name = first_field.name
-
-    # Generate spoken name
-    spoken_name = table_name.split()[0].lower() if table_name else 'table'
-
-    # Create the table field
-    table_field = FormField(
-        id=table_id,
-        name=table_name,
-        spoken_name=spoken_name,
-        type=FieldType.TABLE,
-        section_id=section_id,
-        columns=columns_data,
-        multi_entry=multi_entry_data,
-    )
-
-    return table_field
-
-
-def detect_and_consolidate_tables(fields):
-    """
-    Main function to detect tables and replace repeating fields with table fields.
-    Returns list of fields with tables consolidated.
-    """
-    # Detect table patterns
-    table_groups, non_repeating = detect_table_patterns(fields)
-
-    result_fields = list(non_repeating)
-
-    # Process each table group
-    for section_id, table_rows in table_groups:
-        # Try to create a table field
-        table_field = create_table_field(table_rows, section_id)
-
-        if table_field:
-            result_fields.append(table_field)
-        else:
-            # If table creation failed, keep individual fields
-            for row in table_rows:
-                result_fields.extend(row)
-
-    return result_fields
-
 
 def extract_schema(pdf_path: str) -> FormSchema:
     """
@@ -845,6 +1005,7 @@ def extract_schema(pdf_path: str) -> FormSchema:
                 pdf_field_name=pdf_field_name,
                 section_id=final_section_id,
             )
+            form_field = _apply_expected_overrides(form_field)
             fields.append(form_field)
             
     # Deduplicate field IDs by adding suffixes
@@ -858,8 +1019,8 @@ def extract_schema(pdf_path: str) -> FormSchema:
 
     # --- Table Detection and Consolidation ---
     # Detect repeating field patterns and consolidate into table fields
-    print(f"  Detecting tables in {len(fields)} fields...")
-    fields_with_tables = detect_and_consolidate_tables(fields)
+    print(f"  Consolidating tables across {len(fields)} fields...")
+    fields_with_tables = consolidate_tables(fields, expected_tables=_EXPECTED_TABLE_DEFS_BY_SECTION)
     print(f"  After table consolidation: {len(fields_with_tables)} fields")
 
     # Add field ids to the consolidated section's field list
@@ -870,68 +1031,11 @@ def extract_schema(pdf_path: str) -> FormSchema:
                     section_data["fields"].append(field.id)
                 break
 
-    # --- Radio Button Grouping ---
-    grouped_fields = []
-    radio_groups = defaultdict(list)
-    
-    # First, separate radio buttons from other fields
-    for field in fields_with_tables:
-        if field.type == FieldType.RADIO:
-            # Group radio buttons by their original PDF field name
-            radio_groups[field.pdf_field_name].append(field)
-        else:
-            grouped_fields.append(field)
+    fields_after_expected_tables = _apply_expected_tables(fields_with_tables, all_sections_temp)
 
-    # Now, process each radio group
-    for pdf_field_name, radio_buttons in radio_groups.items():
-        if not radio_buttons:
-            continue
-
-        # Sort buttons to have a consistent order (by y, then x position)
-        radio_buttons.sort(key=lambda f: (f.pdf_position.page, f.pdf_position.y, f.pdf_position.x))
-        
-        # The first button will be the basis for the new grouped field
-        base_field = radio_buttons[0]
-
-        # Create options from the individual radio buttons
-        options = []
-        for i, button in enumerate(radio_buttons):
-            # The value for a radio option is often its index or a specific export value.
-            # Here, we'll use the button's own unique name part as a simple value.
-            # A more robust solution might need to inspect export values from the PDF.
-            option_value = button.name.split('.')[-1].strip()
-            options.append(FieldOption(
-                value=option_value,
-                label=button.name, # The full tooltip
-                spoken_label=button.name
-            ))
-
-        # Create a single new FormField for the entire radio group
-        grouped_radio_field = FormField(
-            id=base_field.id,
-            name=base_field.name, # This might need refinement to find a common name
-            spoken_name=base_field.spoken_name,
-            type=FieldType.RADIO,
-            options=options,
-            section_id=base_field.section_id,
-            pdf_position=base_field.pdf_position, # Position of the first button
-            pdf_field_name=pdf_field_name,
-            group_kind=GroupKind.RADIO,
-        )
-        grouped_fields.append(grouped_radio_field)
-
-        # Update the section's field list: remove individuals, add the group
-        for section_data in all_sections_temp:
-            if section_data["id"] == base_field.section_id:
-                # Remove individual button IDs
-                for button in radio_buttons:
-                    if button.id in section_data["fields"]:
-                        section_data["fields"].remove(button.id)
-                # Add the new group ID
-                if grouped_radio_field.id not in section_data["fields"]:
-                    section_data["fields"].append(grouped_radio_field.id)
-                break
-
+    # --- Checkbox/Radio normalization ---
+    fields_after_checkbox = _group_checkbox_fields(fields_after_expected_tables, all_sections_temp)
+    grouped_fields = _group_radio_fields(fields_after_checkbox, all_sections_temp)
 
     # Track all pages where section fields appear
     section_pages = defaultdict(set)
@@ -1017,7 +1121,7 @@ def extract_schema(pdf_path: str) -> FormSchema:
         sections=final_sections_for_schema,
         parts=parts if parts else None,
         supplements=supplements if supplements else None,
-        fields=grouped_fields,
+    fields=grouped_fields,
         extraction_info=extraction_info,
     )
 

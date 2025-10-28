@@ -187,6 +187,7 @@ class FieldOption(BaseModel):
         None,
         description='Multi-language labels (e.g., {"es": "Soltero", "zh": "单身"})'
     )
+    pdf_field_name: Optional[str] = Field(None, description="Original PDF field backing this option")
 
 
 class TableColumn(BaseModel):
@@ -197,6 +198,11 @@ class TableColumn(BaseModel):
     width: Optional[int] = Field(None, description="Percentage or pixels")
     validation: Optional[ValidationRules] = None
     help: Optional[FieldHelp] = None
+    pdf_field_name: Optional[str] = Field(None, description="Representative PDF field backing this column")
+    options: Optional[List[FieldOption]] = Field(
+        None,
+        description="Available option choices when the column captures radios/checkbox groups"
+    )
 
 
 class MultiEntryConfig(BaseModel):
@@ -213,6 +219,10 @@ class MultiEntryConfig(BaseModel):
     overflow_to_supplement: Optional[SupplementType] = Field(
         None,
         description="Which supplement to use for overflow entries"
+    )
+    row_pdf_field_map: Optional[List[Dict[str, str]]] = Field(
+        None,
+        description="Mapping of column IDs to underlying PDF field names per template row"
     )
 
 
