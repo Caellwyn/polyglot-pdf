@@ -42,10 +42,6 @@
 - `_group_checkbox_fields` maps expected checkbox options when hints exist but 69 checkbox widgets remain unmatched due to absent metadata; these inflate field count.
 - Lessons: need broadened option hints or smarter grouping heuristics (e.g., spatial or name-based clustering) for remaining checkboxes.
 
-## Artifacts Generated Today
-
-- Fresh extractor output: `outputs/i589_extracted_schema_latest.json` (294 fields, 5 tables with row maps).
-- Development journal (this document) captures context for tomorrow’s pickup.
 
 ## Open Issues & Next Steps
 
