@@ -258,10 +258,15 @@ def extract_complete_metadata(doc):
 def detect_table_patterns(fields):
     """
     Detect repeating field patterns that indicate table structures.
-    Strategy: Group by Y position first, then detect repeating row patterns.
+
+    Strategy based on forensic PDF analysis:
+    - Pattern A: Numbered field names (Child1, Child2) - number indicates logical table row
+      One logical row can span multiple physical PDF rows at different Y positions.
+    - Pattern B: Array indices (TextField13[0], TextField13[6]) - spatial + index grouping
+
     Returns list of table groups (each group is a list of row lists).
     """
-    from collections import defaultdict
+    from collections import defaultdict, Counter
     import re
 
     # Group fields by section
@@ -276,131 +281,125 @@ def detect_table_patterns(fields):
         # Track which fields have been added to tables
         used_field_ids = set()
 
-        # Step 1: Group fields by Y position (rows)
-        y_rows = defaultdict(list)
+        # PATTERN A: Numbered field names (e.g., Child1, Child2, Entry1, Entry2)
+        # Key insight: The NUMBER indicates the logical table row, not the Y position!
+
+        # Step 1: Extract base name and row number from field names
+        numbered_fields = defaultdict(lambda: defaultdict(list))  # {base_name: {row_num: [fields]}}
+
         for field in fields_list:
-            if hasattr(field, 'pdf_position'):
-                # Round to nearest 20 pixels for row grouping
-                y_key = round(field.pdf_position.y / 20) * 20
-                y_rows[y_key].append(field)
+            if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
+                continue
 
-        # Step 2: Assign row indices based on patterns
-        # Collect row index information from PDF field names
-        rows_with_indices = {}  # {y_key: row_index}
+            pdf_name = field.pdf_field_name.split('.')[-1]
+            pdf_name_no_idx = pdf_name.split('[')[0]
 
-        for y_key, row_fields in y_rows.items():
-            row_indices = set()
-            for field in row_fields:
-                if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
+            # Match pattern like: ChildAlien1, Entry2, Address3
+            # Require at least 2 letters before the number to avoid false matches
+            # Only match row numbers 1-8 (typical table size)
+            match = re.match(r'^([A-Za-z_]{2,}?)([1-8])$', pdf_name_no_idx)
+
+            if match:
+                base_name = match.group(1)
+                row_num = int(match.group(2))
+
+                # Exclude generic field names that use numbers as field IDs, not row numbers
+                if base_name in ['TextField', 'DateTimeField', 'CheckBox']:
                     continue
 
-                pdf_name = field.pdf_field_name.split('.')[-1]
+                numbered_fields[base_name][row_num].append(field)
 
-                # Check for array index pattern: TextField13[2]
-                match = re.match(r'^.+?\[(\d+)\]$', pdf_name)
-                if match:
-                    row_indices.add(int(match.group(1)))
+        # Step 2: Find groups of base names that share the same row numbers (same table)
+        # Group bases by their row number sets
+        row_nums_to_bases = defaultdict(dict)  # {frozenset(row_nums): {base_name: rows_dict}}
 
-                # Check for numbered field name: ChildAlien2[0]
-                pdf_name_no_idx = pdf_name.split('[')[0]
-                match = re.match(r'^.+?(\d+)$', pdf_name_no_idx)
-                if match:
-                    row_indices.add(int(match.group(1)))
+        for base_name, rows_dict in numbered_fields.items():
+            if len(rows_dict) >= 2:  # At least 2 rows
+                row_nums_set = frozenset(rows_dict.keys())
+                row_nums_to_bases[row_nums_set][base_name] = rows_dict
 
-            # Use the most common index for this row
-            if row_indices:
-                # Count occurrences and pick the most common
-                from collections import Counter
-                counter = Counter()
-                for field in row_fields:
-                    if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
-                        continue
-                    pdf_name = field.pdf_field_name.split('.')[-1]
-                    # Check array index
-                    match = re.match(r'^.+?\[(\d+)\]$', pdf_name)
-                    if match:
-                        counter[int(match.group(1))] += 1
-                    # Check numbered field name
-                    pdf_name_no_idx = pdf_name.split('[')[0]
-                    match = re.match(r'^.+?(\d+)$', pdf_name_no_idx)
-                    if match:
-                        counter[int(match.group(1))] += 1
+        # Step 3: Create tables from grouped base names
+        for row_nums_set, bases_dict in row_nums_to_bases.items():
+            if len(bases_dict) >= 3:  # At least 3 different field name patterns
+                row_nums_sorted = sorted(list(row_nums_set))
 
-                # Use most common index
-                if counter:
-                    rows_with_indices[y_key] = counter.most_common(1)[0][0]
+                # Build table rows
+                table_rows = []
+                for row_num in row_nums_sorted:
+                    # Collect all fields for this logical row number from all bases
+                    row_fields = []
+                    for base_name in sorted(bases_dict.keys()):
+                        if row_num in bases_dict[base_name]:
+                            row_fields.extend(bases_dict[base_name][row_num])
+
+                    if row_fields:
+                        # Sort by X position to get column order
+                        row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
+                        table_rows.append(row_fields_sorted)
+
+                        # Mark as used
+                        for f in row_fields_sorted:
+                            used_field_ids.add(f.id)
+
+                if table_rows and len(table_rows) >= 2:
+                    table_groups.append((section_id, table_rows))
+
+        # PATTERN B: Array indices (e.g., TextField13[0], TextField13[1], TextField13[2])
+        # Extract fields with array indices that weren't used in Pattern A
+        array_fields = []
+        for field in fields_list:
+            if field.id in used_field_ids:
+                continue
+
+            if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
+                continue
+
+            pdf_name = field.pdf_field_name.split('.')[-1]
+            match = re.match(r'^(.+?)\[(\d+)\]$', pdf_name)
+
+            if match:
+                base_name = match.group(1)
+                array_idx = int(match.group(2))
+                array_fields.append({
+                    'field': field,
+                    'base_name': base_name,
+                    'array_idx': array_idx,
+                    'y': field.pdf_position.y if hasattr(field, 'pdf_position') else 0,
+                    'x': field.pdf_position.x if hasattr(field, 'pdf_position') else 0,
+                })
+
+        # Group array fields by spatial regions (Y gaps > 100px indicate different tables)
+        if array_fields:
+            # Sort by Y position
+            array_fields.sort(key=lambda item: item['y'])
+
+            # Split into spatial groups based on Y gaps
+            spatial_groups = []
+            current_group = []
+            prev_y = None
+
+            for item in array_fields:
+                if prev_y is not None and (item['y'] - prev_y) > 100:
+                    # Large gap - new spatial group
+                    if current_group:
+                        spatial_groups.append(current_group)
+                    current_group = [item]
                 else:
-                    rows_with_indices[y_key] = min(row_indices)
+                    current_group.append(item)
+                prev_y = item['y']
 
-        # Step 3: Group rows with consecutive indices into tables
-        sorted_y_keys = sorted(y_rows.keys())
+            if current_group:
+                spatial_groups.append(current_group)
 
-        current_table_rows = []
-        expected_next_idx = None
-        prev_y = None
-        seen_indices = set()  # Track which indices we've seen in current table
-
-        for y_key in sorted_y_keys:
-            row_idx = rows_with_indices.get(y_key)
-            row_fields = y_rows[y_key]
-
-            # Sort fields in row by X position
-            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
-
-            # Check for large Y gap (indicates new table section)
-            y_gap_detected = prev_y is not None and (y_key - prev_y) > 80
-
-            # Check if this row continues the current table
-            if row_idx is not None:
-                # Check if index has restarted (indicates new table)
-                idx_restart = row_idx in seen_indices and row_idx < max(seen_indices) if seen_indices else False
-
-                # Check if indices are consecutive/continuing
-                idx_continues = (expected_next_idx is None or
-                                row_idx == expected_next_idx or
-                                row_idx == expected_next_idx - 1 or
-                                abs(row_idx - expected_next_idx) <= 1)
-
-                if idx_continues and not y_gap_detected and not idx_restart:
-                    if expected_next_idx is None:
-                        # Start a new table
-                        current_table_rows = [row_fields_sorted]
-                        seen_indices = {row_idx}
-                    else:
-                        # Continue current table
-                        current_table_rows.append(row_fields_sorted)
-                        seen_indices.add(row_idx)
-                    expected_next_idx = row_idx + 1
-                else:
-                    # Index gap, restart, or Y gap detected - save current table and start new one
-                    if len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
-                        table_groups.append((section_id, current_table_rows))
-                        for row in current_table_rows:
-                            for f in row:
-                                used_field_ids.add(f.id)
-
-                    current_table_rows = [row_fields_sorted]
-                    expected_next_idx = row_idx + 1
-                    seen_indices = {row_idx}
-            else:
-                # No index found - check if we should save current table
-                if current_table_rows and len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
-                    table_groups.append((section_id, current_table_rows))
-                    for row in current_table_rows:
+            # Process each spatial group
+            for group_items in spatial_groups:
+                table_rows = _process_array_index_group(group_items)
+                # Require at least 3 rows for array index tables (2 rows could be radio buttons)
+                if table_rows and len(table_rows) >= 3:
+                    table_groups.append((section_id, table_rows))
+                    for row in table_rows:
                         for f in row:
                             used_field_ids.add(f.id)
-                current_table_rows = []
-                expected_next_idx = None
-                seen_indices = set()
-
-            prev_y = y_key
-
-        # Save last table if exists
-        if current_table_rows and len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
-            table_groups.append((section_id, current_table_rows))
-            for row in current_table_rows:
-                for f in row:
-                    used_field_ids.add(f.id)
 
         # Add unused fields to non-repeating list
         for field in fields_list:
@@ -408,6 +407,49 @@ def detect_table_patterns(fields):
                 non_repeating_fields.append(field)
 
     return table_groups, non_repeating_fields
+
+
+def _process_array_index_group(items):
+    """
+    Helper function to process array index pattern into table rows within a spatial group.
+    Groups fields at same Y position, uses array indices to identify row numbers.
+    """
+    from collections import defaultdict, Counter
+
+    # Group by Y position (physical rows)
+    y_groups = defaultdict(list)
+    for item in items:
+        y_key = round(item['y'] / 20) * 20
+        y_groups[y_key].append(item)
+
+    # For each physical row (Y position), determine which logical row it belongs to
+    # by finding the most common array index
+    y_to_row_idx = {}
+    for y_key, y_items in y_groups.items():
+        indices = [item['array_idx'] for item in y_items]
+        if indices:
+            # Use most common index as the row identifier
+            most_common_idx = Counter(indices).most_common(1)[0][0]
+            y_to_row_idx[y_key] = most_common_idx
+
+    # Group fields by logical row index
+    row_fields_dict = defaultdict(list)
+    for item in items:
+        y_key = round(item['y'] / 20) * 20
+        row_idx = y_to_row_idx.get(y_key)
+        if row_idx is not None:
+            row_fields_dict[row_idx].append(item['field'])
+
+    # Build table rows sorted by row index
+    table_rows = []
+    for row_idx in sorted(row_fields_dict.keys()):
+        row_fields = row_fields_dict[row_idx]
+        if len(row_fields) >= 2:  # Need at least 2 columns
+            # Sort by X position to get column order
+            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
+            table_rows.append(row_fields_sorted)
+
+    return table_rows
 
 
 def analyze_table_structure(table_rows, section_id):
