@@ -25,17 +25,17 @@ import re
 
 from .models import FormField, FieldType, TableColumn, MultiEntryConfig, FieldOption, SupplementType
 
-_EXPECTED_TABLES_BY_SECTION: Dict[str, List[Dict[str, Any]]] = {}
-
 
 def _is_supported_section(section_id: str) -> bool:
-    if (
-        section_id == "part_a_ii"
-        or section_id.startswith("part_a_ii_")
-        or section_id.startswith("supplement_a")
-    ):
+    """Check if a section likely contains tables based on heuristic patterns."""
+    # Allow table detection in all Part A sections and supplements
+    if section_id.startswith("part_a"):
         return True
-    return section_id in _EXPECTED_TABLES_BY_SECTION
+    if section_id.startswith("supplement"):
+        return True
+    if section_id.startswith("part_d"):
+        return True
+    return False
 
 
 def _slugify(text: Optional[str]) -> str:
@@ -436,13 +436,8 @@ class DetectedTable:
 
 def consolidate_tables(
     fields: Sequence[FormField],
-    *,
-    expected_tables: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> List[FormField]:
-    """Return a new field list where repeating patterns are replaced by tables."""
-
-    global _EXPECTED_TABLES_BY_SECTION
-    _EXPECTED_TABLES_BY_SECTION = expected_tables or {}
+    """Return a new field list where repeating patterns are replaced by tables using heuristic detection."""
 
     tokens_by_section: Dict[str, List[TableToken]] = defaultdict(list)
     for field in fields:
@@ -483,12 +478,10 @@ def consolidate_tables(
 
 
 def _detect_tables_in_section(section_id: str, tokens: Sequence[TableToken]) -> List[DetectedTable]:
-    """Detect tables inside a single section."""
+    """Detect tables inside a single section using heuristic pattern matching."""
 
     if not _is_supported_section(section_id):
         return []
-
-    expected_defs = _EXPECTED_TABLES_BY_SECTION.get(section_id, [])
 
     # Group tokens by normalized key (column stem).
     tokens_by_key: Dict[str, List[TableToken]] = defaultdict(list)
@@ -506,7 +499,7 @@ def _detect_tables_in_section(section_id: str, tokens: Sequence[TableToken]) -> 
 
     detected: List[DetectedTable] = []
     for rows_tuple, columns in multi_row_groups.items():
-        table = _build_table_from_columns(section_id, rows_tuple, columns, expected_defs)
+        table = _build_table_from_columns(section_id, rows_tuple, columns)
         if table:
             detected.append(table)
 
@@ -983,44 +976,31 @@ def _build_table_from_columns(
     section_id: str,
     rows_tuple: Tuple[int, ...],
     columns: Sequence[ColumnCandidate],
-    expected_defs: Sequence[Dict[str, Any]],
 ) -> Optional[DetectedTable]:
+    """Build a table from column candidates using pure heuristic approach."""
     if not columns:
         return None
 
     aggregated_columns = _aggregate_column_candidates(section_id, columns)
 
     # Require a reasonable number of columns before treating a group as a table.
-    if len(aggregated_columns) < 4:
+    if len(aggregated_columns) < 3:
         return None
 
     rows = sorted(rows_tuple)
-    expected_table = _match_expected_table(section_id, aggregated_columns, expected_defs)
 
-    table_columns: List[TableColumn] = []
-    used_field_ids: Set[str] = set()
-    row_pdf_field_map: Optional[List[Dict[str, str]]] = None
-
-    if expected_table:
-        table_columns, used_field_ids, row_pdf_field_map = _build_columns_from_expected(
-            expected_table,
-            aggregated_columns,
-            rows,
-        )
-
-    if not table_columns:
-        table_columns, used_field_ids = _build_columns_fallback(section_id, aggregated_columns)
+    # Build columns using heuristic fallback logic
+    table_columns, used_field_ids = _build_columns_fallback(section_id, aggregated_columns)
 
     if not table_columns:
         return None
 
-    table_id, table_name, spoken_name = _infer_table_metadata(section_id, table_columns, expected_table)
+    # Infer table metadata from section and column patterns
+    table_id, table_name, spoken_name = _infer_table_metadata(section_id, table_columns)
     multi_entry = _build_multi_entry_config(
         section_id,
         rows,
         table_columns,
-        expected_table=expected_table,
-        row_pdf_field_map=row_pdf_field_map,
     )
 
     return DetectedTable(
@@ -1073,13 +1053,8 @@ TABLE_NAME_HINTS: List[Tuple[str, str, str]] = [
 def _infer_table_metadata(
     section_id: str,
     columns: Sequence[TableColumn],
-    expected_table: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str, str]:
-    if expected_table:
-        table_id = expected_table.get("id") or f"{section_id}_table"
-        table_name = expected_table.get("name") or table_id.replace("_", " ").title()
-        spoken = expected_table.get("spoken_name") or table_name.lower()
-        return (table_id, table_name, spoken)
+    """Infer table ID, name, and spoken name from section and column patterns."""
 
     column_ids = {col.id for col in columns if col.id}
     if section_id.startswith("part_a_ii") and "include_in_application" in column_ids:
@@ -1107,36 +1082,8 @@ def _build_multi_entry_config(
     section_id: str,
     rows: Sequence[int],
     columns: Sequence[TableColumn],
-    *,
-    expected_table: Optional[Dict[str, Any]] = None,
-    row_pdf_field_map: Optional[List[Dict[str, str]]] = None,
 ) -> MultiEntryConfig:
-    if expected_table:
-        payload = expected_table.get("multi_entry") or {}
-        min_entries = payload.get("min_entries", 0)
-        max_entries = payload.get("max_entries")
-        initial_rows = payload.get("initial_rows", len(rows))
-        add_button_label = payload.get("add_button_label")
-        remove_button_label = payload.get("remove_button_label")
-        overflow_instruction = payload.get("overflow_instruction")
-        overflow_to = payload.get("overflow_to_supplement")
-        overflow_enum: Optional[SupplementType] = None
-        if overflow_to:
-            try:
-                overflow_enum = SupplementType(overflow_to)
-            except ValueError:
-                overflow_enum = None
-
-        return MultiEntryConfig(
-            min_entries=min_entries,
-            max_entries=max_entries,
-            initial_rows=initial_rows,
-            add_button_label=add_button_label,
-            remove_button_label=remove_button_label,
-            overflow_instruction=overflow_instruction,
-            overflow_to_supplement=overflow_enum,
-            row_pdf_field_map=row_pdf_field_map,
-        )
+    """Build multi-entry configuration using heuristic rules based on section patterns."""
 
     min_entries = 0
     initial_rows = len(rows)
@@ -1148,6 +1095,8 @@ def _build_multi_entry_config(
         add_button_label = "Add Child"
         overflow_instruction = "Use Supplement A for additional children."
         overflow_to_supplement = SupplementType.SUPPLEMENT_A
+    elif section_id.startswith("supplement_a"):
+        add_button_label = "Add Child"
 
     return MultiEntryConfig(
         min_entries=min_entries,
@@ -1155,5 +1104,4 @@ def _build_multi_entry_config(
         add_button_label=add_button_label,
         overflow_instruction=overflow_instruction,
         overflow_to_supplement=overflow_to_supplement,
-        row_pdf_field_map=row_pdf_field_map,
     )
