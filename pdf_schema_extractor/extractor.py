@@ -258,78 +258,154 @@ def extract_complete_metadata(doc):
 def detect_table_patterns(fields):
     """
     Detect repeating field patterns that indicate table structures.
-    Groups fields by logical table rows (same Y position, similar naming pattern).
+    Strategy: Group by Y position first, then detect repeating row patterns.
     Returns list of table groups (each group is a list of row lists).
     """
     from collections import defaultdict
+    import re
 
-    # Group fields by section and Y position
-    section_rows = defaultdict(lambda: defaultdict(list))
-
+    # Group fields by section
+    section_fields = defaultdict(list)
     for field in fields:
-        section_id = field.section_id
-        # Round Y to nearest 20 pixels to group fields in same row
-        y_key = round(field.pdf_position.y / 20) * 20
-        section_rows[section_id][y_key].append(field)
+        section_fields[field.section_id].append(field)
 
-    # Now identify table patterns within each section
     table_groups = []
     non_repeating_fields = []
 
-    for section_id, rows_dict in section_rows.items():
-        # Sort rows by Y position
-        sorted_rows = sorted(rows_dict.items(), key=lambda x: x[0])
+    for section_id, fields_list in section_fields.items():
+        # Track which fields have been added to tables
+        used_field_ids = set()
 
-        # Look for consecutive rows with similar structure (same field count and types)
-        current_table_rows = []
-        prev_row_signature = None
+        # Step 1: Group fields by Y position (rows)
+        y_rows = defaultdict(list)
+        for field in fields_list:
+            if hasattr(field, 'pdf_position'):
+                # Round to nearest 20 pixels for row grouping
+                y_key = round(field.pdf_position.y / 20) * 20
+                y_rows[y_key].append(field)
 
-        for y_pos, row_fields in sorted_rows:
-            # Create a signature for this row (number of fields and their types)
-            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x)
-            row_signature = tuple([f.type for f in row_fields_sorted])
+        # Step 2: Assign row indices based on patterns
+        # Collect row index information from PDF field names
+        rows_with_indices = {}  # {y_key: row_index}
 
-            # Check if this row matches the pattern of a potential table
-            # Tables should have 3+ fields in a row
-            if len(row_fields_sorted) >= 3:
-                if prev_row_signature == row_signature:
-                    # This row matches the previous one - part of the same table
-                    current_table_rows.append(row_fields_sorted)
-                elif current_table_rows:
-                    # Previous rows formed a table, but this one is different
-                    # Save the current table and start fresh
-                    if len(current_table_rows) >= 2:  # Need at least 2 rows
-                        table_groups.append((section_id, current_table_rows))
-                    else:
-                        # Not enough rows, treat as individual fields
-                        for row in current_table_rows:
-                            non_repeating_fields.extend(row)
-                    current_table_rows = [row_fields_sorted]
-                    prev_row_signature = row_signature
+        for y_key, row_fields in y_rows.items():
+            row_indices = set()
+            for field in row_fields:
+                if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
+                    continue
+
+                pdf_name = field.pdf_field_name.split('.')[-1]
+
+                # Check for array index pattern: TextField13[2]
+                match = re.match(r'^.+?\[(\d+)\]$', pdf_name)
+                if match:
+                    row_indices.add(int(match.group(1)))
+
+                # Check for numbered field name: ChildAlien2[0]
+                pdf_name_no_idx = pdf_name.split('[')[0]
+                match = re.match(r'^.+?(\d+)$', pdf_name_no_idx)
+                if match:
+                    row_indices.add(int(match.group(1)))
+
+            # Use the most common index for this row
+            if row_indices:
+                # Count occurrences and pick the most common
+                from collections import Counter
+                counter = Counter()
+                for field in row_fields:
+                    if not hasattr(field, 'pdf_field_name') or not field.pdf_field_name:
+                        continue
+                    pdf_name = field.pdf_field_name.split('.')[-1]
+                    # Check array index
+                    match = re.match(r'^.+?\[(\d+)\]$', pdf_name)
+                    if match:
+                        counter[int(match.group(1))] += 1
+                    # Check numbered field name
+                    pdf_name_no_idx = pdf_name.split('[')[0]
+                    match = re.match(r'^.+?(\d+)$', pdf_name_no_idx)
+                    if match:
+                        counter[int(match.group(1))] += 1
+
+                # Use most common index
+                if counter:
+                    rows_with_indices[y_key] = counter.most_common(1)[0][0]
                 else:
-                    # Start of a potential new table
+                    rows_with_indices[y_key] = min(row_indices)
+
+        # Step 3: Group rows with consecutive indices into tables
+        sorted_y_keys = sorted(y_rows.keys())
+
+        current_table_rows = []
+        expected_next_idx = None
+        prev_y = None
+        seen_indices = set()  # Track which indices we've seen in current table
+
+        for y_key in sorted_y_keys:
+            row_idx = rows_with_indices.get(y_key)
+            row_fields = y_rows[y_key]
+
+            # Sort fields in row by X position
+            row_fields_sorted = sorted(row_fields, key=lambda f: f.pdf_position.x if hasattr(f, 'pdf_position') else 0)
+
+            # Check for large Y gap (indicates new table section)
+            y_gap_detected = prev_y is not None and (y_key - prev_y) > 80
+
+            # Check if this row continues the current table
+            if row_idx is not None:
+                # Check if index has restarted (indicates new table)
+                idx_restart = row_idx in seen_indices and row_idx < max(seen_indices) if seen_indices else False
+
+                # Check if indices are consecutive/continuing
+                idx_continues = (expected_next_idx is None or
+                                row_idx == expected_next_idx or
+                                row_idx == expected_next_idx - 1 or
+                                abs(row_idx - expected_next_idx) <= 1)
+
+                if idx_continues and not y_gap_detected and not idx_restart:
+                    if expected_next_idx is None:
+                        # Start a new table
+                        current_table_rows = [row_fields_sorted]
+                        seen_indices = {row_idx}
+                    else:
+                        # Continue current table
+                        current_table_rows.append(row_fields_sorted)
+                        seen_indices.add(row_idx)
+                    expected_next_idx = row_idx + 1
+                else:
+                    # Index gap, restart, or Y gap detected - save current table and start new one
+                    if len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
+                        table_groups.append((section_id, current_table_rows))
+                        for row in current_table_rows:
+                            for f in row:
+                                used_field_ids.add(f.id)
+
                     current_table_rows = [row_fields_sorted]
-                    prev_row_signature = row_signature
+                    expected_next_idx = row_idx + 1
+                    seen_indices = {row_idx}
             else:
-                # Not enough fields for a table row
-                # Save any accumulated table
-                if current_table_rows and len(current_table_rows) >= 2:
+                # No index found - check if we should save current table
+                if current_table_rows and len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
                     table_groups.append((section_id, current_table_rows))
-                elif current_table_rows:
                     for row in current_table_rows:
-                        non_repeating_fields.extend(row)
-
-                # Add current row fields as non-repeating
-                non_repeating_fields.extend(row_fields)
+                        for f in row:
+                            used_field_ids.add(f.id)
                 current_table_rows = []
-                prev_row_signature = None
+                expected_next_idx = None
+                seen_indices = set()
 
-        # Don't forget the last table
-        if current_table_rows and len(current_table_rows) >= 2:
+            prev_y = y_key
+
+        # Save last table if exists
+        if current_table_rows and len(current_table_rows) >= 2 and len(current_table_rows[0]) >= 2:
             table_groups.append((section_id, current_table_rows))
-        elif current_table_rows:
             for row in current_table_rows:
-                non_repeating_fields.extend(row)
+                for f in row:
+                    used_field_ids.add(f.id)
+
+        # Add unused fields to non-repeating list
+        for field in fields_list:
+            if field.id not in used_field_ids:
+                non_repeating_fields.append(field)
 
     return table_groups, non_repeating_fields
 
@@ -401,6 +477,7 @@ def create_table_field(table_rows, section_id):
     table_rows is a list of lists, where each inner list is a row of fields.
     """
     from .models import TableColumn, MultiEntryConfig
+    import re
 
     # Analyze the table structure
     columns_data, multi_entry_data = analyze_table_structure(table_rows, section_id)
@@ -411,36 +488,95 @@ def create_table_field(table_rows, section_id):
     # Get the first field from first row as template
     first_field = table_rows[0][0]
 
+    # Generate semantic table ID and name
+    # Strategy: Look at PDF field names to identify the table type
+    pdf_names = [f.pdf_field_name for f in table_rows[0] if hasattr(f, 'pdf_field_name') and f.pdf_field_name]
+
+    # Extract base names (without numbers and array indices)
+    base_names = []
+    for pdf_name in pdf_names:
+        # Get last part after dots
+        name = pdf_name.split('.')[-1]
+        # Remove array index
+        name = name.split('[')[0]
+        # Remove trailing numbers
+        name = re.sub(r'\d+$', '', name)
+        if name:
+            base_names.append(name.lower())
+
+    # Identify table type from base names
+    table_type = None
+    table_name = None
+
+    if any('child' in name for name in base_names):
+        table_type = 'children_table'
+        table_name = 'Your Children'
+    elif any('entry' in name or 'date' in name for name in base_names) and 'part_a_i' in section_id:
+        # US entries table in Part A.I
+        table_type = 'us_entries'
+        table_name = 'U.S. Entries'
+    elif any('address' in name or 'street' in name for name in base_names):
+        if 'abroad' in ' '.join([f.name.lower() for f in table_rows[0] if hasattr(f, 'name')]):
+            table_type = 'last_address_abroad'
+            table_name = 'Your Last Address Abroad'
+        else:
+            table_type = 'residences_last_5_years'
+            table_name = 'Residences Last 5 Years'
+    elif any('school' in name or 'education' in name for name in base_names):
+        table_type = 'education_history'
+        table_name = 'Education History'
+    elif any('employer' in name or 'occupation' in name for name in base_names):
+        table_type = 'employment_history'
+        table_name = 'Employment History'
+    elif any('parent' in name or 'sibling' in name or 'family' in name for name in base_names):
+        table_type = 'family_info'
+        table_name = 'Family Information'
+    elif 'part_d' in section_id and any('name' in name for name in base_names):
+        table_type = 'family_assisted_details'
+        table_name = 'Family Members Who Assisted'
+    elif 'supplement' in section_id:
+        if any('child' in name for name in base_names):
+            table_type = 'children_table'
+            table_name = 'Additional Children'
+        else:
+            table_type = 'continuation_table'
+            table_name = 'Continuation'
+
     # Generate table ID
-    # Try to extract a meaningful name from field IDs
-    # Look for common prefix in all first-row field IDs
-    field_ids = [f.id for f in table_rows[0]]
-    common_parts = []
-    id_parts = [fid.split('_') for fid in field_ids]
-
-    # Find common prefix
-    if id_parts:
-        for i in range(len(id_parts[0])):
-            parts_at_i = [parts[i] if i < len(parts) else None for parts in id_parts]
-            if len(set(parts_at_i)) == 1 and parts_at_i[0]:
-                common_parts.append(parts_at_i[0])
-            else:
-                break
-
-    # Generate meaningful table ID
-    if len(common_parts) >= 2:
-        table_id = '_'.join(common_parts) + '_table'
+    if table_type:
+        table_id = f"{section_id}_{table_type}"
     else:
-        table_id = f"{section_id}_table"
+        # Fallback: try to extract common prefix from field IDs
+        field_ids = [f.id for f in table_rows[0]]
+        common_parts = []
+        id_parts = [fid.split('_') for fid in field_ids]
 
-    # Generate table name from first field
-    table_name = first_field.name
+        # Find common prefix
+        if id_parts:
+            for i in range(len(id_parts[0])):
+                parts_at_i = [parts[i] if i < len(parts) else None for parts in id_parts]
+                if len(set(parts_at_i)) == 1 and parts_at_i[0]:
+                    common_parts.append(parts_at_i[0])
+                else:
+                    break
+
+        if len(common_parts) >= 2:
+            table_id = '_'.join(common_parts) + '_table'
+        else:
+            table_id = f"{section_id}_table"
+
+    # Use detected table name or fall back to first field name
+    if not table_name:
+        table_name = first_field.name
+
+    # Generate spoken name
+    spoken_name = table_name.split()[0].lower() if table_name else 'table'
 
     # Create the table field
     table_field = FormField(
         id=table_id,
         name=table_name,
-        spoken_name=table_name.split()[0] if table_name else 'table',
+        spoken_name=spoken_name,
         type=FieldType.TABLE,
         section_id=section_id,
         columns=columns_data,
