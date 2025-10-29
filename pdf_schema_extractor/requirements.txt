@@ -1,0 +1,5 @@
+PyMuPDF
+pydantic==2.8.2
+rapidfuzz==3.10.1
+google-genai==1.38.0
+python-dotenv==1.0.1

@@ -1,0 +1,48 @@
+{
+  "section": {
+    "id": "additional_information_about_your_claim_to_asylum",
+    "title": "Additional Information About Your Claim to Asylum",
+    "page_start": 11,
+    "page_end": 12,
+    "estimated_fields": 5
+  },
+  "fields": [
+    {
+      "id": "a_number_supplement",
+      "name": "A-Number (if available)",
+      "spoken_name": "A number if available",
+      "type": "text",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "A-Number (if available)"
+    },
+    {
+      "id": "date_supplement",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Date"
+    },
+    {
+      "id": "applicant_name_supplement",
+      "name": "Applicant's Name",
+      "spoken_name": "Applicant's Name",
+      "type": "text",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Applicant's Name"
+    },
+    {
+      "id": "applicant_signature_supplement",
+      "name": "Applicant's Signature",
+      "spoken_name": "Applicant's Signature",
+      "type": "signature",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Applicant's Signature"
+    }
+  ],
+  "raw_response": "{\n  \"section_id\": \"additional_information_about_your_claim_to_asylum\",\n  \"section_title\": \"Additional Information About Your Claim to Asylum\",\n  \"total_fields\": 4,\n  \"fields\": [\n    {\n      \"id\": \"a_number_supplement\",\n      \"name\": \"A-Number (if available)\",\n      \"spoken_name\": \"A number if available\",\n      \"type\": \"text\",\n      \"section_id\": \"additional_information_about_your_claim_to_asylum\",\n      \"section_label\": \"Additional Information About Your Claim to Asylum\",\n      \"pdf_field_name\": \"A-Number (if available)\"\n    },\n    {\n      \"id\": \"date_supplement\",\n      \"name\": \"Date\",\n      \"spoken_name\": \"Date\",\n      \"type\": \"date\",\n      \"section_id\": \"additional_information_about_your_claim_to_asylum\",\n      \"section_label\": \"Additional Information About Your Claim to Asylum\",\n      \"pdf_field_name\": \"Date\"\n    },\n    {\n      \"id\": \"applicant_name_supplement\",\n      \"name\": \"Applicant's Name\",\n      \"spoken_name\": \"Applicant's Name\",\n      \"type\": \"text\",\n      \"section_id\": \"additional_information_about_your_claim_to_asylum\",\n      \"section_label\": \"Additional Information About Your Claim to Asylum\",\n      \"pdf_field_name\": \"Applicant's Name\"\n    },\n    {\n      \"id\": \"applicant_signature_supplement\",\n      \"name\": \"Applicant's Signature\",\n      \"spoken_name\": \"Applicant's Signature\",\n      \"type\": \"signature\",\n      \"section_id\": \"additional_information_about_your_claim_to_asylum\",\n      \"section_label\": \"Additional Information About Your Claim to Asylum\",\n      \"pdf_field_name\": \"Applicant's Signature\"\n    }\n  ],\n  \"notes\": \"Extracted fields from the Additional Information About Your Claim to Asylum section.\"\n}"
+}

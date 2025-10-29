@@ -1,0 +1,48 @@
+{
+  "section": {
+    "id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+    "title": "Part G. To Be Completed at Removal Hearing, if Applicable",
+    "page_start": 9,
+    "page_end": 11,
+    "estimated_fields": 24
+  },
+  "fields": [
+    {
+      "id": "signature_of_applicant",
+      "name": "Signature of Applicant",
+      "spoken_name": "Signature of Applicant",
+      "type": "signature",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Signature of Applicant"
+    },
+    {
+      "id": "date_mm_dd_yyyy",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Date (mm/dd/yyyy)"
+    },
+    {
+      "id": "write_your_name_in_your_native_alphabet",
+      "name": "Write Your Name in Your Native Alphabet",
+      "spoken_name": "Write Your Name in Your Native Alphabet",
+      "type": "text",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Write Your Name in Your Native Alphabet"
+    },
+    {
+      "id": "signature_of_immigration_judge",
+      "name": "Signature of Immigration Judge",
+      "spoken_name": "Signature of Immigration Judge",
+      "type": "signature",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Signature of Immigration Judge"
+    }
+  ],
+  "raw_response": "{\n  \"section_id\": \"part_g_to_be_completed_at_removal_hearing_if_appli\",\n  \"section_title\": \"Part G. To Be Completed at Removal Hearing, if Applicable\",\n  \"total_fields\": 0,\n  \"fields\": [\n    {\n      \"id\": \"signature_of_applicant\",\n      \"name\": \"Signature of Applicant\",\n      \"spoken_name\": \"Signature of Applicant\",\n      \"type\": \"signature\",\n      \"section_id\": \"part_g_to_be_completed_at_removal_hearing_if_appli\",\n      \"section_label\": \"Part G. To Be Completed at Removal Hearing, if Applicable\",\n      \"pdf_field_name\": \"Signature of Applicant\"\n    },\n    {\n      \"id\": \"date_mm_dd_yyyy\",\n      \"name\": \"Date\",\n      \"spoken_name\": \"Date\",\n      \"type\": \"date\",\n      \"section_id\": \"part_g_to_be_completed_at_removal_hearing_if_appli\",\n      \"section_label\": \"Part G. To Be Completed at Removal Hearing, if Applicable\",\n      \"pdf_field_name\": \"Date (mm/dd/yyyy)\"\n    },\n    {\n      \"id\": \"write_your_name_in_your_native_alphabet\",\n      \"name\": \"Write Your Name in Your Native Alphabet\",\n      \"spoken_name\": \"Write Your Name in Your Native Alphabet\",\n      \"type\": \"text\",\n      \"section_id\": \"part_g_to_be_completed_at_removal_hearing_if_appli\",\n      \"section_label\": \"Part G. To Be Completed at Removal Hearing, if Applicable\",\n      \"pdf_field_name\": \"Write Your Name in Your Native Alphabet\"\n    },\n    {\n      \"id\": \"signature_of_immigration_judge\",\n      \"name\": \"Signature of Immigration Judge\",\n      \"spoken_name\": \"Signature of Immigration Judge\",\n      \"type\": \"signature\",\n      \"section_id\": \"part_g_to_be_completed_at_removal_hearing_if_appli\",\n      \"section_label\": \"Part G. To Be Completed at Removal Hearing, if Applicable\",\n      \"pdf_field_name\": \"Signature of Immigration Judge\"\n    }\n  ],\n  \"notes\": \"Extracted all fields from Part G. To Be Completed at Removal Hearing, if Applicable\"\n}"
+}
