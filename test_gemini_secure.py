@@ -17,7 +17,7 @@ def test_gemini():
         print("   Set it with: export GEMINI_API_KEY='your_key_here'")
         return False
 
-    model = 'gemini-2.0-flash-exp'
+    model = 'gemini-2.5-flash-lite'
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 
     headers = {
@@ -61,7 +61,7 @@ def test_structured_output():
     if not api_key:
         return False
 
-    model = 'gemini-2.0-flash-exp'
+    model = 'gemini-2.5-flash-lite'
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 
     headers = {
