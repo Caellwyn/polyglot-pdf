@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_gemini_secure.py:*)",
+      "Bash(export GEMINI_API_KEY=AIzaSyB-MTbrER0LA5_Fthb0A84uqzCpcLN8PjI)",
+      "Bash(python test_gemini_enhancer.py:*)",
+      "Read(//c/Users/caell/OneDrive/AILearning/polyglot-pdf/**)",
+      "Bash(python -m pdf_schema_extractor.test_gemini_enhancer:*)",
+      "Bash(python -m pdf_schema_extractor.test_extraction:*)",
+      "Bash(tee:*)",
+      "Bash(python -m pdf_schema_extractor.compare_extraction:*)",
+      "Bash(python -m pdf_schema_extractor.test_gemini_full_extraction:*)",
+      "Bash(python -m pdf_schema_extractor.test_gemini_full_schema:*)",
+      "Bash(python -m pdf_schema_extractor.test_gemini_chunked:*)",
+      "Bash(python -m pdf_schema_extractor.test_full_gemini_extraction:*)",
+      "Bash(timeout 30 python:*)",
+      "Bash(python test_full_gemini_extraction.py:*)",
+      "Bash(GEMINI_API_KEY=AIzaSyB-MTbrER0LA5_Fthb0A84uqzCpcLN8PjI python:*)",
+      "Bash(python -u -m pdf_schema_extractor.test_full_gemini_extraction:*)",
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(awk:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
