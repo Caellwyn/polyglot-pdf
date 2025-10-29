@@ -1,0 +1,27 @@
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \
+-H "x-goog-api-key: $GEMINI_API_KEY" \
+-H 'Content-Type: application/json' \
+-d '{
+      "contents": [{
+        "parts":[
+          { "text": "List a few popular cookie recipes, and include the amounts of ingredients." }
+        ]
+      }],
+      "generationConfig": {
+        "responseMimeType": "application/json",
+        "responseSchema": {
+          "type": "ARRAY",
+          "items": {
+            "type": "OBJECT",
+            "properties": {
+              "recipeName": { "type": "STRING" },
+              "ingredients": {
+                "type": "ARRAY",
+                "items": { "type": "STRING" }
+              }
+            },
+            "propertyOrdering": ["recipeName", "ingredients"]
+          }
+        }
+      }
+}' 2> /dev/null | head
