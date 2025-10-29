@@ -20,6 +20,11 @@ def test_gemini():
     model = 'gemini-2.0-flash-exp'
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': api_key  # API key in header, not query param
+    }
+
     payload = {
         "contents": [{
             "parts": [{"text": "Say 'Hello from Gemini!' if you can read this."}]
@@ -29,8 +34,8 @@ def test_gemini():
     try:
         print(f"Testing {model}...")
         response = requests.post(
-            f"{url}?key={api_key}",
-            headers={'Content-Type': 'application/json'},
+            url,  # No ?key= query param
+            headers=headers,
             json=payload,
             timeout=30
         )
@@ -59,6 +64,11 @@ def test_structured_output():
     model = 'gemini-2.0-flash-exp'
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': api_key
+    }
+
     payload = {
         "contents": [{
             "parts": [{"text": "List 2 colors with hex codes."}]
@@ -82,8 +92,8 @@ def test_structured_output():
     try:
         print(f"\nTesting structured output...")
         response = requests.post(
-            f"{url}?key={api_key}",
-            headers={'Content-Type': 'application/json'},
+            url,
+            headers=headers,
             json=payload,
             timeout=30
         )
