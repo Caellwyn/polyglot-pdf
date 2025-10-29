@@ -1,0 +1,48 @@
+{
+  "section": {
+    "id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+    "title": "Part F. To Be Completed at Asylum Interview, if Applicable",
+    "page_start": 9,
+    "page_end": 9,
+    "estimated_fields": 5
+  },
+  "fields": [
+    {
+      "id": "signature_applicant",
+      "name": "Signature of Applicant",
+      "spoken_name": "Signature of Applicant",
+      "type": "signature",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Signature of Applicant"
+    },
+    {
+      "id": "date_mm_dd_yyyy",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Date (mm/dd/yyyy)"
+    },
+    {
+      "id": "write_your_name_in_your_native_alphabet",
+      "name": "Write Your Name in Your Native Alphabet",
+      "spoken_name": "Write Your Name in Your Native Alphabet",
+      "type": "text",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Write Your Name in Your Native Alphabet"
+    },
+    {
+      "id": "signature_asylum_officer",
+      "name": "Signature of Asylum Officer",
+      "spoken_name": "Signature of Asylum Officer",
+      "type": "signature",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Signature of Asylum Officer"
+    }
+  ],
+  "raw_response": "{\n  \"section_id\": \"part_f_to_be_completed_at_asylum_interview_if_appl\",\n  \"section_title\": \"Part F. To Be Completed at Asylum Interview, if Applicable\",\n  \"total_fields\": 4,\n  \"fields\": [\n    {\n      \"id\": \"signature_applicant\",\n      \"name\": \"Signature of Applicant\",\n      \"spoken_name\": \"Signature of Applicant\",\n      \"type\": \"signature\",\n      \"section_id\": \"part_f_to_be_completed_at_asylum_interview_if_appl\",\n      \"section_label\": \"Part F. To Be Completed at Asylum Interview, if Applicable\",\n      \"pdf_field_name\": \"Signature of Applicant\"\n    },\n    {\n      \"id\": \"date_mm_dd_yyyy\",\n      \"name\": \"Date\",\n      \"spoken_name\": \"Date\",\n      \"type\": \"date\",\n      \"section_id\": \"part_f_to_be_completed_at_asylum_interview_if_appl\",\n      \"section_label\": \"Part F. To Be Completed at Asylum Interview, if Applicable\",\n      \"pdf_field_name\": \"Date (mm/dd/yyyy)\"\n    },\n    {\n      \"id\": \"write_your_name_in_your_native_alphabet\",\n      \"name\": \"Write Your Name in Your Native Alphabet\",\n      \"spoken_name\": \"Write Your Name in Your Native Alphabet\",\n      \"type\": \"text\",\n      \"section_id\": \"part_f_to_be_completed_at_asylum_interview_if_appl\",\n      \"section_label\": \"Part F. To Be Completed at Asylum Interview, if Applicable\",\n      \"pdf_field_name\": \"Write Your Name in Your Native Alphabet\"\n    },\n    {\n      \"id\": \"signature_asylum_officer\",\n      \"name\": \"Signature of Asylum Officer\",\n      \"spoken_name\": \"Signature of Asylum Officer\",\n      \"type\": \"signature\",\n      \"section_id\": \"part_f_to_be_completed_at_asylum_interview_if_appl\",\n      \"section_label\": \"Part F. To Be Completed at Asylum Interview, if Applicable\",\n      \"pdf_field_name\": \"Signature of Asylum Officer\"\n    }\n  ],\n  \"notes\": \"Extracted all fields from Part F.\"\n}"
+}

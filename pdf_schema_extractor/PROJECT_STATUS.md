@@ -207,17 +207,22 @@ Once verifier is built, test all combinations:
 
 ## Timeline
 
-### Immediate (This Session)
+### Completed (October 28, 2025)
 - [x] Document Gemini extraction process
 - [x] Build form-agnostic extractor
-- [ ] Test full extraction on i-589.pdf
-- [ ] Analyze results vs ground truth
+- [x] Test full extraction on i-589.pdf ✅ **DONE**
+- [x] Analyze results vs ground truth ✅ **DONE**
+- [x] Build verification system (4 layers) ✅ **DONE**
+- [x] Fix widget page tracking bug ✅ **DONE**
+- [x] Fix API key loading issue ✅ **DONE**
 
-### Next Session
-- [ ] Build verification system (6 modules)
-- [ ] Run testing matrix
-- [ ] Document verification results
-- [ ] Refine Gemini prompts based on gaps
+### Next Session (PRIORITY ORDER)
+1. [ ] **P0: Fix widget coverage bug** (reports 0.0%, critical)
+2. [ ] **P0: Investigate 35 missing fields** (79.4% vs 90% target)
+3. [ ] **P1: Run verification tests** on both schemas
+4. [ ] **P1: Refine Gemini prompts** for select/email/static_text/checkbox
+5. [ ] **P1: Improve table detection** (6/10 = 60%)
+6. [ ] **P2: Tune section detection** (13 vs 9 sections)
 
 ### Future
 - [ ] Test on additional PDF forms
@@ -249,22 +254,30 @@ Once verifier is built, test all combinations:
 
 ## Success Metrics
 
-### Extraction Quality
+### Extraction Quality (ACTUAL RESULTS ✅)
 - **Target**: 170 fields (ground truth)
-- **Current Gemini**: 69 fields from 3 sections (on track!)
-- **Current Heuristic**: 276 fields (over-extracts)
-- **Goal**: Within 10% of target (153-187 fields)
+- **Gemini Extracted**: **135 fields** (79.4% accuracy)
+- **Heuristic**: 276 fields (over-extracts)
+- **Status**: Within 20% of target, **needs refinement to reach 90%+**
 
-### Type Accuracy
-- **Date fields**: Target 15, Current 7 (from 3 sections)
-- **Radio groups**: Target 26, Current 8 (from 3 sections)
-- **Tables**: Target 10, Gemini finds 12 (exceeds!)
-- **Goal**: 90%+ accuracy on field types
+### Type Accuracy (ACTUAL RESULTS)
+- **Overall**: 52.9% type distribution accuracy ⚠️ **NEEDS WORK**
+- **Strong types** ✓:
+  - Tel: 3/3 (100%)
+  - Date: 13/15 (87%)
+  - Signature: 6/7 (86%)
+  - Radio: 28/26 (108% - slight over)
+- **Weak types** ⚠️:
+  - Select: 0/3 (0%)
+  - Email: 0/1 (0%)
+  - Static text: 0/4 (0%)
+  - Checkbox: 7/16 (44%)
+  - Table: 6/10 (60%)
 
-### Coverage
-- **Widget coverage**: Must be >= 95%
-- **Type compatibility**: Must be 100%
-- **Round-trip success**: Should be 100%
+### Coverage (ACTUAL RESULTS)
+- **Widget coverage**: 0.0% ⚠️ **CRITICAL BUG - INVESTIGATE**
+- **Type compatibility**: Not yet tested
+- **Round-trip success**: Not yet tested
 
 ## Resources
 
@@ -289,4 +302,9 @@ Once verifier is built, test all combinations:
 4. All intermediate results saved to `gemini_extraction_output/`
 5. See `GEMINI_CAPABILITIES_BASELINE.md` for baseline metrics
 
-**Current Status**: Ready to extract full schema and pivot to verification system.
+**Current Status**: ✅ Full extraction complete (135/170 fields). Verification system built and ready. Next session: Fix widget coverage bug and refine prompts.
+
+**See Also**:
+- `EXTRACTION_FINDINGS.md` - Detailed analysis of extraction results
+- `SESSION_SUMMARY.md` - Tonight's session summary
+- `gemini_extraction_output/gemini_extracted_schema.json` - Full extraction output

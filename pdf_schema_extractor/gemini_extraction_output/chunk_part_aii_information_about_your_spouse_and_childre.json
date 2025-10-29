@@ -1,0 +1,322 @@
+{
+  "section": {
+    "id": "part_aii_information_about_your_spouse_and_childre",
+    "title": "Part A.II. Information About Your Spouse and Children",
+    "page_start": 2,
+    "page_end": 3,
+    "estimated_fields": 39
+  },
+  "fields": [
+    {
+      "id": "spouse_alien_registration_number",
+      "name": "Alien Registration Number (A-Number)",
+      "spoken_name": "Spouse Alien Registration Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "AlienRegistrationNumber[0]",
+      "description": "Spouse's Alien Registration Number"
+    },
+    {
+      "id": "spouse_passport_id_number",
+      "name": "Passport/ID Card Number",
+      "spoken_name": "Spouse Passport or ID Card Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "PassportIDCardNumber[0]",
+      "description": "Spouse's Passport or ID Card Number"
+    },
+    {
+      "id": "spouse_date_of_birth",
+      "name": "Date of Birth",
+      "spoken_name": "Spouse Date of Birth",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "DateofBirth[0]",
+      "description": "Spouse's Date of Birth"
+    },
+    {
+      "id": "spouse_social_security_number",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Spouse Social Security Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "USSocialSecurityNumber[0]",
+      "description": "Spouse's U.S. Social Security Number"
+    },
+    {
+      "id": "spouse_complete_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Spouse Last Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "CompleteLastName[0]",
+      "description": "Spouse's Last Name"
+    },
+    {
+      "id": "spouse_first_name",
+      "name": "First Name",
+      "spoken_name": "Spouse First Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "FirstName[0]",
+      "description": "Spouse's First Name"
+    },
+    {
+      "id": "spouse_middle_name",
+      "name": "Middle Name",
+      "spoken_name": "Spouse Middle Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "MiddleName[0]",
+      "description": "Spouse's Middle Name"
+    },
+    {
+      "id": "spouse_other_names_used",
+      "name": "Other names used (include maiden name and aliases)",
+      "spoken_name": "Spouse Other Names Used",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Othernamesusedincludemaidennameandaliases[0]",
+      "description": "Spouse's Other Names Used"
+    },
+    {
+      "id": "spouse_date_of_marriage",
+      "name": "Date of Marriage",
+      "spoken_name": "Spouse Date of Marriage",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "DateofMarriage[0]",
+      "description": "Spouse's Date of Marriage"
+    },
+    {
+      "id": "spouse_place_of_marriage",
+      "name": "Place of Marriage",
+      "spoken_name": "Spouse Place of Marriage",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "PlaceofMarriage[0]",
+      "description": "Spouse's Place of Marriage"
+    },
+    {
+      "id": "spouse_city_and_country_of_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "Spouse City and Country of Birth",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "CityandCountryofBirth[0]",
+      "description": "Spouse's City and Country of Birth"
+    },
+    {
+      "id": "spouse_nationality",
+      "name": "Nationality (Citizenship)",
+      "spoken_name": "Spouse Nationality",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "NationalityCitizenship[0]",
+      "description": "Spouse's Nationality"
+    },
+    {
+      "id": "spouse_race_ethnic_or_tribal_group",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Spouse Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "RaceEthnicorTribalGroup[0]",
+      "description": "Spouse's Race Ethnic or Tribal Group"
+    },
+    {
+      "id": "spouse_sex",
+      "name": "Sex",
+      "spoken_name": "Spouse Sex",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Sex[0]",
+      "description": "Spouse's Sex",
+      "group_id": "spouse_sex_group",
+      "group_label": "Spouse Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "Male[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "Female[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_is_in_the_us",
+      "name": "Is this person in the U.S.?",
+      "spoken_name": "Is spouse in the US",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IsthispersonintheUS[0]",
+      "description": "Is spouse in the US",
+      "group_id": "spouse_is_in_the_us_group",
+      "group_label": "Is spouse in the US",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_location_if_not_in_us",
+      "name": "Specify location",
+      "spoken_name": "Spouse Location if not in US",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Specifylocation[0]",
+      "description": "Spouse Location if not in US"
+    },
+    {
+      "id": "spouse_place_of_last_entry",
+      "name": "Place of last entry into the U.S.",
+      "spoken_name": "Spouse Place of Last Entry",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "PlaceoflastentryintotheUS[0]",
+      "description": "Spouse Place of Last Entry"
+    },
+    {
+      "id": "spouse_date_of_last_entry",
+      "name": "Date of last entry into the U.S.",
+      "spoken_name": "Spouse Date of Last Entry",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "DateoflastentryintotheUS[0]",
+      "description": "Spouse Date of Last Entry"
+    },
+    {
+      "id": "spouse_i94_number",
+      "name": "I-94 Number",
+      "spoken_name": "Spouse I-94 Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "I94Number[0]",
+      "description": "Spouse I-94 Number"
+    },
+    {
+      "id": "spouse_status_when_admitted",
+      "name": "Status when last admitted",
+      "spoken_name": "Spouse Status when Admitted",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "StatuswhenlastadmittedVisatypeifany[0]",
+      "description": "Spouse Status when Admitted"
+    },
+    {
+      "id": "spouse_current_status",
+      "name": "What is your spouse's current status?",
+      "spoken_name": "Spouse Current Status",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Whatisyourspousescurrentstatus[0]",
+      "description": "Spouse Current Status"
+    },
+    {
+      "id": "spouse_expiration_date_of_authorized_stay",
+      "name": "What is the expiration date of his/her authorized stay, if any?",
+      "spoken_name": "Spouse Expiration Date of Authorized Stay",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Whatistheexpirationdateofhis/herauthorizedstayifany[0]",
+      "description": "Spouse Expiration Date of Authorized Stay"
+    },
+    {
+      "id": "spouse_in_immigration_court_proceedings",
+      "name": "Is your spouse in Immigration Court proceedings?",
+      "spoken_name": "Spouse in Immigration Court Proceedings",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IsyourspouseinImmigrationCourtproceedings[0]",
+      "description": "Spouse in Immigration Court Proceedings",
+      "group_id": "spouse_in_immigration_court_proceedings_group",
+      "group_label": "Spouse in Immigration Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[1]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[1]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_previous_arrival_date",
+      "name": "If previously in the U.S., date of previous arrival",
+      "spoken_name": "Spouse Previous Arrival Date",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IfpreviouslyintheUSdateofpreviousarrival[0]",
+      "description": "Spouse Previous Arrival Date"
+    },
+    {
+      "id": "spouse_included_in_application",
+      "name": "If in the U.S., is your spouse to be included in this application?",
+      "spoken_name": "Spouse Included in Application",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IftheUSisyourspousetobeincludedinthisapplicationChecktheappropriatebox[0]",
+      "description": "Spouse Included in Application",
+      "group_id": "spouse_included_in_application_group",
+      "group_label": "Spouse Included in Application",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[2]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[2]"
+        }
+      ]
+    }
+  ],
+  "raw_response": "{\n  \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n  \"section_title\": \"Part A.II. Information About Your Spouse and Children\",\n  \"total_fields\": 25,\n  \"fields\": [\n    {\n      \"id\": \"spouse_alien_registration_number\",\n      \"name\": \"Alien Registration Number (A-Number)\",\n      \"spoken_name\": \"Spouse Alien Registration Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"AlienRegistrationNumber[0]\",\n      \"description\": \"Spouse's Alien Registration Number\"\n    },\n    {\n      \"id\": \"spouse_passport_id_number\",\n      \"name\": \"Passport/ID Card Number\",\n      \"spoken_name\": \"Spouse Passport or ID Card Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"PassportIDCardNumber[0]\",\n      \"description\": \"Spouse's Passport or ID Card Number\"\n    },\n    {\n      \"id\": \"spouse_date_of_birth\",\n      \"name\": \"Date of Birth\",\n      \"spoken_name\": \"Spouse Date of Birth\",\n      \"type\": \"date\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"DateofBirth[0]\",\n      \"description\": \"Spouse's Date of Birth\"\n    },\n    {\n      \"id\": \"spouse_social_security_number\",\n      \"name\": \"U.S. Social Security Number\",\n      \"spoken_name\": \"Spouse Social Security Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"USSocialSecurityNumber[0]\",\n      \"description\": \"Spouse's U.S. Social Security Number\"\n    },\n    {\n      \"id\": \"spouse_complete_last_name\",\n      \"name\": \"Complete Last Name\",\n      \"spoken_name\": \"Spouse Last Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"CompleteLastName[0]\",\n      \"description\": \"Spouse's Last Name\"\n    },\n    {\n      \"id\": \"spouse_first_name\",\n      \"name\": \"First Name\",\n      \"spoken_name\": \"Spouse First Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"FirstName[0]\",\n      \"description\": \"Spouse's First Name\"\n    },\n    {\n      \"id\": \"spouse_middle_name\",\n      \"name\": \"Middle Name\",\n      \"spoken_name\": \"Spouse Middle Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"MiddleName[0]\",\n      \"description\": \"Spouse's Middle Name\"\n    },\n    {\n      \"id\": \"spouse_other_names_used\",\n      \"name\": \"Other names used (include maiden name and aliases)\",\n      \"spoken_name\": \"Spouse Other Names Used\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"Othernamesusedincludemaidennameandaliases[0]\",\n      \"description\": \"Spouse's Other Names Used\"\n    },\n    {\n      \"id\": \"spouse_date_of_marriage\",\n      \"name\": \"Date of Marriage\",\n      \"spoken_name\": \"Spouse Date of Marriage\",\n      \"type\": \"date\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"DateofMarriage[0]\",\n      \"description\": \"Spouse's Date of Marriage\"\n    },\n    {\n      \"id\": \"spouse_place_of_marriage\",\n      \"name\": \"Place of Marriage\",\n      \"spoken_name\": \"Spouse Place of Marriage\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"PlaceofMarriage[0]\",\n      \"description\": \"Spouse's Place of Marriage\"\n    },\n    {\n      \"id\": \"spouse_city_and_country_of_birth\",\n      \"name\": \"City and Country of Birth\",\n      \"spoken_name\": \"Spouse City and Country of Birth\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"CityandCountryofBirth[0]\",\n      \"description\": \"Spouse's City and Country of Birth\"\n    },\n    {\n      \"id\": \"spouse_nationality\",\n      \"name\": \"Nationality (Citizenship)\",\n      \"spoken_name\": \"Spouse Nationality\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"NationalityCitizenship[0]\",\n      \"description\": \"Spouse's Nationality\"\n    },\n    {\n      \"id\": \"spouse_race_ethnic_or_tribal_group\",\n      \"name\": \"Race, Ethnic, or Tribal Group\",\n      \"spoken_name\": \"Spouse Race Ethnic or Tribal Group\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"RaceEthnicorTribalGroup[0]\",\n      \"description\": \"Spouse's Race Ethnic or Tribal Group\"\n    },\n    {\n      \"id\": \"spouse_sex\",\n      \"name\": \"Sex\",\n      \"spoken_name\": \"Spouse Sex\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"Sex[0]\",\n      \"description\": \"Spouse's Sex\",\n      \"group_id\": \"spouse_sex_group\",\n      \"group_label\": \"Spouse Sex\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"male\",\n          \"label\": \"Male\",\n          \"pdf_field_name\": \"Male[0]\"\n        },\n        {\n          \"value\": \"female\",\n          \"label\": \"Female\",\n          \"pdf_field_name\": \"Female[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"spouse_is_in_the_us\",\n      \"name\": \"Is this person in the U.S.?\",\n      \"spoken_name\": \"Is spouse in the US\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"IsthispersonintheUS[0]\",\n      \"description\": \"Is spouse in the US\",\n      \"group_id\": \"spouse_is_in_the_us_group\",\n      \"group_label\": \"Is spouse in the US\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"yes\",\n          \"label\": \"Yes\",\n          \"pdf_field_name\": \"Yes[0]\"\n        },\n        {\n          \"value\": \"no\",\n          \"label\": \"No\",\n          \"pdf_field_name\": \"No[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"spouse_location_if_not_in_us\",\n      \"name\": \"Specify location\",\n      \"spoken_name\": \"Spouse Location if not in US\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"Specifylocation[0]\",\n      \"description\": \"Spouse Location if not in US\"\n    },\n    {\n      \"id\": \"spouse_place_of_last_entry\",\n      \"name\": \"Place of last entry into the U.S.\",\n      \"spoken_name\": \"Spouse Place of Last Entry\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"PlaceoflastentryintotheUS[0]\",\n      \"description\": \"Spouse Place of Last Entry\"\n    },\n    {\n      \"id\": \"spouse_date_of_last_entry\",\n      \"name\": \"Date of last entry into the U.S.\",\n      \"spoken_name\": \"Spouse Date of Last Entry\",\n      \"type\": \"date\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"DateoflastentryintotheUS[0]\",\n      \"description\": \"Spouse Date of Last Entry\"\n    },\n    {\n      \"id\": \"spouse_i94_number\",\n      \"name\": \"I-94 Number\",\n      \"spoken_name\": \"Spouse I-94 Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"I94Number[0]\",\n      \"description\": \"Spouse I-94 Number\"\n    },\n    {\n      \"id\": \"spouse_status_when_admitted\",\n      \"name\": \"Status when last admitted\",\n      \"spoken_name\": \"Spouse Status when Admitted\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"StatuswhenlastadmittedVisatypeifany[0]\",\n      \"description\": \"Spouse Status when Admitted\"\n    },\n    {\n      \"id\": \"spouse_current_status\",\n      \"name\": \"What is your spouse's current status?\",\n      \"spoken_name\": \"Spouse Current Status\",\n      \"type\": \"text\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"Whatisyourspousescurrentstatus[0]\",\n      \"description\": \"Spouse Current Status\"\n    },\n    {\n      \"id\": \"spouse_expiration_date_of_authorized_stay\",\n      \"name\": \"What is the expiration date of his/her authorized stay, if any?\",\n      \"spoken_name\": \"Spouse Expiration Date of Authorized Stay\",\n      \"type\": \"date\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"Whatistheexpirationdateofhis/herauthorizedstayifany[0]\",\n      \"description\": \"Spouse Expiration Date of Authorized Stay\"\n    },\n    {\n      \"id\": \"spouse_in_immigration_court_proceedings\",\n      \"name\": \"Is your spouse in Immigration Court proceedings?\",\n      \"spoken_name\": \"Spouse in Immigration Court Proceedings\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"IsyourspouseinImmigrationCourtproceedings[0]\",\n      \"description\": \"Spouse in Immigration Court Proceedings\",\n      \"group_id\": \"spouse_in_immigration_court_proceedings_group\",\n      \"group_label\": \"Spouse in Immigration Court Proceedings\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"yes\",\n          \"label\": \"Yes\",\n          \"pdf_field_name\": \"Yes[1]\"\n        },\n        {\n          \"value\": \"no\",\n          \"label\": \"No\",\n          \"pdf_field_name\": \"No[1]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"spouse_previous_arrival_date\",\n      \"name\": \"If previously in the U.S., date of previous arrival\",\n      \"spoken_name\": \"Spouse Previous Arrival Date\",\n      \"type\": \"date\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"IfpreviouslyintheUSdateofpreviousarrival[0]\",\n      \"description\": \"Spouse Previous Arrival Date\"\n    },\n    {\n      \"id\": \"spouse_included_in_application\",\n      \"name\": \"If in the U.S., is your spouse to be included in this application?\",\n      \"spoken_name\": \"Spouse Included in Application\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_aii_information_about_your_spouse_and_childre\",\n      \"section_label\": \"Part A.II. Information About Your Spouse and Children\",\n      \"pdf_field_name\": \"IftheUSisyourspousetobeincludedinthisapplicationChecktheappropriatebox[0]\",\n      \"description\": \"Spouse Included in Application\",\n      \"group_id\": \"spouse_included_in_application_group\",\n      \"group_label\": \"Spouse Included in Application\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"yes\",\n          \"label\": \"Yes\",\n          \"pdf_field_name\": \"Yes[2]\"\n        },\n        {\n          \"value\": \"no\",\n          \"label\": \"No\",\n          \"pdf_field_name\": \"No[2]\"\n        }\n      ]\n    }\n  ],\n  \"notes\": \"Extracted all fields related to spouse information.  The child information is structured as a repeating table, which will be defined in the next step.\"\n}"
+}
