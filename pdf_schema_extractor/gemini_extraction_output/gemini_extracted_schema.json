@@ -1,0 +1,2015 @@
+{
+  "total_fields": 135,
+  "fields": [
+    {
+      "id": "alien_registration_number",
+      "name": "Alien Registration Number(s) (A-Number)",
+      "spoken_name": "Alien Registration Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "AlienRegistrationNumber(s)(ANumber)(ifany)[0]",
+      "description": "Your Alien Registration Number, if any"
+    },
+    {
+      "id": "social_security_number",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Social Security Number",
+      "type": "number",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "U.S.SocialSecurityNumber(ifany)[0]",
+      "description": "Your U.S. Social Security Number, if any"
+    },
+    {
+      "id": "uscis_online_account_number",
+      "name": "USCIS Online Account Number",
+      "spoken_name": "USCIS Online Account Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "USCISOnlineAccountNumber(ifany)[0]",
+      "description": "Your USCIS Online Account Number, if any"
+    },
+    {
+      "id": "complete_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Complete Last Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "CompleteLastName[0]",
+      "description": "Your complete last name"
+    },
+    {
+      "id": "first_name",
+      "name": "First Name",
+      "spoken_name": "First Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "FirstName[0]",
+      "description": "Your first name"
+    },
+    {
+      "id": "middle_name",
+      "name": "Middle Name",
+      "spoken_name": "Middle Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "MiddleName[0]",
+      "description": "Your middle name"
+    },
+    {
+      "id": "other_names",
+      "name": "What other names have you used",
+      "spoken_name": "Other names used",
+      "type": "textarea",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatothernameshaveyouused(includemaidennameandaliases)_[0]",
+      "description": "All other names you have used, including maiden names and aliases"
+    },
+    {
+      "id": "residence_street_number",
+      "name": "Street Number and Name",
+      "spoken_name": "Residence Street Number and Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "StreetNumberandName[0]",
+      "description": "Street number and name of your residence in the U.S."
+    },
+    {
+      "id": "residence_apt_number",
+      "name": "Apt. Number",
+      "spoken_name": "Residence Apartment Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Apt.Number[0]",
+      "description": "Apartment number of your residence in the U.S."
+    },
+    {
+      "id": "residence_city",
+      "name": "City",
+      "spoken_name": "Residence City",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "City[0]",
+      "description": "City of your residence in the U.S."
+    },
+    {
+      "id": "residence_state",
+      "name": "State",
+      "spoken_name": "Residence State",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "State[0]",
+      "description": "State of your residence in the U.S."
+    },
+    {
+      "id": "residence_zip_code",
+      "name": "Zip Code",
+      "spoken_name": "Residence Zip Code",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ZipCode[0]",
+      "description": "Zip code of your residence in the U.S."
+    },
+    {
+      "id": "residence_telephone_number",
+      "name": "Telephone Number",
+      "spoken_name": "Residence Telephone Number",
+      "type": "tel",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TelephoneNumber[0]",
+      "description": "Telephone number of your residence in the U.S."
+    },
+    {
+      "id": "mailing_in_care_of",
+      "name": "In Care Of",
+      "spoken_name": "Mailing In Care Of",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "InCareOf(ifapplicable)_[0]",
+      "description": "In Care Of for your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_street_number",
+      "name": "Street Number and Name",
+      "spoken_name": "Mailing Street Number and Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "StreetNumberandName1[0]",
+      "description": "Street number and name of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_apt_number",
+      "name": "Apt. Number",
+      "spoken_name": "Mailing Apartment Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Apt.Number1[0]",
+      "description": "Apartment number of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_city",
+      "name": "City",
+      "spoken_name": "Mailing City",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "City1[0]",
+      "description": "City of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_state",
+      "name": "State",
+      "spoken_name": "Mailing State",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "State1[0]",
+      "description": "State of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_zip_code",
+      "name": "Zip Code",
+      "spoken_name": "Mailing Zip Code",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ZipCode1[0]",
+      "description": "Zip code of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_telephone_number",
+      "name": "Telephone Number",
+      "spoken_name": "Mailing Telephone Number",
+      "type": "tel",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TelephoneNumber1[0]",
+      "description": "Telephone number of your mailing address in the U.S."
+    },
+    {
+      "id": "sex",
+      "name": "Sex",
+      "spoken_name": "Sex",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Sex[0]",
+      "description": "Your sex",
+      "group_id": "sex",
+      "group_label": "Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "Male[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "Female[0]"
+        }
+      ]
+    },
+    {
+      "id": "marital_status",
+      "name": "Marital Status",
+      "spoken_name": "Marital Status",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "MaritalStatus[0]",
+      "description": "Your marital status",
+      "group_id": "marital_status",
+      "group_label": "Marital Status",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "single",
+          "label": "Single",
+          "pdf_field_name": "Single[0]"
+        },
+        {
+          "value": "married",
+          "label": "Married",
+          "pdf_field_name": "Married[0]"
+        },
+        {
+          "value": "divorced",
+          "label": "Divorced",
+          "pdf_field_name": "Divorced[0]"
+        },
+        {
+          "value": "widowed",
+          "label": "Widowed",
+          "pdf_field_name": "Widowed[0]"
+        }
+      ]
+    },
+    {
+      "id": "date_of_birth",
+      "name": "Date of Birth",
+      "spoken_name": "Date of Birth",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "DateofBirth(mm/dd/yyyy)_[0]",
+      "description": "Your date of birth"
+    },
+    {
+      "id": "city_and_country_of_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "City and Country of Birth",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "CityandCountryofBirth[0]",
+      "description": "Your city and country of birth"
+    },
+    {
+      "id": "present_nationality",
+      "name": "Present Nationality (Citizenship)",
+      "spoken_name": "Present Nationality",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "PresentNationality(Citizenship)_[0]",
+      "description": "Your present nationality or citizenship"
+    },
+    {
+      "id": "nationality_at_birth",
+      "name": "Nationality at Birth",
+      "spoken_name": "Nationality at Birth",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "NationalityatBirth[0]",
+      "description": "Your nationality at birth"
+    },
+    {
+      "id": "race_ethnic_or_tribal_group",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Race,Ethnic,orTribalGroup[0]",
+      "description": "Your race, ethnic, or tribal group"
+    },
+    {
+      "id": "religion",
+      "name": "Religion",
+      "spoken_name": "Religion",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Religion[0]",
+      "description": "Your religion"
+    },
+    {
+      "id": "immigration_court_proceedings",
+      "name": "Immigration Court Proceedings",
+      "spoken_name": "Immigration Court Proceedings",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Checkthebox,athroughc,thatapplies_[0]",
+      "description": "Check the box, a through c, that applies",
+      "group_id": "immigration_court_proceedings",
+      "group_label": "Immigration Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "never",
+          "label": "I have never been in Immigration Court proceedings.",
+          "pdf_field_name": "IhaveneverbeeninImmigrationCourtproceedings_[0]"
+        },
+        {
+          "value": "now",
+          "label": "I am now in Immigration Court proceedings.",
+          "pdf_field_name": "IamnowinImmigrationCourtproceedings_[0]"
+        },
+        {
+          "value": "past",
+          "label": "I am not now in Immigration Court proceedings, but I have been in the past.",
+          "pdf_field_name": "IamnotnowinImmigrationCourtproceedings,butIhavebeeninthepast_[0]"
+        }
+      ]
+    },
+    {
+      "id": "last_leave_country_date",
+      "name": "When did you last leave your country?",
+      "spoken_name": "Last Leave Country Date",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whendidyoulastleaveyourcountry_(mm/dd/yyyy)_[0]",
+      "description": "When did you last leave your country?"
+    },
+    {
+      "id": "i94_number",
+      "name": "What is your current I-94 Number, if any?",
+      "spoken_name": "I 94 Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "WhatisyourcurrentI-94Number,ifany_[0]",
+      "description": "What is your current I-94 Number, if any?"
+    },
+    {
+      "id": "entry_history",
+      "name": "Entry History",
+      "spoken_name": "Entry History",
+      "type": "table",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ListeachentryintotheU.S.beginningwithyourmostrecententry.Listdate(mm/dd/yyyy),place,andyourstatusforeachentry.(Attachadditionalsheetsasneeded.)_[0]",
+      "description": "List each entry into the U.S. beginning with your most recent entry. List date (mm/dd/yyyy), place, and your status for each entry. (Attach additional sheets as needed.)",
+      "columns": [
+        {
+          "id": "entry_date",
+          "label": "Date",
+          "type": "date",
+          "pdf_field_name": "Date[0]"
+        },
+        {
+          "id": "entry_place",
+          "label": "Place",
+          "type": "text",
+          "pdf_field_name": "Place[0]"
+        },
+        {
+          "id": "entry_status",
+          "label": "Status",
+          "type": "text",
+          "pdf_field_name": "Status[0]"
+        },
+        {
+          "id": "entry_date_status_expires",
+          "label": "Date Status Expires",
+          "type": "date",
+          "pdf_field_name": "DateStatusExpires[0]"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 3,
+        "initial_rows": 3
+      }
+    },
+    {
+      "id": "last_passport_country",
+      "name": "What country issued your last passport or travel document?",
+      "spoken_name": "Last Passport Country",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatcountryissuedyourlastpassportortraveldocument_[0]",
+      "description": "What country issued your last passport or travel document?"
+    },
+    {
+      "id": "passport_number",
+      "name": "Passport Number",
+      "spoken_name": "Passport Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "PassportNumber[0]",
+      "description": "Your passport number"
+    },
+    {
+      "id": "travel_document_number",
+      "name": "Travel Document Number",
+      "spoken_name": "Travel Document Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TravelDocumentNumber[0]",
+      "description": "Your travel document number"
+    },
+    {
+      "id": "expiration_date",
+      "name": "Expiration Date",
+      "spoken_name": "Expiration Date",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ExpirationDate(mm/dd/yyyy)_[0]",
+      "description": "Your passport or travel document expiration date"
+    },
+    {
+      "id": "native_language",
+      "name": "What is your native language",
+      "spoken_name": "Native Language",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatisyournativelanguage(includedialect,ifapplicable)_[0]",
+      "description": "Your native language, including dialect if applicable"
+    },
+    {
+      "id": "fluent_in_english",
+      "name": "Are you fluent in English?",
+      "spoken_name": "Fluent in English",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "AreyoufluentinEnglish_[0]",
+      "description": "Are you fluent in English?",
+      "group_id": "fluent_in_english",
+      "group_label": "Fluent in English",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[0]"
+        }
+      ]
+    },
+    {
+      "id": "other_languages",
+      "name": "What other languages do you speak fluently?",
+      "spoken_name": "Other Languages",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatotherlanguagesdoyouspeakfluently_[0]",
+      "description": "Other languages you speak fluently"
+    },
+    {
+      "id": "spouse_a_number",
+      "name": "Alien Registration Number (A-Number)",
+      "spoken_name": "Spouse Alien Registration Number A Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Alien Registration Number (A-Number)[0]",
+      "description": "Spouse's Alien Registration Number"
+    },
+    {
+      "id": "spouse_passport_id",
+      "name": "Passport/ID Card Number",
+      "spoken_name": "Spouse Passport ID Card Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Passport/ID Card Number[0]",
+      "description": "Spouse's Passport or ID card number"
+    },
+    {
+      "id": "spouse_dob",
+      "name": "Date of Birth",
+      "spoken_name": "Spouse Date of Birth",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Date of Birth (mm/dd/yyyy)[0]",
+      "description": "Spouse's date of birth"
+    },
+    {
+      "id": "spouse_ssn",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Spouse US Social Security Number",
+      "type": "number",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "U.S. Social Security Number[0]",
+      "description": "Spouse's U.S. Social Security Number"
+    },
+    {
+      "id": "spouse_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Spouse Complete Last Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Complete Last Name[0]",
+      "description": "Spouse's last name"
+    },
+    {
+      "id": "spouse_first_name",
+      "name": "First Name",
+      "spoken_name": "Spouse First Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "First Name[0]",
+      "description": "Spouse's first name"
+    },
+    {
+      "id": "spouse_middle_name",
+      "name": "Middle Name",
+      "spoken_name": "Spouse Middle Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Middle Name[0]",
+      "description": "Spouse's middle name"
+    },
+    {
+      "id": "spouse_other_names",
+      "name": "Other names used (include maiden name and aliases)",
+      "spoken_name": "Spouse Other names used include maiden name and aliases",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Other names used (include maiden name and aliases)[0]",
+      "description": "Spouse's other names used"
+    },
+    {
+      "id": "spouse_date_of_marriage",
+      "name": "Date of Marriage",
+      "spoken_name": "Spouse Date of Marriage",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Date of Marriage (mm/dd/yyyy)[0]",
+      "description": "Spouse's date of marriage"
+    },
+    {
+      "id": "spouse_place_of_marriage",
+      "name": "Place of Marriage",
+      "spoken_name": "Spouse Place of Marriage",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Place of Marriage[0]",
+      "description": "Spouse's place of marriage"
+    },
+    {
+      "id": "spouse_city_country_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "Spouse City and Country of Birth",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "City and Country of Birth[0]",
+      "description": "Spouse's city and country of birth"
+    },
+    {
+      "id": "spouse_nationality",
+      "name": "Nationality (Citizenship)",
+      "spoken_name": "Spouse Nationality Citizenship",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Nationality (Citizenship)[0]",
+      "description": "Spouse's nationality"
+    },
+    {
+      "id": "spouse_race",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Spouse Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Race, Ethnic, or Tribal Group[0]",
+      "description": "Spouse's race, ethnic, or tribal group"
+    },
+    {
+      "id": "spouse_sex",
+      "name": "Sex",
+      "spoken_name": "Spouse Sex",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "description": "Spouse's sex",
+      "group_id": "spouse_sex_group",
+      "group_label": "Spouse Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "Male[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "Female[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_in_us",
+      "name": "Is this person in the U.S.?",
+      "spoken_name": "Is this person in the US",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "description": "Is spouse in the U.S.?",
+      "group_id": "spouse_in_us_group",
+      "group_label": "Spouse In US",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_location_if_not_in_us",
+      "name": "Specify location",
+      "spoken_name": "Spouse Specify location",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Specify location[0]",
+      "description": "Spouse's location if not in the U.S."
+    },
+    {
+      "id": "spouse_place_of_last_entry",
+      "name": "Place of last entry into the U.S.",
+      "spoken_name": "Spouse Place of last entry into the US",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Place of last entry into the U.S.[0]",
+      "description": "Spouse's place of last entry into the U.S."
+    },
+    {
+      "id": "spouse_date_of_last_entry",
+      "name": "Date of last entry into the U.S.",
+      "spoken_name": "Spouse Date of last entry into the US",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Date of last entry into the U.S. (mm/dd/yyyy)[0]",
+      "description": "Spouse's date of last entry into the U.S."
+    },
+    {
+      "id": "spouse_i94_number",
+      "name": "I-94 Number",
+      "spoken_name": "Spouse I 94 Number",
+      "type": "number",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "I-94 Number (if any)[0]",
+      "description": "Spouse's I-94 Number"
+    },
+    {
+      "id": "spouse_status_when_admitted",
+      "name": "Status when last admitted",
+      "spoken_name": "Spouse Status when last admitted",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Status when last admitted (Visa type, if any)[0]",
+      "description": "Spouse's status when last admitted"
+    },
+    {
+      "id": "spouse_current_status",
+      "name": "What is your spouse's current status?",
+      "spoken_name": "What is your spouse's current status",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "What is your spouse's current status[0]",
+      "description": "Spouse's current status"
+    },
+    {
+      "id": "spouse_expiration_date",
+      "name": "What is the expiration date of his/her authorized stay, if any?",
+      "spoken_name": "What is the expiration date of his her authorized stay if any",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "What is the expiration date of his/her authorized stay, if any? (mm/dd/yyyy)[0]",
+      "description": "Spouse's expiration date of authorized stay"
+    },
+    {
+      "id": "spouse_court_proceedings",
+      "name": "Is your spouse in Immigration Court proceedings?",
+      "spoken_name": "Is your spouse in Immigration Court proceedings",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "description": "Is spouse in Immigration Court proceedings?",
+      "group_id": "spouse_court_proceedings_group",
+      "group_label": "Spouse Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[1]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[1]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_included_in_application",
+      "name": "If in the U.S., is your spouse to be included in this application?",
+      "spoken_name": "If in the US is your spouse to be included in this application",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "description": "Is spouse to be included in this application?",
+      "group_id": "spouse_included_in_application_group",
+      "group_label": "Spouse Included In Application",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[2]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[2]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_alien_registration_number",
+      "name": "Alien Registration Number (A-Number)",
+      "spoken_name": "Spouse Alien Registration Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "AlienRegistrationNumber[0]",
+      "description": "Spouse's Alien Registration Number"
+    },
+    {
+      "id": "spouse_passport_id_number",
+      "name": "Passport/ID Card Number",
+      "spoken_name": "Spouse Passport or ID Card Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "PassportIDCardNumber[0]",
+      "description": "Spouse's Passport or ID Card Number"
+    },
+    {
+      "id": "spouse_date_of_birth",
+      "name": "Date of Birth",
+      "spoken_name": "Spouse Date of Birth",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "DateofBirth[0]",
+      "description": "Spouse's Date of Birth"
+    },
+    {
+      "id": "spouse_social_security_number",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Spouse Social Security Number",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "USSocialSecurityNumber[0]",
+      "description": "Spouse's U.S. Social Security Number"
+    },
+    {
+      "id": "spouse_complete_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Spouse Last Name",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "CompleteLastName[0]",
+      "description": "Spouse's Last Name"
+    },
+    {
+      "id": "spouse_other_names_used",
+      "name": "Other names used (include maiden name and aliases)",
+      "spoken_name": "Spouse Other Names Used",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Othernamesusedincludemaidennameandaliases[0]",
+      "description": "Spouse's Other Names Used"
+    },
+    {
+      "id": "spouse_city_and_country_of_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "Spouse City and Country of Birth",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "CityandCountryofBirth[0]",
+      "description": "Spouse's City and Country of Birth"
+    },
+    {
+      "id": "spouse_race_ethnic_or_tribal_group",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Spouse Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "RaceEthnicorTribalGroup[0]",
+      "description": "Spouse's Race Ethnic or Tribal Group"
+    },
+    {
+      "id": "spouse_is_in_the_us",
+      "name": "Is this person in the U.S.?",
+      "spoken_name": "Is spouse in the US",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IsthispersonintheUS[0]",
+      "description": "Is spouse in the US",
+      "group_id": "spouse_is_in_the_us_group",
+      "group_label": "Is spouse in the US",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_expiration_date_of_authorized_stay",
+      "name": "What is the expiration date of his/her authorized stay, if any?",
+      "spoken_name": "Spouse Expiration Date of Authorized Stay",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "Whatistheexpirationdateofhis/herauthorizedstayifany[0]",
+      "description": "Spouse Expiration Date of Authorized Stay"
+    },
+    {
+      "id": "spouse_in_immigration_court_proceedings",
+      "name": "Is your spouse in Immigration Court proceedings?",
+      "spoken_name": "Spouse in Immigration Court Proceedings",
+      "type": "radio",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IsyourspouseinImmigrationCourtproceedings[0]",
+      "description": "Spouse in Immigration Court Proceedings",
+      "group_id": "spouse_in_immigration_court_proceedings_group",
+      "group_label": "Spouse in Immigration Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[1]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[1]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_previous_arrival_date",
+      "name": "If previously in the U.S., date of previous arrival",
+      "spoken_name": "Spouse Previous Arrival Date",
+      "type": "date",
+      "section_id": "part_aii_information_about_your_spouse_and_childre",
+      "section_label": "Part A.II. Information About Your Spouse and Children",
+      "pdf_field_name": "IfpreviouslyintheUSdateofpreviousarrival[0]",
+      "description": "Spouse Previous Arrival Date"
+    },
+    {
+      "id": "last_address",
+      "name": "Last Address Before US",
+      "spoken_name": "Last address where you lived before coming to the United States",
+      "type": "table",
+      "section_id": "part_aiii_information_about_your_background",
+      "section_label": "Part A.III. Information About Your Background",
+      "description": "List your last address where you lived before coming to the United States. If this is not the country where you fear persecution, also list the last address in the country where you fear persecution.",
+      "pdf_field_name": "N/A",
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 2,
+        "initial_rows": 2
+      },
+      "columns": [
+        {
+          "id": "number_street",
+          "label": "Number and Street",
+          "type": "text",
+          "pdf_field_name": "NumberandStreet[0]"
+        },
+        {
+          "id": "city_town",
+          "label": "City/Town",
+          "type": "text",
+          "pdf_field_name": "CityTown[0]"
+        },
+        {
+          "id": "department_province_state",
+          "label": "Department, Province, or State",
+          "type": "text",
+          "pdf_field_name": "DepartmentProvinceorState[0]"
+        },
+        {
+          "id": "country",
+          "label": "Country",
+          "type": "text",
+          "pdf_field_name": "Country[0]"
+        },
+        {
+          "id": "from_date",
+          "label": "From (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "FromMoYr[0]"
+        },
+        {
+          "id": "to_date",
+          "label": "To (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "ToMoYr[0]"
+        }
+      ]
+    },
+    {
+      "id": "residences_past_5_years",
+      "name": "Residences in Past 5 Years",
+      "spoken_name": "Residences during the past 5 years",
+      "type": "table",
+      "section_id": "part_aiii_information_about_your_background",
+      "section_label": "Part A.III. Information About Your Background",
+      "description": "Provide the following information about your residences during the past 5 years. List your present address first.",
+      "pdf_field_name": "N/A",
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 5,
+        "initial_rows": 5
+      },
+      "columns": [
+        {
+          "id": "number_street_residence",
+          "label": "Number and Street",
+          "type": "text",
+          "pdf_field_name": "NumberandStreet[1]"
+        },
+        {
+          "id": "city_town_residence",
+          "label": "City/Town",
+          "type": "text",
+          "pdf_field_name": "CityTown[1]"
+        },
+        {
+          "id": "department_province_state_residence",
+          "label": "Department, Province, or State",
+          "type": "text",
+          "pdf_field_name": "DepartmentProvinceorState[1]"
+        },
+        {
+          "id": "country_residence",
+          "label": "Country",
+          "type": "text",
+          "pdf_field_name": "Country[1]"
+        },
+        {
+          "id": "from_date_residence",
+          "label": "From (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "FromMoYr[1]"
+        },
+        {
+          "id": "to_date_residence",
+          "label": "To (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "ToMoYr[1]"
+        }
+      ]
+    },
+    {
+      "id": "education_history",
+      "name": "Education History",
+      "spoken_name": "Education history",
+      "type": "table",
+      "section_id": "part_aiii_information_about_your_background",
+      "section_label": "Part A.III. Information About Your Background",
+      "description": "Provide the following information about your education, beginning with the most recent school that you attended.",
+      "pdf_field_name": "N/A",
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 5,
+        "initial_rows": 5
+      },
+      "columns": [
+        {
+          "id": "name_of_school",
+          "label": "Name of School",
+          "type": "text",
+          "pdf_field_name": "NameofSchool[0]"
+        },
+        {
+          "id": "type_of_school",
+          "label": "Type of School",
+          "type": "text",
+          "pdf_field_name": "TypeofSchool[0]"
+        },
+        {
+          "id": "location_address",
+          "label": "Location (Address)",
+          "type": "text",
+          "pdf_field_name": "LocationAddress[0]"
+        },
+        {
+          "id": "attended_from",
+          "label": "Attended From (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "AttendedFromMoYr[0]"
+        },
+        {
+          "id": "attended_to",
+          "label": "Attended To (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "AttendedToMoYr[0]"
+        }
+      ]
+    },
+    {
+      "id": "employment_history",
+      "name": "Employment History",
+      "spoken_name": "Employment history",
+      "type": "table",
+      "section_id": "part_aiii_information_about_your_background",
+      "section_label": "Part A.III. Information About Your Background",
+      "description": "Provide the following information about your employment during the past 5 years. List your present employment first.",
+      "pdf_field_name": "N/A",
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 5,
+        "initial_rows": 5
+      },
+      "columns": [
+        {
+          "id": "name_address_employer",
+          "label": "Name and Address of Employer",
+          "type": "text",
+          "pdf_field_name": "NameandAddressofEmployer[0]"
+        },
+        {
+          "id": "your_occupation",
+          "label": "Your Occupation",
+          "type": "text",
+          "pdf_field_name": "YourOccupation[0]"
+        },
+        {
+          "id": "dates_from",
+          "label": "Dates From (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "DatesFromMoYr[0]"
+        },
+        {
+          "id": "dates_to",
+          "label": "Dates To (Mo/Yr)",
+          "type": "date",
+          "pdf_field_name": "DatesToMoYr[0]"
+        }
+      ]
+    },
+    {
+      "id": "family_information",
+      "name": "Family Information",
+      "spoken_name": "Family information",
+      "type": "table",
+      "section_id": "part_aiii_information_about_your_background",
+      "section_label": "Part A.III. Information About Your Background",
+      "description": "Provide the following information about your parents and siblings (brothers and sisters). Check the box if the person is deceased.",
+      "pdf_field_name": "N/A",
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 6,
+        "initial_rows": 6
+      },
+      "columns": [
+        {
+          "id": "full_name",
+          "label": "Full Name",
+          "type": "text",
+          "pdf_field_name": "FullName[0]"
+        },
+        {
+          "id": "city_town_country_birth",
+          "label": "City/Town and Country of Birth",
+          "type": "text",
+          "pdf_field_name": "CityTownandCountryofBirth[0]"
+        },
+        {
+          "id": "current_location",
+          "label": "Current Location",
+          "type": "text",
+          "pdf_field_name": "CurrentLocation[0]"
+        },
+        {
+          "id": "deceased",
+          "label": "Deceased",
+          "type": "checkbox",
+          "pdf_field_name": "Deceased[0]"
+        }
+      ]
+    },
+    {
+      "id": "asylum_reason_race",
+      "name": "Race",
+      "spoken_name": "Race",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Race",
+      "description": "Check if you are seeking asylum or withholding of removal based on race."
+    },
+    {
+      "id": "asylum_reason_religion",
+      "name": "Religion",
+      "spoken_name": "Religion",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Religion",
+      "description": "Check if you are seeking asylum or withholding of removal based on religion."
+    },
+    {
+      "id": "asylum_reason_political_opinion",
+      "name": "Political opinion",
+      "spoken_name": "Political opinion",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Political opinion",
+      "description": "Check if you are seeking asylum or withholding of removal based on political opinion."
+    },
+    {
+      "id": "asylum_reason_membership",
+      "name": "Membership in a particular social group",
+      "spoken_name": "Membership in a particular social group",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Membership in a particular social group",
+      "description": "Check if you are seeking asylum or withholding of removal based on membership in a particular social group."
+    },
+    {
+      "id": "asylum_reason_nationality",
+      "name": "Nationality",
+      "spoken_name": "Nationality",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Nationality",
+      "description": "Check if you are seeking asylum or withholding of removal based on nationality."
+    },
+    {
+      "id": "asylum_reason_torture",
+      "name": "Torture Convention",
+      "spoken_name": "Torture Convention",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "Torture Convention",
+      "description": "Check if you are seeking asylum or withholding of removal under the Convention Against Torture."
+    },
+    {
+      "id": "harm_experienced",
+      "name": "Have you, your family, or close friends or colleagues ever experienced harm or mistreatment or threats in the past by anyone?",
+      "spoken_name": "Have you, your family, or close friends or colleagues ever experienced harm or mistreatment or threats in the past by anyone?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "HarmExperienced",
+      "description": "Indicate if you, your family, or close friends or colleagues have ever experienced harm or mistreatment or threats in the past.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "HarmExperiencedNo"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "HarmExperiencedYes"
+        }
+      ]
+    },
+    {
+      "id": "harm_experienced_explanation",
+      "name": "If \"Yes,\" explain in detail:",
+      "spoken_name": "If yes, explain in detail",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "HarmExperiencedExplanation",
+      "description": "Provide details if you answered 'Yes' to experiencing harm or mistreatment."
+    },
+    {
+      "id": "fear_harm",
+      "name": "Do you fear harm or mistreatment if you return to your home country?",
+      "spoken_name": "Do you fear harm or mistreatment if you return to your home country?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "FearHarm",
+      "description": "Indicate if you fear harm or mistreatment if you return to your home country.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "FearHarmNo"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "FearHarmYes"
+        }
+      ]
+    },
+    {
+      "id": "fear_harm_explanation",
+      "name": "If \"Yes,\" explain in detail:",
+      "spoken_name": "If yes, explain in detail",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "FearHarmExplanation",
+      "description": "Provide details if you answered 'Yes' to fearing harm or mistreatment."
+    },
+    {
+      "id": "ever_accused",
+      "name": "Have you or your family members ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States (including for an immigration law violation)?",
+      "spoken_name": "Have you or your family members ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States including for an immigration law violation?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "EverAccused",
+      "description": "Indicate if you or your family members have ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "EverAccusedNo"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "EverAccusedYes"
+        }
+      ]
+    },
+    {
+      "id": "asylum_reason",
+      "name": "Why are you applying for asylum or withholding of removal under section 241(b)(3) of the INA, or for withholding of removal under the Convention Against Torture?",
+      "spoken_name": "Why are you applying for asylum or withholding of removal under section 241(b)(3) of the INA, or for withholding of removal under the Convention Against Torture?",
+      "type": "checkbox",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page5[0].WhyApplying[0]",
+      "description": "Check the appropriate box(es) below and then provide detailed answers to questions A and B below.",
+      "group_id": "asylum_reason_group",
+      "group_label": "I am seeking asylum or withholding of removal based on:",
+      "group_kind": "checkbox",
+      "options": [
+        {
+          "value": "race",
+          "label": "Race",
+          "pdf_field_name": "topmostSubform[0].Page5[0].Race[0]"
+        },
+        {
+          "value": "religion",
+          "label": "Religion",
+          "pdf_field_name": "topmostSubform[0].Page5[0].Religion[0]"
+        },
+        {
+          "value": "political_opinion",
+          "label": "Political opinion",
+          "pdf_field_name": "topmostSubform[0].Page5[0].PoliticalOpinion[0]"
+        },
+        {
+          "value": "membership",
+          "label": "Membership in a particular social group",
+          "pdf_field_name": "topmostSubform[0].Page5[0].Membership[0]"
+        },
+        {
+          "value": "nationality",
+          "label": "Nationality",
+          "pdf_field_name": "topmostSubform[0].Page5[0].Nationality[0]"
+        },
+        {
+          "value": "torture_convention",
+          "label": "Torture Convention",
+          "pdf_field_name": "topmostSubform[0].Page5[0].TortureConvention[0]"
+        }
+      ]
+    },
+    {
+      "id": "experienced_harm",
+      "name": "Have you, your family, or close friends or colleagues ever experienced harm or mistreatment or threats in the past by anyone?",
+      "spoken_name": "Have you, your family, or close friends or colleagues ever experienced harm or mistreatment or threats in the past by anyone?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page5[0].Group1[0]",
+      "description": "Check yes or no",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page5[0].No[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page5[0].Yes[0]"
+        }
+      ]
+    },
+    {
+      "id": "experienced_harm_explanation",
+      "name": "If \"Yes,\" explain in detail:",
+      "spoken_name": "If yes, explain in detail",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page5[0].Explain[0]",
+      "description": "What happened; When the harm or mistreatment or threats occurred; Who caused the harm or mistreatment or threats; and Why you believe the harm or mistreatment or threats occurred."
+    },
+    {
+      "id": "accused_charged_arrested",
+      "name": "Have you or your family members ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States (including for an immigration law violation)?",
+      "spoken_name": "Have you or your family members ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States including for an immigration law violation?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Group3[0]",
+      "description": "Check yes or no",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page6[0].No_02[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page6[0].Yes_02[0]"
+        }
+      ]
+    },
+    {
+      "id": "accused_charged_arrested_explanation",
+      "name": "If \"Yes,\" explain the circumstances and reasons for the action.",
+      "spoken_name": "If yes, explain the circumstances and reasons for the action",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Explain_02[0]",
+      "description": "Explain the circumstances and reasons for the action."
+    },
+    {
+      "id": "belonged_to_organizations",
+      "name": "Have you or your family members ever belonged to or been associated with any organizations or groups in your home country, such as, but not limited to, a political party, student group, labor union, religious organization, military or paramilitary group, civil patrol, guerrilla organization, ethnic group, human rights group, or the press or media?",
+      "spoken_name": "Have you or your family members ever belonged to or been associated with any organizations or groups in your home country, such as, but not limited to, a political party, student group, labor union, religious organization, military or paramilitary group, civil patrol, guerrilla organization, ethnic group, human rights group, or the press or media?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Group4[0]",
+      "description": "Check yes or no",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page6[0].No_03[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page6[0].Yes_03[0]"
+        }
+      ]
+    },
+    {
+      "id": "belonged_to_organizations_explanation",
+      "name": "If \"Yes,\" describe for each person the level of participation, any leadership or other positions held, and the length of time you or your family members were involved in each organization or activity.",
+      "spoken_name": "If yes, describe for each person the level of participation, any leadership or other positions held, and the length of time you or your family members were involved in each organization or activity",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Explain_03[0]",
+      "description": "Describe for each person the level of participation, any leadership or other positions held, and the length of time you or your family members were involved in each organization or activity."
+    },
+    {
+      "id": "continue_participating",
+      "name": "Do you or your family members continue to participate in any way in these organizations or groups?",
+      "spoken_name": "Do you or your family members continue to participate in any way in these organizations or groups?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Group5[0]",
+      "description": "Check yes or no",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page6[0].No_04[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page6[0].Yes_04[0]"
+        }
+      ]
+    },
+    {
+      "id": "continue_participating_explanation",
+      "name": "If \"Yes,\" describe for each person your or your family members' current level of participation, any leadership or other positions currently held, and the length of time you or your family members have been involved in each organization or group.",
+      "spoken_name": "If yes, describe for each person your or your family members current level of participation, any leadership or other positions currently held, and the length of time you or your family members have been involved in each organization or group",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Explain_04[0]",
+      "description": "Describe for each person your or your family members' current level of participation, any leadership or other positions currently held, and the length of time you or your family members have been involved in each organization or group."
+    },
+    {
+      "id": "afraid_of_torture",
+      "name": "Are you afraid of being subjected to torture in your home country or any other country to which you may be returned?",
+      "spoken_name": "Are you afraid of being subjected to torture in your home country or any other country to which you may be returned?",
+      "type": "radio",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Group6[0]",
+      "description": "Check yes or no",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page6[0].No_05[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page6[0].Yes_05[0]"
+        }
+      ]
+    },
+    {
+      "id": "afraid_of_torture_explanation",
+      "name": "If \"Yes,\" explain why you are afraid and describe the nature of torture you fear, by whom, and why it would be inflicted.",
+      "spoken_name": "If yes, explain why you are afraid and describe the nature of torture you fear, by whom, and why it would be inflicted",
+      "type": "textarea",
+      "section_id": "part_b_information_about_your_application",
+      "section_label": "Part B. Information About Your Application",
+      "pdf_field_name": "topmostSubform[0].Page6[0].Explain_05[0]",
+      "description": "Explain why you are afraid and describe the nature of torture you fear, by whom, and why it would be inflicted."
+    },
+    {
+      "id": "prior_applications",
+      "name": "Have you, your spouse, your child(ren), your parents or your siblings ever applied to the U.S. Government for refugee status, asylum, or withholding of removal?",
+      "spoken_name": "Have you, your spouse, your children, your parents or your siblings ever applied to the US Government for refugee status, asylum, or withholding of removal?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Asks about prior applications for refugee status, asylum, or withholding of removal.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "checkbox_1[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "checkbox_2[0]"
+        }
+      ],
+      "group_id": "prior_applications",
+      "group_label": "Prior Applications",
+      "group_kind": "radio"
+    },
+    {
+      "id": "prior_applications_explanation",
+      "name": "If \"Yes,\" explain the decision and what happened to any status you, your spouse, your child(ren), your parents, or your siblings received as a result of that decision. Indicate whether or not you were included in a parent or spouse's application. If so, include your parent or spouse's A-number in your response. If you have been denied asylum by an immigration judge or the Board of Immigration Appeals, describe any change(s) in conditions in your country or your own personal circumstances since the date of the denial that may affect your eligibility for asylum.",
+      "spoken_name": "If yes, explain the decision and what happened to any status you, your spouse, your children, your parents, or your siblings received as a result of that decision. Indicate whether or not you were included in a parent or spouse's application. If so, include your parent or spouse's A number in your response. If you have been denied asylum by an immigration judge or the Board of Immigration Appeals, describe any changes in conditions in your country or your own personal circumstances since the date of the denial that may affect your eligibility for asylum.",
+      "type": "textarea",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": "explain_1[0]",
+      "description": "Explanation of prior applications for refugee status, asylum, or withholding of removal."
+    },
+    {
+      "id": "travel_through_other_countries",
+      "name": "After leaving the country from which you are claiming asylum, did you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States?",
+      "spoken_name": "After leaving the country from which you are claiming asylum, did you or your spouse or children who are now in the United States travel through or reside in any other country before entering the United States?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Asks about travel through or residence in other countries before entering the United States.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "checkbox_3[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "checkbox_4[0]"
+        }
+      ],
+      "group_id": "travel_through_other_countries",
+      "group_label": "Travel Through Other Countries",
+      "group_kind": "radio"
+    },
+    {
+      "id": "lawful_status_in_other_countries",
+      "name": "Have you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "spoken_name": "Have you, your spouse, your children, or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Asks about applications for or receipt of lawful status in other countries.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "checkbox_5[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "checkbox_6[0]"
+        }
+      ],
+      "group_id": "lawful_status_in_other_countries",
+      "group_label": "Lawful Status in Other Countries",
+      "group_kind": "radio"
+    },
+    {
+      "id": "lawful_status_explanation",
+      "name": "If \"Yes\" to either or both questions (2A and/or 2B), provide for each person the following: the name of each country and the length of stay, the person's status while there, the reasons for leaving, whether or not the person is entitled to return for lawful residence purposes, and whether the person applied for refugee status or for asylum while there, and if not, why he or she did not do so.",
+      "spoken_name": "If yes to either or both questions 2A and/or 2B, provide for each person the following: the name of each country and the length of stay, the person's status while there, the reasons for leaving, whether or not the person is entitled to return for lawful residence purposes, and whether the person applied for refugee status or for asylum while there, and if not, why he or she did not do so.",
+      "type": "textarea",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": "explain_2[0]",
+      "description": "Explanation of applications for or receipt of lawful status in other countries."
+    },
+    {
+      "id": "harm_or_suffering",
+      "name": "Have you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "spoken_name": "Have you, your spouse or your children ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Asks about participation in causing harm or suffering to any person.",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "checkbox_7[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "checkbox_8[0]"
+        }
+      ],
+      "group_id": "harm_or_suffering",
+      "group_label": "Harm or Suffering",
+      "group_kind": "radio"
+    },
+    {
+      "id": "refugee_status_radio",
+      "name": "Have you, your spouse, your child(ren), your parents or your siblings ever applied to the U.S. Government for refugee status, asylum, or withholding of removal?",
+      "spoken_name": "Have you, your spouse, your child(ren), your parents or your siblings ever applied to the U.S. Government for refugee status, asylum, or withholding of removal?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Whether you, your spouse, your child(ren), your parents or your siblings ever applied to the U.S. Government for refugee status, asylum, or withholding of removal",
+      "group_id": "refugee_status",
+      "group_label": "Have you, your spouse, your child(ren), your parents or your siblings ever applied to the U.S. Government for refugee status, asylum, or withholding of removal?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "RadioBtn1[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "RadioBtn2[0]"
+        }
+      ]
+    },
+    {
+      "id": "refugee_status_explanation",
+      "name": "If \"Yes,\" explain the decision and what happened to any status you, your spouse, your child(ren), your parents, or your siblings received as a result of that decision. Indicate whether or not you were included in a parent or spouse's application. If so, include your parent or spouse's A-number in your response. If you have been denied asylum by an immigration judge or the Board of Immigration Appeals, describe any change(s) in conditions in your country or your own personal circumstances since the date of the denial that may affect your eligibility for asylum.",
+      "spoken_name": "If Yes, explain the decision and what happened to any status you, your spouse, your child(ren), your parents, or your siblings received as a result of that decision. Indicate whether or not you were included in a parent or spouse's application. If so, include your parent or spouse's A-number in your response. If you have been denied asylum by an immigration judge or the Board of Immigration Appeals, describe any change(s) in conditions in your country or your own personal circumstances since the date of the denial that may affect your eligibility for asylum.",
+      "type": "textarea",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": "ExplainDecision[0]",
+      "description": "Explain the decision and what happened to any status you, your spouse, your child(ren), your parents, or your siblings received as a result of that decision."
+    },
+    {
+      "id": "travel_through_radio",
+      "name": "After leaving the country from which you are claiming asylum, did you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States?",
+      "spoken_name": "After leaving the country from which you are claiming asylum, did you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Whether you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States",
+      "group_id": "travel_through",
+      "group_label": "After leaving the country from which you are claiming asylum, did you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "RadioBtn3[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "RadioBtn4[0]"
+        }
+      ]
+    },
+    {
+      "id": "lawful_status_radio",
+      "name": "Have you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "spoken_name": "Have you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Whether you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum",
+      "group_id": "lawful_status",
+      "group_label": "Have you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "RadioBtn5[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "RadioBtn6[0]"
+        }
+      ]
+    },
+    {
+      "id": "harm_suffering_radio",
+      "name": "Have you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "spoken_name": "Have you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "type": "radio",
+      "section_id": "part_c_additional_information_about_your_applicati",
+      "section_label": "Part C. Additional Information About Your Application",
+      "pdf_field_name": null,
+      "description": "Whether you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion",
+      "group_id": "harm_suffering",
+      "group_label": "Have you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "RadioBtn7[0]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "RadioBtn8[0]"
+        }
+      ]
+    },
+    {
+      "id": "print_name",
+      "name": "Print your complete name.",
+      "spoken_name": "Print your complete name",
+      "type": "text",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "pdf_field_name": "Print your complete name."
+    },
+    {
+      "id": "native_alphabet_name",
+      "name": "Write your name in your native alphabet.",
+      "spoken_name": "Write your name in your native alphabet",
+      "type": "text",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "pdf_field_name": "Write your name in your native alphabet."
+    },
+    {
+      "id": "spouse_assist",
+      "name": "Did your spouse, parent, or child(ren) assist you in completing this application?",
+      "spoken_name": "Did your spouse, parent, or child(ren) assist you in completing this application?",
+      "type": "radio",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "group_id": "spouse_assist_group",
+      "group_label": "Spouse Assist",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "SpouseNo"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "SpouseYes"
+        }
+      ]
+    },
+    {
+      "id": "other_assist",
+      "name": "Did someone other than your spouse, parent, or child(ren) prepare this application?",
+      "spoken_name": "Did someone other than your spouse, parent, or child(ren) prepare this application?",
+      "type": "radio",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "group_id": "other_assist_group",
+      "group_label": "Other Assist",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "OtherNo"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "OtherYes"
+        }
+      ]
+    },
+    {
+      "id": "signature_applicant",
+      "name": "Signature of Applicant",
+      "spoken_name": "Signature of Applicant",
+      "type": "signature",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "pdf_field_name": "Sign your name so it all appears within the brackets"
+    },
+    {
+      "id": "date_signature",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "part_d_your_signature",
+      "section_label": "Part D. Your Signature",
+      "pdf_field_name": "Date (mm/dd/yyyy)"
+    },
+    {
+      "id": "signature_of_preparer",
+      "name": "Signature of Preparer",
+      "spoken_name": "Signature of Preparer",
+      "type": "signature",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "Signature of Preparer"
+    },
+    {
+      "id": "print_complete_name_of_preparer",
+      "name": "Print Complete Name of Preparer",
+      "spoken_name": "Print Complete Name of Preparer",
+      "type": "text",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "Print Complete Name of Preparer"
+    },
+    {
+      "id": "daytime_telephone_number",
+      "name": "Daytime Telephone Number",
+      "spoken_name": "Daytime Telephone Number",
+      "type": "tel",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "Daytime Telephone Number"
+    },
+    {
+      "id": "address_of_preparer_street_number_and_name",
+      "name": "Address of Preparer: Street Number and Name",
+      "spoken_name": "Address of Preparer: Street Number and Name",
+      "type": "text",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "Address of Preparer: Street Number and Name"
+    },
+    {
+      "id": "city",
+      "name": "City",
+      "spoken_name": "City",
+      "type": "text",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "City"
+    },
+    {
+      "id": "state",
+      "name": "State",
+      "spoken_name": "State",
+      "type": "text",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "State"
+    },
+    {
+      "id": "zip_code",
+      "name": "Zip Code",
+      "spoken_name": "Zip Code",
+      "type": "text",
+      "section_id": "part_e_declaration_of_person_preparing_form_if_oth",
+      "section_label": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "pdf_field_name": "Zip Code"
+    },
+    {
+      "id": "date_mm_dd_yyyy",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Date (mm/dd/yyyy)"
+    },
+    {
+      "id": "write_your_name_in_your_native_alphabet",
+      "name": "Write Your Name in Your Native Alphabet",
+      "spoken_name": "Write Your Name in Your Native Alphabet",
+      "type": "text",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Write Your Name in Your Native Alphabet"
+    },
+    {
+      "id": "signature_asylum_officer",
+      "name": "Signature of Asylum Officer",
+      "spoken_name": "Signature of Asylum Officer",
+      "type": "signature",
+      "section_id": "part_f_to_be_completed_at_asylum_interview_if_appl",
+      "section_label": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "pdf_field_name": "Signature of Asylum Officer"
+    },
+    {
+      "id": "signature_of_applicant",
+      "name": "Signature of Applicant",
+      "spoken_name": "Signature of Applicant",
+      "type": "signature",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Signature of Applicant"
+    },
+    {
+      "id": "signature_of_immigration_judge",
+      "name": "Signature of Immigration Judge",
+      "spoken_name": "Signature of Immigration Judge",
+      "type": "signature",
+      "section_id": "part_g_to_be_completed_at_removal_hearing_if_appli",
+      "section_label": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "pdf_field_name": "Signature of Immigration Judge"
+    },
+    {
+      "id": "a_number_supplement",
+      "name": "A-Number (if available)",
+      "spoken_name": "A number if available",
+      "type": "text",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "A-Number (if available)"
+    },
+    {
+      "id": "date_supplement",
+      "name": "Date",
+      "spoken_name": "Date",
+      "type": "date",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Date"
+    },
+    {
+      "id": "applicant_name_supplement",
+      "name": "Applicant's Name",
+      "spoken_name": "Applicant's Name",
+      "type": "text",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Applicant's Name"
+    },
+    {
+      "id": "applicant_signature_supplement",
+      "name": "Applicant's Signature",
+      "spoken_name": "Applicant's Signature",
+      "type": "signature",
+      "section_id": "additional_information_about_your_claim_to_asylum",
+      "section_label": "Additional Information About Your Claim to Asylum",
+      "pdf_field_name": "Applicant's Signature"
+    }
+  ],
+  "field_type_summary": {
+    "text": 58,
+    "number": 3,
+    "textarea": 11,
+    "tel": 3,
+    "radio": 28,
+    "date": 13,
+    "table": 6,
+    "checkbox": 7,
+    "signature": 6
+  },
+  "sections": [
+    "part_ai_information_about_you",
+    "part_aii_information_about_your_spouse_and_childre",
+    "part_aii_information_about_your_spouse_and_childre",
+    "part_aiii_information_about_your_background",
+    "part_b_information_about_your_application",
+    "part_b_information_about_your_application",
+    "part_c_additional_information_about_your_applicati",
+    "part_c_additional_information_about_your_applicati",
+    "part_d_your_signature",
+    "part_e_declaration_of_person_preparing_form_if_oth",
+    "part_f_to_be_completed_at_asylum_interview_if_appl",
+    "part_g_to_be_completed_at_removal_hearing_if_appli",
+    "additional_information_about_your_claim_to_asylum"
+  ]
+}

@@ -1,0 +1,427 @@
+{
+  "section_id": "part_a_ii",
+  "section_title": "Part A.II. Spouse and Children",
+  "total_fields": 30,
+  "fields": [
+    {
+      "id": "spouse_a_number",
+      "name": "Alien Registration Number (A-Number)",
+      "spoken_name": "Spouse Alien Registration Number A Number",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "AlienRegistrationNumberA-Number_2"
+    },
+    {
+      "id": "spouse_passport_id",
+      "name": "Passport/ID Card Number",
+      "spoken_name": "Spouse Passport ID Card Number",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "PassportIDCardNumber_2"
+    },
+    {
+      "id": "spouse_dob",
+      "name": "Date of Birth",
+      "spoken_name": "Spouse Date of Birth",
+      "type": "date",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "DateofBirth_2"
+    },
+    {
+      "id": "spouse_ssn",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Spouse US Social Security Number",
+      "type": "number",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "USSocialSecurityNumber_2"
+    },
+    {
+      "id": "spouse_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Spouse Complete Last Name",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "CompleteLastName_2"
+    },
+    {
+      "id": "spouse_first_name",
+      "name": "First Name",
+      "spoken_name": "Spouse First Name",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "FirstName_2"
+    },
+    {
+      "id": "spouse_middle_name",
+      "name": "Middle Name",
+      "spoken_name": "Spouse Middle Name",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "MiddleName_2"
+    },
+    {
+      "id": "spouse_other_names",
+      "name": "Other names used (include maiden name and aliases)",
+      "spoken_name": "Spouse Other names used include maiden name and aliases",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "Othernamesusedincludemaidennameandaliases"
+    },
+    {
+      "id": "spouse_date_of_marriage",
+      "name": "Date of Marriage",
+      "spoken_name": "Spouse Date of Marriage",
+      "type": "date",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "DateofMarriage"
+    },
+    {
+      "id": "spouse_place_of_marriage",
+      "name": "Place of Marriage",
+      "spoken_name": "Spouse Place of Marriage",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "PlaceofMarriage"
+    },
+    {
+      "id": "spouse_city_country_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "Spouse City and Country of Birth",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "CityandCountryofBirth"
+    },
+    {
+      "id": "spouse_nationality",
+      "name": "Nationality (Citizenship)",
+      "spoken_name": "Spouse Nationality Citizenship",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "NationalityCitizenship"
+    },
+    {
+      "id": "spouse_race",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Spouse Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "RaceEthnicorTribalGroup"
+    },
+    {
+      "id": "spouse_sex",
+      "name": "Sex",
+      "spoken_name": "Spouse Sex",
+      "type": "radio",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "group_id": "spouse_sex",
+      "group_label": "Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "Male_2"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "Female_2"
+        }
+      ]
+    },
+    {
+      "id": "spouse_in_us",
+      "name": "Is this person in the U.S.?",
+      "spoken_name": "Spouse Is this person in the US",
+      "type": "radio",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "group_id": "spouse_in_us",
+      "group_label": "Is this person in the U.S.?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes_2"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No_2"
+        }
+      ]
+    },
+    {
+      "id": "spouse_location",
+      "name": "Specify location",
+      "spoken_name": "Spouse Specify location",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "Specifylocation"
+    },
+    {
+      "id": "spouse_place_last_entry",
+      "name": "Place of last entry into the U.S.",
+      "spoken_name": "Spouse Place of last entry into the US",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "PlaceoflastentryintotheUS"
+    },
+    {
+      "id": "spouse_date_last_entry",
+      "name": "Date of last entry into the U.S.",
+      "spoken_name": "Spouse Date of last entry into the US",
+      "type": "date",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "DateoflastentryintotheUS"
+    },
+    {
+      "id": "spouse_i94_number",
+      "name": "I-94 Number",
+      "spoken_name": "Spouse I 94 Number",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "I-94Number"
+    },
+    {
+      "id": "spouse_status_when_admitted",
+      "name": "Status when last admitted",
+      "spoken_name": "Spouse Status when last admitted",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "StatuswhenlastadmittedVisatypeifany"
+    },
+    {
+      "id": "spouse_current_status",
+      "name": "What is your spouse's current status?",
+      "spoken_name": "What is your spouse's current status?",
+      "type": "text",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "Whatisyourspousescurrentstatus"
+    },
+    {
+      "id": "spouse_expiration_date",
+      "name": "What is the expiration date of his/her authorized stay, if any?",
+      "spoken_name": "What is the expiration date of his her authorized stay if any",
+      "type": "date",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "pdf_field_name": "Whatistheexpirationdateofhisherauthorizedstayifany"
+    },
+    {
+      "id": "spouse_court_proceedings",
+      "name": "Is your spouse in Immigration Court proceedings?",
+      "spoken_name": "Is your spouse in Immigration Court proceedings",
+      "type": "radio",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "group_id": "spouse_court_proceedings",
+      "group_label": "Is your spouse in Immigration Court proceedings?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes_3"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No_3"
+        }
+      ]
+    },
+    {
+      "id": "spouse_included_application",
+      "name": "If in the U.S., is your spouse to be included in this application?",
+      "spoken_name": "If in the US is your spouse to be included in this application",
+      "type": "radio",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "group_id": "spouse_included_application",
+      "group_label": "If in the U.S., is your spouse to be included in this application?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes_4"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No_4"
+        }
+      ]
+    },
+    {
+      "id": "children_table",
+      "name": "Your Children",
+      "spoken_name": "Your Children",
+      "type": "table",
+      "section_id": "part_a_ii",
+      "section_label": "Part A.II. Spouse and Children",
+      "columns": [
+        {
+          "id": "child_a_number",
+          "label": "Alien Registration Number (A-Number)",
+          "type": "text",
+          "pdf_field_name": "AlienRegistrationNumberA-Number_3[0]"
+        },
+        {
+          "id": "child_passport_id",
+          "label": "Passport/ID Card Number",
+          "type": "text",
+          "pdf_field_name": "PassportIDCardNumber_3[0]"
+        },
+        {
+          "id": "child_marital_status",
+          "label": "Marital Status (Married, Single, Divorced, Widowed)",
+          "type": "text",
+          "pdf_field_name": "MaritalStatusMarriedSingleDivorcedWidowed[0]"
+        },
+        {
+          "id": "child_ssn",
+          "label": "U.S. Social Security Number",
+          "type": "number",
+          "pdf_field_name": "USSocialSecurityNumber_3[0]"
+        },
+        {
+          "id": "child_last_name",
+          "label": "Complete Last Name",
+          "type": "text",
+          "pdf_field_name": "CompleteLastName_3[0]"
+        },
+        {
+          "id": "child_first_name",
+          "label": "First Name",
+          "type": "text",
+          "pdf_field_name": "FirstName_3[0]"
+        },
+        {
+          "id": "child_middle_name",
+          "label": "Middle Name",
+          "type": "text",
+          "pdf_field_name": "MiddleName_3[0]"
+        },
+        {
+          "id": "child_dob",
+          "label": "Date of Birth",
+          "type": "date",
+          "pdf_field_name": "DateofBirth_3[0]"
+        },
+        {
+          "id": "child_city_country_birth",
+          "label": "City and Country of Birth",
+          "type": "text",
+          "pdf_field_name": "CityandCountryofBirth_2[0]"
+        },
+        {
+          "id": "child_nationality",
+          "label": "Nationality (Citizenship)",
+          "type": "text",
+          "pdf_field_name": "NationalityCitizenship_2[0]"
+        },
+        {
+          "id": "child_race",
+          "label": "Race, Ethnic, or Tribal Group",
+          "type": "text",
+          "pdf_field_name": "RaceEthnicorTribalGroup_2[0]"
+        },
+        {
+          "id": "child_sex",
+          "label": "Sex",
+          "type": "radio",
+          "pdf_field_name": "Sex_2[0]"
+        },
+        {
+          "id": "child_in_us",
+          "label": "Is this child in the U.S.?",
+          "type": "radio",
+          "pdf_field_name": "IsthischildintheUS_2[0]"
+        },
+        {
+          "id": "child_location",
+          "label": "Specify location",
+          "type": "text",
+          "pdf_field_name": "Specifylocation_2[0]"
+        },
+        {
+          "id": "child_place_last_entry",
+          "label": "Place of last entry into the U.S.",
+          "type": "text",
+          "pdf_field_name": "PlaceoflastentryintotheUS_2[0]"
+        },
+        {
+          "id": "child_date_last_entry",
+          "label": "Date of last entry into the U.S.",
+          "type": "date",
+          "pdf_field_name": "DateoflastentryintotheUS_2[0]"
+        },
+        {
+          "id": "child_i94_number",
+          "label": "I-94 Number",
+          "type": "text",
+          "pdf_field_name": "I-94Number_2[0]"
+        },
+        {
+          "id": "child_status_when_admitted",
+          "label": "Status when last admitted",
+          "type": "text",
+          "pdf_field_name": "StatuswhenlastadmittedVisatypeifany_2[0]"
+        },
+        {
+          "id": "child_current_status",
+          "label": "What is your child's current status?",
+          "type": "text",
+          "pdf_field_name": "Whatisyourchildscurrentstatus[0]"
+        },
+        {
+          "id": "child_expiration_date",
+          "label": "What is the expiration date of his/her authorized stay, if any?",
+          "type": "date",
+          "pdf_field_name": "Whatistheexpirationdateofhisherauthorizedstayifany_2[0]"
+        },
+        {
+          "id": "child_court_proceedings",
+          "label": "Is your child in Immigration Court proceedings?",
+          "type": "radio",
+          "pdf_field_name": "IsyourchildinImmigrationCourtproceedings[0]"
+        },
+        {
+          "id": "child_included_application",
+          "label": "If in the U.S., is this child to be included in this application?",
+          "type": "radio",
+          "pdf_field_name": "IfintheUSisthischildtobeincludedinthisapplication[0]"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 0,
+        "max_entries": 3,
+        "initial_rows": 3
+      }
+    }
+  ],
+  "notes": "The children table is repeated 3 times on the form. The table has radio buttons inside, which need to be handled carefully."
+}

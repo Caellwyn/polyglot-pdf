@@ -1,0 +1,918 @@
+{
+  "form_title": "Form I-589",
+  "total_fields": 100,
+  "sections": [
+    {
+      "id": "part_a_i",
+      "title": "Part A.I. Information About You",
+      "field_count": 25,
+      "description": "Information about the applicant"
+    },
+    {
+      "id": "part_a_ii",
+      "title": "Part A.II. Information About Your Spouse and Children",
+      "field_count": 21,
+      "description": "Information about the applicant's spouse and children"
+    },
+    {
+      "id": "part_a_iii",
+      "title": "Part A.III. Information About Your Background",
+      "field_count": 5,
+      "description": "Information about the applicant's background"
+    },
+    {
+      "id": "part_b",
+      "title": "Part B. Information About Your Application",
+      "field_count": 4,
+      "description": "Information about the applicant's application"
+    },
+    {
+      "id": "part_c",
+      "title": "Part C. Additional Information About Your Application",
+      "field_count": 6,
+      "description": "Additional information about the applicant's application"
+    },
+    {
+      "id": "part_d",
+      "title": "Part D. Your Signature",
+      "field_count": 7,
+      "description": "Applicant's signature"
+    },
+    {
+      "id": "part_e",
+      "title": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child",
+      "field_count": 7,
+      "description": "Declaration of person preparing form"
+    },
+    {
+      "id": "part_f",
+      "title": "Part F. To Be Completed at Asylum Interview, if Applicable",
+      "field_count": 4,
+      "description": "To be completed at asylum interview"
+    },
+    {
+      "id": "part_g",
+      "title": "Part G. To Be Completed at Removal Hearing, if Applicable",
+      "field_count": 4,
+      "description": "To be completed at removal hearing"
+    }
+  ],
+  "field_type_summary": {
+    "text": 30,
+    "checkbox": 5,
+    "radio": 10,
+    "date": 10,
+    "email": 0,
+    "tel": 2,
+    "textarea": 10,
+    "number": 5,
+    "signature": 3,
+    "select": 0,
+    "table": 25
+  },
+  "fields": [
+    {
+      "id": "a_number",
+      "type": "number",
+      "label": "Alien Registration Number(s) (A-Number)",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Alien Registration Number"
+    },
+    {
+      "id": "ssn",
+      "type": "number",
+      "label": "U.S. Social Security Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Social Security Number"
+    },
+    {
+      "id": "uscis_online_account_number",
+      "type": "number",
+      "label": "USCIS Online Account Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's USCIS Online Account Number"
+    },
+    {
+      "id": "last_name",
+      "type": "text",
+      "label": "Complete Last Name",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's Last Name"
+    },
+    {
+      "id": "first_name",
+      "type": "text",
+      "label": "First Name",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's First Name"
+    },
+    {
+      "id": "middle_name",
+      "type": "text",
+      "label": "Middle Name",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Middle Name"
+    },
+    {
+      "id": "other_names",
+      "type": "text",
+      "label": "What other names have you used (include maiden name and aliases)?",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Other names used by the applicant"
+    },
+    {
+      "id": "residence_street",
+      "type": "text",
+      "label": "Street Number and Name",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Street number and name of residence"
+    },
+    {
+      "id": "residence_apt",
+      "type": "text",
+      "label": "Apt. Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Apartment number of residence"
+    },
+    {
+      "id": "residence_city",
+      "type": "text",
+      "label": "City",
+      "section": "part_a_i",
+      "required": true,
+      "description": "City of residence"
+    },
+    {
+      "id": "residence_state",
+      "type": "text",
+      "label": "State",
+      "section": "part_a_i",
+      "required": true,
+      "description": "State of residence"
+    },
+    {
+      "id": "residence_zip",
+      "type": "text",
+      "label": "Zip Code",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Zip code of residence"
+    },
+    {
+      "id": "residence_tel",
+      "type": "tel",
+      "label": "Telephone Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Telephone number of residence"
+    },
+    {
+      "id": "mailing_in_care_of",
+      "type": "text",
+      "label": "In Care Of (if applicable):",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Mailing address in care of"
+    },
+    {
+      "id": "mailing_street",
+      "type": "text",
+      "label": "Street Number and Name",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Street number and name of mailing address"
+    },
+    {
+      "id": "mailing_apt",
+      "type": "text",
+      "label": "Apt. Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Apartment number of mailing address"
+    },
+    {
+      "id": "mailing_city",
+      "type": "text",
+      "label": "City",
+      "section": "part_a_i",
+      "required": false,
+      "description": "City of mailing address"
+    },
+    {
+      "id": "mailing_state",
+      "type": "text",
+      "label": "State",
+      "section": "part_a_i",
+      "required": false,
+      "description": "State of mailing address"
+    },
+    {
+      "id": "mailing_zip",
+      "type": "text",
+      "label": "Zip Code",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Zip code of mailing address"
+    },
+    {
+      "id": "mailing_tel",
+      "type": "tel",
+      "label": "Telephone Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Telephone number of mailing address"
+    },
+    {
+      "id": "date_of_birth",
+      "type": "date",
+      "label": "Date of Birth (mm/dd/yyyy)",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's Date of Birth"
+    },
+    {
+      "id": "city_country_of_birth",
+      "type": "text",
+      "label": "City and Country of Birth",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's City and Country of Birth"
+    },
+    {
+      "id": "nationality",
+      "type": "text",
+      "label": "Present Nationality (Citizenship)",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's Present Nationality"
+    },
+    {
+      "id": "nationality_at_birth",
+      "type": "text",
+      "label": "Nationality at Birth",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's Nationality at Birth"
+    },
+    {
+      "id": "race_ethnic_tribal",
+      "type": "text",
+      "label": "Race, Ethnic, or Tribal Group",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Race, Ethnic, or Tribal Group"
+    },
+    {
+      "id": "religion",
+      "type": "text",
+      "label": "Religion",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Religion"
+    },
+    {
+      "id": "last_leave_country_date",
+      "type": "date",
+      "label": "When did you last leave your country? (mm/dd/yyyy)",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Date when applicant last left their country"
+    },
+    {
+      "id": "i94_number",
+      "type": "number",
+      "label": "What is your current I-94 Number, if any?",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's I-94 Number"
+    },
+    {
+      "id": "country_issued_passport",
+      "type": "text",
+      "label": "What country issued your last passport or travel document?",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Country that issued applicant's last passport"
+    },
+    {
+      "id": "passport_number",
+      "type": "text",
+      "label": "Passport Number",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Passport Number"
+    },
+    {
+      "id": "expiration_date",
+      "type": "date",
+      "label": "Expiration Date (mm/dd/yyyy)",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Applicant's Passport Expiration Date"
+    },
+    {
+      "id": "native_language",
+      "type": "text",
+      "label": "What is your native language (include dialect, if applicable)?",
+      "section": "part_a_i",
+      "required": true,
+      "description": "Applicant's Native Language"
+    },
+    {
+      "id": "other_languages",
+      "type": "text",
+      "label": "What other languages do you speak fluently?",
+      "section": "part_a_i",
+      "required": false,
+      "description": "Other languages spoken by applicant"
+    },
+    {
+      "id": "spouse_a_number",
+      "type": "number",
+      "label": "Alien Registration Number (A-Number)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Alien Registration Number"
+    },
+    {
+      "id": "spouse_passport_id",
+      "type": "text",
+      "label": "Passport/ID Card Number",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Passport/ID Card Number"
+    },
+    {
+      "id": "spouse_date_of_birth",
+      "type": "date",
+      "label": "Date of Birth (mm/dd/yyyy)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Date of Birth"
+    },
+    {
+      "id": "spouse_ssn",
+      "type": "number",
+      "label": "U.S. Social Security Number",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Social Security Number"
+    },
+    {
+      "id": "spouse_last_name",
+      "type": "text",
+      "label": "Complete Last Name",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Last Name"
+    },
+    {
+      "id": "spouse_first_name",
+      "type": "text",
+      "label": "First Name",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's First Name"
+    },
+    {
+      "id": "spouse_middle_name",
+      "type": "text",
+      "label": "Middle Name",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Middle Name"
+    },
+    {
+      "id": "spouse_other_names",
+      "type": "text",
+      "label": "Other names used (include maiden name and aliases)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Other names"
+    },
+    {
+      "id": "spouse_date_of_marriage",
+      "type": "date",
+      "label": "Date of Marriage (mm/dd/yyyy)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Date of Marriage"
+    },
+    {
+      "id": "spouse_place_of_marriage",
+      "type": "text",
+      "label": "Place of Marriage",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Place of Marriage"
+    },
+    {
+      "id": "spouse_city_country_of_birth",
+      "type": "text",
+      "label": "City and Country of Birth",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's City and Country of Birth"
+    },
+    {
+      "id": "spouse_nationality",
+      "type": "text",
+      "label": "Nationality (Citizenship)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Nationality"
+    },
+    {
+      "id": "spouse_race_ethnic_tribal",
+      "type": "text",
+      "label": "Race, Ethnic, or Tribal Group",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Race, Ethnic, or Tribal Group"
+    },
+    {
+      "id": "spouse_place_of_last_entry",
+      "type": "text",
+      "label": "Place of last entry into the U.S.",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Place of last entry into the U.S."
+    },
+    {
+      "id": "spouse_date_of_last_entry",
+      "type": "date",
+      "label": "Date of last entry into the U.S. (mm/dd/yyyy)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's Date of last entry into the U.S."
+    },
+    {
+      "id": "spouse_i94_number",
+      "type": "number",
+      "label": "I-94 Number (if any)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's I-94 Number"
+    },
+    {
+      "id": "spouse_current_status",
+      "type": "text",
+      "label": "What is your spouse's current status?",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's current status"
+    },
+    {
+      "id": "spouse_expiration_date",
+      "type": "date",
+      "label": "What is the expiration date of his/her authorized stay, if any? (mm/dd/yyyy)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's expiration date of authorized stay"
+    },
+    {
+      "id": "spouse_previous_arrival",
+      "type": "date",
+      "label": "If previously in the U.S., date of previous arrival (mm/dd/yyyy)",
+      "section": "part_a_ii",
+      "required": false,
+      "description": "Spouse's date of previous arrival"
+    },
+    {
+      "id": "last_address_number_street",
+      "type": "text",
+      "label": "Number and Street",
+      "section": "part_a_iii",
+      "required": false,
+      "description": "Last address number and street"
+    },
+    {
+      "id": "last_address_city_town",
+      "type": "text",
+      "label": "City/Town",
+      "section": "part_a_iii",
+      "required": false,
+      "description": "Last address city/town"
+    },
+    {
+      "id": "last_address_department_province_state",
+      "type": "text",
+      "label": "Department, Province, or State",
+      "section": "part_a_iii",
+      "required": false,
+      "description": "Last address department, province, or state"
+    },
+    {
+      "id": "last_address_country",
+      "type": "text",
+      "label": "Country",
+      "section": "part_a_iii",
+      "required": false,
+      "description": "Last address country"
+    },
+    {
+      "id": "last_address_dates",
+      "type": "text",
+      "label": "Dates",
+      "section": "part_a_iii",
+      "required": false,
+      "description": "Last address dates"
+    },
+    {
+      "id": "harm_mistreatment_details",
+      "type": "textarea",
+      "label": "If 'Yes,' explain in detail:",
+      "section": "part_b",
+      "required": false,
+      "description": "Details of harm or mistreatment"
+    },
+    {
+      "id": "fear_harm_details",
+      "type": "textarea",
+      "label": "If 'Yes,' explain in detail:",
+      "section": "part_b",
+      "required": false,
+      "description": "Details of fear of harm"
+    },
+    {
+      "id": "circumstances_reasons",
+      "type": "textarea",
+      "label": "If \"Yes,\" explain the circumstances and reasons for the action.",
+      "section": "part_b",
+      "required": false,
+      "description": "Circumstances and reasons for the action"
+    },
+    {
+      "id": "participation_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" describe for each person the level of participation, any leadership or other positions held, and the length of time you or your family members were involved in each organization or activity.",
+      "section": "part_b",
+      "required": false,
+      "description": "Participation details"
+    },
+    {
+      "id": "participation_details_continue",
+      "type": "textarea",
+      "label": "If \"Yes,\" describe for each person your or your family members' current level of participation, any leadership or other positions currently held, and the length of time you or your family members have been involved in each organization or group.",
+      "section": "part_b",
+      "required": false,
+      "description": "Participation details continue"
+    },
+    {
+      "id": "torture_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" explain why you are afraid and describe the nature of torture you fear, by whom, and why it would be inflicted.",
+      "section": "part_b",
+      "required": false,
+      "description": "Torture details"
+    },
+    {
+      "id": "refugee_status_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" explain the decision and what happened to any status you, your spouse, your child(ren), your parents, or your siblings received as a result of that decision.",
+      "section": "part_c",
+      "required": false,
+      "description": "Refugee status details"
+    },
+    {
+      "id": "travel_reside_details",
+      "type": "textarea",
+      "label": "If \"Yes\" to either or both questions (2A and/or 2B), provide for each person the following: the name of each country and the length of stay, the person's status while there, the reasons for leaving, whether or not the person is entitled to return for lawful residence purposes, and whether the person applied for refugee status or for asylum while there, and if not, why he or she did not do so.",
+      "section": "part_c",
+      "required": false,
+      "description": "Travel reside details"
+    },
+    {
+      "id": "harm_suffering_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" describe in detail each such incident and your own, your spouse's, or your child(ren)'s involvement.",
+      "section": "part_c",
+      "required": false,
+      "description": "Harm suffering details"
+    },
+    {
+      "id": "return_country_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" describe in detail the circumstances of your visit(s) (for example, the date(s) of the trip(s), the purpose(s) of the trip(s), and the length of time you remained in that country for the visit(s).)",
+      "section": "part_c",
+      "required": false,
+      "description": "Return country details"
+    },
+    {
+      "id": "filing_after_one_year_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" explain why you did not file within the first year after you arrived.",
+      "section": "part_c",
+      "required": false,
+      "description": "Filing after one year details"
+    },
+    {
+      "id": "crime_arrest_details",
+      "type": "textarea",
+      "label": "If \"Yes,\" for each instance, specify in your response: what occurred and the circumstances, dates, length of sentence received, location, the duration of the detention or imprisonment, reason(s) for the detention or conviction, any formal charges that were lodged against you or your relatives included in your application, and the reason(s) for release.",
+      "section": "part_c",
+      "required": false,
+      "description": "Crime arrest details"
+    },
+    {
+      "id": "print_complete_name",
+      "type": "text",
+      "label": "Print your complete name.",
+      "section": "part_d",
+      "required": true,
+      "description": "Print applicant's complete name"
+    },
+    {
+      "id": "write_name_native_alphabet",
+      "type": "text",
+      "label": "Write your name in your native alphabet.",
+      "section": "part_d",
+      "required": false,
+      "description": "Write applicant's name in native alphabet"
+    },
+    {
+      "id": "name_spouse_parent_children",
+      "type": "text",
+      "label": "Name",
+      "section": "part_d",
+      "required": false,
+      "description": "Name of spouse, parent, or children"
+    },
+    {
+      "id": "relationship_spouse_parent_children",
+      "type": "text",
+      "label": "Relationship",
+      "section": "part_d",
+      "required": false,
+      "description": "Relationship of spouse, parent, or children"
+    },
+    {
+      "id": "name_other_than_spouse_parent_children",
+      "type": "text",
+      "label": "Name",
+      "section": "part_d",
+      "required": false,
+      "description": "Name of someone other than spouse, parent, or children"
+    },
+    {
+      "id": "relationship_other_than_spouse_parent_children",
+      "type": "text",
+      "label": "Relationship",
+      "section": "part_d",
+      "required": false,
+      "description": "Relationship of someone other than spouse, parent, or children"
+    },
+    {
+      "id": "signature_applicant",
+      "type": "signature",
+      "label": "Signature of Applicant",
+      "section": "part_d",
+      "required": true,
+      "description": "Applicant's Signature"
+    },
+    {
+      "id": "date",
+      "type": "date",
+      "label": "Date (mm/dd/yyyy)",
+      "section": "part_d",
+      "required": true,
+      "description": "Date"
+    },
+    {
+      "id": "signature_preparer",
+      "type": "signature",
+      "label": "Signature of Preparer",
+      "section": "part_e",
+      "required": false,
+      "description": "Signature of Preparer"
+    },
+    {
+      "id": "print_complete_name_preparer",
+      "type": "text",
+      "label": "Print Complete Name of Preparer",
+      "section": "part_e",
+      "required": false,
+      "description": "Print Complete Name of Preparer"
+    },
+    {
+      "id": "daytime_telephone_number",
+      "type": "tel",
+      "label": "Daytime Telephone Number",
+      "section": "part_e",
+      "required": false,
+      "description": "Daytime Telephone Number"
+    },
+    {
+      "id": "address_preparer",
+      "type": "text",
+      "label": "Address of Preparer: Street Number and Name",
+      "section": "part_e",
+      "required": false,
+      "description": "Address of Preparer"
+    },
+    {
+      "id": "city_preparer",
+      "type": "text",
+      "label": "City",
+      "section": "part_e",
+      "required": false,
+      "description": "City of Preparer"
+    },
+    {
+      "id": "state_preparer",
+      "type": "text",
+      "label": "State",
+      "section": "part_e",
+      "required": false,
+      "description": "State of Preparer"
+    },
+    {
+      "id": "zip_code_preparer",
+      "type": "text",
+      "label": "Zip Code",
+      "section": "part_e",
+      "required": false,
+      "description": "Zip Code of Preparer"
+    },
+    {
+      "id": "attorney_state_bar_number",
+      "type": "text",
+      "label": "Attorney State Bar Number (if applicable)",
+      "section": "part_e",
+      "required": false,
+      "description": "Attorney State Bar Number"
+    },
+    {
+      "id": "attorney_accredited_representative_uscis_online_account_number",
+      "type": "text",
+      "label": "Attorney or Accredited Representative USCIS Online Account Number (if any)",
+      "section": "part_e",
+      "required": false,
+      "description": "Attorney or Accredited Representative USCIS Online Account Number"
+    },
+    {
+      "id": "signature_applicant_interview",
+      "type": "signature",
+      "label": "Signature of Applicant",
+      "section": "part_f",
+      "required": false,
+      "description": "Signature of Applicant at Interview"
+    },
+    {
+      "id": "date_interview",
+      "type": "date",
+      "label": "Date (mm/dd/yyyy)",
+      "section": "part_f",
+      "required": false,
+      "description": "Date of Interview"
+    },
+    {
+      "id": "signature_asylum_officer",
+      "type": "signature",
+      "label": "Signature of Asylum Officer",
+      "section": "part_f",
+      "required": false,
+      "description": "Signature of Asylum Officer"
+    },
+    {
+      "id": "signature_applicant_removal",
+      "type": "signature",
+      "label": "Signature of Applicant",
+      "section": "part_g",
+      "required": false,
+      "description": "Signature of Applicant at Removal Hearing"
+    },
+    {
+      "id": "date_removal",
+      "type": "date",
+      "label": "Date (mm/dd/yyyy)",
+      "section": "part_g",
+      "required": false,
+      "description": "Date of Removal Hearing"
+    },
+    {
+      "id": "signature_immigration_judge",
+      "type": "signature",
+      "label": "Signature of Immigration Judge",
+      "section": "part_g",
+      "required": false,
+      "description": "Signature of Immigration Judge"
+    }
+  ],
+  "radio_groups": [
+    {
+      "id": "sex",
+      "label": "Sex",
+      "section": "part_a_i",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male"
+        },
+        {
+          "value": "female",
+          "label": "Female"
+        }
+      ]
+    },
+    {
+      "id": "marital_status",
+      "label": "Marital Status",
+      "section": "part_a_i",
+      "options": [
+        {
+          "value": "single",
+          "label": "Single"
+        },
+        {
+          "value": "married",
+          "label": "Married"
+        },
+        {
+          "value": "divorced",
+          "label": "Divorced"
+        },
+        {
+          "value": "widowed",
+          "label": "Widowed"
+        }
+      ]
+    },
+    {
+      "id": "immigration_court_proceedings",
+      "label": "Check the box, a through c, that applies:",
+      "section": "part_a_i",
+      "options": [
+        {
+          "value": "never",
+          "label": "I have never been in Immigration Court proceedings."
+        },
+        {
+          "value": "now",
+          "label": "I am now in Immigration Court proceedings."
+        },
+        {
+          "value": "past",
+          "label": "I am not now in Immigration Court proceedings, but I have been in the past."
+        }
+      ]
+    },
+    {
+      "id": "fluent_english",
+      "label": "Are you fluent in English?",
+      "section": "part_a_i",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "spouse_in_us",
+      "label": "Is this person in the U.S.?",
+      "section": "part_a_ii",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "spouse_immigration_court",
+      "label": "Is your spouse in Immigration Court proceedings?",
+      "section": "part_a_ii",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "spouse_included_application",
+      "label": "If in the U.S., is your spouse to be included in this application?",
+      "section": "part_a_ii",
+      

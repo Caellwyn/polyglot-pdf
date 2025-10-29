@@ -1,0 +1,508 @@
+{
+  "section": {
+    "id": "part_ai_information_about_you",
+    "title": "Part A.I.  Information About You",
+    "page_start": 0,
+    "page_end": 1,
+    "estimated_fields": 29
+  },
+  "fields": [
+    {
+      "id": "alien_registration_number",
+      "name": "Alien Registration Number(s) (A-Number)",
+      "spoken_name": "Alien Registration Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "AlienRegistrationNumber(s)(ANumber)(ifany)[0]",
+      "description": "Your Alien Registration Number, if any"
+    },
+    {
+      "id": "social_security_number",
+      "name": "U.S. Social Security Number",
+      "spoken_name": "Social Security Number",
+      "type": "number",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "U.S.SocialSecurityNumber(ifany)[0]",
+      "description": "Your U.S. Social Security Number, if any"
+    },
+    {
+      "id": "uscis_online_account_number",
+      "name": "USCIS Online Account Number",
+      "spoken_name": "USCIS Online Account Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "USCISOnlineAccountNumber(ifany)[0]",
+      "description": "Your USCIS Online Account Number, if any"
+    },
+    {
+      "id": "complete_last_name",
+      "name": "Complete Last Name",
+      "spoken_name": "Complete Last Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "CompleteLastName[0]",
+      "description": "Your complete last name"
+    },
+    {
+      "id": "first_name",
+      "name": "First Name",
+      "spoken_name": "First Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "FirstName[0]",
+      "description": "Your first name"
+    },
+    {
+      "id": "middle_name",
+      "name": "Middle Name",
+      "spoken_name": "Middle Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "MiddleName[0]",
+      "description": "Your middle name"
+    },
+    {
+      "id": "other_names",
+      "name": "What other names have you used",
+      "spoken_name": "Other names used",
+      "type": "textarea",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatothernameshaveyouused(includemaidennameandaliases)_[0]",
+      "description": "All other names you have used, including maiden names and aliases"
+    },
+    {
+      "id": "residence_street_number",
+      "name": "Street Number and Name",
+      "spoken_name": "Residence Street Number and Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "StreetNumberandName[0]",
+      "description": "Street number and name of your residence in the U.S."
+    },
+    {
+      "id": "residence_apt_number",
+      "name": "Apt. Number",
+      "spoken_name": "Residence Apartment Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Apt.Number[0]",
+      "description": "Apartment number of your residence in the U.S."
+    },
+    {
+      "id": "residence_city",
+      "name": "City",
+      "spoken_name": "Residence City",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "City[0]",
+      "description": "City of your residence in the U.S."
+    },
+    {
+      "id": "residence_state",
+      "name": "State",
+      "spoken_name": "Residence State",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "State[0]",
+      "description": "State of your residence in the U.S."
+    },
+    {
+      "id": "residence_zip_code",
+      "name": "Zip Code",
+      "spoken_name": "Residence Zip Code",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ZipCode[0]",
+      "description": "Zip code of your residence in the U.S."
+    },
+    {
+      "id": "residence_telephone_number",
+      "name": "Telephone Number",
+      "spoken_name": "Residence Telephone Number",
+      "type": "tel",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TelephoneNumber[0]",
+      "description": "Telephone number of your residence in the U.S."
+    },
+    {
+      "id": "mailing_in_care_of",
+      "name": "In Care Of",
+      "spoken_name": "Mailing In Care Of",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "InCareOf(ifapplicable)_[0]",
+      "description": "In Care Of for your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_street_number",
+      "name": "Street Number and Name",
+      "spoken_name": "Mailing Street Number and Name",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "StreetNumberandName1[0]",
+      "description": "Street number and name of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_apt_number",
+      "name": "Apt. Number",
+      "spoken_name": "Mailing Apartment Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Apt.Number1[0]",
+      "description": "Apartment number of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_city",
+      "name": "City",
+      "spoken_name": "Mailing City",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "City1[0]",
+      "description": "City of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_state",
+      "name": "State",
+      "spoken_name": "Mailing State",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "State1[0]",
+      "description": "State of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_zip_code",
+      "name": "Zip Code",
+      "spoken_name": "Mailing Zip Code",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ZipCode1[0]",
+      "description": "Zip code of your mailing address in the U.S."
+    },
+    {
+      "id": "mailing_telephone_number",
+      "name": "Telephone Number",
+      "spoken_name": "Mailing Telephone Number",
+      "type": "tel",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TelephoneNumber1[0]",
+      "description": "Telephone number of your mailing address in the U.S."
+    },
+    {
+      "id": "sex",
+      "name": "Sex",
+      "spoken_name": "Sex",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Sex[0]",
+      "description": "Your sex",
+      "group_id": "sex",
+      "group_label": "Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "Male[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "Female[0]"
+        }
+      ]
+    },
+    {
+      "id": "marital_status",
+      "name": "Marital Status",
+      "spoken_name": "Marital Status",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "MaritalStatus[0]",
+      "description": "Your marital status",
+      "group_id": "marital_status",
+      "group_label": "Marital Status",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "single",
+          "label": "Single",
+          "pdf_field_name": "Single[0]"
+        },
+        {
+          "value": "married",
+          "label": "Married",
+          "pdf_field_name": "Married[0]"
+        },
+        {
+          "value": "divorced",
+          "label": "Divorced",
+          "pdf_field_name": "Divorced[0]"
+        },
+        {
+          "value": "widowed",
+          "label": "Widowed",
+          "pdf_field_name": "Widowed[0]"
+        }
+      ]
+    },
+    {
+      "id": "date_of_birth",
+      "name": "Date of Birth",
+      "spoken_name": "Date of Birth",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "DateofBirth(mm/dd/yyyy)_[0]",
+      "description": "Your date of birth"
+    },
+    {
+      "id": "city_and_country_of_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "City and Country of Birth",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "CityandCountryofBirth[0]",
+      "description": "Your city and country of birth"
+    },
+    {
+      "id": "present_nationality",
+      "name": "Present Nationality (Citizenship)",
+      "spoken_name": "Present Nationality",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "PresentNationality(Citizenship)_[0]",
+      "description": "Your present nationality or citizenship"
+    },
+    {
+      "id": "nationality_at_birth",
+      "name": "Nationality at Birth",
+      "spoken_name": "Nationality at Birth",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "NationalityatBirth[0]",
+      "description": "Your nationality at birth"
+    },
+    {
+      "id": "race_ethnic_or_tribal_group",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "Race Ethnic or Tribal Group",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Race,Ethnic,orTribalGroup[0]",
+      "description": "Your race, ethnic, or tribal group"
+    },
+    {
+      "id": "religion",
+      "name": "Religion",
+      "spoken_name": "Religion",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Religion[0]",
+      "description": "Your religion"
+    },
+    {
+      "id": "immigration_court_proceedings",
+      "name": "Immigration Court Proceedings",
+      "spoken_name": "Immigration Court Proceedings",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Checkthebox,athroughc,thatapplies_[0]",
+      "description": "Check the box, a through c, that applies",
+      "group_id": "immigration_court_proceedings",
+      "group_label": "Immigration Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "never",
+          "label": "I have never been in Immigration Court proceedings.",
+          "pdf_field_name": "IhaveneverbeeninImmigrationCourtproceedings_[0]"
+        },
+        {
+          "value": "now",
+          "label": "I am now in Immigration Court proceedings.",
+          "pdf_field_name": "IamnowinImmigrationCourtproceedings_[0]"
+        },
+        {
+          "value": "past",
+          "label": "I am not now in Immigration Court proceedings, but I have been in the past.",
+          "pdf_field_name": "IamnotnowinImmigrationCourtproceedings,butIhavebeeninthepast_[0]"
+        }
+      ]
+    },
+    {
+      "id": "last_leave_country_date",
+      "name": "When did you last leave your country?",
+      "spoken_name": "Last Leave Country Date",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whendidyoulastleaveyourcountry_(mm/dd/yyyy)_[0]",
+      "description": "When did you last leave your country?"
+    },
+    {
+      "id": "i94_number",
+      "name": "What is your current I-94 Number, if any?",
+      "spoken_name": "I 94 Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "WhatisyourcurrentI-94Number,ifany_[0]",
+      "description": "What is your current I-94 Number, if any?"
+    },
+    {
+      "id": "entry_history",
+      "name": "Entry History",
+      "spoken_name": "Entry History",
+      "type": "table",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ListeachentryintotheU.S.beginningwithyourmostrecententry.Listdate(mm/dd/yyyy),place,andyourstatusforeachentry.(Attachadditionalsheetsasneeded.)_[0]",
+      "description": "List each entry into the U.S. beginning with your most recent entry. List date (mm/dd/yyyy), place, and your status for each entry. (Attach additional sheets as needed.)",
+      "columns": [
+        {
+          "id": "entry_date",
+          "label": "Date",
+          "type": "date",
+          "pdf_field_name": "Date[0]"
+        },
+        {
+          "id": "entry_place",
+          "label": "Place",
+          "type": "text",
+          "pdf_field_name": "Place[0]"
+        },
+        {
+          "id": "entry_status",
+          "label": "Status",
+          "type": "text",
+          "pdf_field_name": "Status[0]"
+        },
+        {
+          "id": "entry_date_status_expires",
+          "label": "Date Status Expires",
+          "type": "date",
+          "pdf_field_name": "DateStatusExpires[0]"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 1,
+        "max_entries": 3,
+        "initial_rows": 3
+      }
+    },
+    {
+      "id": "last_passport_country",
+      "name": "What country issued your last passport or travel document?",
+      "spoken_name": "Last Passport Country",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatcountryissuedyourlastpassportortraveldocument_[0]",
+      "description": "What country issued your last passport or travel document?"
+    },
+    {
+      "id": "passport_number",
+      "name": "Passport Number",
+      "spoken_name": "Passport Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "PassportNumber[0]",
+      "description": "Your passport number"
+    },
+    {
+      "id": "travel_document_number",
+      "name": "Travel Document Number",
+      "spoken_name": "Travel Document Number",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "TravelDocumentNumber[0]",
+      "description": "Your travel document number"
+    },
+    {
+      "id": "expiration_date",
+      "name": "Expiration Date",
+      "spoken_name": "Expiration Date",
+      "type": "date",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "ExpirationDate(mm/dd/yyyy)_[0]",
+      "description": "Your passport or travel document expiration date"
+    },
+    {
+      "id": "native_language",
+      "name": "What is your native language",
+      "spoken_name": "Native Language",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatisyournativelanguage(includedialect,ifapplicable)_[0]",
+      "description": "Your native language, including dialect if applicable"
+    },
+    {
+      "id": "fluent_in_english",
+      "name": "Are you fluent in English?",
+      "spoken_name": "Fluent in English",
+      "type": "radio",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "AreyoufluentinEnglish_[0]",
+      "description": "Are you fluent in English?",
+      "group_id": "fluent_in_english",
+      "group_label": "Fluent in English",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "No[0]"
+        }
+      ]
+    },
+    {
+      "id": "other_languages",
+      "name": "What other languages do you speak fluently?",
+      "spoken_name": "Other Languages",
+      "type": "text",
+      "section_id": "part_ai_information_about_you",
+      "section_label": "Part A.I. Information About You",
+      "pdf_field_name": "Whatotherlanguagesdoyouspeakfluently_[0]",
+      "description": "Other languages you speak fluently"
+    }
+  ],
+  "raw_response": "{\n  \"section_id\": \"part_ai_information_about_you\",\n  \"section_title\": \"Part A.I. Information About You\",\n  \"total_fields\": 25,\n  \"fields\": [\n    {\n      \"id\": \"alien_registration_number\",\n      \"name\": \"Alien Registration Number(s) (A-Number)\",\n      \"spoken_name\": \"Alien Registration Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"AlienRegistrationNumber(s)(ANumber)(ifany)[0]\",\n      \"description\": \"Your Alien Registration Number, if any\"\n    },\n    {\n      \"id\": \"social_security_number\",\n      \"name\": \"U.S. Social Security Number\",\n      \"spoken_name\": \"Social Security Number\",\n      \"type\": \"number\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"U.S.SocialSecurityNumber(ifany)[0]\",\n      \"description\": \"Your U.S. Social Security Number, if any\"\n    },\n    {\n      \"id\": \"uscis_online_account_number\",\n      \"name\": \"USCIS Online Account Number\",\n      \"spoken_name\": \"USCIS Online Account Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"USCISOnlineAccountNumber(ifany)[0]\",\n      \"description\": \"Your USCIS Online Account Number, if any\"\n    },\n    {\n      \"id\": \"complete_last_name\",\n      \"name\": \"Complete Last Name\",\n      \"spoken_name\": \"Complete Last Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"CompleteLastName[0]\",\n      \"description\": \"Your complete last name\"\n    },\n    {\n      \"id\": \"first_name\",\n      \"name\": \"First Name\",\n      \"spoken_name\": \"First Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"FirstName[0]\",\n      \"description\": \"Your first name\"\n    },\n    {\n      \"id\": \"middle_name\",\n      \"name\": \"Middle Name\",\n      \"spoken_name\": \"Middle Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"MiddleName[0]\",\n      \"description\": \"Your middle name\"\n    },\n    {\n      \"id\": \"other_names\",\n      \"name\": \"What other names have you used\",\n      \"spoken_name\": \"Other names used\",\n      \"type\": \"textarea\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Whatothernameshaveyouused(includemaidennameandaliases)_[0]\",\n      \"description\": \"All other names you have used, including maiden names and aliases\"\n    },\n    {\n      \"id\": \"residence_street_number\",\n      \"name\": \"Street Number and Name\",\n      \"spoken_name\": \"Residence Street Number and Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"StreetNumberandName[0]\",\n      \"description\": \"Street number and name of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"residence_apt_number\",\n      \"name\": \"Apt. Number\",\n      \"spoken_name\": \"Residence Apartment Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Apt.Number[0]\",\n      \"description\": \"Apartment number of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"residence_city\",\n      \"name\": \"City\",\n      \"spoken_name\": \"Residence City\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"City[0]\",\n      \"description\": \"City of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"residence_state\",\n      \"name\": \"State\",\n      \"spoken_name\": \"Residence State\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"State[0]\",\n      \"description\": \"State of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"residence_zip_code\",\n      \"name\": \"Zip Code\",\n      \"spoken_name\": \"Residence Zip Code\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"ZipCode[0]\",\n      \"description\": \"Zip code of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"residence_telephone_number\",\n      \"name\": \"Telephone Number\",\n      \"spoken_name\": \"Residence Telephone Number\",\n      \"type\": \"tel\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"TelephoneNumber[0]\",\n      \"description\": \"Telephone number of your residence in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_in_care_of\",\n      \"name\": \"In Care Of\",\n      \"spoken_name\": \"Mailing In Care Of\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"InCareOf(ifapplicable)_[0]\",\n      \"description\": \"In Care Of for your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_street_number\",\n      \"name\": \"Street Number and Name\",\n      \"spoken_name\": \"Mailing Street Number and Name\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"StreetNumberandName1[0]\",\n      \"description\": \"Street number and name of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_apt_number\",\n      \"name\": \"Apt. Number\",\n      \"spoken_name\": \"Mailing Apartment Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Apt.Number1[0]\",\n      \"description\": \"Apartment number of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_city\",\n      \"name\": \"City\",\n      \"spoken_name\": \"Mailing City\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"City1[0]\",\n      \"description\": \"City of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_state\",\n      \"name\": \"State\",\n      \"spoken_name\": \"Mailing State\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"State1[0]\",\n      \"description\": \"State of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_zip_code\",\n      \"name\": \"Zip Code\",\n      \"spoken_name\": \"Mailing Zip Code\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"ZipCode1[0]\",\n      \"description\": \"Zip code of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"mailing_telephone_number\",\n      \"name\": \"Telephone Number\",\n      \"spoken_name\": \"Mailing Telephone Number\",\n      \"type\": \"tel\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"TelephoneNumber1[0]\",\n      \"description\": \"Telephone number of your mailing address in the U.S.\"\n    },\n    {\n      \"id\": \"sex\",\n      \"name\": \"Sex\",\n      \"spoken_name\": \"Sex\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Sex[0]\",\n      \"description\": \"Your sex\",\n      \"group_id\": \"sex\",\n      \"group_label\": \"Sex\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"male\",\n          \"label\": \"Male\",\n          \"pdf_field_name\": \"Male[0]\"\n        },\n        {\n          \"value\": \"female\",\n          \"label\": \"Female\",\n          \"pdf_field_name\": \"Female[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"marital_status\",\n      \"name\": \"Marital Status\",\n      \"spoken_name\": \"Marital Status\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"MaritalStatus[0]\",\n      \"description\": \"Your marital status\",\n      \"group_id\": \"marital_status\",\n      \"group_label\": \"Marital Status\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"single\",\n          \"label\": \"Single\",\n          \"pdf_field_name\": \"Single[0]\"\n        },\n        {\n          \"value\": \"married\",\n          \"label\": \"Married\",\n          \"pdf_field_name\": \"Married[0]\"\n        },\n        {\n          \"value\": \"divorced\",\n          \"label\": \"Divorced\",\n          \"pdf_field_name\": \"Divorced[0]\"\n        },\n        {\n          \"value\": \"widowed\",\n          \"label\": \"Widowed\",\n          \"pdf_field_name\": \"Widowed[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"date_of_birth\",\n      \"name\": \"Date of Birth\",\n      \"spoken_name\": \"Date of Birth\",\n      \"type\": \"date\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"DateofBirth(mm/dd/yyyy)_[0]\",\n      \"description\": \"Your date of birth\"\n    },\n    {\n      \"id\": \"city_and_country_of_birth\",\n      \"name\": \"City and Country of Birth\",\n      \"spoken_name\": \"City and Country of Birth\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"CityandCountryofBirth[0]\",\n      \"description\": \"Your city and country of birth\"\n    },\n    {\n      \"id\": \"present_nationality\",\n      \"name\": \"Present Nationality (Citizenship)\",\n      \"spoken_name\": \"Present Nationality\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"PresentNationality(Citizenship)_[0]\",\n      \"description\": \"Your present nationality or citizenship\"\n    },\n    {\n      \"id\": \"nationality_at_birth\",\n      \"name\": \"Nationality at Birth\",\n      \"spoken_name\": \"Nationality at Birth\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"NationalityatBirth[0]\",\n      \"description\": \"Your nationality at birth\"\n    },\n    {\n      \"id\": \"race_ethnic_or_tribal_group\",\n      \"name\": \"Race, Ethnic, or Tribal Group\",\n      \"spoken_name\": \"Race Ethnic or Tribal Group\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Race,Ethnic,orTribalGroup[0]\",\n      \"description\": \"Your race, ethnic, or tribal group\"\n    },\n    {\n      \"id\": \"religion\",\n      \"name\": \"Religion\",\n      \"spoken_name\": \"Religion\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Religion[0]\",\n      \"description\": \"Your religion\"\n    },\n    {\n      \"id\": \"immigration_court_proceedings\",\n      \"name\": \"Immigration Court Proceedings\",\n      \"spoken_name\": \"Immigration Court Proceedings\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Checkthebox,athroughc,thatapplies_[0]\",\n      \"description\": \"Check the box, a through c, that applies\",\n      \"group_id\": \"immigration_court_proceedings\",\n      \"group_label\": \"Immigration Court Proceedings\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"never\",\n          \"label\": \"I have never been in Immigration Court proceedings.\",\n          \"pdf_field_name\": \"IhaveneverbeeninImmigrationCourtproceedings_[0]\"\n        },\n        {\n          \"value\": \"now\",\n          \"label\": \"I am now in Immigration Court proceedings.\",\n          \"pdf_field_name\": \"IamnowinImmigrationCourtproceedings_[0]\"\n        },\n        {\n          \"value\": \"past\",\n          \"label\": \"I am not now in Immigration Court proceedings, but I have been in the past.\",\n          \"pdf_field_name\": \"IamnotnowinImmigrationCourtproceedings,butIhavebeeninthepast_[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"last_leave_country_date\",\n      \"name\": \"When did you last leave your country?\",\n      \"spoken_name\": \"Last Leave Country Date\",\n      \"type\": \"date\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Whendidyoulastleaveyourcountry_(mm/dd/yyyy)_[0]\",\n      \"description\": \"When did you last leave your country?\"\n    },\n    {\n      \"id\": \"i94_number\",\n      \"name\": \"What is your current I-94 Number, if any?\",\n      \"spoken_name\": \"I 94 Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"WhatisyourcurrentI-94Number,ifany_[0]\",\n      \"description\": \"What is your current I-94 Number, if any?\"\n    },\n    {\n      \"id\": \"entry_history\",\n      \"name\": \"Entry History\",\n      \"spoken_name\": \"Entry History\",\n      \"type\": \"table\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"ListeachentryintotheU.S.beginningwithyourmostrecententry.Listdate(mm/dd/yyyy),place,andyourstatusforeachentry.(Attachadditionalsheetsasneeded.)_[0]\",\n      \"description\": \"List each entry into the U.S. beginning with your most recent entry. List date (mm/dd/yyyy), place, and your status for each entry. (Attach additional sheets as needed.)\",\n      \"columns\": [\n        {\n          \"id\": \"entry_date\",\n          \"label\": \"Date\",\n          \"type\": \"date\",\n          \"pdf_field_name\": \"Date[0]\"\n        },\n        {\n          \"id\": \"entry_place\",\n          \"label\": \"Place\",\n          \"type\": \"text\",\n          \"pdf_field_name\": \"Place[0]\"\n        },\n        {\n          \"id\": \"entry_status\",\n          \"label\": \"Status\",\n          \"type\": \"text\",\n          \"pdf_field_name\": \"Status[0]\"\n        },\n        {\n          \"id\": \"entry_date_status_expires\",\n          \"label\": \"Date Status Expires\",\n          \"type\": \"date\",\n          \"pdf_field_name\": \"DateStatusExpires[0]\"\n        }\n      ],\n      \"multi_entry\": {\n        \"min_entries\": 1,\n        \"max_entries\": 3,\n        \"initial_rows\": 3\n      }\n    },\n    {\n      \"id\": \"last_passport_country\",\n      \"name\": \"What country issued your last passport or travel document?\",\n      \"spoken_name\": \"Last Passport Country\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Whatcountryissuedyourlastpassportortraveldocument_[0]\",\n      \"description\": \"What country issued your last passport or travel document?\"\n    },\n    {\n      \"id\": \"passport_number\",\n      \"name\": \"Passport Number\",\n      \"spoken_name\": \"Passport Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"PassportNumber[0]\",\n      \"description\": \"Your passport number\"\n    },\n    {\n      \"id\": \"travel_document_number\",\n      \"name\": \"Travel Document Number\",\n      \"spoken_name\": \"Travel Document Number\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"TravelDocumentNumber[0]\",\n      \"description\": \"Your travel document number\"\n    },\n    {\n      \"id\": \"expiration_date\",\n      \"name\": \"Expiration Date\",\n      \"spoken_name\": \"Expiration Date\",\n      \"type\": \"date\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"ExpirationDate(mm/dd/yyyy)_[0]\",\n      \"description\": \"Your passport or travel document expiration date\"\n    },\n    {\n      \"id\": \"native_language\",\n      \"name\": \"What is your native language\",\n      \"spoken_name\": \"Native Language\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Whatisyournativelanguage(includedialect,ifapplicable)_[0]\",\n      \"description\": \"Your native language, including dialect if applicable\"\n    },\n    {\n      \"id\": \"fluent_in_english\",\n      \"name\": \"Are you fluent in English?\",\n      \"spoken_name\": \"Fluent in English\",\n      \"type\": \"radio\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"AreyoufluentinEnglish_[0]\",\n      \"description\": \"Are you fluent in English?\",\n      \"group_id\": \"fluent_in_english\",\n      \"group_label\": \"Fluent in English\",\n      \"group_kind\": \"radio\",\n      \"options\": [\n        {\n          \"value\": \"yes\",\n          \"label\": \"Yes\",\n          \"pdf_field_name\": \"Yes[0]\"\n        },\n        {\n          \"value\": \"no\",\n          \"label\": \"No\",\n          \"pdf_field_name\": \"No[0]\"\n        }\n      ]\n    },\n    {\n      \"id\": \"other_languages\",\n      \"name\": \"What other languages do you speak fluently?\",\n      \"spoken_name\": \"Other Languages\",\n      \"type\": \"text\",\n      \"section_id\": \"part_ai_information_about_you\",\n      \"section_label\": \"Part A.I. Information About You\",\n      \"pdf_field_name\": \"Whatotherlanguagesdoyouspeakfluently_[0]\",\n      \"description\": \"Other languages you speak fluently\"\n    }\n  ],\n  \"notes\": \"Extracted all fields from Part A.I. Information About You. Consolidated Yes/No checkboxes into radio groups. Detected the entry history table and defined its columns. Inferred semantic types for date, tel, and textarea fields.\"\n}"
+}
