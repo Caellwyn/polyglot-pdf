@@ -47,7 +47,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const [completedSections, setCompletedSections] = useState<Set<number>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
-	const [pushToTalkMode, setPushToTalkMode] = useState(false)
+	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
@@ -813,6 +813,47 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 					)}
 				</div>
 
+				{/* Push-to-Talk Toggle */}
+				<div className="vff-ptt-toggle-container">
+					<label className="vff-ptt-toggle-label">
+						<span className="vff-ptt-label-text">Input Mode:</span>
+						<div className="vff-ptt-toggle-switch">
+							<input
+								type="checkbox"
+								checked={pushToTalkMode}
+								onChange={handlePushToTalkToggle}
+								className="vff-ptt-toggle-input"
+								onKeyDown={(e) => {
+									if (e.code === 'Space') {
+										e.preventDefault() // Prevent spacebar from toggling checkbox when focused
+									}
+								}}
+							/>
+							<span className="vff-ptt-toggle-slider">
+								<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-auto">🎤</span>
+								<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
+							</span>
+						</div>
+						<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+					</label>
+				</div>
+
+				{/* Push-to-Talk Button (only visible in PTT mode) */}
+				{pushToTalkMode && isConnected && (
+					<div className="vff-ptt-button-container">
+						<button
+							className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
+							onMouseDown={handlePushToTalkPress}
+							onMouseUp={handlePushToTalkRelease}
+							onMouseLeave={handlePushToTalkRelease}
+							onTouchStart={handlePushToTalkPress}
+							onTouchEnd={handlePushToTalkRelease}
+						>
+							{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
+						</button>
+					</div>
+				)}
+
 				{/* Controls */}
 				<div className="vff-controls">
 					{!isConnected && !isPausedState ? (
@@ -1191,6 +1232,118 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 					color: #666;
 					font-style: italic;
 					text-align: center;
+				}
+
+				/* PTT Toggle Container */
+				.vff-ptt-toggle-container {
+					padding: 12px;
+					background: #f8f9ff;
+					border-radius: 8px;
+					border: 1px solid #d0dbff;
+					margin-bottom: 12px;
+				}
+
+				.vff-ptt-toggle-label {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 10px;
+					cursor: pointer;
+				}
+
+				.vff-ptt-label-text {
+					font-size: 13px;
+					font-weight: 600;
+					color: #374151;
+				}
+
+				.vff-ptt-toggle-switch {
+					position: relative;
+					display: inline-block;
+					width: 50px;
+					height: 24px;
+				}
+
+				.vff-ptt-toggle-input {
+					opacity: 0;
+					width: 0;
+					height: 0;
+				}
+
+				.vff-ptt-toggle-slider {
+					position: absolute;
+					cursor: pointer;
+					top: 0;
+					left: 0;
+					right: 0;
+					bottom: 0;
+					background-color: #667eea;
+					transition: 0.3s;
+					border-radius: 24px;
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 0 4px;
+				}
+
+				.vff-ptt-toggle-slider:before {
+					content: "";
+					position: absolute;
+					height: 18px;
+					width: 18px;
+					left: 3px;
+					bottom: 3px;
+					background-color: white;
+					transition: 0.3s;
+					border-radius: 50%;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+					z-index: 1;
+				}
+
+				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider {
+					background-color: #4c51bf;
+				}
+
+				.vff-ptt-toggle-input:checked + .vff-ptt-toggle-slider:before {
+					transform: translateX(26px);
+				}
+
+				.vff-ptt-toggle-input:focus + .vff-ptt-toggle-slider {
+					box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+				}
+
+				.vff-ptt-toggle-icon {
+					font-size: 12px;
+					opacity: 0.7;
+					transition: opacity 0.3s;
+				}
+
+				.vff-ptt-toggle-icon-auto {
+					order: 1;
+				}
+
+				.vff-ptt-toggle-icon-ptt {
+					order: 2;
+				}
+
+				.vff-ptt-toggle-input:not(:checked) ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-auto {
+					opacity: 1;
+				}
+
+				.vff-ptt-toggle-input:checked ~ .vff-ptt-toggle-slider .vff-ptt-toggle-icon-ptt {
+					opacity: 1;
+				}
+
+				.vff-ptt-mode-label {
+					font-size: 13px;
+					font-weight: 600;
+					color: #6b7280;
+					min-width: 40px;
+					text-align: right;
+				}
+
+				.vff-ptt-button-container {
+					margin-bottom: 12px;
 				}
 
 				.vff-ptt-button {
