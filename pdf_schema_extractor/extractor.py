@@ -735,17 +735,24 @@ def extract_schema(pdf_path: str) -> FormSchema:
     return schema
 
 
+import argparse
+import sys
+
 if __name__ == "__main__":
-    # This is an example of how to use the function.
-    # The user will need to provide the correct paths.
-    # I will need to find the correct path to the PDF.
-    pdf_file_path = "C:\\Users\\caell\\OneDrive\\AILearning\\polyglot-pdf\\example_pdfs\\i-589\\i-589-asylum-application.pdf"
-    output_schema_path = "C:\\Users\\caell\\OneDrive\\AILearning\\polyglot-pdf\\pdf_schema_extractor\\test_schemas\\extracted_schema.json"
+    parser = argparse.ArgumentParser(description="Extract schema from PDF form")
+    parser.add_argument("pdf_path", help="Path to the PDF file to extract")
+    parser.add_argument(
+        "-o", "--output",
+        default="extracted_schema.json",
+        help="Output path for schema JSON (default: extracted_schema.json)"
+    )
     
-    print(f"Extracting schema from {pdf_file_path}...")
-    schema_data = extract_schema(pdf_file_path)
+    args = parser.parse_args()
     
-    with open(output_schema_path, "w") as f:
+    print(f"Extracting schema from {args.pdf_path}...")
+    schema_data = extract_schema(args.pdf_path)
+    
+    with open(args.output, "w") as f:
         json.dump(schema_data, f, indent=2)
         
-    print(f"Schema extracted and saved to {output_schema_path}")
+    print(f"Schema extracted and saved to {args.output}")

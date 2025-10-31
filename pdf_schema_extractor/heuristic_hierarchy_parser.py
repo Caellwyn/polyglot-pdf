@@ -17,13 +17,18 @@ def parse_tooltip_hierarchy(tooltip: str) -> Dict[str, Any]:
     """
     Parse tooltip into hierarchical structure.
 
+    Handles multiple government form formats:
+    - i-589: "Part. A. 1. Information About You. 1. Enter..."
+    - i-90: "Part 1. Information About You. Mailing Address. 6. A. Enter..."
+
     Returns:
         {
-            "part": "A" | "B" | "C" | "D" | null,
+            "part": "A" | "1" | "2" | null,  (letter or number)
             "section": "1" | "2" | ... | null,
             "question": "1" | "2" | ... | null,
             "sub_question": "A" | "B" | ... | null,
             "section_name": "Information About You" | null,
+            "subsection_name": "Mailing Address" | null,
             "spoken_name": "Alien Registration Number" | tooltip,
             "raw_tooltip": original tooltip
         }
@@ -34,6 +39,7 @@ def parse_tooltip_hierarchy(tooltip: str) -> Dict[str, Any]:
         "question": None,
         "sub_question": None,
         "section_name": None,
+        "subsection_name": None,
         "spoken_name": None,
         "raw_tooltip": tooltip,
         "parse_method": "regex"
@@ -42,58 +48,91 @@ def parse_tooltip_hierarchy(tooltip: str) -> Dict[str, Any]:
     if not tooltip:
         return result
 
-    # Pattern 1: Full hierarchy - Part A. 1. Section Name. 1. A. Enter ...
+    # Remove common noise patterns
+    clean_tooltip = re.sub(r'^NOTE:\s*', '', tooltip, flags=re.IGNORECASE)
+    clean_tooltip = clean_tooltip.strip()
+
+    # Pattern 1: i-589 style - Part. A. 1. Section Name. 1. A. Enter ...
     # Example: "Part. A. 1. Information About You. 1. Enter Alien Registration Number..."
-    # Sub-question must be followed by period to avoid matching first letter of words
     match = re.match(
-        r'Part\.?\s*([A-D])\.?\s*(\d+)?\.\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
-        tooltip,
+        r'Part\.?\s*([A-Z])\.?\s*(\d+)\.?\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
+        clean_tooltip,
         re.IGNORECASE
     )
-
     if match:
-        result["part"] = match.group(1)
+        result["part"] = match.group(1).upper()
         result["section"] = match.group(2)
         result["section_name"] = match.group(3).strip()
         result["question"] = match.group(4)
-        result["sub_question"] = match.group(5)
+        result["sub_question"] = match.group(5).upper() if match.group(5) else None
         description = match.group(6)
-
-        # Extract spoken name from description
         result["spoken_name"] = extract_spoken_name(description)
         return result
 
-    # Pattern 2: Part + Section Name + Question - Part B. Section Name. 2. A. ...
-    # Example: "Part B. Information About Your Application. 2. Have you..."
+    # Pattern 2: i-90 style with subsection - Part 1. Section. Subsection. 6. A. Enter...
+    # Example: "Part 1. Information About You. Mailing Address. 6. A. Enter In Care Of Name."
     match = re.match(
-        r'Part\.?\s*([A-D])\.?\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
-        tooltip,
+        r'Part\.?\s*(\d+)\.?\s*([^.]+?)\.\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
+        clean_tooltip,
         re.IGNORECASE
     )
+    if match:
+        # Check if group 3 looks like a subsection (not a sentence starting with action verb)
+        potential_subsection = match.group(3).strip()
+        if not re.match(r'^(Enter|Select|Provide|Check|List|Complete|Print)', potential_subsection, re.IGNORECASE):
+            result["part"] = match.group(1)
+            result["section_name"] = match.group(2).strip()
+            result["subsection_name"] = potential_subsection
+            result["question"] = match.group(4)
+            result["sub_question"] = match.group(5).upper() if match.group(5) else None
+            description = match.group(6)
+            result["spoken_name"] = extract_spoken_name(description)
+            return result
 
+    # Pattern 3: i-90 style without subsection - Part 1. Section Name. 1. Enter...
+    # Example: "Part 1. Information About You. 1. Enter Alien Registration Number."
+    match = re.match(
+        r'Part\.?\s*(\d+)\.?\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
+        clean_tooltip,
+        re.IGNORECASE
+    )
     if match:
         result["part"] = match.group(1)
         result["section_name"] = match.group(2).strip()
         result["question"] = match.group(3)
-        result["sub_question"] = match.group(4)
+        result["sub_question"] = match.group(4).upper() if match.group(4) else None
         description = match.group(5)
-
         result["spoken_name"] = extract_spoken_name(description)
         return result
 
-    # Pattern 3: Part + Section Name only - Part D. Your Signature. ...
-    # Example: "Part D. Your Signature. Print your Complete Name."
+    # Pattern 4: i-589 style without section number - Part B. Section Name. 2. A. ...
+    # Example: "Part B. Information About Your Application. 2. Have you..."
     match = re.match(
-        r'Part\.?\s*([A-D])\.?\s*([^.]+?)\.\s*(.+)',
-        tooltip,
+        r'Part\.?\s*([A-Z])\.?\s*([^.]+?)\.\s*(\d+)\.?\s*(?:([A-Z])\.)?\s*(.+)',
+        clean_tooltip,
         re.IGNORECASE
     )
-
     if match:
-        result["part"] = match.group(1)
+        result["part"] = match.group(1).upper()
+        result["section_name"] = match.group(2).strip()
+        result["question"] = match.group(3)
+        result["sub_question"] = match.group(4).upper() if match.group(4) else None
+        description = match.group(5)
+        result["spoken_name"] = extract_spoken_name(description)
+        return result
+
+    # Pattern 5: Part + Section/Subsection only (no question number)
+    # Example: "Part D. Your Signature. Print your Complete Name."
+    # Example: "Part 1. Information About You. Your Full Name. NOTE: Your card will be..."
+    match = re.match(
+        r'Part\.?\s*([A-Z]|\d+)\.?\s*([^.]+?)\.\s*(.+)',
+        clean_tooltip,
+        re.IGNORECASE
+    )
+    if match:
+        result["part"] = match.group(1).upper() if match.group(1).isalpha() else match.group(1)
         result["section_name"] = match.group(2).strip()
         description = match.group(3)
-
         result["spoken_name"] = extract_spoken_name(description)
         return result
 
@@ -184,12 +223,16 @@ if __name__ == "__main__":
     # Stats
     with_part = sum(1 for h in hierarchies.values() if h['part'])
     with_section = sum(1 for h in hierarchies.values() if h['section'])
+    with_section_name = sum(1 for h in hierarchies.values() if h['section_name'])
+    with_subsection = sum(1 for h in hierarchies.values() if h.get('subsection_name'))
     with_question = sum(1 for h in hierarchies.values() if h['question'])
     with_subq = sum(1 for h in hierarchies.values() if h['sub_question'])
 
     print(f"\nParsing statistics:")
     print(f"  Fields with Part: {with_part}/{len(hierarchies)}")
-    print(f"  Fields with Section: {with_section}/{len(hierarchies)}")
+    print(f"  Fields with Section ID: {with_section}/{len(hierarchies)}")
+    print(f"  Fields with Section Name: {with_section_name}/{len(hierarchies)}")
+    print(f"  Fields with Subsection: {with_subsection}/{len(hierarchies)}")
     print(f"  Fields with Question: {with_question}/{len(hierarchies)}")
     print(f"  Fields with Sub-question: {with_subq}/{len(hierarchies)}")
 
@@ -197,8 +240,23 @@ if __name__ == "__main__":
     print(f"\nSample parsed hierarchies:")
     for field_name, hier in list(hierarchies.items())[:5]:
         print(f"\n{field_name}:")
-        print(f"  Path: Part {hier['part']} > Section {hier['section']} > Q{hier['question']} > {hier['sub_question']}")
-        print(f"  Name: {hier['spoken_name']}")
+        # Build hierarchical path
+        path_parts = []
+        if hier['part']:
+            path_parts.append(f"Part {hier['part']}")
+        if hier['section']:
+            path_parts.append(f"Sec {hier['section']}")
+        if hier['section_name']:
+            path_parts.append(hier['section_name'])
+        if hier.get('subsection_name'):
+            path_parts.append(hier['subsection_name'])
+        if hier['question']:
+            path_parts.append(f"Q{hier['question']}")
+        if hier['sub_question']:
+            path_parts.append(hier['sub_question'])
+
+        print(f"  Path: {' > '.join(path_parts) if path_parts else 'No structure'}")
+        print(f"  Spoken: {hier['spoken_name']}")
 
     # Save
     with open(output_path, 'w', encoding='utf-8') as f:

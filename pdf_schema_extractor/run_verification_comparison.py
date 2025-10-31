@@ -4,6 +4,7 @@ Run verification tests on both canonical and Gemini-extracted schemas.
 Compare results to identify synergies between heuristic and LLM approaches.
 """
 
+import argparse
 import json
 from pathlib import Path
 from schema_verifier import verify_schema, VerificationReport
@@ -173,25 +174,35 @@ def main():
     """Run verification comparison."""
 
     # Paths
-    pdf_path = "test_schemas/test_pdfs/i-589.pdf"
-    canonical_schema_path = "test_schemas/test_pdfs/i589_schema.json"
-    gemini_schema_path = "gemini_extraction_output/gemini_extracted_schema.json"
-
+    parser = argparse.ArgumentParser(description="Process PDF schema extraction")
+    parser.add_argument("pdf_path", help="Path to the PDF file")
+    parser.add_argument(
+        "-c", "--canonical",
+        required=True,
+        help="Path to canonical schema JSON"
+    )
+    parser.add_argument(
+        "-g", "--gemini",
+        default="gemini_extraction_output/gemini_extracted_schema.json",
+        help="Path for Gemini extracted schema output (default: gemini_extraction_output/gemini_extracted_schema.json)"
+    )
     canonical_report_path = "verification_canonical.json"
     gemini_report_path = "verification_gemini.json"
 
     print_section_header("VERIFICATION TEST SUITE")
-    print(f"\nPDF: {pdf_path}")
-    print(f"Canonical Schema: {canonical_schema_path}")
-    print(f"Gemini Schema: {gemini_schema_path}")
+    print(f"\nPDF: {args.pdf_path}")
+    print(f"Canonical Schema: {args.canonical_schema_path}")
+    print(f"Gemini Schema: {args.gemini_schema_path}")
+
+
 
     # Verify canonical schema
     print_section_header("VERIFYING CANONICAL SCHEMA")
-    canonical_report = verify_schema(pdf_path, canonical_schema_path, canonical_report_path)
+    canonical_report = verify_schema(args.pdf_path, args.canonical, canonical_report_path)
 
     # Verify Gemini schema
     print_section_header("VERIFYING GEMINI SCHEMA")
-    gemini_report = verify_schema(pdf_path, gemini_schema_path, gemini_report_path)
+    gemini_report = verify_schema(args.pdf_path, args.gemini, gemini_report_path)
 
     # Compare results
     compare_reports(canonical_report_path, gemini_report_path)

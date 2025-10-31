@@ -67,7 +67,7 @@ class TextareaSize(str, Enum):
     SMALL = "small"    # 2 rows - for short responses
     MEDIUM = "medium"  # 5 rows - for moderate responses
     LARGE = "large"    # 10 rows - for long responses
-    XLARGE = "xlarge"  # 20+ rows - for very long narratives (Part B questions)
+    XLARGE = "xlarge"  # 20+ rows - for very long narratives
 
 
 class ConditionalOperator(str, Enum):
@@ -85,10 +85,9 @@ class ConditionalOperator(str, Enum):
 
 
 class SupplementType(str, Enum):
+    ## Not fully implemented yet
     """Types of supplement pages for overflow content"""
-    SUPPLEMENT_A = "supplement_a"  # Additional children (I-589)
-    SUPPLEMENT_B = "supplement_b"  # Additional information/narratives (I-589)
-
+    TYPE = "supplement_a"  # ex. Additional children (I-589)
 
 class GroupKind(str, Enum):
     """Type of field grouping"""
@@ -248,6 +247,14 @@ class FormField(BaseModel):
     type: FieldType
     validation: Optional[ValidationRules] = None
 
+    # Field behavior flags (from PDF field_flags)
+    read_only: bool = Field(default=False, description="Field is read-only (may be conditionally unlockable)")
+    required: bool = Field(default=False, description="Field is required")
+    multiline: bool = Field(default=False, description="Text field allows multiple lines")
+    is_comb: bool = Field(default=False, description="Fixed-width character cells (e.g., for SSN)")
+    no_toggle_off: bool = Field(default=False, description="Radio button can't be toggled off once selected")
+    hidden: bool = Field(default=False, description="Field is hidden from view")
+
     # Organization
     section_id: str = Field(description="Which section this belongs to")
     section_label: Optional[str] = Field(None, description="Section display name")
@@ -257,6 +264,10 @@ class FormField(BaseModel):
 
     # Conditional display
     show_if: Optional[ConditionalDisplay] = None
+    conditional_fields: Optional[List[str]] = Field(
+        None,
+        description="List of field IDs conditionally shown based on this field"
+    )
 
     # Help and guidance
     help: Optional[FieldHelp] = None
@@ -298,10 +309,10 @@ class FormField(BaseModel):
     multi_entry: Optional[MultiEntryConfig] = None
 
     # Multi-language support
-    name_translations: Optional[Dict[str, str]] = Field(
-        None,
-        description='Translations of field name for multi-language support (e.g., {"es": "Nombre Completo"})'
-    )
+    # name_translations: Optional[Dict[str, str]] = Field(
+    #     None,
+    #     description='Translations of field name for multi-language support (e.g., {"es": "Nombre Completo"})'
+    # )
 
     # Auto-fill logic
     auto_fill_na: Optional[bool] = Field(
@@ -364,6 +375,7 @@ class FormSupplement(BaseModel):
     trigger_condition: Optional[str] = Field(None, description="When to use this supplement")
     fields: List[str] = Field(description="Field IDs available in supplement")
     page_number: Optional[int] = Field(None, description="PDF page number")
+    supplement_type: Optional[SupplementType] = None
 
 
 class ExtractionInfo(BaseModel):

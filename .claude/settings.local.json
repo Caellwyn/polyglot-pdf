@@ -5,7 +5,10 @@
       "Bash(python:*)",
       "Bash(python -m pytest:*)",
       "Bash(git add:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(git commit:*)",
+      "Bash(timeout 180 python:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
