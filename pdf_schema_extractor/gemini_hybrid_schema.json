@@ -1,0 +1,4247 @@
+{
+  "total_fields": 278,
+  "fields": [
+    {
+      "id": "torture_convention",
+      "name": "Convention Against Torture",
+      "spoken_name": "Convention Against Torture",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBox31[0]",
+      "consolidated_widgets": [
+        "CheckBox31[0]"
+      ],
+      "description": "Check this box if you also want to apply for withholding of removal under the Convention Against Torture."
+    },
+    {
+      "id": "uscis_online_account_number",
+      "name": "USCIS Online Account Number",
+      "spoken_name": "uscis online account number",
+      "type": "text",
+      "pdf_field_name": "TextField1[8]",
+      "consolidated_widgets": [
+        "TextField1[8]"
+      ],
+      "description": "Enter your USCIS online account number, if any."
+    },
+    {
+      "id": "alien_registration_number",
+      "name": "Alien Registration Number",
+      "spoken_name": "alien registration number",
+      "type": "text",
+      "pdf_field_name": "PtAILine1_ANumber[0]",
+      "consolidated_widgets": [
+        "PtAILine1_ANumber[0]"
+      ],
+      "description": "Enter your Alien Registration Number (A-Number), if any."
+    },
+    {
+      "id": "social_security_number",
+      "name": "Social Security Number",
+      "spoken_name": "social security number",
+      "type": "text",
+      "pdf_field_name": "TextField1[0]",
+      "consolidated_widgets": [
+        "TextField1[0]"
+      ],
+      "description": "Enter your U.S. Social Security Number, if any."
+    },
+    {
+      "id": "last_name",
+      "name": "Last Name",
+      "spoken_name": "last name",
+      "type": "text",
+      "pdf_field_name": "PtAILine4_LastName[0]",
+      "consolidated_widgets": [
+        "PtAILine4_LastName[0]"
+      ],
+      "description": "Enter your complete last name."
+    },
+    {
+      "id": "first_name",
+      "name": "First Name",
+      "spoken_name": "first name",
+      "type": "text",
+      "pdf_field_name": "PtAILine5_FirstName[0]",
+      "consolidated_widgets": [
+        "PtAILine5_FirstName[0]"
+      ],
+      "description": "Enter your first name."
+    },
+    {
+      "id": "middle_name",
+      "name": "Middle Name",
+      "spoken_name": "middle name",
+      "type": "text",
+      "pdf_field_name": "PtAILine6_MiddleName[0]",
+      "consolidated_widgets": [
+        "PtAILine6_MiddleName[0]"
+      ],
+      "description": "Enter your middle name."
+    },
+    {
+      "id": "other_names_used",
+      "name": "Other Names Used",
+      "spoken_name": "other names used",
+      "type": "text",
+      "pdf_field_name": "TextField1[1]",
+      "consolidated_widgets": [
+        "TextField1[1]"
+      ],
+      "description": "Enter any other names you have used (include maiden name and aliases)."
+    },
+    {
+      "id": "residence_street_number_and_name",
+      "name": "Residence Street Number and Name",
+      "spoken_name": "residence street number and name",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_StreetNumandName[0]",
+      "consolidated_widgets": [
+        "PtAILine8_StreetNumandName[0]"
+      ],
+      "description": "Enter the street number and name of your residence in the U.S."
+    },
+    {
+      "id": "residence_apartment_number",
+      "name": "Residence Apartment Number",
+      "spoken_name": "residence apartment number",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_AptNumber[0]",
+      "consolidated_widgets": [
+        "PtAILine8_AptNumber[0]"
+      ],
+      "description": "Enter the apartment number of your residence in the U.S."
+    },
+    {
+      "id": "residence_city",
+      "name": "Residence City",
+      "spoken_name": "residence city",
+      "type": "text",
+      "pdf_field_name": "TextField1[2]",
+      "consolidated_widgets": [
+        "TextField1[2]"
+      ],
+      "description": "Enter the city of your residence in the U.S."
+    },
+    {
+      "id": "residence_state",
+      "name": "Residence State",
+      "spoken_name": "residence state",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_State[0]",
+      "consolidated_widgets": [
+        "PtAILine8_State[0]"
+      ],
+      "description": "Enter the state of your residence in the U.S."
+    },
+    {
+      "id": "residence_zip_code",
+      "name": "Residence Zip Code",
+      "spoken_name": "residence zip code",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_Zipcode[0]",
+      "consolidated_widgets": [
+        "PtAILine8_Zipcode[0]"
+      ],
+      "description": "Enter the zip code of your residence in the U.S."
+    },
+    {
+      "id": "residence_area_code",
+      "name": "Residence Area Code",
+      "spoken_name": "residence area code",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_AreaCode[0]",
+      "consolidated_widgets": [
+        "PtAILine8_AreaCode[0]"
+      ],
+      "description": "Enter the area code of your residence telephone number."
+    },
+    {
+      "id": "residence_telephone_number",
+      "name": "Residence Telephone Number",
+      "spoken_name": "residence telephone number",
+      "type": "text",
+      "pdf_field_name": "PtAILine8_TelephoneNumber[0]",
+      "consolidated_widgets": [
+        "PtAILine8_TelephoneNumber[0]"
+      ],
+      "description": "Enter the 7-digit telephone number of your residence."
+    },
+    {
+      "id": "mailing_in_care_of",
+      "name": "Mailing In Care Of",
+      "spoken_name": "mailing in care of",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_InCareOf[0]",
+      "consolidated_widgets": [
+        "PtAILine9_InCareOf[0]"
+      ],
+      "description": "Enter the \"In Care Of\" name for your mailing address, if applicable."
+    },
+    {
+      "id": "mailing_street_number_and_name",
+      "name": "Mailing Street Number and Name",
+      "spoken_name": "mailing street number and name",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_StreetNumandName[0]",
+      "consolidated_widgets": [
+        "PtAILine9_StreetNumandName[0]"
+      ],
+      "description": "Enter the street number and name for your mailing address."
+    },
+    {
+      "id": "mailing_apartment_number",
+      "name": "Mailing Apartment Number",
+      "spoken_name": "mailing apartment number",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_AptNumber[0]",
+      "consolidated_widgets": [
+        "PtAILine9_AptNumber[0]"
+      ],
+      "description": "Enter the apartment number for your mailing address."
+    },
+    {
+      "id": "mailing_city",
+      "name": "Mailing City",
+      "spoken_name": "mailing city",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_City[0]",
+      "consolidated_widgets": [
+        "PtAILine9_City[0]"
+      ],
+      "description": "Enter the city for your mailing address."
+    },
+    {
+      "id": "mailing_state",
+      "name": "Mailing State",
+      "spoken_name": "mailing state",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_State[0]",
+      "consolidated_widgets": [
+        "PtAILine9_State[0]"
+      ],
+      "description": "Enter the state for your mailing address."
+    },
+    {
+      "id": "mailing_zip_code",
+      "name": "Mailing Zip Code",
+      "spoken_name": "mailing zip code",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_ZipCode[0]",
+      "consolidated_widgets": [
+        "PtAILine9_ZipCode[0]"
+      ],
+      "description": "Enter the zip code for your mailing address."
+    },
+    {
+      "id": "mailing_area_code",
+      "name": "Mailing Area Code",
+      "spoken_name": "mailing area code",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_AreaCode[0]",
+      "consolidated_widgets": [
+        "PtAILine9_AreaCode[0]"
+      ],
+      "description": "Enter the area code for your mailing telephone number."
+    },
+    {
+      "id": "mailing_telephone_number",
+      "name": "Mailing Telephone Number",
+      "spoken_name": "mailing telephone number",
+      "type": "text",
+      "pdf_field_name": "PtAILine9_TelephoneNumbe[0]",
+      "consolidated_widgets": [
+        "PtAILine9_TelephoneNumbe[0]"
+      ],
+      "description": "Enter the 7-digit telephone number for your mailing address."
+    },
+    {
+      "id": "sex",
+      "name": "Sex",
+      "spoken_name": "sex",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PartALine9Sex[0]",
+        "PartALine9Sex[1]"
+      ],
+      "group_id": "sex",
+      "group_label": "Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "PartALine9Sex[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "PartALine9Sex[1]"
+        }
+      ]
+    },
+    {
+      "id": "marital_status",
+      "name": "Marital Status",
+      "spoken_name": "marital status",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "Marital[0]",
+        "Marital[1]",
+        "Marital[2]",
+        "Marital[3]"
+      ],
+      "group_id": "marital_status",
+      "group_label": "Marital Status",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "single",
+          "label": "Single",
+          "pdf_field_name": "Marital[0]"
+        },
+        {
+          "value": "married",
+          "label": "Married",
+          "pdf_field_name": "Marital[1]"
+        },
+        {
+          "value": "divorced",
+          "label": "Divorced",
+          "pdf_field_name": "Marital[2]"
+        },
+        {
+          "value": "widowed",
+          "label": "Widowed",
+          "pdf_field_name": "Marital[3]"
+        }
+      ]
+    },
+    {
+      "id": "date_of_birth",
+      "name": "Date of Birth",
+      "spoken_name": "date of birth",
+      "type": "date",
+      "pdf_field_name": "DateTimeField1[0]",
+      "consolidated_widgets": [
+        "DateTimeField1[0]"
+      ],
+      "description": "Enter your date of birth."
+    },
+    {
+      "id": "city_and_country_of_birth",
+      "name": "City and Country of Birth",
+      "spoken_name": "city and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField1[4]",
+      "consolidated_widgets": [
+        "TextField1[4]"
+      ],
+      "description": "Enter your city and country of birth."
+    },
+    {
+      "id": "present_nationality",
+      "name": "Present Nationality",
+      "spoken_name": "present nationality",
+      "type": "text",
+      "pdf_field_name": "TextField1[3]",
+      "consolidated_widgets": [
+        "TextField1[3]"
+      ],
+      "description": "Enter your present nationality (citizenship)."
+    },
+    {
+      "id": "nationality_at_birth",
+      "name": "Nationality at Birth",
+      "spoken_name": "nationality at birth",
+      "type": "text",
+      "pdf_field_name": "TextField1[5]",
+      "consolidated_widgets": [
+        "TextField1[5]"
+      ],
+      "description": "Enter your nationality at birth."
+    },
+    {
+      "id": "race_ethnic_or_tribal_group",
+      "name": "Race, Ethnic, or Tribal Group",
+      "spoken_name": "race ethnic or tribal group",
+      "type": "text",
+      "pdf_field_name": "TextField1[6]",
+      "consolidated_widgets": [
+        "TextField1[6]"
+      ],
+      "description": "Enter your race, ethnic, or tribal group."
+    },
+    {
+      "id": "religion",
+      "name": "Religion",
+      "spoken_name": "religion",
+      "type": "text",
+      "pdf_field_name": "TextField1[7]",
+      "consolidated_widgets": [
+        "TextField1[7]"
+      ],
+      "description": "Enter your religion."
+    },
+    {
+      "id": "immigration_court_proceedings",
+      "name": "Immigration Court Proceedings",
+      "spoken_name": "immigration court proceedings",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox3[0]",
+        "CheckBox3[2]",
+        "CheckBox3[1]"
+      ],
+      "group_id": "immigration_court_proceedings",
+      "group_label": "Immigration Court Proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "never",
+          "label": "I have never been in Immigration Court proceedings.",
+          "pdf_field_name": "CheckBox3[0]"
+        },
+        {
+          "value": "now",
+          "label": "I am now in Immigration Court proceedings.",
+          "pdf_field_name": "CheckBox3[2]"
+        },
+        {
+          "value": "past",
+          "label": "I am not now in Immigration Court proceedings, but I have been in the past.",
+          "pdf_field_name": "CheckBox3[1]"
+        }
+      ]
+    },
+    {
+      "id": "last_leave_country_date",
+      "name": "Last Leave Country Date",
+      "spoken_name": "last leave country date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField6[0]",
+      "consolidated_widgets": [
+        "DateTimeField6[0]"
+      ],
+      "description": "Enter the date you last left your country."
+    },
+    {
+      "id": "current_i_94_number",
+      "name": "Current I-94 Number",
+      "spoken_name": "current i 94 number",
+      "type": "text",
+      "pdf_field_name": "TextField3[0]",
+      "consolidated_widgets": [
+        "TextField3[0]"
+      ],
+      "description": "Enter your current I-94 Number, if any."
+    },
+    {
+      "id": "entry_1_date",
+      "name": "Entry 1 Date",
+      "spoken_name": "entry 1 date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField2[0]",
+      "consolidated_widgets": [
+        "DateTimeField2[0]"
+      ],
+      "description": "Enter the date of your most recent entry into the U.S."
+    },
+    {
+      "id": "entry_1_place",
+      "name": "Entry 1 Place",
+      "spoken_name": "entry 1 place",
+      "type": "text",
+      "pdf_field_name": "TextField4[0]",
+      "consolidated_widgets": [
+        "TextField4[0]"
+      ],
+      "description": "Enter the place of your most recent entry into the U.S."
+    },
+    {
+      "id": "entry_1_status",
+      "name": "Entry 1 Status",
+      "spoken_name": "entry 1 status",
+      "type": "text",
+      "pdf_field_name": "TextField4[1]",
+      "consolidated_widgets": [
+        "TextField4[1]"
+      ],
+      "description": "Enter your status at the time of your most recent entry into the U.S."
+    },
+    {
+      "id": "entry_1_date_status_expires",
+      "name": "Entry 1 Date Status Expires",
+      "spoken_name": "entry 1 date status expires",
+      "type": "date",
+      "pdf_field_name": "DateTimeField2[1]",
+      "consolidated_widgets": [
+        "DateTimeField2[1]"
+      ],
+      "description": "Enter the date your status expires for your most recent entry into the U.S."
+    },
+    {
+      "id": "entry_2_date",
+      "name": "Entry 2 Date",
+      "spoken_name": "entry 2 date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField3[0]",
+      "consolidated_widgets": [
+        "DateTimeField3[0]"
+      ],
+      "description": "Enter the date of your second most recent entry into the U.S."
+    },
+    {
+      "id": "entry_2_place",
+      "name": "Entry 2 Place",
+      "spoken_name": "entry 2 place",
+      "type": "text",
+      "pdf_field_name": "TextField4[2]",
+      "consolidated_widgets": [
+        "TextField4[2]"
+      ],
+      "description": "Enter the place of your second most recent entry into the U.S."
+    },
+    {
+      "id": "entry_2_status",
+      "name": "Entry 2 Status",
+      "spoken_name": "entry 2 status",
+      "type": "text",
+      "pdf_field_name": "TextField4[3]",
+      "consolidated_widgets": [
+        "TextField4[3]"
+      ],
+      "description": "Enter your status at the time of your second most recent entry into the U.S."
+    },
+    {
+      "id": "entry_3_date",
+      "name": "Entry 3 Date",
+      "spoken_name": "entry 3 date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField4[0]",
+      "consolidated_widgets": [
+        "DateTimeField4[0]"
+      ],
+      "description": "Enter the date of your third most recent entry into the U.S."
+    },
+    {
+      "id": "entry_3_place",
+      "name": "Entry 3 Place",
+      "spoken_name": "entry 3 place",
+      "type": "text",
+      "pdf_field_name": "TextField4[4]",
+      "consolidated_widgets": [
+        "TextField4[4]"
+      ],
+      "description": "Enter the place of your third most recent entry into the U.S."
+    },
+    {
+      "id": "entry_3_status",
+      "name": "Entry 3 Status",
+      "spoken_name": "entry 3 status",
+      "type": "text",
+      "pdf_field_name": "TextField4[5]",
+      "consolidated_widgets": [
+        "TextField4[5]"
+      ],
+      "description": "Enter your status at the time of your third most recent entry into the U.S."
+    },
+    {
+      "id": "passport_or_travel_document_country",
+      "name": "Passport or Travel Document Country",
+      "spoken_name": "passport or travel document country",
+      "type": "text",
+      "pdf_field_name": "TextField5[0]",
+      "consolidated_widgets": [
+        "TextField5[0]"
+      ],
+      "description": "Country that issued your last passport or travel document"
+    },
+    {
+      "id": "passport_number",
+      "name": "Passport Number",
+      "spoken_name": "passport number",
+      "type": "text",
+      "pdf_field_name": "TextField5[1]",
+      "consolidated_widgets": [
+        "TextField5[1]"
+      ],
+      "description": "Enter your passport number"
+    },
+    {
+      "id": "expiration_date",
+      "name": "Expiration Date",
+      "spoken_name": "expiration date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField2[2]",
+      "consolidated_widgets": [
+        "DateTimeField2[2]"
+      ],
+      "description": "Enter the expiration date of your passport or travel document"
+    },
+    {
+      "id": "travel_document_number",
+      "name": "Travel Document Number",
+      "spoken_name": "travel document number",
+      "type": "text",
+      "pdf_field_name": "TextField5[2]",
+      "consolidated_widgets": [
+        "TextField5[2]"
+      ],
+      "description": "Enter your travel document number"
+    },
+    {
+      "id": "native_language",
+      "name": "Native Language",
+      "spoken_name": "native language",
+      "type": "text",
+      "pdf_field_name": "TextField7[0]",
+      "consolidated_widgets": [
+        "TextField7[0]"
+      ],
+      "description": "Enter your native language"
+    },
+    {
+      "id": "other_languages",
+      "name": "Other Languages",
+      "spoken_name": "other languages",
+      "type": "text",
+      "pdf_field_name": "TextField7[1]",
+      "consolidated_widgets": [
+        "TextField7[1]"
+      ],
+      "description": "Enter other languages you speak fluently"
+    },
+    {
+      "id": "fluent_in_english",
+      "name": "Fluent in English",
+      "spoken_name": "fluent in english",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox4[0]",
+        "CheckBox4[1]"
+      ],
+      "group_id": "fluent_in_english",
+      "group_label": "Are you fluent in English?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "CheckBox4[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "CheckBox4[1]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_not_married",
+      "name": "Spouse Not Married",
+      "spoken_name": "spouse not married",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBox5[0]",
+      "consolidated_widgets": [
+        "CheckBox5[0]"
+      ],
+      "description": "Check this box if you are not married"
+    },
+    {
+      "id": "spouse_alien_number",
+      "name": "Spouse Alien Number",
+      "spoken_name": "spouse alien number",
+      "type": "text",
+      "pdf_field_name": "PtAIILine1_ANumber[0]",
+      "consolidated_widgets": [
+        "PtAIILine1_ANumber[0]"
+      ],
+      "description": "Enter spouse's alien registration number"
+    },
+    {
+      "id": "spouse_passport_id_card_number",
+      "name": "Spouse Passport ID Card Number",
+      "spoken_name": "spouse passport id card number",
+      "type": "text",
+      "pdf_field_name": "TextField10[1]",
+      "consolidated_widgets": [
+        "TextField10[1]"
+      ],
+      "description": "Enter spouse's passport or ID card number"
+    },
+    {
+      "id": "spouse_date_of_birth",
+      "name": "Spouse Date of Birth",
+      "spoken_name": "spouse date of birth",
+      "type": "date",
+      "pdf_field_name": "DateTimeField7[0]",
+      "consolidated_widgets": [
+        "DateTimeField7[0]"
+      ],
+      "description": "Enter spouse's date of birth"
+    },
+    {
+      "id": "spouse_social_security_number",
+      "name": "Spouse Social Security Number",
+      "spoken_name": "spouse social security number",
+      "type": "text",
+      "pdf_field_name": "TextField10[2]",
+      "consolidated_widgets": [
+        "TextField10[2]"
+      ],
+      "description": "Enter spouse's social security number"
+    },
+    {
+      "id": "spouse_last_name",
+      "name": "Spouse Last Name",
+      "spoken_name": "spouse last name",
+      "type": "text",
+      "pdf_field_name": "PtAIILine5_LastName[0]",
+      "consolidated_widgets": [
+        "PtAIILine5_LastName[0]"
+      ],
+      "description": "Enter spouse's last name"
+    },
+    {
+      "id": "spouse_first_name",
+      "name": "Spouse First Name",
+      "spoken_name": "spouse first name",
+      "type": "text",
+      "pdf_field_name": "PtAIILine6_FirstName[0]",
+      "consolidated_widgets": [
+        "PtAIILine6_FirstName[0]"
+      ],
+      "description": "Enter spouse's first name"
+    },
+    {
+      "id": "spouse_middle_name",
+      "name": "Spouse Middle Name",
+      "spoken_name": "spouse middle name",
+      "type": "text",
+      "pdf_field_name": "PtAIILine7_MiddleName[0]",
+      "consolidated_widgets": [
+        "PtAIILine7_MiddleName[0]"
+      ],
+      "description": "Enter spouse's middle name"
+    },
+    {
+      "id": "spouse_maiden_name",
+      "name": "Spouse Maiden Name",
+      "spoken_name": "spouse maiden name",
+      "type": "text",
+      "pdf_field_name": "TextField10[3]",
+      "consolidated_widgets": [
+        "TextField10[3]"
+      ],
+      "description": "Enter spouse's maiden name"
+    },
+    {
+      "id": "spouse_date_of_marriage",
+      "name": "Spouse Date of Marriage",
+      "spoken_name": "spouse date of marriage",
+      "type": "date",
+      "pdf_field_name": "DateTimeField8[0]",
+      "consolidated_widgets": [
+        "DateTimeField8[0]"
+      ],
+      "description": "Enter spouse's date of marriage"
+    },
+    {
+      "id": "spouse_place_of_marriage",
+      "name": "Spouse Place of Marriage",
+      "spoken_name": "spouse place of marriage",
+      "type": "text",
+      "pdf_field_name": "TextField10[4]",
+      "consolidated_widgets": [
+        "TextField10[4]"
+      ],
+      "description": "Enter spouse's place of marriage"
+    },
+    {
+      "id": "spouse_city_and_country_of_birth",
+      "name": "Spouse City and Country of Birth",
+      "spoken_name": "spouse city and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField10[5]",
+      "consolidated_widgets": [
+        "TextField10[5]"
+      ],
+      "description": "Enter spouse's city and country of birth"
+    },
+    {
+      "id": "spouse_nationality",
+      "name": "Spouse Nationality",
+      "spoken_name": "spouse nationality",
+      "type": "text",
+      "pdf_field_name": "TextField10[0]",
+      "consolidated_widgets": [
+        "TextField10[0]"
+      ],
+      "description": "Enter spouse's nationality"
+    },
+    {
+      "id": "spouse_race_ethnic_or_tribal_group",
+      "name": "Spouse Race Ethnic or Tribal Group",
+      "spoken_name": "spouse race ethnic or tribal group",
+      "type": "text",
+      "pdf_field_name": "TextField10[6]",
+      "consolidated_widgets": [
+        "TextField10[6]"
+      ],
+      "description": "Enter spouse's race, ethnic or tribal group"
+    },
+    {
+      "id": "spouse_sex",
+      "name": "Spouse Sex",
+      "spoken_name": "spouse sex",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox14_Sex[0]",
+        "CheckBox14_Sex[1]"
+      ],
+      "group_id": "spouse_sex",
+      "group_label": "Spouse Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "CheckBox14_Sex[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "CheckBox14_Sex[1]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_is_in_us",
+      "name": "Spouse Is In US",
+      "spoken_name": "spouse is in us",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine15_CheckBox15[1]",
+        "PtAIILine15_CheckBox15[0]",
+        "PtAIILine15_Specify[0]"
+      ],
+      "group_id": "spouse_is_in_us",
+      "group_label": "Is this person in the U.S.?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine15_CheckBox15[1]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine15_CheckBox15[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_location_if_not_in_us",
+      "name": "Spouse Location If Not In US",
+      "spoken_name": "spouse location if not in us",
+      "type": "text",
+      "pdf_field_name": "PtAIILine15_Specify[0]",
+      "consolidated_widgets": [
+        "PtAIILine15_Specify[0]"
+      ],
+      "description": "If spouse is not in the U.S., specify location"
+    },
+    {
+      "id": "spouse_place_of_last_entry",
+      "name": "Spouse Place of Last Entry",
+      "spoken_name": "spouse place of last entry",
+      "type": "text",
+      "pdf_field_name": "PtAIILine16_PlaceofLastEntry[0]",
+      "consolidated_widgets": [
+        "PtAIILine16_PlaceofLastEntry[0]"
+      ],
+      "description": "Enter spouse's place of last entry into the U.S."
+    },
+    {
+      "id": "spouse_date_of_last_entry",
+      "name": "Spouse Date of Last Entry",
+      "spoken_name": "spouse date of last entry",
+      "type": "date",
+      "pdf_field_name": "PtAIILine17_DateofLastEntry[0]",
+      "consolidated_widgets": [
+        "PtAIILine17_DateofLastEntry[0]"
+      ],
+      "description": "Enter spouse's date of last entry into the U.S."
+    },
+    {
+      "id": "spouse_i_94_number",
+      "name": "Spouse I-94 Number",
+      "spoken_name": "spouse i 94 number",
+      "type": "text",
+      "pdf_field_name": "PtAIILine18_I94Number[0]",
+      "consolidated_widgets": [
+        "PtAIILine18_I94Number[0]"
+      ],
+      "description": "Enter spouse's I-94 number"
+    },
+    {
+      "id": "spouse_status_when_last_admitted",
+      "name": "Spouse Status When Last Admitted",
+      "spoken_name": "spouse status when last admitted",
+      "type": "text",
+      "pdf_field_name": "PtAIILine19_StatusofLastAdmission[0]",
+      "consolidated_widgets": [
+        "PtAIILine19_StatusofLastAdmission[0]"
+      ],
+      "description": "Enter spouse's status when last admitted"
+    },
+    {
+      "id": "spouse_current_status",
+      "name": "Spouse Current Status",
+      "spoken_name": "spouse current status",
+      "type": "text",
+      "pdf_field_name": "PtAIILine20_SpouseCurrentStatus[0]",
+      "consolidated_widgets": [
+        "PtAIILine20_SpouseCurrentStatus[0]"
+      ],
+      "description": "Enter spouse's current status"
+    },
+    {
+      "id": "spouse_expiration_date_of_authorized_stay",
+      "name": "Spouse Expiration Date of Authorized Stay",
+      "spoken_name": "spouse expiration date of authorized stay",
+      "type": "date",
+      "pdf_field_name": "PtAIILine21_ExpDateofAuthorizedStay[0]",
+      "consolidated_widgets": [
+        "PtAIILine21_ExpDateofAuthorizedStay[0]"
+      ],
+      "description": "Enter spouse's expiration date of authorized stay"
+    },
+    {
+      "id": "spouse_in_immigration_court_proceedings",
+      "name": "Spouse In Immigration Court Proceedings",
+      "spoken_name": "spouse in immigration court proceedings",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine22_Yes[0]",
+        "PtAIILine22_No[0]"
+      ],
+      "group_id": "spouse_in_immigration_court_proceedings",
+      "group_label": "Is your spouse in Immigration Court Proceedings?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine22_Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine22_No[0]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_previous_arrival_date",
+      "name": "Spouse Previous Arrival Date",
+      "spoken_name": "spouse previous arrival date",
+      "type": "date",
+      "pdf_field_name": "PtAIILine23_PreviousArrivalDate[0]",
+      "consolidated_widgets": [
+        "PtAIILine23_PreviousArrivalDate[0]"
+      ],
+      "description": "Enter spouse's previous arrival date"
+    },
+    {
+      "id": "spouse_included_in_application",
+      "name": "Spouse Included In Application",
+      "spoken_name": "spouse included in application",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine24_Yes[0]",
+        "PtAIILine24_No[0]"
+      ],
+      "group_id": "spouse_included_in_application",
+      "group_label": "If in the U.S., is your spouse to be included in this application?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine24_Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine24_No[0]"
+        }
+      ]
+    },
+    {
+      "id": "children_have_children",
+      "name": "Children Have Children",
+      "spoken_name": "children have children",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ChildrenCheckbox[1]",
+        "ChildrenCheckbox[0]"
+      ],
+      "group_id": "children_have_children",
+      "group_label": "Do you have children?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ChildrenCheckbox[1]"
+        },
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ChildrenCheckbox[0]"
+        }
+      ]
+    },
+    {
+      "id": "child_information_table",
+      "name": "Child Information",
+      "spoken_name": "child information",
+      "type": "table",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ChildAlien1[0]",
+        "ChildPassport1[0]",
+        "ChildMarital1[0]",
+        "ChildSSN1[0]",
+        "ChildLast1[0]",
+        "ChildFirst1[0]",
+        "ChildMiddle1[0]",
+        "ChildDOB1[0]",
+        "ChildCity1[0]",
+        "ChildNat1[0]"
+      ],
+      "columns": [
+        {
+          "id": "child_alien_number",
+          "label": "Alien Number",
+          "type": "text",
+          "pdf_field_name": "ChildAlien1[0]"
+        },
+        {
+          "id": "child_passport_id",
+          "label": "Passport/ID",
+          "type": "text",
+          "pdf_field_name": "ChildPassport1[0]"
+        },
+        {
+          "id": "child_marital_status",
+          "label": "Marital Status",
+          "type": "text",
+          "pdf_field_name": "ChildMarital1[0]"
+        },
+        {
+          "id": "child_ssn",
+          "label": "SSN",
+          "type": "text",
+          "pdf_field_name": "ChildSSN1[0]"
+        },
+        {
+          "id": "child_last_name",
+          "label": "Last Name",
+          "type": "text",
+          "pdf_field_name": "ChildLast1[0]"
+        },
+        {
+          "id": "child_first_name",
+          "label": "First Name",
+          "type": "text",
+          "pdf_field_name": "ChildFirst1[0]"
+        },
+        {
+          "id": "child_middle_name",
+          "label": "Middle Name",
+          "type": "text",
+          "pdf_field_name": "ChildMiddle1[0]"
+        },
+        {
+          "id": "child_dob",
+          "label": "Date of Birth",
+          "type": "date",
+          "pdf_field_name": "ChildDOB1[0]"
+        },
+        {
+          "id": "child_city_country",
+          "label": "City/Country of Birth",
+          "type": "text",
+          "pdf_field_name": "ChildCity1[0]"
+        },
+        {
+          "id": "child_nationality",
+          "label": "Nationality",
+          "type": "text",
+          "pdf_field_name": "ChildNat1[0]"
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 0,
+        "max_entries": 1,
+        "initial_rows": 1
+      }
+    },
+    {
+      "id": "child_1_race_ethnic_or_tribal_group",
+      "name": "Child 1 Race, Ethnic, or Tribal Group",
+      "spoken_name": "child 1 race, ethnic, or tribal group",
+      "type": "text",
+      "pdf_field_name": "ChildRace1[0]",
+      "consolidated_widgets": [
+        "ChildRace1[0]"
+      ]
+    },
+    {
+      "id": "child_1_sex",
+      "name": "Child 1 Sex",
+      "spoken_name": "child 1 sex",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox12_Sex[0]",
+        "CheckBox12_Sex[1]"
+      ],
+      "group_id": "child_1_sex",
+      "group_label": "Child 1 Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "CheckBox12_Sex[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "CheckBox12_Sex[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_1_is_this_child_in_the_u_s",
+      "name": "Child 1 Is this child in the U.S.?",
+      "spoken_name": "child 1 is this child in the u s",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox17[0]",
+        "CheckBox17[1]",
+        "PtAIILine13_Specify[0]"
+      ],
+      "group_id": "child_1_is_this_child_in_the_u_s",
+      "group_label": "Child 1 Is this child in the U.S.?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "CheckBox17[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "CheckBox17[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_1_date_of_last_entry_into_the_u_s",
+      "name": "Child 1 Date of Last Entry into the U.S.",
+      "spoken_name": "child 1 date of last entry into the u s",
+      "type": "date",
+      "pdf_field_name": "PtAIILine15_ExpirationDate[0]",
+      "consolidated_widgets": [
+        "PtAIILine15_ExpirationDate[0]"
+      ]
+    },
+    {
+      "id": "child_1_place_of_last_entry_into_the_u_s",
+      "name": "Child 1 Place of Last Entry into the U.S.",
+      "spoken_name": "child 1 place of last entry into the u s",
+      "type": "text",
+      "pdf_field_name": "PtAIILine14_PlaceofLastEntry[0]",
+      "consolidated_widgets": [
+        "PtAIILine14_PlaceofLastEntry[0]"
+      ]
+    },
+    {
+      "id": "child_1_i_94_number",
+      "name": "Child 1 I-94 Number",
+      "spoken_name": "child 1 i 94 number",
+      "type": "number",
+      "pdf_field_name": "PtAIILine16_I94Number[0]",
+      "consolidated_widgets": [
+        "PtAIILine16_I94Number[0]"
+      ]
+    },
+    {
+      "id": "child_1_status_when_last_admitted",
+      "name": "Child 1 Status when Last Admitted",
+      "spoken_name": "child 1 status when last admitted",
+      "type": "text",
+      "pdf_field_name": "PtAIILine17_StatusofLastAdmission[0]",
+      "consolidated_widgets": [
+        "PtAIILine17_StatusofLastAdmission[0]"
+      ]
+    },
+    {
+      "id": "child_1_is_your_child_in_immigration_court_proceedings",
+      "name": "Child 1 Is your child in Immigration Court proceedings?",
+      "spoken_name": "child 1 is your child in immigration court proceedings",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine20_Yes[0]",
+        "PtAIILine20_No[0]"
+      ],
+      "group_id": "child_1_is_your_child_in_immigration_court_proceedings",
+      "group_label": "Child 1 Is your child in Immigration Court proceedings?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine20_Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine20_No[0]"
+        }
+      ]
+    },
+    {
+      "id": "child_1_expiration_date_of_authorized_stay",
+      "name": "Child 1 Expiration Date of Authorized Stay",
+      "spoken_name": "child 1 expiration date of authorized stay",
+      "type": "date",
+      "pdf_field_name": "PtAIILine19_ExpDateofAuthorizedStay[0]",
+      "consolidated_widgets": [
+        "PtAIILine19_ExpDateofAuthorizedStay[0]"
+      ]
+    },
+    {
+      "id": "child_1_current_status_of_child",
+      "name": "Child 1 Current Status of Child",
+      "spoken_name": "child 1 current status of child",
+      "type": "text",
+      "pdf_field_name": "PtAIILine18_CurrentStatusofChild[0]",
+      "consolidated_widgets": [
+        "PtAIILine18_CurrentStatusofChild[0]"
+      ]
+    },
+    {
+      "id": "child_1_is_this_child_to_be_included_in_this_application",
+      "name": "Child 1 Is this child to be included in this application?",
+      "spoken_name": "child 1 is this child to be included in this application",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine21_Yes[0]",
+        "PtAIILine21_No[0]"
+      ],
+      "group_id": "child_1_is_this_child_to_be_included_in_this_application",
+      "group_label": "Child 1 Is this child to be included in this application?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine21_Yes[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine21_No[0]"
+        }
+      ]
+    },
+    {
+      "id": "children_information_table",
+      "name": "Children Information",
+      "spoken_name": "children information",
+      "type": "table",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ChildAlien2[0]",
+        "ChildPassport2[0]",
+        "ChildMarital2[0]",
+        "ChildSSN2[0]",
+        "ChildLast2[0]",
+        "ChildFirst2[0]",
+        "ChildMiddle2[0]",
+        "ChildDOB2[0]",
+        "ChildCity2[0]",
+        "ChildNat2[0]",
+        "ChildRace2[0]",
+        "CheckBox26_Sex[0]",
+        "CheckBox26_Sex[1]",
+        "PtAIILine13_Specify2[0]",
+        "CheckBox27[0]",
+        "CheckBox27[1]",
+        "PtAIILine15_DateofLastEntry2[0]",
+        "PtAIILine16_I94Number2[0]",
+        "PtAIILine14_PlaceofLastEntry2[0]",
+        "PtAIILine17_StatusofLastAdmission2[0]",
+        "PtAIILine20_Yes2[0]",
+        "PtAIILine20_No2[0]",
+        "PtAIILine18_ChildCurrentStatus2[0]",
+        "PtAIILine19_ExpDateofAuthorizedStay2[0]",
+        "PtAIILine21_Yes2[0]",
+        "PtAIILine21_No2[0]",
+        "ChildAlien3[0]",
+        "ChildPassport3[0]",
+        "ChildMarital3[0]",
+        "ChildSSN3[0]",
+        "ChildLast3[0]",
+        "ChildFirst3[0]",
+        "ChildMiddle3[0]",
+        "ChildDOB3[0]"
+      ],
+      "columns": [
+        {
+          "id": "alien_registration_number",
+          "label": "Alien Registration Number",
+          "type": "text",
+          "pdf_field_name": "ChildAlien2[0]"
+        },
+        {
+          "id": "passport_id_card_number",
+          "label": "Passport/ID Card Number",
+          "type": "text",
+          "pdf_field_name": "ChildPassport2[0]"
+        },
+        {
+          "id": "marital_status",
+          "label": "Marital Status",
+          "type": "text",
+          "pdf_field_name": "ChildMarital2[0]"
+        },
+        {
+          "id": "social_security_number",
+          "label": "Social Security Number",
+          "type": "number",
+          "pdf_field_name": "ChildSSN2[0]"
+        },
+        {
+          "id": "last_name",
+          "label": "Last Name",
+          "type": "text",
+          "pdf_field_name": "ChildLast2[0]"
+        },
+        {
+          "id": "first_name",
+          "label": "First Name",
+          "type": "text",
+          "pdf_field_name": "ChildFirst2[0]"
+        },
+        {
+          "id": "middle_name",
+          "label": "Middle Name",
+          "type": "text",
+          "pdf_field_name": "ChildMiddle2[0]"
+        },
+        {
+          "id": "date_of_birth",
+          "label": "Date of Birth",
+          "type": "date",
+          "pdf_field_name": "ChildDOB2[0]"
+        },
+        {
+          "id": "city_and_country_of_birth",
+          "label": "City and Country of Birth",
+          "type": "text",
+          "pdf_field_name": "ChildCity2[0]"
+        },
+        {
+          "id": "nationality_citizenship",
+          "label": "Nationality (Citizenship)",
+          "type": "text",
+          "pdf_field_name": "ChildNat2[0]"
+        },
+        {
+          "id": "race_ethnic_or_tribal_group",
+          "label": "Race, Ethnic, or Tribal Group",
+          "type": "text",
+          "pdf_field_name": "ChildRace2[0]"
+        },
+        {
+          "id": "sex",
+          "label": "Sex",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "CheckBox26_Sex[0]",
+            "CheckBox26_Sex[1]"
+          ],
+          "group_id": "sex",
+          "group_label": "Sex",
+          "group_kind": "radio",
+          "options": [
+            {
+              "value": "male",
+              "label": "Male",
+              "pdf_field_name": "CheckBox26_Sex[0]"
+            },
+            {
+              "value": "female",
+              "label": "Female",
+              "pdf_field_name": "CheckBox26_Sex[1]"
+            }
+          ]
+        },
+        {
+          "id": "is_this_child_in_the_u_s",
+          "label": "Is this child in the U.S.?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "CheckBox27[0]",
+            "CheckBox27[1]",
+            "PtAIILine13_Specify2[0]"
+          ],
+          "group_id": "is_this_child_in_the_u_s",
+          "group_label": "Is this child in the U.S.?",
+          "group_kind": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "CheckBox27[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "CheckBox27[1]"
+            }
+          ]
+        },
+        {
+          "id": "date_of_last_entry_into_the_u_s",
+          "label": "Date of Last Entry into the U.S.",
+          "type": "date",
+          "pdf_field_name": "PtAIILine15_DateofLastEntry2[0]"
+        },
+        {
+          "id": "i_94_number",
+          "label": "I-94 Number",
+          "type": "number",
+          "pdf_field_name": "PtAIILine16_I94Number2[0]"
+        },
+        {
+          "id": "place_of_last_entry_into_the_u_s",
+          "label": "Place of Last Entry into the U.S.",
+          "type": "text",
+          "pdf_field_name": "PtAIILine14_PlaceofLastEntry2[0]"
+        },
+        {
+          "id": "status_when_last_admitted",
+          "label": "Status when Last Admitted",
+          "type": "text",
+          "pdf_field_name": "PtAIILine17_StatusofLastAdmission2[0]"
+        },
+        {
+          "id": "is_your_child_in_immigration_court_proceedings",
+          "label": "Is your child in Immigration Court proceedings?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "PtAIILine20_Yes2[0]",
+            "PtAIILine20_No2[0]"
+          ],
+          "group_id": "is_your_child_in_immigration_court_proceedings",
+          "group_label": "Is your child in Immigration Court proceedings?",
+          "group_kind": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "PtAIILine20_Yes2[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "PtAIILine20_No2[0]"
+            }
+          ]
+        },
+        {
+          "id": "current_status_of_child",
+          "label": "Current Status of Child",
+          "type": "text",
+          "pdf_field_name": "PtAIILine18_ChildCurrentStatus2[0]"
+        },
+        {
+          "id": "expiration_date_of_authorized_stay",
+          "label": "Expiration Date of Authorized Stay",
+          "type": "date",
+          "pdf_field_name": "PtAIILine19_ExpDateofAuthorizedStay2[0]"
+        },
+        {
+          "id": "is_this_child_to_be_included_in_this_application",
+          "label": "Is this child to be included in this application?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "PtAIILine21_Yes2[0]",
+            "PtAIILine21_No2[0]"
+          ],
+          "group_id": "is_this_child_to_be_included_in_this_application",
+          "group_label": "Is this child to be included in this application?",
+          "group_kind": "radio",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "PtAIILine21_Yes2[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "PtAIILine21_No2[0]"
+            }
+          ]
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 0,
+        "max_entries": 2,
+        "initial_rows": 2
+      }
+    },
+    {
+      "id": "child_3_city_and_country_of_birth",
+      "name": "Child 3 City and Country of Birth",
+      "spoken_name": "child 3 city and country of birth",
+      "type": "text",
+      "pdf_field_name": "ChildCity3[0]",
+      "consolidated_widgets": [
+        "ChildCity3[0]"
+      ]
+    },
+    {
+      "id": "child_3_nationality_citizenship",
+      "name": "Child 3 Nationality Citizenship",
+      "spoken_name": "child 3 nationality citizenship",
+      "type": "text",
+      "pdf_field_name": "ChildNat3[0]",
+      "consolidated_widgets": [
+        "ChildNat3[0]"
+      ]
+    },
+    {
+      "id": "child_3_race_ethnic_or_tribal_group",
+      "name": "Child 3 Race Ethnic or Tribal Group",
+      "spoken_name": "child 3 race ethnic or tribal group",
+      "type": "text",
+      "pdf_field_name": "ChildRace3[0]",
+      "consolidated_widgets": [
+        "ChildRace3[0]"
+      ]
+    },
+    {
+      "id": "child_3_sex",
+      "name": "Child 3 Sex",
+      "spoken_name": "child 3 sex",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox36_Sex[0]",
+        "CheckBox36_Sex[1]"
+      ],
+      "group_id": "child_3_sex",
+      "group_label": "Child 3 Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "CheckBox36_Sex[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "CheckBox36_Sex[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_3_is_this_child_in_the_u_s_specify_location",
+      "name": "Child 3 Is this child in the U. S. Specify location",
+      "spoken_name": "child 3 is this child in the u s specify location",
+      "type": "text",
+      "pdf_field_name": "PtAIILine13_Specify3[0]",
+      "consolidated_widgets": [
+        "PtAIILine13_Specify3[0]"
+      ]
+    },
+    {
+      "id": "child_3_is_this_child_in_the_u_s",
+      "name": "Child 3 Is this child in the U. S.",
+      "spoken_name": "child 3 is this child in the u s",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox37[0]",
+        "CheckBox37[1]"
+      ],
+      "group_id": "child_3_is_this_child_in_the_u_s",
+      "group_label": "Child 3 Is this child in the U. S.",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes (Complete Blocks 14 to 21)",
+          "pdf_field_name": "CheckBox37[0]"
+        },
+        {
+          "value": "no",
+          "label": "No (Specify location)",
+          "pdf_field_name": "CheckBox37[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_3_date_of_last_entry_into_the_u_s",
+      "name": "Child 3 Date of Last Entry into the U. S.",
+      "spoken_name": "child 3 date of last entry into the u s",
+      "type": "date",
+      "pdf_field_name": "PtAIILine15_DateofLastEntry3[0]",
+      "consolidated_widgets": [
+        "PtAIILine15_DateofLastEntry3[0]"
+      ]
+    },
+    {
+      "id": "child_3_i_94_number",
+      "name": "Child 3 I-94 Number",
+      "spoken_name": "child 3 i 94 number",
+      "type": "text",
+      "pdf_field_name": "PtAIILine16_I94Number3[0]",
+      "consolidated_widgets": [
+        "PtAIILine16_I94Number3[0]"
+      ]
+    },
+    {
+      "id": "child_3_place_of_last_entry_into_the_u_s",
+      "name": "Child 3 Place of Last Entry into the U. S.",
+      "spoken_name": "child 3 place of last entry into the u s",
+      "type": "text",
+      "pdf_field_name": "PtAIILine14_PlaceofLastEntry3[0]",
+      "consolidated_widgets": [
+        "PtAIILine14_PlaceofLastEntry3[0]"
+      ]
+    },
+    {
+      "id": "child_3_status_when_last_admitted",
+      "name": "Child 3 Status when Last Admitted",
+      "spoken_name": "child 3 status when last admitted",
+      "type": "text",
+      "pdf_field_name": "PtAIILine17_StatusofLastAdmission3[0]",
+      "consolidated_widgets": [
+        "PtAIILine17_StatusofLastAdmission3[0]"
+      ]
+    },
+    {
+      "id": "child_3_current_status",
+      "name": "Child 3 Current Status",
+      "spoken_name": "child 3 current status",
+      "type": "text",
+      "pdf_field_name": "PtAIILine18_ChildCurrentStatus3[0]",
+      "consolidated_widgets": [
+        "PtAIILine18_ChildCurrentStatus3[0]"
+      ]
+    },
+    {
+      "id": "child_3_is_your_child_in_immigration_court_proceedings",
+      "name": "Child 3 Is your child in Immigration Court proceedings",
+      "spoken_name": "child 3 is your child in immigration court proceedings",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine20_Yes3[0]",
+        "PtAIILine20_No3[0]"
+      ],
+      "group_id": "child_3_is_your_child_in_immigration_court_proceedings",
+      "group_label": "Child 3 Is your child in Immigration Court proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine20_Yes3[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine20_No3[0]"
+        }
+      ]
+    },
+    {
+      "id": "child_3_expiration_date_of_authorized_stay",
+      "name": "Child 3 Expiration Date of Authorized Stay",
+      "spoken_name": "child 3 expiration date of authorized stay",
+      "type": "date",
+      "pdf_field_name": "PtAIILine19_ExpDateofAuthorizedStay3[0]",
+      "consolidated_widgets": [
+        "PtAIILine19_ExpDateofAuthorizedStay3[0]"
+      ]
+    },
+    {
+      "id": "child_3_is_this_child_to_be_included_in_this_application",
+      "name": "Child 3 Is this child to be included in this application",
+      "spoken_name": "child 3 is this child to be included in this application",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine21_Yes3[0]",
+        "PtAIILine21_No3[0]"
+      ],
+      "group_id": "child_3_is_this_child_to_be_included_in_this_application",
+      "group_label": "Child 3 Is this child to be included in this application",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine21_Yes3[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine21_No3[0]"
+        }
+      ]
+    },
+    {
+      "id": "child_4_alien_registration_number",
+      "name": "Child 4 Alien Registration Number",
+      "spoken_name": "child 4 alien registration number",
+      "type": "text",
+      "pdf_field_name": "ChildAlien4[0]",
+      "consolidated_widgets": [
+        "ChildAlien4[0]"
+      ]
+    },
+    {
+      "id": "child_4_passport_id_card_number",
+      "name": "Child 4 Passport ID Card Number",
+      "spoken_name": "child 4 passport id card number",
+      "type": "text",
+      "pdf_field_name": "ChildPassport4[0]",
+      "consolidated_widgets": [
+        "ChildPassport4[0]"
+      ]
+    },
+    {
+      "id": "child_4_marital_status",
+      "name": "Child 4 Marital Status",
+      "spoken_name": "child 4 marital status",
+      "type": "text",
+      "pdf_field_name": "ChildMarital4[0]",
+      "consolidated_widgets": [
+        "ChildMarital4[0]"
+      ]
+    },
+    {
+      "id": "child_4_social_security_number",
+      "name": "Child 4 Social Security Number",
+      "spoken_name": "child 4 social security number",
+      "type": "text",
+      "pdf_field_name": "ChildSSN4[0]",
+      "consolidated_widgets": [
+        "ChildSSN4[0]"
+      ]
+    },
+    {
+      "id": "child_4_last_name",
+      "name": "Child 4 Last Name",
+      "spoken_name": "child 4 last name",
+      "type": "text",
+      "pdf_field_name": "ChildLast4[0]",
+      "consolidated_widgets": [
+        "ChildLast4[0]"
+      ]
+    },
+    {
+      "id": "child_4_first_name",
+      "name": "Child 4 First Name",
+      "spoken_name": "child 4 first name",
+      "type": "text",
+      "pdf_field_name": "ChildFirst4[0]",
+      "consolidated_widgets": [
+        "ChildFirst4[0]"
+      ]
+    },
+    {
+      "id": "child_4_middle_name",
+      "name": "Child 4 Middle Name",
+      "spoken_name": "child 4 middle name",
+      "type": "text",
+      "pdf_field_name": "ChildMiddle4[0]",
+      "consolidated_widgets": [
+        "ChildMiddle4[0]"
+      ]
+    },
+    {
+      "id": "child_4_date_of_birth",
+      "name": "Child 4 Date of Birth",
+      "spoken_name": "child 4 date of birth",
+      "type": "date",
+      "pdf_field_name": "ChildDOB4[0]",
+      "consolidated_widgets": [
+        "ChildDOB4[0]"
+      ]
+    },
+    {
+      "id": "child_4_city_and_country_of_birth",
+      "name": "Child 4 City and Country of Birth",
+      "spoken_name": "child 4 city and country of birth",
+      "type": "text",
+      "pdf_field_name": "ChildCity4[0]",
+      "consolidated_widgets": [
+        "ChildCity4[0]"
+      ]
+    },
+    {
+      "id": "child_4_nationality_citizenship",
+      "name": "Child 4 Nationality Citizenship",
+      "spoken_name": "child 4 nationality citizenship",
+      "type": "text",
+      "pdf_field_name": "ChildNat4[0]",
+      "consolidated_widgets": [
+        "ChildNat4[0]"
+      ]
+    },
+    {
+      "id": "child_4_race_ethnic_or_tribal_group",
+      "name": "Child 4 Race Ethnic or Tribal Group",
+      "spoken_name": "child 4 race ethnic or tribal group",
+      "type": "text",
+      "pdf_field_name": "ChildRace4[0]",
+      "consolidated_widgets": [
+        "ChildRace4[0]"
+      ]
+    },
+    {
+      "id": "child_4_sex",
+      "name": "Child 4 Sex",
+      "spoken_name": "child 4 sex",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox46_Sex[0]",
+        "CheckBox46_Sex[1]"
+      ],
+      "group_id": "child_4_sex",
+      "group_label": "Child 4 Sex",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "male",
+          "label": "Male",
+          "pdf_field_name": "CheckBox46_Sex[0]"
+        },
+        {
+          "value": "female",
+          "label": "Female",
+          "pdf_field_name": "CheckBox46_Sex[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_4_is_this_child_in_the_u_s_specify_location",
+      "name": "Child 4 Is this child in the U. S. Specify location",
+      "spoken_name": "child 4 is this child in the u s specify location",
+      "type": "text",
+      "pdf_field_name": "PtAIILine13_Specify4[0]",
+      "consolidated_widgets": [
+        "PtAIILine13_Specify4[0]"
+      ]
+    },
+    {
+      "id": "child_4_is_this_child_in_the_u_s",
+      "name": "Child 4 Is this child in the U. S.",
+      "spoken_name": "child 4 is this child in the u s",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "CheckBox47[0]",
+        "CheckBox47[1]"
+      ],
+      "group_id": "child_4_is_this_child_in_the_u_s",
+      "group_label": "Child 4 Is this child in the U. S.",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes (Complete Blocks 14 to 21)",
+          "pdf_field_name": "CheckBox47[0]"
+        },
+        {
+          "value": "no",
+          "label": "No (Specify location)",
+          "pdf_field_name": "CheckBox47[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_4_date_of_last_entry_into_the_u_s",
+      "name": "Child 4 Date of Last Entry into the U. S.",
+      "spoken_name": "child 4 date of last entry into the u s",
+      "type": "date",
+      "pdf_field_name": "PtAIILine15_DateofLastEntry4[0]",
+      "consolidated_widgets": [
+        "PtAIILine15_DateofLastEntry4[0]"
+      ]
+    },
+    {
+      "id": "child_4_i_94_number",
+      "name": "Child 4 I-94 Number",
+      "spoken_name": "child 4 i 94 number",
+      "type": "text",
+      "pdf_field_name": "PtAIILine16_I94Number4[0]",
+      "consolidated_widgets": [
+        "PtAIILine16_I94Number4[0]"
+      ]
+    },
+    {
+      "id": "child_4_place_of_last_entry_into_the_u_s",
+      "name": "Child 4 Place of Last Entry into the U. S.",
+      "spoken_name": "child 4 place of last entry into the u s",
+      "type": "text",
+      "pdf_field_name": "PtAIILine14_PlaceofLastEntry4[0]",
+      "consolidated_widgets": [
+        "PtAIILine14_PlaceofLastEntry4[0]"
+      ]
+    },
+    {
+      "id": "child_4_status_when_last_admitted",
+      "name": "Child 4 Status when Last Admitted",
+      "spoken_name": "child 4 status when last admitted",
+      "type": "text",
+      "pdf_field_name": "PtAIILine17_StatusofLastAdmission4[0]",
+      "consolidated_widgets": [
+        "PtAIILine17_StatusofLastAdmission4[0]"
+      ]
+    },
+    {
+      "id": "child_4_expiration_date_of_authorized_stay",
+      "name": "Child 4 Expiration Date of Authorized Stay",
+      "spoken_name": "child 4 expiration date of authorized stay",
+      "type": "date",
+      "pdf_field_name": "PtAIILine19_ExpDateofAuthorizedStay4[0]",
+      "consolidated_widgets": [
+        "PtAIILine19_ExpDateofAuthorizedStay4[0]"
+      ]
+    },
+    {
+      "id": "child_4_is_your_child_in_immigration_court_proceedings",
+      "name": "Child 4 Is your child in Immigration Court proceedings",
+      "spoken_name": "child 4 is your child in immigration court proceedings",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine20_Yes4[0]",
+        "PtAIILine20_No4[0]"
+      ],
+      "group_id": "child_4_is_your_child_in_immigration_court_proceedings",
+      "group_label": "Child 4 Is your child in Immigration Court proceedings",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine20_Yes4[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine20_No4[0]"
+        }
+      ]
+    },
+    {
+      "id": "child_4_current_status",
+      "name": "Child 4 Current Status",
+      "spoken_name": "child 4 current status",
+      "type": "text",
+      "pdf_field_name": "PtAIILine18_ChildCurrentStatus4[0]",
+      "consolidated_widgets": [
+        "PtAIILine18_ChildCurrentStatus4[0]"
+      ]
+    },
+    {
+      "id": "child_4_is_this_child_to_be_included_in_this_application",
+      "name": "Child 4 Is this child to be included in this application",
+      "spoken_name": "child 4 is this child to be included in this application",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtAIILine21_Yes4[0]",
+        "PtAIILine21_No4[0]"
+      ],
+      "group_id": "child_4_is_this_child_to_be_included_in_this_application",
+      "group_label": "Child 4 Is this child to be included in this application",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtAIILine21_Yes4[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtAIILine21_No4[0]"
+        }
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_number_and_street",
+      "name": "Last Address Before Coming to the United States Number and Street",
+      "spoken_name": "last address before coming to the united states number and street",
+      "type": "text",
+      "pdf_field_name": "TextField13[0]",
+      "consolidated_widgets": [
+        "TextField13[0]"
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_city_town",
+      "name": "Last Address Before Coming to the United States City Town",
+      "spoken_name": "last address before coming to the united states city town",
+      "type": "text",
+      "pdf_field_name": "TextField13[2]",
+      "consolidated_widgets": [
+        "TextField13[2]"
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_department_province_or_state",
+      "name": "Last Address Before Coming to the United States Department Province or State",
+      "spoken_name": "last address before coming to the united states department province or state",
+      "type": "text",
+      "pdf_field_name": "TextField13[4]",
+      "consolidated_widgets": [
+        "TextField13[4]"
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_country",
+      "name": "Last Address Before Coming to the United States Country",
+      "spoken_name": "last address before coming to the united states country",
+      "type": "text",
+      "pdf_field_name": "TextField13[6]",
+      "consolidated_widgets": [
+        "TextField13[6]"
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_from_date",
+      "name": "Last Address Before Coming to the United States From Date",
+      "spoken_name": "last address before coming to the united states from date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField21[0]",
+      "consolidated_widgets": [
+        "DateTimeField21[0]"
+      ]
+    },
+    {
+      "id": "last_address_before_coming_to_the_united_states_to_date",
+      "name": "Last Address Before Coming to the United States To Date",
+      "spoken_name": "last address before coming to the united states to date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField20[0]",
+      "consolidated_widgets": [
+        "DateTimeField20[0]"
+      ]
+    },
+    {
+      "id": "last_address_number_and_street_provide_if_available",
+      "name": "Last Address Number and Street (Provide if available)",
+      "spoken_name": "last address number and street provide if available",
+      "type": "text",
+      "pdf_field_name": "TextField13[1]",
+      "consolidated_widgets": [
+        "TextField13[1]"
+      ]
+    },
+    {
+      "id": "last_address_city_town",
+      "name": "Last Address City/Town",
+      "spoken_name": "last address city town",
+      "type": "text",
+      "pdf_field_name": "TextField13[3]",
+      "consolidated_widgets": [
+        "TextField13[3]"
+      ]
+    },
+    {
+      "id": "last_address_department_province_or_state",
+      "name": "Last Address Department, Province, or State",
+      "spoken_name": "last address department province or state",
+      "type": "text",
+      "pdf_field_name": "TextField13[5]",
+      "consolidated_widgets": [
+        "TextField13[5]"
+      ]
+    },
+    {
+      "id": "last_address_country",
+      "name": "Last Address Country",
+      "spoken_name": "last address country",
+      "type": "text",
+      "pdf_field_name": "TextField13[7]",
+      "consolidated_widgets": [
+        "TextField13[7]"
+      ]
+    },
+    {
+      "id": "last_address_dates_from",
+      "name": "Last Address Dates From",
+      "spoken_name": "last address dates from",
+      "type": "date",
+      "pdf_field_name": "DateTimeField22[0]",
+      "consolidated_widgets": [
+        "DateTimeField22[0]"
+      ]
+    },
+    {
+      "id": "last_address_dates_to",
+      "name": "Last Address Dates To",
+      "spoken_name": "last address dates to",
+      "type": "date",
+      "pdf_field_name": "DateTimeField23[0]",
+      "consolidated_widgets": [
+        "DateTimeField23[0]"
+      ]
+    },
+    {
+      "id": "present_address_number_and_street_line_1_of_5",
+      "name": "Present Address Number and Street Line 1 of 5",
+      "spoken_name": "present address number and street line 1 of 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[8]",
+      "consolidated_widgets": [
+        "TextField13[8]"
+      ]
+    },
+    {
+      "id": "present_address_city_town",
+      "name": "Present Address City/Town",
+      "spoken_name": "present address city town",
+      "type": "text",
+      "pdf_field_name": "TextField13[10]",
+      "consolidated_widgets": [
+        "TextField13[10]"
+      ]
+    },
+    {
+      "id": "present_address_department_province_or_state",
+      "name": "Present Address Department, Province or State",
+      "spoken_name": "present address department province or state",
+      "type": "text",
+      "pdf_field_name": "TextField13[12]",
+      "consolidated_widgets": [
+        "TextField13[12]"
+      ]
+    },
+    {
+      "id": "present_address_country",
+      "name": "Present Address Country",
+      "spoken_name": "present address country",
+      "type": "text",
+      "pdf_field_name": "TextField13[14]",
+      "consolidated_widgets": [
+        "TextField13[14]"
+      ]
+    },
+    {
+      "id": "present_address_dates_from",
+      "name": "Present Address Dates From",
+      "spoken_name": "present address dates from",
+      "type": "date",
+      "pdf_field_name": "DateTimeField24[0]",
+      "consolidated_widgets": [
+        "DateTimeField24[0]"
+      ]
+    },
+    {
+      "id": "present_address_dates_to",
+      "name": "Present Address Dates To",
+      "spoken_name": "present address dates to",
+      "type": "date",
+      "pdf_field_name": "DateTimeField26[0]",
+      "consolidated_widgets": [
+        "DateTimeField26[0]"
+      ]
+    },
+    {
+      "id": "present_address_number_and_street_line_2_of_5",
+      "name": "Present Address Number and Street Line 2 of 5",
+      "spoken_name": "present address number and street line 2 of 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[9]",
+      "consolidated_widgets": [
+        "TextField13[9]"
+      ]
+    },
+    {
+      "id": "present_address_city_town_2",
+      "name": "Present Address City/Town 2",
+      "spoken_name": "present address city town 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[11]",
+      "consolidated_widgets": [
+        "TextField13[11]"
+      ]
+    },
+    {
+      "id": "present_address_department_province_or_state_2",
+      "name": "Present Address Department, Province or State 2",
+      "spoken_name": "present address department province or state 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[13]",
+      "consolidated_widgets": [
+        "TextField13[13]"
+      ]
+    },
+    {
+      "id": "present_address_country_2",
+      "name": "Present Address Country 2",
+      "spoken_name": "present address country 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[15]",
+      "consolidated_widgets": [
+        "TextField13[15]"
+      ]
+    },
+    {
+      "id": "present_address_dates_from_2",
+      "name": "Present Address Dates From 2",
+      "spoken_name": "present address dates from 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField25[0]",
+      "consolidated_widgets": [
+        "DateTimeField25[0]"
+      ]
+    },
+    {
+      "id": "present_address_dates_to_2",
+      "name": "Present Address Dates To 2",
+      "spoken_name": "present address dates to 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField27[0]",
+      "consolidated_widgets": [
+        "DateTimeField27[0]"
+      ]
+    },
+    {
+      "id": "present_address_number_and_street_line_3_of_5",
+      "name": "Present Address Number and Street Line 3 of 5",
+      "spoken_name": "present address number and street line 3 of 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[16]",
+      "consolidated_widgets": [
+        "TextField13[16]"
+      ]
+    },
+    {
+      "id": "present_address_city_town_3",
+      "name": "Present Address City/Town 3",
+      "spoken_name": "present address city town 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[17]",
+      "consolidated_widgets": [
+        "TextField13[17]"
+      ]
+    },
+    {
+      "id": "present_address_department_province_or_state_3",
+      "name": "Present Address Department, Province or State 3",
+      "spoken_name": "present address department province or state 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[18]",
+      "consolidated_widgets": [
+        "TextField13[18]"
+      ]
+    },
+    {
+      "id": "present_address_country_3",
+      "name": "Present Address Country 3",
+      "spoken_name": "present address country 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[19]",
+      "consolidated_widgets": [
+        "TextField13[19]"
+      ]
+    },
+    {
+      "id": "present_address_dates_from_3",
+      "name": "Present Address Dates From 3",
+      "spoken_name": "present address dates from 3",
+      "type": "date",
+      "pdf_field_name": "DateTimeField28[0]",
+      "consolidated_widgets": [
+        "DateTimeField28[0]"
+      ]
+    },
+    {
+      "id": "present_address_dates_to_3",
+      "name": "Present Address Dates To 3",
+      "spoken_name": "present address dates to 3",
+      "type": "date",
+      "pdf_field_name": "DateTimeField29[0]",
+      "consolidated_widgets": [
+        "DateTimeField29[0]"
+      ]
+    },
+    {
+      "id": "present_address_number_and_street_line_4_of_5",
+      "name": "Present Address Number and Street Line 4 of 5",
+      "spoken_name": "present address number and street line 4 of 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[20]",
+      "consolidated_widgets": [
+        "TextField13[20]"
+      ]
+    },
+    {
+      "id": "present_address_city_town_4",
+      "name": "Present Address City/Town 4",
+      "spoken_name": "present address city town 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[21]",
+      "consolidated_widgets": [
+        "TextField13[21]"
+      ]
+    },
+    {
+      "id": "present_address_department_province_or_state_4",
+      "name": "Present Address Department, Province or State 4",
+      "spoken_name": "present address department province or state 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[22]",
+      "consolidated_widgets": [
+        "TextField13[22]"
+      ]
+    },
+    {
+      "id": "present_address_country_4",
+      "name": "Present Address Country 4",
+      "spoken_name": "present address country 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[23]",
+      "consolidated_widgets": [
+        "TextField13[23]"
+      ]
+    },
+    {
+      "id": "present_address_dates_from_4",
+      "name": "Present Address Dates From 4",
+      "spoken_name": "present address dates from 4",
+      "type": "date",
+      "pdf_field_name": "DateTimeField30[0]",
+      "consolidated_widgets": [
+        "DateTimeField30[0]"
+      ]
+    },
+    {
+      "id": "present_address_dates_to_4",
+      "name": "Present Address Dates To 4",
+      "spoken_name": "present address dates to 4",
+      "type": "date",
+      "pdf_field_name": "DateTimeField31[0]",
+      "consolidated_widgets": [
+        "DateTimeField31[0]"
+      ]
+    },
+    {
+      "id": "present_address_number_and_street_line_5_of_5",
+      "name": "Present Address Number and Street Line 5 of 5",
+      "spoken_name": "present address number and street line 5 of 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[24]",
+      "consolidated_widgets": [
+        "TextField13[24]"
+      ]
+    },
+    {
+      "id": "present_address_city_town_5",
+      "name": "Present Address City/Town 5",
+      "spoken_name": "present address city town 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[25]",
+      "consolidated_widgets": [
+        "TextField13[25]"
+      ]
+    },
+    {
+      "id": "present_address_department_province_or_state_5",
+      "name": "Present Address Department, Province or State 5",
+      "spoken_name": "present address department province or state 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[26]",
+      "consolidated_widgets": [
+        "TextField13[26]"
+      ]
+    },
+    {
+      "id": "present_address_country_5",
+      "name": "Present Address Country 5",
+      "spoken_name": "present address country 5",
+      "type": "text",
+      "pdf_field_name": "TextField13[27]",
+      "consolidated_widgets": [
+        "TextField13[27]"
+      ]
+    },
+    {
+      "id": "present_address_dates_from_5",
+      "name": "Present Address Dates From 5",
+      "spoken_name": "present address dates from 5",
+      "type": "date",
+      "pdf_field_name": "DateTimeField32[0]",
+      "consolidated_widgets": [
+        "DateTimeField32[0]"
+      ]
+    },
+    {
+      "id": "present_address_dates_to_5",
+      "name": "Present Address Dates To 5",
+      "spoken_name": "present address dates to 5",
+      "type": "date",
+      "pdf_field_name": "DateTimeField33[0]",
+      "consolidated_widgets": [
+        "DateTimeField33[0]"
+      ]
+    },
+    {
+      "id": "name_of_school_line_1_of_4",
+      "name": "Name of School Line 1 of 4",
+      "spoken_name": "name of school line 1 of 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[28]",
+      "consolidated_widgets": [
+        "TextField13[28]"
+      ]
+    },
+    {
+      "id": "type_of_school",
+      "name": "Type of School",
+      "spoken_name": "type of school",
+      "type": "text",
+      "pdf_field_name": "TextField13[30]",
+      "consolidated_widgets": [
+        "TextField13[30]"
+      ]
+    },
+    {
+      "id": "location_address",
+      "name": "Location (Address)",
+      "spoken_name": "location address",
+      "type": "text",
+      "pdf_field_name": "TextField13[32]",
+      "consolidated_widgets": [
+        "TextField13[32]"
+      ]
+    },
+    {
+      "id": "attended_from",
+      "name": "Attended From",
+      "spoken_name": "attended from",
+      "type": "date",
+      "pdf_field_name": "DateTimeField41[0]",
+      "consolidated_widgets": [
+        "DateTimeField41[0]"
+      ]
+    },
+    {
+      "id": "attended_to",
+      "name": "Attended To",
+      "spoken_name": "attended to",
+      "type": "date",
+      "pdf_field_name": "DateTimeField40[0]",
+      "consolidated_widgets": [
+        "DateTimeField40[0]"
+      ]
+    },
+    {
+      "id": "name_of_school_line_2_of_4",
+      "name": "Name of School Line 2 of 4",
+      "spoken_name": "name of school line 2 of 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[29]",
+      "consolidated_widgets": [
+        "TextField13[29]"
+      ]
+    },
+    {
+      "id": "type_of_school_2",
+      "name": "Type of School 2",
+      "spoken_name": "type of school 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[31]",
+      "consolidated_widgets": [
+        "TextField13[31]"
+      ]
+    },
+    {
+      "id": "location_address_2",
+      "name": "Location (Address) 2",
+      "spoken_name": "location address 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[33]",
+      "consolidated_widgets": [
+        "TextField13[33]"
+      ]
+    },
+    {
+      "id": "attended_from_2",
+      "name": "Attended From 2",
+      "spoken_name": "attended from 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField38[0]",
+      "consolidated_widgets": [
+        "DateTimeField38[0]"
+      ]
+    },
+    {
+      "id": "attended_to_2",
+      "name": "Attended To 2",
+      "spoken_name": "attended to 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField39[0]",
+      "consolidated_widgets": [
+        "DateTimeField39[0]"
+      ]
+    },
+    {
+      "id": "name_of_school_line_3_of_4",
+      "name": "Name of School Line 3 of 4",
+      "spoken_name": "name of school line 3 of 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[34]",
+      "consolidated_widgets": [
+        "TextField13[34]"
+      ]
+    },
+    {
+      "id": "type_of_school_3",
+      "name": "Type of School 3",
+      "spoken_name": "type of school 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[35]",
+      "consolidated_widgets": [
+        "TextField13[35]"
+      ]
+    },
+    {
+      "id": "location_address_3",
+      "name": "Location (Address) 3",
+      "spoken_name": "location address 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[36]",
+      "consolidated_widgets": [
+        "TextField13[36]"
+      ]
+    },
+    {
+      "id": "attended_from_3",
+      "name": "Attended From 3",
+      "spoken_name": "attended from 3",
+      "type": "date",
+      "pdf_field_name": "DateTimeField37[0]",
+      "consolidated_widgets": [
+        "DateTimeField37[0]"
+      ]
+    },
+    {
+      "id": "education_name_of_school_line_4_of_4",
+      "name": "TextField13[37]",
+      "spoken_name": "education name of school line 4 of 4",
+      "type": "text",
+      "pdf_field_name": "TextField13[37]",
+      "consolidated_widgets": [
+        "TextField13[37]"
+      ]
+    },
+    {
+      "id": "education_type_of_school",
+      "name": "TextField13[38]",
+      "spoken_name": "education type of school",
+      "type": "text",
+      "pdf_field_name": "TextField13[38]",
+      "consolidated_widgets": [
+        "TextField13[38]"
+      ]
+    },
+    {
+      "id": "education_location_address",
+      "name": "TextField13[39]",
+      "spoken_name": "education location address",
+      "type": "text",
+      "pdf_field_name": "TextField13[39]",
+      "consolidated_widgets": [
+        "TextField13[39]"
+      ]
+    },
+    {
+      "id": "education_attended_from",
+      "name": "DateTimeField34[0]",
+      "spoken_name": "education attended from",
+      "type": "date",
+      "pdf_field_name": "DateTimeField34[0]",
+      "consolidated_widgets": [
+        "DateTimeField34[0]"
+      ]
+    },
+    {
+      "id": "education_attended_to",
+      "name": "DateTimeField35[0]",
+      "spoken_name": "education attended to",
+      "type": "date",
+      "pdf_field_name": "DateTimeField35[0]",
+      "consolidated_widgets": [
+        "DateTimeField35[0]"
+      ]
+    },
+    {
+      "id": "employment_name_and_address_of_employer_line_1_of_3",
+      "name": "TextField13[40]",
+      "spoken_name": "employment name and address of employer line 1 of 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[40]",
+      "consolidated_widgets": [
+        "TextField13[40]"
+      ]
+    },
+    {
+      "id": "employment_your_occupation",
+      "name": "TextField13[42]",
+      "spoken_name": "employment your occupation",
+      "type": "text",
+      "pdf_field_name": "TextField13[42]",
+      "consolidated_widgets": [
+        "TextField13[42]"
+      ]
+    },
+    {
+      "id": "employment_dates_from",
+      "name": "DateTimeField42[0]",
+      "spoken_name": "employment dates from",
+      "type": "date",
+      "pdf_field_name": "DateTimeField42[0]",
+      "consolidated_widgets": [
+        "DateTimeField42[0]"
+      ]
+    },
+    {
+      "id": "employment_dates_to",
+      "name": "DateTimeField44[0]",
+      "spoken_name": "employment dates to",
+      "type": "date",
+      "pdf_field_name": "DateTimeField44[0]",
+      "consolidated_widgets": [
+        "DateTimeField44[0]"
+      ]
+    },
+    {
+      "id": "employment_name_and_address_of_employer_line_2_of_3",
+      "name": "TextField13[41]",
+      "spoken_name": "employment name and address of employer line 2 of 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[41]",
+      "consolidated_widgets": [
+        "TextField13[41]"
+      ]
+    },
+    {
+      "id": "employment_your_occupation_2",
+      "name": "TextField13[43]",
+      "spoken_name": "employment your occupation 2",
+      "type": "text",
+      "pdf_field_name": "TextField13[43]",
+      "consolidated_widgets": [
+        "TextField13[43]"
+      ]
+    },
+    {
+      "id": "employment_dates_from_2",
+      "name": "DateTimeField43[0]",
+      "spoken_name": "employment dates from 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField43[0]",
+      "consolidated_widgets": [
+        "DateTimeField43[0]"
+      ]
+    },
+    {
+      "id": "employment_dates_to_2",
+      "name": "DateTimeField45[0]",
+      "spoken_name": "employment dates to 2",
+      "type": "date",
+      "pdf_field_name": "DateTimeField45[0]",
+      "consolidated_widgets": [
+        "DateTimeField45[0]"
+      ]
+    },
+    {
+      "id": "employment_name_and_address_of_employer_line_3_of_3",
+      "name": "TextField13[44]",
+      "spoken_name": "employment name and address of employer line 3 of 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[44]",
+      "consolidated_widgets": [
+        "TextField13[44]"
+      ]
+    },
+    {
+      "id": "employment_your_occupation_3",
+      "name": "TextField13[45]",
+      "spoken_name": "employment your occupation 3",
+      "type": "text",
+      "pdf_field_name": "TextField13[45]",
+      "consolidated_widgets": [
+        "TextField13[45]"
+      ]
+    },
+    {
+      "id": "employment_dates_from_3",
+      "name": "DateTimeField46[0]",
+      "spoken_name": "employment dates from 3",
+      "type": "date",
+      "pdf_field_name": "DateTimeField46[0]",
+      "consolidated_widgets": [
+        "DateTimeField46[0]"
+      ]
+    },
+    {
+      "id": "employment_dates_to_3",
+      "name": "DateTimeField47[0]",
+      "spoken_name": "employment dates to 3",
+      "type": "date",
+      "pdf_field_name": "DateTimeField47[0]",
+      "consolidated_widgets": [
+        "DateTimeField47[0]"
+      ]
+    },
+    {
+      "id": "mother_full_name",
+      "name": "TextField13[46]",
+      "spoken_name": "mother full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[46]",
+      "consolidated_widgets": [
+        "TextField13[46]"
+      ]
+    },
+    {
+      "id": "mother_city_town_and_country_of_birth",
+      "name": "TextField13[49]",
+      "spoken_name": "mother city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[49]",
+      "consolidated_widgets": [
+        "TextField13[49]"
+      ]
+    },
+    {
+      "id": "mother_current_location",
+      "name": "TextField35[0]",
+      "spoken_name": "mother current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[0]",
+      "consolidated_widgets": [
+        "TextField35[0]"
+      ]
+    },
+    {
+      "id": "mother_deceased",
+      "name": "m[0]",
+      "spoken_name": "mother deceased",
+      "type": "checkbox",
+      "pdf_field_name": "m[0]",
+      "consolidated_widgets": [
+        "m[0]"
+      ]
+    },
+    {
+      "id": "father_full_name",
+      "name": "TextField13[47]",
+      "spoken_name": "father full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[47]",
+      "consolidated_widgets": [
+        "TextField13[47]"
+      ]
+    },
+    {
+      "id": "father_city_town_and_country_of_birth",
+      "name": "TextField13[50]",
+      "spoken_name": "father city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[50]",
+      "consolidated_widgets": [
+        "TextField13[50]"
+      ]
+    },
+    {
+      "id": "father_current_location",
+      "name": "TextField35[1]",
+      "spoken_name": "father current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[1]",
+      "consolidated_widgets": [
+        "TextField35[1]"
+      ]
+    },
+    {
+      "id": "father_deceased",
+      "name": "f[0]",
+      "spoken_name": "father deceased",
+      "type": "checkbox",
+      "pdf_field_name": "f[0]",
+      "consolidated_widgets": [
+        "f[0]"
+      ]
+    },
+    {
+      "id": "sibling_1_full_name",
+      "name": "TextField13[48]",
+      "spoken_name": "sibling 1 full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[48]",
+      "consolidated_widgets": [
+        "TextField13[48]"
+      ]
+    },
+    {
+      "id": "sibling_1_city_town_and_country_of_birth",
+      "name": "TextField13[51]",
+      "spoken_name": "sibling 1 city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[51]",
+      "consolidated_widgets": [
+        "TextField13[51]"
+      ]
+    },
+    {
+      "id": "sibling_1_current_location",
+      "name": "TextField35[2]",
+      "spoken_name": "sibling 1 current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[2]",
+      "consolidated_widgets": [
+        "TextField35[2]"
+      ]
+    },
+    {
+      "id": "sibling_1_deceased",
+      "name": "s1[0]",
+      "spoken_name": "sibling 1 deceased",
+      "type": "checkbox",
+      "pdf_field_name": "s1[0]",
+      "consolidated_widgets": [
+        "s1[0]"
+      ]
+    },
+    {
+      "id": "sibling_2_full_name",
+      "name": "TextField13[52]",
+      "spoken_name": "sibling 2 full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[52]",
+      "consolidated_widgets": [
+        "TextField13[52]"
+      ]
+    },
+    {
+      "id": "sibling_2_city_town_and_country_of_birth",
+      "name": "TextField13[53]",
+      "spoken_name": "sibling 2 city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[53]",
+      "consolidated_widgets": [
+        "TextField13[53]"
+      ]
+    },
+    {
+      "id": "sibling_2_current_location",
+      "name": "TextField35[3]",
+      "spoken_name": "sibling 2 current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[3]",
+      "consolidated_widgets": [
+        "TextField35[3]"
+      ]
+    },
+    {
+      "id": "sibling_2_deceased",
+      "name": "s2[0]",
+      "spoken_name": "sibling 2 deceased",
+      "type": "checkbox",
+      "pdf_field_name": "s2[0]",
+      "consolidated_widgets": [
+        "s2[0]"
+      ]
+    },
+    {
+      "id": "sibling_3_full_name",
+      "name": "TextField13[54]",
+      "spoken_name": "sibling 3 full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[54]",
+      "consolidated_widgets": [
+        "TextField13[54]"
+      ]
+    },
+    {
+      "id": "sibling_3_city_town_and_country_of_birth",
+      "name": "TextField13[55]",
+      "spoken_name": "sibling 3 city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[55]",
+      "consolidated_widgets": [
+        "TextField13[55]"
+      ]
+    },
+    {
+      "id": "sibling_3_current_location",
+      "name": "TextField35[4]",
+      "spoken_name": "sibling 3 current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[4]",
+      "consolidated_widgets": [
+        "TextField35[4]"
+      ]
+    },
+    {
+      "id": "sibling_3_deceased",
+      "name": "s3[0]",
+      "spoken_name": "sibling 3 deceased",
+      "type": "checkbox",
+      "pdf_field_name": "s3[0]",
+      "consolidated_widgets": [
+        "s3[0]"
+      ]
+    },
+    {
+      "id": "sibling_4_full_name",
+      "name": "TextField13[56]",
+      "spoken_name": "sibling 4 full name",
+      "type": "text",
+      "pdf_field_name": "TextField13[56]",
+      "consolidated_widgets": [
+        "TextField13[56]"
+      ]
+    },
+    {
+      "id": "sibling_4_city_town_and_country_of_birth",
+      "name": "TextField13[57]",
+      "spoken_name": "sibling 4 city town and country of birth",
+      "type": "text",
+      "pdf_field_name": "TextField13[57]",
+      "consolidated_widgets": [
+        "TextField13[57]"
+      ]
+    },
+    {
+      "id": "sibling_4_current_location",
+      "name": "TextField35[5]",
+      "spoken_name": "sibling 4 current location",
+      "type": "text",
+      "pdf_field_name": "TextField35[5]",
+      "consolidated_widgets": [
+        "TextField35[5]"
+      ]
+    },
+    {
+      "id": "sibling_4_deceased",
+      "name": "s4[0]",
+      "spoken_name": "sibling 4 deceased",
+      "type": "checkbox",
+      "pdf_field_name": "s4[0]",
+      "consolidated_widgets": [
+        "s4[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_race",
+      "name": "CheckBoxrace[0]",
+      "spoken_name": "why applying for asylum race",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxrace[0]",
+      "consolidated_widgets": [
+        "CheckBoxrace[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_religion",
+      "name": "CheckBoxreligion[0]",
+      "spoken_name": "why applying for asylum religion",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxreligion[0]",
+      "consolidated_widgets": [
+        "CheckBoxreligion[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_politics",
+      "name": "CheckBoxpolitics[0]",
+      "spoken_name": "why applying for asylum politics",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxpolitics[0]",
+      "consolidated_widgets": [
+        "CheckBoxpolitics[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_social",
+      "name": "CheckBoxsocial[0]",
+      "spoken_name": "why applying for asylum social",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxsocial[0]",
+      "consolidated_widgets": [
+        "CheckBoxsocial[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_nationality",
+      "name": "CheckBoxnationality[0]",
+      "spoken_name": "why applying for asylum nationality",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxnationality[0]",
+      "consolidated_widgets": [
+        "CheckBoxnationality[0]"
+      ]
+    },
+    {
+      "id": "why_applying_for_asylum_torture",
+      "name": "CheckBoxtorture[0]",
+      "spoken_name": "why applying for asylum torture",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBoxtorture[0]",
+      "consolidated_widgets": [
+        "CheckBoxtorture[0]"
+      ]
+    },
+    {
+      "id": "experienced_harm_or_mistreatment",
+      "name": "ckboxyn1a[0]",
+      "spoken_name": "experienced harm or mistreatment",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn1a[0]",
+        "ckboxyn1a[1]"
+      ],
+      "group_id": "experienced_harm_or_mistreatment",
+      "group_label": "Experienced Harm or Mistreatment",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn1a[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn1a[1]"
+        }
+      ]
+    },
+    {
+      "id": "date_time_field36_0",
+      "name": "DateTimeField36[0]",
+      "spoken_name": "date time field36 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField36[0]",
+      "consolidated_widgets": [
+        "DateTimeField36[0]"
+      ]
+    },
+    {
+      "id": "date_time_field35_0",
+      "name": "DateTimeField35[0]",
+      "spoken_name": "date time field35 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField35[0]",
+      "consolidated_widgets": [
+        "DateTimeField35[0]"
+      ]
+    },
+    {
+      "id": "date_time_field44_0",
+      "name": "DateTimeField44[0]",
+      "spoken_name": "date time field44 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField44[0]",
+      "consolidated_widgets": [
+        "DateTimeField44[0]"
+      ]
+    },
+    {
+      "id": "date_time_field45_0",
+      "name": "DateTimeField45[0]",
+      "spoken_name": "date time field45 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField45[0]",
+      "consolidated_widgets": [
+        "DateTimeField45[0]"
+      ]
+    },
+    {
+      "id": "date_time_field46_0",
+      "name": "DateTimeField46[0]",
+      "spoken_name": "date time field46 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField46[0]",
+      "consolidated_widgets": [
+        "DateTimeField46[0]"
+      ]
+    },
+    {
+      "id": "date_time_field47_0",
+      "name": "DateTimeField47[0]",
+      "spoken_name": "date time field47 0",
+      "type": "text",
+      "pdf_field_name": "DateTimeField47[0]",
+      "consolidated_widgets": [
+        "DateTimeField47[0]"
+      ]
+    },
+    {
+      "id": "part_b_fear_harm_or_mistreatment",
+      "name": "Part B Fear Harm or Mistreatment",
+      "spoken_name": "part b fear harm or mistreatment",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn1b[0]",
+        "ckboxyn1b[1]"
+      ],
+      "group_id": "part_b_fear_harm_or_mistreatment",
+      "group_label": "Part B. Information About Your Application. 1. Why are you applying for asylum or withholding of removal under section 2 41(B)(3) of the Immigration and Nationality Act (I N. A.), or for withholding of removal under the Convention Against Torture? Check the appropriate box/boxes below and then provide detailed answers to questions. A. and B below.  B. Do you fear harm or mistreatment if you return to your home country?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn1b[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn1b[1]"
+        }
+      ]
+    },
+    {
+      "id": "ever_accused_charged_arrested",
+      "name": "Ever Accused Charged Arrested",
+      "spoken_name": "ever accused charged arrested",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn2[0]",
+        "ckboxyn2[1]"
+      ],
+      "group_id": "ever_accused_charged_arrested",
+      "group_label": "Part B. Information About Your Application. 2. Have you or your family members ever been accused, charged, arrested, detained, interrogated, convicted and sentenced, or imprisoned in any country other than the United States (including for an immigration law violation)?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn2[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn2[1]"
+        }
+      ]
+    },
+    {
+      "id": "ever_belonged_to_organizations",
+      "name": "Ever Belonged to Organizations",
+      "spoken_name": "ever belonged to organizations",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn3a[0]",
+        "ckboxyn3a[1]"
+      ],
+      "group_id": "ever_belonged_to_organizations",
+      "group_label": "Part B. Information About Your Application. 3. A. Have you or your family members ever belonged to or been associated with any organizations or groups in your home country, such as, but not limited to, a political party, student group, labor union, religious organization, military or paramilitary group, civil patrol, guerrilla organization, ethnic group, human rights group, or the press or media?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn3a[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn3a[1]"
+        }
+      ]
+    },
+    {
+      "id": "continue_to_participate_in_organizations",
+      "name": "Continue to Participate in Organizations",
+      "spoken_name": "continue to participate in organizations",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn3b[0]",
+        "ckboxyn3b[1]"
+      ],
+      "group_id": "continue_to_participate_in_organizations",
+      "group_label": "Part B. Information About Your Application. 3. B. Do you or your family members continue to participate in any way in these organizations or groups?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn3b[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn3b[1]"
+        }
+      ]
+    },
+    {
+      "id": "afraid_of_being_subjected_to_torture",
+      "name": "Afraid of Being Subjected to Torture",
+      "spoken_name": "afraid of being subjected to torture",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxyn4[0]",
+        "ckboxyn4[1]"
+      ],
+      "group_id": "afraid_of_being_subjected_to_torture",
+      "group_label": "Part B. Information About Your Application. 4. Are you afraid of being subjected to torture in your home country or any other country to which you may be returned?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxyn4[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxyn4[1]"
+        }
+      ]
+    },
+    {
+      "id": "ever_applied_for_refugee_status",
+      "name": "Ever Applied for Refugee Status",
+      "spoken_name": "ever applied for refugee status",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync1[0]",
+        "ckboxync1[1]"
+      ],
+      "group_id": "ever_applied_for_refugee_status",
+      "group_label": "Part C. Additional Information About Your application. 1. Have you, your spouse, your child(ren), your parents or your siblings ever applied to the U. S. Government for refugee status, asylum, or withholding of removal?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync1[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync1[1]"
+        }
+      ]
+    },
+    {
+      "id": "traveled_through_other_country",
+      "name": "Traveled Through Other Country",
+      "spoken_name": "traveled through other country",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync2a[0]",
+        "ckboxync2a[1]"
+      ],
+      "group_id": "traveled_through_other_country",
+      "group_label": "Part C. Additional Information About Your Application. 2. A. After leaving the country from which you are claiming asylum, did you or your spouse or child(ren) who are now in the United States travel through or reside in any other country before entering the United States?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync2a[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync2a[1]"
+        }
+      ]
+    },
+    {
+      "id": "applied_for_lawful_status_in_other_country",
+      "name": "Applied for Lawful Status in Other Country",
+      "spoken_name": "applied for lawful status in other country",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync2b[0]",
+        "ckboxync2b[1]"
+      ],
+      "group_id": "applied_for_lawful_status_in_other_country",
+      "group_label": "Part C. Additional Information About Your Application. 2. B. Have you, your spouse, your child(ren), or other family members, such as your parents or siblings, ever applied for or received any lawful status in any country other than the one from which you are now claiming asylum?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync2b[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync2b[1]"
+        }
+      ]
+    },
+    {
+      "id": "caused_harm_or_suffering",
+      "name": "Caused Harm or Suffering",
+      "spoken_name": "caused harm or suffering",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync3[0]",
+        "ckboxync3[1]"
+      ],
+      "group_id": "caused_harm_or_suffering",
+      "group_label": "Part C. Additional Information About Your Application. 3. Have you, your spouse or your child(ren) ever ordered, incited, assisted or otherwise participated in causing harm or suffering to any person because of his or her race, religion, nationality, membership in a particular social group or belief in a particular political opinion?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync3[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync3[1]"
+        }
+      ]
+    },
+    {
+      "id": "returned_to_country_of_harm",
+      "name": "Returned to Country of Harm",
+      "spoken_name": "returned to country of harm",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PCckboxyn4[0]",
+        "PCckboxyn4[1]"
+      ],
+      "group_id": "returned_to_country_of_harm",
+      "group_label": "Part C. Additional Information About Your Application. 4. After you left the country where you were harmed or fear harm, did you return to that country?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PCckboxyn4[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PCckboxyn4[1]"
+        }
+      ]
+    },
+    {
+      "id": "filing_more_than_one_year_after_arrival",
+      "name": "Filing More Than One Year After Arrival",
+      "spoken_name": "filing more than one year after arrival",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync5[0]",
+        "ckboxync5[1]"
+      ],
+      "group_id": "filing_more_than_one_year_after_arrival",
+      "group_label": "Part C. Additional Information About Your Application. 5. Are you filing this application more than 1 year after your last arrival in the United States?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync5[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync5[1]"
+        }
+      ]
+    },
+    {
+      "id": "ever_committed_crime",
+      "name": "Ever Committed Crime",
+      "spoken_name": "ever committed crime",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxync6[0]",
+        "ckboxync6[1]"
+      ],
+      "group_id": "ever_committed_crime",
+      "group_label": "Part C. Additional Information About Your Application. 6. Have you or any member of your family included in the application ever committed any crime and/or been arrested, charged, convicted, or sentenced for any crimes in the United States?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxync6[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxync6[1]"
+        }
+      ]
+    },
+    {
+      "id": "print_your_complete_name",
+      "name": "Print Your Complete Name",
+      "spoken_name": "print your complete name",
+      "type": "text",
+      "pdf_field_name": "TextField20[0]",
+      "consolidated_widgets": [
+        "TextField20[0]"
+      ],
+      "description": "Part D. Your Signature. Print your Complete Name."
+    },
+    {
+      "id": "write_your_name_in_your_native_alphabet",
+      "name": "Write Your Name in Your Native Alphabet",
+      "spoken_name": "write your name in your native alphabet",
+      "type": "text",
+      "pdf_field_name": "TextField20[1]",
+      "consolidated_widgets": [
+        "TextField20[1]"
+      ],
+      "description": "Part D. Your Signature. Write your Name in your native alphabet."
+    },
+    {
+      "id": "spouse_parent_or_child_assisted",
+      "name": "Spouse Parent or Child Assisted",
+      "spoken_name": "spouse parent or child assisted",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "PtD_ckboxynd1[0]",
+        "PtD_ckboxynd1[1]"
+      ],
+      "group_id": "spouse_parent_or_child_assisted",
+      "group_label": "Part D. Your Signature. Did your spouse, parent, or child(ren) assist you in completing this application?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "PtD_ckboxynd1[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "PtD_ckboxynd1[1]"
+        }
+      ]
+    },
+    {
+      "id": "child_name_1",
+      "name": "Child Name 1",
+      "spoken_name": "child name 1",
+      "type": "text",
+      "pdf_field_name": "PtD_ChildName1[0]",
+      "consolidated_widgets": [
+        "PtD_ChildName1[0]"
+      ],
+      "description": "Part D. Your Signature. Did your spouse, parent, or child/children assist you in completing this application? If Yes, Enter Name 1."
+    },
+    {
+      "id": "relationship_of_child_1",
+      "name": "Relationship of Child 1",
+      "spoken_name": "relationship of child 1",
+      "type": "text",
+      "pdf_field_name": "PtD_RelationshipOfChild1[0]",
+      "consolidated_widgets": [
+        "PtD_RelationshipOfChild1[0]"
+      ],
+      "description": "Part D. Your Signature. Did your spouse, parent, or child/children assist you in completing this application? If Yes, Enter Relationship 1."
+    },
+    {
+      "id": "child_name_2",
+      "name": "Child Name 2",
+      "spoken_name": "child name 2",
+      "type": "text",
+      "pdf_field_name": "PtD_ChildName2[0]",
+      "consolidated_widgets": [
+        "PtD_ChildName2[0]"
+      ],
+      "description": "Part D. Your Signature. Did your spouse, parent, or child/children assist you in completing this application? If Yes, Enter Name 2."
+    },
+    {
+      "id": "relationship_of_child_2",
+      "name": "Relationship of Child 2",
+      "spoken_name": "relationship of child 2",
+      "type": "text",
+      "pdf_field_name": "PtD_RelationshipOfChild2[0]",
+      "consolidated_widgets": [
+        "PtD_RelationshipOfChild2[0]"
+      ],
+      "description": "Part D. Your Signature. Did your spouse, parent, or child/children assist you in completing this application? If Yes, Enter Relationship 2."
+    },
+    {
+      "id": "someone_other_than_family_prepared",
+      "name": "Someone Other Than Family Prepared",
+      "spoken_name": "someone other than family prepared",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxynd2[0]",
+        "ckboxynd2[1]"
+      ],
+      "group_id": "someone_other_than_family_prepared",
+      "group_label": "Part D. Your Signature. Did someone other than your spouse, parent, or child/children prepare this application?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxynd2[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxynd2[1]"
+        }
+      ]
+    },
+    {
+      "id": "provided_with_list_of_persons",
+      "name": "Provided With List of Persons",
+      "spoken_name": "provided with list of persons",
+      "type": "radio",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "ckboxynd3[0]",
+        "ckboxynd3[1]"
+      ],
+      "group_id": "provided_with_list_of_persons",
+      "group_label": "Part D. Your Signature. Asylum applicants may be represented by counsel.  Have you been provided with a list of persons who may be available to assist you, at little or no cost, with your asylum claim?",
+      "group_kind": "radio",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes",
+          "pdf_field_name": "ckboxynd3[0]"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "pdf_field_name": "ckboxynd3[1]"
+        }
+      ]
+    },
+    {
+      "id": "preparer_name",
+      "name": "Preparer Name",
+      "spoken_name": "preparer name",
+      "type": "text",
+      "pdf_field_name": "PtE_PreparerName[0]",
+      "consolidated_widgets": [
+        "PtE_PreparerName[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Print Complete Name of Preparer."
+    },
+    {
+      "id": "preparer_street_number_and_name",
+      "name": "Preparer Street Number and Name",
+      "spoken_name": "preparer street number and name",
+      "type": "text",
+      "pdf_field_name": "PtE_StreetNumAndName[0]",
+      "consolidated_widgets": [
+        "PtE_StreetNumAndName[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Address of Preparer. Enter Street Number and Name."
+    },
+    {
+      "id": "preparer_daytime_telephone_number_area_code",
+      "name": "Preparer Daytime Telephone Number Area Code",
+      "spoken_name": "preparer daytime telephone number area code",
+      "type": "text",
+      "pdf_field_name": "TextField25[1]",
+      "consolidated_widgets": [
+        "TextField25[1]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Daytime Telephone Number. Enter 3-digit Area Code."
+    },
+    {
+      "id": "preparer_daytime_telephone_number",
+      "name": "Preparer Daytime Telephone Number",
+      "spoken_name": "preparer daytime telephone number",
+      "type": "text",
+      "pdf_field_name": "TextField25[0]",
+      "consolidated_widgets": [
+        "TextField25[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Enter 7-digit Daytime Telephone Number."
+    },
+    {
+      "id": "preparer_apartment_number",
+      "name": "Preparer Apartment Number",
+      "spoken_name": "preparer apartment number",
+      "type": "text",
+      "pdf_field_name": "PtE_AptNumber[0]",
+      "consolidated_widgets": [
+        "PtE_AptNumber[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Address of Preparer. Enter Apartment Number."
+    },
+    {
+      "id": "preparer_city",
+      "name": "Preparer City",
+      "spoken_name": "preparer city",
+      "type": "text",
+      "pdf_field_name": "PtE_City[0]",
+      "consolidated_widgets": [
+        "PtE_City[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Address of Preparer. Enter City."
+    },
+    {
+      "id": "preparer_state",
+      "name": "Preparer State",
+      "spoken_name": "preparer state",
+      "type": "text",
+      "pdf_field_name": "PtE_State[0]",
+      "consolidated_widgets": [
+        "PtE_State[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Address of Preparer. Enter State."
+    },
+    {
+      "id": "preparer_zip_code",
+      "name": "Preparer Zip Code",
+      "spoken_name": "preparer zip code",
+      "type": "text",
+      "pdf_field_name": "PtE_ZipCode[0]",
+      "consolidated_widgets": [
+        "PtE_ZipCode[0]"
+      ],
+      "description": "Part E. Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. Address of Preparer. Enter Zip Code."
+    },
+    {
+      "id": "attorney_or_accredited_representative",
+      "name": "Attorney or Accredited Representative",
+      "spoken_name": "attorney or accredited representative",
+      "type": "checkbox",
+      "pdf_field_name": "CheckBox1[0]",
+      "consolidated_widgets": [
+        "CheckBox1[0]"
+      ],
+      "description": "Part E.  Declaration of Person Preparing Form, if Other Than Applicant, Spouse, Parent, or Child. To be completed by an attorney or accredited representative (if any)."
+    },
+    {
+      "id": "attorney_state_bar_number",
+      "name": "Attorney State Bar Number",
+      "spoken_name": "attorney state bar number",
+      "type": "text",
+      "pdf_field_name": "AttorneyStateBarNumber[0]",
+      "consolidated_widgets": [
+        "AttorneyStateBarNumber[0]"
+      ],
+      "description": "To be completed by an attorney or accredited representative (if any).  Enter Attorney or State Bar Number (if applicable)."
+    },
+    {
+      "id": "uscis_online_account_number",
+      "name": "USCIS Online Account Number",
+      "spoken_name": "uscis online account number",
+      "type": "text",
+      "pdf_field_name": "USCISOnlineAcctNumber[0]",
+      "consolidated_widgets": [
+        "USCISOnlineAcctNumber[0]"
+      ],
+      "description": "To be completed by an attorney or accredited representative (if any). Enter Attorney or Accredited Representative U S C I S Online Account Number (if any)."
+    },
+    {
+      "id": "supplement_a_date",
+      "name": "Supplement A Date",
+      "spoken_name": "supplement a date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField57[0]",
+      "consolidated_widgets": [
+        "DateTimeField57[0]"
+      ],
+      "description": "Supplement. A. Enter Date. Enter as 2-digit Month, 2-digit Day and 4-digit Year."
+    },
+    {
+      "id": "additional_child_1_alien_registration_number",
+      "name": "Additional Child 1 Alien Registration Number",
+      "spoken_name": "additional child 1 alien registration number",
+      "type": "text",
+      "pdf_field_name": "TextField12[6]",
+      "consolidated_widgets": [
+        "TextField12[6]"
+      ],
+      "description": "Supplement. A. List All of Your Children, Regardless of Age or Marital Status. (NOTE: Use this form and attach additional pages and documentation as needed, if you have more than four children). 1. Additional Child 1. Enter Alien Registration Number (A. -Number), if any."
+    },
+    {
+      "id": "additional_child_1_marital_status",
+      "name": "Additional Child 1 Marital Status",
+      "spoken_name": "additional child 1 marital status",
+      "type": "text",
+      "pdf_field_name": "TextField12[8]",
+      "consolidated_widgets": [
+        "TextField12[8]"
+      ],
+      "description": "Supplement. A. List All of Your Children, Regardless of Age or Marital Status. 3. Additional Child 1. Enter Marital Status (Married, Single, Divorced or Widowed.)"
+    },
+    {
+      "id": "children_info_1",
+      "name": "Children Information 1",
+      "spoken_name": "children information 1",
+      "type": "table",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "TextField12[7]",
+        "TextField12[9]",
+        "TextField12[0]",
+        "TextField12[2]",
+        "TextField12[3]",
+        "DateTimeField14[0]",
+        "TextField12[5]",
+        "TextField12[1]",
+        "TextField12[4]",
+        "CheckBox12_Sex[2]",
+        "CheckBox12_Sex[3]",
+        "SuppLALine13_Specify[0]",
+        "CheckBox57[0]",
+        "CheckBox57[1]",
+        "ChildEntry5[0]",
+        "ChildExp5[0]",
+        "ChildINum5[0]",
+        "ChildStatus5[0]",
+        "SuppA_CheckBox20[0]",
+        "SuppA_CheckBox20[1]",
+        "ChildCurrent5[0]",
+        "ChildExpAuth5[0]",
+        "SuppA_CheckBox21[0]",
+        "SuppA_CheckBox21[1]"
+      ],
+      "columns": [
+        {
+          "id": "alien_registration_number",
+          "label": "Alien Registration Number",
+          "type": "text",
+          "pdf_field_name": "TextField12[7]"
+        },
+        {
+          "id": "social_security_number",
+          "label": "Social Security Number",
+          "type": "text",
+          "pdf_field_name": "TextField12[9]"
+        },
+        {
+          "id": "last_name",
+          "label": "Last Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[0]"
+        },
+        {
+          "id": "first_name",
+          "label": "First Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[2]"
+        },
+        {
+          "id": "middle_name",
+          "label": "Middle Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[3]"
+        },
+        {
+          "id": "date_of_birth",
+          "label": "Date of Birth",
+          "type": "date",
+          "pdf_field_name": "DateTimeField14[0]"
+        },
+        {
+          "id": "race_ethnic_or_tribal_group",
+          "label": "Race, Ethnic or Tribal Group",
+          "type": "text",
+          "pdf_field_name": "TextField12[5]"
+        },
+        {
+          "id": "city_and_country_of_birth",
+          "label": "City and Country of Birth",
+          "type": "text",
+          "pdf_field_name": "TextField12[1]"
+        },
+        {
+          "id": "nationality_citizenship",
+          "label": "Nationality (Citizenship)",
+          "type": "text",
+          "pdf_field_name": "TextField12[4]"
+        },
+        {
+          "id": "sex",
+          "label": "Sex",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "CheckBox12_Sex[2]",
+            "CheckBox12_Sex[3]"
+          ],
+          "options": [
+            {
+              "value": "male",
+              "label": "Male",
+              "pdf_field_name": "CheckBox12_Sex[2]"
+            },
+            {
+              "value": "female",
+              "label": "Female",
+              "pdf_field_name": "CheckBox12_Sex[3]"
+            }
+          ]
+        },
+        {
+          "id": "is_this_child_in_the_u_s_specify_location",
+          "label": "Is this child in the U. S.? Specify location",
+          "type": "text",
+          "pdf_field_name": "SuppLALine13_Specify[0]"
+        },
+        {
+          "id": "is_this_child_in_the_u_s",
+          "label": "Is this child in the U. S.",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "CheckBox57[0]",
+            "CheckBox57[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "CheckBox57[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "CheckBox57[1]"
+            }
+          ]
+        },
+        {
+          "id": "place_of_last_entry_into_the_u_s",
+          "label": "Place of Last Entry into the U. S.",
+          "type": "text",
+          "pdf_field_name": "ChildEntry5[0]"
+        },
+        {
+          "id": "date_of_last_entry_into_the_u_s",
+          "label": "Date of Last Entry into the U. S.",
+          "type": "date",
+          "pdf_field_name": "ChildExp5[0]"
+        },
+        {
+          "id": "i_94_number",
+          "label": "I-94 Number",
+          "type": "text",
+          "pdf_field_name": "ChildINum5[0]"
+        },
+        {
+          "id": "status_when_last_admitted",
+          "label": "Status when Last Admitted",
+          "type": "text",
+          "pdf_field_name": "ChildStatus5[0]"
+        },
+        {
+          "id": "is_your_child_in_immigration_court_proceedings",
+          "label": "Is your child in Immigration Court Proceedings?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppA_CheckBox20[0]",
+            "SuppA_CheckBox20[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "SuppA_CheckBox20[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "SuppA_CheckBox20[1]"
+            }
+          ]
+        },
+        {
+          "id": "current_status",
+          "label": "Current Status",
+          "type": "text",
+          "pdf_field_name": "ChildCurrent5[0]"
+        },
+        {
+          "id": "expiration_date_of_authorized_stay",
+          "label": "Expiration Date of Authorized Stay",
+          "type": "date",
+          "pdf_field_name": "ChildExpAuth5[0]"
+        },
+        {
+          "id": "is_this_child_to_be_included_in_this_application",
+          "label": "Is this child to be included in this application?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppA_CheckBox21[0]",
+            "SuppA_CheckBox21[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "SuppA_CheckBox21[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "SuppA_CheckBox21[1]"
+            }
+          ]
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 0,
+        "max_entries": 1,
+        "initial_rows": 1
+      }
+    },
+    {
+      "id": "children_info_2",
+      "name": "Children Information 2",
+      "spoken_name": "children information 2",
+      "type": "table",
+      "pdf_field_name": null,
+      "consolidated_widgets": [
+        "TextField12[16]",
+        "TextField12[17]",
+        "TextField12[18]",
+        "TextField12[19]",
+        "TextField12[10]",
+        "TextField12[12]",
+        "TextField12[13]",
+        "DateTimeField14[1]",
+        "TextField12[11]",
+        "TextField12[14]",
+        "TextField12[15]",
+        "SuppAL12_CheckBox[0]",
+        "SuppAL12_CheckBox[1]",
+        "SuppLALine13_Specify2[0]",
+        "SuppAL13_CheckBox[0]",
+        "SuppAL13_CheckBox[1]",
+        "ChildEntry6[0]",
+        "ChildExp6[0]",
+        "ChildINum6[0]",
+        "ChildStatus6[0]",
+        "SuppALine20_CheckBox2[0]",
+        "SuppALine20_CheckBox2[1]",
+        "ChildCurrent6[0]",
+        "ChildExpAuth6[0]",
+        "SuppALine21_CheckBox[0]",
+        "SuppALine21_CheckBox[1]"
+      ],
+      "columns": [
+        {
+          "id": "alien_registration_number",
+          "label": "Alien Registration Number",
+          "type": "text",
+          "pdf_field_name": "TextField12[16]"
+        },
+        {
+          "id": "passport_id_card_number",
+          "label": "Passport/ID Card Number",
+          "type": "text",
+          "pdf_field_name": "TextField12[17]"
+        },
+        {
+          "id": "marital_status",
+          "label": "Marital Status",
+          "type": "text",
+          "pdf_field_name": "TextField12[18]"
+        },
+        {
+          "id": "social_security_number",
+          "label": "Social Security Number",
+          "type": "text",
+          "pdf_field_name": "TextField12[19]"
+        },
+        {
+          "id": "last_name",
+          "label": "Last Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[10]"
+        },
+        {
+          "id": "first_name",
+          "label": "First Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[12]"
+        },
+        {
+          "id": "middle_name",
+          "label": "Middle Name",
+          "type": "text",
+          "pdf_field_name": "TextField12[13]"
+        },
+        {
+          "id": "date_of_birth",
+          "label": "Date of Birth",
+          "type": "date",
+          "pdf_field_name": "DateTimeField14[1]"
+        },
+        {
+          "id": "city_and_country_of_birth",
+          "label": "City and Country of Birth",
+          "type": "text",
+          "pdf_field_name": "TextField12[11]"
+        },
+        {
+          "id": "nationality_citizenship",
+          "label": "Nationality (Citizenship)",
+          "type": "text",
+          "pdf_field_name": "TextField12[14]"
+        },
+        {
+          "id": "race_ethnic_or_tribal_group",
+          "label": "Race, Ethnic or Tribal Group",
+          "type": "text",
+          "pdf_field_name": "TextField12[15]"
+        },
+        {
+          "id": "sex",
+          "label": "Sex",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppAL12_CheckBox[0]",
+            "SuppAL12_CheckBox[1]"
+          ],
+          "options": [
+            {
+              "value": "male",
+              "label": "Male",
+              "pdf_field_name": "SuppAL12_CheckBox[0]"
+            },
+            {
+              "value": "female",
+              "label": "Female",
+              "pdf_field_name": "SuppAL12_CheckBox[1]"
+            }
+          ]
+        },
+        {
+          "id": "is_this_child_in_the_u_s_specify_location",
+          "label": "Is this child in the U. S.? Specify location",
+          "type": "text",
+          "pdf_field_name": "SuppLALine13_Specify2[0]"
+        },
+        {
+          "id": "is_this_child_in_the_u_s",
+          "label": "Is this child in the U. S.",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppAL13_CheckBox[0]",
+            "SuppAL13_CheckBox[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "SuppAL13_CheckBox[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "SuppAL13_CheckBox[1]"
+            }
+          ]
+        },
+        {
+          "id": "place_of_last_entry_into_the_u_s",
+          "label": "Place of Last Entry into the U. S.",
+          "type": "text",
+          "pdf_field_name": "ChildEntry6[0]"
+        },
+        {
+          "id": "date_of_last_entry_into_the_u_s",
+          "label": "Date of Last Entry into the U. S.",
+          "type": "date",
+          "pdf_field_name": "ChildExp6[0]"
+        },
+        {
+          "id": "i_94_number",
+          "label": "I-94 Number",
+          "type": "text",
+          "pdf_field_name": "ChildINum6[0]"
+        },
+        {
+          "id": "status_when_last_admitted",
+          "label": "Status when Last Admitted",
+          "type": "text",
+          "pdf_field_name": "ChildStatus6[0]"
+        },
+        {
+          "id": "is_your_child_in_immigration_court_proceedings",
+          "label": "Is your child in Immigration Court Proceedings?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppALine20_CheckBox2[0]",
+            "SuppALine20_CheckBox2[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "SuppALine20_CheckBox2[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "SuppALine20_CheckBox2[1]"
+            }
+          ]
+        },
+        {
+          "id": "current_status",
+          "label": "Current Status",
+          "type": "text",
+          "pdf_field_name": "ChildCurrent6[0]"
+        },
+        {
+          "id": "expiration_date_of_authorized_stay",
+          "label": "Expiration Date of Authorized Stay",
+          "type": "date",
+          "pdf_field_name": "ChildExpAuth6[0]"
+        },
+        {
+          "id": "is_this_child_to_be_included_in_this_application",
+          "label": "Is this child to be included in this application?",
+          "type": "radio",
+          "pdf_field_name": null,
+          "consolidated_widgets": [
+            "SuppALine21_CheckBox[0]",
+            "SuppALine21_CheckBox[1]"
+          ],
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "pdf_field_name": "SuppALine21_CheckBox[0]"
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "pdf_field_name": "SuppALine21_CheckBox[1]"
+            }
+          ]
+        }
+      ],
+      "multi_entry": {
+        "min_entries": 0,
+        "max_entries": 1,
+        "initial_rows": 1
+      }
+    },
+    {
+      "id": "supplement_b_part",
+      "name": "Supplement B Part",
+      "spoken_name": "supplement b part",
+      "type": "text",
+      "pdf_field_name": "TextField31[0]",
+      "consolidated_widgets": [
+        "TextField31[0]"
+      ]
+    },
+    {
+      "id": "supplement_b_question",
+      "name": "Supplement B Question",
+      "spoken_name": "supplement b question",
+      "type": "text",
+      "pdf_field_name": "TextField31[1]",
+      "consolidated_widgets": [
+        "TextField31[1]"
+      ]
+    },
+    {
+      "id": "supplement_b_additional_information",
+      "name": "Supplement B Additional Information",
+      "spoken_name": "supplement b additional information",
+      "type": "textarea",
+      "pdf_field_name": "TextField32[0]",
+      "consolidated_widgets": [
+        "TextField32[0]"
+      ]
+    },
+    {
+      "id": "supplement_b_date",
+      "name": "Supplement B Date",
+      "spoken_name": "supplement b date",
+      "type": "date",
+      "pdf_field_name": "DateTimeField58[0]",
+      "consolidated_widgets": [
+        "DateTimeField58[0]"
+      ]
+    }
+  ]
+}

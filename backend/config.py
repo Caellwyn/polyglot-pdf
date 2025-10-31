@@ -26,7 +26,7 @@ class Settings(BaseModel):
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = False  # Gemini proactivity setting for live sessions
+	PROACTIVE_AUDIO: bool = True  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start
@@ -43,35 +43,43 @@ class Settings(BaseModel):
 	# Tool declarations for web forms (stateless, client-managed)
 	# Note: get_next_field is NOT included - client handles field navigation
 	TOOL_DECLARATIONS: list[dict] = [
+		# HALLUCINATION_REDUCTION (Oct 30, 2025): Changed to single-field updates only
+		# Multi-field updates caused higher hallucination rates
 		{
 			"name": "update_form_fields",
-			# "behavior": "NON_BLOCKING",
-			# 'scheduling': 'WHEN_IDLE',
 			"description": (
-				"Update one or more form fields with values the user provides in response to your questions. "
+				"Update EXACTLY ONE form field with the value the user provides. "
 				"CRITICAL: Call this IMMEDIATELY when user answers your question, even if conversational. "
+				"CRITICAL: Update ONLY ONE FIELD per tool call. NEVER update multiple fields at once. "
 				'Always fill field values in English. Translate from user if necessary. '
 				'User answering your question = providing a value. Examples:\n'
-				'  You ask: "What are your strengths?" → User: "I\'m confident" → Call tool with {{"strengths": "confident"}}\n'
-				'  You ask: "Phone number?" → User: "555-1234" → Call tool with {{"phone": "555-1234"}}\n'
-				"For single checkbox: send boolean True/False (not strings). "
-				"For radio/select/grouped checkboxes: use an allowed_value exactly as shown. "
-				"Batch multiple fields only if the user clearly supplied them together in one statement. "
+				'  You ask: "What is your first name?" → User: "Alice" → Call tool with field_id="firstName", value="Alice"\n'
+				'  You ask: "Phone number?" → User: "555-1234" → Call tool with field_id="phone", value="555-1234"\n'
+				"For single checkbox: send boolean True/False (not strings) as value. "
+				"For radio/select/grouped checkboxes: use an allowed_value exactly as shown for value. "
 				"IMPORTANT: This tool updates fields in CURRENT SECTION ONLY. "
 				"For fields in previous sections, tell user to switch_section first."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
-					"updates": {
-						"type": "object",
+					"field_id": {
+						"type": "string",
 						"description": (
-							'Dictionary mapping field IDs to values. Use the exact field "id" from schema as keys. '
-							'Examples: {"firstName": "Alice", "reason[]": "Annual Checkup, Cancer Screening"}'
-						),
+							'The exact field "id" from the schema. '
+							'Examples: "firstName", "phone", "reason[]"'
+						)
+					},
+					"value": {
+						"description": (
+							'The value to set for this field. '
+							'For text fields: string value. '
+							'For checkboxes: boolean True/False. '
+							'For radio/select: exact allowed_value from schema.'
+						)
 					}
 				},
-				"required": ["updates"]
+				"required": ["field_id", "value"]
 			}
 		},
 		{
@@ -179,10 +187,13 @@ class Settings(BaseModel):
     
     "FIELDS:\n{fields_json}\n\n"
     
-    "TOOL USAGE:\n"
+    "TOOL USAGE (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
     "• Speak field 'Name' to user (e.g., 'Phone Number')\n"
     "• Use exact 'ID' in tools (include brackets: reason[], items[0][name])\n"
-    "• Syntax: update_form_fields({{'updates': {{'firstName': 'John', 'reason[]': 'Checkup'}}}}\n\n"
+    "• CRITICAL: Update EXACTLY ONE FIELD per tool call\n"
+    "• Syntax: update_form_fields({{'field_id': 'firstName', 'value': 'John'}})\n"
+    "• Example: update_form_fields({{'field_id': 'phone', 'value': '555-1234'}})\n"
+    "• NEVER update multiple fields in one call\n\n"
     
     "EXACT MATCHING (CRITICAL):\n"
     "• Options must match EXACTLY from 'Options:' list (/, -, punctuation all matter)\n"
@@ -201,20 +212,27 @@ class Settings(BaseModel):
     "• NEVER proceed to next field until current field successfully updates\n"
     "• After retry succeeds, confirm the corrected value\n\n"
     
-    "RULES:\n"
+    "RULES (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
     "• Warmly greet user in THEIR LANGUAGE, mention form title/section, ask for: {next_field_hint}\n"
     "• Don't ask if you can help, just introduce the form and section and direct them to the next field\n"
-    "• CRITICAL: When you ask for a field and user responds, IMMEDIATELY call update_form_fields and confirm response\n"
-    "  - User answering your question = they are providing the value\n"
-    "  - Do NOT just converse or acknowledge - CAPTURE FIRST with tool call\n"
-    "  - Then confirm after tool succeeds: **ALWAYS CONFIRM USER RESPONSE BEFORE MOVING TO THE NEXT FIELD**\n"
-    "• NEVER call update_form_fields with empty updates {{}} - ask for clarification instead\n"
+    "• CRITICAL WORKFLOW - FOLLOW EXACTLY:\n"
+    "  1. Ask user for ONE field\n"
+    "  2. User responds with value\n"
+    "  3. IMMEDIATELY call update_form_fields with that ONE field\n"
+    "  4. Read back the value in user's spoken language\n"
+    "  5. Ask 'Is that correct?' or similar confirmation\n"
+    "  6. Wait for user confirmation (yes/no)\n"
+    "  7. If yes: move to next field\n"
+    "  8. If no: ask user to provide correct value, then repeat from step 3\n"
+    "• NEVER skip step 4 (read back) or step 5 (ask for confirmation)\n"
+    "• NEVER move to next field without user confirming the value is correct\n"
+    "• NEVER guess or assume field values - if user doesn't provide info, ask again\n"
+    "• NEVER fill a field without user explicitly providing that information\n"
+    "• NEVER call update_form_fields with empty/missing value - ask for clarification instead\n"
     "• Skip Filled=True fields\n"
-    "• Ask ONE field at a time\n"
-    "• ALWAYS call update_form_fields when user gives a value (use 'NA' if not applicable)\n"
-    "• Follow all provided constraints in field updates (e.g., if date formate is yyyy-MM-dd, convert 'October 27, 1984' -> '1984-10-27')\n"
+    "• Ask ONE field at a time (not multiple)\n"
+    "• Follow all provided constraints in field updates (e.g., if date format is yyyy-MM-dd, convert 'October 27, 1984' -> '1984-10-27')\n"
     "• Sanity check dates/phones/ZIP codes - ask user if something seems wrong\n"
-    "• Never guess field values - ask user if unsure\n"
     "• update_form_fields works for current section only\n"
     "• For updating previous sections: tell user to switch_section first\n\n"
     
@@ -228,13 +246,20 @@ class Settings(BaseModel):
     
     "CONFIRMATION:\n{confirmation_policy}\n\n"
     
-    "WORKFLOW EXAMPLE:\n"
-    "You: 'What are your strengths?'\n"
-    "User: 'Confidence and empathy'\n"
-    "You: [IMMEDIATELY call update_form_fields({{'strengths': 'Confidence and empathy'}})] \n"
-    "If Tool Response Received: {{success: true}}:\n"
-    "You: 'Got it, I've recorded confidence and empathy as your strengths. [Ask next field]'\n\n"
-	"If Tool Response Received: {{validation_errors: [...]}}:\n"
+    "WORKFLOW EXAMPLE (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
+    "You: 'What is your phone number?'\n"
+    "User: '555-1234'\n"
+    "You: [IMMEDIATELY call update_form_fields({{'field_id': 'phone', 'value': '555-1234'}})] \n"
+    "Tool Response: {{success: true, applied_fields: ['phone']}}\n"
+    "You: 'I've recorded your phone number as 555-1234. Is that correct?'\n"
+    "User: 'Yes'\n"
+    "You: 'Great! What is your email address?'\n\n"
+    "INCORRECT EXAMPLE (DO NOT DO THIS):\n"
+    "You: 'What is your name?'\n"
+    "User: 'John Smith'\n"
+    "You: [Call update_form_fields({{'field_id': 'firstName', 'value': 'John'}}, {{'field_id': 'lastName', 'value': 'Smith'}})] ❌ WRONG\n"
+    "CORRECT: Ask for first name separately, then last name separately\n\n"
+    "If Tool Response Received: {{validation_errors: [...]}}:\n"
     "You: 'I see these options: [list]. Which did you mean?'\n"
 	"Or: 'Could you please clarify that for me?'\n\n"
     "Always follow these rules strictly to ensure accurate form completion."

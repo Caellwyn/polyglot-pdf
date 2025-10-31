@@ -38,7 +38,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 	const [currentSection, setCurrentSection] = useState(1)
 	const [completedSections, setCompletedSections] = useState<Set<number>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
-	const [pushToTalkMode, setPushToTalkMode] = useState(false)
+	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showGreetingCarousel, setShowGreetingCarousel] = useState(false)
 	const carouselDismissedRef = useRef(false)  // Track if user/system dismissed carousel
@@ -563,6 +563,42 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 							</div>
 						)}
 
+					{/* Push-to-Talk Toggle */}
+					<div className="vff-ptt-toggle-container-mobile">
+						<label className="vff-ptt-toggle-label-mobile">
+							<span className="vff-ptt-label-text-mobile">Input Mode:</span>
+							<div className="vff-ptt-toggle-switch-mobile">
+								<input
+									type="checkbox"
+									checked={pushToTalkMode}
+									onChange={handlePushToTalkToggle}
+									className="vff-ptt-toggle-input-mobile"
+								/>
+								<span className="vff-ptt-toggle-slider-mobile">
+									<span className="vff-ptt-toggle-icon-mobile vff-ptt-toggle-icon-auto-mobile">🎤</span>
+									<span className="vff-ptt-toggle-icon-mobile vff-ptt-toggle-icon-ptt-mobile">⌨️</span>
+								</span>
+							</div>
+							<span className="vff-ptt-mode-label-mobile">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+						</label>
+					</div>
+
+					{/* Push-to-Talk Bar Button (only visible in PTT mode and when connected) */}
+					{pushToTalkMode && isConnected && (
+						<div className="vff-ptt-bar-container">
+							<button
+								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
+								onTouchStart={handlePushToTalkPress}
+								onTouchEnd={handlePushToTalkRelease}
+								onMouseDown={handlePushToTalkPress}
+								onMouseUp={handlePushToTalkRelease}
+								onMouseLeave={handlePushToTalkRelease}
+							>
+								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
+							</button>
+						</div>
+					)}
+
 					{/* Action Button */}
 					{!isConnected && !isPausedState ? (
 						<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
@@ -951,7 +987,148 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 				}
 
 				/* Mobile Adjustments */
-				@media (max-width: 480px) {
+				/* Mobile PTT Toggle Styles */
+			.vff-ptt-toggle-container-mobile {
+				padding: 10px;
+				background: #f8f9ff;
+				border-radius: 8px;
+				border: 1px solid #d0dbff;
+				margin-bottom: 12px;
+			}
+
+			.vff-ptt-toggle-label-mobile {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 10px;
+				cursor: pointer;
+			}
+
+			.vff-ptt-label-text-mobile {
+				font-size: 13px;
+				font-weight: 600;
+				color: #374151;
+			}
+
+			.vff-ptt-toggle-switch-mobile {
+				position: relative;
+				display: inline-block;
+				width: 50px;
+				height: 24px;
+			}
+
+			.vff-ptt-toggle-input-mobile {
+				opacity: 0;
+				width: 0;
+				height: 0;
+			}
+
+			.vff-ptt-toggle-slider-mobile {
+				position: absolute;
+				cursor: pointer;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background-color: #667eea;
+				transition: 0.3s;
+				border-radius: 24px;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 0 4px;
+			}
+
+			.vff-ptt-toggle-slider-mobile:before {
+				content: "";
+				position: absolute;
+				height: 18px;
+				width: 18px;
+				left: 3px;
+				bottom: 3px;
+				background-color: white;
+				transition: 0.3s;
+				border-radius: 50%;
+				box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+				z-index: 1;
+			}
+
+			.vff-ptt-toggle-input-mobile:checked + .vff-ptt-toggle-slider-mobile {
+				background-color: #4c51bf;
+			}
+
+			.vff-ptt-toggle-input-mobile:checked + .vff-ptt-toggle-slider-mobile:before {
+				transform: translateX(26px);
+			}
+
+			.vff-ptt-toggle-input-mobile:focus + .vff-ptt-toggle-slider-mobile {
+				box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+			}
+
+			.vff-ptt-toggle-icon-mobile {
+				font-size: 12px;
+				opacity: 0.7;
+				transition: opacity 0.3s;
+			}
+
+			.vff-ptt-toggle-icon-auto-mobile {
+				order: 1;
+			}
+
+			.vff-ptt-toggle-icon-ptt-mobile {
+				order: 2;
+			}
+
+			.vff-ptt-toggle-input-mobile:not(:checked) ~ .vff-ptt-toggle-slider-mobile .vff-ptt-toggle-icon-auto-mobile {
+				opacity: 1;
+			}
+
+			.vff-ptt-toggle-input-mobile:checked ~ .vff-ptt-toggle-slider-mobile .vff-ptt-toggle-icon-ptt-mobile {
+				opacity: 1;
+			}
+
+			.vff-ptt-mode-label-mobile {
+				font-size: 13px;
+				font-weight: 600;
+				color: #6b7280;
+				min-width: 40px;
+				text-align: right;
+			}
+
+			/* Mobile PTT Bar Button Styles */
+			.vff-ptt-bar-container {
+				margin-bottom: 12px;
+			}
+
+			.vff-ptt-bar-button {
+				width: 100%;
+				padding: 16px;
+				font-size: 16px;
+				font-weight: 600;
+				background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
+				color: white;
+				border: none;
+				border-radius: 8px;
+				cursor: pointer;
+				user-select: none;
+				-webkit-user-select: none;
+				-webkit-touch-callout: none;
+				transition: all 0.2s;
+				box-shadow: 0 2px 8px rgba(76, 81, 191, 0.3);
+			}
+
+			.vff-ptt-bar-button:active,
+			.vff-ptt-bar-button.active {
+				background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+				box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+				transform: scale(0.98);
+			}
+
+			.vff-ptt-bar-button:hover:not(:active) {
+				box-shadow: 0 4px 12px rgba(76, 81, 191, 0.4);
+			}
+
+			@media (max-width: 480px) {
 					.vff-panel-mobile {
 						right: 10px;
 						width: calc(100vw - 20px);

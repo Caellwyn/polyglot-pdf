@@ -131,7 +131,9 @@ class SchemaVerifier:
         for page in doc:
             pdf_widgets.extend(page.widgets())
 
-        pdf_field_names = {w.field_name for w in pdf_widgets if w.field_name}
+        # Normalize PDF field names (strip hierarchy prefix)
+        pdf_field_names = {self._normalize_pdf_field_name(w.field_name)
+                          for w in pdf_widgets if w.field_name}
 
         # Get all PDF field names from schema
         schema_pdf_names = set()
@@ -194,12 +196,13 @@ class SchemaVerifier:
         """
         doc = fitz.open(pdf_path)
 
-        # Get all PDF widgets
+        # Get all PDF widgets (normalize names)
         widgets_by_name = {}
         for page in doc:
             for widget in page.widgets():
                 if widget.field_name:
-                    widgets_by_name[widget.field_name] = widget
+                    normalized_name = self._normalize_pdf_field_name(widget.field_name)
+                    widgets_by_name[normalized_name] = widget
 
         errors = []
         warnings = []
@@ -400,6 +403,22 @@ class SchemaVerifier:
             warnings=warnings,
             details={"status": "not_implemented"}
         )
+
+    def _normalize_pdf_field_name(self, full_name: str) -> str:
+        """
+        Normalize PDF field name by extracting the actual field name
+        from the full hierarchy path.
+
+        Example:
+          'form1[0].#subform[0].PtAILine1_ANumber[0]' -> 'PtAILine1_ANumber[0]'
+        """
+        if not full_name:
+            return full_name
+
+        # Extract the last component after the last dot
+        if '.' in full_name:
+            return full_name.split('.')[-1]
+        return full_name
 
     def _collect_pdf_field_names(self, field: Dict[str, Any], names: Set[str]):
         """Recursively collect all PDF field names from a field."""

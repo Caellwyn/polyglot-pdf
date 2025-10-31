@@ -521,8 +521,14 @@ class LiveAIGemini(ILiveAI):
         config = {
             "response_modalities": response_modalities,
             "tools": tools_config,
-
         }
+
+        # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable proactive audio
+        # This helps Gemini ignore dirty/choppy audio and background conversation
+        if settings.PROACTIVE_AUDIO:
+            config["proactivity"] = {
+                "proactive_audio": True
+            }
         
         # Enable automatic voice activity detection for realtime audio input
         # This allows Gemini to detect when user starts/stops speaking
