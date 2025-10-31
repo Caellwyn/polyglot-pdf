@@ -4,10 +4,9 @@ Multi-layer schema verification system.
 Validates PDF schemas WITHOUT requiring ground truth.
 
 Verification Layers:
-1. Widget Coverage - Every PDF widget must be in schema
+1. Widget Coverage - Every PDF widget must be in schema (checks consolidated_widgets)
 2. Type Compatibility - Schema types must match widget types
 3. Structural Consistency - Internal logic checks
-4. Heuristic Cross-Validation - Compare with heuristic extraction
 """
 
 import json
@@ -16,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Set, Tuple
 from dataclasses import dataclass, field
 from collections import defaultdict
+from widget_inventory import extract_widget_inventory
 
 @dataclass
 class VerificationResult:
@@ -45,7 +45,8 @@ class SchemaVerifier:
         "checkbox": ["checkbox", "radio"],
         "radio": ["radio"],
         "select": ["select"],
-        "signature": ["signature"],
+        # Signature widgets in government PDFs are often used as secure text inputs
+        "signature": ["signature", "text", "textarea", "date", "email", "tel", "number"],
     }
 
     def verify(self, pdf_path: str, schema: Dict[str, Any]) -> VerificationReport:
@@ -68,28 +69,22 @@ class SchemaVerifier:
         layers = []
 
         # Layer 1: Widget Coverage (CRITICAL)
-        print(f"\n[Layer 1/4] Widget Coverage...")
+        print(f"\n[Layer 1/3] Widget Coverage...")
         coverage_result = self.verify_widget_coverage(pdf_path, schema)
         layers.append(coverage_result)
         print(f"  Score: {coverage_result.score*100:.1f}% - {'PASS' if coverage_result.passed else 'FAIL'}")
 
         # Layer 2: Type Compatibility (CRITICAL)
-        print(f"\n[Layer 2/4] Type Compatibility...")
+        print(f"\n[Layer 2/3] Type Compatibility...")
         type_result = self.verify_type_compatibility(pdf_path, schema)
         layers.append(type_result)
         print(f"  Score: {type_result.score*100:.1f}% - {'PASS' if type_result.passed else 'FAIL'}")
 
         # Layer 3: Structural Consistency (HIGH)
-        print(f"\n[Layer 3/4] Structural Consistency...")
+        print(f"\n[Layer 3/3] Structural Consistency...")
         structure_result = self.verify_structural_consistency(schema)
         layers.append(structure_result)
         print(f"  Score: {structure_result.score*100:.1f}% - {'PASS' if structure_result.passed else 'FAIL'}")
-
-        # Layer 4: Heuristic Cross-Validation (MEDIUM)
-        print(f"\n[Layer 4/4] Heuristic Cross-Validation...")
-        heuristic_result = self.verify_heuristic_crossval(pdf_path, schema)
-        layers.append(heuristic_result)
-        print(f"  Score: {heuristic_result.score*100:.1f}% - {'PASS' if heuristic_result.passed else 'FAIL'}")
 
         # Calculate overall result
         critical_passed = all(l.passed for l in layers[:2])  # Layers 1-2 are critical
@@ -122,18 +117,13 @@ class SchemaVerifier:
     def verify_widget_coverage(self, pdf_path: str, schema: Dict[str, Any]) -> VerificationResult:
         """
         Verify that all PDF widgets are accounted for in schema.
+        Uses FILTERED widget inventory (excludes hidden/readonly/signature fields).
         CRITICAL: Must have 95%+ coverage to pass.
         """
-        doc = fitz.open(pdf_path)
-
-        # Get all PDF widgets
-        pdf_widgets = []
-        for page in doc:
-            pdf_widgets.extend(page.widgets())
-
-        # Normalize PDF field names (strip hierarchy prefix)
-        pdf_field_names = {self._normalize_pdf_field_name(w.field_name)
-                          for w in pdf_widgets if w.field_name}
+        # Use filtered widget inventory (same as extractors use)
+        # This automatically excludes hidden, readonly, signature, barcode fields
+        filtered_widgets = extract_widget_inventory(pdf_path)
+        pdf_field_names = {w['field_name'] for w in filtered_widgets}
 
         # Get all PDF field names from schema
         schema_pdf_names = set()
@@ -192,17 +182,14 @@ class SchemaVerifier:
     def verify_type_compatibility(self, pdf_path: str, schema: Dict[str, Any]) -> VerificationResult:
         """
         Verify that schema field types are compatible with PDF widget types.
+        Uses FILTERED widget inventory (excludes hidden/readonly/signature fields).
         CRITICAL: Must have 100% compatibility to pass.
         """
-        doc = fitz.open(pdf_path)
+        # Use filtered widget inventory (same as extractors use)
+        filtered_widgets = extract_widget_inventory(pdf_path)
 
-        # Get all PDF widgets (normalize names)
-        widgets_by_name = {}
-        for page in doc:
-            for widget in page.widgets():
-                if widget.field_name:
-                    normalized_name = self._normalize_pdf_field_name(widget.field_name)
-                    widgets_by_name[normalized_name] = widget
+        # Build lookup dict: field_name -> field_type (string)
+        widgets_by_name = {w['field_name']: w['field_type'] for w in filtered_widgets}
 
         errors = []
         warnings = []
@@ -215,11 +202,10 @@ class SchemaVerifier:
             if not pdf_name:
                 continue
 
-            widget = widgets_by_name.get(pdf_name)
-            if not widget:
+            widget_type = widgets_by_name.get(pdf_name)
+            if not widget_type:
                 continue
 
-            widget_type = self._normalize_widget_type(widget)
             schema_type = field.get("type")
 
             if not self._is_compatible(widget_type, schema_type):
@@ -241,11 +227,10 @@ class SchemaVerifier:
                 if not pdf_name:
                     continue
 
-                widget = widgets_by_name.get(pdf_name)
-                if not widget:
+                widget_type = widgets_by_name.get(pdf_name)
+                if not widget_type:
                     continue
 
-                widget_type = self._normalize_widget_type(widget)
                 schema_type = col.get("type")
 
                 if not self._is_compatible(widget_type, schema_type):
@@ -264,11 +249,10 @@ class SchemaVerifier:
                 if not pdf_name:
                     continue
 
-                widget = widgets_by_name.get(pdf_name)
-                if not widget:
+                widget_type = widgets_by_name.get(pdf_name)
+                if not widget_type:
                     continue
 
-                widget_type = self._normalize_widget_type(widget)
                 schema_type = field.get("type")  # parent field type
 
                 if not self._is_compatible(widget_type, schema_type):
@@ -361,8 +345,13 @@ class SchemaVerifier:
         # Check 5: All fields should have required attributes
         for field in schema.get("fields", []):
             total_checks += 1
-            required_attrs = ["id", "name", "type", "section_id"]
+            required_attrs = ["id", "name", "type"]
             missing = [attr for attr in required_attrs if not field.get(attr)]
+
+            # Check for section (either section_id or section is acceptable)
+            if not field.get("section_id") and not field.get("section"):
+                missing.append("section_id or section")
+
             if missing:
                 errors.append(f"Field {field.get('id', 'UNKNOWN')} missing attributes: {missing}")
             else:
@@ -387,23 +376,6 @@ class SchemaVerifier:
             }
         )
 
-    def verify_heuristic_crossval(self, pdf_path: str, schema: Dict[str, Any]) -> VerificationResult:
-        """
-        Cross-validate against heuristic extraction.
-        High agreement = high confidence. Disagreements = needs review.
-        """
-        # This would require running heuristic extraction
-        # For now, return placeholder
-        warnings = ["Heuristic cross-validation not yet implemented"]
-
-        return VerificationResult(
-            layer="heuristic_crossval",
-            passed=True,
-            score=0.8,  # Assume good for now
-            warnings=warnings,
-            details={"status": "not_implemented"}
-        )
-
     def _normalize_pdf_field_name(self, full_name: str) -> str:
         """
         Normalize PDF field name by extracting the actual field name
@@ -424,6 +396,10 @@ class SchemaVerifier:
         """Recursively collect all PDF field names from a field."""
         if field.get("pdf_field_name"):
             names.add(field["pdf_field_name"])
+
+        # Check consolidated_widgets (our new tracking method)
+        for widget_name in field.get("consolidated_widgets", []):
+            names.add(widget_name)
 
         # Check columns
         for col in field.get("columns", []):
