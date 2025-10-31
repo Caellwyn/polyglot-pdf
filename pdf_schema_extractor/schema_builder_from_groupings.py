@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""
+Schema Builder - Combines Gemini groupings with widget inventory.
+
+Separation of concerns:
+- Gemini provides: Groups, tables (semantic understanding)
+- Python provides: 100% widget coverage, field details, schema structure
+"""
+
+import json
+from typing import Dict, List, Any
+from widget_inventory import extract_widget_inventory
+
+
+def parse_tooltip_for_label(tooltip: str) -> str:
+    """
+    Extract user-friendly label from tooltip.
+
+    Examples:
+    - "Part. A. 1. Information About You. 1. Enter Alien Registration Number" → "Alien Registration Number"
+    - "Part. A. 1. Information About You. 4. Enter Complete Last Name" → "Complete Last Name"
+    """
+    if not tooltip:
+        return ""
+
+    # Remove "Part X" prefix
+    if ". Enter " in tooltip:
+        return tooltip.split(". Enter ")[-1].rstrip(".")
+
+    # Try to extract last meaningful part
+    parts = [p.strip() for p in tooltip.split(".") if p.strip()]
+    if parts:
+        # Skip "Part X" type prefixes
+        filtered = [p for p in parts if not p.startswith("Part ") and len(p) > 3]
+        if filtered:
+            return filtered[-1]
+
+    return tooltip[:50]  # Fallback
+
+
+def parse_section_from_tooltip(tooltip: str) -> str:
+    """
+    Extract section name from tooltip.
+
+    Example: "Part. A. 1. Information About You. ..." → "Part A.1 - Information About You"
+    """
+    if not tooltip:
+        return "General"
+
+    if "Part." in tooltip:
+        # Extract "Part. A. 1. Information About You"
+        parts = tooltip.split(".")
+        if len(parts) >= 4:
+            # "Part", " A", " 1", " Information About You"
+            return f"Part {parts[1].strip()}.{parts[2].strip()} - {parts[3].strip()}"
+
+    return "General"
+
+
+def build_schema(
+    widget_inventory: List[Dict[str, Any]],
+    groupings: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Build complete schema from widget inventory + Gemini groupings.
+
+    Args:
+        widget_inventory: List of all widgets from PDF
+        groupings: Gemini output with 'groups' and 'tables'
+
+    Returns:
+        Complete schema with 100% widget coverage
+    """
+    print(f"\n{'='*70}")
+    print("SCHEMA BUILDER - Combining Gemini + Heuristic")
+    print(f"{'='*70}")
+
+    # Index widgets by field name for fast lookup
+    widgets_by_name = {w['field_name']: w for w in widget_inventory}
+    accounted_widgets = set()
+
+    fields = []
+
+    # Process groups
+    print(f"\nProcessing {len(groupings.get('groups', []))} groups...")
+    for group in groupings.get('groups', []):
+        widget_names = group['widgets']
+        group_type = group['type']
+        purpose = group['purpose']
+
+        # Get widget details
+        group_widgets = [widgets_by_name.get(name) for name in widget_names if name in widgets_by_name]
+        if not group_widgets:
+            continue
+
+        # Mark as accounted
+        accounted_widgets.update(widget_names)
+
+        # Build field
+        first_widget = group_widgets[0]
+        field = {
+            "id": first_widget['field_name'].replace('[0]', '').lower(),
+            "name": parse_tooltip_for_label(first_widget['field_label']) or purpose,
+            "type": "radio" if group_type == "radio" else "checkbox",
+            "section": parse_section_from_tooltip(first_widget['field_label']),
+            "consolidated_widgets": widget_names,
+            "options": [
+                {
+                    "value": w['field_name'],
+                    "label": w['field_label'].split('.')[-1].strip() if w['field_label'] else w['field_name'],
+                    "pdf_field_name": w['field_name']
+                }
+                for w in group_widgets
+            ]
+        }
+        fields.append(field)
+
+    print(f"  Created {len([f for f in fields if f['type'] in ['radio', 'checkbox']])} group fields")
+
+    # Process tables
+    print(f"\nProcessing {len(groupings.get('tables', []))} tables...")
+    for table in groupings.get('tables', []):
+        widget_names = table['widgets']
+        rows = table['rows']
+        columns = table['columns']
+        purpose = table['purpose']
+
+        # Mark as accounted
+        accounted_widgets.update(widget_names)
+
+        # Get first widget for context
+        first_widget = widgets_by_name.get(widget_names[0])
+
+        field = {
+            "id": purpose.lower().replace(' ', '_'),
+            "name": purpose,
+            "type": "table",
+            "section": parse_section_from_tooltip(first_widget['field_label']) if first_widget else "General",
+            "consolidated_widgets": widget_names,
+            "columns": [
+                {
+                    "id": col['field_pattern'].lower(),
+                    "name": col['label'],
+                    "type": "text"  # Could be enhanced with actual widget types
+                }
+                for col in columns
+            ],
+            "rows": []  # Empty - filled by user
+        }
+        fields.append(field)
+
+    print(f"  Created {len([f for f in fields if f['type'] == 'table'])} table fields")
+
+    # Process standalone widgets (not in any group/table)
+    standalone_widgets = [w for w in widget_inventory if w['field_name'] not in accounted_widgets]
+    print(f"\nProcessing {len(standalone_widgets)} standalone widgets...")
+
+    for widget in standalone_widgets:
+        field = {
+            "id": widget['field_name'].replace('[0]', '').lower(),
+            "name": parse_tooltip_for_label(widget['field_label']) or widget['field_name'],
+            "type": widget['field_type'],
+            "section": parse_section_from_tooltip(widget['field_label']),
+            "pdf_field_name": widget['field_name'],
+            "consolidated_widgets": [widget['field_name']],
+            "label": widget['field_label']
+        }
+
+        # Add checkbox value for single checkboxes
+        if widget['field_type'] == 'checkbox':
+            field['options'] = [{
+                "value": widget['field_name'],
+                "label": parse_tooltip_for_label(widget['field_label']) or widget['field_name'],
+                "pdf_field_name": widget['field_name']
+            }]
+
+        fields.append(field)
+
+    print(f"  Created {len(standalone_widgets)} standalone fields")
+
+    # Validate 100% coverage
+    all_consolidated = set()
+    for field in fields:
+        all_consolidated.update(field.get('consolidated_widgets', []))
+
+    total_widgets = len(widget_inventory)
+    coverage = len(all_consolidated) / total_widgets if total_widgets else 0
+
+    print(f"\n{'='*70}")
+    print("SCHEMA BUILD COMPLETE")
+    print(f"{'='*70}")
+    print(f"Total fields: {len(fields)}")
+    print(f"  - Groups/Tables (Gemini): {len(groupings.get('groups', [])) + len(groupings.get('tables', []))}")
+    print(f"  - Standalone (Heuristic): {len(standalone_widgets)}")
+    print(f"Widget coverage: {len(all_consolidated)} / {total_widgets} ({coverage*100:.1f}%)")
+
+    if coverage < 1.0:
+        missing = total_widgets - len(all_consolidated)
+        print(f"  WARNING: {missing} widgets not accounted for!")
+    elif coverage > 1.0:
+        print(f"  WARNING: Some widgets counted multiple times (check for duplicates)")
+    else:
+        print(f"  SUCCESS: 100% widget coverage achieved")
+
+    schema = {
+        "form_metadata": {
+            "title": "Form I-589",
+            "total_widgets": total_widgets,
+            "total_fields": len(fields)
+        },
+        "fields": fields
+    }
+
+    return schema
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 3:
+        print("Usage: python schema_builder_from_groupings.py <pdf_path> <groupings_json> [output_json]")
+        sys.exit(1)
+
+    pdf_path = sys.argv[1]
+    groupings_path = sys.argv[2]
+    output_path = sys.argv[3] if len(sys.argv) > 3 else "final_schema.json"
+
+    # Load widget inventory
+    print(f"Loading widget inventory from {pdf_path}...")
+    widgets = extract_widget_inventory(pdf_path)
+
+    # Load groupings
+    print(f"Loading groupings from {groupings_path}...")
+    with open(groupings_path, 'r', encoding='utf-8') as f:
+        groupings = json.load(f)
+
+    # Build schema
+    schema = build_schema(widgets, groupings)
+
+    # Save
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(schema, f, indent=2, ensure_ascii=False)
+
+    print(f"\nSchema saved to: {output_path}")

@@ -1,0 +1,68 @@
+{
+  "overall_passed": false,
+  "confidence_score": 0.45,
+  "summary": {
+    "total_layers": 4,
+    "layers_passed": 2,
+    "critical_passed": false,
+    "confidence_score": 0.45,
+    "field_count": 135,
+    "total_errors": 1,
+    "total_warnings": 4
+  },
+  "layers": [
+    {
+      "layer": "widget_coverage",
+      "passed": false,
+      "score": 0.0,
+      "errors": [
+        "Coverage is only 0.0% (need 95%+)"
+      ],
+      "warnings": [
+        "Missing 449 widgets (first 10): ['TextField28[0]', 'ChildAlien3[0]', 'TextField20[1]', 'ChildPassport4[0]', 'PtAILine8_StreetNumandName[0]', 'PtAIILine19_ExpDateofAuthorizedStay[0]', 'PtAIILine17_StatusofLastAdmission[0]', 'ChildLast3[0]', 'TextField13[43]', 'PtAILine8_AptNumber[0]']",
+        "Hallucinated 200 names (first 10): ['DepartmentProvinceorState[0]', 'RadioBtn2[0]', 'topmostSubform[0].Page6[0].Group5[0]', 'Yes[0]', 'topmostSubform[0].Page6[0].Group3[0]', 'A-Number (if available)', 'AttendedToMoYr[0]', 'Nationality (Citizenship)[0]', 'FromMoYr[0]', 'EverAccusedYes']"
+      ],
+      "details": {
+        "total_widgets": 449,
+        "covered_widgets": 0,
+        "missing_widgets": 449,
+        "hallucinated_names": 200,
+        "coverage_percent": 0.0
+      }
+    },
+    {
+      "layer": "type_compatibility",
+      "passed": false,
+      "score": 0.0,
+      "errors": [],
+      "warnings": [
+        "No fields with pdf_field_name to check"
+      ],
+      "details": {}
+    },
+    {
+      "layer": "structural_consistency",
+      "passed": true,
+      "score": 1.0,
+      "errors": [],
+      "warnings": [],
+      "details": {
+        "checks_run": 170,
+        "checks_passed": 170,
+        "consistency_percent": 100.0
+      }
+    },
+    {
+      "layer": "heuristic_crossval",
+      "passed": true,
+      "score": 0.8,
+      "errors": [],
+      "warnings": [
+        "Heuristic cross-validation not yet implemented"
+      ],
+      "details": {
+        "status": "not_implemented"
+      }
+    }
+  ]
+}
