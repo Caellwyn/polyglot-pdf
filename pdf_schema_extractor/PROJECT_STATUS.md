@@ -1,7 +1,7 @@
-# PDF Schema Extractor - Project Status & Handoff
+# PDF Schema Extractor - Project Status
 
-**Date:** October 30, 2025
-**Status:** Minimal approach validated, verifier corrected, critical gaps identified
+**Date:** October 31, 2025
+**Status:** Production pipeline validated with corrected field flags and enhanced schemas
 
 ---
 
@@ -15,166 +15,174 @@
 
 ---
 
+## Project Rules
+
+- Maintain only 2 markdown documents: This file, and a technical guide
+- Keep all PDF schema extractor related files in this folder
+- Unit test all changes and new features
+- Do not commit or deploy without permission
+- Ensure schemas always match form_schema_model.py
+- Always label extractions, logs, etc. with the PDF ID (i-589, i-90, etc.)
+- Keep PDF-specific materials in PDF-specific folders (e.g., `test_schemas/test_pdfs/i-90/`)
+- Clear and comprehensive comments
+- Update this file and technical_guide before committing with latest changes and state
+
+---
+
 ## Current State Summary
 
-### What Works ✅
+### Completed Forms
 
-1. **Widget Extraction (100%)** - All editable PDF fields captured
-2. **Type Detection (100%)** - Field types correctly identified
-3. **Grouping Detection** - Radio/checkbox groups and tables identified
-4. **Section Metadata (83%)** - Basic Part/Section hierarchy from tooltips
-5. **Verification System** - Now uses correct baselines and metrics
-
-### Critical Gaps ❌
-
-1. **Conditional Logic (0%)** - "If married, show section X" not captured
-2. **Validation Rules (0%)** - No required flags, formats, constraints
-3. **Help Text (0%)** - No instructions for voice AI to guide users
-4. **Round-trip Testing (0%)** - Haven't verified schema→PDF works
-5. **Section Accuracy (83%)** - 17% of fields missing proper section labels
-
----
-
-## Approaches Tested
-
-### Minimal Approach (WINNER)
-- **Method:** Gemini for grouping/tables only, Python for everything else
-- **Cost:** 1-2 API calls per form (~$0.02-0.05)
-- **Quality:** 99.9% verification score
-- **Coverage:** 100% widget coverage (405/405 fields)
+#### I-589 (Asylum Application) ✅
+- **Status:** Complete and validated
+- **Widget Coverage:** 100% (405/405 widgets)
 - **Files:**
-  - `gemini_grouping_extractor.py` - Extract semantic groups
-  - `heuristic_hierarchy_parser.py` - Parse tooltips with regex
-  - `schema_builder_from_groupings.py` - Combine into schema
-- **Output:** `final_schema_minimal.json`
+  - `i589_widgets_clean.json` - Widget inventory
+  - `gemini_groupings.json` - Semantic groups
+  - `final_schema_minimal.json` - Enhanced schema
+  - `verification_minimal.json` - Validation results
 
-### Hybrid v2 Approach (DEPRECATED)
-- **Method:** Batched Gemini extraction of full field objects
-- **Cost:** 9 API calls per form (~$0.10-0.20)
-- **Quality:** 70.9% verification score (missing section metadata)
-- **Coverage:** 99.8% widget coverage (404/405 fields)
-- **Issue:** Gemini didn't provide section information
-- **Output:** `gemini_hybrid_schema.json`
+#### I-90 (Green Card Replacement) ✅
+- **Status:** Complete with enhanced metadata
+- **Widget Coverage:** 99.5% (187/188 widgets)
+- **Fields:** 147 fields (groups consolidate multiple widgets)
+- **Files:**
+  - `i-90_widgets_v2.json` - Widget inventory with **corrected field flags**
+  - `i-90_gemini_groupings.json` - Semantic groups
+  - `i-90_schema_final_complete.json` - **Final enhanced schema**
+  - `EXTRACTION_SUMMARY.md` - Detailed extraction summary
 
-**Decision:** Use Minimal approach for production.
+**Enhancements:**
+- ✅ Spoken names: 147/147 (100%)
+- ✅ Help text: 147/147 (100%)
+- ✅ Conditional logic: 30 fields (Part 8 pre-population rules)
+- ✅ Validation hints: 13 fields (format requirements)
 
----
-
-## Key Lessons Learned
-
-### 1. Separation of Concerns Works
-
-**What Gemini is Good At:**
-- Semantic understanding (this checkbox group represents "marital status")
-- Grouping related fields
-- Identifying tables and their dimensions
-- Inferring relationships from visual layout
-
-**What Python/Regex is Good At:**
-- 100% completeness guarantees
-- Consistent pattern matching
-- Fast, deterministic parsing
-- No API costs or token limits
-
-**Mistake to Avoid:** Don't ask Gemini to extract everything. Use it strategically.
-
-### 2. Metrics Must Measure What Matters
-
-**Original Verifier Problems:**
-- Used unfiltered widget count (449 vs 405 filtered)
-- Had fake 80% hardcoded metric
-- Required `section_id` that schemas didn't have
-- Reported 90% coverage when actual was 100%
-
-**Fixed Verifier:**
-- Uses filtered widget inventory (same as extractors)
-- Removed fake metrics
-- Accepts `section` OR `section_id`
-- Reports accurate 100% coverage
-
-**Lesson:** Metrics are useless if they don't measure the right thing.
-
-### 3. Government PDFs Have Quirks
-
-- **Signature widgets = text fields** - Type 7 used for secure text inputs, not just signatures
-- **No required flags** - PDF metadata doesn't have field constraints
-- **No conditional logic** - Business rules live in instructions, not form structure
-- **Tooltips are goldmines** - Rich semantic info about hierarchy and field purpose
-
-### 4. Label Overlay Doesn't Solve Core Problem
-
-We tested annotating PDFs with field names overlay for Gemini to see. Result: Doesn't solve output token limit. The bottleneck is output size, not input clarity.
-
-### 5. Widget Filtering Matters
-
-**Filtered out (55 widgets):**
-- Barcodes
-- Read-only fields
-- Hidden fields
-- Button widgets
-
-**Why this matters:** Extractors use filtered count (405), verifier was using unfiltered (460), causing false "90% coverage" reports.
+**Field Metadata:**
+- 72 COMB fields (fixed-width character cells for SSN, dates)
+- 8 multiline fields (textarea detection)
+- 31 read-only fields (Part 8 pre-populated)
+- Perfect Part ordering (1→2→3→4→5→6→7→8)
 
 ---
 
-## Critical Findings - PyMuPDF Limitations
+## Critical Issues Fixed (I-90 Extraction)
 
-**What PyMuPDF Gives Us:**
-- ✅ Field names, types, positions
-- ✅ Tooltips/labels (rich semantic data!)
-- ✅ Widget properties (read-only, hidden, etc.)
+### 1. Incorrect Field Flag Bits ✅ FIXED
+**Problem:** `widget_inventory.py` had COMB and MULTILINE bits swapped
+- Was using bit 23 for MULTILINE (wrong - should be bit 12)
+- Was using bit 14 for COMB (wrong - should be bit 23)
 
-**What PyMuPDF Does NOT Give Us:**
-- ❌ Required vs optional flags (0/460 fields have flag set)
-- ❌ Validation rules (format, length, etc.)
-- ❌ Conditional logic (JavaScript-based show/hide)
-- ❌ Help text separate from tooltips
+**Fix:** Corrected to PDF 1.7 specification
+- Bit 12 = MULTILINE (multiline text fields)
+- Bit 23 = COMB (fixed-width character cells)
+- Added 9 additional flags: NO_EXPORT, PASSWORD, RICH_TEXT, RADIO, PUSHBUTTON, COMBO, EDIT, MULTI_SELECT, FILE_SELECT
 
-**Implication:** Need to extract constraints and logic from tooltips and form instructions.
+**Impact:** 98 fields corrected from "signature" type to "text" or "textarea"
+
+### 2. Incomplete Groups ✅ FIXED
+**Problem:** 8 widgets missing from groups
+- Gender group only had "male" (missing "female")
+- Race group only had "White" (missing Asian, Black, Indian, Hawaiian)
+
+**Fix:** Added fuzzy matching in `schema_builder_from_groupings.py`
+- Handles name variations (e.g., "P1_Line8_m" → "P1_Line8_male[0]")
+- Uses actual widget names from inventory, not Gemini approximations
+
+**Result:**
+- Gender group: 1 → 2 options
+- Race group: 1 → 5 options
+
+### 3. Tooltip-Based Ordering ✅ IMPLEMENTED
+**Problem:** Fields sorted by ID prefix mixed Parts together
+
+**Fix:** Updated `fix_i90_schema.py` to parse Part/Question from tooltips using `parse_tooltip_hierarchy()`
+
+**Result:** Perfect sequential ordering - Part 1→2→3→4→5→6→7→8
 
 ---
 
 ## Production Pipeline Architecture
 
-### Current Working Pipeline (Minimal Approach)
+### Current Working Pipeline (Minimal Approach + Enhancement)
 
 ```
-1. Widget Inventory (Python)
-   ├─ Extract 405 editable widgets from PDF
-   ├─ Filter out barcodes, read-only, hidden fields
-   └─ Output: widget_inventory.json
+1. Widget Inventory (widget_inventory.py)
+   ├─ Extract editable widgets from PDF
+   ├─ Parse field flags (CORRECTED bit definitions)
+   ├─ Filter out barcodes, hidden fields
+   └─ Output: {form}_widgets_v2.json
 
-2. PDF Annotation (Python)
-   ├─ Overlay field names on PDF in red
-   └─ Output: i589_annotated.pdf
+2. PDF Annotation (pdf_annotator.py)
+   ├─ Overlay field names on PDF
+   └─ Output: {form}-annotated.pdf
 
-3. Gemini Grouping (Gemini API)
-   ├─ Identify radio/checkbox groups (51 groups)
-   ├─ Identify tables with dimensions (6 tables)
-   └─ Output: gemini_groupings.json (57 items, 14% of schema)
+3. Gemini Grouping (gemini_grouping_extractor.py)
+   ├─ Identify radio/checkbox groups
+   ├─ Identify tables with dimensions
+   └─ Output: {form}_gemini_groupings.json
 
-4. Tooltip Hierarchy Parsing (Python Regex)
+4. Tooltip Hierarchy Parsing (heuristic_hierarchy_parser.py)
    ├─ Extract Part/Section/Question from tooltips
-   ├─ Extract spoken field names
-   └─ Output: heuristic_hierarchy.json (83% success rate)
+   ├─ Generalized for multiple form formats
+   └─ Used by schema builder and fixer
 
-5. Schema Builder (Python)
-   ├─ Apply Gemini groups (135 widgets)
-   ├─ Add standalone widgets (270 widgets)
-   ├─ Enrich with hierarchy metadata
+5. Schema Builder (schema_builder_from_groupings.py)
+   ├─ Apply Gemini groups with fuzzy matching
+   ├─ Add standalone widgets
+   ├─ Extract form metadata from PDF
    ├─ Validate 100% widget coverage
-   └─ Output: final_schema_minimal.json (303 fields)
+   └─ Output: {form}_schema_v2.json
 
-6. Verification (Python)
-   ├─ Widget coverage: 100% ✓
-   ├─ Type compatibility: 100% ✓
-   ├─ Structural consistency: 99.7% ✓
-   └─ Overall confidence: 99.9% ✓
+6. Schema Fixer (fix_i90_schema.py)
+   ├─ Fix field types (signature → text/textarea based on multiline flag)
+   ├─ Add all PDF metadata to fields (read_only, required, is_comb, etc.)
+   ├─ Tooltip-based ordering for perfect Part sequence
+   ├─ Extract option labels from tooltips
+   └─ Output: {form}_schema_v2_fixed_final.json
+
+7. Gemini Enhancement (gemini_schema_enhancer.py)
+   ├─ Batch processing (40 fields per batch)
+   ├─ MINIMAL APPROACH: Only requests semantic info
+   ├─ Generates spoken names, help text, conditional logic
+   ├─ Uses exact field_id references for clean merging
+   └─ Output: {form}_schema_final_complete.json
+
+8. Validation (validate_schema.py)
+   ├─ Pydantic FormSchema validation
+   ├─ Check for duplicates, orphans, empty sections
+   └─ Report field type distribution
 ```
 
-**Cost per form:** ~$0.02-0.05
-**Time per form:** ~2-3 minutes
-**Quality:** 99.9% by current metrics
+**Cost per form:** ~$0.05-0.10 (with enhancement)
+**Time per form:** ~5-7 minutes
+**Quality:** 99%+ widget coverage, 100% enhancement coverage
+
+---
+
+## Key Technical Decisions
+
+### Minimal Approach for Gemini
+- **Do NOT ask Gemini to regenerate full schema**
+- Only request what we don't have: spoken names, help text, conditional logic
+- Use exact `field_id` references for clean merging
+- Reduces hallucination risk significantly
+
+### Tooltip Parsing Strategy
+- Tooltips contain ALL semantic information
+- Generalized parser handles both i-589 (Part. A. 1.) and i-90 (Part 1.) formats
+- Used for: field ordering, section names, option labels, conditional logic
+
+### Field Flag Bit Parsing
+- **Must match PDF 1.7 specification exactly**
+- COMB fields critical for voice AI (know to prompt digit-by-digit for SSN)
+- MULTILINE determines textarea vs text input
+- RADIO flag identifies mutually exclusive button groups
+
+### Fuzzy Matching for Groups
+- Gemini sometimes approximates widget names
+- Fuzzy matcher finds actual names via case-insensitive and prefix matching
+- Ensures 100% group completeness
 
 ---
 
@@ -194,70 +202,32 @@ We tested annotating PDFs with field names overlay for Gemini to see. Result: Do
 
 ---
 
-### Priority 2: Conditional Logic Extraction ⚠️ CRITICAL
+### Priority 2: Form Instructions Parsing
 **Status:** 0% implemented
-**Why Critical:** Voice AI needs to know "If married, ask about spouse"
-
-**Current Coverage:** 0 fields with `show_if` rules (should be ~20-50)
-
-**Extraction Strategy:**
-1. Parse form instructions for conditional language
-   - "If yes, complete Part C"
-   - "Answer questions 5-10 only if..."
-2. Gemini pass to identify dependencies
-3. Add `show_if` rules to schema
-
-**Validation:** Manual review of i-589 to identify all conditionals
-
----
-
-### Priority 3: Field Constraints & Validation ⚠️ CRITICAL
-**Status:** Partial (types only)
-**Why Critical:** Voice AI must validate user input
-
-**What We Need:**
-- Required vs optional
-- Data type (SSN, date, phone, etc.)
-- Format (MM/DD/YYYY, XXX-XX-XXXX)
-- Min/max length
-- Allowed values/ranges
-
-**Extraction Sources:**
-1. Tooltips - "Enter 8-9 digit A-Number"
-2. Field names - "DateFrom" implies date type
-3. Gemini inference - "This looks like a social security number"
-
-**Validation:** Test with invalid inputs, verify rejection
-
----
-
-### Priority 4: Section Accuracy (83% → 100%)
-**Status:** Regex parser failing on 17% of fields
-**Why Critical:** Poor navigation experience
-
-**Failures:**
-- Part E fields - Different tooltip format
-- Instruction/note fields - No standard pattern
-
-**Fix Options:**
-1. Improve regex patterns for Part E
-2. Add Gemini tooltip parser for validation
-3. Hybrid: Regex first, Gemini for failures
-
-**Acceptance:** 100% of fields have correct section
-
----
-
-### Priority 5: Help Text / Instructions
-**Status:** Not extracted
-**Why Important:** Better UX for voice AI
+**Why Important:** Additional conditional logic and validation rules live in instruction PDFs
 
 **Sources:**
-- Tooltips (we have these)
-- Form instructions (not parsed yet)
-- Examples in form (not identified)
+- i-90instr.pdf - Instructions for I-90 form
+- i-589instr.pdf - Instructions for I-589 form
 
-**Extraction:** Likely needs Gemini to identify helpful instructions
+**Extraction Strategy:**
+1. Parse instruction PDFs for conditional language
+2. Map instructions to specific fields
+3. Extract validation requirements (format, length, etc.)
+4. Add to schema as help text and validation rules
+
+---
+
+### Priority 3: Multi-Form Testing
+**Status:** 2 forms validated (i-589, i-90)
+**Why Important:** Need to validate pipeline works across all form types
+
+**Next Forms to Test:**
+- I-485 (Adjustment of Status)
+- I-765 (Work Permit)
+- N-400 (Citizenship)
+
+**Validation:** Each form should achieve >99% widget coverage
 
 ---
 
@@ -265,207 +235,130 @@ We tested annotating PDFs with field names overlay for Gemini to see. Result: Do
 
 ### Active Production Files
 
-**Extractors:**
-- `widget_inventory.py` - Extract widgets from PDF
-- `pdf_annotator.py` - Create labeled PDF
-- `gemini_grouping_extractor.py` - Gemini semantic grouping
-- `heuristic_hierarchy_parser.py` - Regex tooltip parsing
-- `schema_builder_from_groupings.py` - Combine into schema
+**Core Extractors:**
+- `widget_inventory.py` - Extract widgets with corrected field flags
+- `pdf_annotator.py` - Create labeled PDFs for Gemini
+- `gemini_grouping_extractor.py` - Semantic group detection
+- `heuristic_hierarchy_parser.py` - Generalized tooltip parsing
+- `schema_builder_from_groupings.py` - Combine into schema with fuzzy matching
+- `fix_i90_schema.py` - Type fixing, metadata, ordering, option labels
+- `gemini_schema_enhancer.py` - Batch enhancement with minimal approach
 
-**Verification:**
-- `schema_verifier.py` - Multi-layer validation (CORRECTED)
+**Supporting Tools:**
+- `validate_schema.py` - Pydantic validation
+- `enhanced_pdf_annotator.py` - Verification PDF with group indicators
+- `form_schema_model.py` - Pydantic schema definition
 
-**Outputs:**
-- `final_schema_minimal.json` - Best schema so far
-- `heuristic_hierarchy.json` - Tooltip parsing results
-- `gemini_groupings.json` - Grouping extraction
-
-### Deprecated Files (Can Archive)
-
-**Old Approaches:**
-- `gemini_hybrid_extractor.py` - Batched approach (replaced by minimal)
-- `gemini_hybrid_schema.json` - Output from hybrid v2
-- `gemini_extraction_output/` - Old extraction attempts
-
-**Old Documentation:**
-- `HYBRID_EXTRACTION_STRATEGY.md` - Pre-minimal approach
-- `APPROACH_COMPARISON.md` - Outdated comparison
-- `FINAL_SESSION_SUMMARY.md` - Old session summary
-
-**Keep for Reference:**
-- `METRICS_AUDIT.md` - Documents verifier issues found
-- `VERIFIER_FINAL_RESULTS.md` - Corrected verification results
-- `MINIMAL_APPROACH_SUMMARY.md` - Minimal approach details
-- `LABEL_OVERLAY_FINDINGS.md` - Why label overlay doesn't help
+**Output Files:**
+- `test_schemas/test_pdfs/i-589/` - i-589 extraction artifacts
+- `test_schemas/test_pdfs/i-90/` - i-90 extraction artifacts (with EXTRACTION_SUMMARY.md)
 
 ---
 
-## Technical Debt
+## Key Lessons Learned
 
-### 1. Duplicate Widgets in Minimal Schema
-**Issue:** 14 widgets listed in multiple groups (103.5% coverage)
-**Fix:** Deduplicate in `schema_builder_from_groupings.py`
-**Impact:** Low (just data hygiene)
+### 1. PDF Specification Matters
+- Field flag bits must exactly match PDF 1.7 spec
+- Type 7 widgets can be text OR signature depending on context
+- COMB flag (bit 23) indicates fixed-width character cells (critical for UX)
+- MULTILINE flag (bit 12) determines textarea vs text input
 
-### 2. Hybrid v2 Missing 1 Widget
-**Issue:** `DateTimeField48[0]` not in hybrid schema
-**Status:** Minimal approach captures it, so not blocking
-**Action:** Can ignore if using minimal approach
+### 2. Gemini's Strengths and Weaknesses
+**Good at:**
+- Semantic understanding (this group represents "race")
+- Visual analysis with annotated PDFs
+- Identifying conditional logic from context
+- Generating natural spoken names
 
-### 3. Background Bash Processes
-**Issue:** Several long-running background processes from testing
-**Action:** Kill or let them complete
+**Not good at:**
+- Exact widget name matching (needs fuzzy matching)
+- Maintaining 100% completeness (Python handles this)
+- Structured output without explicit format requirements
+
+### 3. Tooltips are Semantic Goldmines
+- Contain Part/Section/Question hierarchy
+- Include field purpose and context
+- Often have validation hints (e.g., "7-9 digits")
+- Enable conditional logic detection (e.g., "pre-populates from Part 1")
+
+### 4. Ordering Matters for UX
+- Users expect Part 1 → Part 2 → Part 3 progression
+- Field ID sorting doesn't match visual form order
+- Tooltip-based ordering provides perfect sequence
+- Page index resolves duplicates across pages
+
+---
+
+## Quality Metrics
+
+### I-589 (Asylum Application)
+- ✅ Widget coverage: 100% (405/405)
+- ✅ Type compatibility: 100%
+- ✅ Structural consistency: 99.7%
+- ✅ Overall confidence: 99.9%
+
+### I-90 (Green Card Replacement)
+- ✅ Widget coverage: 99.5% (187/188)
+- ✅ Field flags: 100% correct (after fix)
+- ✅ Group completeness: 100%
+- ✅ Part ordering: 100% sequential
+- ✅ Enhancement coverage: 100% (147/147 fields)
+- ✅ Pydantic validation: PASS
+
+**Missing Metrics (Production Readiness):**
+- ❌ Round-trip success: Not tested
+- ❌ Instruction parsing: 0%
+- ❌ Multi-form validation: 2/50+ forms
 
 ---
 
 ## Next Steps (Prioritized)
 
-### Immediate (This Week)
+### Immediate
+1. ✅ Clean up outdated schema files
+2. ✅ Update PROJECT_STATUS.md with latest results
+3. Commit changes to repository
 
-1. **Kill background processes**
-   ```bash
-   # Check running processes
-   /bashes
-   # Kill old test runs
-   ```
+### Short Term (Next Week)
+4. **Round-trip testing**
+   - Fill i-90 schema with test data
+   - Export to PDF
+   - Verify field accuracy
+   - Document any issues
 
-2. **Archive deprecated files**
-   - Move hybrid approach files to `archive/hybrid_v2/`
-   - Move old docs to `archive/documentation/`
-   - Keep only active minimal approach files
+5. **Extract i-485 schema**
+   - Test pipeline on third form
+   - Validate generalization
+   - Identify any edge cases
 
-3. **Create round-trip test**
-   - Write test that fills schema and exports to PDF
-   - Verify all 405 fields appear correctly
-   - Document any failures
+### Medium Term (Next 2 Weeks)
+6. **Parse instruction PDFs**
+   - Extract conditional logic from instructions
+   - Map to schema fields
+   - Add validation requirements
 
-### Short Term (Next 2 Weeks)
-
-4. **Fix section parsing (17% failures)**
-   - Option A: Improve regex for Part E format
-   - Option B: Create Gemini tooltip parser for validation
-   - Decision depends on round-trip test results
-
-5. **Extract conditional logic**
-   - Manual audit of i-589 for all conditionals
-   - Design `show_if` schema structure
-   - Create Gemini extractor for dependencies
-
-6. **Extract validation constraints**
-   - Parse tooltips for constraints
-   - Gemini pass for type inference
-   - Add to schema with test cases
-
-### Medium Term (Next Month)
-
-7. **Test with second form**
-   - Pick different government form
-   - Run minimal pipeline
-   - Measure quality metrics
-   - Identify form-specific patterns
-
-8. **Build constraint validator**
-   - Code that checks user input against schema constraints
-   - Used by voice AI for real-time validation
-
-9. **Create human review UI**
-   - Tool to flag schema issues
-   - Easy editing of section labels, constraints, conditionals
-
-### Long Term
-
-10. **Scale to 50+ forms**
-11. **Build schema versioning system**
-12. **Create automated regression tests**
-
----
-
-## Quality Metrics That Actually Matter
-
-### Current Metrics (Good for Pipeline Quality)
-- ✅ Widget coverage: 100%
-- ✅ Type compatibility: 100%
-- ✅ Structural consistency: 99.7%
-
-### Missing Metrics (Good for Production Readiness)
-- ❌ Round-trip success: Not tested
-- ❌ Conditional logic coverage: 0%
-- ❌ Validation rule coverage: Unknown
-- ❌ Section accuracy: 83%
-- ❌ Help text coverage: 0%
-
-### Target for Production
-- Round-trip: 100%
-- Conditional logic: 100%
-- Validation rules: 95%+
-- Section accuracy: 100%
-- Help text: 80%+
-
----
-
-## Key Decisions Needed
-
-1. **Section parsing approach?**
-   - Improve regex OR add Gemini validation?
-   - Cost: Regex = free, Gemini = +1 API call
-
-2. **Conditional logic extraction?**
-   - Automated (Gemini) OR manual (human review)?
-   - Hybrid approach?
-
-3. **Quality bar for constraints?**
-   - 100% required for some forms?
-   - Or acceptable to mark "unknown" and let humans fill in?
-
-4. **Testing strategy?**
-   - Automated tests for each form?
-   - Or manual spot-checks?
-
----
-
-## Commands for Cleanup
-
-```bash
-# Archive old approaches
-mkdir -p archive/hybrid_v2
-mv gemini_hybrid_extractor.py archive/hybrid_v2/
-mv gemini_hybrid_schema.json archive/hybrid_v2/
-
-# Archive old docs
-mkdir -p archive/documentation
-mv APPROACH_COMPARISON.md archive/documentation/
-mv FINAL_SESSION_SUMMARY.md archive/documentation/
-mv HYBRID_EXTRACTION_STRATEGY.md archive/documentation/
-
-# Kill background processes if still running
-/bashes  # List processes
-# Then kill individual ones as needed
-```
-
----
-
-## Questions for Next Session
-
-1. What's the highest priority - round-trip, conditionals, or constraints?
-2. Should we create Gemini tooltip parser or fix regex?
-3. How many forms do we need to support in V1?
-4. What's the timeline for production?
-5. Manual review acceptable or must be 100% automated?
+7. **Build round-trip exporter**
+   - Schema → PDF writer
+   - Handle all field types
+   - Strip read_only flags for Part 8 fields
 
 ---
 
 ## Contact/Handoff Notes
 
-**Current schemas:**
-- `final_schema_minimal.json` - Use this one (99.9% quality)
-- `gemini_hybrid_schema.json` - Don't use (missing sections)
+**Current Status:** Production pipeline validated with 2 forms (i-589, i-90)
 
-**Key insight:** The minimal approach (Gemini for semantics, Python for precision) achieves same quality as hybrid at 75% lower cost.
+**Key Achievement:** Fixed critical field flag parsing bug that affected 98 fields
 
-**Biggest risk:** Haven't tested round-trip. This is critical path blocker.
+**Biggest Success:** Minimal approach + enhancement achieves 100% field coverage with rich semantic metadata
 
-**Biggest gap:** Zero conditional logic captured. Forms are unusable for voice AI without this.
+**Biggest Risk:** Round-trip testing not completed - critical path blocker
 
-**Ready for:** Round-trip testing, conditional logic extraction planning
+**Ready For:**
+- Round-trip testing
+- Additional form extractions
+- Instruction PDF parsing
 
-**Not ready for:** Production deployment to real users
+**Not Ready For:**
+- Production deployment to real users
+- Automated form submission

@@ -9,6 +9,63 @@ import json
 from typing import List, Dict, Any
 from pathlib import Path
 
+# PDF Field Flag Constants (bit positions per PDF 1.7 specification)
+# Common to all field types:
+READ_ONLY = 1 << 0       # bit 0  - field is read-only
+REQUIRED = 1 << 1        # bit 1  - field is required
+NO_EXPORT = 1 << 2       # bit 2  - exclude from submit
+
+# Text field flags:
+MULTILINE = 1 << 12      # bit 12 - multiline text field
+PASSWORD = 1 << 13       # bit 13 - password field (mask input)
+FILE_SELECT = 1 << 20    # bit 20 - file selection field
+COMB = 1 << 23           # bit 23 - fixed-width character cells (e.g., SSN)
+RICH_TEXT = 1 << 24      # bit 24 - rich text formatting
+
+# Button field flags (checkbox, radio):
+NO_TOGGLE_TO_OFF = 1 << 14  # bit 14 - radio button can't be toggled off once selected
+RADIO = 1 << 15          # bit 15 - part of radio button group (mutually exclusive)
+PUSHBUTTON = 1 << 16     # bit 16 - push button (not checkbox/radio)
+
+# Choice field flags (dropdown, list):
+COMBO = 1 << 17          # bit 17 - combo box (dropdown)
+EDIT = 1 << 18           # bit 18 - editable combo box
+MULTI_SELECT = 1 << 21   # bit 21 - allow multiple selections
+
+
+def parse_field_flags(flags: int) -> dict:
+    """
+    Parse PDF field flags into readable boolean flags.
+
+    Args:
+        flags: Raw field_flags integer from PDF widget
+
+    Returns:
+        Dictionary with boolean flags for common field properties
+    """
+    return {
+        # Common flags
+        "read_only": bool(flags & READ_ONLY),
+        "required": bool(flags & REQUIRED),
+        "no_export": bool(flags & NO_EXPORT),
+
+        # Text field flags
+        "multiline": bool(flags & MULTILINE),
+        "password": bool(flags & PASSWORD),
+        "is_comb": bool(flags & COMB),
+        "rich_text": bool(flags & RICH_TEXT),
+
+        # Button field flags
+        "no_toggle_to_off": bool(flags & NO_TOGGLE_TO_OFF),
+        "is_radio": bool(flags & RADIO),
+        "is_pushbutton": bool(flags & PUSHBUTTON),
+
+        # Choice field flags
+        "is_combo": bool(flags & COMBO),
+        "is_editable": bool(flags & EDIT),
+        "multi_select": bool(flags & MULTI_SELECT),
+    }
+
 
 def should_exclude_widget(widget) -> tuple[bool, str]:
     """
@@ -27,17 +84,17 @@ def should_exclude_widget(widget) -> tuple[bool, str]:
     # Note: We don't filter signature section fields because they contain important
     # text inputs (name, date, etc.). Gemini will handle identifying actual signature widgets.
 
-    # Filter out read-only fields (field_flags bit 0 = read-only)
-    if widget.field_flags and (widget.field_flags & 1):
-        return (True, "read_only")
-
-    # Filter out hidden fields (field_display = 2 means hidden)
-    if widget.field_display == 2:
+    # Check if hidden (field_display: 1 = hidden, 2 = visible)
+    # Per PyMuPDF docs: 0=visible, 1=hidden, 2=no_print, 3=no_view
+    if widget.field_display == 1:
         return (True, "hidden")
 
     # Filter out buttons (except if they're signature buttons)
     if widget.field_type == 5 and widget.field_type_string != "signature":
         return (True, "button")
+
+    # Note: We DO NOT filter read-only fields here anymore, as they may be
+    # conditionally unlockable. We flag them instead and let downstream logic decide.
 
     return (False, "")
 
@@ -57,7 +114,32 @@ def extract_widget_inventory(pdf_path: str, include_filtered: bool = False) -> L
         - field_label: Tooltip/label text (rich semantic info!)
         - field_type: Widget type (text, checkbox, etc.)
         - page: Page number (0-indexed)
-        - position: Approximate Y position for ordering
+        - position_y: Y position for ordering
+        - field_flags: Raw field flags integer
+        - field_display: Display mode (0=visible, 1=hidden, 2=no_print, 3=no_view)
+        - text_maxlen: Maximum text length (for text fields)
+
+        Parsed boolean flags (Common):
+        - read_only: Field is read-only
+        - required: Field is required
+        - no_export: Exclude from form submission
+        - hidden: Field is hidden (computed from field_display)
+
+        Text field flags:
+        - multiline: Multiline text field
+        - password: Password field (mask input)
+        - is_comb: Fixed-width character cells (e.g., SSN, dates)
+        - rich_text: Rich text formatting enabled
+
+        Button field flags:
+        - no_toggle_to_off: Radio button can't be toggled off once selected
+        - is_radio: Part of radio button group (mutually exclusive)
+        - is_pushbutton: Push button (not checkbox/radio)
+
+        Choice field flags:
+        - is_combo: Combo box (dropdown)
+        - is_editable: Editable combo box
+        - multi_select: Allow multiple selections
     """
     doc = fitz.open(pdf_path)
 
@@ -104,6 +186,10 @@ def extract_widget_inventory(pdf_path: str, include_filtered: bool = False) -> L
             }
             widget_type = type_map.get(widget.field_type, f"unknown_{widget.field_type}")
 
+            # Parse field flags
+            flags = widget.field_flags if widget.field_flags else 0
+            parsed_flags = parse_field_flags(flags)
+
             widget_data = {
                 "field_name": short_name,
                 "full_field_name": widget.field_name,
@@ -111,6 +197,35 @@ def extract_widget_inventory(pdf_path: str, include_filtered: bool = False) -> L
                 "field_type": widget_type,
                 "page": page_num,
                 "position_y": int(widget.rect.y0) if widget.rect else 0,
+
+                # Raw field properties
+                "field_flags": flags,
+                "field_display": widget.field_display,
+                "text_maxlen": widget.text_maxlen if hasattr(widget, 'text_maxlen') else None,
+
+                # Parsed boolean flags - Common
+                "read_only": parsed_flags["read_only"],
+                "required": parsed_flags["required"],
+                "no_export": parsed_flags["no_export"],
+
+                # Text field flags
+                "multiline": parsed_flags["multiline"],
+                "password": parsed_flags["password"],
+                "is_comb": parsed_flags["is_comb"],
+                "rich_text": parsed_flags["rich_text"],
+
+                # Button field flags
+                "no_toggle_to_off": parsed_flags["no_toggle_to_off"],
+                "is_radio": parsed_flags["is_radio"],
+                "is_pushbutton": parsed_flags["is_pushbutton"],
+
+                # Choice field flags
+                "is_combo": parsed_flags["is_combo"],
+                "is_editable": parsed_flags["is_editable"],
+                "multi_select": parsed_flags["multi_select"],
+
+                # Computed flags
+                "hidden": widget.field_display == 1,
             }
 
             # Flag duplicates

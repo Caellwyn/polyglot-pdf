@@ -8,8 +8,58 @@ Separation of concerns:
 """
 
 import json
-from typing import Dict, List, Any
+import re
+import fitz
+from typing import Dict, List, Any, Optional, Tuple
 from widget_inventory import extract_widget_inventory
+from heuristic_hierarchy_parser import parse_tooltip_hierarchy
+
+
+def extract_form_metadata_from_pdf(pdf_path: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Extract form metadata from PDF.
+
+    Returns:
+        (form_number, form_title, edition_date)
+    """
+    doc = fitz.open(pdf_path)
+
+    form_number = None
+    form_title = None
+    edition_date = None
+
+    # Try to get from PDF metadata
+    metadata = doc.metadata
+    if metadata.get('title'):
+        title = metadata['title']
+        form_title = title
+
+        # Extract form number from title (e.g., "Form I-90, Application...")
+        match = re.search(r'Form\s+(I-\d+)', title, re.IGNORECASE)
+        if match:
+            form_number = match.group(1).upper()
+
+    # Try to get from barcode widget (contains: form_number|edition_date|page)
+    if not form_number or not edition_date:
+        first_page = doc[0]
+        for widget in first_page.widgets():
+            if widget.field_value and 'barcode' in widget.field_name.lower():
+                parts = widget.field_value.split('|')
+                if len(parts) >= 2:
+                    form_number = parts[0].strip().upper()
+                    edition_date = parts[1].strip()
+                break
+
+    # Fallback to filename
+    if not form_number:
+        filename = pdf_path.split('/')[-1].replace('\\', '/')
+        match = re.search(r'(i-\d+)', filename, re.IGNORECASE)
+        if match:
+            form_number = match.group(1).upper()
+
+    doc.close()
+
+    return form_number, form_title, edition_date
 
 
 def parse_tooltip_for_label(tooltip: str) -> str:
@@ -40,19 +90,30 @@ def parse_tooltip_for_label(tooltip: str) -> str:
 
 def parse_section_from_tooltip(tooltip: str) -> str:
     """
-    Extract section name from tooltip.
+    Extract section name from tooltip using generalized parser.
 
-    Example: "Part. A. 1. Information About You. ..." → "Part A.1 - Information About You"
+    Examples:
+    - i-589: "Part. A. 1. Information About You. ..." → "Part A.1 - Information About You"
+    - i-90: "Part 1. Information About You. Mailing Address. ..." → "Part 1 - Information About You"
     """
     if not tooltip:
         return "General"
 
-    if "Part." in tooltip:
-        # Extract "Part. A. 1. Information About You"
-        parts = tooltip.split(".")
-        if len(parts) >= 4:
-            # "Part", " A", " 1", " Information About You"
-            return f"Part {parts[1].strip()}.{parts[2].strip()} - {parts[3].strip()}"
+    parsed = parse_tooltip_hierarchy(tooltip)
+
+    # Build section name from parsed hierarchy
+    parts = []
+    if parsed.get('part'):
+        part_str = f"Part {parsed['part']}"
+        if parsed.get('section'):
+            part_str += f".{parsed['section']}"
+        parts.append(part_str)
+
+    if parsed.get('section_name'):
+        parts.append(parsed['section_name'])
+
+    if parts:
+        return " - ".join(parts)
 
     return "General"
 
@@ -88,13 +149,52 @@ def build_schema(
         group_type = group['type']
         purpose = group['purpose']
 
-        # Get widget details
-        group_widgets = [widgets_by_name.get(name) for name in widget_names if name in widgets_by_name]
+        # Get widget details - try exact match first, then fuzzy match
+        group_widgets = []
+        found_widget_names = []
+        fuzzy_matches = []
+
+        for name in widget_names:
+            widget = widgets_by_name.get(name)
+
+            # If exact match fails, try fuzzy matching
+            if not widget:
+                # Try case-insensitive match
+                name_lower = name.lower()
+                for w_name, w_data in widgets_by_name.items():
+                    if w_name.lower() == name_lower:
+                        widget = w_data
+                        found_widget_names.append(w_name)
+                        fuzzy_matches.append((name, w_name, "case-insensitive"))
+                        break
+
+                # Try partial match (e.g., "P1_Line8_m" -> "P1_Line8_male[0]")
+                if not widget:
+                    for w_name, w_data in widgets_by_name.items():
+                        # Check if name is a prefix of w_name
+                        if w_name.lower().startswith(name_lower):
+                            widget = w_data
+                            found_widget_names.append(w_name)
+                            fuzzy_matches.append((name, w_name, "prefix"))
+                            break
+            else:
+                found_widget_names.append(name)
+
+            if widget:
+                group_widgets.append(widget)
+
+        # Log fuzzy matches
+        if fuzzy_matches:
+            print(f"  Fuzzy matched in '{purpose}':")
+            for gemini_name, actual_name, match_type in fuzzy_matches:
+                print(f"    '{gemini_name}' -> '{actual_name}' ({match_type})")
+
         if not group_widgets:
+            print(f"  WARNING: Group '{purpose}' has no matching widgets")
             continue
 
-        # Mark as accounted
-        accounted_widgets.update(widget_names)
+        # Mark as accounted (only widgets that actually exist)
+        accounted_widgets.update(found_widget_names)
 
         # Build field
         first_widget = group_widgets[0]
@@ -103,7 +203,7 @@ def build_schema(
             "name": parse_tooltip_for_label(first_widget['field_label']) or purpose,
             "type": "radio" if group_type == "radio" else "checkbox",
             "section": parse_section_from_tooltip(first_widget['field_label']),
-            "consolidated_widgets": widget_names,
+            "consolidated_widgets": found_widget_names,  # Use actual found names, not Gemini names
             "options": [
                 {
                     "value": w['field_name'],
@@ -202,9 +302,14 @@ def build_schema(
     else:
         print(f"  SUCCESS: 100% widget coverage achieved")
 
+    # Extract form metadata from PDF
+    form_number, form_title, edition_date = extract_form_metadata_from_pdf(pdf_path)
+
     schema = {
         "form_metadata": {
-            "title": "Form I-589",
+            "title": form_title or f"Form {form_number}" if form_number else "Unknown Form",
+            "form_number": form_number,
+            "edition_date": edition_date,
             "total_widgets": total_widgets,
             "total_fields": len(fields)
         },

@@ -1,0 +1,190 @@
+{
+  "groups": [
+    {
+      "type": "radio",
+      "widgets": [
+        "P1_checkbox4[0]",
+        "P1_checkbox4[1]",
+        "P1_checkbox4[2]"
+      ],
+      "purpose": "Name change selection"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P1_checkbox6c_Unit[2]",
+        "P1_checkb",
+        "P1_checkb"
+      ],
+      "purpose": "Mailing Address Unit Type"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P1_checkbox7b_Unit[2]",
+        "P1_checkb",
+        "P1_checkb"
+      ],
+      "purpose": "Physical Address Unit Type"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P1_Line8_m",
+        "P1_Line8_female[0]"
+      ],
+      "purpose": "Sex selection"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P2_checkbox2[5]",
+        "P2_checkbox2[6]",
+        "P2_checkbox2[7]",
+        "P2_checkbox2[4]",
+        "P2_checkbox2[0]",
+        "P2_checkbox2[1]",
+        "P2_checkbox2[2]",
+        "P2_checkbox2[3]",
+        "P2_checkbox2[11]",
+        "P2_checkbox2[9]",
+        "P2_checkbox2[10]",
+        "P2_checkbox2[8]"
+      ],
+      "purpose": "Reason for application"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P2_checkbox1[0]",
+        "P2_checkbox1[1]",
+        "P2_checkbox1[2]"
+      ],
+      "purpose": "Status selection"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P3_checkbox3[4]",
+        "P3_checkbox3[0]",
+        "P3_checkbox3[1]",
+        "P3_checkbox3[2]",
+        "P3_checkbox3[3]"
+      ],
+      "purpose": "Conditional permanent resident"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P3_checkbox4[1]",
+        "P3_checkbox4[0]"
+      ],
+      "purpose": "Exclusion, deportation, or removal proceedings"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P3_checkbox5[1]",
+        "P3_checkbox5[0]"
+      ],
+      "purpose": "Filed Form I-407"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P3_checkbox6[1]",
+        "P3_checkbox6[0]"
+      ],
+      "purpose": "Hispanic or Latino"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P3_checkbox7_White[0]",
+        "P3_checkbox7_Asian[0]",
+        "P3_checkbox7_Black[0]",
+        "P3_checkbox7_Indian[0]",
+        "P3_checkbox7_Hawaiian[0]"
+      ],
+      "purpose": "Race"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P3_checkbox10[6]",
+        "P3_checkbox10[8]",
+        "P3_checkbox10[0]",
+        "P3_checkbox10[5]",
+        "P3_checkbox10[1]",
+        "P3_checkbox10[2]",
+        "P3_checkbox10[4]",
+        "P3_checkbox10[7]"
+      ],
+      "purpose": "Eye color"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P3_checkbox11[0]",
+        "P3_checkbox11[7]",
+        "P3_checkbox11[8]",
+        "P3_checkbox11[1]",
+        "P3_checkbox11[6]",
+        "P3_checkbox11[3]",
+        "P3_checkbox11[5]",
+        "P3_checkbox11[4]"
+      ],
+      "purpose": "Hair color"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P4_checkbox1[1]",
+        "P4_checkbox1[0]"
+      ],
+      "purpose": "Requesting an accommodation"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P1_checkb",
+        "P1_checkb"
+      ],
+      "purpose": "Mailing Address Unit Type"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P5_Checkbox1a[0]",
+        "P5_Checkbox1b[0]",
+        "P5_Checkbox2[0]"
+      ],
+      "purpose": "Applicant's Statement"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P6_checkb",
+        "P6_checkb"
+      ],
+      "purpose": "Mailing Address Unit Type"
+    },
+    {
+      "type": "checkbox_group",
+      "widgets": [
+        "P7_checkb",
+        "P7_checkb"
+      ],
+      "purpose": "Mailing Address Unit Type"
+    },
+    {
+      "type": "radio",
+      "widgets": [
+        "P7_checkbox7[0]",
+        "P7_checkbox7[1]"
+      ],
+      "purpose": "Preparer's Statement"
+    }
+  ],
+  "tables": []
+}
