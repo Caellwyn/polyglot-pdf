@@ -49,7 +49,7 @@ class RoundTripTester:
         print(f"  Indexed {len(self.fields_by_pdf_name)} PDF field mappings")
 
     def generate_test_data(self) -> Dict[str, Any]:
-        """Generate test data for all fillable fields."""
+        """Generate test data for all fillable fields with validation support."""
         print(f"\n{'='*70}")
         print("GENERATING TEST DATA")
         print(f"{'='*70}")
@@ -72,13 +72,48 @@ class RoundTripTester:
                 else:
                     continue
 
-            # Generate appropriate test value based on field type
-            if field_type == 'text':
+            # Check for validation rules
+            validation = field.get('validation', {})
+            val_type = validation.get('type')
+            exact_length = validation.get('exact_length')
+
+            # Generate value based on validation rules first
+            if val_type == 'phone_number':
+                test_data[pdf_name] = "(555) 123-4567"
+            elif val_type == 'zip_code':
+                test_data[pdf_name] = "90210"
+            elif val_type == 'postal_code':
+                test_data[pdf_name] = "ABC123"
+            elif val_type == 'ssn':
+                test_data[pdf_name] = "123456789"
+            elif val_type == 'a_number':
+                max_len = field.get('max_length', 9)
+                test_data[pdf_name] = '1' * min(max_len, 9)
+            elif val_type == 'receipt_number' or val_type == 'uscis_account':
+                # EXACTLY 12 characters/digits
+                length = exact_length or 12
+                test_data[pdf_name] = '1' * length
+            elif val_type == 'date':
+                test_data[pdf_name] = "01/01/2000"
+
+            # Fall back to field type
+            elif field_type == 'date':
+                test_data[pdf_name] = "01/01/2000"
+
+            elif field_type == 'select':
+                # Use first option from field options
+                options = field.get('options', [])
+                if options:
+                    test_data[pdf_name] = options[0].get('value', 'OPTION1')
+                else:
+                    test_data[pdf_name] = "CA"  # Default for state fields
+
+            elif field_type == 'text':
                 # Check if it's a COMB field (formatted input)
-                if field.get('is_comb'):
-                    max_len = field.get('max_length', 10)
-                    # Generate numeric value for COMB fields (like SSN, A-number)
-                    test_data[pdf_name] = '1' * min(max_len, 9)
+                if field.get('is_comb') or exact_length:
+                    max_len = exact_length or field.get('max_length', 10)
+                    # Generate to exact length for COMB fields
+                    test_data[pdf_name] = '1' * max_len
                 else:
                     # Regular text
                     field_name = field.get('name', 'Test')
@@ -149,6 +184,10 @@ class RoundTripTester:
                             widget.field_value = field_value
                         elif widget.field_type == 3:  # Radio
                             widget.field_value = field_value
+                        elif widget.field_type == 4:  # Select/Dropdown
+                            widget.field_value = str(field_value)
+                        elif widget.field_type == 6:  # Listbox
+                            widget.field_value = str(field_value)
                         elif widget.field_type in [1, 7]:  # Text or signature
                             widget.field_value = str(field_value)
                         else:
@@ -226,7 +265,7 @@ class RoundTripTester:
                 actual_value = widget.field_value
 
                 # Normalize for comparison
-                if widget.field_type in [1, 7]:  # Text fields
+                if widget.field_type in [1, 4, 6, 7]:  # Text, Select, Listbox, Signature
                     expected_str = str(expected_value)
                     actual_str = str(actual_value) if actual_value else ""
 
