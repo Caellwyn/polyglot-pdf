@@ -237,7 +237,7 @@ class GeminiSchemaValidator:
         return enhanced_schema
 
     def _build_validation_prompt(self, schema: Dict, start_idx: int, end_idx: int) -> str:
-        """Build comprehensive validation prompt."""
+        """Build comprehensive validation prompt with enhanced pattern detection."""
 
         field_summaries = []
         for field in schema.get('fields', [])[start_idx:end_idx]:
@@ -247,6 +247,7 @@ class GeminiSchemaValidator:
                 "current_type": field.get('type'),
                 "section": field.get('section', '')[:60],
                 "pdf_field_name": field.get('pdf_field_name', ''),
+                "read_only": field.get('read_only', False),
             })
 
         prompt = f"""You are a government immigration form expert analyzing Form I-90 (Application to Replace Permanent Residence Card).
@@ -262,51 +263,97 @@ class GeminiSchemaValidator:
 
 **For each field, provide:**
 
-1. **field_type_correction** (if current type is wrong):
-   - "radio" - Mutually exclusive options (can only select one)
+1. **field_type_correction** (if current type is WRONG):
+
+   CRITICAL - MUTUALLY EXCLUSIVE DETECTION:
+   - Search the annotated PDF for these EXACT PHRASES in tooltips/labels:
+     * "select only one box"
+     * "select one box"
+     * "mark only one"
+     * "check only one"
+   - If found → field_type_correction: "radio" (NOT checkbox)
+
+   CRITICAL - YES/NO QUESTIONS:
+   - ALL Yes/No questions are mutually exclusive → "radio"
+   - Example: "Do you have..." with Yes/No options → "radio"
+
+   Field Types:
+   - "radio" - Mutually exclusive (can only select ONE)
    - "checkbox" - Multiple selection allowed
-   - "select" - Dropdown menu (states, height, etc.)
-   - "date" - Date fields (birth date, admission date, signature date)
+   - "select" - Dropdown menu (states, height, country, etc.)
+   - "date" - Date fields (MM/DD/YYYY format)
    - "text" - Regular text input
    - "textarea" - Multi-line text
 
-   **Common patterns to identify:**
-   - Yes/No questions → "radio" (mutually exclusive)
-   - Apt/Ste/Flr selectors → "radio" (can't be all three)
-   - State fields → "select" (dropdown of states)
-   - Date of Birth, Date Signed → "date"
-   - Height (feet/inches) → "select" (dropdown)
+   **Common Patterns:**
+   - State fields → "select" (dropdown with 50 states)
+   - Height feet/inches → "select" (dropdown with specific ranges)
+   - Date of Birth, Date Signed, Date of Admission → "date"
+   - Country → "select" (dropdown)
 
 2. **validation_rules** (from instruction PDF):
-   - phone_number: "10 digits, format (XXX) XXX-XXXX"
-   - zip_code: "5 digits"
-   - postal_code: "alphanumeric, 3-10 characters"
-   - ssn: "9 digits, format XXX-XX-XXXX"
-   - a_number: "7-9 digits"
-   - receipt_number: "12 digits"
-   - date: "MM/DD/YYYY"
 
-   **Look for:** Field names containing "phone", "zip", "postal", "SSN", "A-Number", "receipt", "date"
+   Extract exact validation requirements:
+   - phone_number: 10 digits, pattern: ^\(\\d{{3}}\) \\d{{3}}-\\d{{4}}$
+   - zip_code: 5 digits, pattern: ^\\d{{5}}$
+   - postal_code: alphanumeric, pattern: ^[A-Z0-9]{{3,10}}$
+   - ssn: 9 digits, pattern: ^\\d{{9}}$
+   - a_number: 7-9 digits, pattern: ^\\d{{7,9}}$
+   - receipt_number: EXACTLY 12 digits, pattern: ^\\d{{12}}$
+   - date: MM/DD/YYYY, pattern: ^(0[1-9]|1[0-2])\\/(0[1-9]|[12][0-9]|3[01])\\/(\\d{{4}})$
+   - uscis_account: EXACTLY 12 characters
 
-3. **conditional_logic** (from instruction PDF):
-   - When does this field appear/unlock?
-   - Which other field(s) control its visibility?
-   - What conditions must be met?
+   **Look for field names/labels containing:**
+   - "phone", "telephone", "mobile" → phone_number
+   - "zip", "ZIP Code" → zip_code
+   - "postal" → postal_code
+   - "SSN", "Social Security" → ssn
+   - "A-Number", "Alien Registration" → a_number
+   - "receipt", "case number" → receipt_number
+   - "date", "birth", "signed", "admission" → date
+   - "USCIS Online Account" → uscis_account
 
-   **Example patterns:**
-   - "If question 4 = Yes, then show questions 5a, 5b, 5c"
-   - "Unlocked when applicant selects option A in question 1"
-   - "Required only if filing based on lost/stolen card"
+   NOTE: Do NOT provide dropdown options - these will be extracted from PDF widget metadata.
+
+3. **conditional_logic** (STRUCTURED FORMAT):
+
+   For fields that are read_only=true OR have conditional dependencies:
+
+   {{
+     "trigger_field": "p1_q4",
+     "trigger_value": "yes",
+     "dependent_fields": ["p1_q5a", "p1_q5b", "p1_q5c"],
+     "unlock_method": "flip_readonly_bit",
+     "description": "When Q4 is answered Yes, unlock Q5a-c for name change details",
+     "pdf_field_flag_change": {{
+       "bit": 0,
+       "current_value": 1,
+       "required_value": 0
+     }}
+   }}
+
+   unlock_method options:
+   - "flip_readonly_bit" - Clear bit 0 in PDF field_flags to make editable
+   - "voice_ai_only" - Only enforce in voice UI, PDF doesn't support
+   - "javascript" - Requires PDF JavaScript (not supported by PyMuPDF)
+
+   **From instruction PDF, identify:**
+   - Which question/field triggers the conditional
+   - What value unlocks the dependent fields
+   - Which fields become available
+   - Whether it requires PDF field flag modification
 
 4. **spoken_name** (for voice AI):
-   - Natural, conversational name (2-8 words)
+   - Natural, conversational (2-8 words)
    - Remove: "Enter", "Select", "Provide" prefixes
    - Use everyday language
+   - Example: "Alien Registration Number" → "alien number"
 
 5. **help_text** (for voice guidance):
    - Clear explanation (1-3 sentences)
-   - Include WHY the information is needed
-   - Reference instruction PDF for additional context
+   - Include WHY needed + WHERE to find it
+   - Reference instruction PDF for context
+   - Example: "Your alien registration number (A-Number) is a 7-9 digit number found on your green card"
 
 **Output Format (JSON):**
 {{
@@ -315,30 +362,48 @@ class GeminiSchemaValidator:
       "field_id": "exact_field_id_from_input",
       "field_type_correction": "radio" | "checkbox" | "select" | "date" | null,
       "validation_rules": {{
-        "type": "phone_number" | "zip_code" | "postal_code" | "ssn" | "a_number" | "receipt_number" | "date",
+        "type": "phone_number" | "zip_code" | "postal_code" | "ssn" | "a_number" | "receipt_number" | "date" | "uscis_account",
         "pattern": "regex_pattern",
-        "format_hint": "user-friendly format description"
+        "format_hint": "user-friendly format",
+        "exact_length": 12  // For fields requiring exact length
       }},
-      "conditional_logic": "description of when field appears",
+      "conditional_logic": {{
+        "trigger_field": "field_id",
+        "trigger_value": "yes" | "option_value",
+        "dependent_fields": ["field_id1", "field_id2"],
+        "unlock_method": "flip_readonly_bit" | "voice_ai_only" | "javascript",
+        "description": "human-readable explanation",
+        "pdf_field_flag_change": {{
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }}
+      }},
       "spoken_name": "natural voice name",
-      "help_text": "clear guidance for voice AI"
+      "help_text": "clear guidance"
     }}
   ]
 }}
 
-**CRITICAL:**
-- Use EXACT field_id values from input
-- Only provide field_type_correction if current type is WRONG
-- Only provide conditional_logic if field has conditions
-- Cross-reference instruction PDF for validation rules and conditional logic
-- Focus on accuracy over completeness
+NOTE: Dropdown options will be automatically extracted from PDF widget metadata - you only need to identify that field_type should be "select".
 
-**Priority Issues to Find:**
-- Checkboxes that should be radio (Yes/No questions, mutually exclusive options)
-- Text fields that should be select/dropdown (states, height)
-- Text fields that should be date fields
-- Missing validation rules (phone numbers, zip codes)
-- Conditional logic from instruction PDF (especially Part 2 Question 2 dependencies)
+**CRITICAL INSTRUCTIONS:**
+1. Use EXACT field_id values from input
+2. Search annotated PDF for "select only one" phrases - these are ALWAYS radio
+3. ALL Yes/No questions are radio, not checkbox
+4. For select fields, just identify type="select" - options will be extracted from widget metadata
+5. For read_only fields, identify unlock conditions and bit changes needed
+6. Use instruction PDF to find exact validation requirements
+7. Provide exact_length for fields like USCIS account (12 chars) and receipt numbers (12 digits)
+
+**Priority Patterns to Find:**
+- "select only one box" in tooltips → radio
+- "Yes/No" questions → radio
+- State/Country fields → select with options
+- Height fields → select with ranges
+- Date fields (birth, signed, admission) → date
+- Phone, ZIP, SSN, A-Number → validation rules with exact patterns
+- Read-only fields that unlock conditionally → conditional_logic with bit flip
 """
 
         return prompt
