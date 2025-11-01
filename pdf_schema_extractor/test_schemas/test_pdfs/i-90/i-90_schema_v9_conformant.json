@@ -1,0 +1,4124 @@
+{
+  "source": "pdf",
+  "form_metadata": {
+    "title": "Form I-90, Application to Replace Permanent Residence Card",
+    "form_number": "I-90",
+    "edition_date": "01/20/25",
+    "total_widgets": 188,
+    "total_fields": 147,
+    "version": "v9_conformant",
+    "language": "en"
+  },
+  "parts": [
+    {
+      "id": "part_1",
+      "label": "Part 1. Information About You",
+      "order": 1,
+      "section_ids": [
+        "Part 1 - Information About You"
+      ]
+    },
+    {
+      "id": "part_2",
+      "label": "Part 2. Application Type",
+      "order": 2,
+      "section_ids": [
+        "Part 2 - Application Type"
+      ]
+    },
+    {
+      "id": "part_3",
+      "label": "Part 3. Processing Information",
+      "order": 3,
+      "section_ids": [
+        "Part 3 - Processing Information"
+      ]
+    },
+    {
+      "id": "part_4",
+      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments",
+      "order": 4,
+      "section_ids": [
+        "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments"
+      ]
+    },
+    {
+      "id": "part_5",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature",
+      "order": 5,
+      "section_ids": [
+        "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature"
+      ]
+    },
+    {
+      "id": "part_6",
+      "label": "Part 6. Interpreter's Contact Information, Certification, and Signature",
+      "order": 6,
+      "section_ids": [
+        "Part 6 - Interpreter's Contact Information, Certification, and Signature"
+      ]
+    },
+    {
+      "id": "part_7",
+      "label": "Part 7. Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "order": 7,
+      "section_ids": [
+        "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant"
+      ]
+    },
+    {
+      "id": "part_8",
+      "label": "Part 8. Additional Information",
+      "order": 8,
+      "section_ids": [
+        "Part 8 - Additional Information"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "Part 1 - Information About You",
+      "label": "Part 1 - Information About You",
+      "order": 1,
+      "fields": [
+        "p1_line1_aliennumber",
+        "p1_line1_aliennumber[1]",
+        "p1_line2_acctidentifier",
+        "p1_line3b_givenname",
+        "p1_line3c_middlename",
+        "p1_checkbox4",
+        "p1_line6a_incareofname",
+        "p1_line6b_streetnumbername",
+        "p1_line6c_aptsteflrnumber",
+        "p1_line6d_cityortown",
+        "p1_line6e_state",
+        "p1_line6f_zipcode",
+        "p1_line6g_province",
+        "p1_line6h_postalcode",
+        "p1_line6i_country",
+        "p1_line7b_aptsteflrnumber",
+        "p1_line7c_cityortown",
+        "p1_line7d_state",
+        "p1_line7e_zipcode",
+        "p1_line7f_province",
+        "p1_line7g_postalcode",
+        "p1_line7h_country",
+        "p1_line8_male",
+        "p1_line9_dateofbirth",
+        "p1_line10_citytownofbirth",
+        "p1_line11_countryofbirth",
+        "p1_line14_classofadmission",
+        "p1_line15_dateofadmission",
+        "p1_line16_ssn",
+        "p1_line3a_familyname",
+        "p1_line7a_streetnumbername",
+        "p1_line5a_familyname",
+        "p1_line5b_givenname",
+        "p1_line5c_middlename",
+        "p1_line12_mothergivenname",
+        "p1_line13_fathergivenname",
+        "p1_unit_type6c_unit",
+        "p1_unit_type7b_unit"
+      ]
+    },
+    {
+      "id": "Part 2 - Application Type",
+      "label": "Part 2 - Application Type",
+      "order": 2,
+      "fields": [
+        "p2_checkbox1",
+        "p2_line2h1_cityandstate",
+        "p2_checkbox3",
+        "p2_checkbox3[1]",
+        "p2_checkbox3[2]",
+        "p2_checkbox3[3]",
+        "p2_checkbox3[4]",
+        "p2_checkbox2[5]"
+      ]
+    },
+    {
+      "id": "Part 3 - Processing Information",
+      "label": "Part 3 - Processing Information",
+      "order": 3,
+      "fields": [
+        "p3_line1_locationappliedvisa",
+        "p3_line2_locationissuedvisa",
+        "p3_checkbox5[1]",
+        "p3_line8_heightfeet",
+        "p3_line8_heightinches",
+        "p3_line9_heightinches1",
+        "p3_line9_heightinches2",
+        "p3_line9_heightinches3",
+        "p3_line3a_destination",
+        "p3_line3a1_cityandstate",
+        "p3_checkbox4[1]",
+        "p3_eye_color",
+        "p3_hair_color",
+        "p3_ethnicity",
+        "p3_race"
+      ]
+    },
+    {
+      "id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "label": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "order": 4,
+      "fields": [
+        "p4_checkbox1a",
+        "p4_checkbox1[1]"
+      ]
+    },
+    {
+      "id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "label": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "order": 5,
+      "fields": [
+        "p4_line1a_accomodationrequested",
+        "p4_checkbox1b",
+        "p4_line1b_accomodationrequested",
+        "p4_checkbox1c",
+        "p4_line1c_accomodationrequested"
+      ]
+    },
+    {
+      "id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "order": 6,
+      "fields": [
+        "p5_line1b_language",
+        "p5_line2_nameofrepresentative",
+        "p5_line3_daytimephonenumber",
+        "p5_line4_mobilephonenumber",
+        "p5_line5_emailaddress",
+        "p5_line6a_signatureofapplicant",
+        "p5_line6b_dateofsignature",
+        "p5_checkbox1a"
+      ]
+    },
+    {
+      "id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "label": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "order": 7,
+      "fields": [
+        "p6_line1b_interpretersgivenname",
+        "p6_line2_nameofbusinessor",
+        "p6_line3a_streetnumbername",
+        "p6_line3b_aptsteflrnumber",
+        "p6_line3c_citytown",
+        "p6_line3d_state",
+        "p6_line3e_zipcode",
+        "p6_line3f_province",
+        "p6_line3g_postalcode",
+        "p6_line3h_country",
+        "p6_line4_interpretersdaytimephonenumber",
+        "p6_line4_interpretersdaytimephonenumber[1]",
+        "p6_line5_interpretersemailaddress",
+        "p6_line6a_signature",
+        "p6_line6b_dateofsignature",
+        "p6_line1a_interpretersfamilyname",
+        "p6_language",
+        "p6_unit_type3b_unit"
+      ]
+    },
+    {
+      "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "order": 8,
+      "fields": [
+        "p7_line1b_preparersgivenname",
+        "p7_line2_nameofbusinessor",
+        "p7_line3a_streetnumbername",
+        "p7_line3b_aptsteflrnumber",
+        "p7_line3c_citytown",
+        "p7_line3d_state",
+        "p7_line3e_zipcode",
+        "p7_line3f_province",
+        "p7_line3g_postalcode",
+        "p7_line3h_country",
+        "p7_line4_preparersdaytimephonenumber",
+        "p7_line5_preparersfaxnumber",
+        "p7_line6_preparersemailaddress",
+        "p7_checkbox7",
+        "p7_checkbox7extend",
+        "p7_checkbox7extend[1]",
+        "p7_line8a_signatureofpreparer",
+        "p7_line8b_dateofsignature",
+        "p7_unit_type3b_unit"
+      ]
+    },
+    {
+      "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "order": 9,
+      "fields": [
+        "p7_line1a_familyname"
+      ]
+    },
+    {
+      "id": "Part 8 - Additional Information",
+      "label": "Part 8 - Additional Information",
+      "order": 10,
+      "fields": [
+        "p1_line3b_givenname[1]",
+        "p1_line3c_middlename[1]",
+        "p8_line3a_pagenumber",
+        "p8_line3b_partnumber",
+        "p8_line3c_itemnumber",
+        "p8_line3d_additionalinfo",
+        "p8_line5a_pagenumber[1]",
+        "p8_line5b_partnumber[1]",
+        "p8_line5c_itemnumber[1]",
+        "p8_line5d_additionalinfo[1]",
+        "p8_line4a_pagenumber",
+        "p8_line4b_partnumber",
+        "p8_line4c_itemnumber",
+        "p8_line4d_additionalinfo",
+        "p8_line5a_pagenumber",
+        "p8_line5b_partnumber",
+        "p8_line5c_itemnumber",
+        "p8_line5d_additionalinfo",
+        "p8_line5a_pagenumber[2]",
+        "p8_line5b_partnumber[2]",
+        "p8_line5c_itemnumber[2]",
+        "p8_line5d_additionalinfo[2]",
+        "p1_line3a_familyname[1]"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "p1_line1_aliennumber",
+      "name": "Alien Registration Number. (A. Number). ",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line1_AlienNumber[0]",
+      "consolidated_widgets": [
+        "P1_Line1_AlienNumber[0]"
+      ],
+      "label": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "alien registration number",
+      "help": {
+        "instructions": "Your alien registration number (A-Number) is a 7-9 digit number found on your green card or other immigration documents. It begins with an 'A'.",
+        "format_hint": "7-9 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{7,9}$",
+        "format_preset": "a_number"
+      },
+      "copy_to": [
+        "p1_line1_aliennumber[1]"
+      ]
+    },
+    {
+      "id": "p1_line1_aliennumber[1]",
+      "name": "Alien Registration Number. (A. Number). ",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line1_AlienNumber[1]",
+      "consolidated_widgets": [
+        "P1_Line1_AlienNumber[1]"
+      ],
+      "label": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "alien registration number",
+      "help": {
+        "instructions": "Your alien registration number (A-Number) is a 7-9 digit number found on your green card or other immigration documents. It begins with an 'A'.",
+        "format_hint": "7-9 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{7,9}$",
+        "format_preset": "a_number"
+      },
+      "copy_from": "p1_line1_aliennumber"
+    },
+    {
+      "id": "p1_line2_acctidentifier",
+      "name": "U S C I S Online Account Number, if any",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line2_AcctIdentifier[0]",
+      "consolidated_widgets": [
+        "P1_Line2_AcctIdentifier[0]"
+      ],
+      "label": "Part 1. Information About You. 2. Enter U S C I S Online Account Number, if any.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 12,
+      "spoken_name": "uscis online account number",
+      "help": {
+        "instructions": "Your USCIS online account number is a 12-character identifier if you have previously filed a form online. You can find it in your account profile or on the Account Access Notice."
+      },
+      "validation": {
+        "type": "uscis_account",
+        "min_length": 12,
+        "max_length": 12
+      }
+    },
+    {
+      "id": "p1_line3b_givenname",
+      "name": "Given Name (First Name). ",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line3b_GivenName[0]",
+      "consolidated_widgets": [
+        "P1_Line3b_GivenName[0]"
+      ],
+      "label": "Part 1. Information About You. Your Full Name. 3. B. Enter Given Name (First Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "given name",
+      "help": {
+        "instructions": "Enter your given name (first name) as it appears on your official documents."
+      },
+      "copy_to": [
+        "p1_line3b_givenname[1]"
+      ]
+    },
+    {
+      "id": "p1_line3c_middlename",
+      "name": "Middle Name",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line3c_MiddleName[0]",
+      "consolidated_widgets": [
+        "P1_Line3c_MiddleName[0]"
+      ],
+      "label": "Part 1. Information About You. Your Full Name. 3. C. Enter Middle Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "middle name",
+      "help": {
+        "instructions": "Enter your middle name as it appears on your official documents. If you do not have a middle name, enter 'N/A'."
+      },
+      "copy_to": [
+        "p1_line3c_middlename[1]"
+      ]
+    },
+    {
+      "id": "p1_checkbox4",
+      "name": "Has Your Name Legally Changed?",
+      "type": "radio",
+      "section_id": "Part 1 - Information About You",
+      "consolidated_widgets": [
+        "P1_checkbox4[0]",
+        "P1_checkbox4[1]",
+        "P1_checkbox4[2]"
+      ],
+      "options": [
+        {
+          "value": "P1_checkbox4[0]",
+          "label": "Yes (Proceed to Item Numbers 5.a. - 5.c.)",
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[0]"
+        },
+        {
+          "value": "P1_checkbox4[1]",
+          "label": "No (Proceed to Item Numbers 6.a. - 6.c.)",
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[1]"
+        },
+        {
+          "value": "P1_checkbox4[2]",
+          "label": "Not Applicable - I never received my previous card",
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[2]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "Has your name legally changed since the issuance of your Permanent Resident Card?",
+      "help": {
+        "instructions": "Indicate if your name has legally changed since your Permanent Resident Card was issued. Select 'Yes' if it has, 'No' if it hasn't, or 'N/A' if you never received your previous card."
+      },
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P1_checkbox4[0]",
+          "shows": [],
+          "unlocks": [
+            "p1_line5b_givenname",
+            "p1_line5a_familyname",
+            "p1_line5c_middlename"
+          ],
+          "makes_required": []
+        }
+      ],
+      "conditional_fields": [
+        "p1_line5b_givenname",
+        "p1_line5a_familyname",
+        "p1_line5c_middlename"
+      ]
+    },
+    {
+      "id": "p1_line6a_incareofname",
+      "name": "In Care Of Name",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6a_InCareofName[0]",
+      "consolidated_widgets": [
+        "P1_Line6a_InCareofName[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. A. Enter In Care Of Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 34,
+      "spoken_name": "in care of name",
+      "help": {
+        "instructions": "Enter the name of the person or organization if the mail is delivered to someone other than yourself."
+      }
+    },
+    {
+      "id": "p1_line6b_streetnumbername",
+      "name": "Street Number\rand Name",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6b_StreetNumberName[0]",
+      "consolidated_widgets": [
+        "P1_Line6b_StreetNumberName[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. B. Enter Street Number\rand Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "street number and name",
+      "help": {
+        "instructions": "Enter the street number and name of your mailing address."
+      }
+    },
+    {
+      "id": "p1_line6c_aptsteflrnumber",
+      "name": "Apartment, Suite, or Floor Number",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6c_AptSteFlrNumber[0]",
+      "consolidated_widgets": [
+        "P1_Line6c_AptSteFlrNumber[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. C. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 6,
+      "spoken_name": "apartment suite or floor number",
+      "help": {
+        "instructions": "Enter the apartment, suite, or floor number of your mailing address, if applicable."
+      },
+      "show_if": {
+        "field": "p1_unit_type6c_unit",
+        "operator": "equals",
+        "value": "P1_checkbox6c_Unit[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p1_line6d_cityortown",
+      "name": "City or Town",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6d_CityOrTown[0]",
+      "consolidated_widgets": [
+        "P1_Line6d_CityOrTown[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. D. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "city or town",
+      "help": {
+        "instructions": "Enter the city or town of your mailing address."
+      }
+    },
+    {
+      "id": "p1_line6e_state",
+      "name": "Select State from List of States",
+      "type": "select",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6e_State[0]",
+      "consolidated_widgets": [
+        "P1_Line6e_State[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. E. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "state",
+      "help": {
+        "instructions": "Select the state of your mailing address from the dropdown menu.",
+        "format_hint": "2 letter state code"
+      }
+    },
+    {
+      "id": "p1_line6f_zipcode",
+      "name": "ZIP Code",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6f_ZipCode[0]",
+      "consolidated_widgets": [
+        "P1_Line6f_ZipCode[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. F. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 5,
+      "spoken_name": "zip code",
+      "help": {
+        "instructions": "Enter the 5-digit ZIP code of your mailing address.",
+        "format_hint": "5 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{5}$",
+        "format_preset": "zip"
+      }
+    },
+    {
+      "id": "p1_line6g_province",
+      "name": "Province",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6g_Province[0]",
+      "consolidated_widgets": [
+        "P1_Line6g_Province[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. G. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "province",
+      "help": {
+        "instructions": "Enter the province of your mailing address, if applicable. This is usually for addresses outside the United States."
+      }
+    },
+    {
+      "id": "p1_line6h_postalcode",
+      "name": "Postal Code",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6h_PostalCode[0]",
+      "consolidated_widgets": [
+        "P1_Line6h_PostalCode[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. H. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "postal code",
+      "help": {
+        "instructions": "Enter the postal code of your mailing address, if applicable. This is usually for addresses outside the United States.",
+        "format_hint": "Alphanumeric postal code"
+      },
+      "validation": {
+        "type": "postal_code",
+        "pattern": "^[A-Z0-9]{3,10}$"
+      }
+    },
+    {
+      "id": "p1_line6i_country",
+      "name": "Country",
+      "type": "select",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line6i_Country[0]",
+      "consolidated_widgets": [
+        "P1_Line6i_Country[0]"
+      ],
+      "label": "Part 1. Information About You. Mailing Address. 6. I. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "country",
+      "help": {
+        "instructions": "Enter the country of your mailing address."
+      }
+    },
+    {
+      "id": "p1_line7b_aptsteflrnumber",
+      "name": "Apartment, Suite or Floor Number",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7b_AptSteFlrNumber[0]",
+      "consolidated_widgets": [
+        "P1_Line7b_AptSteFlrNumber[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. B. Enter Apartment, Suite or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 6,
+      "spoken_name": "apartment suite or floor number",
+      "help": {
+        "instructions": "Enter the apartment, suite, or floor number of your physical address, if applicable."
+      },
+      "show_if": {
+        "field": "p1_unit_type7b_unit",
+        "operator": "equals",
+        "value": "P1_checkbox7b_Unit[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p1_line7c_cityortown",
+      "name": "City or Town",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7c_CityOrTown[0]",
+      "consolidated_widgets": [
+        "P1_Line7c_CityOrTown[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "city or town",
+      "help": {
+        "instructions": "Enter the city or town of your physical address."
+      }
+    },
+    {
+      "id": "p1_line7d_state",
+      "name": "Select State from List of States",
+      "type": "select",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7d_State[0]",
+      "consolidated_widgets": [
+        "P1_Line7d_State[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7 D. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "state",
+      "help": {
+        "instructions": "Select the state of your physical address from the dropdown menu.",
+        "format_hint": "2 letter state code"
+      }
+    },
+    {
+      "id": "p1_line7e_zipcode",
+      "name": "ZIP Code",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7e_ZipCode[0]",
+      "consolidated_widgets": [
+        "P1_Line7e_ZipCode[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. E. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 5,
+      "spoken_name": "zip code",
+      "help": {
+        "instructions": "Enter the 5-digit ZIP code of your physical address.",
+        "format_hint": "5 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{5}$",
+        "format_preset": "zip"
+      }
+    },
+    {
+      "id": "p1_line7f_province",
+      "name": "Province",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7f_Province[0]",
+      "consolidated_widgets": [
+        "P1_Line7f_Province[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. F. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "province",
+      "help": {
+        "instructions": "Enter the province of your physical address, if applicable. This is usually for addresses outside the United States."
+      }
+    },
+    {
+      "id": "p1_line7g_postalcode",
+      "name": "Postal Code",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7g_PostalCode[0]",
+      "consolidated_widgets": [
+        "P1_Line7g_PostalCode[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "postal code",
+      "help": {
+        "instructions": "Enter the postal code of your physical address, if applicable. This is usually for addresses outside the United States.",
+        "format_hint": "Alphanumeric postal code"
+      },
+      "validation": {
+        "type": "postal_code",
+        "pattern": "^[A-Z0-9]{3,10}$"
+      }
+    },
+    {
+      "id": "p1_line7h_country",
+      "name": "Country",
+      "type": "select",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7h_Country[0]",
+      "consolidated_widgets": [
+        "P1_Line7h_Country[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. 7. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "country",
+      "help": {
+        "instructions": "Enter the country of your physical address."
+      }
+    },
+    {
+      "id": "p1_line8_male",
+      "name": "Select Male",
+      "type": "radio",
+      "section_id": "Part 1 - Information About You",
+      "consolidated_widgets": [
+        "P1_Line8_male[0]",
+        "P1_Line8_female[0]"
+      ],
+      "options": [
+        {
+          "value": "P1_Line8_male[0]",
+          "label": "Male",
+          "pdf_field_name": "form1[0].#subform[1].P1_Line8_male[0]"
+        },
+        {
+          "value": "P1_Line8_female[0]",
+          "label": "Female",
+          "pdf_field_name": "form1[0].#subform[1].P1_Line8_female[0]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "select sex",
+      "help": {
+        "instructions": "Indicate your sex as it appears on your birth certificate."
+      }
+    },
+    {
+      "id": "p1_line9_dateofbirth",
+      "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "type": "date",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line9_DateOfBirth[0]",
+      "consolidated_widgets": [
+        "P1_Line9_DateOfBirth[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 9. Enter Date of Birth. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "date of birth",
+      "help": {
+        "instructions": "Enter your date of birth in MM/DD/YYYY format.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "validation": null
+    },
+    {
+      "id": "p1_line10_citytownofbirth",
+      "name": "City / Town / Village of Birth",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line10_CityTownOfBirth[0]",
+      "consolidated_widgets": [
+        "P1_Line10_CityTownOfBirth[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 10. Enter City / Town / Village of Birth.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "city town or village of birth",
+      "help": {
+        "instructions": "Enter the city, town, or village where you were born."
+      }
+    },
+    {
+      "id": "p1_line11_countryofbirth",
+      "name": "Country of Birth",
+      "type": "select",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line11_CountryofBirth[0]",
+      "consolidated_widgets": [
+        "P1_Line11_CountryofBirth[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 11. Enter Country of Birth.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "country of birth",
+      "help": {
+        "instructions": "Enter the country where you were born."
+      }
+    },
+    {
+      "id": "p1_line14_classofadmission",
+      "name": "Class of Admission",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line14_ClassOfAdmission[0]",
+      "consolidated_widgets": [
+        "P1_Line14_ClassOfAdmission[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 14. Enter Class of Admission.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "class of admission",
+      "help": {
+        "instructions": "Enter the three-character code for the immigrant category under which you were granted lawful permanent resident or conditional permanent resident status. This code can be found on your Permanent Resident Card."
+      }
+    },
+    {
+      "id": "p1_line15_dateofadmission",
+      "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "type": "date",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line15_DateOfAdmission[0]",
+      "consolidated_widgets": [
+        "P1_Line15_DateOfAdmission[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 15. Enter Date of Admission. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "date of admission",
+      "help": {
+        "instructions": "Enter the date on which you were granted lawful permanent resident or conditional permanent resident status in MM/DD/YYYY format.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "validation": null
+    },
+    {
+      "id": "p1_line16_ssn",
+      "name": "U. S. Social Security Number, if any",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line16_SSN[0]",
+      "consolidated_widgets": [
+        "P1_Line16_SSN[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. 16. Enter U. S. Social Security Number, if any.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "social security number",
+      "help": {
+        "instructions": "Enter your 9-digit U.S. Social Security Number, if any.",
+        "format_hint": "9 digits (XXX-XX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{9}$",
+        "format_preset": "ssn"
+      }
+    },
+    {
+      "id": "p1_line3a_familyname",
+      "name": "Family Name (Last Name)",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line3a_FamilyName[0]",
+      "consolidated_widgets": [
+        "P1_Line3a_FamilyName[0]"
+      ],
+      "label": "Part 1. Information About You. Your Full Name. NOTE: Your card will be issued in this name. 3. A. Enter Family Name (Last Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "family name",
+      "help": {
+        "instructions": "Enter your family name (last name) as it appears on your official documents."
+      },
+      "copy_to": [
+        "p1_line3a_familyname[1]"
+      ]
+    },
+    {
+      "id": "p1_line7a_streetnumbername",
+      "name": "Street Number and Name",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line7a_StreetNumberName[0]",
+      "consolidated_widgets": [
+        "P1_Line7a_StreetNumberName[0]"
+      ],
+      "label": "Part 1. Information About You. Physical Address. Provide this information only if different than mailing address. 7. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "physical address street number and name",
+      "help": {
+        "instructions": "Enter the street number and name for your physical address. This is only needed if it is different from your mailing address."
+      }
+    },
+    {
+      "id": "p1_line5a_familyname",
+      "name": "Family Name (Last Name). ",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line5a_FamilyName[0]",
+      "consolidated_widgets": [
+        "P1_Line5a_FamilyName[0]"
+      ],
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. NOTE:  Attach all evidence of your legal name change with this application. 5. A. Enter Family Name (Last Name). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "family name as printed on green card",
+      "help": {
+        "instructions": "Enter your family name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
+      },
+      "show_if": {
+        "field": "p1_checkbox4",
+        "operator": "equals",
+        "value": "P1_checkbox4[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p1_line5b_givenname",
+      "name": "Given Name (First Name). ",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line5b_GivenName[0]",
+      "consolidated_widgets": [
+        "P1_Line5b_GivenName[0]"
+      ],
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. 5. B. Enter Given Name (First Name). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "given name as printed on green card",
+      "help": {
+        "instructions": "Enter your given name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
+      },
+      "show_if": {
+        "field": "p1_checkbox4",
+        "operator": "equals",
+        "value": "P1_checkbox4[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p1_line5c_middlename",
+      "name": "Middle Name",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line5c_MiddleName[0]",
+      "consolidated_widgets": [
+        "P1_Line5c_MiddleName[0]"
+      ],
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. 5. C. Enter Middle Name.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "middle name as printed on green card",
+      "help": {
+        "instructions": "Enter your middle name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
+      },
+      "show_if": {
+        "field": "p1_checkbox4",
+        "operator": "equals",
+        "value": "P1_checkbox4[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p1_line12_mothergivenname",
+      "name": "Given Name (First Name)",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line12_MotherGivenName[0]",
+      "consolidated_widgets": [
+        "P1_Line12_MotherGivenName[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. Mother's Name. 12. Enter Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "mother's given name",
+      "help": {
+        "instructions": "Enter your mother's given name or first name."
+      }
+    },
+    {
+      "id": "p1_line13_fathergivenname",
+      "name": "Given Name (First Name)",
+      "type": "text",
+      "section_id": "Part 1 - Information About You",
+      "pdf_field_name": "P1_Line13_FatherGivenName[0]",
+      "consolidated_widgets": [
+        "P1_Line13_FatherGivenName[0]"
+      ],
+      "label": "Part 1. Information About You. Additional Information. Father's Name. 13. Enter Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "father's given name",
+      "help": {
+        "instructions": "Enter your father's given name or first name."
+      }
+    },
+    {
+      "id": "p2_checkbox1",
+      "name": "(Proceed to Section A",
+      "type": "radio",
+      "section_id": "Part 2 - Application Type",
+      "consolidated_widgets": [
+        "P2_checkbox1[0]",
+        "P2_checkbox1[1]",
+        "P2_checkbox1[2]"
+      ],
+      "options": [
+        {
+          "value": "P2_checkbox1[0]",
+          "label": "Lawful Permanent Resident",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[0]"
+        },
+        {
+          "value": "P2_checkbox1[1]",
+          "label": "Permanent Resident - In Commuter Status",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[1]"
+        },
+        {
+          "value": "P2_checkbox1[2]",
+          "label": "Conditional Permanent Resident",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[2]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "lawful permanent resident status",
+      "help": {
+        "instructions": "Indicate your current status as a Lawful Permanent Resident, Permanent Resident - In Commuter Status, or Conditional Permanent Resident. Select only one."
+      },
+      "conditional_fields": [
+        "p2_checkbox3",
+        "p2_checkbox3[4]",
+        "p2_checkbox2[5]",
+        "p2_checkbox3[3]",
+        "p2_checkbox3[1]",
+        "p2_checkbox3[2]"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P2_checkbox1[0]",
+          "shows": [],
+          "unlocks": [
+            "p2_checkbox3",
+            "p2_checkbox3[4]",
+            "p2_checkbox2[5]",
+            "p2_checkbox3[3]",
+            "p2_checkbox3[1]",
+            "p2_checkbox3[2]"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p2_line2h1_cityandstate",
+      "name": "Enter City or Town and State",
+      "type": "text",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_Line2h1_CityandState[0]",
+      "consolidated_widgets": [
+        "P2_Line2h1_CityandState[0]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. H. 1. A. My Port of Entry (P O E) into the United States will be.  Enter City or Town and State.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "port of entry city and state",
+      "help": {
+        "instructions": "Enter the City and State of your Port-of-Entry into the United States. This is needed if you are a permanent resident who is taking up commuter status.",
+        "format_hint": "12 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{12}$",
+        "type": "receipt_number"
+      },
+      "show_if": {
+        "field": "p2_checkbox2[5]",
+        "operator": "equals",
+        "value": "P2_checkbox2[11]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox3",
+      "name": "Select My previous card was issued but never received",
+      "type": "checkbox",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_checkbox3[0]",
+      "consolidated_widgets": [
+        "P2_checkbox3[0]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. B. Select My previous card was issued but never received.",
+      "options": [
+        {
+          "value": "P2_checkbox3[0]",
+          "label": "My previous card was issued but never received",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "my previous card was issued but never received",
+      "help": {
+        "instructions": "Select this reason if you never received your card. Submit a copy of the latest Form I-797 for Form I-485 or Form I-90 that should have resulted in issuance of your Permanent Resident Card."
+      },
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox3[1]",
+      "name": "Select My existing card has been mutilated",
+      "type": "checkbox",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_checkbox3[1]",
+      "consolidated_widgets": [
+        "P2_checkbox3[1]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. C. Select My existing card has been mutilated. ",
+      "options": [
+        {
+          "value": "P2_checkbox3[1]",
+          "label": "My existing card has been mutilated",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[1]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "my existing card has been mutilated",
+      "help": {
+        "instructions": "Select this reason if your card is mutilated or partially destroyed. Submit a copy of your Permanent Resident Card or a government-issued form of identification that contains your name, date of birth, photograph, and signature."
+      },
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox3[2]",
+      "name": "(Attach your existing permanent resident card with incorrect data along with this application",
+      "type": "checkbox",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_checkbox3[2]",
+      "consolidated_widgets": [
+        "P2_checkbox3[2]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. D. Select My existing card has incorrect data because of Department of Homeland Security (D H S) error. (Attach your existing permanent resident card with incorrect data along with this application.)",
+      "options": [
+        {
+          "value": "P2_checkbox3[2]",
+          "label": "My existing card has incorrect data because of Department of Homeland Security",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[2]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "my existing card has incorrect data because of DHS error",
+      "help": {
+        "instructions": "Select this reason if your card has incorrect data and the error was caused by DHS. Attach the original Permanent Resident Card issued with the incorrect data."
+      },
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox3[3]",
+      "name": "Select My name or other biographical information has legally changed since the issuance of my existing card",
+      "type": "checkbox",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_checkbox3[3]",
+      "consolidated_widgets": [
+        "P2_checkbox3[3]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. E. Select My name or other biographical information has legally changed since the issuance of my existing card. ",
+      "options": [
+        {
+          "value": "P2_checkbox3[3]",
+          "label": "My name or other biographical information has legally changed since the issuance of my existing card",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[3]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "my name or other biographic information has legally changed since the issuance of my existing card",
+      "help": {
+        "instructions": "Select this reason if your biographical information has changed since the issuance of your card. Submit a copy of the original court order reflecting your new name or a copy of your original marriage certificate, divorce decree, birth certificate, adoption decree, passport or applicable court documents, etc."
+      },
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox3[4]",
+      "name": "Select My previous card has been lost, stolen, or destroyed",
+      "type": "checkbox",
+      "section_id": "Part 2 - Application Type",
+      "pdf_field_name": "P2_checkbox3[4]",
+      "consolidated_widgets": [
+        "P2_checkbox3[4]"
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. A. Select My previous card has been lost, stolen, or destroyed.",
+      "options": [
+        {
+          "value": "P2_checkbox3[4]",
+          "label": "My previous card has been lost, stolen, or destroyed",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[4]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "my previous card has been lost, stolen, or destroyed",
+      "help": {
+        "instructions": "Select this reason if your card was lost, stolen, or destroyed. Submit a copy of your Permanent Resident Card or a government-issued form of identification that contains your name, date of birth, photograph, and signature."
+      },
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p2_checkbox2[5]",
+      "name": "Select My previous card has been lost, stolen, or destroyed",
+      "type": "radio",
+      "section_id": "Part 2 - Application Type",
+      "consolidated_widgets": [
+        "P2_checkbox2[0]",
+        "P2_checkbox2[1]",
+        "P2_checkbox2[2]",
+        "P2_checkbox2[3]",
+        "P2_checkbox2[4]",
+        "P2_checkbox2[5]",
+        "P2_checkbox2[6]",
+        "P2_checkbox2[7]",
+        "P2_checkbox2[8]",
+        "P2_checkbox2[9]",
+        "P2_checkbox2[10]",
+        "P2_checkbox2[11]"
+      ],
+      "options": [
+        {
+          "value": "P2_checkbox2[0]",
+          "label": "My name or other biographic information has been legally changed since issuance of my existing card",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[0]"
+        },
+        {
+          "value": "P2_checkbox2[1]",
+          "label": "My existing card has already expired or will expire within six months",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[1]"
+        },
+        {
+          "value": "P2_checkbox2[2]",
+          "label": "I have reached my 14th birthday and am registering as required. My existing card will expire AFTER my 16th birthday.",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[2]"
+        },
+        {
+          "value": "P2_checkbox2[3]",
+          "label": "I have reached my 14th birthday and am registering as required. My existing card will expire BEFORE my 16th birthday.",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[3]"
+        },
+        {
+          "value": "P2_checkbox2[4]",
+          "label": "My existing card has incorrect data because of Department of Homeland Security",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[4]"
+        },
+        {
+          "value": "P2_checkbox2[5]",
+          "label": "My previous card has been lost, stolen, or destroyed",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[5]"
+        },
+        {
+          "value": "P2_checkbox2[6]",
+          "label": "My previous card was issued but never received",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[6]"
+        },
+        {
+          "value": "P2_checkbox2[7]",
+          "label": "My existing card has been mutilated",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[7]"
+        },
+        {
+          "value": "P2_checkbox2[8]",
+          "label": "I have a prior edition of the Alien Registration Card, or I am applying to replace my current Permanent Resident Card for a reason that is not specified above",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[8]"
+        },
+        {
+          "value": "P2_checkbox2[9]",
+          "label": "I am a commuter who is taking up actual residence in the United States",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[9]"
+        },
+        {
+          "value": "P2_checkbox2[10]",
+          "label": "I have been automatically converted to lawful permanent resident status",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[10]"
+        },
+        {
+          "value": "P2_checkbox2[11]",
+          "label": "I am a permanent resident who is taking up commuter status",
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[11]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "previous card lost, stolen, or destroyed",
+      "help": {
+        "instructions": "Select if your previous card has been lost, stolen, or destroyed."
+      },
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P2_checkbox2[0]",
+          "shows": [],
+          "unlocks": [
+            "p2_line2h1_cityandstate"
+          ],
+          "makes_required": []
+        }
+      ],
+      "show_if": {
+        "field": "p2_checkbox1",
+        "operator": "equals",
+        "value": "P2_checkbox1[1]"
+      },
+      "conditional_fields": [
+        "p2_line2h1_cityandstate"
+      ],
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p3_line1_locationappliedvisa",
+      "name": "Location where you applied for an immigrant visa or adjustment of status",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line1_LocationAppliedVisa[0]",
+      "consolidated_widgets": [
+        "P3_Line1_LocationAppliedVisa[0]"
+      ],
+      "label": "Part 3. Processing Information. 1. Enter Location where you applied for an immigrant visa or adjustment of status.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "location where you applied for immigrant visa",
+      "help": {
+        "instructions": "Enter the location where you applied for an immigrant visa or adjustment of status. List the location of the U.S. Embassy, U.S. Consulate, or USCIS office."
+      }
+    },
+    {
+      "id": "p3_line2_locationissuedvisa",
+      "name": "Location where your immigrant visa was issued or U S C I S office where you were granted adjustment of status",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line2_LocationIssuedVisa[0]",
+      "consolidated_widgets": [
+        "P3_Line2_LocationIssuedVisa[0]"
+      ],
+      "label": "Part 3. Processing Information. 2. Enter Location where your immigrant visa was issued or U S C I S office where you were granted adjustment of status.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "location where immigrant visa was issued",
+      "help": {
+        "instructions": "Enter the location where your immigrant visa was issued or USCIS office where you were granted adjustment of status. List the location of the U.S. Embassy, U.S. Consulate, or USCIS office."
+      }
+    },
+    {
+      "id": "p3_checkbox5[1]",
+      "name": "Additional Information",
+      "type": "radio",
+      "section_id": "Part 3 - Processing Information",
+      "consolidated_widgets": [
+        "P3_checkbox5[0]",
+        "P3_checkbox5[1]"
+      ],
+      "options": [
+        {
+          "value": "P3_checkbox5[0]",
+          "label": "Since you were granted permanent residence, have you ever filed Form I-4 07, Abandonment by Alien of Status as Lawful Permanent Resident, or otherwise been judged to have abandoned your status? Select No",
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[0]"
+        },
+        {
+          "value": "P3_checkbox5[1]",
+          "label": "Additional Information",
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[1]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "no to abandonment of status",
+      "help": {
+        "instructions": "Select 'No' if you have not filed Form I-407, Abandonment by Alien of Status as Lawful Permanent Resident, or otherwise been determined to have abandoned your status."
+      }
+    },
+    {
+      "id": "p3_line8_heightfeet",
+      "name": "Select Number of Feet from List",
+      "type": "radio",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line8_HeightFeet[0]",
+      "consolidated_widgets": [
+        "P3_Line8_HeightFeet[0]"
+      ],
+      "label": "Part 3. Processing Information. Biographic Information. 8. Height. Feet. Select Number of Feet from List.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "height in feet",
+      "help": {
+        "instructions": "Select your height in feet."
+      }
+    },
+    {
+      "id": "p3_line8_heightinches",
+      "name": "Select Number of Inches from List",
+      "type": "radio",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line8_HeightInches[0]",
+      "consolidated_widgets": [
+        "P3_Line8_HeightInches[0]"
+      ],
+      "label": "Part 3. Processing Information. Biographic Information. 8. Height. Inches. Select Number of Inches from List.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "height in inches",
+      "help": {
+        "instructions": "Select your height in inches."
+      }
+    },
+    {
+      "id": "p3_line9_heightinches1",
+      "name": "First Digit of Weight in Pounds",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line9_HeightInches1[0]",
+      "consolidated_widgets": [
+        "P3_Line9_HeightInches1[0]"
+      ],
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter First Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 1,
+      "spoken_name": "first digit of weight in pounds",
+      "help": {
+        "instructions": "Enter the first digit of your weight in pounds."
+      }
+    },
+    {
+      "id": "p3_line9_heightinches2",
+      "name": "Second Digit of Weight in Pounds",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line9_HeightInches2[0]",
+      "consolidated_widgets": [
+        "P3_Line9_HeightInches2[0]"
+      ],
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Second Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 1,
+      "spoken_name": "second digit of weight in pounds",
+      "help": {
+        "instructions": "Enter the second digit of your weight in pounds."
+      }
+    },
+    {
+      "id": "p3_line9_heightinches3",
+      "name": "Third Digit of Weight in Pounds",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line9_HeightInches3[0]",
+      "consolidated_widgets": [
+        "P3_Line9_HeightInches3[0]"
+      ],
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Third Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 1,
+      "spoken_name": "third digit of weight in pounds",
+      "help": {
+        "instructions": "Enter the third digit of your weight in pounds."
+      }
+    },
+    {
+      "id": "p3_line3a_destination",
+      "name": "Destination in the United States at time of admission",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line3a_Destination[0]",
+      "consolidated_widgets": [
+        "P3_Line3a_Destination[0]"
+      ],
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 3. A. Enter Destination in the United States at time of admission.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "destination in the united states",
+      "help": {
+        "instructions": "Enter your destination in the United States at the time of admission."
+      }
+    },
+    {
+      "id": "p3_line3a1_cityandstate",
+      "name": "City or Town and State",
+      "type": "text",
+      "section_id": "Part 3 - Processing Information",
+      "pdf_field_name": "P3_Line3a1_CityandState[0]",
+      "consolidated_widgets": [
+        "P3_Line3a1_CityandState[0]"
+      ],
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 3. A. 1. Port of Entry where admitted to the United States. Enter City or Town and State.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "port of entry city and state",
+      "help": {
+        "instructions": "Enter the City or Town and State of the Port-of-Entry where you were admitted to the United States."
+      }
+    },
+    {
+      "id": "p3_checkbox4[1]",
+      "name": "Additional Information",
+      "type": "radio",
+      "section_id": "Part 3 - Processing Information",
+      "consolidated_widgets": [
+        "P3_checkbox4[0]",
+        "P3_checkbox4[1]"
+      ],
+      "options": [
+        {
+          "value": "P3_checkbox4[0]",
+          "label": "Have you ever been in exclusion, deportation, or removal proceedings or ordered removed from the United States? Select No",
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[0]"
+        },
+        {
+          "value": "P3_checkbox4[1]",
+          "label": "Additional Information",
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[1]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "ever been in exclusion deportation removal",
+      "help": {
+        "instructions": "Select 'Yes' if you have ever been in exclusion, deportation, or removal proceedings."
+      }
+    },
+    {
+      "id": "p4_checkbox1a",
+      "name": ", American Sign Language))",
+      "type": "checkbox",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "pdf_field_name": "P4_checkbox1a[0]",
+      "consolidated_widgets": [
+        "P4_checkbox1a[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. A. Select I am deaf or hard of hearing and request the following accommodation (if you are requesting a sign-language interpreter, indicate for which language (e. g., American Sign Language)).",
+      "options": [
+        {
+          "value": "P4_checkbox1a[0]",
+          "label": "I am deaf or hard of hearing and request the following accommodation",
+          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1a[0]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "sign language interpreter needed",
+      "help": {
+        "instructions": "Check this box if you need a sign language interpreter."
+      },
+      "conditional_fields": [
+        "p4_line1a_accomodationrequested"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P4_checkbox1a[0]",
+          "shows": [],
+          "unlocks": [
+            "p4_line1a_accomodationrequested"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p4_line1a_accomodationrequested",
+      "name": "Language",
+      "type": "textarea",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
+      "consolidated_widgets": [
+        "P4_Line1a_AccomodationRequested[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. A. Enter Language.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 140,
+      "spoken_name": "sign language needed",
+      "help": {
+        "instructions": "Specify the sign language you need for the interpreter."
+      },
+      "show_if": {
+        "field": "p4_checkbox1a",
+        "operator": "equals",
+        "value": "P4_checkbox1a[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p4_checkbox1b",
+      "name": "Select I am blind or have low vision and request the following accommodation",
+      "type": "checkbox",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "pdf_field_name": "P4_checkbox1b[0]",
+      "consolidated_widgets": [
+        "P4_checkbox1b[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. B. Select I am blind or have low vision and request the following accommodation.",
+      "options": [
+        {
+          "value": "P4_checkbox1b[0]",
+          "label": "I am blind or have low vision and request the following accommodation",
+          "pdf_field_name": "form1[0].#subform[3].P4_checkbox1b[0]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "blind or low vision accommodation",
+      "help": {
+        "instructions": "Check this box if you are blind or have low vision and need an accommodation."
+      },
+      "conditional_fields": [
+        "p4_line1b_accomodationrequested"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P4_checkbox1b[0]",
+          "shows": [],
+          "unlocks": [
+            "p4_line1b_accomodationrequested"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p4_line1b_accomodationrequested",
+      "name": "Accommodation Requested",
+      "type": "textarea",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
+      "consolidated_widgets": [
+        "P4_Line1b_AccomodationRequested[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. B. Enter Accommodation Requested.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 140,
+      "spoken_name": "blind or low vision accommodation details",
+      "help": {
+        "instructions": "Describe the specific accommodation you need due to blindness or low vision."
+      },
+      "show_if": {
+        "field": "p4_checkbox1b",
+        "operator": "equals",
+        "value": "P4_checkbox1b[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p4_checkbox1c",
+      "name": "Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting)",
+      "type": "checkbox",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "pdf_field_name": "P4_checkbox1c[0]",
+      "consolidated_widgets": [
+        "P4_checkbox1c[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. C. Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting). ",
+      "options": [
+        {
+          "value": "P4_checkbox1c[0]",
+          "label": "I have another type of disability and/or impairment",
+          "pdf_field_name": "form1[0].#subform[3].P4_checkbox1c[0]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "other disability accommodation",
+      "help": {
+        "instructions": "Check this box if you have another type of disability and need an accommodation."
+      },
+      "conditional_fields": [
+        "p4_line1c_accomodationrequested"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P4_checkbox1c[0]",
+          "shows": [],
+          "unlocks": [
+            "p4_line1c_accomodationrequested"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p4_line1c_accomodationrequested",
+      "name": "Description of Disability and/or Impairment and the Accommodations Requested",
+      "type": "textarea",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
+      "consolidated_widgets": [
+        "P4_Line1c_AccomodationRequested[0]"
+      ],
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. C. Enter Description of Disability and/or Impairment and the Accommodations Requested.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 140,
+      "spoken_name": "other disability accommodation details",
+      "help": {
+        "instructions": "Describe your disability and the specific accommodation you are requesting."
+      },
+      "show_if": {
+        "field": "p4_checkbox1c",
+        "operator": "equals",
+        "value": "P4_checkbox1c[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p4_checkbox1[1]",
+      "name": "Are you requesting an accommodation because of your disabilities and/or impairments? Select Yes",
+      "type": "radio",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "consolidated_widgets": [
+        "P4_checkbox1[0]",
+        "P4_checkbox1[1]"
+      ],
+      "options": [
+        {
+          "value": "P4_checkbox1[0]",
+          "label": "Are you requesting an accommodation because of a disabilities and/or impairments? Select No",
+          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[0]"
+        },
+        {
+          "value": "P4_checkbox1[1]",
+          "label": "Are you requesting an accommodation because of your disabilities and/or impairments? Select Yes",
+          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[1]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "requesting disability accommodation",
+      "help": {
+        "instructions": "Select 'Yes' if you are requesting an accommodation because of a disability or impairment."
+      }
+    },
+    {
+      "id": "p5_line1b_language",
+      "name": "Language",
+      "type": "text",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line1b_Language[0]",
+      "consolidated_widgets": [
+        "P5_Line1b_Language[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. 1. B. Enter Language.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "language of interpreter",
+      "help": {
+        "instructions": "This field is automatically populated with the language the interpreter used."
+      },
+      "show_if": {
+        "field": "p5_checkbox1a",
+        "operator": "equals",
+        "value": "P5_Checkbox1b[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p5_line2_nameofrepresentative",
+      "name": "Name of Preparer",
+      "type": "text",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line2_NameofRepresentative[0]",
+      "consolidated_widgets": [
+        "P5_Line2_NameofRepresentative[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. 2. Enter Name of Preparer.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "name of preparer",
+      "help": {
+        "instructions": "This field is automatically populated with the name of the person who prepared the form for you."
+      },
+      "show_if": {
+        "field": "p5_checkbox1a",
+        "operator": "equals",
+        "value": "P5_Checkbox2[0]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p5_line3_daytimephonenumber",
+      "name": "Applicant's Daytime Telephone Number",
+      "type": "text",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line3_DaytimePhoneNumber[0]",
+      "consolidated_widgets": [
+        "P5_Line3_DaytimePhoneNumber[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 3. Enter Applicant's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 13,
+      "spoken_name": "daytime telephone number",
+      "help": {
+        "instructions": "Enter your daytime telephone number where you can be reached.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p5_line4_mobilephonenumber",
+      "name": "Applicant's Mobile Telephone Number (if any)",
+      "type": "text",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line4_MobilePhoneNumber[0]",
+      "consolidated_widgets": [
+        "P5_Line4_MobilePhoneNumber[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 4. Enter Applicant's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 13,
+      "spoken_name": "mobile telephone number",
+      "help": {
+        "instructions": "Enter your mobile telephone number, if you have one.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p5_line5_emailaddress",
+      "name": "Applicant's Email Address (if any)",
+      "type": "text",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line5_EmailAddress[0]",
+      "consolidated_widgets": [
+        "P5_Line5_EmailAddress[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 5. Enter Applicant's Email Address (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "email address",
+      "help": {
+        "instructions": "Enter your email address, if you have one."
+      }
+    },
+    {
+      "id": "p5_line6a_signatureofapplicant",
+      "name": "Print and sign in ink",
+      "type": "signature",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line6a_SignatureofApplicant[0]",
+      "consolidated_widgets": [
+        "P5_Line6a_SignatureofApplicant[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signature. 6. A. Applicant's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "applicant signature",
+      "help": {
+        "instructions": "Sign your name in ink. This field cannot be signed with a digital signature."
+      }
+    },
+    {
+      "id": "p5_line6b_dateofsignature",
+      "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "type": "signature",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Line6b_DateofSignature[0]",
+      "consolidated_widgets": [
+        "P5_Line6b_DateofSignature[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signature. 6. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "applicant signature date",
+      "help": {
+        "instructions": "Enter the date you are signing this application. Use a two-digit month, two-digit day, and four-digit year format (MM/DD/YYYY).",
+        "format_hint": "MM/DD/YYYY"
+      }
+    },
+    {
+      "id": "p5_checkbox1a",
+      "name": "Select I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question",
+      "type": "checkbox",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "consolidated_widgets": [
+        "P5_Checkbox1a[0]",
+        "P5_Checkbox1b[0]",
+        "P5_Checkbox2[0]"
+      ],
+      "options": [
+        {
+          "value": "P5_Checkbox1a[0]",
+          "label": "I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question",
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1a[0]"
+        },
+        {
+          "value": "P5_Checkbox1b[0]",
+          "label": "The interpreter named in Part 6. has read to me every question and instruction on this application and my answer to every question in a language in which I am fluent and I understood everything",
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1b[0]"
+        },
+        {
+          "value": "P5_Checkbox2[0]",
+          "label": "At my request, the preparer named in Part 7",
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox2[0]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "I can read and understand English",
+      "help": {
+        "instructions": "Select this box if you can read and understand English and have read and understood all questions and instructions in this application."
+      },
+      "conditional_fields": [
+        "p5_line2_nameofrepresentative",
+        "p5_line1b_language"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P5_Checkbox1a[0]",
+          "shows": [],
+          "unlocks": [
+            "p5_line2_nameofrepresentative",
+            "p5_line1b_language"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p6_line1b_interpretersgivenname",
+      "name": "Interpreter's Given Name (First Name)",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line1b_InterpretersGivenName[0]",
+      "consolidated_widgets": [
+        "P6_Line1b_InterpretersGivenName[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 1. B. Enter Interpreter's Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "interpreter's first name",
+      "help": {
+        "instructions": "Enter the first name of the interpreter who assisted you with this form."
+      }
+    },
+    {
+      "id": "p6_line2_nameofbusinessor",
+      "name": "Interpreter's Business or Organization Name (if any)",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line2_NameofBusinessor[0]",
+      "consolidated_widgets": [
+        "P6_Line2_NameofBusinessor[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 2. Enter Interpreter's Business or Organization Name (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 30,
+      "spoken_name": "interpreter's business or organization name",
+      "help": {
+        "instructions": "Enter the name of the interpreter's business or organization, if applicable."
+      }
+    },
+    {
+      "id": "p6_line3a_streetnumbername",
+      "name": "Street Number and Name",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3a_StreetNumberName[0]",
+      "consolidated_widgets": [
+        "P6_Line3a_StreetNumberName[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "interpreter's street number and name",
+      "help": {
+        "instructions": "Enter the street number and name for the interpreter's mailing address."
+      }
+    },
+    {
+      "id": "p6_line3b_aptsteflrnumber",
+      "name": "Apartment, Suite, or Floor Number",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3b_AptSteFlrNumber[0]",
+      "consolidated_widgets": [
+        "P6_Line3b_AptSteFlrNumber[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. B. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 6,
+      "spoken_name": "interpreter's apartment, suite, or floor number",
+      "help": {
+        "instructions": "Enter the apartment, suite, or floor number for the interpreter's mailing address."
+      },
+      "show_if": {
+        "field": "p6_unit_type3b_unit",
+        "operator": "equals",
+        "value": "P6_checkbox3b_Unit[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p6_line3c_citytown",
+      "name": "City or Town",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3c_CityTown[0]",
+      "consolidated_widgets": [
+        "P6_Line3c_CityTown[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "interpreter's city or town",
+      "help": {
+        "instructions": "Enter the city or town for the interpreter's mailing address."
+      }
+    },
+    {
+      "id": "p6_line3d_state",
+      "name": "Select State from List of States",
+      "type": "radio",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3d_State[0]",
+      "consolidated_widgets": [
+        "P6_Line3d_State[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. D. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "interpreter's state",
+      "help": {
+        "instructions": "Select the state for the interpreter's mailing address from the list."
+      }
+    },
+    {
+      "id": "p6_line3e_zipcode",
+      "name": "ZIP Code",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3e_ZipCode[0]",
+      "consolidated_widgets": [
+        "P6_Line3e_ZipCode[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. E. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 5,
+      "spoken_name": "interpreter's zip code",
+      "help": {
+        "instructions": "Enter the ZIP code for the interpreter's mailing address.",
+        "format_hint": "5 or 9 digits"
+      }
+    },
+    {
+      "id": "p6_line3f_province",
+      "name": "Province",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3f_Province[0]",
+      "consolidated_widgets": [
+        "P6_Line3f_Province[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. F. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "interpreter's province",
+      "help": {
+        "instructions": "Enter the province for the interpreter's mailing address, if applicable."
+      }
+    },
+    {
+      "id": "p6_line3g_postalcode",
+      "name": "Postal Code",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3g_PostalCode[0]",
+      "consolidated_widgets": [
+        "P6_Line3g_PostalCode[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "interpreter's postal code",
+      "help": {
+        "instructions": "Enter the postal code for the interpreter's mailing address, if applicable.",
+        "format_hint": "Alphanumeric postal code"
+      },
+      "validation": {
+        "pattern": "^[A-Z0-9]{3,10}$",
+        "type": "postal_code"
+      }
+    },
+    {
+      "id": "p6_line3h_country",
+      "name": "Country",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line3h_Country[0]",
+      "consolidated_widgets": [
+        "P6_Line3h_Country[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "interpreter's country",
+      "help": {
+        "instructions": "Enter the country for the interpreter's mailing address."
+      }
+    },
+    {
+      "id": "p6_line4_interpretersdaytimephonenumber",
+      "name": "Interpreter's Daytime Telephone Number",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[0]",
+      "consolidated_widgets": [
+        "P6_Line4_InterpretersDaytimePhoneNumber[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 4. Enter Interpreter's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 10,
+      "spoken_name": "interpreter's daytime phone number",
+      "help": {
+        "instructions": "Enter the interpreter's daytime telephone number.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p6_line4_interpretersdaytimephonenumber[1]",
+      "name": "Interpreter's Mobile Telephone Number (if any)",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[1]",
+      "consolidated_widgets": [
+        "P6_Line4_InterpretersDaytimePhoneNumber[1]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 5. Enter Interpreter's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 10,
+      "spoken_name": "interpreter's mobile phone number",
+      "help": {
+        "instructions": "Enter the interpreter's mobile phone number, if any.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p6_line5_interpretersemailaddress",
+      "name": "Interpreter's Email Address, (if any)",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line5_InterpretersEmailAddress[0]",
+      "consolidated_widgets": [
+        "P6_Line5_InterpretersEmailAddress[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 6. Enter Interpreter's Email Address, (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "interpreter's email address",
+      "help": {
+        "instructions": "Enter the interpreter's email address, if any.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p6_line6a_signature",
+      "name": "Print and sign in ink",
+      "type": "signature",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line6a_Signature[0]",
+      "consolidated_widgets": [
+        "P6_Line6a_Signature[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7. A. Interpreter's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 1,
+      "spoken_name": "interpreter's signature",
+      "help": {
+        "instructions": "This field is read-only. The interpreter must sign this application in ink.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p6_line6b_dateofsignature",
+      "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "type": "date",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line6b_DateofSignature[0]",
+      "consolidated_widgets": [
+        "P6_Line6b_DateofSignature[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "interpreter's signature date",
+      "help": {
+        "instructions": "Enter the date the interpreter signed the form in MM/DD/YYYY format.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": null
+    },
+    {
+      "id": "p6_line1a_interpretersfamilyname",
+      "name": "Interpreter's Family Name (Last Name)",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Line1a_InterpretersFamilyName[0]",
+      "consolidated_widgets": [
+        "P6_Line1a_InterpretersFamilyName[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Provide the following information about the interpreter. Interpreter's Full Name. 1. A. Enter Interpreter's Family Name (Last Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "interpreter's family name",
+      "help": {
+        "instructions": "Enter the interpreter's last name."
+      }
+    },
+    {
+      "id": "p6_language",
+      "name": "Language",
+      "type": "text",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "pdf_field_name": "P6_Language[0]",
+      "consolidated_widgets": [
+        "P6_Language[0]"
+      ],
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Certification. I certify, under penalty of perjury, that: I am fluent in English and (another language), which is the same language provided in Part 5., Item Number 1. B., and I have read to this applicant in the identified language every question and instruction on this application and his or her answer to every question.  The applicant informed me that he or she understands every instruction, question, and answer on the application, including the Applicant's Certification, and has verified the accuracy of every answer. Enter Language.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 18,
+      "spoken_name": "language spoken by interpreter",
+      "help": {
+        "instructions": "Enter the language in which the interpreter communicated with the applicant."
+      }
+    },
+    {
+      "id": "p7_line1b_preparersgivenname",
+      "name": "Preparer's Given Name (First Name). ",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line1b_PreparersGivenName[0]",
+      "consolidated_widgets": [
+        "P7_Line1b_PreparersGivenName[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Full Name. 1.B. Enter Preparer's Given Name (First Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "preparer's given name",
+      "help": {
+        "instructions": "Enter the first name of the person preparing the application, if other than the applicant."
+      }
+    },
+    {
+      "id": "p7_line2_nameofbusinessor",
+      "name": "Preparer's Business or Organization Name (if any)",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line2_NameofBusinessor[0]",
+      "consolidated_widgets": [
+        "P7_Line2_NameofBusinessor[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Full Name. 2. Enter Preparer's Business or Organization Name (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 34,
+      "spoken_name": "preparer's business or organization name",
+      "help": {
+        "instructions": "Enter the name of the preparer's business or organization, if applicable."
+      }
+    },
+    {
+      "id": "p7_line3a_streetnumbername",
+      "name": "Street Number and Name",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3a_StreetNumberName[0]",
+      "consolidated_widgets": [
+        "P7_Line3a_StreetNumberName[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 25,
+      "spoken_name": "preparer's street number and name",
+      "help": {
+        "instructions": "Enter the street number and name of the preparer's mailing address."
+      }
+    },
+    {
+      "id": "p7_line3b_aptsteflrnumber",
+      "name": "Apartment, Suite, or Floor Number",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3b_AptSteFlrNumber[0]",
+      "consolidated_widgets": [
+        "P7_Line3b_AptSteFlrNumber[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. B. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 6,
+      "spoken_name": "preparer's apartment, suite, or floor number",
+      "help": {
+        "instructions": "Enter the apartment, suite, or floor number of the preparer's mailing address, if applicable."
+      },
+      "show_if": {
+        "field": "p7_unit_type3b_unit",
+        "operator": "equals",
+        "value": "P7_checkbox3b_Unit[2]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p7_line3c_citytown",
+      "name": "City or Town",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3c_CityTown[0]",
+      "consolidated_widgets": [
+        "P7_Line3c_CityTown[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "preparer's city or town",
+      "help": {
+        "instructions": "Enter the city or town of the preparer's mailing address."
+      }
+    },
+    {
+      "id": "p7_line3d_state",
+      "name": "Select State from List of States",
+      "type": "select",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3d_State[0]",
+      "consolidated_widgets": [
+        "P7_Line3d_State[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. D. Select State from List of States. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "preparer's state",
+      "help": {
+        "instructions": "Select the state of the preparer's mailing address."
+      }
+    },
+    {
+      "id": "p7_line3e_zipcode",
+      "name": "Zip Code",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3e_ZipCode[0]",
+      "consolidated_widgets": [
+        "P7_Line3e_ZipCode[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. E. Enter Zip Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 5,
+      "spoken_name": "preparer's zip code",
+      "help": {
+        "instructions": "Enter the zip code of the preparer's mailing address. This should be a 5-digit code.",
+        "format_hint": "5 digits"
+      },
+      "validation": {
+        "pattern": "^\\d{5}$",
+        "format_preset": "zip"
+      }
+    },
+    {
+      "id": "p7_line3f_province",
+      "name": "Province. ",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3f_Province[0]",
+      "consolidated_widgets": [
+        "P7_Line3f_Province[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. F. Enter Province. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 20,
+      "spoken_name": "preparer's province",
+      "help": {
+        "instructions": "Enter the province of the preparer's mailing address, if applicable."
+      }
+    },
+    {
+      "id": "p7_line3g_postalcode",
+      "name": "Postal Code",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3g_PostalCode[0]",
+      "consolidated_widgets": [
+        "P7_Line3g_PostalCode[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 9,
+      "spoken_name": "preparer's postal code",
+      "help": {
+        "instructions": "Enter the postal code of the preparer's mailing address, if applicable. This should be an alphanumeric code between 3 and 10 characters.",
+        "format_hint": "Alphanumeric postal code"
+      },
+      "validation": {
+        "type": "postal_code",
+        "pattern": "^[A-Z0-9]{3,10}$"
+      }
+    },
+    {
+      "id": "p7_line3h_country",
+      "name": "Country",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line3h_Country[0]",
+      "consolidated_widgets": [
+        "P7_Line3h_Country[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "preparer's country",
+      "help": {
+        "instructions": "Enter the country of the preparer's mailing address."
+      }
+    },
+    {
+      "id": "p7_line4_preparersdaytimephonenumber",
+      "name": "Preparer's Daytime Telephone Number",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line4_PreparersDaytimePhoneNumber[0]",
+      "consolidated_widgets": [
+        "P7_Line4_PreparersDaytimePhoneNumber[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Contact Information. 4. Enter Preparer's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 10,
+      "spoken_name": "preparer's daytime phone number",
+      "help": {
+        "instructions": "Enter the preparer's daytime phone number. Use the format (XXX) XXX-XXXX.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p7_line5_preparersfaxnumber",
+      "name": "Preparer's Mobile Telephone Number (if any)",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line5_PreparersFaxNumber[0]",
+      "consolidated_widgets": [
+        "P7_Line5_PreparersFaxNumber[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant.  Preparer's Contact Information. 5. Enter Preparer's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 10,
+      "spoken_name": "preparer's mobile phone number",
+      "help": {
+        "instructions": "Enter the preparer's mobile phone number, if any. Use the format (XXX) XXX-XXXX.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p7_line6_preparersemailaddress",
+      "name": "Preparer's Email Address (if any)",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line6_PreparersEmailAddress[0]",
+      "consolidated_widgets": [
+        "P7_Line6_PreparersEmailAddress[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Contact Information. 6. Enter Preparer's Email Address (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 38,
+      "spoken_name": "preparer's email address",
+      "help": {
+        "instructions": "Enter the preparer's email address, if any.",
+        "format_hint": "10 digits (XXX-XXX-XXXX)"
+      },
+      "validation": {
+        "pattern": "^\\d{10}$",
+        "format_preset": "phone"
+      }
+    },
+    {
+      "id": "p7_checkbox7",
+      "name": "Select I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent",
+      "type": "radio",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "consolidated_widgets": [
+        "P7_checkbox7[0]",
+        "P7_checkbox7[1]"
+      ],
+      "options": [
+        {
+          "value": "P7_checkbox7[0]",
+          "label": "I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[0]"
+        },
+        {
+          "value": "P7_checkbox7[1]",
+          "label": "I am an attorney or accredited representative and my representation of the applicant in this case extends / does not extend beyond the preparation of this application",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[1]"
+        }
+      ],
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "preparer is attorney or not",
+      "help": {
+        "instructions": "Select whether the preparer is an attorney or accredited representative, or not."
+      },
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P7_checkbox7[0]",
+          "shows": [],
+          "unlocks": [
+            "p7_checkbox7extend",
+            "p7_checkbox7extend[1]"
+          ],
+          "makes_required": []
+        }
+      ],
+      "conditional_fields": [
+        "p7_checkbox7extend",
+        "p7_checkbox7extend[1]"
+      ]
+    },
+    {
+      "id": "p7_checkbox7extend",
+      "name": "Select I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application",
+      "type": "checkbox",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_checkbox7Extend[0]",
+      "consolidated_widgets": [
+        "P7_checkbox7Extend[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. B. Select I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application.",
+      "options": [
+        {
+          "value": "P7_checkbox7Extend[0]",
+          "label": "I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[0]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "representation extends beyond preparation",
+      "help": {
+        "instructions": "Check if the representation extends beyond the preparation of the application."
+      },
+      "show_if": {
+        "field": "p7_checkbox7",
+        "operator": "equals",
+        "value": "P7_checkbox7[1]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p7_checkbox7extend[1]",
+      "name": "Select I am an attorney or accredited representative and my representation of the applicant in this case does not extend beyond the preparation of this application",
+      "type": "checkbox",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_checkbox7Extend[1]",
+      "consolidated_widgets": [
+        "P7_checkbox7Extend[1]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. B. Select I am an attorney or accredited representative and my representation of the applicant in this case does not extend beyond the preparation of this application.",
+      "options": [
+        {
+          "value": "P7_checkbox7Extend[1]",
+          "label": "I am an attorney or accredited representative and my representation of the applicant in this case does not extend beyond the preparation of this application",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[1]"
+        }
+      ],
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "representation does not extend beyond preparation",
+      "help": {
+        "instructions": "Check if the representation does not extend beyond the preparation of the application."
+      },
+      "show_if": {
+        "field": "p7_checkbox7",
+        "operator": "equals",
+        "value": "P7_checkbox7[1]"
+      },
+      "conditional_logic": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      }
+    },
+    {
+      "id": "p7_line8a_signatureofpreparer",
+      "name": "Print and sign in ink",
+      "type": "signature",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line8a_SignatureofPreparer[0]",
+      "consolidated_widgets": [
+        "P7_Line8a_SignatureofPreparer[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Signature. 8. A. Preparer's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 1,
+      "spoken_name": "preparer's signature",
+      "help": {
+        "instructions": "The preparer must sign their name in ink."
+      }
+    },
+    {
+      "id": "p7_line8b_dateofsignature",
+      "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "type": "date",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "pdf_field_name": "P7_Line8b_DateofSignature[0]",
+      "consolidated_widgets": [
+        "P7_Line8b_DateofSignature[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant.  Preparer's Signature. 8. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "preparer's signature date",
+      "help": {
+        "instructions": "Enter the date the preparer signed the form in MM/DD/YYYY format.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "validation": null
+    },
+    {
+      "id": "p7_line1a_familyname",
+      "name": "Preparer's Family Name (Last Name). ",
+      "type": "text",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "pdf_field_name": "P7_Line1a_FamilyName[0]",
+      "consolidated_widgets": [
+        "P7_Line1a_FamilyName[0]"
+      ],
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant. Provide the following information about the preparer. Preparer's Full Name. 1. A. Enter Preparer's Family Name (Last Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "preparer's family name",
+      "help": {
+        "instructions": "Enter the last name of the person preparing the application, if other than the applicant."
+      }
+    },
+    {
+      "id": "p1_line3b_givenname[1]",
+      "name": "This field pre-populates from page 1",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P1_Line3b_GivenName[1]",
+      "consolidated_widgets": [
+        "P1_Line3b_GivenName[1]"
+      ],
+      "label": "Part 8. Additional Information. Your Full Name. 1. B. Given Name (First Name). This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "given name",
+      "help": {
+        "instructions": "This field pre-populates from page 1."
+      },
+      "copy_from": "p1_line3b_givenname"
+    },
+    {
+      "id": "p1_line3c_middlename[1]",
+      "name": "This field pre-populates from page 1",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P1_Line3c_MiddleName[1]",
+      "consolidated_widgets": [
+        "P1_Line3c_MiddleName[1]"
+      ],
+      "label": "Part 8. Additional Information. Your Full Name. 1. C. Middle Name. This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "middle name",
+      "help": {
+        "instructions": "This field pre-populates from page 1."
+      },
+      "copy_from": "p1_line3c_middlename"
+    },
+    {
+      "id": "p8_line3a_pagenumber",
+      "name": "Page Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line3a_PageNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line3a_PageNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 3. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 2,
+      "spoken_name": "page number",
+      "help": {
+        "instructions": "Enter the page number this additional information refers to."
+      }
+    },
+    {
+      "id": "p8_line3b_partnumber",
+      "name": "Part Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line3b_PartNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line3b_PartNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 3. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "part number",
+      "help": {
+        "instructions": "Enter the part number this additional information refers to."
+      }
+    },
+    {
+      "id": "p8_line3c_itemnumber",
+      "name": "Item Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line3c_ItemNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line3c_ItemNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 3. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "item number",
+      "help": {
+        "instructions": "Enter the item number this additional information refers to."
+      }
+    },
+    {
+      "id": "p8_line3d_additionalinfo",
+      "name": "Additional Information",
+      "type": "textarea",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line3d_AdditionalInfo[0]",
+      "consolidated_widgets": [
+        "P8_Line3d_AdditionalInfo[0]"
+      ],
+      "label": "Part 8. Additional Information. 3. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "additional information",
+      "help": {
+        "instructions": "Enter any additional information needed for this page, part, and item."
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber[1]",
+      "name": "Page Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5a_PageNumber[1]",
+      "consolidated_widgets": [
+        "P8_Line5a_PageNumber[1]"
+      ],
+      "label": "Part 8. Additional Information. 4. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 2,
+      "spoken_name": "page number",
+      "help": {
+        "instructions": "Enter the page number this additional information refers to."
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber[1]",
+      "name": "Part Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5b_PartNumber[1]",
+      "consolidated_widgets": [
+        "P8_Line5b_PartNumber[1]"
+      ],
+      "label": "Part 8. Additional Information. 4. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "part number",
+      "help": {
+        "instructions": "Enter the part number this additional information refers to."
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber[1]",
+      "name": "Item Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5c_ItemNumber[1]",
+      "consolidated_widgets": [
+        "P8_Line5c_ItemNumber[1]"
+      ],
+      "label": "Part 8. Additional Information. 4. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, item number",
+      "help": {
+        "instructions": "Enter the item number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo[1]",
+      "name": "Additional Information",
+      "type": "textarea",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[1]",
+      "consolidated_widgets": [
+        "P8_Line5d_AdditionalInfo[1]"
+      ],
+      "label": "Part 8. Additional Information. 4. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "Page 8, additional information",
+      "help": {
+        "instructions": "Enter any additional information that you need to provide for the item number you specified."
+      }
+    },
+    {
+      "id": "p8_line4a_pagenumber",
+      "name": "Page Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line4a_PageNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line4a_PageNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 5. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 2,
+      "spoken_name": "Page 8, page number",
+      "help": {
+        "instructions": "Enter the page number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line4b_partnumber",
+      "name": "Part Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line4b_PartNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line4b_PartNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 5. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, part number",
+      "help": {
+        "instructions": "Enter the part number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line4c_itemnumber",
+      "name": "Item Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line4c_ItemNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line4c_ItemNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 5. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, item number",
+      "help": {
+        "instructions": "Enter the item number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line4d_additionalinfo",
+      "name": "Additional Information",
+      "type": "textarea",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line4d_AdditionalInfo[0]",
+      "consolidated_widgets": [
+        "P8_Line4d_AdditionalInfo[0]"
+      ],
+      "label": "Part 8. Additional Information. 5. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "Page 8, additional information",
+      "help": {
+        "instructions": "Enter any additional information that you need to provide for the item number you specified."
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber",
+      "name": "Page Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5a_PageNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line5a_PageNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 6. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 2,
+      "spoken_name": "Page 8, page number",
+      "help": {
+        "instructions": "Enter the page number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber",
+      "name": "Part Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5b_PartNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line5b_PartNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 6. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, part number",
+      "help": {
+        "instructions": "Enter the part number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber",
+      "name": "Item Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5c_ItemNumber[0]",
+      "consolidated_widgets": [
+        "P8_Line5c_ItemNumber[0]"
+      ],
+      "label": "Part 8. Additional Information. 6. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, item number",
+      "help": {
+        "instructions": "Enter the item number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo",
+      "name": "Additional Information",
+      "type": "textarea",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[0]",
+      "consolidated_widgets": [
+        "P8_Line5d_AdditionalInfo[0]"
+      ],
+      "label": "Part 8. Additional Information. 6. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "Page 8, additional information",
+      "help": {
+        "instructions": "Enter any additional information that you need to provide for the item number you specified."
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber[2]",
+      "name": "Page Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5a_PageNumber[2]",
+      "consolidated_widgets": [
+        "P8_Line5a_PageNumber[2]"
+      ],
+      "label": "Part 8. Additional Information. 7. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 2,
+      "spoken_name": "Page 8, page number",
+      "help": {
+        "instructions": "Enter the page number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber[2]",
+      "name": "Part Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5b_PartNumber[2]",
+      "consolidated_widgets": [
+        "P8_Line5b_PartNumber[2]"
+      ],
+      "label": "Part 8. Additional Information. 7. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, part number",
+      "help": {
+        "instructions": "Enter the part number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber[2]",
+      "name": "Item Number",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5c_ItemNumber[2]",
+      "consolidated_widgets": [
+        "P8_Line5c_ItemNumber[2]"
+      ],
+      "label": "Part 8. Additional Information. 7. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "max_length": 4,
+      "spoken_name": "Page 8, item number",
+      "help": {
+        "instructions": "Enter the item number from the original form that you are providing additional information for."
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo[2]",
+      "name": "Additional Information",
+      "type": "textarea",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[2]",
+      "consolidated_widgets": [
+        "P8_Line5d_AdditionalInfo[2]"
+      ],
+      "label": "Part 8. Additional Information. 7. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "Page 8, additional information",
+      "help": {
+        "instructions": "Enter any additional information that you need to provide for the item number you specified."
+      }
+    },
+    {
+      "id": "p1_line3a_familyname[1]",
+      "name": "This field pre-populates from page 1",
+      "type": "text",
+      "section_id": "Part 8 - Additional Information",
+      "pdf_field_name": "P1_Line3a_FamilyName[1]",
+      "consolidated_widgets": [
+        "P1_Line3a_FamilyName[1]"
+      ],
+      "label": "Part 8. Additional Information. If you need extra space to provide any additional information within this application, use the space below.  If you need more space than what is provided, you may make copies of this page to complete and file with this application or attach a separate sheet of paper.  Include your name and. A. Number (if any) at the top of each sheet; indicate the Page Number, Part Number, and Item Number to which your answer refers; and sign and date each sheet. Your Full Name. 1. A. Family Name (Last Name). This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "spoken_name": "family name",
+      "help": {
+        "instructions": "This field automatically populates with the family name you provided earlier in the form."
+      },
+      "copy_from": "p1_line3a_familyname"
+    },
+    {
+      "id": "p1_unit_type6c_unit",
+      "name": "Select Unit Type",
+      "type": "radio",
+      "section_id": "Part 1 - Information About You",
+      "consolidated_widgets": [
+        "P1_checkbox6c_Unit[0]",
+        "P1_checkbox6c_Unit[1]",
+        "P1_checkbox6c_Unit[2]"
+      ],
+      "options": [
+        {
+          "value": "P1_checkbox6c_Unit[1]",
+          "label": "Suite",
+          "pdf_field_name": "P1_checkbox6c_Unit[1]"
+        },
+        {
+          "value": "P1_checkbox6c_Unit[2]",
+          "label": "Floor",
+          "pdf_field_name": "P1_checkbox6c_Unit[2]"
+        },
+        {
+          "value": "P1_checkbox6c_Unit[0]",
+          "label": "Apartment",
+          "pdf_field_name": "P1_checkbox6c_Unit[0]"
+        }
+      ],
+      "spoken_name": "unit type",
+      "help": {
+        "instructions": "Select the appropriate unit type for your mailing address: Apartment, Suite, or Floor."
+      },
+      "conditional_fields": [
+        "p1_line6c_aptsteflrnumber"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P1_checkbox6c_Unit[1]",
+          "shows": [],
+          "unlocks": [
+            "p1_line6c_aptsteflrnumber"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p1_unit_type7b_unit",
+      "name": "Select Unit Type",
+      "type": "radio",
+      "section_id": "Part 1 - Information About You",
+      "consolidated_widgets": [
+        "P1_checkbox7b_Unit[2]",
+        "P1_checkbox7b_Unit[0]",
+        "P1_checkbox7b_Unit[1]"
+      ],
+      "options": [
+        {
+          "value": "P1_checkbox7b_Unit[0]",
+          "label": "Apartment",
+          "pdf_field_name": "P1_checkbox7b_Unit[0]"
+        },
+        {
+          "value": "P1_checkbox7b_Unit[1]",
+          "label": "Suite",
+          "pdf_field_name": "P1_checkbox7b_Unit[1]"
+        },
+        {
+          "value": "P1_checkbox7b_Unit[2]",
+          "label": "Floor",
+          "pdf_field_name": "P1_checkbox7b_Unit[2]"
+        }
+      ],
+      "spoken_name": "unit type",
+      "help": {
+        "instructions": "Select the appropriate unit type for your physical address: Apartment, Suite, or Floor."
+      },
+      "conditional_fields": [
+        "p1_line7b_aptsteflrnumber"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P1_checkbox7b_Unit[0]",
+          "shows": [],
+          "unlocks": [
+            "p1_line7b_aptsteflrnumber"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p6_unit_type3b_unit",
+      "name": "Select Unit Type",
+      "type": "radio",
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "consolidated_widgets": [
+        "P6_checkbox3b_Unit[0]",
+        "P6_checkbox3b_Unit[1]",
+        "P6_checkbox3b_Unit[2]"
+      ],
+      "options": [
+        {
+          "value": "P6_checkbox3b_Unit[1]",
+          "label": "Suite",
+          "pdf_field_name": "P6_checkbox3b_Unit[1]"
+        },
+        {
+          "value": "P6_checkbox3b_Unit[2]",
+          "label": "Floor",
+          "pdf_field_name": "P6_checkbox3b_Unit[2]"
+        },
+        {
+          "value": "P6_checkbox3b_Unit[0]",
+          "label": "Apartment",
+          "pdf_field_name": "P6_checkbox3b_Unit[0]"
+        }
+      ],
+      "spoken_name": "unit type",
+      "help": {
+        "instructions": "Select the appropriate unit type for the interpreter's mailing address: Apartment, Suite, or Floor."
+      },
+      "conditional_fields": [
+        "p6_line3b_aptsteflrnumber"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P6_checkbox3b_Unit[1]",
+          "shows": [],
+          "unlocks": [
+            "p6_line3b_aptsteflrnumber"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p7_unit_type3b_unit",
+      "name": "Select Unit Type",
+      "type": "radio",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "consolidated_widgets": [
+        "P7_checkbox3b_Unit[0]",
+        "P7_checkbox3b_Unit[1]",
+        "P7_checkbox3b_Unit[2]"
+      ],
+      "options": [
+        {
+          "value": "P7_checkbox3b_Unit[1]",
+          "label": "Suite",
+          "pdf_field_name": "P7_checkbox3b_Unit[1]"
+        },
+        {
+          "value": "P7_checkbox3b_Unit[2]",
+          "label": "Floor",
+          "pdf_field_name": "P7_checkbox3b_Unit[2]"
+        },
+        {
+          "value": "P7_checkbox3b_Unit[0]",
+          "label": "Apartment",
+          "pdf_field_name": "P7_checkbox3b_Unit[0]"
+        }
+      ],
+      "spoken_name": "unit type",
+      "help": {
+        "instructions": "Select the appropriate unit type for the preparer's mailing address: Apartment, Suite, or Floor."
+      },
+      "conditional_fields": [
+        "p7_line3b_aptsteflrnumber"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "P7_checkbox3b_Unit[1]",
+          "shows": [],
+          "unlocks": [
+            "p7_line3b_aptsteflrnumber"
+          ],
+          "makes_required": []
+        }
+      ]
+    },
+    {
+      "id": "p3_ethnicity",
+      "name": "Ethnicity",
+      "spoken_name": "ethnicity",
+      "type": "radio",
+      "section_id": "Part 3 - Biographic Information",
+      "options": [
+        {
+          "value": "hispanic_latino",
+          "label": "Hispanic or Latino"
+        },
+        {
+          "value": "not_hispanic_latino",
+          "label": "Not Hispanic or Latino"
+        }
+      ],
+      "help": {
+        "instructions": "Select one option for ethnicity."
+      }
+    },
+    {
+      "id": "p3_race",
+      "name": "Race (Select all applicable)",
+      "spoken_name": "race",
+      "type": "checkbox",
+      "section_id": "Part 3 - Biographic Information",
+      "options": [
+        {
+          "value": "white",
+          "label": "White"
+        },
+        {
+          "value": "asian",
+          "label": "Asian"
+        },
+        {
+          "value": "black",
+          "label": "Black or African American"
+        },
+        {
+          "value": "native_american",
+          "label": "American Indian or Alaska Native"
+        },
+        {
+          "value": "pacific_islander",
+          "label": "Native Hawaiian or Other Pacific Islander"
+        }
+      ],
+      "help": {
+        "instructions": "Select all applicable races."
+      }
+    },
+    {
+      "id": "p3_eye_color",
+      "name": "Eye Color",
+      "spoken_name": "eye color",
+      "type": "radio",
+      "section_id": "Part 3 - Biographic Information",
+      "options": [
+        {
+          "value": "black",
+          "label": "Black"
+        },
+        {
+          "value": "blue",
+          "label": "Blue"
+        },
+        {
+          "value": "brown",
+          "label": "Brown"
+        },
+        {
+          "value": "gray",
+          "label": "Gray"
+        },
+        {
+          "value": "green",
+          "label": "Green"
+        },
+        {
+          "value": "hazel",
+          "label": "Hazel"
+        },
+        {
+          "value": "maroon",
+          "label": "Maroon"
+        },
+        {
+          "value": "pink",
+          "label": "Pink"
+        },
+        {
+          "value": "unknown",
+          "label": "Unknown/Other"
+        }
+      ],
+      "help": {
+        "instructions": "Select your eye color."
+      }
+    },
+    {
+      "id": "p3_hair_color",
+      "name": "Hair Color",
+      "spoken_name": "hair color",
+      "type": "radio",
+      "section_id": "Part 3 - Biographic Information",
+      "options": [
+        {
+          "value": "bald",
+          "label": "Bald"
+        },
+        {
+          "value": "black",
+          "label": "Black"
+        },
+        {
+          "value": "blond",
+          "label": "Blond"
+        },
+        {
+          "value": "brown",
+          "label": "Brown"
+        },
+        {
+          "value": "gray",
+          "label": "Gray"
+        },
+        {
+          "value": "red",
+          "label": "Red"
+        },
+        {
+          "value": "sandy",
+          "label": "Sandy"
+        },
+        {
+          "value": "white",
+          "label": "White"
+        },
+        {
+          "value": "unknown",
+          "label": "Unknown/Other"
+        }
+      ],
+      "help": {
+        "instructions": "Select your hair color."
+      }
+    }
+  ],
+  "extraction_info": {
+    "extracted_at": "2025-11-01T15:27:09.389096",
+    "extraction_confidence": 0.95,
+    "extractor_version": "v9_conformant",
+    "manual_review_required": false,
+    "manual_review_completed": true,
+    "approved_by": "system"
+  }
+}
