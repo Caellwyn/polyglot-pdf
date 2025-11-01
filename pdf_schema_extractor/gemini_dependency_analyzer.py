@@ -25,30 +25,66 @@ class GeminiDependencyAnalyzer:
 
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
         self.model = "gemini-2.0-flash-exp"  # Supports structured outputs
-        self.upload_url = f"{self.base_url}/files"
+        self.upload_url = "https://generativelanguage.googleapis.com/upload/v1beta/files"
 
     def _upload_file(self, file_path: str) -> str:
         """Upload PDF to Gemini File API."""
-        files = {'file': open(file_path, 'rb')}
-        headers = {'X-Goog-Upload-Protocol': 'multipart'}
+        # Step 1: Initiate resumable upload
+        file_size = os.path.getsize(file_path)
+        headers = {
+            "X-Goog-Upload-Protocol": "resumable",
+            "X-Goog-Upload-Command": "start",
+            "X-Goog-Upload-Header-Content-Length": str(file_size),
+            "X-Goog-Upload-Header-Content-Type": "application/pdf",
+            "Content-Type": "application/json"
+        }
+
+        metadata = {"file": {"display_name": Path(file_path).name}}
 
         response = requests.post(
-            self.upload_url,
+            f"{self.upload_url}?key={self.api_key}",
             headers=headers,
-            files=files,
-            params={'key': self.api_key}
+            json=metadata,
+            timeout=30
         )
 
         if response.status_code != 200:
-            raise Exception(f"Upload failed: {response.text}")
+            raise Exception(f"Upload initiation failed: {response.status_code} - {response.text}")
 
-        result = response.json()
-        return result['file']['uri']
+        upload_url = response.headers.get("X-Goog-Upload-URL")
+        if not upload_url:
+            print(f"DEBUG: Response status: {response.status_code}")
+            print(f"DEBUG: Response headers: {response.headers}")
+            print(f"DEBUG: Response body: {response.text}")
+            raise Exception("No upload URL in response")
+
+        # Step 2: Upload file content
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+
+        upload_headers = {
+            "X-Goog-Upload-Command": "upload, finalize",
+            "X-Goog-Upload-Offset": "0",
+            "Content-Length": str(file_size)
+        }
+
+        upload_response = requests.put(
+            upload_url,
+            headers=upload_headers,
+            data=file_content,
+            timeout=60
+        )
+
+        if upload_response.status_code != 200:
+            raise Exception(f"Upload failed: {upload_response.status_code} - {upload_response.text}")
+
+        file_info = upload_response.json().get("file", {})
+        return file_info.get("uri")
 
     def _wait_for_processing(self, file_uri: str, timeout: int = 60) -> str:
         """Wait for PDF to be processed."""
         file_name = file_uri.split('/')[-1]
-        get_url = f"{self.upload_url}/{file_name}"
+        get_url = f"{self.base_url}/files/{file_name}"
 
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -145,7 +181,9 @@ class GeminiDependencyAnalyzer:
 
         return f"""# Conditional Dependency Analysis Task
 
-You are analyzing a PDF form to identify ALL conditional field dependencies.
+You are analyzing TWO PDFs to identify ALL conditional field dependencies:
+1. **Form PDF** - The actual form with field names and layout
+2. **Instruction PDF** - Detailed instructions explaining conditional logic
 
 ## Your Task
 
@@ -159,14 +197,33 @@ For EACH field in the schema, determine:
 {json.dumps(field_list, indent=2)}
 ```
 
+## CRITICAL RULES
+
+1. **EVERY read_only=true field MUST have a trigger field**
+   - If you see read_only=true, search the instruction PDF for conditional text
+   - These fields are locked until a condition is met
+
+2. **Checkbox groups share the same trigger**
+   - Example: p2_checkbox3[0], p2_checkbox3[1], p2_checkbox3[2] likely all triggered by same parent field
+   - Example: p4_checkbox1a, p4_checkbox1b, p4_checkbox1c likely all triggered by p4_checkbox1[1]
+
+3. **Use the instruction PDF extensively**
+   - Search for "Item Number X" or "Question X" to find conditional logic
+   - Look for phrases: "complete only if", "show only if", "if you answered", "applies only if"
+   - Match question numbers in instructions to field IDs in schema
+
 ## Instructions
 
 ### Finding Trigger Relationships (show_if)
 
-Look at the instruction PDF and form PDF carefully. Identify fields that:
-- Say "complete only if..." or "show only if..."
-- Are read-only and depend on another field's value
-- Have conditional logic described in instructions
+**PRIMARY SOURCE: Instruction PDF**
+- Search for each field's question number in the instruction PDF
+- Look for conditional phrases explaining when to complete each field
+- Cross-reference with form PDF to identify the trigger field
+
+**SECONDARY SOURCE: Form PDF structure**
+- Read-only fields usually follow their trigger field
+- Grouped fields (same prefix, different suffix) often share triggers
 
 **Examples:**
 - "Q5a-c: Complete only if you answered YES to Question 4"
@@ -186,16 +243,18 @@ For each trigger field, list ALL fields it controls.
 
 ### Unlock Detection (needs_unlock)
 
-Set needs_unlock=true if:
-- Field is read_only=true AND has conditional logic
-- Instructions say it "unlocks" or "becomes available"
-- It's a PDF field that needs the READ_ONLY bit cleared
+**IMPORTANT**: Set needs_unlock=true for:
+- ANY field where read_only=true AND you found a show_if condition
+- These fields need the PDF READ_ONLY bit cleared programmatically
 
 ### Confidence Levels
 
-- **high**: Clear instruction ("complete only if X is Y")
-- **medium**: Implicit from context (field order, similar patterns)
+**ALWAYS include confidence**:
+- **high**: Explicit instruction in instruction PDF ("complete only if X is Y")
+- **medium**: Implicit from field grouping or structure
 - **low**: Uncertain, needs manual review
+
+**Note**: If you find a clear dependency for a read_only field, mark it as "high" confidence.
 
 ## Critical Rules
 
@@ -252,7 +311,16 @@ Set needs_unlock=true if:
 }}
 ```
 
-Now analyze ALL fields and return complete bidirectional dependencies.
+## Your Analysis Process
+
+1. **Start with read_only=true fields** - These MUST have triggers
+2. **Check the instruction PDF** for each read_only field's question number
+3. **Look for conditional phrases** in the instructions
+4. **Identify the trigger field** by matching question numbers to field IDs
+5. **Set needs_unlock=true** for all read_only fields with show_if
+6. **Include confidence** for every dependency
+
+Now analyze ALL fields, focusing heavily on the instruction PDF to find dependencies for the {len([f for f in field_list if f.get('read_only')])} read-only fields. Return complete bidirectional dependencies.
 """
 
     def analyze_dependencies(
