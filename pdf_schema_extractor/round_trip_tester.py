@@ -73,9 +73,12 @@ class RoundTripTester:
                     continue
 
             # Check for validation rules
-            validation = field.get('validation', {})
-            val_type = validation.get('type')
-            exact_length = validation.get('exact_length')
+            validation = field.get('validation') or {}
+            # Support both old 'type' and new 'format_preset' keys
+            val_type = validation.get('format_preset') or validation.get('type')
+            exact_length = validation.get('exact_length') or (
+                validation.get('min_length') if validation.get('min_length') == validation.get('max_length') else None
+            )
 
             # Generate value based on validation rules first
             if val_type == 'phone_number':
