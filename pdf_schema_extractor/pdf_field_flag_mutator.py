@@ -62,6 +62,8 @@ def extract_unlock_instructions(schema: Dict) -> List[Dict]:
     """
     Extract all field unlocking instructions from schema.
 
+    Supports both v8 (conditional_logic) and v9 (conditional_behavior) schemas.
+
     Returns list of:
     {
         "field_pdf_name": "P1_Line5a_FirstName[0]",
@@ -77,40 +79,72 @@ def extract_unlock_instructions(schema: Dict) -> List[Dict]:
     unlock_instructions = []
 
     for field in schema.get('fields', []):
-        # Check if field has conditional logic
+        # V9 schema format: check conditional_behavior (new format)
+        conditional_behavior = field.get('conditional_behavior')
+
+        # Also check if field has show_if and is read_only (indicates conditional field)
+        show_if = field.get('show_if')
+        read_only = field.get('read_only', False)
+
+        # V8 schema format: check conditional_logic (legacy)
         conditional_logic = field.get('conditional_logic')
         if not conditional_logic:
-            # Also check in help section
+            # Also check in help section (very old format)
             help_section = field.get('help', {})
             conditional_logic = help_section.get('conditional_logic')
 
-        if not conditional_logic:
+        # Determine unlock method
+        unlock_method = None
+        bit_change = None
+
+        # Priority 1: conditional_behavior (v9)
+        if conditional_behavior:
+            unlock_method = conditional_behavior.get('unlock_method')
+            bit_change = conditional_behavior.get('pdf_field_flag_change')
+
+        # Priority 2: conditional_logic (v8)
+        elif conditional_logic:
+            parsed = parse_conditional_logic(conditional_logic)
+            unlock_method = parsed.get('unlock_method')
+            bit_change = parsed.get('bit_change')
+
+        # Priority 3: Infer from show_if + read_only (v9 inference)
+        elif show_if and read_only:
+            # Field has conditional display and is read-only
+            # Assume it needs unlocking via bit flip
+            unlock_method = 'flip_readonly_bit'
+            bit_change = {
+                'bit': 0,
+                'current_value': 1,
+                'required_value': 0
+            }
+
+        # Skip if no unlock method found
+        if unlock_method != 'flip_readonly_bit':
             continue
 
-        # Parse the conditional logic
-        parsed = parse_conditional_logic(conditional_logic)
+        # Get PDF field name(s)
+        pdf_field_name = field.get('pdf_field_name')
 
-        if parsed['unlock_method'] == 'flip_readonly_bit':
-            pdf_field_name = field.get('pdf_field_name')
+        # For group fields, get all consolidated widgets
+        pdf_fields = []
+        if pdf_field_name:
+            pdf_fields.append(pdf_field_name)
+        elif field.get('consolidated_widgets'):
+            pdf_fields.extend(field['consolidated_widgets'])
 
-            # For group fields, get all consolidated widgets
-            pdf_fields = []
-            if pdf_field_name:
-                pdf_fields.append(pdf_field_name)
-            elif field.get('consolidated_widgets'):
-                pdf_fields.extend(field['consolidated_widgets'])
-
-            for pdf_name in pdf_fields:
-                unlock_instructions.append({
-                    'field_pdf_name': pdf_name,
-                    'field_id': field.get('id'),
-                    'unlock_method': parsed['unlock_method'],
-                    'bit_change': parsed.get('bit_change', {
-                        'bit': 0,
-                        'current_value': 1,
-                        'required_value': 0
-                    })
-                })
+        # Add unlock instructions
+        for pdf_name in pdf_fields:
+            unlock_instructions.append({
+                'field_pdf_name': pdf_name,
+                'field_id': field.get('id'),
+                'unlock_method': unlock_method,
+                'bit_change': bit_change or {
+                    'bit': 0,
+                    'current_value': 1,
+                    'required_value': 0
+                }
+            })
 
     return unlock_instructions
 
