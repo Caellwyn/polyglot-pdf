@@ -190,6 +190,22 @@ def extract_widget_inventory(pdf_path: str, include_filtered: bool = False) -> L
             flags = widget.field_flags if widget.field_flags else 0
             parsed_flags = parse_field_flags(flags)
 
+            # Override type based on field flags (more accurate than PyMuPDF's field_type)
+            if parsed_flags['is_combo']:
+                # COMBO flag (bit 17) indicates dropdown/select field
+                # PyMuPDF often reports these as 'radio' but they're actually dropdowns
+                widget_type = "select"
+
+            # Extract dropdown options for select fields
+            choice_options = None
+            if widget_type == "select" and hasattr(widget, 'choice_values'):
+                # choice_values is list of (value, label) tuples
+                choice_options = [
+                    {"value": val, "label": label}
+                    for val, label in widget.choice_values
+                    if val and val.strip()  # Skip empty entries
+                ]
+
             widget_data = {
                 "field_name": short_name,
                 "full_field_name": widget.field_name,
@@ -227,6 +243,10 @@ def extract_widget_inventory(pdf_path: str, include_filtered: bool = False) -> L
                 # Computed flags
                 "hidden": widget.field_display == 1,
             }
+
+            # Add choice options for select fields
+            if choice_options:
+                widget_data["choice_options"] = choice_options
 
             # Flag duplicates
             if is_duplicate:
