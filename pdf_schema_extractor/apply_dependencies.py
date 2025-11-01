@@ -92,7 +92,11 @@ def apply_dependencies_to_schema(schema: Dict, dependencies: Dict, min_confidenc
                     stats['errors'].append(f"Dependent field {dep_id} not found")
 
             if valid_deps:
-                field['conditional_fields'] = valid_deps
+                # Merge with existing conditional_fields if present
+                existing = field.get('conditional_fields', [])
+                # Combine and deduplicate
+                merged = list(set(existing + valid_deps))
+                field['conditional_fields'] = merged
                 stats['conditional_fields_applied'] += 1
 
         # Flag fields needing unlock
