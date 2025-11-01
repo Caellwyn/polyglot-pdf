@@ -1,0 +1,256 @@
+{
+  "errors": [
+    {
+      "category": "missing_trigger_fields",
+      "count": 1,
+      "details": [
+        {
+          "field_id": "p2_line2h1_cityandstate",
+          "trigger_field": "p2_checkbox2[11]",
+          "issue": "Trigger field does not exist in schema"
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "category": "missing_js_unlock_instructions",
+      "count": 10,
+      "details": [
+        {
+          "field_id": "p1_line5a_familyname",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p1_line5b_givenname",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p1_line5c_middlename",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p2_line2h1_cityandstate",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_checkbox1a",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_line1a_accomodationrequested",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_checkbox1b",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_line1b_accomodationrequested",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_checkbox1c",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        },
+        {
+          "field_id": "p4_line1c_accomodationrequested",
+          "has_python": true,
+          "issue": "Missing JavaScript unlock instructions for client-side unlocking"
+        }
+      ]
+    },
+    {
+      "category": "incomplete_conditionals",
+      "count": 20,
+      "manual_review_needed": 20,
+      "details": [
+        {
+          "field_id": "p1_checkbox4",
+          "type": "needs_manual_parsing",
+          "missing_fields": [],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        },
+        {
+          "field_id": "p2_checkbox3",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p2_checkbox3[1]",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p2_checkbox3[2]",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p2_checkbox3[3]",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p2_checkbox3[4]",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p2_checkbox2[5]",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Complex condition - manual review needed"
+        },
+        {
+          "field_id": "p4_checkbox1a",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p4_line1a_accomodationrequested",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p4_checkbox1b",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p4_line1b_accomodationrequested",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p4_checkbox1c",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p4_line1c_accomodationrequested",
+          "type": "conditional_visibility",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Trigger field needs manual identification"
+        },
+        {
+          "field_id": "p5_line1b_language",
+          "type": "pre_populated_conditional",
+          "missing_fields": [],
+          "needs_manual_review": true,
+          "note": "Manual review needed - complex pre-population logic"
+        },
+        {
+          "field_id": "p5_line2_nameofrepresentative",
+          "type": "pre_populated_conditional",
+          "missing_fields": [],
+          "needs_manual_review": true,
+          "note": "Manual review needed - complex pre-population logic"
+        },
+        {
+          "field_id": "p5_line6a_signatureofapplicant",
+          "type": "needs_manual_parsing",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        },
+        {
+          "field_id": "p6_line3b_aptsteflrnumber",
+          "type": "needs_manual_parsing",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        },
+        {
+          "field_id": "p7_line3b_aptsteflrnumber",
+          "type": "needs_manual_parsing",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        },
+        {
+          "field_id": "p7_checkbox7extend[1]",
+          "type": "needs_manual_parsing",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        },
+        {
+          "field_id": "p7_line8a_signatureofpreparer",
+          "type": "needs_manual_parsing",
+          "missing_fields": [
+            "trigger_field"
+          ],
+          "needs_manual_review": true,
+          "note": "Requires manual parsing - Gemini flagged for review"
+        }
+      ]
+    }
+  ],
+  "info": [],
+  "total_issues": 3
+}
