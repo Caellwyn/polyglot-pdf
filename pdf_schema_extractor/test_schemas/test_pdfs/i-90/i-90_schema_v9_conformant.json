@@ -749,7 +749,7 @@
       "consolidated_widgets": [
         "P1_Line7d_State[0]"
       ],
-      "label": "Part 1. Information About You. Physical Address. 7 D. Select State from List of States.",
+      "label": "Part 1. Information About You. Physical Address. 7. D. Select State from List of States.",
       "read_only": false,
       "required": false,
       "multiline": false,

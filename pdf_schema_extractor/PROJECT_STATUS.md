@@ -1,7 +1,7 @@
 # PDF Schema Extractor - Project Status
 
 **Date:** November 1, 2025
-**Status:** I-90 schema fully conformant to Pydantic models - Production ready (100% validation, 100% round-trip)
+**Status:** I-90 schema v11 - Production ready with hierarchical field ordering and all corrections (100% validation, 100% round-trip)
 
 ---
 
@@ -66,6 +66,90 @@
 - ✅ New conditional logic models enable frontend conditional evaluators
 - ✅ Conformance script can be applied to all 50+ forms
 - ✅ 100% data integrity preserved across schema transformation
+
+---
+
+### November 1, 2025 (Evening) - Field Ordering + Schema Corrections Complete ✅
+
+**Session 3: Conditional Unlock Flow Validation (32 fields unlocked, 120 filled)**
+
+**Problem Solved:** Validate complete end-to-end conditional unlock system works.
+
+**Approach:** Integration testing with PDF bit manipulation
+- Updated mutator to support v9 schema format
+- Created enhanced round-trip tester for unlocked fields
+- Validated complete unlock → fill → verify flow
+
+**Results:**
+- ✅ **32 PDF widgets unlocked** (readonly bit flipped: 0x00800001 → 0x00800000)
+- ✅ **21 field IDs validated** (logical schema fields)
+- ✅ **120 fields filled** (99 baseline + 21 unlocked)
+- ✅ **100% round-trip success** (120/120 matches)
+
+**Tools Updated/Created:**
+- Updated `pdf_field_flag_mutator.py` - v9 schema support (reads conditional_behavior)
+- `test_conditional_unlock_flow.py` - Basic integration test
+- `test_conditional_unlock_enhanced.py` - Complete validation with unlocked field data
+- `CONDITIONAL_UNLOCK_FLOW_VALIDATION.md` - Full documentation
+
+---
+
+**Session 4: Hierarchical Field Ordering (v10 - 133/137 fields ordered)**
+
+**Problem Solved:** Schema fields need to be in natural reading order (Part.Question.Sub).
+
+**Approach:** Parse question numbers from PDF widget tooltips
+- Extract hierarchical structure from tooltip text ("Part 1. ... 3. A. Enter...")
+- Sort fields by question hierarchy (1.1, 1.2, 1.3.A, 1.3.B, etc.)
+- Add page numbers and positions to all fields
+
+**Results:**
+- ✅ **133/137 fields ordered** (97% coverage)
+- ✅ **Question numbers extracted** (e.g., "1.3.A", "2.4.B")
+- ✅ **Page positions added** (page, x, y, width, height)
+- ✅ **100% validation** (Pydantic + round-trip)
+
+**Data Added to Schema:**
+```json
+{
+  "question_number": "1.3.A",
+  "pdf_position": {
+    "page": 1,
+    "x": 72.0,
+    "y": 100.5,
+    "width": 200.0,
+    "height": 20.0
+  }
+}
+```
+
+**Tool Created:**
+- `extract_field_order_from_labels.py` - Reusable for all USCIS forms
+- `FIELD_ORDERING_COMPLETE.md` - Full documentation
+
+---
+
+**Session 5: Schema Corrections (v11 - 87 fixes, 137 → 132 fields)**
+
+**Problems Solved:** Multiple schema accuracy issues identified.
+
+**Fixes Applied:**
+1. **Comb flags (64 fixes)** - Removed incorrect `comb:true`, kept only for A-Number, SSN, Account
+2. **Date validation (4 fixes)** - Added MM/DD/YYYY pattern validation
+3. **P2_checkbox1 dependencies (1 fix)** - Fixed complex OR logic ([0] OR [1] unlock field)
+4. **Consolidate p2_checkbox3 (4 fixes)** - Merged 4 checkbox fields into 1 multi-option
+5. **P4_checkbox1[1] unlocks (4 fixes)** - Fixed unlock logic for accommodation checkboxes
+6. **Unit type unlocks (8 fixes)** - Any unit checkbox unlocks apt/ste/flr field (4 addresses)
+7. **Consolidate p7_checkbox7extend (2 fixes)** - Merged 2 checkboxes into 1 radio field
+
+**Results:**
+- ✅ **87 total fixes applied**
+- ✅ **132 fields** (5 consolidated from 137)
+- ✅ **Pydantic validation: PASS** (0 errors)
+- ✅ **Round-trip test: 100%** (99/99 fields)
+
+**Tool Created:**
+- `fix_schema_issues_v10.py` - Systematic fix script
 
 ---
 
