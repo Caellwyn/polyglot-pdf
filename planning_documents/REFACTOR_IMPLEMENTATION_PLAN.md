@@ -23,7 +23,8 @@ This plan outlines the transformation from a web-form-first system to a **PDF-dr
 
 ---
 
-## Schema Design Clarifications (Oct 26, 2025)
+## DEPRECATED Schema Design Clarifications (Oct 26, 2025)
+## SWITCHED TO I-90
 
 **Web Form Structure:**
 1. **Children Fields Grouping**: Group all children fields together in web form view for better UX
@@ -44,6 +45,39 @@ This plan outlines the transformation from a web-form-first system to a **PDF-dr
 
 ---
 
+## Current Session Context (November 2, 2025)
+
+**Active Work**: Building Schema → WebForm renderer (Phase 2A)
+
+**System Architecture Goals:**
+1. **Cloud Repository**: Schemas + PDFs served via dropdown (future)
+2. **Generic Renderer**: Schema → WebForm with preserved validation, dependencies, ordering
+3. **Backend Schema**: Optimized version for Gemini (spoken names, hints, dependencies)
+4. **Round-Trip System**: WebForm data → PDF via pdf-lib (fill, preview, download, print)
+
+**Why WebForm Instead of PDF Display:**
+- PDF doesn't scale to mobile (fixed layout)
+- WebForm can be responsive (mobile + desktop)
+- Lower resources, more responsive UX
+- Better accessibility for voice interaction
+
+**Critical Design Principle:**
+> This must be GENERIC - work for ANY PDF where schema is accurately extracted, not just I-90.
+> Build a deterministic pipeline: PDF → Schema → WebForm → PDF
+
+**Current Schema:**
+- I-90 v11 (132 fields, 7 parts, 100% validated)
+- Conforms to `backend/models/form_models.py` v1.1.0
+- Location: `pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
+
+**Tech Stack Decisions:**
+- Frontend: React + TypeScript (integrate with existing `frontend/src/`)
+- State: Reuse sessionStorage pattern for consistency
+- Responsive: Build mobile + desktop support from day 1
+- Start: MVP field types (text, textarea, radio, checkbox, date, select) then expand
+
+---
+
 ## Implementation Phases
 
 ### **Phase 1: PDF → Schema Foundation** (Weeks 1-2)
@@ -55,7 +89,7 @@ Design schema model, build extraction pipeline, create admin verification UI.
 **Goal**: Understand USCIS PDF structure and design comprehensive schema model.
 
 **Tasks**:
-- Analyze example USCIS PDFs (I-485, I-765, N-400) for field types, constraints, sections
+- Analyze example USCIS PDFs (I-90) for field types, constraints, sections
 - Design `FormSchema` model extending/replacing current `webForm` structure
 - Define field types:
   - Basic: text, textarea, checkbox, radio, select, date
@@ -75,7 +109,7 @@ Design schema model, build extraction pipeline, create admin verification UI.
 
 ---
 
-#### **Phase 1B: Build PDF → Schema Extraction Pipeline**
+#### PARTIAL COMPLETION: REMAINING DEFERRED **Phase 1B: Build PDF → Schema Extraction Pipeline**
 
 **Goal**: Automated extraction of form structure and fields from PDF.
 
@@ -91,19 +125,19 @@ Design schema model, build extraction pipeline, create admin verification UI.
 - Handle edge cases (multi-column layouts, complex tables)
 
 **Deliverables**:
-- `backend/pdf_extractor.py` - PDF → Schema converter
+- `pdf_schema_extractor/pdf_extractor.py` - PDF → Schema converter
 - `backend/llm_classifier.py` - LLM-based field classification
-- API endpoint: `POST /api/schemas/extract-from-pdf` (accepts PDF, returns FormSchema JSON)
+- ## DEPRECATED API endpoint: `POST /api/schemas/extract-from-pdf` (accepts PDF, returns FormSchema JSON)
 - Unit tests for extraction accuracy (>85% field detection rate)
 
-**Success Criteria**:
+**Success Criteria**: ## DEFERRED
 - Successfully extracts schema from 3 different USCIS forms
 - Confidence scores identify uncertain fields for manual review
 - Extraction completes in <30 seconds per PDF
 
 ---
 
-#### **Phase 1C: Create Admin UI for Schema Verification**
+#### DEFERRED **Phase 1C: Create Admin UI for Schema Verification** 
 
 **Goal**: Interface for humans to verify and correct LLM-extracted schemas.
 
@@ -198,12 +232,12 @@ Build dynamic form renderer, pagination, and session persistence.
 
 ---
 
-#### **Phase 2C: Build Save/Load Functionality**
+#### DEPRECATED **Phase 2C: Build Save/Load Functionality**
 
 **Goal**: Session persistence for incomplete forms.
 
 **Tasks**:
-- Implement session management:
+- Implement session management: 
   - Create session on form start (generate session_id)
   - Auto-save every 30 seconds + on field blur
   - Manual "Save Progress" button
@@ -230,7 +264,7 @@ Build dynamic form renderer, pagination, and session persistence.
 
 Update WebSocket handlers and design Gemini tool definitions.
 
-#### **Phase 3A: Design Schema-Based WebSocket Handlers**
+#### **Phase 3A: Design/Confirm Schema-Based WebSocket Handlers**
 
 **Goal**: WebSocket communication for schema-driven forms.
 
@@ -255,7 +289,7 @@ Update WebSocket handlers and design Gemini tool definitions.
 
 ---
 
-#### **Phase 3B: Create Tool Definitions for Schema-Driven Updates**
+#### **Phase 3B: Create/Update Tool Definitions for Schema-Driven Updates**
 
 **Goal**: Function calling interface for Gemini to interact with forms.
 
@@ -430,12 +464,6 @@ Generate completed PDFs from form data with dynamic supplement generation.
 - `frontend/src/utils/supplementGenerator.ts` - Supplement A/B generation logic
 - Frontend download button with progress indicator
 
-**Deliverables** (Option B):
-- `backend/pdf_generator.py` - Form data → PDF converter (stateless)
-- `backend/supplement_generator.py` - Supplement A/B generation logic
-- API endpoint: `POST /api/pdf/generate` (does NOT store PDF, returns immediately)
-- Frontend download button with progress indicator
-
 **Success Criteria**:
 - Generated PDF matches original USCIS form layout
 - All fields populated correctly (>99% accuracy)
@@ -481,38 +509,9 @@ Comprehensive testing across languages, forms, and use cases.
 
 ---
 
-#### **Phase 6B: Field-Level Testing Across USCIS Forms**
 
-**Goal**: Verify system handles different form types and edge cases.
 
-**Tasks**:
-- Test with multiple USCIS forms:
-  - I-485 (Application to Register Permanent Residence)
-  - I-765 (Employment Authorization)
-  - N-400 (Naturalization)
-  - I-130 (Petition for Alien Relative)
-- Edge case testing:
-  - Long text fields (>500 characters)
-  - Special characters in names (é, ñ, 中)
-  - Date edge cases (leap years, future dates)
-  - Multi-entry lists with 10+ items
-- Validation rule coverage:
-  - Test all field types and validation rules
-  - Verify error messages are accurate
-
-**Deliverables**:
-- Test matrix: Forms × Field Types × Edge Cases
-- Bug report for any failures
-- Test coverage report (target: >90% pass rate)
-
-**Success Criteria**:
-- All tested forms complete successfully
-- Edge cases handled gracefully
-- Test pass rate >90%
-
----
-
-#### **Phase 6C: Pilot Testing with Real Users**
+#### **Phase 6B: Pilot I-90 Testing with Real Users**
 
 **Goal**: Real-world validation with 5-10 users.
 
@@ -540,6 +539,37 @@ Comprehensive testing across languages, forms, and use cases.
 - Average completion time <20 minutes for I-485
 - User satisfaction score >4/5
 - <5 critical bugs identified
+
+---
+#### **Phase 6C: Field-Level Testing Across USCIS Forms**
+
+**Goal**: Verify system handles different form types and edge cases.
+
+**Tasks**:
+- Test with multiple USCIS forms:
+  - I-90
+  - I-485 (Application to Register Permanent Residence)
+  - I-765 (Employment Authorization)
+  - N-400 (Naturalization)
+  - I-130 (Petition for Alien Relative)
+- Edge case testing:
+  - Long text fields (>500 characters)
+  - Special characters in names (é, ñ, 中)
+  - Date edge cases (leap years, future dates)
+  - Multi-entry lists with 10+ items
+- Validation rule coverage:
+  - Test all field types and validation rules
+  - Verify error messages are accurate
+
+**Deliverables**:
+- Test matrix: Forms × Field Types × Edge Cases
+- Bug report for any failures
+- Test coverage report (target: >90% pass rate)
+
+**Success Criteria**:
+- All tested forms complete successfully
+- Edge cases handled gracefully
+- Test pass rate >90%
 
 ---
 
@@ -725,25 +755,16 @@ All form behavior driven by schema:
 
 Features deferred to post-MVP:
 
-- **Whisper Integration**: Gemini Live handles audio natively
 - **Custom PDF Templates**: Start with USCIS forms only
-- **Offline Mode**: Requires complex sync logic
 - **Mobile App**: Web-first, mobile-responsive only
 - **E-Signatures**: Not required for USCIS submission (wet signature)
 - **Payment Integration**: Not needed for form filling
-- **Conditional Logic**: Simple forms first, add if needed
 - **Analytics Dashboard**: Add after pilot validation
 
 ---
 
 ## Next Steps
-
-1. **Review & Approve Plan**: Stakeholder sign-off on approach
-2. **Set Up Project Board**: Track phases in GitHub Projects or similar
-3. **Begin Phase 1A**: Schema design (Week 1)
-4. **Schedule Weekly Check-ins**: Review progress, adjust timeline
-5. **Prepare Test Data**: Gather 5+ USCIS PDF forms for testing
-
+- 
 ---
 
 **Document Owner**: Development Team
