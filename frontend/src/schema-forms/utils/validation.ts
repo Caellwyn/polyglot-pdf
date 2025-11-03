@@ -246,6 +246,11 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
       return triggerValue !== field.show_if.value;
 
     case "contains":
+      // Handle checkbox groups (arrays) - check if specific option is selected
+      if (Array.isArray(triggerValue)) {
+        return triggerValue.includes(field.show_if.value);
+      }
+      // Handle text fields - substring matching
       return String(triggerValue).includes(String(field.show_if.value));
 
     case "greater_than":
@@ -255,6 +260,10 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
       return Number(triggerValue) < Number(field.show_if.value);
 
     case "is_checked":
+      // Handle both single checkboxes (boolean) and checkbox groups (arrays)
+      if (Array.isArray(triggerValue)) {
+        return triggerValue.length > 0; // Any option selected
+      }
       return triggerValue === true;
 
     case "is_empty":
