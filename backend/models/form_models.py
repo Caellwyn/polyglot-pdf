@@ -4,8 +4,8 @@ Polyglot PDF Form Schema - Pydantic Models
 Unified schema supporting both web forms and PDF forms.
 Designed to handle USCIS immigration forms with complex structures.
 
-@version 1.0.0
-@date 2025-10-25
+@version 1.1.0
+@date 2025-11-01
 """
 
 from typing import Optional, List, Dict, Any, Literal, Union
@@ -161,10 +161,67 @@ class ValidationRules(BaseModel):
 
 
 class ConditionalDisplay(BaseModel):
-    """Conditional display logic"""
+    """
+    Reactive, dependent-side logic.
+    Used on a field to define the condition under which it should be shown.
+    Example: Placed on Field B, "Show me if Field A's value is 'Yes'."
+    """
     field: str = Field(description="Field ID to check")
     operator: ConditionalOperator
-    value: Union[str, int, float, bool]
+    value: Union[str, int, float, bool, List[Union[str, int, float, bool]]] = Field(
+        description="Value to compare against (can be a list for IN/NOT_IN operators)"
+    )
+
+
+class ConditionalControl(BaseModel):
+    """
+    Proactive, trigger-side logic.
+    Used on a field to define what it controls when its value changes.
+    Example: Placed on Field A, "When my value is 'Yes', unlock Field B and show Field C."
+    """
+    operator: ConditionalOperator = Field(
+        default=ConditionalOperator.EQUALS,
+        description="The operator to check this field's value against."
+    )
+    value: Union[str, int, float, bool, List[Union[str, int, float, bool]]] = Field(
+        description="The value (or list of values) to check for."
+    )
+
+    # Define all possible actions
+    shows: Optional[List[str]] = Field(
+        None, description="List of field IDs to show (make not hidden)."
+    )
+    hides: Optional[List[str]] = Field(
+        None, description="List of field IDs to hide."
+    )
+    unlocks: Optional[List[str]] = Field(
+        None, description="List of field IDs to unlock (make not read-only)."
+    )
+    locks: Optional[List[str]] = Field(
+        None, description="List of field IDs to lock (make read-only)."
+    )
+    makes_required: Optional[List[str]] = Field(
+        None, description="List of field IDs to make required."
+    )
+    makes_optional: Optional[List[str]] = Field(
+        None, description="List of field IDs to make optional (not required)."
+    )
+
+
+class ConditionalBehavior(BaseModel):
+    """
+    Defines *how* a field reacts to conditional actions.
+    This is often implementation-specific (e.g., PDF vs. Web).
+    """
+    unlock_method: Optional[Literal["flip_readonly_bit", "set_property"]] = Field(
+        None, description="Method to use when unlocking this field."
+    )
+    show_method: Optional[Literal["remove_hidden_flag", "set_property"]] = Field(
+        None, description="Method to use when showing this field."
+    )
+    pdf_field_flag_change: Optional[Dict[str, Any]] = Field(
+        None, description="PDF-specific bit manipulation for field flags (e.g., {'bit': 0, 'current_value': 1, 'required_value': 0})"
+    )
 
 
 class FieldHelp(BaseModel):
@@ -228,6 +285,12 @@ class AddressFields(BaseModel):
     city: str = Field(description="Field ID for city")
     state: str = Field(description="Field ID for state")
     zip: str = Field(description="Field ID for ZIP code")
+    province: Optional[str] = Field(
+        None, description="Field ID for province (international addresses)"
+    )
+    postal_code: Optional[str] = Field(
+        None, description="Field ID for postal code (international addresses)"
+    )
     country: Optional[str] = Field(None, description="Field ID for country (international addresses)")
 
 
@@ -246,6 +309,12 @@ class FormField(BaseModel):
     # Type and behavior
     type: FieldType
     validation: Optional[ValidationRules] = None
+    read_only: Optional[bool] = Field(
+        False, description="Is this field read-only by default? Can be changed by conditional logic."
+    )
+    hidden: Optional[bool] = Field(
+        False, description="Is this field hidden by default? Can be changed by conditional logic."
+    )
 
     # Organization
     section_id: str = Field(description="Which section this belongs to")
@@ -255,10 +324,25 @@ class FormField(BaseModel):
     group_kind: Optional[GroupKind] = Field(None, description="Type of group if applicable")
 
     # Conditional display
-    show_if: Optional[ConditionalDisplay] = None
+    show_if: Optional[ConditionalDisplay] = Field(
+        None, description="Reactive logic: defines if this field should be shown."
+    )
+
+    # Conditional control (trigger-side)
+    controls_fields: Optional[List[ConditionalControl]] = Field(
+        None,
+        description="Proactive logic: defines how this field's value affects other fields."
+    )
+
+    # Conditional behavior (how to react)
+    conditional_behavior: Optional[ConditionalBehavior] = Field(
+        None, description="Defines *how* this field reacts to conditional logic (e.g., PDF bit flipping)."
+    )
+
+    # Legacy support - deprecated, use controls_fields instead
     conditional_fields: Optional[List[str]] = Field(
         None,
-        description="List of field IDs conditionally shown based on this field"
+        description="DEPRECATED: Use controls_fields instead. List of field IDs conditionally shown based on this field"
     )
 
     # Help and guidance
