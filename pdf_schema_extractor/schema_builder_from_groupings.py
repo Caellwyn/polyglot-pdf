@@ -274,6 +274,10 @@ def build_schema(
                 "pdf_field_name": widget['field_name']
             }]
 
+        # Add choice options for select fields
+        if widget['field_type'] == 'select' and 'choice_options' in widget:
+            field['options'] = widget['choice_options']
+
         fields.append(field)
 
     print(f"  Created {len(standalone_widgets)} standalone fields")
