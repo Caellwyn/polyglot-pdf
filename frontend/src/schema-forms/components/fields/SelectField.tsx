@@ -6,7 +6,7 @@ import type { FormField } from "../../types/schema";
 
 export interface SelectFieldProps {
   field: FormField;
-  value: string;
+  value: any;
   onChange: (value: string) => void;
   onBlur?: () => void;
   error?: string | null;
@@ -21,10 +21,45 @@ export function SelectField({
   error,
   disabled = false,
 }: SelectFieldProps) {
-  if (!field.options) {
-    console.error(`[SelectField] Field ${field.id} has no options`);
-    return null;
+  // Fallback: if select field has no options, render as text field
+  if (!field.options || field.options.length === 0) {
+    console.warn(`[SelectField] Field ${field.id} has no options - rendering as text input instead`);
+    return (
+      <div className="form-field">
+        <label htmlFor={field.id} className="form-field__label">
+          {field.name}
+          {field.validation?.required && <span className="form-field__required">*</span>}
+        </label>
+        <input
+          type="text"
+          id={field.id}
+          name={field.id}
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          disabled={disabled || field.read_only}
+          className={`form-field__input ${error ? "form-field__input--error" : ""}`}
+          placeholder={field.help?.format_hint || ""}
+        />
+        {field.help?.instructions && (
+          <p className="form-field__instructions">{field.help.instructions}</p>
+        )}
+        {error && (
+          <p id={`${field.id}-error`} className="form-field__error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
   }
+
+  // Normalize value to string (handle undefined/null)
+  const currentValue = value !== null && value !== undefined ? String(value) : "";
+
+  const handleChange = (newValue: string) => {
+    console.log(`[SelectField] ${field.id} changed to:`, newValue);
+    onChange(newValue);
+  };
 
   return (
     <div className="form-field">
@@ -40,8 +75,8 @@ export function SelectField({
       <select
         id={field.id}
         name={field.id}
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
+        value={currentValue}
+        onChange={(e) => handleChange(e.target.value)}
         onBlur={onBlur}
         disabled={disabled || field.read_only}
         className={`form-field__select ${error ? "form-field__select--error" : ""}`}

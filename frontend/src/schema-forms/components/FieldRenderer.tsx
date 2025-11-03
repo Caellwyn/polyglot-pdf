@@ -37,6 +37,16 @@ export function FieldRenderer({
     return null; // Hide field
   }
 
+  // Check if field should be unlocked when shown conditionally
+  // If the field has conditional_behavior with unlock_method "flip_readonly_bit",
+  // it should be editable when the show_if condition is met
+  const shouldUnlock =
+    field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
+    field.conditional_logic?.unlock_method === "flip_readonly_bit";
+
+  // Override disabled state for fields that unlock when shown
+  const isDisabled = shouldUnlock ? disabled : (disabled || field.read_only);
+
   const handleBlur = () => {
     if (onBlur) {
       onBlur(field.id);
@@ -55,7 +65,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -67,7 +77,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -79,7 +89,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -91,7 +101,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -103,7 +113,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -115,7 +125,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 
@@ -128,7 +138,7 @@ export function FieldRenderer({
           onChange={onChange}
           onBlur={handleBlur}
           error={error}
-          disabled={disabled}
+          disabled={isDisabled}
         />
       );
 

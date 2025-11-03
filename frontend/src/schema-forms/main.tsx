@@ -15,7 +15,9 @@ if (!root) {
 }
 
 ReactDOM.createRoot(root).render(
-  <React.StrictMode>
+  // Temporarily disabled StrictMode - it was causing double renders
+  // and creating duplicate state objects
+  // <React.StrictMode>
     <SchemaFormDemo />
-  </React.StrictMode>
+  // </React.StrictMode>
 );

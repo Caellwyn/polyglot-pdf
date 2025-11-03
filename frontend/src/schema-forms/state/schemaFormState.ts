@@ -30,23 +30,32 @@ export class SchemaFormStateManager {
    * Initialize or load existing form state
    */
   static init(schema: FormSchema): SchemaFormState {
+    console.log('[SchemaFormStateManager] init() called');
     const existing = this.load();
+    console.log('[SchemaFormStateManager] Loaded existing state:', existing ? `has ${Object.keys(existing.fieldValues).length} field values` : 'NULL');
+
+    // Clean up duplicate sections (e.g., Part 7 appears twice with different capitalization)
+    const cleanedSchema = this.deduplicateSections(schema);
 
     // If schema matches and it's recent (< 1 hour), reuse state
     if (
       existing &&
-      existing.schema.form_metadata.form_number === schema.form_metadata.form_number &&
-      existing.schema.form_metadata.version === schema.form_metadata.version &&
+      existing.schema.form_metadata.form_number === cleanedSchema.form_metadata.form_number &&
+      existing.schema.form_metadata.version === cleanedSchema.form_metadata.version &&
       Date.now() - existing.lastUpdated < 60 * 60 * 1000
     ) {
+      console.log('[SchemaFormStateManager] Returning EXISTING state with', Object.keys(existing.fieldValues).length, 'field values');
+      console.log('[SchemaFormStateManager] existing.fieldValues:', existing.fieldValues);
       return existing;
     }
 
+    console.log('[SchemaFormStateManager] Creating NEW empty state');
+
     // New session - initialize with first section
-    const firstSection = this.getFirstSection(schema);
+    const firstSection = this.getFirstSection(cleanedSchema);
 
     const newState: SchemaFormState = {
-      schema,
+      schema: cleanedSchema,
       fieldValues: {},
       currentSectionId: firstSection?.id || "",
       completedSections: new Set(),
@@ -64,9 +73,14 @@ export class SchemaFormStateManager {
   static load(): SchemaFormState | null {
     try {
       const stored = sessionStorage.getItem(this.STORAGE_KEY);
-      if (!stored) return null;
+      if (!stored) {
+        console.log('[SchemaFormStateManager] load() - No stored state found');
+        return null;
+      }
 
+      console.log('[SchemaFormStateManager] load() - Found stored state, length:', stored.length);
       const parsed = JSON.parse(stored);
+      console.log('[SchemaFormStateManager] load() - Parsed fieldValues:', parsed.fieldValues);
 
       // Restore Set from array
       if (parsed.completedSections) {
@@ -92,7 +106,15 @@ export class SchemaFormStateManager {
         lastUpdated: Date.now(),
       };
 
-      sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify(toStore));
+      console.log('[SchemaFormStateManager] save() - About to save fieldValues:', toStore.fieldValues);
+      const jsonString = JSON.stringify(toStore);
+      console.log('[SchemaFormStateManager] save() - JSON string length:', jsonString.length);
+      sessionStorage.setItem(this.STORAGE_KEY, jsonString);
+
+      // Verify it was saved
+      const verified = sessionStorage.getItem(this.STORAGE_KEY);
+      const parsed = JSON.parse(verified!);
+      console.log('[SchemaFormStateManager] save() - Verified fieldValues after save:', parsed.fieldValues);
     } catch (error) {
       console.error("[SchemaFormState] Failed to save state:", error);
     }
@@ -102,6 +124,9 @@ export class SchemaFormStateManager {
    * Update a field value
    */
   static updateField(state: SchemaFormState, fieldId: string, value: any): SchemaFormState {
+    console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
+    console.log(`[SchemaFormStateManager] Current state.fieldValues:`, state.fieldValues);
+
     const newState = {
       ...state,
       fieldValues: {
@@ -111,6 +136,8 @@ export class SchemaFormStateManager {
       lastUpdated: Date.now(),
     };
 
+    console.log(`[SchemaFormStateManager] New state.fieldValues after spread:`, newState.fieldValues);
+
     // Clear validation error for this field
     if (newState.validationErrors[fieldId]) {
       const { [fieldId]: removed, ...rest } = newState.validationErrors;
@@ -118,6 +145,8 @@ export class SchemaFormStateManager {
     }
 
     this.save(newState);
+    console.log(`[SchemaFormStateManager] Returning newState with fieldValues:`, newState.fieldValues);
+    console.log(`[SchemaFormStateManager] Are they the same object?`, state.fieldValues === newState.fieldValues);
     return newState;
   }
 
@@ -197,16 +226,31 @@ export class SchemaFormStateManager {
    */
   static getNextSection(state: SchemaFormState): FormSection | null {
     const currentSection = this.getCurrentSection(state);
-    if (!currentSection) return null;
+    if (!currentSection) {
+      console.log('[getNextSection] currentSection is NULL');
+      return null;
+    }
 
     const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
-    const currentIndex = sortedSections.findIndex((s) => s.id === currentSection.id);
+    console.log('[getNextSection] All sections after sort:', sortedSections.map(s => `${s.id} (order: ${s.order})`));
+    console.log('[getNextSection] Looking for currentSection.id:', currentSection.id);
 
-    if (currentIndex === -1 || currentIndex === sortedSections.length - 1) {
+    const currentIndex = sortedSections.findIndex((s) => s.id === currentSection.id);
+    console.log('[getNextSection] currentIndex:', currentIndex, 'out of', sortedSections.length, 'sections');
+
+    if (currentIndex === -1) {
+      console.error('[getNextSection] Current section ID not found in sorted sections! This means state.currentSectionId does not match any section ID.');
+      return null;
+    }
+
+    if (currentIndex === sortedSections.length - 1) {
+      console.log('[getNextSection] Already at last section');
       return null; // No next section
     }
 
-    return sortedSections[currentIndex + 1];
+    const nextSection = sortedSections[currentIndex + 1];
+    console.log('[getNextSection] Returning next section:', nextSection.id);
+    return nextSection;
   }
 
   /**
@@ -232,6 +276,59 @@ export class SchemaFormStateManager {
   private static getFirstSection(schema: FormSchema): FormSection | null {
     const sortedSections = [...schema.sections].sort((a, b) => a.order - b.order);
     return sortedSections[0] || null;
+  }
+
+  /**
+   * Deduplicate sections (e.g., Part 7 with different capitalization)
+   * Merges duplicate sections by combining their fields
+   */
+  private static deduplicateSections(schema: FormSchema): FormSchema {
+    const seenParts = new Map<string, FormSection>();
+    const deduplicatedSections: FormSection[] = [];
+
+    // Extract part number from section ID (e.g., "Part 7" from "Part 7 - Some Title")
+    const getPartNumber = (sectionId: string): number => {
+      const match = sectionId.match(/^Part\s+(\d+)/i);
+      return match ? parseInt(match[1], 10) : 999;
+    };
+
+    for (const section of schema.sections) {
+      const partNumber = getPartNumber(section.id);
+      const partKey = `part_${partNumber}`;
+
+      if (seenParts.has(partKey)) {
+        // Merge fields into existing section
+        const existing = seenParts.get(partKey)!;
+        existing.fields = [...existing.fields, ...section.fields];
+      } else {
+        // First occurrence of this part
+        const newSection = { ...section, fields: [...section.fields] };
+        seenParts.set(partKey, newSection);
+        deduplicatedSections.push(newSection);
+      }
+    }
+
+    // Sort by part number (extracted from ID), not by original order field
+    deduplicatedSections.sort((a, b) => {
+      const aNum = getPartNumber(a.id);
+      const bNum = getPartNumber(b.id);
+      return aNum - bNum;
+    });
+
+    // Re-number sections to be sequential
+    deduplicatedSections.forEach((section, index) => {
+      section.order = index + 1;
+    });
+
+    console.log(`[SchemaFormState] Deduplicated ${schema.sections.length} sections -> ${deduplicatedSections.length} sections`);
+    deduplicatedSections.forEach((section, i) => {
+      console.log(`  ${i + 1}. ${section.id} (order: ${section.order}, ${section.fields.length} fields)`);
+    });
+
+    return {
+      ...schema,
+      sections: deduplicatedSections,
+    };
   }
 
   /**
