@@ -176,8 +176,9 @@
       "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "order": 5,
       "fields": [
-        "p5_checkbox1a",
+        "p5_checkbox1",
         "p5_line1b_language",
+        "p5_checkbox2",
         "p5_line2_nameofrepresentative",
         "p5_line3_daytimephonenumber",
         "p5_line4_mobilephonenumber",
@@ -3230,14 +3231,13 @@
       "question_number": "4.1.C"
     },
     {
-      "id": "p5_checkbox1a",
-      "name": "Select I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question",
-      "type": "checkbox",
+      "id": "p5_checkbox1",
+      "name": "Applicant's Statement (Select one)",
+      "type": "radio",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "consolidated_widgets": [
         "P5_Checkbox1a[0]",
-        "P5_Checkbox1b[0]",
-        "P5_Checkbox2[0]"
+        "P5_Checkbox1b[0]"
       ],
       "options": [
         {
@@ -3249,24 +3249,21 @@
           "value": "P5_Checkbox1b[0]",
           "label": "The interpreter named in Part 6. has read to me every question and instruction on this application and my answer to every question in a language in which I am fluent and I understood everything",
           "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1b[0]"
-        },
-        {
-          "value": "P5_Checkbox2[0]",
-          "label": "At my request, the preparer named in Part 7",
-          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox2[0]"
         }
       ],
       "read_only": false,
-      "required": false,
+      "required": true,
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "I can read and understand English",
+      "spoken_name": "applicant statement",
       "help": {
-        "instructions": "Select this box if you can read and understand English and have read and understood all questions and instructions in this application."
+        "instructions": "Select one option: either you read and understand English, OR an interpreter helped you."
+      },
+      "validation": {
+        "required": true
       },
       "conditional_fields": [
-        "p5_line2_nameofrepresentative",
         "p5_line1b_language"
       ],
       "controls_fields": [
@@ -3278,15 +3275,6 @@
             "p5_line1b_language"
           ],
           "makes_required": []
-        },
-        {
-          "operator": "equals",
-          "value": "P5_Checkbox2[0]",
-          "shows": [],
-          "unlocks": [
-            "p5_line2_nameofrepresentative"
-          ],
-          "makes_required": []
         }
       ],
       "pdf_position": {
@@ -3296,7 +3284,52 @@
         "width": 9.999996185302734,
         "height": 10.0
       },
-      "question_number": "5.1.A"
+      "question_number": "5.1"
+    },
+    {
+      "id": "p5_checkbox2",
+      "name": "At my request, the preparer named in Part 7 prepared this application for me",
+      "type": "checkbox",
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "pdf_field_name": "P5_Checkbox2[0]",
+      "consolidated_widgets": [
+        "P5_Checkbox2[0]"
+      ],
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. 2. At my request, the preparer named in Part 7 prepared this application for me.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "spoken_name": "preparer helped prepare application",
+      "help": {
+        "instructions": "Check this box if applicable - if someone else prepared this application for you at your request."
+      },
+      "conditional_fields": [
+        "p5_line2_nameofrepresentative"
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": true,
+          "shows": [],
+          "unlocks": [
+            "p5_line2_nameofrepresentative"
+          ],
+          "makes_required": []
+        }
+      ],
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit"
+      },
+      "pdf_position": {
+        "page": 4,
+        "x": 61.02000045776367,
+        "y": 600.0,
+        "width": 9.999996185302734,
+        "height": 10.0
+      },
+      "question_number": "5.2"
     },
     {
       "id": "p5_line1b_language",
@@ -3318,7 +3351,7 @@
         "instructions": "This field is automatically populated with the language the interpreter used."
       },
       "show_if": {
-        "field": "p5_checkbox1a",
+        "field": "p5_checkbox1",
         "operator": "equals",
         "value": "P5_Checkbox1b[0]"
       },
@@ -3362,9 +3395,9 @@
         "instructions": "This field is automatically populated with the name of the person who prepared the form for you."
       },
       "show_if": {
-        "field": "p5_checkbox1a",
-        "operator": "equals",
-        "value": "P5_Checkbox2[0]"
+        "field": "p5_checkbox2",
+        "operator": "is_checked",
+        "value": true
       },
       "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
