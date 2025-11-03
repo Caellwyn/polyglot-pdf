@@ -147,6 +147,9 @@ class ValidationRules(BaseModel):
     pattern: Optional[str] = Field(None, description="Regex pattern")
     custom_error: Optional[str] = Field(None, description="Custom error message")
 
+    # Character restrictions (more readable than regex)
+    digits_only: Optional[bool] = Field(None, description="Only allow numeric digits (0-9)")
+
     # Date-specific constraints
     date_constraint: Optional[Literal["past_only", "future_only", "within_5_years"]] = Field(
         None,

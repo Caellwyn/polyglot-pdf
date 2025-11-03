@@ -19,7 +19,10 @@
       "Bash(python -u -m pdf_schema_extractor.test_full_gemini_extraction:*)",
       "Bash(find:*)",
       "Bash(git add:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(npm run:*)",
+      "Bash(python:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

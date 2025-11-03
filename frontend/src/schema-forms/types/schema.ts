@@ -91,6 +91,7 @@ export interface ValidationRules {
   max?: number; // For numeric fields
   pattern?: string; // Regex pattern
   custom_error?: string;
+  digits_only?: boolean; // Only allow numeric digits (0-9)
   date_constraint?: "past_only" | "future_only" | "within_5_years";
   format_preset?: "ssn" | "a_number" | "phone" | "email" | "zip";
 }
@@ -238,6 +239,7 @@ export interface FormField {
 
   // Auto-fill logic
   auto_fill_na?: boolean;
+  copy_to?: string[]; // Auto-copy this field's value to these target field IDs
 
   // Supplement overflow
   overflow_to_supplement?: string;
