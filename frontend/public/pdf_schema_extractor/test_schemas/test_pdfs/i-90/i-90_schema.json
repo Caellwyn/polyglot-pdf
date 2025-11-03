@@ -209,7 +209,6 @@
         "p6_line5_interpretersemailaddress",
         "p6_line6a_signature",
         "p6_line6b_dateofsignature"
-
       ]
     },
     {
@@ -842,7 +841,257 @@
         "width": 36.0,
         "height": 18.0
       },
-      "question_number": "1.6.E"
+      "question_number": "1.6.E",
+      "options": [
+        {
+          "value": "AA",
+          "label": "AA"
+        },
+        {
+          "value": "AE",
+          "label": "AE"
+        },
+        {
+          "value": "AK",
+          "label": "AK"
+        },
+        {
+          "value": "AL",
+          "label": "AL"
+        },
+        {
+          "value": "AP",
+          "label": "AP"
+        },
+        {
+          "value": "AR",
+          "label": "AR"
+        },
+        {
+          "value": "AS",
+          "label": "AS"
+        },
+        {
+          "value": "AZ",
+          "label": "AZ"
+        },
+        {
+          "value": "CA",
+          "label": "CA"
+        },
+        {
+          "value": "CO",
+          "label": "CO"
+        },
+        {
+          "value": "CT",
+          "label": "CT"
+        },
+        {
+          "value": "DC",
+          "label": "DC"
+        },
+        {
+          "value": "DE",
+          "label": "DE"
+        },
+        {
+          "value": "FL",
+          "label": "FL"
+        },
+        {
+          "value": "FM",
+          "label": "FM"
+        },
+        {
+          "value": "GA",
+          "label": "GA"
+        },
+        {
+          "value": "GU",
+          "label": "GU"
+        },
+        {
+          "value": "HI",
+          "label": "HI"
+        },
+        {
+          "value": "IA",
+          "label": "IA"
+        },
+        {
+          "value": "ID",
+          "label": "ID"
+        },
+        {
+          "value": "IL",
+          "label": "IL"
+        },
+        {
+          "value": "IN",
+          "label": "IN"
+        },
+        {
+          "value": "KS",
+          "label": "KS"
+        },
+        {
+          "value": "KY",
+          "label": "KY"
+        },
+        {
+          "value": "LA",
+          "label": "LA"
+        },
+        {
+          "value": "MA",
+          "label": "MA"
+        },
+        {
+          "value": "MD",
+          "label": "MD"
+        },
+        {
+          "value": "ME",
+          "label": "ME"
+        },
+        {
+          "value": "MH",
+          "label": "MH"
+        },
+        {
+          "value": "MI",
+          "label": "MI"
+        },
+        {
+          "value": "MN",
+          "label": "MN"
+        },
+        {
+          "value": "MO",
+          "label": "MO"
+        },
+        {
+          "value": "MP",
+          "label": "MP"
+        },
+        {
+          "value": "MS",
+          "label": "MS"
+        },
+        {
+          "value": "MT",
+          "label": "MT"
+        },
+        {
+          "value": "NC",
+          "label": "NC"
+        },
+        {
+          "value": "ND",
+          "label": "ND"
+        },
+        {
+          "value": "NE",
+          "label": "NE"
+        },
+        {
+          "value": "NH",
+          "label": "NH"
+        },
+        {
+          "value": "NJ",
+          "label": "NJ"
+        },
+        {
+          "value": "NM",
+          "label": "NM"
+        },
+        {
+          "value": "NV",
+          "label": "NV"
+        },
+        {
+          "value": "NY",
+          "label": "NY"
+        },
+        {
+          "value": "OH",
+          "label": "OH"
+        },
+        {
+          "value": "OK",
+          "label": "OK"
+        },
+        {
+          "value": "OR",
+          "label": "OR"
+        },
+        {
+          "value": "PA",
+          "label": "PA"
+        },
+        {
+          "value": "PR",
+          "label": "PR"
+        },
+        {
+          "value": "PW",
+          "label": "PW"
+        },
+        {
+          "value": "RI",
+          "label": "RI"
+        },
+        {
+          "value": "SC",
+          "label": "SC"
+        },
+        {
+          "value": "SD",
+          "label": "SD"
+        },
+        {
+          "value": "TN",
+          "label": "TN"
+        },
+        {
+          "value": "TX",
+          "label": "TX"
+        },
+        {
+          "value": "UT",
+          "label": "UT"
+        },
+        {
+          "value": "VA",
+          "label": "VA"
+        },
+        {
+          "value": "VI",
+          "label": "VI"
+        },
+        {
+          "value": "VT",
+          "label": "VT"
+        },
+        {
+          "value": "WA",
+          "label": "WA"
+        },
+        {
+          "value": "WI",
+          "label": "WI"
+        },
+        {
+          "value": "WV",
+          "label": "WV"
+        },
+        {
+          "value": "WY",
+          "label": "WY"
+        }
+      ]
     },
     {
       "id": "p1_line6f_zipcode",
@@ -1151,7 +1400,257 @@
         "width": 36.0,
         "height": 18.0
       },
-      "question_number": "1.7.D"
+      "question_number": "1.7.D",
+      "options": [
+        {
+          "value": "AA",
+          "label": "AA"
+        },
+        {
+          "value": "AE",
+          "label": "AE"
+        },
+        {
+          "value": "AK",
+          "label": "AK"
+        },
+        {
+          "value": "AL",
+          "label": "AL"
+        },
+        {
+          "value": "AP",
+          "label": "AP"
+        },
+        {
+          "value": "AR",
+          "label": "AR"
+        },
+        {
+          "value": "AS",
+          "label": "AS"
+        },
+        {
+          "value": "AZ",
+          "label": "AZ"
+        },
+        {
+          "value": "CA",
+          "label": "CA"
+        },
+        {
+          "value": "CO",
+          "label": "CO"
+        },
+        {
+          "value": "CT",
+          "label": "CT"
+        },
+        {
+          "value": "DC",
+          "label": "DC"
+        },
+        {
+          "value": "DE",
+          "label": "DE"
+        },
+        {
+          "value": "FL",
+          "label": "FL"
+        },
+        {
+          "value": "FM",
+          "label": "FM"
+        },
+        {
+          "value": "GA",
+          "label": "GA"
+        },
+        {
+          "value": "GU",
+          "label": "GU"
+        },
+        {
+          "value": "HI",
+          "label": "HI"
+        },
+        {
+          "value": "IA",
+          "label": "IA"
+        },
+        {
+          "value": "ID",
+          "label": "ID"
+        },
+        {
+          "value": "IL",
+          "label": "IL"
+        },
+        {
+          "value": "IN",
+          "label": "IN"
+        },
+        {
+          "value": "KS",
+          "label": "KS"
+        },
+        {
+          "value": "KY",
+          "label": "KY"
+        },
+        {
+          "value": "LA",
+          "label": "LA"
+        },
+        {
+          "value": "MA",
+          "label": "MA"
+        },
+        {
+          "value": "MD",
+          "label": "MD"
+        },
+        {
+          "value": "ME",
+          "label": "ME"
+        },
+        {
+          "value": "MH",
+          "label": "MH"
+        },
+        {
+          "value": "MI",
+          "label": "MI"
+        },
+        {
+          "value": "MN",
+          "label": "MN"
+        },
+        {
+          "value": "MO",
+          "label": "MO"
+        },
+        {
+          "value": "MP",
+          "label": "MP"
+        },
+        {
+          "value": "MS",
+          "label": "MS"
+        },
+        {
+          "value": "MT",
+          "label": "MT"
+        },
+        {
+          "value": "NC",
+          "label": "NC"
+        },
+        {
+          "value": "ND",
+          "label": "ND"
+        },
+        {
+          "value": "NE",
+          "label": "NE"
+        },
+        {
+          "value": "NH",
+          "label": "NH"
+        },
+        {
+          "value": "NJ",
+          "label": "NJ"
+        },
+        {
+          "value": "NM",
+          "label": "NM"
+        },
+        {
+          "value": "NV",
+          "label": "NV"
+        },
+        {
+          "value": "NY",
+          "label": "NY"
+        },
+        {
+          "value": "OH",
+          "label": "OH"
+        },
+        {
+          "value": "OK",
+          "label": "OK"
+        },
+        {
+          "value": "OR",
+          "label": "OR"
+        },
+        {
+          "value": "PA",
+          "label": "PA"
+        },
+        {
+          "value": "PR",
+          "label": "PR"
+        },
+        {
+          "value": "PW",
+          "label": "PW"
+        },
+        {
+          "value": "RI",
+          "label": "RI"
+        },
+        {
+          "value": "SC",
+          "label": "SC"
+        },
+        {
+          "value": "SD",
+          "label": "SD"
+        },
+        {
+          "value": "TN",
+          "label": "TN"
+        },
+        {
+          "value": "TX",
+          "label": "TX"
+        },
+        {
+          "value": "UT",
+          "label": "UT"
+        },
+        {
+          "value": "VA",
+          "label": "VA"
+        },
+        {
+          "value": "VI",
+          "label": "VI"
+        },
+        {
+          "value": "VT",
+          "label": "VT"
+        },
+        {
+          "value": "WA",
+          "label": "WA"
+        },
+        {
+          "value": "WI",
+          "label": "WI"
+        },
+        {
+          "value": "WV",
+          "label": "WV"
+        },
+        {
+          "value": "WY",
+          "label": "WY"
+        }
+      ]
     },
     {
       "id": "p1_line7e_zipcode",
@@ -1778,7 +2277,7 @@
       "controls_fields": [
         {
           "operator": "equals",
-          "value": "P2_checkbox2[0]",
+          "value": "P2_checkbox2[11]",
           "shows": [],
           "unlocks": [
             "p2_line2h1_cityandstate"
@@ -1789,7 +2288,7 @@
       "show_if": {
         "field": "p2_checkbox1",
         "operator": "equals",
-        "value": "P2_checkbox1[1]"
+        "value": "P2_checkbox1[0]"
       },
       "conditional_fields": [
         "p2_line2h1_cityandstate"
@@ -1829,6 +2328,26 @@
           "value": "P2_checkbox3[0]",
           "label": "My previous card was issued but never received",
           "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]"
+        },
+        {
+          "value": "P2_checkbox3[1]",
+          "label": "My existing card has been mutilated",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[1]"
+        },
+        {
+          "value": "P2_checkbox3[2]",
+          "label": "My existing card has incorrect data because of DHS error.  (Attach your existing permanent resident card with incorrect data along with this application.)",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[2]"
+        },
+        {
+          "value": "P2_checkbox3[3]",
+          "label": "My name or other biographic information has legally changed since the issuance of my existing card.",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[3]"
+        },
+        {
+          "value": "P2_checkbox3[4]",
+          "label": "My previous card has been lost, stolen, or destroyed",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[4]"
         }
       ],
       "read_only": true,
@@ -3863,7 +4382,257 @@
         "width": 36.0,
         "height": 18.0
       },
-      "question_number": "7.3.D"
+      "question_number": "7.3.D",
+      "options": [
+        {
+          "value": "AA",
+          "label": "AA"
+        },
+        {
+          "value": "AE",
+          "label": "AE"
+        },
+        {
+          "value": "AK",
+          "label": "AK"
+        },
+        {
+          "value": "AL",
+          "label": "AL"
+        },
+        {
+          "value": "AP",
+          "label": "AP"
+        },
+        {
+          "value": "AR",
+          "label": "AR"
+        },
+        {
+          "value": "AS",
+          "label": "AS"
+        },
+        {
+          "value": "AZ",
+          "label": "AZ"
+        },
+        {
+          "value": "CA",
+          "label": "CA"
+        },
+        {
+          "value": "CO",
+          "label": "CO"
+        },
+        {
+          "value": "CT",
+          "label": "CT"
+        },
+        {
+          "value": "DC",
+          "label": "DC"
+        },
+        {
+          "value": "DE",
+          "label": "DE"
+        },
+        {
+          "value": "FL",
+          "label": "FL"
+        },
+        {
+          "value": "FM",
+          "label": "FM"
+        },
+        {
+          "value": "GA",
+          "label": "GA"
+        },
+        {
+          "value": "GU",
+          "label": "GU"
+        },
+        {
+          "value": "HI",
+          "label": "HI"
+        },
+        {
+          "value": "IA",
+          "label": "IA"
+        },
+        {
+          "value": "ID",
+          "label": "ID"
+        },
+        {
+          "value": "IL",
+          "label": "IL"
+        },
+        {
+          "value": "IN",
+          "label": "IN"
+        },
+        {
+          "value": "KS",
+          "label": "KS"
+        },
+        {
+          "value": "KY",
+          "label": "KY"
+        },
+        {
+          "value": "LA",
+          "label": "LA"
+        },
+        {
+          "value": "MA",
+          "label": "MA"
+        },
+        {
+          "value": "MD",
+          "label": "MD"
+        },
+        {
+          "value": "ME",
+          "label": "ME"
+        },
+        {
+          "value": "MH",
+          "label": "MH"
+        },
+        {
+          "value": "MI",
+          "label": "MI"
+        },
+        {
+          "value": "MN",
+          "label": "MN"
+        },
+        {
+          "value": "MO",
+          "label": "MO"
+        },
+        {
+          "value": "MP",
+          "label": "MP"
+        },
+        {
+          "value": "MS",
+          "label": "MS"
+        },
+        {
+          "value": "MT",
+          "label": "MT"
+        },
+        {
+          "value": "NC",
+          "label": "NC"
+        },
+        {
+          "value": "ND",
+          "label": "ND"
+        },
+        {
+          "value": "NE",
+          "label": "NE"
+        },
+        {
+          "value": "NH",
+          "label": "NH"
+        },
+        {
+          "value": "NJ",
+          "label": "NJ"
+        },
+        {
+          "value": "NM",
+          "label": "NM"
+        },
+        {
+          "value": "NV",
+          "label": "NV"
+        },
+        {
+          "value": "NY",
+          "label": "NY"
+        },
+        {
+          "value": "OH",
+          "label": "OH"
+        },
+        {
+          "value": "OK",
+          "label": "OK"
+        },
+        {
+          "value": "OR",
+          "label": "OR"
+        },
+        {
+          "value": "PA",
+          "label": "PA"
+        },
+        {
+          "value": "PR",
+          "label": "PR"
+        },
+        {
+          "value": "PW",
+          "label": "PW"
+        },
+        {
+          "value": "RI",
+          "label": "RI"
+        },
+        {
+          "value": "SC",
+          "label": "SC"
+        },
+        {
+          "value": "SD",
+          "label": "SD"
+        },
+        {
+          "value": "TN",
+          "label": "TN"
+        },
+        {
+          "value": "TX",
+          "label": "TX"
+        },
+        {
+          "value": "UT",
+          "label": "UT"
+        },
+        {
+          "value": "VA",
+          "label": "VA"
+        },
+        {
+          "value": "VI",
+          "label": "VI"
+        },
+        {
+          "value": "VT",
+          "label": "VT"
+        },
+        {
+          "value": "WA",
+          "label": "WA"
+        },
+        {
+          "value": "WI",
+          "label": "WI"
+        },
+        {
+          "value": "WV",
+          "label": "WV"
+        },
+        {
+          "value": "WY",
+          "label": "WY"
+        }
+      ]
     },
     {
       "id": "p7_line3e_zipcode",
