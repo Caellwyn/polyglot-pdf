@@ -50,7 +50,19 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
     // Use functional update to avoid stale closure issues
     setState(prevState => {
       console.log(`[SchemaForm] setState functional update - prevState.fieldValues:`, prevState.fieldValues);
-      const newState = SchemaFormStateManager.updateField(prevState, fieldId, value);
+      let newState = SchemaFormStateManager.updateField(prevState, fieldId, value);
+
+      // Handle copy_to logic: auto-copy value to target fields
+      const field = prevState.schema.fields.find(f => f.id === fieldId);
+      if (field?.copy_to && field.copy_to.length > 0) {
+        console.log(`[SchemaForm] Field ${fieldId} has copy_to:`, field.copy_to);
+        // Copy value to all target fields
+        field.copy_to.forEach(targetFieldId => {
+          console.log(`[SchemaForm] Copying value from ${fieldId} to ${targetFieldId}`);
+          newState = SchemaFormStateManager.updateField(newState, targetFieldId, value);
+        });
+      }
+
       console.log(`[SchemaForm] setState functional update - newState.fieldValues:`, newState.fieldValues);
       return newState;
     });

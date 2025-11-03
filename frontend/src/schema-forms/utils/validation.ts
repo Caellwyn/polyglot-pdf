@@ -60,6 +60,11 @@ function validateTextValue(field: FormField, value: string, rules: ValidationRul
     return `${field.name} must be at most ${rules.max_length} characters`;
   }
 
+  // Digits only (numeric characters 0-9)
+  if (rules.digits_only && !/^\d+$/.test(value)) {
+    return `${field.name} must contain only numeric digits (0-9)`;
+  }
+
   // Format presets
   if (rules.format_preset) {
     const presetError = validateFormatPreset(field, value, rules.format_preset);
