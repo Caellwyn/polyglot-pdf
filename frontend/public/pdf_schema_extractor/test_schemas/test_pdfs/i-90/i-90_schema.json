@@ -763,8 +763,8 @@
       },
       "show_if": {
         "field": "p1_unit_type6c_unit",
-        "operator": "not_equals",
-        "value": ""
+        "operator": "is_not_empty",
+        "value": true
       },
       "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
@@ -1322,8 +1322,8 @@
       },
       "show_if": {
         "field": "p1_unit_type7b_unit",
-        "operator": "not_equals",
-        "value": ""
+        "operator": "is_not_empty",
+        "value": true
       },
       "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
@@ -3762,8 +3762,8 @@
       },
       "show_if": {
         "field": "p6_unit_type3b_unit",
-        "operator": "not_equals",
-        "value": ""
+        "operator": "is_not_empty",
+        "value": true
       },
       "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
@@ -4349,8 +4349,8 @@
       },
       "show_if": {
         "field": "p7_unit_type3b_unit",
-        "operator": "not_equals",
-        "value": ""
+        "operator": "is_not_empty",
+        "value": true
       },
       "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
