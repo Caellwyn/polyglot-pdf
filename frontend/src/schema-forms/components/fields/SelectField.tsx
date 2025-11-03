@@ -37,7 +37,7 @@ export function SelectField({
           value={value || ""}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
-          disabled={disabled || field.read_only}
+          disabled={disabled}
           className={`form-field__input ${error ? "form-field__input--error" : ""}`}
           placeholder={field.help?.format_hint || ""}
         />
@@ -55,6 +55,21 @@ export function SelectField({
 
   // Normalize value to string (handle undefined/null)
   const currentValue = value !== null && value !== undefined ? String(value) : "";
+
+  // Debug: Log value being rendered
+  console.log(`[SelectField] ${field.id} rendering with value:`, {
+    rawValue: value,
+    currentValue,
+    hasOptions: field.options && field.options.length > 0,
+    optionCount: field.options?.length || 0
+  });
+
+  // Debug: Check if current value matches any option
+  const matchingOption = field.options.find(opt => opt.value === currentValue);
+  if (value && !matchingOption) {
+    console.warn(`[SelectField] ${field.id} value "${currentValue}" doesn't match any option:`,
+      field.options.map(o => o.value));
+  }
 
   const handleChange = (newValue: string) => {
     console.log(`[SelectField] ${field.id} changed to:`, newValue);
@@ -78,7 +93,7 @@ export function SelectField({
         value={currentValue}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={onBlur}
-        disabled={disabled || field.read_only}
+        disabled={disabled}
         className={`form-field__select ${error ? "form-field__select--error" : ""}`}
         aria-invalid={error ? "true" : "false"}
         aria-describedby={error ? `${field.id}-error` : undefined}

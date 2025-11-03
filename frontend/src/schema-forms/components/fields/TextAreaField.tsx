@@ -59,7 +59,7 @@ export function TextAreaField({
         placeholder={field.placeholder}
         maxLength={field.max_length || field.validation?.max_length}
         rows={getRows()}
-        disabled={disabled || field.read_only}
+        disabled={disabled}
         className={`form-field__textarea ${error ? "form-field__textarea--error" : ""}`}
         aria-invalid={error ? "true" : "false"}
         aria-describedby={error ? `${field.id}-error` : undefined}
