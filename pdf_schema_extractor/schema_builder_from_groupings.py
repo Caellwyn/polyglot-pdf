@@ -266,13 +266,8 @@ def build_schema(
             "label": widget['field_label']
         }
 
-        # Add checkbox value for single checkboxes
-        if widget['field_type'] == 'checkbox':
-            field['options'] = [{
-                "value": widget['field_name'],
-                "label": parse_tooltip_for_label(widget['field_label']) or widget['field_name'],
-                "pdf_field_name": widget['field_name']
-            }]
+        # Single checkboxes don't need options - they store boolean true/false
+        # Only checkbox GROUPS (created by Gemini groupings) have options
 
         # Add choice options for select fields
         if widget['field_type'] == 'select' and 'choice_options' in widget:
