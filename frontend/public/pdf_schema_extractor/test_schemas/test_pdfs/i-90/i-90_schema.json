@@ -82,14 +82,17 @@
       "order": 1,
       "fields": [
         "p1_line1_aliennumber",
-        "p1_line1_aliennumber[1]",
         "p1_line2_acctidentifier",
         "p1_line3a_familyname",
         "p1_line3b_givenname",
         "p1_line3c_middlename",
         "p1_checkbox4",
+        "p1_line5a_familyname",
+        "p1_line5b_givenname",
+        "p1_line5c_middlename",
         "p1_line6a_incareofname",
         "p1_line6b_streetnumbername",
+        "p1_unit_type6c_unit",
         "p1_line6c_aptsteflrnumber",
         "p1_line6d_cityortown",
         "p1_line6e_state",
@@ -97,6 +100,8 @@
         "p1_line6g_province",
         "p1_line6h_postalcode",
         "p1_line6i_country",
+        "p1_line7a_streetnumbername",
+        "p1_unit_type7b_unit",
         "p1_line7b_aptsteflrnumber",
         "p1_line7c_cityortown",
         "p1_line7d_state",
@@ -111,14 +116,8 @@
         "p1_line14_classofadmission",
         "p1_line15_dateofadmission",
         "p1_line16_ssn",
-        "p1_line7a_streetnumbername",
-        "p1_line5a_familyname",
-        "p1_line5b_givenname",
-        "p1_line5c_middlename",
         "p1_line12_mothergivenname",
-        "p1_line13_fathergivenname",
-        "p1_unit_type6c_unit",
-        "p1_unit_type7b_unit"
+        "p1_line13_fathergivenname"
       ]
     },
     {
@@ -143,15 +142,15 @@
       "fields": [
         "p3_line1_locationappliedvisa",
         "p3_line2_locationissuedvisa",
+        "p3_line3a_destination",
+        "p3_line3a1_cityandstate",
+        "p3_checkbox4[1]",
         "p3_checkbox5[1]",
         "p3_line8_heightfeet",
         "p3_line8_heightinches",
         "p3_line9_heightinches1",
         "p3_line9_heightinches2",
         "p3_line9_heightinches3",
-        "p3_line3a_destination",
-        "p3_line3a1_cityandstate",
-        "p3_checkbox4[1]",
         "p3_eye_color",
         "p3_hair_color",
         "p3_ethnicity",
@@ -164,14 +163,7 @@
       "order": 4,
       "fields": [
         "p4_checkbox1a",
-        "p4_checkbox1[1]"
-      ]
-    },
-    {
-      "id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
-      "label": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
-      "order": 5,
-      "fields": [
+        "p4_checkbox1[1]",
         "p4_line1a_accomodationrequested",
         "p4_checkbox1b",
         "p4_line1b_accomodationrequested",
@@ -182,26 +174,29 @@
     {
       "id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "order": 6,
+      "order": 5,
       "fields": [
+        "p5_checkbox1a",
         "p5_line1b_language",
         "p5_line2_nameofrepresentative",
         "p5_line3_daytimephonenumber",
         "p5_line4_mobilephonenumber",
         "p5_line5_emailaddress",
         "p5_line6a_signatureofapplicant",
-        "p5_line6b_dateofsignature",
-        "p5_checkbox1a"
+        "p5_line6b_dateofsignature"
       ]
     },
     {
       "id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
       "label": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "order": 7,
+      "order": 6,
       "fields": [
+        "p6_line1a_interpretersfamilyname",
         "p6_line1b_interpretersgivenname",
+        "p6_language",
         "p6_line2_nameofbusinessor",
         "p6_line3a_streetnumbername",
+        "p6_unit_type3b_unit",
         "p6_line3b_aptsteflrnumber",
         "p6_line3c_citytown",
         "p6_line3d_state",
@@ -213,20 +208,20 @@
         "p6_line4_interpretersdaytimephonenumber[1]",
         "p6_line5_interpretersemailaddress",
         "p6_line6a_signature",
-        "p6_line6b_dateofsignature",
-        "p6_line1a_interpretersfamilyname",
-        "p6_language",
-        "p6_unit_type3b_unit"
+        "p6_line6b_dateofsignature"
+
       ]
     },
     {
       "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
       "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "order": 8,
+      "order": 7,
       "fields": [
+        "p7_line1a_familyname",
         "p7_line1b_preparersgivenname",
         "p7_line2_nameofbusinessor",
         "p7_line3a_streetnumbername",
+        "p7_unit_type3b_unit",
         "p7_line3b_aptsteflrnumber",
         "p7_line3c_citytown",
         "p7_line3d_state",
@@ -241,23 +236,16 @@
         "p7_checkbox7extend",
         "p7_checkbox7extend[1]",
         "p7_line8a_signatureofpreparer",
-        "p7_line8b_dateofsignature",
-        "p7_unit_type3b_unit"
-      ]
-    },
-    {
-      "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
-      "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
-      "order": 9,
-      "fields": [
-        "p7_line1a_familyname"
+        "p7_line8b_dateofsignature"
       ]
     },
     {
       "id": "Part 8 - Additional Information",
       "label": "Part 8 - Additional Information",
-      "order": 10,
+      "order": 8,
       "fields": [
+        "p1_line1_aliennumber[1]",
+        "p1_line3a_familyname[1]",
         "p1_line3b_givenname[1]",
         "p1_line3c_middlename[1]",
         "p8_line3a_pagenumber",
@@ -279,8 +267,7 @@
         "p8_line5a_pagenumber[2]",
         "p8_line5b_partnumber[2]",
         "p8_line5c_itemnumber[2]",
-        "p8_line5d_additionalinfo[2]",
-        "p1_line3a_familyname[1]"
+        "p8_line5d_additionalinfo[2]"
       ]
     }
   ],
@@ -957,7 +944,7 @@
     {
       "id": "p1_line6i_country",
       "name": "Country",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line6i_Country[0]",
       "consolidated_widgets": [
@@ -1266,7 +1253,7 @@
     {
       "id": "p1_line7h_country",
       "name": "Country",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line7h_Country[0]",
       "consolidated_widgets": [
@@ -1395,7 +1382,7 @@
     {
       "id": "p1_line11_countryofbirth",
       "name": "Country of Birth",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line11_CountryofBirth[0]",
       "consolidated_widgets": [
@@ -2076,7 +2063,7 @@
       "name": "Ethnicity",
       "spoken_name": "ethnicity",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "Part 3 - Processing Information",
       "options": [
         {
           "value": "hispanic_latino",
@@ -2096,7 +2083,7 @@
       "name": "Race (Select all applicable)",
       "spoken_name": "race",
       "type": "checkbox",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "Part 3 - Processing Information",
       "options": [
         {
           "value": "white",
@@ -2271,7 +2258,7 @@
       "name": "Eye Color",
       "spoken_name": "eye color",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "Part 3 - Processing Information",
       "options": [
         {
           "value": "black",
@@ -2320,7 +2307,7 @@
       "name": "Hair Color",
       "spoken_name": "hair color",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "Part 3 - Processing Information",
       "options": [
         {
           "value": "bald",
@@ -2472,12 +2459,12 @@
       "id": "p4_line1a_accomodationrequested",
       "name": "Language",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1a_AccomodationRequested[0]"
       ],
-      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. A. Enter Language.",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. A. Enter Language.",
       "read_only": true,
       "required": false,
       "multiline": true,
@@ -2517,12 +2504,12 @@
       "id": "p4_checkbox1b",
       "name": "Select I am blind or have low vision and request the following accommodation",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
       "pdf_field_name": "P4_checkbox1b[0]",
       "consolidated_widgets": [
         "P4_checkbox1b[0]"
       ],
-      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. B. Select I am blind or have low vision and request the following accommodation.",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. B. Select I am blind or have low vision and request the following accommodation.",
       "options": [
         {
           "value": "P4_checkbox1b[0]",
@@ -2571,12 +2558,12 @@
       "id": "p4_line1b_accomodationrequested",
       "name": "Accommodation Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1b_AccomodationRequested[0]"
       ],
-      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. B. Enter Accommodation Requested.",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. B. Enter Accommodation Requested.",
       "read_only": true,
       "required": false,
       "multiline": true,
@@ -2616,12 +2603,12 @@
       "id": "p4_checkbox1c",
       "name": "Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting)",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
       "pdf_field_name": "P4_checkbox1c[0]",
       "consolidated_widgets": [
         "P4_checkbox1c[0]"
       ],
-      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. C. Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting). ",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. C. Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting). ",
       "options": [
         {
           "value": "P4_checkbox1c[0]",
@@ -2670,12 +2657,12 @@
       "id": "p4_line1c_accomodationrequested",
       "name": "Description of Disability and/or Impairment and the Accommodations Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1c_AccomodationRequested[0]"
       ],
-      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. C. Enter Description of Disability and/or Impairment and the Accommodations Requested.",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. C. Enter Description of Disability and/or Impairment and the Accommodations Requested.",
       "read_only": true,
       "required": false,
       "multiline": true,
@@ -3642,12 +3629,12 @@
       "id": "p7_line1a_familyname",
       "name": "Preparer's Family Name (Last Name). ",
       "type": "text",
-      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
       "pdf_field_name": "P7_Line1a_FamilyName[0]",
       "consolidated_widgets": [
         "P7_Line1a_FamilyName[0]"
       ],
-      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant. Provide the following information about the preparer. Preparer's Full Name. 1. A. Enter Preparer's Family Name (Last Name). ",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Provide the following information about the preparer. Preparer's Full Name. 1. A. Enter Preparer's Family Name (Last Name). ",
       "read_only": false,
       "required": false,
       "multiline": false,

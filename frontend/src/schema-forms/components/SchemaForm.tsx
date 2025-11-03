@@ -25,15 +25,17 @@ export interface SchemaFormProps {
 }
 
 export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProps) {
-  const [state, setState] = useState<SchemaFormState>(() =>
-    SchemaFormStateManager.init(schema)
-  );
+  const [state, setState] = useState<SchemaFormState>(() => {
+    console.log('[SchemaForm] Initial state setup');
+    return SchemaFormStateManager.init(schema);
+  });
 
-  // Update state when schema changes
-  useEffect(() => {
-    const newState = SchemaFormStateManager.init(schema);
-    setState(newState);
-  }, [schema]);
+  // Prevent rapid navigation/submission (debounce)
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // NOTE: Removed useEffect that was wiping state on schema changes
+  // Schema should not change during form filling, and if it does,
+  // we don't want to lose user's data
 
   // Notify parent of section changes
   useEffect(() => {
@@ -43,32 +45,65 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
   }, [state.currentSectionId, onSectionChange]);
 
   const handleFieldChange = (fieldId: string, value: any) => {
-    const newState = SchemaFormStateManager.updateField(state, fieldId, value);
-    setState(newState);
+    console.log(`[SchemaForm] handleFieldChange called: ${fieldId} = ${JSON.stringify(value)}`);
+
+    // Use functional update to avoid stale closure issues
+    setState(prevState => {
+      console.log(`[SchemaForm] setState functional update - prevState.fieldValues:`, prevState.fieldValues);
+      const newState = SchemaFormStateManager.updateField(prevState, fieldId, value);
+      console.log(`[SchemaForm] setState functional update - newState.fieldValues:`, newState.fieldValues);
+      return newState;
+    });
+
+    console.log(`[SchemaForm] setState called with functional update - waiting for React to re-render...`);
   };
 
   const handleFieldBlur = (fieldId: string) => {
+    console.log(`[SchemaForm] handleFieldBlur called for: ${fieldId}`);
+
     // Validate field on blur
-    const field = state.schema.fields.find((f) => f.id === fieldId);
-    if (!field) return;
+    setState(prevState => {
+      const field = prevState.schema.fields.find((f) => f.id === fieldId);
+      if (!field) return prevState;
 
-    const value = state.fieldValues[fieldId];
-    const error = validateField(field, value);
+      const value = prevState.fieldValues[fieldId];
+      console.log(`[SchemaForm] handleFieldBlur - validating ${fieldId}, value:`, value);
+      const error = validateField(field, value);
 
-    const newState = SchemaFormStateManager.setValidationError(state, fieldId, error);
-    setState(newState);
+      const newState = SchemaFormStateManager.setValidationError(prevState, fieldId, error);
+      console.log(`[SchemaForm] handleFieldBlur - newState.fieldValues:`, newState.fieldValues);
+      return newState;
+    });
   };
 
   const handleNextSection = () => {
+    console.log('[handleNextSection] Called, isNavigating:', isNavigating);
+    if (isNavigating) {
+      console.log('[handleNextSection] Already navigating - ignoring');
+      return;
+    }
+
     const nextSection = SchemaFormStateManager.getNextSection(state);
+    console.log('[handleNextSection] nextSection:', nextSection?.id);
     if (!nextSection) return;
 
     // Validate current section before moving
     const currentSection = SchemaFormStateManager.getCurrentSection(state);
-    if (currentSection && !SchemaFormStateManager.isSectionValid(state, currentSection.id)) {
+    console.log('[handleNextSection] currentSection:', currentSection?.id);
+
+    const isValid = SchemaFormStateManager.isSectionValid(state, currentSection!.id);
+    console.log('[handleNextSection] isSectionValid:', isValid);
+
+    if (currentSection && !isValid) {
+      console.log('[handleNextSection] Section invalid - showing alert');
       alert("Please complete all required fields before continuing.");
       return;
     }
+
+    console.log('[handleNextSection] Section valid - navigating');
+
+    // Set navigation flag
+    setIsNavigating(true);
 
     // Mark current section as complete
     let newState = state;
@@ -79,6 +114,13 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
     // Navigate to next section
     newState = SchemaFormStateManager.navigateToSection(newState, nextSection.id);
     setState(newState);
+    console.log('[handleNextSection] Navigation complete');
+
+    // Clear navigation flag after a short delay
+    setTimeout(() => {
+      console.log('[handleNextSection] Clearing navigation flag');
+      setIsNavigating(false);
+    }, 300);
   };
 
   const handlePreviousSection = () => {
@@ -90,7 +132,24 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
   };
 
   const handleSubmit = (e: React.FormEvent) => {
+    console.log('[handleSubmit] Form submit triggered! isNavigating:', isNavigating);
     e.preventDefault();
+
+    // Ignore if we're currently navigating (prevents double-trigger from click event)
+    if (isNavigating) {
+      console.log('[handleSubmit] Currently navigating - ignoring submit');
+      return;
+    }
+
+    // Check if there's a next section - if so, don't submit, just navigate
+    const nextSection = SchemaFormStateManager.getNextSection(state);
+    if (nextSection) {
+      console.log('[handleSubmit] Next section exists - triggering navigation instead of submit');
+      handleNextSection();
+      return;
+    }
+
+    console.log('[handleSubmit] No next section - this is the final submit');
 
     // Validate all fields
     let hasErrors = false;
@@ -127,6 +186,17 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
   // Sort sections by order for progress display
   const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
   const currentSectionIndex = sortedSections.findIndex((s) => s.id === state.currentSectionId);
+
+  // Debug: Log current state's fieldValues at TOP of render
+  console.log(`[SchemaForm] ===== RENDER START =====`);
+  console.log(`[SchemaForm] RENDER - state.fieldValues:`, Object.keys(state.fieldValues).length, 'fields with values');
+  console.log(`[SchemaForm] RENDER - actual state.fieldValues:`, state.fieldValues);
+  console.log(`[SchemaForm] RENDER - state.currentSectionId:`, state.currentSectionId);
+
+  // Debug section navigation
+  console.log(`[SchemaForm] Current section: ${currentSection?.id} (${currentSectionIndex + 1}/${sortedSections.length})`);
+  console.log(`[SchemaForm] Next section:`, nextSection?.id || "NONE (last section)");
+  console.log(`[SchemaForm] Prev section:`, prevSection?.id || "NONE (first section)");
 
   return (
     <form className="schema-form" onSubmit={handleSubmit}>
@@ -180,19 +250,22 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
           </button>
         )}
 
-        {nextSection ? (
-          <button
-            type="button"
-            onClick={handleNextSection}
-            className="schema-form__nav-button schema-form__nav-button--next"
-          >
-            Next →
-          </button>
-        ) : (
-          <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
-            Submit Form
-          </button>
-        )}
+        {(() => {
+          console.log(`[SchemaForm] Rendering navigation button. nextSection = ${nextSection ? nextSection.id : 'NULL'}`);
+          return nextSection ? (
+            <button
+              type="button"
+              onClick={handleNextSection}
+              className="schema-form__nav-button schema-form__nav-button--next"
+            >
+              Next →
+            </button>
+          ) : (
+            <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
+              Submit Form
+            </button>
+          );
+        })()}
       </div>
 
       {/* Legal Warnings */}

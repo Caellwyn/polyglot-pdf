@@ -259,7 +259,6 @@
   height: 1.25rem;
   margin: 0 0.5rem 0 0;
   cursor: pointer;
-  accent-color: #4CAF50;
 }
 
 .form-field__radio-input:disabled,

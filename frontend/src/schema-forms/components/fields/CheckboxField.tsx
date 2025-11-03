@@ -6,7 +6,7 @@ import type { FormField } from "../../types/schema";
 
 export interface CheckboxFieldProps {
   field: FormField;
-  value: boolean | string[];
+  value: any;
   onChange: (value: boolean | string[]) => void;
   onBlur?: () => void;
   error?: string | null;
@@ -23,6 +23,14 @@ export function CheckboxField({
 }: CheckboxFieldProps) {
   // Single checkbox (no options)
   if (!field.options) {
+    const isChecked = value === true || value === "true" || value === 1;
+
+    const handleChange = (checked: boolean) => {
+      console.log(`[CheckboxField] ${field.id} changed to:`, checked);
+      onChange(checked);
+      if (onBlur) onBlur();
+    };
+
     return (
       <div className="form-field">
         <label className="form-field__checkbox-label">
@@ -30,11 +38,8 @@ export function CheckboxField({
             type="checkbox"
             id={field.id}
             name={field.id}
-            checked={value === true}
-            onChange={(e) => {
-              onChange(e.target.checked);
-              if (onBlur) onBlur();
-            }}
+            checked={isChecked}
+            onChange={(e) => handleChange(e.target.checked)}
             disabled={disabled || field.read_only}
             className="form-field__checkbox-input"
           />
@@ -65,6 +70,7 @@ export function CheckboxField({
       ? selectedValues.filter((v) => v !== optionValue)
       : [...selectedValues, optionValue];
 
+    console.log(`[CheckboxField] ${field.id} changed to:`, newValues);
     onChange(newValues);
     if (onBlur) onBlur();
   };

@@ -32,18 +32,25 @@ export function SectionRenderer({
       </div>
 
       <div className="section__fields">
-        {fields.map((field) => (
-          <FieldRenderer
-            key={field.id}
-            field={field}
-            value={fieldValues[field.id]}
-            onChange={(value) => onFieldChange(field.id, value)}
-            onBlur={onFieldBlur}
-            error={validationErrors[field.id] || null}
-            disabled={disabled}
-            allFieldValues={fieldValues}
-          />
-        ))}
+        {fields.map((field) => {
+          const fieldValue = fieldValues[field.id];
+          // Debug radio/checkbox fields
+          if (field.type === 'radio' || field.type === 'checkbox') {
+            console.log(`[SectionRenderer] Passing to ${field.type} ${field.id}: value=${JSON.stringify(fieldValue)}`);
+          }
+          return (
+            <FieldRenderer
+              key={field.id}
+              field={field}
+              value={fieldValue}
+              onChange={(value) => onFieldChange(field.id, value)}
+              onBlur={onFieldBlur}
+              error={validationErrors[field.id] || null}
+              disabled={disabled}
+              allFieldValues={fieldValues}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import type { FormField } from "../../types/schema";
 
 export interface RadioFieldProps {
   field: FormField;
-  value: string;
+  value: any;
   onChange: (value: string) => void;
   onBlur?: () => void;
   error?: string | null;
@@ -25,6 +25,18 @@ export function RadioField({
     console.error(`[RadioField] Field ${field.id} has no options`);
     return null;
   }
+
+  // Normalize value to string (handle undefined/null)
+  const currentValue = value !== null && value !== undefined ? String(value) : "";
+
+  const handleChange = (newValue: string) => {
+    console.log(`[RadioField] ${field.id} changed to:`, newValue, `(previous: ${currentValue})`);
+    onChange(newValue);
+    if (onBlur) onBlur();
+  };
+
+  // Debug: log what value we received and what we're comparing
+  console.log(`[RadioField] ${field.id} RENDER - received value prop:`, JSON.stringify(value), `-> currentValue="${currentValue}"`);
 
   return (
     <div className="form-field">
@@ -45,11 +57,8 @@ export function RadioField({
                 type="radio"
                 name={field.id}
                 value={option.value}
-                checked={value === option.value}
-                onChange={(e) => {
-                  onChange(e.target.value);
-                  if (onBlur) onBlur();
-                }}
+                checked={currentValue === option.value}
+                onChange={(e) => handleChange(e.target.value)}
                 disabled={disabled || field.read_only}
                 className="form-field__radio-input"
               />

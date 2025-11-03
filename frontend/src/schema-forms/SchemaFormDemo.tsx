@@ -49,6 +49,13 @@ export function SchemaFormDemo() {
     console.log("[SchemaFormDemo] Section changed to:", sectionId);
   };
 
+  const handleClearSession = () => {
+    if (confirm("Clear all form data and start fresh?")) {
+      sessionStorage.removeItem("schema_form_state");
+      window.location.reload();
+    }
+  };
+
   if (loading) {
     return (
       <div className="schema-form-demo">
@@ -88,6 +95,11 @@ export function SchemaFormDemo() {
 
   return (
     <div className="schema-form-demo">
+      <div style={{ padding: "10px", background: "#f0f0f0", marginBottom: "20px" }}>
+        <button onClick={handleClearSession} style={{ padding: "8px 16px", cursor: "pointer" }}>
+          🗑️ Clear Form & Start Fresh
+        </button>
+      </div>
       <SchemaForm schema={schema} onSubmit={handleSubmit} onSectionChange={handleSectionChange} />
     </div>
   );
