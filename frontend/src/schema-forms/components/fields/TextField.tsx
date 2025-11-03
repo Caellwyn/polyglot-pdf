@@ -43,7 +43,7 @@ export function TextField({
         onBlur={onBlur}
         placeholder={field.placeholder}
         maxLength={field.max_length || field.validation?.max_length}
-        disabled={disabled || field.read_only}
+        disabled={disabled}
         className={`form-field__input ${error ? "form-field__input--error" : ""}`}
         aria-invalid={error ? "true" : "false"}
         aria-describedby={error ? `${field.id}-error` : undefined}

@@ -47,7 +47,7 @@ export function DateField({
         onBlur={onBlur}
         min={field.min_date}
         max={field.max_date}
-        disabled={disabled || field.read_only}
+        disabled={disabled}
         className={`form-field__input form-field__input--date ${
           error ? "form-field__input--error" : ""
         }`}

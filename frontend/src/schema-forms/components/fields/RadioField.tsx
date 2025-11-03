@@ -59,7 +59,7 @@ export function RadioField({
                 value={option.value}
                 checked={currentValue === option.value}
                 onChange={(e) => handleChange(e.target.value)}
-                disabled={disabled || field.read_only}
+                disabled={disabled}
                 className="form-field__radio-input"
               />
               <span className="form-field__radio-text">{option.label}</span>

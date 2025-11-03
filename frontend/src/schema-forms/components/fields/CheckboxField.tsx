@@ -40,7 +40,7 @@ export function CheckboxField({
             name={field.id}
             checked={isChecked}
             onChange={(e) => handleChange(e.target.checked)}
-            disabled={disabled || field.read_only}
+            disabled={disabled}
             className="form-field__checkbox-input"
           />
           <span className="form-field__checkbox-text">
@@ -96,7 +96,7 @@ export function CheckboxField({
                 value={option.value}
                 checked={selectedValues.includes(option.value)}
                 onChange={() => handleToggle(option.value)}
-                disabled={disabled || field.read_only}
+                disabled={disabled}
                 className="form-field__checkbox-input"
               />
               <span className="form-field__checkbox-text">{option.label}</span>

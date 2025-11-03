@@ -33,7 +33,9 @@ export function FieldRenderer({
   allFieldValues = {},
 }: FieldRendererProps) {
   // Check if field should be shown based on conditional logic
-  if (!shouldShowField(field, allFieldValues)) {
+  const isShown = shouldShowField(field, allFieldValues);
+
+  if (!isShown) {
     return null; // Hide field
   }
 
@@ -44,7 +46,20 @@ export function FieldRenderer({
     field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
     field.conditional_logic?.unlock_method === "flip_readonly_bit";
 
+  // Debug conditional unlocking
+  if (field.read_only && shouldUnlock) {
+    console.log(`[FieldRenderer] 🔓 Unlocking field ${field.id}:`, {
+      read_only: field.read_only,
+      shouldUnlock,
+      show_if: field.show_if,
+      triggerField: field.show_if?.field,
+      triggerValue: field.show_if?.field ? allFieldValues[field.show_if.field] : undefined,
+      expectedValue: field.show_if?.value
+    });
+  }
+
   // Override disabled state for fields that unlock when shown
+  // When a field has unlock behavior and is shown (condition met), it should be editable
   const isDisabled = shouldUnlock ? disabled : (disabled || field.read_only);
 
   const handleBlur = () => {
