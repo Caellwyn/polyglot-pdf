@@ -17,14 +17,16 @@ import {
 } from "../state/schemaFormState";
 import { SectionRenderer } from "./SectionRenderer";
 import { validateField } from "../utils/validation";
+import { fillPDF, downloadPDF } from "../utils/pdfFiller";
 
 export interface SchemaFormProps {
   schema: FormSchema;
+  pdfUrl?: string; // URL to original PDF for filling (optional)
   onSubmit?: (fieldValues: Record<string, any>) => void;
   onSectionChange?: (sectionId: string) => void;
 }
 
-export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProps) {
+export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: SchemaFormProps) {
   const [state, setState] = useState<SchemaFormState>(() => {
     console.log('[SchemaForm] Initial state setup');
     return SchemaFormStateManager.init(schema);
@@ -32,6 +34,9 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
 
   // Prevent rapid navigation/submission (debounce)
   const [isNavigating, setIsNavigating] = useState(false);
+
+  // PDF download state
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
   // NOTE: Removed useEffect that was wiping state on schema changes
   // Schema should not change during form filling, and if it does,
@@ -189,6 +194,33 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!pdfUrl) {
+      alert("PDF URL not configured. Cannot download filled PDF.");
+      return;
+    }
+
+    setIsDownloadingPDF(true);
+    console.log('[SchemaForm] Starting PDF download...');
+
+    try {
+      const filledPDFBytes = await fillPDF(pdfUrl, state.fieldValues, state.schema);
+
+      // Generate filename from form metadata
+      const formNumber = state.schema.form_metadata.form_number || 'form';
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const filename = `${formNumber}-filled-${timestamp}.pdf`;
+
+      downloadPDF(filledPDFBytes, filename);
+      console.log('[SchemaForm] PDF downloaded successfully:', filename);
+    } catch (error) {
+      console.error('[SchemaForm] PDF download failed:', error);
+      alert('Failed to download PDF. Check console for details.');
+    } finally {
+      setIsDownloadingPDF(false);
+    }
+  };
+
   const currentSection = SchemaFormStateManager.getCurrentSection(state);
   const currentFields = SchemaFormStateManager.getCurrentSectionFields(state);
   const nextSection = SchemaFormStateManager.getNextSection(state);
@@ -279,6 +311,23 @@ export function SchemaForm({ schema, onSubmit, onSectionChange }: SchemaFormProp
           );
         })()}
       </div>
+
+      {/* PDF Download Section */}
+      {pdfUrl && (
+        <div className="schema-form__pdf-download">
+          <button
+            type="button"
+            onClick={handleDownloadPDF}
+            disabled={isDownloadingPDF}
+            className="schema-form__download-button"
+          >
+            {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
+          </button>
+          <p className="schema-form__download-help">
+            Download a PDF with all your current answers filled in. You can continue editing the form after downloading.
+          </p>
+        </div>
+      )}
 
       {/* Legal Warnings */}
       {state.schema.legal_warnings && state.schema.legal_warnings.length > 0 && (

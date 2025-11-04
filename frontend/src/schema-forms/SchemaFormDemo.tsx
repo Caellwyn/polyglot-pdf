@@ -100,7 +100,12 @@ export function SchemaFormDemo() {
           🗑️ Clear Form & Start Fresh
         </button>
       </div>
-      <SchemaForm schema={schema} onSubmit={handleSubmit} onSectionChange={handleSectionChange} />
+      <SchemaForm
+        schema={schema}
+        pdfUrl="/pdfs/i-90.pdf"
+        onSubmit={handleSubmit}
+        onSectionChange={handleSectionChange}
+      />
     </div>
   );
 }

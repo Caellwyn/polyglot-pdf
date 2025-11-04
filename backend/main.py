@@ -9,6 +9,7 @@ load_dotenv()
 from .config import Settings, get_settings
 from .routes import websocket_routes
 from .routes.vad_config_routes import vad_config_websocket
+from .routes import pdf_fill_routes
 from .utils.logging import configure_logging
 
 
@@ -25,6 +26,8 @@ app.add_middleware(
         "http://127.0.0.1:5174",
         "http://localhost:5175",  # Added for dev server port conflicts
         "http://127.0.0.1:5175",
+        "http://localhost:5177",  # Schema form dev server
+        "http://127.0.0.1:5177",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -32,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(websocket_routes.router)
+app.include_router(pdf_fill_routes.router)
 
 
 @app.websocket("/ws/vad-config")
