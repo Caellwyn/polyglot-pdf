@@ -1,7 +1,7 @@
 # PDF Schema Extractor - Project Status
 
-**Date:** November 3, 2025
-**Status:** Phase 2A+ Complete - Schema-driven webform renderer with conditional logic, validation, and auto-copy working end-to-end
+**Date:** November 4, 2025
+**Status:** Phase 3A In Progress - Backend PDF filling with XFA support (partial)
 
 ---
 
@@ -16,6 +16,121 @@
 ---
 
 ## Recent Accomplishments
+
+### November 3-4, 2025 - Phase 3A: Backend PDF Filling (Partial) ⚠️ 🔧
+
+**Problem Solved:** Enable round-trip PDF filling for USCIS XFA forms using backend PyMuPDF integration.
+
+**Branch:** `phase-3-refactor`
+
+#### 🎯 Features Implemented
+
+**1. XFA Form Support**
+- ✅ Fixed I-90 schema with full XFA paths (`form1[0].#subform[0].P1_Line3a_FamilyName[0]`)
+- ✅ Created backend `/api/fill-pdf` endpoint using PyMuPDF
+- ✅ Stateless passthrough architecture (no data stored on backend)
+- ✅ Environment-aware URL handling (dev: localhost, prod: Cloud Run)
+- ✅ 116 fields mapped with XFA paths (100% coverage)
+
+**2. Backend Integration**
+- ✅ `backend/routes/pdf_fill_routes.py` - PDF filling endpoint
+- ✅ PyMuPDF field filling with full XFA path support
+- ✅ Frontend `pdfFiller.ts` calls backend API
+- ✅ Download filled PDF with generated filename
+
+**3. Architecture Decision: Backend PDF Filling**
+- **Why:** XFA (XML Forms Architecture) not supported by frontend libraries (pdf-lib, jsPDF)
+- **Solution:** PyMuPDF on backend handles XFA perfectly
+- **Privacy:** Stateless passthrough (same model as Gemini audio)
+
+#### ⚠️ Known Issues & Limitations
+
+**Working:**
+- ✅ Text fields (name, address, etc.)
+- ✅ Date fields (formatted correctly)
+- ✅ Select dropdowns (state, country)
+- ✅ Read-only fields (A-Number areas)
+
+**Needs Fixes:**
+- ❌ **Checkboxes** - Values don't appear in saved PDF
+- ❌ **Radio buttons** - Values don't persist
+- 🔄 **Tables, Address Groups, Signatures** - Not tested yet
+
+**Needs Testing:**
+- All field types across all 8 I-90 sections
+- Multi-page forms with different XFA subform prefixes
+- Conditional fields that unlock during form filling
+- Edge cases (long text, special characters, international addresses)
+
+#### 📁 Files Created/Modified
+
+**Backend:**
+- `backend/routes/pdf_fill_routes.py` - NEW: PDF filling endpoint (167 lines)
+- `backend/main.py` - UPDATED: Register pdf_fill_routes, add CORS for :5177
+
+**Frontend:**
+- `frontend/src/schema-forms/utils/pdfFiller.ts` - UPDATED: Backend API integration (95 lines)
+- `frontend/src/schema-forms/components/SchemaForm.tsx` - UPDATED: Download PDF button
+- `frontend/src/schema-forms/styles/schema-form.css` - UPDATED: PDF download styles
+- `frontend/public/pdfs/i-90.pdf` - NEW: Original I-90 PDF for filling
+
+**Schema:**
+- `frontend/public/.../i-90/i-90_schema.json` - UPDATED: Full XFA paths in pdf_field_name
+- `frontend/public/.../i-90/i-90_schema_backup.json` - NEW: Backup before XFA fix
+
+**Tooling:**
+- `check_pdf_fields.py` - NEW: Compare schema to PDF field names
+- `check_xfa_prefixes.py` - NEW: Analyze XFA prefix patterns
+- `fix_i90_schema_xfa.py` - NEW: Add XFA prefixes to schema
+- `test_xfa_field_fill.py` - NEW: Test PyMuPDF field filling
+
+#### 📊 Metrics
+
+- **Commits:** (pending)
+- **Files Changed:** 10+ files across frontend/backend/schema
+- **Lines Added:** ~350 new, ~100 modified
+- **Field Mappings Fixed:** 116 fields with XFA paths
+- **Fields Tested:** 6 text/date/select fields working
+- **Success Rate:** Text/date/select: 100%, Checkbox/radio: 0%
+
+#### 🚧 Next Steps (TODO)
+
+**Immediate (Before Next Session):**
+1. Fix checkbox field filling in `pdf_fill_routes.py`
+2. Fix radio button field filling
+3. Test all field types across I-90
+4. Update schema extractor to preserve XFA paths
+
+**Future (Phase 3B-C):**
+5. Wire voice overlay to schema forms
+6. Connect backend WebSocket handlers
+7. Test end-to-end voice → form → PDF flow
+
+#### 🔑 Key Technical Decisions
+
+**Why Backend PDF Filling?**
+- XFA forms require Adobe-specific handling
+- Frontend libraries don't support XFA
+- PyMuPDF (backend) has native XFA support
+- Matches existing architecture (Gemini passthrough)
+
+**XFA Path Structure:**
+```javascript
+// Different subforms per page/section
+"form1[0].#subform[0].P1_Line3a_FamilyName[0]"  // Page 1
+"form1[0].#subform[1].P1_Line10_CityTownOfBirth[0]"  // Page 2
+"form1[0].#subform[0].#area[1].P1_Line1_AlienNumber[0]"  // Special area
+```
+
+**Stateless Backend Design:**
+```
+Frontend → POST /api/fill-pdf {pdf_filename, field_values, form_schema}
+Backend → Load PDF, fill fields, return bytes
+Frontend → Download filled PDF
+(No data stored on backend)
+```
+
+---
 
 ### November 2-3, 2025 - Phase 2A+: Schema-Driven WebForm Renderer Complete ✅ 🎉
 

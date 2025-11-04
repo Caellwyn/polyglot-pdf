@@ -146,6 +146,140 @@ export type ConnectionStatus =
 - `webFormState.ts` - Form state (sessionStorage)
 - `webFormConnection.ts` - WebSocket message handling
 
+**Schema-Driven Forms** (`schema-forms/`):
+- `types/schema.ts` - TypeScript types mirroring backend Pydantic models
+- `state/schemaFormState.ts` - Schema form state manager (sessionStorage)
+- `components/SchemaForm.tsx` - Main schema-driven form renderer
+- `components/SectionRenderer.tsx` - Section-based form rendering
+- `components/fields/` - Field-specific renderers (TextField, CheckboxField, etc.)
+- `utils/pdfFiller.ts` - Backend PDF filling integration
+- `utils/validation.ts` - Client-side validation
+
+---
+
+## PDF Schema Integration (Phase 3A - November 2025)
+
+### Overview
+
+Phase 3A implements round-trip PDF filling for USCIS forms. Users fill schema-driven web forms, which can be exported back to the original PDF with all values populated.
+
+**Key Features**:
+- ✅ Backend PDF filling using PyMuPDF (handles XFA forms)
+- ✅ Full XFA path mapping (e.g., `form1[0].#subform[0].P1_Line3a_FamilyName[0]`)
+- ✅ Stateless passthrough (receives values → fills PDF → returns bytes)
+- ✅ Text, date, and select fields working
+- ⚠️ Checkboxes/radios need fixes (values don't appear in saved PDF)
+
+### Architecture Decision: Backend PDF Filling
+
+**Why Backend?**
+- XFA (XML Forms Architecture) forms used by USCIS are Adobe-specific
+- Frontend libraries (pdf-lib, jsPDF) don't support XFA
+- PyMuPDF (backend) handles XFA perfectly
+
+**Flow**:
+```
+Frontend → POST /api/fill-pdf
+  ├── pdf_filename: "i-90.pdf"
+  ├── field_values: { "p1_line3a_familyname": "Smith", ... }
+  └── form_schema: { fields: [...], ... }
+
+Backend (PyMuPDF)
+  ├── Load PDF from disk
+  ├── Map schema field IDs → XFA paths
+  ├── Fill fields with values
+  └── Return filled PDF bytes
+
+Frontend → Download to user
+```
+
+**Stateless Design**:
+- No user data stored on backend
+- Data flow: Request → Process → Response
+- Same privacy model as Gemini audio passthrough
+
+### XFA Field Path Structure
+
+USCIS PDFs use hierarchical XFA paths that vary by page/section:
+
+```javascript
+// Page 1 fields
+"form1[0].#subform[0].P1_Line3a_FamilyName[0]"
+
+// Page 2 fields (different subform)
+"form1[0].#subform[1].P1_Line10_CityTownOfBirth[0]"
+
+// Special areas
+"form1[0].#subform[0].#area[1].P1_Line1_AlienNumber[0]"
+```
+
+**Schema Updates** (Nov 3, 2025):
+- I-90 schema updated with full XFA paths in `pdf_field_name` property
+- 116 fields mapped successfully (100% coverage)
+- Backup saved before modification
+
+### Backend Endpoint: `/api/fill-pdf`
+
+**Location**: `backend/routes/pdf_fill_routes.py`
+
+**Request**:
+```python
+class PDFFillRequest(BaseModel):
+    pdf_filename: str  # e.g., "i-90.pdf"
+    field_values: Dict[str, Any]  # field_id → value
+    form_schema: Dict[str, Any]  # Full schema with mappings
+```
+
+**Process**:
+1. Load PDF from `pdf_schema_extractor/test_schemas/test_pdfs/{form}/{filename}`
+2. Extract field mappings from schema (`field.id` → `field.pdf_field_name`)
+3. Iterate through `field_values`, find widgets in PDF by XFA path
+4. Set widget values and update
+5. Return PDF as bytes with Content-Disposition header
+
+**Response**:
+- `200 OK`: PDF bytes (application/pdf)
+- `404 Not Found`: PDF file doesn't exist
+- `500 Internal Server Error`: Filling failed
+
+### Frontend Integration
+
+**File**: `frontend/src/schema-forms/utils/pdfFiller.ts`
+
+**Environment Handling**:
+```typescript
+// Development: http://localhost:8000
+// Production: https://voice-form-filler-773443099751.us-central1.run.app
+// Override: window.__VFF_BACKEND_URL (auto-converts ws:// → http://)
+```
+
+**Usage**:
+```typescript
+import { fillPDF, downloadPDF } from '../utils/pdfFiller';
+
+const pdfBytes = await fillPDF('/pdfs/i-90.pdf', fieldValues, schema);
+downloadPDF(pdfBytes, 'i-90-filled-2025-11-03.pdf');
+```
+
+### Known Issues & Future Work
+
+**Current Status**:
+- ✅ **Working**: Text fields, date fields, select dropdowns, read-only fields
+- ⚠️ **Needs Fixes**: Checkboxes and radio buttons (values don't persist to PDF)
+- 🔄 **Needs Testing**: Complex field types (tables, address groups, signatures)
+
+**Todo**:
+1. Fix checkbox/radio button field filling in `pdf_fill_routes.py`
+2. Test with all field types across all I-90 sections
+3. Verify filled PDFs open correctly in Adobe Reader/Preview
+4. Test with other USCIS forms (I-589, N-400, etc.)
+5. Update schema extractor to preserve XFA paths during extraction
+
+**Schema Extractor Update Needed**:
+- Currently drops XFA prefixes during extraction
+- Fix: Preserve full XFA path in `pdf_field_name` property
+- Location: `pdf_schema_extractor/` (identify where prefixes are lost)
+
 ---
 
 ## Audio Pipeline

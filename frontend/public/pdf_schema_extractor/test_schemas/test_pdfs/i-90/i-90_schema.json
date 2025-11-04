@@ -277,7 +277,7 @@
       "name": "Alien Registration Number (A-Number)",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line1_AlienNumber[0]",
+      "pdf_field_name": "form1[0].#subform[0].#area[1].P1_Line1_AlienNumber[0]",
       "consolidated_widgets": [
         "P1_Line1_AlienNumber[0]"
       ],
@@ -317,7 +317,7 @@
       "name": "U S C I S Online Account Number, if any",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line2_AcctIdentifier[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line2_AcctIdentifier[0]",
       "consolidated_widgets": [
         "P1_Line2_AcctIdentifier[0]"
       ],
@@ -353,7 +353,7 @@
       "name": "Family Name (Last Name)",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line3a_FamilyName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line3a_FamilyName[0]",
       "consolidated_widgets": [
         "P1_Line3a_FamilyName[0]"
       ],
@@ -384,7 +384,7 @@
       "name": "Given Name (First Name). ",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line3b_GivenName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line3b_GivenName[0]",
       "consolidated_widgets": [
         "P1_Line3b_GivenName[0]"
       ],
@@ -415,7 +415,7 @@
       "name": "Middle Name",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line3c_MiddleName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line3c_MiddleName[0]",
       "consolidated_widgets": [
         "P1_Line3c_MiddleName[0]"
       ],
@@ -509,7 +509,7 @@
       "name": "Family Name (Last Name). ",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line5a_FamilyName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line5a_FamilyName[0]",
       "consolidated_widgets": [
         "P1_Line5a_FamilyName[0]"
       ],
@@ -553,7 +553,7 @@
       "name": "Given Name (First Name). ",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line5b_GivenName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line5b_GivenName[0]",
       "consolidated_widgets": [
         "P1_Line5b_GivenName[0]"
       ],
@@ -597,7 +597,7 @@
       "name": "Middle Name",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line5c_MiddleName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line5c_MiddleName[0]",
       "consolidated_widgets": [
         "P1_Line5c_MiddleName[0]"
       ],
@@ -641,7 +641,7 @@
       "name": "In Care Of Name",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6a_InCareofName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6a_InCareofName[0]",
       "consolidated_widgets": [
         "P1_Line6a_InCareofName[0]"
       ],
@@ -670,7 +670,7 @@
       "name": "Street Number\rand Name",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6b_StreetNumberName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6b_StreetNumberName[0]",
       "consolidated_widgets": [
         "P1_Line6b_StreetNumberName[0]"
       ],
@@ -751,7 +751,7 @@
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6c_AptSteFlrNumber[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6c_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P1_Line6c_AptSteFlrNumber[0]"
       ],
@@ -796,7 +796,7 @@
       "name": "City or Town",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6d_CityOrTown[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6d_CityOrTown[0]",
       "consolidated_widgets": [
         "P1_Line6d_CityOrTown[0]"
       ],
@@ -825,7 +825,7 @@
       "name": "Select State from List of States",
       "type": "select",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6e_State[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6e_State[0]",
       "consolidated_widgets": [
         "P1_Line6e_State[0]"
       ],
@@ -1104,7 +1104,7 @@
       "name": "ZIP Code",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6f_ZipCode[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6f_ZipCode[0]",
       "consolidated_widgets": [
         "P1_Line6f_ZipCode[0]"
       ],
@@ -1138,7 +1138,7 @@
       "name": "Province",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6g_Province[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6g_Province[0]",
       "consolidated_widgets": [
         "P1_Line6g_Province[0]"
       ],
@@ -1167,7 +1167,7 @@
       "name": "Postal Code",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6h_PostalCode[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6h_PostalCode[0]",
       "consolidated_widgets": [
         "P1_Line6h_PostalCode[0]"
       ],
@@ -1201,7 +1201,7 @@
       "name": "Country",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line6i_Country[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line6i_Country[0]",
       "consolidated_widgets": [
         "P1_Line6i_Country[0]"
       ],
@@ -1229,7 +1229,7 @@
       "name": "Street Number and Name",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7a_StreetNumberName[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P1_Line7a_StreetNumberName[0]"
       ],
@@ -1310,7 +1310,7 @@
       "name": "Apartment, Suite or Floor Number",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7b_AptSteFlrNumber[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P1_Line7b_AptSteFlrNumber[0]"
       ],
@@ -1355,7 +1355,7 @@
       "name": "City or Town",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7c_CityOrTown[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7c_CityOrTown[0]",
       "consolidated_widgets": [
         "P1_Line7c_CityOrTown[0]"
       ],
@@ -1384,7 +1384,7 @@
       "name": "Select State from List of States",
       "type": "select",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7d_State[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7d_State[0]",
       "consolidated_widgets": [
         "P1_Line7d_State[0]"
       ],
@@ -1663,7 +1663,7 @@
       "name": "ZIP Code",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7e_ZipCode[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7e_ZipCode[0]",
       "consolidated_widgets": [
         "P1_Line7e_ZipCode[0]"
       ],
@@ -1697,7 +1697,7 @@
       "name": "Province",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7f_Province[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7f_Province[0]",
       "consolidated_widgets": [
         "P1_Line7f_Province[0]"
       ],
@@ -1726,7 +1726,7 @@
       "name": "Postal Code",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7g_PostalCode[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7g_PostalCode[0]",
       "consolidated_widgets": [
         "P1_Line7g_PostalCode[0]"
       ],
@@ -1760,7 +1760,7 @@
       "name": "Country",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line7h_Country[0]",
+      "pdf_field_name": "form1[0].#subform[0].P1_Line7h_Country[0]",
       "consolidated_widgets": [
         "P1_Line7h_Country[0]"
       ],
@@ -1827,7 +1827,7 @@
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line9_DateOfBirth[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line9_DateOfBirth[0]",
       "consolidated_widgets": [
         "P1_Line9_DateOfBirth[0]"
       ],
@@ -1860,7 +1860,7 @@
       "name": "City / Town / Village of Birth",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line10_CityTownOfBirth[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line10_CityTownOfBirth[0]",
       "consolidated_widgets": [
         "P1_Line10_CityTownOfBirth[0]"
       ],
@@ -1889,7 +1889,7 @@
       "name": "Country of Birth",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line11_CountryofBirth[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line11_CountryofBirth[0]",
       "consolidated_widgets": [
         "P1_Line11_CountryofBirth[0]"
       ],
@@ -1917,7 +1917,7 @@
       "name": "Given Name (First Name)",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line12_MotherGivenName[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line12_MotherGivenName[0]",
       "consolidated_widgets": [
         "P1_Line12_MotherGivenName[0]"
       ],
@@ -1945,7 +1945,7 @@
       "name": "Given Name (First Name)",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line13_FatherGivenName[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line13_FatherGivenName[0]",
       "consolidated_widgets": [
         "P1_Line13_FatherGivenName[0]"
       ],
@@ -1973,7 +1973,7 @@
       "name": "Class of Admission",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line14_ClassOfAdmission[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line14_ClassOfAdmission[0]",
       "consolidated_widgets": [
         "P1_Line14_ClassOfAdmission[0]"
       ],
@@ -2001,7 +2001,7 @@
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line15_DateOfAdmission[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line15_DateOfAdmission[0]",
       "consolidated_widgets": [
         "P1_Line15_DateOfAdmission[0]"
       ],
@@ -2034,7 +2034,7 @@
       "name": "U. S. Social Security Number, if any",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line16_SSN[0]",
+      "pdf_field_name": "form1[0].#subform[1].P1_Line16_SSN[0]",
       "consolidated_widgets": [
         "P1_Line16_SSN[0]"
       ],
@@ -2145,7 +2145,7 @@
       "name": "Enter City or Town and State",
       "type": "text",
       "section_id": "Part 2 - Application Type",
-      "pdf_field_name": "P2_Line2h1_CityandState[0]",
+      "pdf_field_name": "form1[0].#subform[1].P2_Line2h1_CityandState[0]",
       "consolidated_widgets": [
         "P2_Line2h1_CityandState[0]"
       ],
@@ -2294,7 +2294,10 @@
       "show_if": {
         "field": "p2_checkbox1",
         "operator": "in",
-        "value": ["P2_checkbox1[0]", "P2_checkbox1[1]"]
+        "value": [
+          "P2_checkbox1[0]",
+          "P2_checkbox1[1]"
+        ]
       },
       "conditional_fields": [
         "p2_line2h1_cityandstate"
@@ -2324,7 +2327,7 @@
       "name": "Select My previous card was issued but never received",
       "type": "checkbox",
       "section_id": "Part 2 - Application Type",
-      "pdf_field_name": "P2_checkbox3[0]",
+      "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]",
       "consolidated_widgets": [
         "P2_checkbox3[0]"
       ],
@@ -2395,7 +2398,7 @@
       "name": "Location where you applied for an immigrant visa or adjustment of status",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line1_LocationAppliedVisa[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line1_LocationAppliedVisa[0]",
       "consolidated_widgets": [
         "P3_Line1_LocationAppliedVisa[0]"
       ],
@@ -2424,7 +2427,7 @@
       "name": "Location where your immigrant visa was issued or U S C I S office where you were granted adjustment of status",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line2_LocationIssuedVisa[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line2_LocationIssuedVisa[0]",
       "consolidated_widgets": [
         "P3_Line2_LocationIssuedVisa[0]"
       ],
@@ -2453,7 +2456,7 @@
       "name": "Destination in the United States at time of admission",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line3a_Destination[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line3a_Destination[0]",
       "consolidated_widgets": [
         "P3_Line3a_Destination[0]"
       ],
@@ -2481,7 +2484,7 @@
       "name": "City or Town and State",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line3a1_CityandState[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line3a1_CityandState[0]",
       "consolidated_widgets": [
         "P3_Line3a1_CityandState[0]"
       ],
@@ -2640,7 +2643,7 @@
       "name": "Select Number of Feet from List",
       "type": "radio",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line8_HeightFeet[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line8_HeightFeet[0]",
       "consolidated_widgets": [
         "P3_Line8_HeightFeet[0]"
       ],
@@ -2668,7 +2671,7 @@
       "name": "Select Number of Inches from List",
       "type": "radio",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line8_HeightInches[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line8_HeightInches[0]",
       "consolidated_widgets": [
         "P3_Line8_HeightInches[0]"
       ],
@@ -2696,7 +2699,7 @@
       "name": "First Digit of Weight in Pounds",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line9_HeightInches1[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line9_HeightInches1[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches1[0]"
       ],
@@ -2725,7 +2728,7 @@
       "name": "Second Digit of Weight in Pounds",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line9_HeightInches2[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line9_HeightInches2[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches2[0]"
       ],
@@ -2754,7 +2757,7 @@
       "name": "Third Digit of Weight in Pounds",
       "type": "text",
       "section_id": "Part 3 - Processing Information",
-      "pdf_field_name": "P3_Line9_HeightInches3[0]",
+      "pdf_field_name": "form1[0].#subform[2].P3_Line9_HeightInches3[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches3[0]"
       ],
@@ -2931,7 +2934,7 @@
       "name": "I am deaf or hard of hearing and request the following accommodation",
       "type": "checkbox",
       "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
-      "pdf_field_name": "P4_checkbox1a[0]",
+      "pdf_field_name": "form1[0].#subform[2].P4_checkbox1a[0]",
       "consolidated_widgets": [
         "P4_checkbox1a[0]"
       ],
@@ -2989,7 +2992,7 @@
       "name": "Language",
       "type": "textarea",
       "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
-      "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
+      "pdf_field_name": "form1[0].#subform[2].P4_Line1a_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1a_AccomodationRequested[0]"
       ],
@@ -3034,7 +3037,7 @@
       "name": "I am blind or have low vision and request the following accommodation",
       "type": "checkbox",
       "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
-      "pdf_field_name": "P4_checkbox1b[0]",
+      "pdf_field_name": "form1[0].#subform[3].P4_checkbox1b[0]",
       "consolidated_widgets": [
         "P4_checkbox1b[0]"
       ],
@@ -3092,7 +3095,7 @@
       "name": "Accommodation Requested",
       "type": "textarea",
       "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
-      "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
+      "pdf_field_name": "form1[0].#subform[3].P4_Line1b_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1b_AccomodationRequested[0]"
       ],
@@ -3137,7 +3140,7 @@
       "name": "I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting)",
       "type": "checkbox",
       "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
-      "pdf_field_name": "P4_checkbox1c[0]",
+      "pdf_field_name": "form1[0].#subform[3].P4_checkbox1c[0]",
       "consolidated_widgets": [
         "P4_checkbox1c[0]"
       ],
@@ -3165,7 +3168,7 @@
           "makes_required": []
         }
       ],
-        "conditional_logic": {
+      "conditional_logic": {
         "unlock_method": "flip_readonly_bit",
         "pdf_field_flag_change": {
           "bit": 0,
@@ -3195,7 +3198,7 @@
       "name": "Description of Disability and/or Impairment and the Accommodations Requested",
       "type": "textarea",
       "section_id": "Part 4 - Accommodations for Individuals With Disabilities and/or Impairments",
-      "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
+      "pdf_field_name": "form1[0].#subform[3].P4_Line1c_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1c_AccomodationRequested[0]"
       ],
@@ -3296,7 +3299,7 @@
       "name": "At my request, the preparer named in Part 7 prepared this application for me",
       "type": "checkbox",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Checkbox2[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Checkbox2[0]",
       "consolidated_widgets": [
         "P5_Checkbox2[0]"
       ],
@@ -3341,7 +3344,7 @@
       "name": "Language",
       "type": "text",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line1b_Language[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line1b_Language[0]",
       "consolidated_widgets": [
         "P5_Line1b_Language[0]"
       ],
@@ -3385,7 +3388,7 @@
       "name": "Name of Preparer",
       "type": "text",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line2_NameofRepresentative[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line2_NameofRepresentative[0]",
       "consolidated_widgets": [
         "P5_Line2_NameofRepresentative[0]"
       ],
@@ -3429,7 +3432,7 @@
       "name": "Applicant's Daytime Telephone Number",
       "type": "text",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line3_DaytimePhoneNumber[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line3_DaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P5_Line3_DaytimePhoneNumber[0]"
       ],
@@ -3463,7 +3466,7 @@
       "name": "Applicant's Mobile Telephone Number (if any)",
       "type": "text",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line4_MobilePhoneNumber[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line4_MobilePhoneNumber[0]",
       "consolidated_widgets": [
         "P5_Line4_MobilePhoneNumber[0]"
       ],
@@ -3497,7 +3500,7 @@
       "name": "Applicant's Email Address (if any)",
       "type": "text",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line5_EmailAddress[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line5_EmailAddress[0]",
       "consolidated_widgets": [
         "P5_Line5_EmailAddress[0]"
       ],
@@ -3526,7 +3529,7 @@
       "name": "Print and sign in ink",
       "type": "signature",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line6a_SignatureofApplicant[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line6a_SignatureofApplicant[0]",
       "consolidated_widgets": [
         "P5_Line6a_SignatureofApplicant[0]"
       ],
@@ -3554,7 +3557,7 @@
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "signature",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "pdf_field_name": "P5_Line6b_DateofSignature[0]",
+      "pdf_field_name": "form1[0].#subform[3].P5_Line6b_DateofSignature[0]",
       "consolidated_widgets": [
         "P5_Line6b_DateofSignature[0]"
       ],
@@ -3584,7 +3587,7 @@
       "name": "Interpreter's Family Name (Last Name)",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line1a_InterpretersFamilyName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line1a_InterpretersFamilyName[0]",
       "consolidated_widgets": [
         "P6_Line1a_InterpretersFamilyName[0]"
       ],
@@ -3612,7 +3615,7 @@
       "name": "Interpreter's Given Name (First Name)",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line1b_InterpretersGivenName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line1b_InterpretersGivenName[0]",
       "consolidated_widgets": [
         "P6_Line1b_InterpretersGivenName[0]"
       ],
@@ -3640,7 +3643,7 @@
       "name": "Interpreter's Business or Organization Name (if any)",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line2_NameofBusinessor[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line2_NameofBusinessor[0]",
       "consolidated_widgets": [
         "P6_Line2_NameofBusinessor[0]"
       ],
@@ -3669,7 +3672,7 @@
       "name": "Street Number and Name",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3a_StreetNumberName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P6_Line3a_StreetNumberName[0]"
       ],
@@ -3750,7 +3753,7 @@
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3b_AptSteFlrNumber[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P6_Line3b_AptSteFlrNumber[0]"
       ],
@@ -3795,7 +3798,7 @@
       "name": "City or Town",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3c_CityTown[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3c_CityTown[0]",
       "consolidated_widgets": [
         "P6_Line3c_CityTown[0]"
       ],
@@ -3824,7 +3827,7 @@
       "name": "Select State from List of States",
       "type": "radio",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3d_State[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3d_State[0]",
       "consolidated_widgets": [
         "P6_Line3d_State[0]"
       ],
@@ -3852,7 +3855,7 @@
       "name": "ZIP Code",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3e_ZipCode[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3e_ZipCode[0]",
       "consolidated_widgets": [
         "P6_Line3e_ZipCode[0]"
       ],
@@ -3882,7 +3885,7 @@
       "name": "Province",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3f_Province[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3f_Province[0]",
       "consolidated_widgets": [
         "P6_Line3f_Province[0]"
       ],
@@ -3911,7 +3914,7 @@
       "name": "Postal Code",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3g_PostalCode[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3g_PostalCode[0]",
       "consolidated_widgets": [
         "P6_Line3g_PostalCode[0]"
       ],
@@ -3945,7 +3948,7 @@
       "name": "Country",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line3h_Country[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line3h_Country[0]",
       "consolidated_widgets": [
         "P6_Line3h_Country[0]"
       ],
@@ -3973,7 +3976,7 @@
       "name": "Interpreter's Daytime Telephone Number",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line4_InterpretersDaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P6_Line4_InterpretersDaytimePhoneNumber[0]"
       ],
@@ -4007,7 +4010,7 @@
       "name": "Interpreter's Mobile Telephone Number (if any)",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[1]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line4_InterpretersDaytimePhoneNumber[1]",
       "consolidated_widgets": [
         "P6_Line4_InterpretersDaytimePhoneNumber[1]"
       ],
@@ -4041,7 +4044,7 @@
       "name": "Interpreter's Email Address, (if any)",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line5_InterpretersEmailAddress[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line5_InterpretersEmailAddress[0]",
       "consolidated_widgets": [
         "P6_Line5_InterpretersEmailAddress[0]"
       ],
@@ -4075,7 +4078,7 @@
       "name": "Language",
       "type": "text",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Language[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Language[0]",
       "consolidated_widgets": [
         "P6_Language[0]"
       ],
@@ -4104,7 +4107,7 @@
       "name": "Print and sign in ink",
       "type": "signature",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line6a_Signature[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line6a_Signature[0]",
       "consolidated_widgets": [
         "P6_Line6a_Signature[0]"
       ],
@@ -4138,7 +4141,7 @@
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
-      "pdf_field_name": "P6_Line6b_DateofSignature[0]",
+      "pdf_field_name": "form1[0].#subform[4].P6_Line6b_DateofSignature[0]",
       "consolidated_widgets": [
         "P6_Line6b_DateofSignature[0]"
       ],
@@ -4171,7 +4174,7 @@
       "name": "Preparer's Given Name (First Name). ",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line1b_PreparersGivenName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line1b_PreparersGivenName[0]",
       "consolidated_widgets": [
         "P7_Line1b_PreparersGivenName[0]"
       ],
@@ -4199,7 +4202,7 @@
       "name": "Preparer's Family Name (Last Name). ",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line1a_FamilyName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line1a_FamilyName[0]",
       "consolidated_widgets": [
         "P7_Line1a_FamilyName[0]"
       ],
@@ -4227,7 +4230,7 @@
       "name": "Preparer's Business or Organization Name (if any)",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line2_NameofBusinessor[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line2_NameofBusinessor[0]",
       "consolidated_widgets": [
         "P7_Line2_NameofBusinessor[0]"
       ],
@@ -4256,7 +4259,7 @@
       "name": "Street Number and Name",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3a_StreetNumberName[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P7_Line3a_StreetNumberName[0]"
       ],
@@ -4337,7 +4340,7 @@
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3b_AptSteFlrNumber[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P7_Line3b_AptSteFlrNumber[0]"
       ],
@@ -4382,7 +4385,7 @@
       "name": "City or Town",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3c_CityTown[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3c_CityTown[0]",
       "consolidated_widgets": [
         "P7_Line3c_CityTown[0]"
       ],
@@ -4411,7 +4414,7 @@
       "name": "Select State from List of States",
       "type": "select",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3d_State[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3d_State[0]",
       "consolidated_widgets": [
         "P7_Line3d_State[0]"
       ],
@@ -4689,7 +4692,7 @@
       "name": "Zip Code",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3e_ZipCode[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3e_ZipCode[0]",
       "consolidated_widgets": [
         "P7_Line3e_ZipCode[0]"
       ],
@@ -4723,7 +4726,7 @@
       "name": "Province. ",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3f_Province[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3f_Province[0]",
       "consolidated_widgets": [
         "P7_Line3f_Province[0]"
       ],
@@ -4752,7 +4755,7 @@
       "name": "Postal Code",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3g_PostalCode[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3g_PostalCode[0]",
       "consolidated_widgets": [
         "P7_Line3g_PostalCode[0]"
       ],
@@ -4786,7 +4789,7 @@
       "name": "Country",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line3h_Country[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line3h_Country[0]",
       "consolidated_widgets": [
         "P7_Line3h_Country[0]"
       ],
@@ -4814,7 +4817,7 @@
       "name": "Preparer's Daytime Telephone Number",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line4_PreparersDaytimePhoneNumber[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line4_PreparersDaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P7_Line4_PreparersDaytimePhoneNumber[0]"
       ],
@@ -4848,7 +4851,7 @@
       "name": "Preparer's Mobile Telephone Number (if any)",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line5_PreparersFaxNumber[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line5_PreparersFaxNumber[0]",
       "consolidated_widgets": [
         "P7_Line5_PreparersFaxNumber[0]"
       ],
@@ -4882,7 +4885,7 @@
       "name": "Preparer's Email Address (if any)",
       "type": "text",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line6_PreparersEmailAddress[0]",
+      "pdf_field_name": "form1[0].#subform[4].P7_Line6_PreparersEmailAddress[0]",
       "consolidated_widgets": [
         "P7_Line6_PreparersEmailAddress[0]"
       ],
@@ -4971,7 +4974,7 @@
       "name": "Select I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application",
       "type": "radio",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_checkbox7Extend[0]",
+      "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[0]",
       "consolidated_widgets": [
         "P7_checkbox7Extend[0]",
         "P7_checkbox7Extend[1]"
@@ -5026,7 +5029,7 @@
       "name": "Print and sign in ink",
       "type": "signature",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line8a_SignatureofPreparer[0]",
+      "pdf_field_name": "form1[0].#subform[5].P7_Line8a_SignatureofPreparer[0]",
       "consolidated_widgets": [
         "P7_Line8a_SignatureofPreparer[0]"
       ],
@@ -5055,7 +5058,7 @@
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
       "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
-      "pdf_field_name": "P7_Line8b_DateofSignature[0]",
+      "pdf_field_name": "form1[0].#subform[5].P7_Line8b_DateofSignature[0]",
       "consolidated_widgets": [
         "P7_Line8b_DateofSignature[0]"
       ],
@@ -5088,7 +5091,7 @@
       "name": "Alien Registration Number. (A. Number). ",
       "type": "text",
       "section_id": "Part 1 - Information About You",
-      "pdf_field_name": "P1_Line1_AlienNumber[1]",
+      "pdf_field_name": "form1[0].#subform[6].#area[3].P1_Line1_AlienNumber[1]",
       "consolidated_widgets": [
         "P1_Line1_AlienNumber[1]"
       ],
@@ -5123,7 +5126,7 @@
       "name": "This field pre-populates from page 1",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P1_Line3a_FamilyName[1]",
+      "pdf_field_name": "form1[0].#subform[6].P1_Line3a_FamilyName[1]",
       "consolidated_widgets": [
         "P1_Line3a_FamilyName[1]"
       ],
@@ -5152,7 +5155,7 @@
       "name": "This field pre-populates from page 1",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P1_Line3b_GivenName[1]",
+      "pdf_field_name": "form1[0].#subform[6].P1_Line3b_GivenName[1]",
       "consolidated_widgets": [
         "P1_Line3b_GivenName[1]"
       ],
@@ -5181,7 +5184,7 @@
       "name": "This field pre-populates from page 1",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P1_Line3c_MiddleName[1]",
+      "pdf_field_name": "form1[0].#subform[6].P1_Line3c_MiddleName[1]",
       "consolidated_widgets": [
         "P1_Line3c_MiddleName[1]"
       ],
@@ -5210,7 +5213,7 @@
       "name": "Page Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line3a_PageNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line3a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line3a_PageNumber[0]"
       ],
@@ -5239,7 +5242,7 @@
       "name": "Part Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line3b_PartNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line3b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line3b_PartNumber[0]"
       ],
@@ -5268,7 +5271,7 @@
       "name": "Item Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line3c_ItemNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line3c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line3c_ItemNumber[0]"
       ],
@@ -5297,7 +5300,7 @@
       "name": "Additional Information",
       "type": "textarea",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line3d_AdditionalInfo[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line3d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line3d_AdditionalInfo[0]"
       ],
@@ -5325,7 +5328,7 @@
       "name": "Page Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5a_PageNumber[1]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5a_PageNumber[1]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[1]"
       ],
@@ -5354,7 +5357,7 @@
       "name": "Part Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5b_PartNumber[1]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5b_PartNumber[1]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[1]"
       ],
@@ -5383,7 +5386,7 @@
       "name": "Item Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5c_ItemNumber[1]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5c_ItemNumber[1]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[1]"
       ],
@@ -5412,7 +5415,7 @@
       "name": "Additional Information",
       "type": "textarea",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5d_AdditionalInfo[1]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5d_AdditionalInfo[1]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[1]"
       ],
@@ -5440,7 +5443,7 @@
       "name": "Page Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line4a_PageNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line4a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line4a_PageNumber[0]"
       ],
@@ -5469,7 +5472,7 @@
       "name": "Part Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line4b_PartNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line4b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line4b_PartNumber[0]"
       ],
@@ -5498,7 +5501,7 @@
       "name": "Item Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line4c_ItemNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line4c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line4c_ItemNumber[0]"
       ],
@@ -5527,7 +5530,7 @@
       "name": "Additional Information",
       "type": "textarea",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line4d_AdditionalInfo[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line4d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line4d_AdditionalInfo[0]"
       ],
@@ -5555,7 +5558,7 @@
       "name": "Page Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5a_PageNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[0]"
       ],
@@ -5584,7 +5587,7 @@
       "name": "Part Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5b_PartNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[0]"
       ],
@@ -5613,7 +5616,7 @@
       "name": "Item Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5c_ItemNumber[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[0]"
       ],
@@ -5642,7 +5645,7 @@
       "name": "Additional Information",
       "type": "textarea",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5d_AdditionalInfo[0]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[0]"
       ],
@@ -5670,7 +5673,7 @@
       "name": "Page Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5a_PageNumber[2]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5a_PageNumber[2]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[2]"
       ],
@@ -5699,7 +5702,7 @@
       "name": "Part Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5b_PartNumber[2]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5b_PartNumber[2]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[2]"
       ],
@@ -5728,7 +5731,7 @@
       "name": "Item Number",
       "type": "text",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5c_ItemNumber[2]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5c_ItemNumber[2]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[2]"
       ],
@@ -5757,7 +5760,7 @@
       "name": "Additional Information",
       "type": "textarea",
       "section_id": "Part 8 - Additional Information",
-      "pdf_field_name": "P8_Line5d_AdditionalInfo[2]",
+      "pdf_field_name": "form1[0].#subform[6].P8_Line5d_AdditionalInfo[2]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[2]"
       ],
