@@ -3,9 +3,9 @@ node_modules/
 .env
 .env.local
 backend/.env
-
-*__pycache__*
-*.pyc
+__pycache__/
+**__pycache__**
+**.pyc
 *.pyo
 .vscode/
 
