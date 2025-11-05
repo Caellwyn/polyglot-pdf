@@ -141,6 +141,10 @@ class LiveAIGemini(ILiveAI):
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
         self._pending_client_content: List[str] = []  # Queue for send_client_content() calls before session ready
 
+        # Rate limiting for audio queue warnings
+        self._last_audio_queue_warning: float = 0.0  # Timestamp of last warning
+        self._audio_queue_warning_interval: float = 5.0  # Log at most once per 5 seconds
+
         # Lock to avoid concurrent start/stop races
         self._task_lock = asyncio.Lock()
 
@@ -280,7 +284,12 @@ class LiveAIGemini(ILiveAI):
         except asyncio.QueueFull:
             # Queue backed up - drop this audio frame to avoid blocking
             # Audio is resilient to dropped frames (slight quality degradation vs blocking control msgs)
-            self._log.warn("⚠️ AUDIO_QUEUE_FULL", message="Dropping audio frame - queue backed up")
+            # Rate limit this warning to avoid flooding logs (only log once per interval)
+            import time
+            current_time = time.time()
+            if current_time - self._last_audio_queue_warning >= self._audio_queue_warning_interval:
+                self._log.warn("⚠️ AUDIO_QUEUE_FULL", message="Dropping audio frames - queue backed up (suppressing similar warnings for 5s)")
+                self._last_audio_queue_warning = current_time
             pass
 
     async def send_text_message(self, text: str):
@@ -494,6 +503,10 @@ class LiveAIGemini(ILiveAI):
         conservative so tests and local dev don't require full protocol coverage.
         """
 
+        # Import settings at the start to avoid UnboundLocalError
+        from backend.config import get_settings
+        settings = get_settings()
+
         # Reset token counters for this session
         self._session_total_tokens = 0
         self._session_prompt_tokens = 0
@@ -533,9 +546,7 @@ class LiveAIGemini(ILiveAI):
         # Enable automatic voice activity detection for realtime audio input
         # This allows Gemini to detect when user starts/stops speaking
         try:
-            # Load VAD config from backend settings
-            from backend.config import get_settings
-            settings = get_settings()
+            # Build VAD settings from config (settings already loaded at top of function)
             vad_settings = {}
             
             # Build VAD settings from config

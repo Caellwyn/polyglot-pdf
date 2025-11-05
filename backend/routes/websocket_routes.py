@@ -601,9 +601,10 @@ async def fill_form_from_schema(
 		return
 
 	source = str(schema.get("source") or "web").lower().strip() or "web"
-	if source != "web":
+	# Accept both "web" and "pdf" sources - PDF schemas can be voice-filled via web interface
+	if source not in ("web", "pdf"):
 		log.error("invalid_source", source=source)
-		await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "source_must_be_web"})
+		await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "source_must_be_web_or_pdf"})
 		await websocket.close(code=1008)
 		return
 

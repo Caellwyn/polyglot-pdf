@@ -18,6 +18,7 @@ import {
 import { SectionRenderer } from "./SectionRenderer";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF } from "../utils/pdfFiller";
+import { VoiceOverlay } from "../../demo/VoiceOverlay";
 
 export interface SchemaFormProps {
   schema: FormSchema;
@@ -243,10 +244,11 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   console.log(`[SchemaForm] Prev section:`, prevSection?.id || "NONE (first section)");
 
   return (
-    <form className="schema-form" onSubmit={handleSubmit}>
-      {/* Form Header */}
-      <div className="schema-form__header">
-        <h1 className="schema-form__title">{state.schema.form_metadata.title}</h1>
+    <>
+      <form className="schema-form" onSubmit={handleSubmit}>
+        {/* Form Header */}
+        <div className="schema-form__header">
+          <h1 className="schema-form__title">{state.schema.form_metadata.title}</h1>
         {state.schema.form_metadata.description && (
           <p className="schema-form__description">{state.schema.form_metadata.description}</p>
         )}
@@ -340,5 +342,9 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
         </div>
       )}
     </form>
+
+    {/* Voice Overlay - Outside form to prevent submit triggers */}
+    <VoiceOverlay schema={state.schema} />
+    </>
   );
 }
