@@ -79,13 +79,12 @@ export class SchemaFormStateManager {
     try {
       const stored = sessionStorage.getItem(this.STORAGE_KEY);
       if (!stored) {
-        console.log('[SchemaFormStateManager] load() - No stored state found');
+        // Silently return null if no stored state
         return null;
       }
 
-      console.log('[SchemaFormStateManager] load() - Found stored state, length:', stored.length);
+      // Silently load - only log on init, not on every load
       const parsed = JSON.parse(stored);
-      console.log('[SchemaFormStateManager] load() - Parsed fieldValues:', parsed.fieldValues);
 
       // Restore Set from array
       if (parsed.completedParts) {
@@ -121,15 +120,9 @@ export class SchemaFormStateManager {
         lastUpdated: Date.now(),
       };
 
-      console.log('[SchemaFormStateManager] save() - About to save fieldValues:', toStore.fieldValues);
+      // Silently save - no need for console spam
       const jsonString = JSON.stringify(toStore);
-      console.log('[SchemaFormStateManager] save() - JSON string length:', jsonString.length);
       sessionStorage.setItem(this.STORAGE_KEY, jsonString);
-
-      // Verify it was saved
-      const verified = sessionStorage.getItem(this.STORAGE_KEY);
-      const parsed = JSON.parse(verified!);
-      console.log('[SchemaFormStateManager] save() - Verified fieldValues after save:', parsed.fieldValues);
     } catch (error) {
       console.error("[SchemaFormState] Failed to save state:", error);
     }

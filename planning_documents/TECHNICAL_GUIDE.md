@@ -4,11 +4,24 @@
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
-- ✅ **Phase 4A Connection Layer Update** (Nov 5, 2025)
-  - Migrated connection.ts to use SchemaFormStateManager
-  - All 17 unit tests passing for connection manager
-  - Removed WebFormStateManager dependency from voice infrastructure
-  - Updated state persistence to use SchemaFormState structure
+- ✅ **Phase 4A Migration Complete** (Nov 5, 2025)
+  - **Connection Layer**: Migrated connection.ts to SchemaFormStateManager (17/17 tests passing)
+  - **Voice Overlays**: Completed VoiceOverlay.tsx and VoiceOverlayMobile.tsx migration
+    - Desktop/mobile 100% synchronized (all Tasks #3-8 mirrored)
+    - Part-based navigation (currentPartId, completedParts) replaces section-based
+    - Fixed validation.required pattern (f.validation?.required)
+    - Added part-based API to ConnectionManager (startPart, switchToPart, completePart, getCurrentPartId, getCompletedPartIds)
+    - **Integration Tested**: VoiceOverlay successfully integrated with schema-form-demo.html (Gemini Live working)
+  - **Demo System**: Deprecated old demo.html and AdultIntakeDemo.tsx (marked for removal)
+  - **Backend Fixes**:
+    - Schema source validation: Now accepts both "web" and "pdf" sources (I-90 compatibility)
+    - Fixed UnboundLocalError in live_ai_gemini.py (settings import moved to top of _run_session_loop)
+    - Audio queue warning rate limiting (once per 5 seconds to prevent terminal flooding)
+  - **UX Improvements**:
+    - VoiceOverlay moved outside `<form>` element to prevent unwanted submit triggers
+    - Removed verbose logging from schemaFormState.ts load/save methods (console spam eliminated)
+  - **Backend Tests**: Fixed field_utils.py to use current FormField model, deleted 7 obsolete test files (102 tests passing)
+  - All changes committed to origin/shared-audio-stream
   
 - ✅ Hallucination Reduction Features (Oct 30, 2025)
   - Audio preprocessing filters (noise gate + high-pass)
@@ -166,10 +179,15 @@ export type ConnectionStatus =
 - `utils/validation.ts` - Client-side validation
 
 **Migration Note (Nov 2025)**:
-The project is transitioning from `WebFormStateManager` to `SchemaFormStateManager`:
-- ✅ Connection layer (connection.ts) - Migrated Nov 5, 2025
+The project completed transition from `WebFormStateManager` to `SchemaFormStateManager`:
+- ✅ Connection layer (connection.ts) - Migrated Nov 5, 2025 (17/17 tests passing)
 - ✅ WebSocket connection (webFormConnection.ts) - Already updated
-- ⏸️ Voice overlay components - In progress (Task #2-9)
+- ✅ Voice overlay components - **Completed Nov 5, 2025**
+  - VoiceOverlay.tsx and VoiceOverlayMobile.tsx fully migrated (Tasks #3-9)
+  - Desktop/mobile 100% synchronized
+  - Part-based navigation replaces section-based (currentPartId, completedParts)
+  - Part-based API added to ConnectionManager (5 new methods)
+- ⚠️ WebFormStateManager deprecated - Kept for backward compatibility only
 
 ---
 

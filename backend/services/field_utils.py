@@ -6,14 +6,14 @@ and extracting field metadata from schemas. These functions are stateless
 and can be used independently of the FormFillingService.
 """
 from typing import Any, Dict, List, Optional
-from backend.models.form_models import FormField, Rect
+from backend.models.form_models import FormField, FieldType
 
 
 def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
     """Build field list from schema (stateless).
     
     Constructs FormField objects from a form schema dictionary.
-    Used by web sessions to build field objects for tool responses.
+    Used by web sessions to build field objects for validation.
     
     Args:
         schema: Form schema dictionary with 'fields' array
@@ -22,28 +22,30 @@ def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
         List of FormField objects with populated metadata
         
     Note:
-        Web forms don't have physical rectangles, so dummy rects are used.
         The backend doesn't persist these fields - they're rebuilt each time.
     """
     fields = []
     
     for field_data in schema.get("fields", []):
-        # Build FormField-like object from schema
-        # Web forms don't have physical rectangles, use dummy rect
-        dummy_rect = Rect(x0=0, y0=0, x1=100, y1=20)
+        # Build FormField object from schema
+        # Extract only the properties that exist in the current FormField model
+        field_type_str = field_data.get("type", "text")
+        
+        # Convert string type to FieldType enum
+        try:
+            field_type = FieldType(field_type_str)
+        except ValueError:
+            field_type = FieldType.TEXT
         
         field = FormField(
             id=field_data.get("id"),
             name=field_data.get("name"),
-            spoken_name=field_data.get("name"),  # Use same for web
-            spoken_aliases=[],
-            page_index=field_data.get("page_index", 0),
-            rect=dummy_rect,  # Web forms need dummy rect for validation
-            field_type=field_data.get("type", "text"),
-            type=field_data.get("type", "text"),
-            value=field_data.get("value"),
-            options=field_data.get("allowed_values") or field_data.get("options") or [],
-            meta={},  # Backend doesn't track meta for web
+            spoken_name=field_data.get("spoken_name") or field_data.get("name"),
+            spoken_aliases=field_data.get("spoken_aliases") or [],
+            type=field_type,
+            section_id=field_data.get("section_id", ""),  # Required field
+            validation=field_data.get("validation"),
+            options=field_data.get("options"),
         )
         fields.append(field)
     
