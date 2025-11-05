@@ -79,11 +79,11 @@
 
 #### 🚀 Next Steps
 
-**Phase 2: WebSocket Connection Layer (2 hours)**
-- Update `webFormConnection.ts` to use `SchemaFormStateManager`
-- Replace `WebFormState` with `SchemaFormState`
-- Update handshake generation to use `getHandshakePayload()`
-- Test section switching with real WebSocket backend
+**Phase 2: WebSocket Connection Layer - PARTIAL** (see PHASE2_STATUS.md)
+- ✅ Core methods updated to use `SchemaFormStateManager`
+- ✅ Handshake generation using `getHandshakePayload()`
+- ⚠️ Section-switching methods require refactoring (5-6 hours remaining)
+- ⏳ Navigation functions need SchemaFormState compatibility
 
 ---
 
