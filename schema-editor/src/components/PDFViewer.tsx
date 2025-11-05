@@ -1,7 +1,9 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
+import type { PDFPageProxy } from 'pdfjs-dist';
 import { usePDFDocument } from '../hooks/usePDFDocument';
 import { PDFPage } from './PDFPage';
+import { FieldOverlay } from './FieldOverlay';
 
 interface PDFViewerProps {
   pdfPath: string;
@@ -18,11 +20,21 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const pageRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
+  const pageDimensions = React.useRef<Map<number, { width: number; height: number }>>(new Map());
   const [scale, setScale] = React.useState(1.0);
   const [currentPage, setCurrentPage] = React.useState(1);
 
   // Load PDF document
   const { document, numPages, isLoading, error } = usePDFDocument(pdfPath);
+
+  // Callback to store page dimensions when pages load
+  const handlePageLoad = React.useCallback((pageNum: number) => (page: PDFPageProxy) => {
+    const viewport = page.getViewport({ scale: 1.0 }); // Get unscaled dimensions
+    pageDimensions.current.set(pageNum, {
+      width: viewport.width,
+      height: viewport.height,
+    });
+  }, []);
 
   // Zoom controls
   const handleZoomIn = () => setScale(s => Math.min(2.0, s + 0.25));
@@ -241,10 +253,30 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                   document={document}
                   pageNumber={pageNum}
                   scale={scale}
+                  onPageLoad={handlePageLoad(pageNum)}
                   className="mb-4"
                 />
+
+                {/* Field overlays */}
+                {pageDimensions.current.has(pageNum) && (
+                  <div className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
+                    {schema.fields
+                      .filter(field => field.pdf_position?.page === pageNum)
+                      .map(field => (
+                        <FieldOverlay
+                          key={field.id}
+                          field={field}
+                          pageHeight={pageDimensions.current.get(pageNum)!.height}
+                          scale={scale}
+                          isSelected={field.id === selectedFieldId}
+                          onClick={() => onSelectField(field.id)}
+                        />
+                      ))}
+                  </div>
+                )}
+
                 {/* Page number label */}
-                <div className="absolute top-0 right-0 bg-gray-900 bg-opacity-75 text-white text-xs px-2 py-1 rounded-bl">
+                <div className="absolute top-0 right-0 bg-gray-900 bg-opacity-75 text-white text-xs px-2 py-1 rounded-bl" style={{ zIndex: 5 }}>
                   Page {pageNum}
                 </div>
               </div>
