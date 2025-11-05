@@ -6,18 +6,18 @@ import type { FormSchema, FormConfig } from '../types/schema';
 export const AVAILABLE_FORMS: FormConfig[] = [
   {
     name: 'I-90 (Green Card Replacement) - Draft',
-    pdfPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90.pdf',
-    schemaPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_draft_schema.json',
+    pdfPath: '/schemas/i-90/i-90.pdf',
+    schemaPath: '/schemas/i-90/i-90_draft_schema.json',
   },
   {
     name: 'I-90 (Green Card Replacement) - Gold Standard',
-    pdfPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90.pdf',
-    schemaPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json',
+    pdfPath: '/schemas/i-90/i-90.pdf',
+    schemaPath: '/schemas/i-90/i-90_schema.json',
   },
   {
     name: 'I-589 (Asylum Application)',
-    pdfPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-589/i-589.pdf',
-    schemaPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-589/final_schema_minimal.json',
+    pdfPath: '/schemas/i-589/i-589.pdf',
+    schemaPath: '/schemas/i-589/final_schema_minimal.json',
   },
 ];
 
