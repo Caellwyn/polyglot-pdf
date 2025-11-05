@@ -1,23 +1,20 @@
 /**
- * WebFormConnection - WebSocket connection manage  async connect(wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      return;
-    }
-    
-    this.setStatus("connecting");
-    
-    try:
-      this.ws = new WebSocket(wsUrl); * 
+ * WebFormConnection - WebSocket connection manager
+ *
  * Handles WebSocket lifecycle with auto-reconnect and state preservation.
- * Works with WebFormStateManager for stateless architecture.
+ * Works with SchemaFormStateManager for stateless architecture.
  */
 
-import { WebFormStateManager, WebFormState, FormSchema } from "./webFormState";
-import { 
-  computeNextField, 
-  formatNextFieldHint, 
+import {
+  SchemaFormStateManager,
+  type SchemaFormState
+} from "./schema-forms/state/schemaFormState";
+import type { FormSchema } from "./schema-forms/types/schema";
+import {
+  computeNextField,
+  formatNextFieldHint,
   getFieldOrder,
-  isFormComplete 
+  isFormComplete
 } from "./navigation";
 
 export type ConnectionStatus = 
@@ -40,7 +37,7 @@ export interface ConnectionCallbacks {
 
 export class WebFormConnection {
   private ws: WebSocket | null = null;
-  private state: WebFormState;
+  private state: SchemaFormState;
   private callbacks: ConnectionCallbacks;
   private status: ConnectionStatus = "disconnected";
   private reconnectAttempts = 0;
@@ -59,7 +56,7 @@ export class WebFormConnection {
   private fillLanguage: string = "English";
   
   constructor(schema: FormSchema, callbacks: ConnectionCallbacks = {}, fillLanguage: string = "English") {
-    this.state = WebFormStateManager.init(schema);
+    this.state = SchemaFormStateManager.init(schema);
     this.callbacks = callbacks;
     this.fillLanguage = fillLanguage;
   }
@@ -151,17 +148,17 @@ export class WebFormConnection {
   private handleOpen(): void {
     this.reconnectAttempts = 0;
     this.reconnectDelay = 1000;
-    
+
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
-    
+
     // Skip automatic handshake during section switches (startSection will send it)
     if (this.isSectionSwitching) {
       return;
     }
-    
+
     // Send handshake with schema + current_values + fill_language
-    const handshake = WebFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
+    const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
     this.send(handshake);
   }
   
@@ -274,15 +271,15 @@ export class WebFormConnection {
    */
   private handleSessionReady(message: any): void {
     const { session_id, ephemeral } = message;
-    
+
     // Update state with session ID
-    this.state = WebFormStateManager.setSessionId(this.state, session_id);
+    this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
     this.setStatus("connected");
-    
+
     if (this.callbacks.onSessionReady) {
       this.callbacks.onSessionReady(session_id);
     }
-    
+
     // No need to send initial hint - backend will request it as part of initial message
   }
   
@@ -348,7 +345,7 @@ export class WebFormConnection {
         continue;
       }
 
-      const currentValue = this.state.current_values[field.id]?.value;
+      const currentValue = this.state.fieldValues[field.id]?.value;
       const shouldUpdate = isApplied || !Object.is(currentValue, value);
       if (!shouldUpdate) {
         continue;
@@ -357,25 +354,25 @@ export class WebFormConnection {
       this.updateField(field.id, value as any, { confirmed: isApplied, emit: false });
       updatedFields.push({ fieldId: field.id, value });
     }
-    
+
     // Also check for fields where Gemini dropped the [] suffix (e.g., "functioningConcerns" instead of "functioningConcerns[]")
     for (const [key, value] of Object.entries(formState)) {
       // Skip if we already processed this field
       if (this.state.schema.fields.some(f => f.id === key || f.name === key)) {
         continue;
       }
-      
+
       // Try appending [] to see if that matches a field
       const keyWithBrackets = key + '[]';
       const field = this.state.schema.fields.find(f => f.id === keyWithBrackets || f.name === keyWithBrackets);
-      
+
       if (field) {
         const isApplied = appliedSet.has(key) || appliedSet.has(keyWithBrackets);
         if (limitToApplied && !isApplied) {
           continue;
         }
-        
-        const currentValue = this.state.current_values[field.id]?.value;
+
+        const currentValue = this.state.fieldValues[field.id]?.value;
         const shouldUpdate = isApplied || !Object.is(currentValue, value);
         if (!shouldUpdate) {
           continue;
@@ -422,7 +419,7 @@ export class WebFormConnection {
     
     if (requestedFieldIds.length === 0) {
       // No specific fields requested - return all
-      for (const [fieldId, fieldValue] of Object.entries(this.state.current_values)) {
+      for (const [fieldId, fieldValue] of Object.entries(this.state.fieldValues)) {
         fieldValues[fieldId] = {
           value: fieldValue.value,
           confirmed: fieldValue.confirmed,
@@ -431,16 +428,16 @@ export class WebFormConnection {
     } else {
       // Return only requested fields
       for (const fieldId of requestedFieldIds) {
-        let fieldValue = this.state.current_values[fieldId];
-        
+        let fieldValue = this.state.fieldValues[fieldId];
+
         // Fallback: Try with [] appended if not found (Gemini sometimes drops the [])
         if (!fieldValue && !fieldId.endsWith('[]')) {
-          fieldValue = this.state.current_values[fieldId + '[]'];
+          fieldValue = this.state.fieldValues[fieldId + '[]'];
         }
-        
+
         // Fallback: Try without [] if not found (in case query has [] but state doesn't)
         if (!fieldValue && fieldId.endsWith('[]')) {
-          fieldValue = this.state.current_values[fieldId.slice(0, -2)];
+          fieldValue = this.state.fieldValues[fieldId.slice(0, -2)];
         }
         
         if (fieldValue) {
@@ -525,61 +522,26 @@ export class WebFormConnection {
 
   /**
    * Phase 3: Handle switch_section request from backend (AI tool call)
+   * TODO Phase 2: Reimplement using parts-based system
    */
   private async handleSwitchSectionRequest(message: any): Promise<void> {
-    const identifier = message.identifier;
-    
-    try {
-      // Parse identifier - try as number first
-      let targetNumber: number | undefined;
-      
-      if (typeof identifier === 'number') {
-        targetNumber = identifier;
-      } else if (typeof identifier === 'string') {
-        // Try to parse as number
-        const parsed = parseInt(identifier, 10);
-        if (!isNaN(parsed)) {
-          targetNumber = parsed;
-        } else {
-          // Look up by label (case-insensitive)
-          const currentState = WebFormStateManager.load();
-          if (currentState?.section_index) {
-            const identifierLower = identifier.toLowerCase();
-            const section = currentState.section_index.sections.find(
-              s => s.section_label.toLowerCase() === identifierLower ||
-                   s.section_id.toLowerCase() === identifierLower
-            );
-            
-            if (section) {
-              targetNumber = section.section_number;
-            }
-          }
-        }
-      }
-      
-      if (!targetNumber) {
-        return;
-      }
-      
-      // Call existing switchSection method using the stored connected URL
-      await this.switchSection(targetNumber, this.connectedUrl);
-      
-    } catch (error) {
-      // Error switching section - ignore
-    }
+    // TODO: Reimplement with parts system
+    // This method needs to find part by order number and call switchToPart()
+    console.warn('[WebFormConnection] handleSwitchSectionRequest not yet implemented for parts-based system');
   }
 
   /**
    * Handle prepare_section_switch request from backend (new backend-side reconnect pattern)
+   * TODO Phase 2: Reimplement using parts-based system
    */
   private handlePrepareSectionSwitchRequest(message: any): void {
     const requestId = message.request_id;
     const identifier = message.identifier;
-    
+
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
-    
+
     try {
-      const currentState = WebFormStateManager.load();
+      const currentState = SchemaFormStateManager.load();
       console.log('[WebFormConnection] Loaded state', { hasState: !!currentState, hasSectionIndex: !!currentState?.section_index });
       
       if (!currentState || !currentState.section_index) {
@@ -1160,7 +1122,7 @@ export class WebFormConnection {
     const confirmed = options?.confirmed;
     const emit = options?.emit ?? false;
 
-    this.state = WebFormStateManager.updateFieldValue(this.state, fieldId, value, { confirmed });
+    this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, { confirmed });
 
     if (emit) {
       this.flushField(fieldId);
@@ -1172,7 +1134,7 @@ export class WebFormConnection {
       return;
     }
 
-    const fieldState = this.state.current_values[fieldId];
+    const fieldState = this.state.fieldValues[fieldId];
     if (!fieldState) {
       return;
     }
@@ -1215,7 +1177,7 @@ export class WebFormConnection {
   /**
    * Get current state
    */
-  getState(): WebFormState {
+  getState(): SchemaFormState {
     return this.state;
   }
   
@@ -1223,15 +1185,15 @@ export class WebFormConnection {
    * Get completion percentage
    */
   getCompletionPercentage(): number {
-    return WebFormStateManager.getCompletionPercentage(this.state);
+    return SchemaFormStateManager.getProgress(this.state);
   }
-  
+
   /**
    * Clear state and disconnect
    */
   reset(): void {
     this.disconnect();
-    WebFormStateManager.clear();
+    SchemaFormStateManager.clear();
   }
   
   /**
