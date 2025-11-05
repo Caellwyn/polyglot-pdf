@@ -1,9 +1,15 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Last Updated**: October 30, 2025
+**Last Updated**: November 5, 2025
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
+- ✅ **Phase 4A Connection Layer Update** (Nov 5, 2025)
+  - Migrated connection.ts to use SchemaFormStateManager
+  - All 17 unit tests passing for connection manager
+  - Removed WebFormStateManager dependency from voice infrastructure
+  - Updated state persistence to use SchemaFormState structure
+  
 - ✅ Hallucination Reduction Features (Oct 30, 2025)
   - Audio preprocessing filters (noise gate + high-pass)
   - Push-to-Talk (PTT) mode as default
@@ -145,17 +151,25 @@ export type ConnectionStatus =
 - `useDemoVAD.ts` - VAD integration hook
 
 **State Management**:
-- `webFormState.ts` - Form state (sessionStorage)
-- `webFormConnection.ts` - WebSocket message handling
+- `schema-forms/state/schemaFormState.ts` - **Primary state manager** (sessionStorage) - Used by all voice and schema components
+- `webFormState.ts` - **DEPRECATED** - Legacy state manager (will be removed)
+- `webFormConnection.ts` - WebSocket message handling (updated to use SchemaFormState)
+- `shared/connection.ts` - Connection manager (updated Nov 5, 2025 to use SchemaFormStateManager)
 
 **Schema-Driven Forms** (`schema-forms/`):
 - `types/schema.ts` - TypeScript types mirroring backend Pydantic models
-- `state/schemaFormState.ts` - Schema form state manager (sessionStorage)
+- `state/schemaFormState.ts` - Schema form state manager (sessionStorage) with WebSocket support
 - `components/SchemaForm.tsx` - Main schema-driven form renderer
 - `components/SectionRenderer.tsx` - Section-based form rendering
 - `components/fields/` - Field-specific renderers (TextField, CheckboxField, etc.)
 - `utils/pdfFiller.ts` - Backend PDF filling integration
 - `utils/validation.ts` - Client-side validation
+
+**Migration Note (Nov 2025)**:
+The project is transitioning from `WebFormStateManager` to `SchemaFormStateManager`:
+- ✅ Connection layer (connection.ts) - Migrated Nov 5, 2025
+- ✅ WebSocket connection (webFormConnection.ts) - Already updated
+- ⏸️ Voice overlay components - In progress (Task #2-9)
 
 ---
 

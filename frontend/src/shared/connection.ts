@@ -15,8 +15,8 @@ declare global {
 }
 
 import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus } from '../webFormConnection'
-import type { FormSchema } from '../webFormState'
-import { WebFormStateManager } from '../webFormState'
+import type { FormSchema } from '../schema-forms/types/schema'
+import { SchemaFormStateManager, type SchemaFormState } from '../schema-forms/state/schemaFormState'
 import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
@@ -58,12 +58,12 @@ export interface ConnectionManager {
  * Restore DOM fields from sessionStorage on page load
  * Ensures DOM and sessionStorage stay in sync across page refreshes
  */
-function restoreDOMFromSessionStorage(state: any, schema: FormSchema): void {
+function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
 	console.log('[VFF Connection] 🔄 Restoring DOM from sessionStorage...')
 	let restoredCount = 0
 	
-	for (const [fieldId, fieldValue] of Object.entries(state.current_values)) {
-		const value = (fieldValue as any).value
+	for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
+		const value = fieldValue.value
 		if (value === null || value === undefined || value === '') continue
 		
 		// Find the field element
@@ -179,7 +179,7 @@ export function createConnectionManager(
 	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
 	
 	// Initialize sessionStorage state immediately
-	const state = WebFormStateManager.init(schema)
+	const state = SchemaFormStateManager.init(schema)
 	
 	// Restore DOM fields from sessionStorage (if any values exist from previous session)
 	restoreDOMFromSessionStorage(state, schema)
@@ -198,15 +198,15 @@ export function createConnectionManager(
 		onManualEdit: (fieldId, value) => {
 			console.log('[VFF Connection] 🖊️ Manual edit detected:', fieldId, '=', value)
 			
-			// Update sessionStorage immediately using WebFormStateManager
+			// Update sessionStorage immediately using SchemaFormStateManager
 			// Manual edits are marked as confirmed (user explicitly filled them)
-			const updatedState = WebFormStateManager.updateFieldValue(
+			const updatedState = SchemaFormStateManager.updateField(
 				state, 
 				fieldId, 
 				value, 
 				{ confirmed: true }
 			)
-			// Update the reference (though WebFormStateManager.updateField already saves)
+			// Update the reference (though SchemaFormStateManager.updateField already saves)
 			Object.assign(state, updatedState)
 			console.log('[VFF Connection] ✓ Updated sessionStorage for:', fieldId)
 			
@@ -336,8 +336,8 @@ export function createConnectionManager(
 						onManualEdit: (fieldId, value) => {
 							console.log('[VFF Connection] 🖊️ Manual edit detected:', fieldId, '=', value)
 							
-							// Update sessionStorage immediately using WebFormStateManager
-							const updatedState = WebFormStateManager.updateFieldValue(
+							// Update sessionStorage immediately using SchemaFormStateManager
+							const updatedState = SchemaFormStateManager.updateField(
 								state, 
 								fieldId, 
 								value, 
