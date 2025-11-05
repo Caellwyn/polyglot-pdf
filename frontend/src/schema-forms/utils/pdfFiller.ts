@@ -65,33 +65,64 @@ export async function fillPDF(
   console.log('[pdfFiller] Backend URL:', backendUrl);
   console.log('[pdfFiller] Field values to fill:', Object.keys(fieldValues).length);
 
+  // DEBUG: Log radio/checkbox values specifically
+  console.log('[pdfFiller] === RADIO/CHECKBOX VALUES ===');
+  Object.entries(fieldValues).forEach(([key, value]) => {
+    if (key.includes('checkbox') || key.includes('male')) {
+      console.log(`  ${key} = ${JSON.stringify(value)}`);
+    }
+  });
+  console.log('[pdfFiller] === END RADIO/CHECKBOX VALUES ===');
+
   // Extract PDF filename from URL
   const pdfFilename = pdfUrl.split('/').pop() || 'form.pdf';
 
-  // Call backend endpoint
-  const response = await fetch(`${backendUrl}/api/fill-pdf`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      pdf_filename: pdfFilename,
-      field_values: fieldValues,
-      form_schema: schema,
-    }),
+  const requestPayload = {
+    pdf_filename: pdfFilename,
+    field_values: fieldValues,
+    form_schema: schema,
+  };
+
+  console.log('[pdfFiller] Request URL:', `${backendUrl}/api/fill-pdf`);
+  console.log('[pdfFiller] Request payload:', {
+    pdf_filename: pdfFilename,
+    field_count: Object.keys(fieldValues).length,
+    schema_fields: schema.fields?.length || 0,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[pdfFiller] Backend error:', errorText);
-    throw new Error(`PDF filling failed: ${response.statusText}`);
+  try {
+    // Call backend endpoint
+    const response = await fetch(`${backendUrl}/api/fill-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    console.log('[pdfFiller] Response status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[pdfFiller] Backend error response:', errorText);
+      throw new Error(`PDF filling failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    // Get PDF bytes from response
+    const pdfBytes = await response.arrayBuffer();
+    console.log('[pdfFiller] Received filled PDF:', pdfBytes.byteLength, 'bytes');
+
+    return new Uint8Array(pdfBytes);
+  } catch (error) {
+    console.error('[pdfFiller] Fetch error:', error);
+    console.error('[pdfFiller] Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      backendUrl,
+      pdfFilename,
+    });
+    throw error;
   }
-
-  // Get PDF bytes from response
-  const pdfBytes = await response.arrayBuffer();
-  console.log('[pdfFiller] Received filled PDF:', pdfBytes.byteLength, 'bytes');
-
-  return new Uint8Array(pdfBytes);
 }
 
 
