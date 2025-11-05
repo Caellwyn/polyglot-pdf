@@ -496,21 +496,37 @@ Fix by:
 
 ---
 
-### 🚧 Next Development Priorities
+### ✅ Phase 4: Click Interactions (Complete - Nov 5, 2025)
+**Status**: Click-to-select fully functional (integrated in Phase 3)
 
-#### 1. **Phase 4: Click-to-Select Fields** (Upcoming)
-**Goal**: Make field overlays clickable
+**Completed Features**:
+- ✅ Click overlay → Select field in editor
+- ✅ Highlight selected field with thicker border (3px vs 2px)
+- ✅ Hover effects (pointer cursor, background color change)
+- ✅ Tooltips on hover (show field name and type)
+- ✅ Visual selection feedback (darker color, higher z-index)
+- ✅ Accessibility features (title, cursor, data attributes)
+- ✅ 13 new documentation tests (86 total tests passing)
 
-**Features**:
-- Click overlay → Select field in editor
-- Highlight selected field with thicker border
-- Hover effects (pointer cursor, lighter border)
-- Sync: Click in list → Scroll PDF, Click PDF → Update list
-- Keyboard navigation (arrows to cycle fields)
+**Key Insight**: Click functionality was already integrated in Phase 3 when connecting FieldOverlay components. Phase 4 focused on documenting and testing the workflow.
+
+**User Experience**:
+- Click field in list → PDF scrolls to field's page ✅
+- Click field overlay on PDF → Field selected in editor ✅
+- Hover over overlay → See field name + type tooltip ✅
+- Selected fields clearly highlighted ✅
+
+**Future Enhancements** (Phase 6):
+- Keyboard navigation (Tab to cycle, Enter to select)
+- Scroll field list when PDF clicked (currently only scrolls PDF when list clicked)
+
+**Documentation**: See `PHASE4_SUMMARY.md`
 
 ---
 
-#### 3. **Phase 5: Zoom Presets** (Upcoming)
+### 🚧 Next Development Priorities
+
+#### 1. **Phase 5: Zoom Presets** (Next - Upcoming)
 **Goal**: Implement functional zoom presets
 
 **Features**:
@@ -521,7 +537,7 @@ Fix by:
 
 ---
 
-#### 4. **Phase 6: Polish & Performance** (Upcoming)
+#### 2. **Phase 6: Polish & Performance** (Upcoming)
 **Goal**: Production-ready with great UX
 
 **Features**:
@@ -534,7 +550,7 @@ Fix by:
 
 ---
 
-#### 7. **Update Extractor Field Ordering** (Backlog)
+#### 3. **Update Extractor Field Ordering** (Backlog)
 **Goal**: Improve field order parsing to handle alphabetic labels
 
 **Change**: Update label parsing regex in extractor from `\d+\.` to `(\d+|[A-Z])\.`
@@ -547,7 +563,7 @@ Fix by:
 
 ---
 
-#### 8. **Drag-and-Drop Field Reordering** (Backlog)
+#### 4. **Drag-and-Drop Field Reordering** (Backlog)
 **Goal**: Allow users to reorder fields within sections via drag-and-drop
 
 **Features**:
@@ -567,7 +583,7 @@ Fix by:
 
 ---
 
-#### 4. **Bulk Operations** (Medium Priority)
+#### 5. **Bulk Operations** (Medium Priority)
 **Goal**: Edit multiple fields at once
 
 **Features**:
@@ -589,7 +605,7 @@ Fix by:
 
 ---
 
-#### 5. **Templates - Common Help Text Patterns** (Medium Priority)
+#### 6. **Templates - Common Help Text Patterns** (Medium Priority)
 **Goal**: Speed up help text entry with pre-written templates
 
 **Features**:
@@ -622,7 +638,7 @@ interface HelpTemplate {
 
 ---
 
-#### 6. **Gemini Integration - AI-Suggested Help Text** (Future)
+#### 7. **Gemini Integration - AI-Suggested Help Text** (Future)
 **Goal**: Use AI to generate help text suggestions
 
 **Features**:
@@ -645,7 +661,7 @@ interface HelpTemplate {
 
 ---
 
-#### 7. **Undo/Redo - Multi-Level History** (Future)
+#### 8. **Undo/Redo - Multi-Level History** (Future)
 **Goal**: Allow users to undo/redo changes
 
 **Features**:
@@ -687,12 +703,13 @@ interface HelpTemplate {
 ### 🐛 Known Issues & Limitations
 
 **Current Limitations**:
-- PDF viewer is placeholder (no actual PDF rendering yet)
 - No undo/redo functionality
 - No bulk operations
 - No drag-and-drop reordering
 - No field search/filter
 - Changes are local only (no server sync)
+- Keyboard navigation not yet implemented (Phase 6)
+- Field list doesn't auto-scroll when clicking PDF field (Phase 6)
 
 **Browser Compatibility**:
 - Tested on Chrome/Edge (Chromium-based)
