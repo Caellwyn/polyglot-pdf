@@ -98,7 +98,7 @@ describe('PDFViewer Integration', () => {
       />
     );
 
-    expect(screen.getByText('1 fields with positions')).toBeInTheDocument();
+    expect(screen.getByText('1 fields')).toBeInTheDocument();
   });
 
   it('should render PDF page after loading', async () => {

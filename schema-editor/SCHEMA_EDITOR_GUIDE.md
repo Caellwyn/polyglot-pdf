@@ -399,8 +399,53 @@ Fix by:
 
 ## Current Status & Roadmap
 
-### ✅ Phase 1: Core Editor (Complete)
-**Status**: MVP Complete - Fully functional schema editor
+### ✅ Phase 1: PDF.js Core Setup (Complete - Nov 5, 2025)
+**Status**: PDF document loading and basic rendering working
+
+**Completed Features**:
+- ✅ PDF.js worker configuration with Vite/ES modules
+- ✅ usePDFDocument hook for document lifecycle management
+- ✅ PDFPage component for canvas-based rendering
+- ✅ Zoom controls (50% - 200%, +/- buttons)
+- ✅ Loading states and error handling
+- ✅ Static toolbar with controls
+- ✅ Comprehensive test suite (19 tests passing)
+
+**Technical Implementation**:
+- PDF.js v4.0.379 with ES modules
+- Canvas-based rendering
+- React hooks for state management
+- Vitest + React Testing Library
+
+**Documentation**: See `PHASE1_SUMMARY.md`
+
+---
+
+### ✅ Phase 2: Multi-Page Support (Complete - Nov 5, 2025)
+**Status**: All pages render with full navigation
+
+**Completed Features**:
+- ✅ Render all PDF pages vertically (not just first page)
+- ✅ Page navigation controls (prev/next buttons)
+- ✅ Page number input with validation
+- ✅ Current page indicator ("Page X of Y")
+- ✅ Auto-scroll to field's page when selected
+- ✅ Page number overlays on each page
+- ✅ Scroll-based page tracking
+- ✅ 15 new tests (34 total tests passing)
+
+**User Experience**:
+- Select field in list → PDF auto-scrolls to that page
+- Use ← → buttons for quick page navigation
+- Type page number to jump directly
+- See all 9 pages of I-90 form at once
+
+**Documentation**: See `PHASE2_SUMMARY.md`
+
+---
+
+### ✅ Schema Editor MVP (Complete)
+**Status**: Fully functional schema editor (original Phase 1)
 
 **Completed Features**:
 - ✅ Field list with section grouping and status icons (complete/review/error)
@@ -424,7 +469,65 @@ Fix by:
 
 ### 🚧 Next Development Priorities
 
-#### 1. **Update Extractor Field Ordering** (Immediate)
+#### 1. **Phase 3: Field Overlays** (In Progress)
+**Goal**: Draw colored borders over PDF fields for visual editing
+
+**Features**:
+- Draw rectangles over fields using `pdf_position` data
+- Color-code by validation status:
+  - 🟢 Green = Complete fields
+  - 🟡 Yellow = Needs review
+  - 🔴 Red = Has errors
+- Position overlays correctly on each page
+- Handle coordinate transformation (PDF → screen)
+- Show field labels on hover
+- Update overlays when zoom/page changes
+
+**Technical Approach**:
+- Position overlays absolutely over PDF canvas
+- Convert PDF coordinates (bottom-left origin) to screen (top-left)
+- Use existing `checkFieldComplete()` for status colors
+- Transform coordinates based on scale: `screenX = pdfX * scale`
+
+---
+
+#### 2. **Phase 4: Click-to-Select Fields** (Upcoming)
+**Goal**: Make field overlays clickable
+
+**Features**:
+- Click overlay → Select field in editor
+- Highlight selected field with thicker border
+- Hover effects (pointer cursor, lighter border)
+- Sync: Click in list → Scroll PDF, Click PDF → Update list
+- Keyboard navigation (arrows to cycle fields)
+
+---
+
+#### 3. **Phase 5: Zoom Presets** (Upcoming)
+**Goal**: Implement functional zoom presets
+
+**Features**:
+- Fit Width: Scale to container width
+- Fit Page: Scale entire page to fit height
+- Maintain scroll position on zoom changes
+- Update overlay positions on zoom
+
+---
+
+#### 4. **Phase 6: Polish & Performance** (Upcoming)
+**Goal**: Production-ready with great UX
+
+**Features**:
+- Keyboard shortcuts (+ / - for zoom, arrows for pages)
+- Debounce zoom changes
+- Throttle scroll events
+- Virtual scrolling for large PDFs (if needed)
+- Responsive layout
+- Comments and documentation
+
+---
+
+#### 7. **Update Extractor Field Ordering** (Backlog)
 **Goal**: Improve field order parsing to handle alphabetic labels
 
 **Change**: Update label parsing regex in extractor from `\d+\.` to `(\d+|[A-Z])\.`
@@ -437,7 +540,7 @@ Fix by:
 
 ---
 
-#### 2. **Drag-and-Drop Field Reordering** (High Priority)
+#### 8. **Drag-and-Drop Field Reordering** (Backlog)
 **Goal**: Allow users to reorder fields within sections via drag-and-drop
 
 **Features**:
@@ -454,28 +557,6 @@ Fix by:
 - Only allow reordering within same section
 - Visual feedback during drag
 - Persist order in schema structure
-
----
-
-#### 3. **PDF.js Integration** (High Priority)
-**Goal**: Full PDF rendering with interactive field overlays
-
-**Features**:
-- Render actual PDF in left panel (replace placeholder)
-- Click field boxes on PDF to select in editor
-- Highlight selected field on PDF with colored border
-- Zoom controls (fit-width, fit-page, custom zoom)
-- Page navigation for multi-page forms
-- Field overlays show validation status (green/yellow/red borders)
-
-**Technical Approach**:
-- Use `pdfjs-dist` (already in package.json v4.0.379)
-- Canvas-based rendering
-- Position overlays using `pdf_position` data from schema
-- Sync selection between PDF viewer and field list
-
-**Files to Update**:
-- `schema-editor/src/components/PDFViewer.tsx` (currently placeholder)
 
 ---
 

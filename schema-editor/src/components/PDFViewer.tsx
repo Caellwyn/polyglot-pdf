@@ -17,7 +17,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   onSelectField,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const pageRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
   const [scale, setScale] = React.useState(1.0);
+  const [currentPage, setCurrentPage] = React.useState(1);
 
   // Load PDF document
   const { document, numPages, isLoading, error } = usePDFDocument(pdfPath);
@@ -30,27 +32,131 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     setScale(1.0);
   };
 
+  // Page navigation
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      scrollToPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < numPages) {
+      scrollToPage(currentPage + 1);
+    }
+  };
+
+  const handlePageInput = (page: number) => {
+    const validPage = Math.max(1, Math.min(numPages, page));
+    scrollToPage(validPage);
+  };
+
+  const scrollToPage = (pageNumber: number) => {
+    const pageEl = pageRefs.current.get(pageNumber);
+    if (pageEl && containerRef.current) {
+      pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setCurrentPage(pageNumber);
+    }
+  };
+
+  // Auto-scroll to field's page when field is selected
+  React.useEffect(() => {
+    if (selectedFieldId && schema) {
+      const field = schema.fields.find(f => f.id === selectedFieldId);
+      if (field?.pdf_position?.page) {
+        scrollToPage(field.pdf_position.page);
+      }
+    }
+  }, [selectedFieldId, schema]);
+
+  // Track current page based on scroll position
+  React.useEffect(() => {
+    if (!containerRef.current || numPages === 0) return;
+
+    const handleScroll = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      // Find which page is most visible
+      let maxVisibility = 0;
+      let mostVisiblePage = 1;
+
+      pageRefs.current.forEach((pageEl, pageNum) => {
+        const rect = pageEl.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        // Calculate how much of the page is visible
+        const visibleTop = Math.max(rect.top, containerRect.top);
+        const visibleBottom = Math.min(rect.bottom, containerRect.bottom);
+        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+
+        if (visibleHeight > maxVisibility) {
+          maxVisibility = visibleHeight;
+          mostVisiblePage = pageNum;
+        }
+      });
+
+      setCurrentPage(mostVisiblePage);
+    };
+
+    const scrollContainer = containerRef.current.querySelector('.overflow-auto');
+    scrollContainer?.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      scrollContainer?.removeEventListener('scroll', handleScroll);
+    };
+  }, [numPages]);
+
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-gray-100">
       {/* Toolbar */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
+        {/* Left: Page navigation */}
+        <div className="flex items-center gap-3">
           {numPages > 0 && (
-            <span>
-              {numPages} {numPages === 1 ? 'page' : 'pages'}
-            </span>
+            <>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn-sm btn-secondary"
+                  onClick={handlePrevPage}
+                  disabled={currentPage <= 1}
+                  title="Previous page"
+                >
+                  ←
+                </button>
+                <button
+                  className="btn-sm btn-secondary"
+                  onClick={handleNextPage}
+                  disabled={currentPage >= numPages}
+                  title="Next page"
+                >
+                  →
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Page</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={numPages}
+                  value={currentPage}
+                  onChange={(e) => handlePageInput(parseInt(e.target.value) || 1)}
+                  className="w-12 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+                />
+                <span className="text-sm text-gray-600">of {numPages}</span>
+              </div>
+            </>
           )}
           {schema.fields.filter(f => f.pdf_position).length > 0 && (
             <>
-              <span>•</span>
-              <span>
-                {schema.fields.filter(f => f.pdf_position).length} fields with positions
+              <span className="text-gray-300">|</span>
+              <span className="text-sm text-gray-600">
+                {schema.fields.filter(f => f.pdf_position).length} fields
               </span>
             </>
           )}
         </div>
 
-        {/* Zoom controls */}
+        {/* Right: Zoom controls */}
         <div className="flex items-center gap-2">
           <button
             className="btn-sm btn-secondary"
@@ -117,14 +223,32 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         )}
 
         {document && !isLoading && !error && (
-          <div className="p-8">
-            {/* Render first page only for Phase 1 */}
-            <PDFPage
-              document={document}
-              pageNumber={1}
-              scale={scale}
-              className="mb-4"
-            />
+          <div className="p-8 space-y-4">
+            {/* Render all pages */}
+            {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
+              <div
+                key={pageNum}
+                ref={(el) => {
+                  if (el) {
+                    pageRefs.current.set(pageNum, el);
+                  } else {
+                    pageRefs.current.delete(pageNum);
+                  }
+                }}
+                className="relative"
+              >
+                <PDFPage
+                  document={document}
+                  pageNumber={pageNum}
+                  scale={scale}
+                  className="mb-4"
+                />
+                {/* Page number label */}
+                <div className="absolute top-0 right-0 bg-gray-900 bg-opacity-75 text-white text-xs px-2 py-1 rounded-bl">
+                  Page {pageNum}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
