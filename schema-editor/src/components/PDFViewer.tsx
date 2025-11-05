@@ -39,9 +39,49 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   // Zoom controls
   const handleZoomIn = () => setScale(s => Math.min(2.0, s + 0.25));
   const handleZoomOut = () => setScale(s => Math.max(0.5, s - 0.25));
+
   const handleFitWidth = () => {
-    // Will implement in Phase 5
-    setScale(1.0);
+    if (!containerRef.current || pageDimensions.current.size === 0) return;
+
+    // Get the first page's width as reference (most PDFs have consistent page sizes)
+    const firstPageDims = pageDimensions.current.get(1);
+    if (!firstPageDims) return;
+
+    // Get container width (accounting for padding: p-8 = 32px * 2 = 64px)
+    const scrollContainer = containerRef.current.querySelector('.overflow-auto');
+    if (!scrollContainer) return;
+
+    const containerWidth = scrollContainer.clientWidth - 64; // Subtract padding
+    const pageWidth = firstPageDims.width;
+
+    // Calculate scale and clamp to bounds
+    const newScale = Math.max(0.5, Math.min(2.0, containerWidth / pageWidth));
+    setScale(newScale);
+  };
+
+  const handleFitPage = () => {
+    if (!containerRef.current || pageDimensions.current.size === 0) return;
+
+    // Get the first page's dimensions as reference
+    const firstPageDims = pageDimensions.current.get(1);
+    if (!firstPageDims) return;
+
+    // Get container dimensions (accounting for padding: p-8 = 32px * 2 = 64px)
+    const scrollContainer = containerRef.current.querySelector('.overflow-auto');
+    if (!scrollContainer) return;
+
+    const containerWidth = scrollContainer.clientWidth - 64; // Subtract horizontal padding
+    const containerHeight = scrollContainer.clientHeight - 64; // Subtract vertical padding
+
+    const pageWidth = firstPageDims.width;
+    const pageHeight = firstPageDims.height;
+
+    // Calculate scale for both dimensions and use the smaller (so entire page fits)
+    const scaleForWidth = containerWidth / pageWidth;
+    const scaleForHeight = containerHeight / pageHeight;
+    const newScale = Math.max(0.5, Math.min(2.0, Math.min(scaleForWidth, scaleForHeight)));
+
+    setScale(newScale);
   };
 
   // Page navigation
@@ -195,6 +235,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
             title="Fit to width"
           >
             Fit Width
+          </button>
+          <button
+            className="btn-sm btn-secondary"
+            onClick={handleFitPage}
+            title="Fit entire page"
+          >
+            Fit Page
           </button>
         </div>
       </div>

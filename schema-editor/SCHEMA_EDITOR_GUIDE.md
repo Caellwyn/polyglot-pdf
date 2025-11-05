@@ -524,20 +524,41 @@ Fix by:
 
 ---
 
-### 🚧 Next Development Priorities
+###✅ Phase 5: Zoom Presets (Complete - Nov 5, 2025)
+**Status**: Fit Width and Fit Page fully functional
 
-#### 1. **Phase 5: Zoom Presets** (Next - Upcoming)
-**Goal**: Implement functional zoom presets
+**Completed Features**:
+- ✅ Fit Width button - Scales page to fit container width
+- ✅ Fit Page button - Scales entire page to fit viewport
+- ✅ Dynamic scale calculation based on container and page dimensions
+- ✅ Bounds clamping (0.5 - 2.0) respects Phase 1 limits
+- ✅ Safety checks for missing refs and dimensions
+- ✅ 27 new tests (113 total tests passing)
 
-**Features**:
-- Fit Width: Scale to container width
-- Fit Page: Scale entire page to fit height
-- Maintain scroll position on zoom changes
-- Update overlay positions on zoom
+**Implementation**:
+- `handleFitWidth()`: Calculates optimal scale for page width
+- `handleFitPage()`: Calculates optimal scale for entire page (uses smaller of width/height scale)
+- Both account for p-8 padding (64px per axis)
+- Both use first page dimensions as reference
+- Overlays automatically update with scale changes
+
+**Calculation Examples**:
+- **Fit Width**: Container 800px - 64px padding = 736px / Page 612px = **120% scale**
+- **Fit Page**: Min(width scale, height scale) = **93% scale** (entire page visible)
+
+**User Experience**:
+- Click "Fit Width" → Page scales to fill horizontal space
+- Click "Fit Page" → Entire page visible without scrolling
+- Can mix manual zoom (+/-) and presets seamlessly
+- Field overlays remain pixel-perfect at any zoom level
+
+**Documentation**: See `PHASE5_SUMMARY.md`
 
 ---
 
-#### 2. **Phase 6: Polish & Performance** (Upcoming)
+### 🚧 Next Development Priorities
+
+#### 1. **Phase 6: Polish & Performance** (Next - Upcoming)
 **Goal**: Production-ready with great UX
 
 **Features**:
@@ -771,6 +792,6 @@ Key areas:
 ---
 
 **Version:** 1.0.0  
-**Last Updated:** November 4, 2025  
+**Last Updated:** November 5, 2025  
 **Status:** MVP Complete - Core editing functionality working  
 **Next Priority:** Field ordering regex update, then drag-and-drop reordering

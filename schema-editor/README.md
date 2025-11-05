@@ -74,7 +74,7 @@ Edit `src/utils/schemaLoader.ts` and add to `AVAILABLE_FORMS`:
 - **Vite** - Fast build tool with ES modules
 - **TailwindCSS** - Utility-first styling
 - **PDF.js v4.0.379** - Full PDF rendering with canvas
-- **Vitest** - Fast unit testing (86 tests passing)
+- **Vitest** - Fast unit testing (113 tests passing)
 
 ## Development
 
@@ -88,15 +88,14 @@ npm run test:run   # Run tests once
 
 ## Known Limitations
 
-- Fit Width/Fit Page buttons are placeholders (Phase 5 - coming next)
 - No undo/redo (browser back button works)
-- No keyboard shortcuts for page navigation yet (Phase 6)
+- No keyboard shortcuts for zoom/page navigation yet (Phase 6)
 - Field list doesn't auto-scroll when clicking PDF field (Phase 6)
+- Scroll position not maintained when zooming (Phase 6 potential enhancement)
 
 ## Future Enhancements
 
-- **Phase 5**: Functional zoom presets (fit-width, fit-page) - NEXT
-- **Phase 6**: Polish & performance (keyboard shortcuts, virtual scrolling)
+- **Phase 6**: Polish & performance (keyboard shortcuts, virtual scrolling) - NEXT
 - Drag-and-drop field reordering
 - Bulk operations (change type for multiple fields)
 - Field consolidation tool (merge checkbox groups into radio)
