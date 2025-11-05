@@ -170,7 +170,7 @@ Phase 3A implements round-trip PDF filling for USCIS forms. Users fill schema-dr
 - ✅ Full XFA path mapping (e.g., `form1[0].#subform[0].P1_Line3a_FamilyName[0]`)
 - ✅ Stateless passthrough (receives values → fills PDF → returns bytes)
 - ✅ Text, date, and select fields working
-- ⚠️ Checkboxes/radios need fixes (values don't appear in saved PDF)
+- ✅ **Radio buttons and checkboxes working** (Nov 4, 2025 - Fixed with direct PDF structure manipulation)
 
 ### Architecture Decision: Backend PDF Filling
 
@@ -236,13 +236,115 @@ class PDFFillRequest(BaseModel):
 1. Load PDF from `pdf_schema_extractor/test_schemas/test_pdfs/{form}/{filename}`
 2. Extract field mappings from schema (`field.id` → `field.pdf_field_name`)
 3. Iterate through `field_values`, find widgets in PDF by XFA path
-4. Set widget values and update
-5. Return PDF as bytes with Content-Disposition header
+4. Fill widgets using appropriate method (see Field Type Handling below)
+5. Set `NeedAppearances` flag for PDF viewer compatibility
+6. Save with full rewrite (not incremental) to ensure XFA compatibility
+7. Return PDF as bytes with Content-Disposition header
 
 **Response**:
 - `200 OK`: PDF bytes (application/pdf)
 - `404 Not Found`: PDF file doesn't exist
 - `500 Internal Server Error`: Filling failed
+
+### Field Type Handling
+
+**Text, Date, Select Fields** (Standard Method):
+```python
+widget.field_value = str(value)
+widget.update()
+```
+
+**Radio Buttons & Checkboxes** (Direct PDF Structure Manipulation):
+
+Due to XFA form limitations in PyMuPDF, button fields require direct manipulation of the PDF's internal structure:
+
+```python
+# For XFA forms, we need to set both /V and /AS keys directly
+# widget.field_value doesn't persist correctly for XFA
+# IMPORTANT: Do NOT call widget.update() after this!
+try:
+    # Set /V (value) key - the actual field value
+    doc.xref_set_key(widget.xref, "V", f"/{target_value}")
+    # Set /AS (appearance state) key - tells which appearance stream to use
+    doc.xref_set_key(widget.xref, "AS", f"/{target_value}")
+except Exception as e:
+    # Fallback to widget API (for non-XFA forms)
+    widget.field_value = target_value
+    widget.update()
+```
+
+**Why This Works**:
+- XFA forms have two representations: XFA XML data (dynamic) and AcroForm fallback (static)
+- PyMuPDF's `widget.field_value` API works with the XFA layer, which doesn't persist correctly
+- Direct `xref_set_key()` modifies the AcroForm layer, which persists across save/load cycles
+- `/V` stores the actual field value (e.g., `/Y` or `/Off`)
+- `/AS` tells the PDF viewer which appearance stream to render
+- Skipping `widget.update()` for buttons prevents overwriting these direct modifications
+
+**PDF Object Structure Example**:
+```
+<<
+  /Type /Annot
+  /Subtype /Widget
+  /FT /Btn
+  /V /Y              ← Value key (set via xref_set_key)
+  /AS /Y             ← Appearance state (set via xref_set_key)
+  /AP << /N << /Off 2476 0 R /Y 2478 0 R >> >>  ← Appearance dictionary (pre-existing)
+>>
+```
+
+**Button On-State Detection**:
+```python
+def get_button_on_state(widget) -> str:
+    """Extract the 'on' state from a button widget's button_states()"""
+    try:
+        states = widget.button_states()
+        if states and 'normal' in states:
+            normal_states = states['normal']
+            if isinstance(normal_states, list):
+                for state in normal_states:
+                    if state and state.lower() not in ['off', '']:
+                        return state
+    except:
+        pass
+    return 'Yes'  # Fallback
+```
+
+Different PDFs use different on-state values: `Y`, `Yes`, `1`, `1a`, etc. This function extracts the correct value from the widget's appearance dictionary.
+
+**Radio Button Group Handling**:
+
+Radio buttons require setting ALL options in the group (selected + deselected):
+
+```python
+for option in radio_group_options:
+    is_selected = (option.value == selected_value)
+    for widget in find_widgets_for_option(option):
+        if is_selected:
+            doc.xref_set_key(widget.xref, "V", f"/{on_state}")
+            doc.xref_set_key(widget.xref, "AS", f"/{on_state}")
+        else:
+            doc.xref_set_key(widget.xref, "V", "/Off")
+            doc.xref_set_key(widget.xref, "AS", "/Off")
+```
+
+This ensures radio button exclusivity (only one selected per group).
+
+**Save Configuration**:
+```python
+# Set NeedAppearances flag for PDF viewer compatibility
+doc.need_appearances(True)
+
+# Save with full rewrite (not incremental)
+doc.save(
+    temp_path,
+    garbage=4,          # Maximum garbage collection
+    clean=True,         # Clean up unused objects
+    deflate=True,       # Compress streams
+    incremental=False,  # Full rewrite (critical for XFA)
+    expand=255          # Expand all object streams
+)
+```
 
 ### Frontend Integration
 
@@ -263,24 +365,44 @@ const pdfBytes = await fillPDF('/pdfs/i-90.pdf', fieldValues, schema);
 downloadPDF(pdfBytes, 'i-90-filled-2025-11-03.pdf');
 ```
 
-### Known Issues & Future Work
+### Testing & Verification
 
-**Current Status**:
-- ✅ **Working**: Text fields, date fields, select dropdowns, read-only fields
-- ⚠️ **Needs Fixes**: Checkboxes and radio buttons (values don't persist to PDF)
-- 🔄 **Needs Testing**: Complex field types (tables, address groups, signatures)
+**Tested with i-90 Form** (Nov 4, 2025):
+- ✅ Text fields: Family name, given name, etc.
+- ✅ Date fields: Date of birth, admission date
+- ✅ Select dropdowns: State, country
+- ✅ Radio buttons: Gender selection, name change status
+- ✅ Checkboxes: Single and group selections
+- ✅ Read-only fields: Properly skipped
+- ✅ PDF opens correctly in Adobe Reader, Chrome PDF viewer, macOS Preview
 
-**Todo**:
-1. Fix checkbox/radio button field filling in `pdf_fill_routes.py`
-2. Test with all field types across all I-90 sections
-3. Verify filled PDFs open correctly in Adobe Reader/Preview
-4. Test with other USCIS forms (I-589, N-400, etc.)
-5. Update schema extractor to preserve XFA paths during extraction
+**Key Learnings**:
 
-**Schema Extractor Update Needed**:
-- Currently drops XFA prefixes during extraction
-- Fix: Preserve full XFA path in `pdf_field_name` property
-- Location: `pdf_schema_extractor/` (identify where prefixes are lost)
+1. **XFA Limitation**: PyMuPDF's `widget.field_value` API doesn't work reliably for XFA button fields. Values revert to 'Off' after save/reopen when using the widget API.
+
+2. **The Fix**: Direct PDF structure manipulation via `doc.xref_set_key()` bypasses the XFA layer and modifies the AcroForm directly, which persists correctly.
+
+3. **Critical Bug**: Calling `widget.update()` AFTER setting xref keys overwrites the direct modifications. Must only call `widget.update()` for non-button fields.
+
+4. **Appearance Streams**: XFA forms have pre-existing appearance dictionaries (`/AP`). The `/AS` key selects which appearance to display. Setting both `/V` and `/AS` ensures visual rendering.
+
+### Future Work
+
+**Additional Forms**:
+- Test with other USCIS forms (I-589, N-400, etc.)
+- Verify approach works across different XFA implementations
+- Handle edge cases (conditional fields, calculated values)
+
+**Complex Field Types**:
+- Tables with dynamic rows
+- Signature fields
+- File attachments
+- Barcode generation (if needed)
+
+**Schema Extractor**:
+- Currently preserves full XFA paths correctly
+- Consider auto-detecting button on-states during extraction
+- Add validation for appearance dictionary completeness
 
 ---
 
