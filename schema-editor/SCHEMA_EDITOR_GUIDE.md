@@ -467,31 +467,38 @@ Fix by:
 
 ---
 
-### 🚧 Next Development Priorities
+### ✅ Phase 3: Field Overlays (Complete - Nov 5, 2025)
+**Status**: Color-coded field overlays render on PDF
 
-#### 1. **Phase 3: Field Overlays** (In Progress)
-**Goal**: Draw colored borders over PDF fields for visual editing
+**Completed Features**:
+- ✅ Color-coded borders over PDF fields (Green/Yellow/Red)
+- ✅ PDF coordinate transformation (`pdfCoordinates.ts`)
+- ✅ FieldOverlay component with status-based colors
+- ✅ Hover tooltips showing field name and type
+- ✅ Correct positioning with Y-axis inversion
+- ✅ Dynamic updates when zooming
+- ✅ Thicker border for selected fields
+- ✅ 39 new tests (22 coordinate + 17 overlay)
+- ✅ 73 total tests passing
 
-**Features**:
-- Draw rectangles over fields using `pdf_position` data
-- Color-code by validation status:
-  - 🟢 Green = Complete fields
-  - 🟡 Yellow = Needs review
-  - 🔴 Red = Has errors
-- Position overlays correctly on each page
-- Handle coordinate transformation (PDF → screen)
-- Show field labels on hover
-- Update overlays when zoom/page changes
+**Color Coding**:
+- 🟢 Green: Complete (all required info filled)
+- 🟡 Yellow: Needs review (missing help text or spoken name)
+- 🔴 Red: Has errors (missing required properties)
 
-**Technical Approach**:
-- Position overlays absolutely over PDF canvas
-- Convert PDF coordinates (bottom-left origin) to screen (top-left)
-- Use existing `checkFieldComplete()` for status colors
-- Transform coordinates based on scale: `screenX = pdfX * scale`
+**Technical Implementation**:
+- Y-axis inversion: `screenY = (pageHeight - pdfY - fieldHeight) * scale`
+- Per-page overlay rendering with dimension tracking
+- Existing `checkFieldComplete()` for status determination
+- Absolute positioning over PDF canvas
+
+**Documentation**: See `PHASE3_SUMMARY.md`
 
 ---
 
-#### 2. **Phase 4: Click-to-Select Fields** (Upcoming)
+### 🚧 Next Development Priorities
+
+#### 1. **Phase 4: Click-to-Select Fields** (Upcoming)
 **Goal**: Make field overlays clickable
 
 **Features**:

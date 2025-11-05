@@ -5,6 +5,7 @@ Visual editor for PDF form schemas - makes human correction of extracted schemas
 ## Features
 
 ✅ **Visual PDF Viewer** - Full PDF rendering with multi-page support and navigation
+✅ **Color-Coded Field Overlays** - See field locations with green/yellow/red status borders
 ✅ **Field List** - Tree view with completion status (complete/review/error)
 ✅ **Property Editor** - Edit field types, help text, validation, conditional logic
 ✅ **Real-time Validation** - Instant feedback on schema errors
@@ -12,6 +13,7 @@ Visual editor for PDF form schemas - makes human correction of extracted schemas
 ✅ **Progress Tracking** - See completion percentage at a glance
 ✅ **Page Navigation** - Prev/next buttons, page input, auto-scroll to selected fields
 ✅ **Zoom Controls** - 50%-200% zoom with +/- buttons
+✅ **Hover Tooltips** - See field name and type when hovering over PDF fields
 ✅ **Auto-save** - Changes tracked, save with Cmd+S
 
 ## Quick Start
@@ -72,7 +74,7 @@ Edit `src/utils/schemaLoader.ts` and add to `AVAILABLE_FORMS`:
 - **Vite** - Fast build tool with ES modules
 - **TailwindCSS** - Utility-first styling
 - **PDF.js v4.0.379** - Full PDF rendering with canvas
-- **Vitest** - Fast unit testing (34 tests passing)
+- **Vitest** - Fast unit testing (73 tests passing)
 
 ## Development
 
@@ -86,16 +88,14 @@ npm run test:run   # Run tests once
 
 ## Known Limitations
 
-- Field overlays not yet visible on PDF (Phase 3 - coming next)
-- Field overlays not yet clickable (Phase 4 - coming next)
+- Field overlays not yet clickable to select (Phase 4 - coming next)
 - Fit Width button is placeholder (Phase 5 - coming next)
 - No undo/redo (browser back button works)
 - No keyboard shortcuts for page navigation yet
 
 ## Future Enhancements
 
-- **Phase 3**: Colored field overlays on PDF (green/yellow/red status borders)
-- **Phase 4**: Clickable field overlays (click PDF to select field)
+- **Phase 4**: Clickable field overlays (click PDF to select field) - NEXT
 - **Phase 5**: Functional zoom presets (fit-width, fit-page)
 - **Phase 6**: Polish & performance (keyboard shortcuts, virtual scrolling)
 - Drag-and-drop field reordering
