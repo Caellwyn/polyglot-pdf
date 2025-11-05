@@ -1,150 +1,230 @@
 # PDF Schema Extractor
 
-Extracts structured schemas from government PDF forms to power voice AI for non-English speaking immigrants.
+Extracts structured schemas from PDF forms (primarily USCIS immigration forms) to power multilingual voice AI form filling.
+
+**Status:** Active development - Core extraction pipeline working, Gemini integration in progress
 
 ---
 
-## Quick Start
+## Quick Reference
 
-### Extract Schema from PDF
+### What This Does
+
+Converts PDF forms → JSON schemas with:
+- Field types (text, checkbox, radio, select, date, etc.)
+- Validation rules and constraints
+- Conditional logic (show_if, unlock_when)
+- Hierarchical organization (parts, sections, fields)
+- Table detection (repeating field patterns)
+
+### What You Need
 
 ```bash
-# 1. Extract widgets
-python widget_inventory.py test_schemas/test_pdfs/i-589.pdf
-
-# 2. Create annotated PDF
-python pdf_annotator.py test_schemas/test_pdfs/i-589.pdf
-
-# 3. Extract groupings with Gemini
-python gemini_grouping_extractor.py test_schemas/test_pdfs/i-589.pdf
-
-# 4. Parse hierarchy from tooltips
-python heuristic_hierarchy_parser.py test_schemas/test_pdfs/i-589.pdf
-
-# 5. Build complete schema
-python schema_builder_from_groupings.py test_schemas/test_pdfs/i-589.pdf gemini_groupings.json
-
-# 6. Verify schema quality
-python -c "from schema_verifier import verify_schema; verify_schema('test_schemas/test_pdfs/i-589.pdf', 'final_schema.json')"
-```
-
-### Current Best Schema
-
-**Use this:** `final_schema_minimal.json`
-- 99.9% verification score
-- 100% widget coverage (405/405 fields)
-- 303 total fields
-- Cost: ~$0.02-0.05 per form
-
----
-
-## Active Files (Production)
-
-### Core Pipeline
-- `widget_inventory.py` - Extract widgets from PDF
-- `pdf_annotator.py` - Create labeled PDF for Gemini
-- `gemini_grouping_extractor.py` - Extract semantic groups/tables
-- `heuristic_hierarchy_parser.py` - Parse tooltip hierarchy
-- `schema_builder_from_groupings.py` - Build complete schema
-
-### Validation
-- `schema_verifier.py` - Multi-layer verification (FIXED)
-
-### Documentation
-- `PROJECT_STATUS.md` - **READ THIS FIRST** - Complete project status
-- `METRICS_AUDIT.md` - Documents verifier issues and fixes
-- `VERIFIER_FINAL_RESULTS.md` - Latest verification results
-- `MINIMAL_APPROACH_SUMMARY.md` - Minimal approach details
-- `LABEL_OVERLAY_FINDINGS.md` - Why label overlay doesn't help
-
----
-
-## Archived Files
-
-### archive/hybrid_v2/
-Old batched Gemini extraction approach (replaced by minimal approach)
-- Cost: 9 API calls vs 1-2
-- Quality: 70.9% vs 99.9%
-- **Don't use these files**
-
-### archive/documentation/
-Old strategy docs (superseded by PROJECT_STATUS.md)
-
----
-
-## Known Issues & Limitations
-
-### Missing Features (CRITICAL for production)
-1. **Conditional logic (0%)** - No "show_if" rules extracted
-2. **Validation rules (0%)** - No constraints/formats captured
-3. **Round-trip testing (0%)** - Haven't verified schema→PDF works
-4. **Section accuracy (83%)** - 17% of fields mislabeled
-
-### See PROJECT_STATUS.md for:
-- Complete gap analysis
-- Prioritized next steps
-- Quality metrics
-- Production readiness checklist
-
----
-
-## Quality Metrics
-
-### Current (Minimal Approach)
-- Widget Coverage: **100%** (405/405)
-- Type Compatibility: **100%**
-- Structural Consistency: **99.7%**
-- Overall Confidence: **99.9%**
-
-### Target for Production
-- Round-trip: **100%** (not tested yet)
-- Conditional logic: **100%** (0% currently)
-- Validation rules: **95%+** (0% currently)
-- Section accuracy: **100%** (83% currently)
-
----
-
-## Key Decisions
-
-**Approach:** Minimal (Gemini for semantics, Python for precision)
-- ✅ Cheaper (75% cost reduction)
-- ✅ Better quality (99.9% vs 70.9%)
-- ✅ No truncation issues
-- ✅ Guaranteed 100% coverage
-
-**Architecture:** Separation of concerns works
-- Gemini: Semantic grouping, table detection
-- Python: Pattern matching, completeness guarantees
-- Human: Review edge cases only
-
----
-
-## Next Steps
-
-1. **Round-trip testing** - CRITICAL BLOCKER
-2. **Conditional logic extraction** - CRITICAL for voice AI
-3. **Validation rules** - CRITICAL for data quality
-4. **Fix section parsing** - Improve from 83% to 100%
-
-See PROJECT_STATUS.md for detailed roadmap.
-
----
-
-## Environment
-
-```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Set Gemini API key
-export GEMINI_API_KEY="your-key-here"
+export GEMINI_API_KEY="your-key-here"  # For future Gemini integration
 ```
+
+---
+
+## Core Files
+
+### Production Pipeline (Working)
+
+**Step 1: Extract Widget Inventory**
+```bash
+python widget_inventory.py <pdf_path>
+```
+- Extracts all editable PDF widgets
+- Parses field flags (read_only, required, multiline, etc.)
+- Outputs: `{form}_widgets.json`
+
+**Step 2: Create Annotated PDF** (Optional - for debugging)
+```bash
+python pdf_annotator.py <pdf_path>
+```
+- Overlays field names on PDF for visual verification
+- Outputs: `{form}-annotated.pdf`
+
+**Step 3: Parse Tooltip Hierarchy**
+```bash
+python heuristic_hierarchy_parser.py <pdf_path>
+```
+- Extracts hierarchical question numbers from tooltips
+- Parses section structure (Part 1.3.A format)
+- Outputs: `{form}_hierarchy.json`
+
+**Step 4: Build Complete Schema**
+```bash
+python schema_builder_from_groupings.py <pdf_path> <groupings_json>
+```
+- Combines widget inventory + groupings + hierarchy
+- Applies fuzzy matching to group related fields
+- Validates 100% widget coverage
+- Outputs: `{form}_schema.json`
+
+**Note:** `<groupings_json>` currently requires manual creation or Gemini extraction (tools in progress)
+
+---
+
+### Utility Scripts
+
+**Extract Field Ordering**
+```bash
+python extract_field_order_from_labels.py <pdf> <schema_json> <output_json>
+```
+- Parses hierarchical question numbers (1.3.A, 2.4.B, etc.)
+- Adds `question_number` and `pdf_position` to fields
+- Ensures fields render in natural reading order
+
+**Build Conditional Index**
+```bash
+python build_conditional_index.py <schema_json> <output_json>
+```
+- Creates bidirectional conditional logic index
+- Maps trigger fields → dependent fields
+- Maps dependent fields → trigger fields
+- Adds `controls_fields` metadata to triggers
+
+**Mutate PDF Field Flags** (Testing only)
+```bash
+python pdf_field_flag_mutator.py <pdf> <schema_json> <output_pdf>
+```
+- Flips read_only bits for testing unlock behavior
+- Used to validate conditional field unlocking
+- Generates test PDFs with modified field flags
+
+---
+
+### Core Library Modules
+
+**form_models.py** (30KB)
+- Pydantic v1.1.0 models for schema validation
+- Defines: FormSchema, FormField, ConditionalDisplay, ValidationRules, etc.
+- Single source of truth for schema structure
+
+**table_detection.py** (40KB)
+- Consolidates repeating widget patterns into semantic tables
+- Detects children lists, employment history, address groups
+- Uses heuristics: repeated stems, spatial clustering, label patterns
+
+**extractor.py** (29KB)
+- Main extraction engine (used by other scripts)
+- Imports: form_models, table_detection
+- Provides: FormSchema parsing, field grouping, validation
+
+---
+
+## Current Schemas
+
+### I-90 (Green Card Replacement) ✅
+- **Location:** `test_schemas/test_pdfs/i-90/i-90_schema.json`
+- **Status:** v11 - Production ready
+- **Fields:** 132 fields (consolidated from 137)
+- **Coverage:** 99.5% (187/188 widgets)
+- **Features:**
+  - ✅ Full conditional logic (21 dependencies)
+  - ✅ Hierarchical ordering (question_number)
+  - ✅ Bidirectional conditional index
+  - ✅ Round-trip tested (100% success)
+
+### I-589 (Asylum Application) ⚠️
+- **Location:** `test_schemas/test_pdfs/i-589/final_schema_minimal.json`
+- **Status:** Complete but needs conformance update
+- **Fields:** 303 fields
+- **Coverage:** 100% (405/405 widgets)
+- **Note:** Pre-dates v1.1.0 model updates
+
+---
+
+## Missing Pieces (In Progress)
+
+**Gemini Integration Layer:**
+- `gemini_grouping_extractor.py` - Extract semantic groups/tables from annotated PDFs
+- `gemini_schema_enhancer.py` - Add spoken names, help text, validation hints
+- `gemini_dependency_analyzer.py` - Auto-extract conditional dependencies
+
+**Validation Pipeline:**
+- `validate_schema.py` - Pydantic validation + reference checking
+- `round_trip_tester.py` - Fill PDF + verify data integrity
+
+**Dependency Tools:**
+- `apply_csv_dependencies.py` - Apply manual CSV dependency mappings
+- `review_dependencies.py` - Interactive dependency review/correction
+
+**Note:** These tools exist in project history but are not yet integrated into the current branch. Will be restored as needed.
+
+---
+
+## Architecture Decisions
+
+**Separation of Concerns:**
+- **Python** (100% reliable): Widget extraction, coverage guarantees, structure validation
+- **Gemini** (semantic): Field grouping, table detection, spoken names, help text
+- **Human** (edge cases): Review complex conditionals, verify section boundaries
+
+**Why This Works:**
+- Python ensures 100% widget coverage (no fields lost)
+- Gemini handles semantic understanding (what fields mean)
+- Human review only for ambiguous cases (~5-10% of fields)
+
+**Quality Targets:**
+- Widget coverage: 100%
+- Round-trip accuracy: 100%
+- Conditional logic: 95%+ auto-extracted
+- Section accuracy: 95%+
+
+---
+
+## Test Data
+
+**I-90 Files:**
+- `i-90.pdf` - Original USCIS form
+- `i-90_schema.json` - Current schema (v11)
+- `i-90_dependencies.csv` - Manual dependency mappings
+- `i-90-annotated.pdf` - Debug visualization
+- `I-90-filled-2025-11-04.pdf` - Test output
+
+**I-589 Files:**
+- `i-589.pdf` - Original USCIS form
+- `final_schema_minimal.json` - Complete schema
+- `i589_widgets_clean.json` - Widget inventory
+- `gemini_groupings.json` - Gemini-extracted groups
+
+---
+
+## Archive
+
+**_archive/enhanced_pdf_annotator.py**
+- Enhanced annotator with group visualization
+- Requires Gemini groupings file
+- Kept for future reference
+
+---
+
+## Contributing
+
+**Before modifying:**
+1. Read `planning_documents/PROJECT_STATUS.md` for current state
+2. Check `form_models.py` for schema structure (v1.1.0)
+3. All schemas must validate against Pydantic models
+4. Maintain 100% widget coverage in extraction
+
+**When adding forms:**
+1. Extract widgets: `widget_inventory.py`
+2. Build schema: `schema_builder_from_groupings.py`
+3. Validate: Check against form_models.py
+4. Test: Round-trip fill + verify
 
 ---
 
 ## Support
 
-For questions or issues, refer to:
-1. `PROJECT_STATUS.md` - Comprehensive project status
-2. Archived docs - Historical context
-3. Code comments - Implementation details
+**Questions?**
+- Check `planning_documents/PROJECT_STATUS.md` - Detailed status
+- Check `planning_documents/TECHNICAL_GUIDE.md` - Architecture
+- Review code comments in core modules
+
+**Issues?**
+- Widget extraction: Check `widget_inventory.py`
+- Schema validation: Check `form_models.py`
+- Table detection: Check `table_detection.py`
