@@ -17,6 +17,76 @@
 
 ## Recent Accomplishments
 
+### November 5, 2025 - Phase 1: WebSocket State Manager Consolidation ✅
+
+**Problem Solved:** Align schema-forms state management with existing WebSocket voice integration patterns.
+
+**Branch:** `claude/align-websockets-011CUpAutS2MaBKLNxYFQRQM`
+
+#### 🎯 Features Implemented
+
+**1. WebSocket-Compatible State Management**
+- ✅ Added `FieldValue` wrapper type for tracking AI-filled vs user-filled fields
+- ✅ Updated `SchemaFormState` interface with WebSocket-specific properties:
+  - `fieldValues: Record<string, FieldValue>` (was `Record<string, any>`)
+  - `currentPartId` (renamed from `currentSectionId`)
+  - `completedParts` (renamed from `completedSections`)
+  - `sessionId` (set by backend during handshake)
+- ✅ Backwards compatibility migration in `load()` method
+- ✅ WebSocket integration methods:
+  - `getCurrentPartNumber()` - Maps parts[].order to section_number
+  - `switchToPart()` - Section switching with completion tracking
+  - `extractPartFields()` - Extract schema subset for current part
+  - `getPreviousSpokenNames()` - Collect spoken names from completed parts
+  - `getHandshakePayload()` - Generate WebSocket handshake data
+  - `setSessionId()` - Store backend session ID
+
+**2. Schema Support Improvements**
+- ✅ Fixed section deduplication to skip non-"Part N" patterns
+- ✅ Legacy schema support (schemas without parts array)
+- ✅ Handles schemas with `section-*` IDs vs `Part N` IDs
+
+**3. Comprehensive Testing**
+- ✅ Created 40 unit tests with 100% pass rate
+- ✅ Test coverage for:
+  - FieldValue wrapping/unwrapping
+  - Backwards compatibility migration
+  - WebSocket handshake payload generation
+  - Part extraction and filtering
+  - Spoken name collection (including aliases)
+  - State persistence (save/load round-trip)
+  - Legacy schema support
+
+#### 📁 Files Created/Modified
+
+**Frontend:**
+- `frontend/src/schema-forms/types/schema.ts` - UPDATED: Added FieldValue interface
+- `frontend/src/schema-forms/state/schemaFormState.ts` - UPDATED: WebSocket methods (+263 lines, -32 lines)
+- `frontend/src/schema-forms/components/SchemaForm.tsx` - UPDATED: currentSectionId → currentPartId
+- `frontend/src/schema-forms/state/schemaFormState.test.ts` - NEW: 40 comprehensive unit tests (792 lines)
+
+**Documentation:**
+- `planning_documents/FRONTEND_CONSOLIDATION_PLAN.md` - NEW: Consolidation strategy (960 lines)
+- `planning_documents/TECHNICAL_GUIDE.md` - UPDATED: Marked activity watchdog as deprecated
+
+#### 📊 Metrics
+
+- **Commits:** 2 (planning + phase 1 implementation)
+- **Files Changed:** 6 files (3 src, 1 test, 2 docs)
+- **Lines Added:** ~1,055 new, ~40 modified
+- **Tests:** 40/40 passing (100%)
+- **Estimated Time:** 3 hours actual vs 4 hours planned
+
+#### 🚀 Next Steps
+
+**Phase 2: WebSocket Connection Layer (2 hours)**
+- Update `webFormConnection.ts` to use `SchemaFormStateManager`
+- Replace `WebFormState` with `SchemaFormState`
+- Update handshake generation to use `getHandshakePayload()`
+- Test section switching with real WebSocket backend
+
+---
+
 ### November 3-4, 2025 - Phase 3A: Backend PDF Filling (Partial) ⚠️ 🔧
 
 **Problem Solved:** Enable round-trip PDF filling for USCIS XFA forms using backend PyMuPDF integration.

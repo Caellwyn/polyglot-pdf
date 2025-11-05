@@ -360,6 +360,14 @@ export class SchemaFormStateManager {
    * Merges duplicate sections by combining their fields
    */
   private static deduplicateSections(schema: FormSchema): FormSchema {
+    // Check if any sections match the "Part N" pattern
+    const hasPartPattern = schema.sections.some(s => /^Part\s+\d+/i.test(s.id));
+
+    // If no sections match the pattern, skip deduplication
+    if (!hasPartPattern) {
+      return schema;
+    }
+
     const seenParts = new Map<string, FormSection>();
     const deduplicatedSections: FormSection[] = [];
 
@@ -479,9 +487,15 @@ export class SchemaFormStateManager {
    * Used for section switching via WebSocket
    */
   static switchToPart(state: SchemaFormState, partId: string): SchemaFormState {
+    // Only mark current part as completed if switching to a different part
+    const completedParts = partId !== state.currentPartId
+      ? new Set([...state.completedParts, state.currentPartId])
+      : state.completedParts;
+
     const newState = {
       ...state,
       currentPartId: partId,
+      completedParts,
       lastUpdated: Date.now()
     };
     this.save(newState);
@@ -506,10 +520,37 @@ export class SchemaFormStateManager {
    * Returns schema with only fields from the specified part
    */
   static extractPartFields(schema: FormSchema, partId: string): FormSchema {
+    // Handle schemas without parts (legacy web forms) - treat sectionId as partId
+    if (!schema.parts || schema.parts.length === 0) {
+      const section = schema.sections.find(s => s.id === partId);
+      if (!section) {
+        console.warn(`[SchemaFormStateManager] Part ${partId} not found in schema`);
+        return {
+          ...schema,
+          fields: [],
+          sections: []
+        };
+      }
+
+      // Extract fields for this section
+      const sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
+
+      return {
+        ...schema,
+        fields: sectionFields,
+        sections: [section]
+      };
+    }
+
     const part = schema.parts?.find(p => p.id === partId);
     if (!part) {
       console.warn(`[SchemaFormStateManager] Part ${partId} not found in schema`);
-      return schema;
+      // Return schema with empty fields and sections
+      return {
+        ...schema,
+        fields: [],
+        sections: []
+      };
     }
 
     // Find sections in this part
@@ -551,6 +592,10 @@ export class SchemaFormStateManager {
           const field = state.schema.fields.find(f => f.id === fieldId);
           if (field?.spoken_name) {
             spokenNames.push(field.spoken_name);
+            // Also include spoken aliases
+            if (field.spoken_aliases) {
+              spokenNames.push(...field.spoken_aliases);
+            }
           }
         });
       });
