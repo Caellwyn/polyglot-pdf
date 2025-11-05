@@ -1,0 +1,4561 @@
+{
+  "source": "pdf",
+  "form_metadata": {
+    "title": "Form I-90, Application to Replace Permanent Residence Card",
+    "form_number": "I-90",
+    "edition_date": "[TODO: Extract from PDF]",
+    "total_widgets": 188,
+    "total_fields": 188,
+    "version": "draft_v1",
+    "language": "en",
+    "extraction_date": "2025-11-05T06:20:34.230997",
+    "extraction_method": "automated_extractor.py"
+  },
+  "parts": [
+    {
+      "id": "part_1",
+      "label": "Part 1",
+      "order": 1,
+      "section_ids": [
+        "Part 1 - Information About You"
+      ]
+    },
+    {
+      "id": "part_2",
+      "label": "Part 2",
+      "order": 2,
+      "section_ids": [
+        "Part 2 - Application Type"
+      ]
+    },
+    {
+      "id": "part_3",
+      "label": "Part 3",
+      "order": 3,
+      "section_ids": [
+        "Part 3 - Processing Information"
+      ]
+    },
+    {
+      "id": "part_4",
+      "label": "Part 4",
+      "order": 4,
+      "section_ids": [
+        "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+        "Part 4 - Accommodations for Individuals With Disabilities and Impairments"
+      ]
+    },
+    {
+      "id": "part_5",
+      "label": "Part 5",
+      "order": 5,
+      "section_ids": [
+        "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature"
+      ]
+    },
+    {
+      "id": "part_6",
+      "label": "Part 6",
+      "order": 6,
+      "section_ids": [
+        "Part 6 - Interpreter's Contact Information, Certification, and Signature"
+      ]
+    },
+    {
+      "id": "part_7",
+      "label": "Part 7",
+      "order": 7,
+      "section_ids": [
+        "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+        "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant"
+      ]
+    },
+    {
+      "id": "part_8",
+      "label": "Part 8",
+      "order": 8,
+      "section_ids": [
+        "Part 8 - Additional Information"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "Part 1 - Information About You",
+      "label": "Part 1 - Information About You",
+      "order": 1,
+      "fields": [
+        "p1_line10_citytownofbirth[0]",
+        "p1_line11_countryofbirth[0]",
+        "p1_line1_aliennumber[0]",
+        "p1_line1_aliennumber[1]",
+        "p1_line2_acctidentifier[0]",
+        "p1_line12_mothergivenname[0]",
+        "p1_line13_fathergivenname[0]",
+        "p1_line3a_familyname[0]",
+        "p1_line3b_givenname[0]",
+        "p1_line3c_middlename[0]",
+        "p1_line14_classofadmission[0]",
+        "p1_checkbox4[0]",
+        "p1_checkbox4[1]",
+        "p1_checkbox4[2]",
+        "p1_line15_dateofadmission[0]",
+        "p1_line5a_familyname[0]",
+        "p1_line5b_givenname[0]",
+        "p1_line5c_middlename[0]",
+        "p1_line6a_incareofname[0]",
+        "p1_line6b_streetnumbername[0]",
+        "p1_line6c_aptsteflrnumber[0]",
+        "p1_checkbox6c_unit[0]",
+        "p1_checkbox6c_unit[1]",
+        "p1_checkbox6c_unit[2]",
+        "p1_line6d_cityortown[0]",
+        "p1_line6e_state[0]",
+        "p1_line6f_zipcode[0]",
+        "p1_line6g_province[0]",
+        "p1_line6h_postalcode[0]",
+        "p1_line6i_country[0]",
+        "p1_line16_ssn[0]",
+        "p1_line7a_streetnumbername[0]",
+        "p1_line7b_aptsteflrnumber[0]",
+        "p1_checkbox7b_unit[0]",
+        "p1_checkbox7b_unit[1]",
+        "p1_checkbox7b_unit[2]",
+        "p1_line7c_cityortown[0]",
+        "p1_line7e_zipcode[0]",
+        "p1_line7f_province[0]",
+        "p1_line7g_postalcode[0]",
+        "p1_line7h_country[0]",
+        "p1_line8_male[0]",
+        "p1_line8_female[0]",
+        "p1_line9_dateofbirth[0]",
+        "p1_line7d_state[0]"
+      ]
+    },
+    {
+      "id": "Part 2 - Application Type",
+      "label": "Part 2 - Application Type",
+      "order": 2,
+      "fields": [
+        "p2_checkbox1[0]",
+        "p2_checkbox1[1]",
+        "p2_checkbox1[2]",
+        "p2_checkbox2[5]",
+        "p2_checkbox2[6]",
+        "p2_checkbox2[7]",
+        "p2_checkbox2[4]",
+        "p2_checkbox2[0]",
+        "p2_checkbox2[1]",
+        "p2_checkbox2[2]",
+        "p2_checkbox2[3]",
+        "p2_checkbox2[11]",
+        "p2_line2h1_cityandstate[0]",
+        "p2_checkbox2[9]",
+        "p2_checkbox2[10]",
+        "p2_checkbox2[8]",
+        "p2_checkbox3[4]",
+        "p2_checkbox3[0]",
+        "p2_checkbox3[1]",
+        "p2_checkbox3[2]",
+        "p2_checkbox3[3]"
+      ]
+    },
+    {
+      "id": "Part 3 - Processing Information",
+      "label": "Part 3 - Processing Information",
+      "order": 3,
+      "fields": [
+        "p3_checkbox10[0]",
+        "p3_checkbox10[5]",
+        "p3_checkbox10[6]",
+        "p3_checkbox10[1]",
+        "p3_checkbox10[2]",
+        "p3_checkbox10[8]",
+        "p3_checkbox10[3]",
+        "p3_checkbox10[4]",
+        "p3_checkbox10[7]",
+        "p3_line1_locationappliedvisa[0]",
+        "p3_checkbox11[0]",
+        "p3_checkbox11[1]",
+        "p3_checkbox11[8]",
+        "p3_checkbox11[2]",
+        "p3_checkbox11[6]",
+        "p3_checkbox11[7]",
+        "p3_checkbox11[3]",
+        "p3_checkbox11[4]",
+        "p3_checkbox11[5]",
+        "p3_line2_locationissuedvisa[0]",
+        "p3_line3a_destination[0]",
+        "p3_line3a1_cityandstate[0]",
+        "p3_checkbox4[0]",
+        "p3_checkbox4[1]",
+        "p3_checkbox5[0]",
+        "p3_checkbox5[1]",
+        "p3_checkbox6[1]",
+        "p3_checkbox6[0]",
+        "p3_checkbox7_white[0]",
+        "p3_checkbox7_asian[0]",
+        "p3_checkbox7_black[0]",
+        "p3_checkbox7_indian[0]",
+        "p3_checkbox7_hawaiian[0]",
+        "p3_line8_heightfeet[0]",
+        "p3_line8_heightinches[0]",
+        "p3_line9_heightinches1[0]",
+        "p3_line9_heightinches2[0]",
+        "p3_line9_heightinches3[0]"
+      ]
+    },
+    {
+      "id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "label": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "order": 4,
+      "fields": [
+        "p4_checkbox1[0]",
+        "p4_checkbox1a[0]",
+        "p4_checkbox1[1]"
+      ]
+    },
+    {
+      "id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "label": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "order": 5,
+      "fields": [
+        "p4_line1a_accomodationrequested[0]",
+        "p4_checkbox1b[0]",
+        "p4_line1b_accomodationrequested[0]",
+        "p4_checkbox1c[0]",
+        "p4_line1c_accomodationrequested[0]"
+      ]
+    },
+    {
+      "id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "order": 6,
+      "fields": [
+        "p5_checkbox1a[0]",
+        "p5_checkbox1b[0]",
+        "p5_checkbox2[0]",
+        "p5_line1b_language[0]",
+        "p5_line2_nameofrepresentative[0]",
+        "p5_line3_daytimephonenumber[0]",
+        "p5_line4_mobilephonenumber[0]",
+        "p5_line5_emailaddress[0]",
+        "p5_line6a_signatureofapplicant[0]",
+        "p5_line6b_dateofsignature[0]"
+      ]
+    },
+    {
+      "id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "label": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "order": 7,
+      "fields": [
+        "p6_line1a_interpretersfamilyname[0]",
+        "p6_line1b_interpretersgivenname[0]",
+        "p6_line2_nameofbusinessor[0]",
+        "p6_line3a_streetnumbername[0]",
+        "p6_line3b_aptsteflrnumber[0]",
+        "p6_checkbox3b_unit[0]",
+        "p6_checkbox3b_unit[1]",
+        "p6_checkbox3b_unit[2]",
+        "p6_line3c_citytown[0]",
+        "p6_line3d_state[0]",
+        "p6_line3e_zipcode[0]",
+        "p6_line3f_province[0]",
+        "p6_line3g_postalcode[0]",
+        "p6_line3h_country[0]",
+        "p6_line4_interpretersdaytimephonenumber[0]",
+        "p6_line4_interpretersdaytimephonenumber[1]",
+        "p6_language[0]",
+        "p6_line5_interpretersemailaddress[0]",
+        "p6_line6a_signature[0]",
+        "p6_line6b_dateofsignature[0]"
+      ]
+    },
+    {
+      "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "order": 8,
+      "fields": [
+        "p7_line1a_familyname[0]"
+      ]
+    },
+    {
+      "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "order": 9,
+      "fields": [
+        "p7_line1b_preparersgivenname[0]",
+        "p7_line2_nameofbusinessor[0]",
+        "p7_line3a_streetnumbername[0]",
+        "p7_line3b_aptsteflrnumber[0]",
+        "p7_checkbox3b_unit[0]",
+        "p7_checkbox3b_unit[1]",
+        "p7_checkbox3b_unit[2]",
+        "p7_line3c_citytown[0]",
+        "p7_line3d_state[0]",
+        "p7_line3e_zipcode[0]",
+        "p7_line3f_province[0]",
+        "p7_line3g_postalcode[0]",
+        "p7_line3h_country[0]",
+        "p7_line4_preparersdaytimephonenumber[0]",
+        "p7_line5_preparersfaxnumber[0]",
+        "p7_line6_preparersemailaddress[0]",
+        "p7_checkbox7[0]",
+        "p7_checkbox7[1]",
+        "p7_checkbox7extend[0]",
+        "p7_checkbox7extend[1]",
+        "p7_line8a_signatureofpreparer[0]",
+        "p7_line8b_dateofsignature[0]"
+      ]
+    },
+    {
+      "id": "Part 8 - Additional Information",
+      "label": "Part 8 - Additional Information",
+      "order": 10,
+      "fields": [
+        "p1_line3b_givenname[1]",
+        "p1_line3c_middlename[1]",
+        "p8_line3a_pagenumber[0]",
+        "p8_line3b_partnumber[0]",
+        "p8_line3c_itemnumber[0]",
+        "p8_line3d_additionalinfo[0]",
+        "p8_line5a_pagenumber[1]",
+        "p8_line5b_partnumber[1]",
+        "p8_line5c_itemnumber[1]",
+        "p8_line5d_additionalinfo[1]",
+        "p8_line4a_pagenumber[0]",
+        "p8_line4b_partnumber[0]",
+        "p8_line4c_itemnumber[0]",
+        "p8_line4d_additionalinfo[0]",
+        "p8_line5a_pagenumber[0]",
+        "p8_line5b_partnumber[0]",
+        "p8_line5c_itemnumber[0]",
+        "p8_line5d_additionalinfo[0]",
+        "p8_line5a_pagenumber[2]",
+        "p8_line5b_partnumber[2]",
+        "p8_line5c_itemnumber[2]",
+        "p8_line5d_additionalinfo[2]",
+        "p1_line3a_familyname[1]"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "p1_line10_citytownofbirth[0]",
+      "name": "Part 1. Information About You. Additional Information. 10. Enter City / Town / Village of Birth.",
+      "type": "text",
+      "pdf_field_name": "P1_Line10_CityTownOfBirth[0]",
+      "label": "Part 1. Information About You. Additional Information. 10. Enter City / Town / Village of Birth.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.0",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 2,
+        "y": 168
+      },
+      "spoken_name": "information about you. additional information. cit",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. cit]"
+      }
+    },
+    {
+      "id": "p1_line11_countryofbirth[0]",
+      "name": "Part 1. Information About You. Additional Information. 11. Enter Country of Birth.",
+      "type": "text",
+      "pdf_field_name": "P1_Line11_CountryofBirth[0]",
+      "label": "Part 1. Information About You. Additional Information. 11. Enter Country of Birth.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.1",
+      "pdf_position": {
+        "page": 2,
+        "y": 204
+      },
+      "spoken_name": "information about you. additional information. cou",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. cou]"
+      }
+    },
+    {
+      "id": "p1_line1_aliennumber[0]",
+      "name": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "type": "text",
+      "pdf_field_name": "P1_Line1_AlienNumber[0]",
+      "label": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.1.A",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 1,
+        "y": 293
+      },
+      "spoken_name": "information about you. alien registration number",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. alien registration number]"
+      }
+    },
+    {
+      "id": "p1_line1_aliennumber[1]",
+      "name": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "type": "text",
+      "pdf_field_name": "P1_Line1_AlienNumber[1]",
+      "label": "Part 1. Information About You. 1. Enter Alien Registration Number. (A. Number). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.1.A",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 7,
+        "y": 294
+      },
+      "spoken_name": "information about you. alien registration number",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. alien registration number]"
+      }
+    },
+    {
+      "id": "p1_line2_acctidentifier[0]",
+      "name": "Part 1. Information About You. 2. Enter U S C I S Online Account Number, if any.",
+      "type": "text",
+      "pdf_field_name": "P1_Line2_AcctIdentifier[0]",
+      "label": "Part 1. Information About You. 2. Enter U S C I S Online Account Number, if any.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.2",
+      "max_length": 12,
+      "pdf_position": {
+        "page": 1,
+        "y": 330
+      },
+      "spoken_name": "information about you. u s c i s online account nu",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. u s c i s online account nu]"
+      }
+    },
+    {
+      "id": "p1_line12_mothergivenname[0]",
+      "name": "Part 1. Information About You. Additional Information. Mother's Name. 12. Enter Given Name (First Na",
+      "type": "text",
+      "pdf_field_name": "P1_Line12_MotherGivenName[0]",
+      "label": "Part 1. Information About You. Additional Information. Mother's Name. 12. Enter Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.2",
+      "pdf_position": {
+        "page": 2,
+        "y": 252
+      },
+      "spoken_name": "information about you. additional information. mot",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. mot]"
+      }
+    },
+    {
+      "id": "p1_line13_fathergivenname[0]",
+      "name": "Part 1. Information About You. Additional Information. Father's Name. 13. Enter Given Name (First Na",
+      "type": "text",
+      "pdf_field_name": "P1_Line13_FatherGivenName[0]",
+      "label": "Part 1. Information About You. Additional Information. Father's Name. 13. Enter Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.3",
+      "pdf_position": {
+        "page": 2,
+        "y": 306
+      },
+      "spoken_name": "information about you. additional information. fat",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. fat]"
+      }
+    },
+    {
+      "id": "p1_line3a_familyname[0]",
+      "name": "Part 1. Information About You. Your Full Name. NOTE: Your card will be issued in this name. 3. A. En",
+      "type": "text",
+      "pdf_field_name": "P1_Line3a_FamilyName[0]",
+      "label": "Part 1. Information About You. Your Full Name. NOTE: Your card will be issued in this name. 3. A. Enter Family Name (Last Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.3.A",
+      "pdf_position": {
+        "page": 1,
+        "y": 402
+      },
+      "spoken_name": "information about you. your full name. note: your ",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. note: your ]"
+      }
+    },
+    {
+      "id": "p1_line3b_givenname[0]",
+      "name": "Part 1. Information About You. Your Full Name. 3. B. Enter Given Name (First Name). ",
+      "type": "text",
+      "pdf_field_name": "P1_Line3b_GivenName[0]",
+      "label": "Part 1. Information About You. Your Full Name. 3. B. Enter Given Name (First Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.3.B",
+      "pdf_position": {
+        "page": 1,
+        "y": 425
+      },
+      "spoken_name": "information about you. your full name. given name",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. given name]"
+      }
+    },
+    {
+      "id": "p1_line3c_middlename[0]",
+      "name": "Part 1. Information About You. Your Full Name. 3. C. Enter Middle Name.",
+      "type": "text",
+      "pdf_field_name": "P1_Line3c_MiddleName[0]",
+      "label": "Part 1. Information About You. Your Full Name. 3. C. Enter Middle Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.3.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 450
+      },
+      "spoken_name": "information about you. your full name. middle name",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. middle name]"
+      }
+    },
+    {
+      "id": "p1_line14_classofadmission[0]",
+      "name": "Part 1. Information About You. Additional Information. 14. Enter Class of Admission.",
+      "type": "text",
+      "pdf_field_name": "P1_Line14_ClassOfAdmission[0]",
+      "label": "Part 1. Information About You. Additional Information. 14. Enter Class of Admission.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.4",
+      "pdf_position": {
+        "page": 2,
+        "y": 354
+      },
+      "spoken_name": "information about you. additional information. cla",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. cla]"
+      }
+    },
+    {
+      "id": "p1_checkbox4[0]",
+      "name": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance o",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox4[0]",
+      "label": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance of your Permanent Resident Card? Select Yes. (Proceed to Item Numbers 5. A. through 5. C.).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.4.5.A.5.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 504
+      },
+      "spoken_name": "information about you. your full name. has your na",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. has your na]"
+      }
+    },
+    {
+      "id": "p1_checkbox4[1]",
+      "name": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance o",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox4[1]",
+      "label": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance of your Permanent Resident Card? Select No (Proceed to Item Numbers 6. A. through 6. I.).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.4.6.A.6.I",
+      "pdf_position": {
+        "page": 1,
+        "y": 526
+      },
+      "spoken_name": "information about you. your full name. has your na",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. has your na]"
+      }
+    },
+    {
+      "id": "p1_checkbox4[2]",
+      "name": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance o",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox4[2]",
+      "label": "Part 1. Information About You. Your Full Name. 4. Has your name legally changed since the issuance of your Permanent Resident Card? Select Not Applicable - I never received my previous card. (Proceed to Item Numbers 6. A. through 6. I.).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.4.6.A.6.I",
+      "pdf_position": {
+        "page": 1,
+        "y": 547
+      },
+      "spoken_name": "information about you. your full name. has your na",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. your full name. has your na]"
+      }
+    },
+    {
+      "id": "p1_line15_dateofadmission[0]",
+      "name": "Part 1. Information About You. Additional Information. 15. Enter Date of Admission. Enter as 2-digit",
+      "type": "date",
+      "pdf_field_name": "P1_Line15_DateOfAdmission[0]",
+      "label": "Part 1. Information About You. Additional Information. 15. Enter Date of Admission. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.5",
+      "pdf_position": {
+        "page": 2,
+        "y": 389
+      },
+      "spoken_name": "information about you. additional information. dat",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. dat]"
+      }
+    },
+    {
+      "id": "p1_line5a_familyname[0]",
+      "name": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent ",
+      "type": "text",
+      "pdf_field_name": "P1_Line5a_FamilyName[0]",
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. NOTE:  Attach all evidence of your legal name change with this application. 5. A. Enter Family Name (Last Name). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.5.A",
+      "pdf_position": {
+        "page": 1,
+        "y": 642
+      },
+      "spoken_name": "information about you.  your name exactly as it is",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you.  your name exactly as it is]"
+      }
+    },
+    {
+      "id": "p1_line5b_givenname[0]",
+      "name": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent ",
+      "type": "text",
+      "pdf_field_name": "P1_Line5b_GivenName[0]",
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. 5. B. Enter Given Name (First Name). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.5.B",
+      "pdf_position": {
+        "page": 1,
+        "y": 666
+      },
+      "spoken_name": "information about you.  your name exactly as it is",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you.  your name exactly as it is]"
+      }
+    },
+    {
+      "id": "p1_line5c_middlename[0]",
+      "name": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent ",
+      "type": "text",
+      "pdf_field_name": "P1_Line5c_MiddleName[0]",
+      "label": "Part 1. Information About You. Provide your name exactly as it is printed on your current Permanent Resident Card. 5. C. Enter Middle Name.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.5.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 690
+      },
+      "spoken_name": "information about you.  your name exactly as it is",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you.  your name exactly as it is]"
+      }
+    },
+    {
+      "id": "p1_line6a_incareofname[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. A. Enter In Care Of Name.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6a_InCareofName[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. A. Enter In Care Of Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.A",
+      "max_length": 34,
+      "pdf_position": {
+        "page": 1,
+        "y": 294
+      },
+      "spoken_name": "information about you. mailing address. in care of",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. in care of]"
+      }
+    },
+    {
+      "id": "p1_line6b_streetnumbername[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. B. Enter Street Number\rand Name.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6b_StreetNumberName[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. B. Enter Street Number\rand Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.B",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 1,
+        "y": 318
+      },
+      "spoken_name": "information about you. mailing address. street num",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. street num]"
+      }
+    },
+    {
+      "id": "p1_line6c_aptsteflrnumber[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. C. Enter Apartment, Suite, or Floor Number.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6c_AptSteFlrNumber[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. C. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.C",
+      "max_length": 6,
+      "pdf_position": {
+        "page": 1,
+        "y": 342
+      },
+      "spoken_name": "information about you. mailing address. apartment,",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. apartment,]"
+      }
+    },
+    {
+      "id": "p1_checkbox6c_unit[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. C. Select Apartment.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox6c_Unit[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. C. Select Apartment.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 346
+      },
+      "spoken_name": "information about you. mailing address. select apa",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. select apa]"
+      }
+    },
+    {
+      "id": "p1_checkbox6c_unit[1]",
+      "name": "Part 1. Information About You. Mailing Address. 6. C. Select Suite.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox6c_Unit[1]",
+      "label": "Part 1. Information About You. Mailing Address. 6. C. Select Suite.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 346
+      },
+      "spoken_name": "information about you. mailing address. select sui",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. select sui]"
+      }
+    },
+    {
+      "id": "p1_checkbox6c_unit[2]",
+      "name": "Part 1. Information About You. Mailing Address. 6. C. Select Floor.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox6c_Unit[2]",
+      "label": "Part 1. Information About You. Mailing Address. 6. C. Select Floor.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.C",
+      "pdf_position": {
+        "page": 1,
+        "y": 346
+      },
+      "spoken_name": "information about you. mailing address. select flo",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. select flo]"
+      }
+    },
+    {
+      "id": "p1_line6d_cityortown[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. D. Enter City or Town.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6d_CityOrTown[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. D. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.D",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 1,
+        "y": 366
+      },
+      "spoken_name": "information about you. mailing address. city or to",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. city or to]"
+      }
+    },
+    {
+      "id": "p1_line6e_state[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. E. Select State from List of States.",
+      "type": "select",
+      "pdf_field_name": "P1_Line6e_State[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. E. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.E",
+      "pdf_position": {
+        "page": 1,
+        "y": 390
+      },
+      "spoken_name": "information about you. mailing address. select sta",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. select sta]"
+      }
+    },
+    {
+      "id": "p1_line6f_zipcode[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. F. Enter ZIP Code.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6f_ZipCode[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. F. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.F",
+      "max_length": 5,
+      "pdf_position": {
+        "page": 1,
+        "y": 390
+      },
+      "spoken_name": "information about you. mailing address. zip code",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. zip code]"
+      }
+    },
+    {
+      "id": "p1_line6g_province[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. G. Enter Province.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6g_Province[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. G. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.G",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 1,
+        "y": 414
+      },
+      "spoken_name": "information about you. mailing address. province",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. province]"
+      }
+    },
+    {
+      "id": "p1_line6h_postalcode[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. H. Enter Postal Code.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6h_PostalCode[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. H. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.H",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 1,
+        "y": 438
+      },
+      "spoken_name": "information about you. mailing address. postal cod",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. postal cod]"
+      }
+    },
+    {
+      "id": "p1_line6i_country[0]",
+      "name": "Part 1. Information About You. Mailing Address. 6. I. Enter Country.",
+      "type": "text",
+      "pdf_field_name": "P1_Line6i_Country[0]",
+      "label": "Part 1. Information About You. Mailing Address. 6. I. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.I",
+      "pdf_position": {
+        "page": 1,
+        "y": 474
+      },
+      "spoken_name": "information about you. mailing address. country",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. mailing address. country]"
+      }
+    },
+    {
+      "id": "p1_line16_ssn[0]",
+      "name": "Part 1. Information About You. Additional Information. 16. Enter U. S. Social Security Number, if an",
+      "type": "text",
+      "pdf_field_name": "P1_Line16_SSN[0]",
+      "label": "Part 1. Information About You. Additional Information. 16. Enter U. S. Social Security Number, if any.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.6.U.S",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 2,
+        "y": 425
+      },
+      "spoken_name": "information about you. additional information. s. ",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. s. ]"
+      }
+    },
+    {
+      "id": "p1_line7a_streetnumbername[0]",
+      "name": "Part 1. Information About You. Physical Address. Provide this information only if different than mai",
+      "type": "text",
+      "pdf_field_name": "P1_Line7a_StreetNumberName[0]",
+      "label": "Part 1. Information About You. Physical Address. Provide this information only if different than mailing address. 7. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.A",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 1,
+        "y": 545
+      },
+      "spoken_name": "information about you. physical address.  this inf",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address.  this inf]"
+      }
+    },
+    {
+      "id": "p1_line7b_aptsteflrnumber[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. B. Enter Apartment, Suite or Floor Number.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7b_AptSteFlrNumber[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. B. Enter Apartment, Suite or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.B",
+      "max_length": 6,
+      "pdf_position": {
+        "page": 1,
+        "y": 569
+      },
+      "spoken_name": "information about you. physical address. apartment",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. apartment]"
+      }
+    },
+    {
+      "id": "p1_checkbox7b_unit[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. B. Select Apartment.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox7b_Unit[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. B. Select Apartment.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.B",
+      "pdf_position": {
+        "page": 1,
+        "y": 573
+      },
+      "spoken_name": "information about you. physical address. select ap",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. select ap]"
+      }
+    },
+    {
+      "id": "p1_checkbox7b_unit[1]",
+      "name": "Part 1. Information About You. Physical Address. 7. B. Select Suite.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox7b_Unit[1]",
+      "label": "Part 1. Information About You. Physical Address. 7. B. Select Suite.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.B",
+      "pdf_position": {
+        "page": 1,
+        "y": 573
+      },
+      "spoken_name": "information about you. physical address. select su",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. select su]"
+      }
+    },
+    {
+      "id": "p1_checkbox7b_unit[2]",
+      "name": "Part 1. Information About You. Physical Address. 7. B. Select Floor.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_checkbox7b_Unit[2]",
+      "label": "Part 1. Information About You. Physical Address. 7. B. Select Floor.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.B",
+      "pdf_position": {
+        "page": 1,
+        "y": 573
+      },
+      "spoken_name": "information about you. physical address. select fl",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. select fl]"
+      }
+    },
+    {
+      "id": "p1_line7c_cityortown[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. C. Enter City or Town.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7c_CityOrTown[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.C",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 1,
+        "y": 593
+      },
+      "spoken_name": "information about you. physical address. city or t",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. city or t]"
+      }
+    },
+    {
+      "id": "p1_line7e_zipcode[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. E. Enter ZIP Code.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7e_ZipCode[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. E. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.E",
+      "max_length": 5,
+      "pdf_position": {
+        "page": 1,
+        "y": 617
+      },
+      "spoken_name": "information about you. physical address. zip code",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. zip code]"
+      }
+    },
+    {
+      "id": "p1_line7f_province[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. F. Enter Province.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7f_Province[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. F. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.F",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 1,
+        "y": 641
+      },
+      "spoken_name": "information about you. physical address. province",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. province]"
+      }
+    },
+    {
+      "id": "p1_line7g_postalcode[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. G. Enter Postal Code.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7g_PostalCode[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.G",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 1,
+        "y": 665
+      },
+      "spoken_name": "information about you. physical address. postal co",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. postal co]"
+      }
+    },
+    {
+      "id": "p1_line7h_country[0]",
+      "name": "Part 1. Information About You. Physical Address. 7. H. Enter Country.",
+      "type": "text",
+      "pdf_field_name": "P1_Line7h_Country[0]",
+      "label": "Part 1. Information About You. Physical Address. 7. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.7.H",
+      "pdf_position": {
+        "page": 1,
+        "y": 701
+      },
+      "spoken_name": "information about you. physical address. country",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. country]"
+      }
+    },
+    {
+      "id": "p1_line8_male[0]",
+      "name": "Part 1. Information About You. Additional Information. 8. Sex. Select Male.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_Line8_male[0]",
+      "label": "Part 1. Information About You. Additional Information. 8. Sex. Select Male.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.8",
+      "pdf_position": {
+        "page": 2,
+        "y": 112
+      },
+      "spoken_name": "information about you. additional information. sex",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. sex]"
+      }
+    },
+    {
+      "id": "p1_line8_female[0]",
+      "name": "Part 1. Information About You. Additional Information. 8. Sex. Select Female.",
+      "type": "checkbox",
+      "pdf_field_name": "P1_Line8_female[0]",
+      "label": "Part 1. Information About You. Additional Information. 8. Sex. Select Female.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.8",
+      "pdf_position": {
+        "page": 2,
+        "y": 112
+      },
+      "spoken_name": "information about you. additional information. sex",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. sex]"
+      }
+    },
+    {
+      "id": "p1_line9_dateofbirth[0]",
+      "name": "Part 1. Information About You. Additional Information. 9. Enter Date of Birth. Enter as 2-digit Mont",
+      "type": "date",
+      "pdf_field_name": "P1_Line9_DateOfBirth[0]",
+      "label": "Part 1. Information About You. Additional Information. 9. Enter Date of Birth. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.9",
+      "pdf_position": {
+        "page": 2,
+        "y": 132
+      },
+      "spoken_name": "information about you. additional information. dat",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. additional information. dat]"
+      }
+    },
+    {
+      "id": "p1_line7d_state[0]",
+      "name": "Part 1. Information About You. Physical Address. 7 D. Select State from List of States.",
+      "type": "select",
+      "pdf_field_name": "P1_Line7d_State[0]",
+      "label": "Part 1. Information About You. Physical Address. 7 D. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 1 - Information About You",
+      "question_number": "1.D",
+      "pdf_position": {
+        "page": 1,
+        "y": 617
+      },
+      "spoken_name": "information about you. physical address. 7 d. sele",
+      "help": {
+        "instructions": "[TODO: Add help text for information about you. physical address. 7 d. sele]"
+      }
+    },
+    {
+      "id": "p2_checkbox1[0]",
+      "name": "Part 2. Application Type. NOTE:  If your conditional permanent resident status (for example:  C R 1,",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox1[0]",
+      "label": "Part 2. Application Type. NOTE:  If your conditional permanent resident status (for example:  C R 1, C R 2, C F 1, C F 2) is expiring within the next 90 days, then do not file this application.  (See the What is the Purpose of This Application section of the Form I-90 Instructions for further information.) My status is (Select only one box). 1. A. Select Lawful Permanent Resident. (Proceed to Section A.)",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.1.A.A",
+      "pdf_position": {
+        "page": 2,
+        "y": 570
+      },
+      "spoken_name": "application type. note:  if your conditional perma",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. note:  if your conditional perma]"
+      }
+    },
+    {
+      "id": "p2_checkbox1[1]",
+      "name": "Part 2. Application Type. My status is (Select only one box). 1. B. Select Permanent Resident - In C",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox1[1]",
+      "label": "Part 2. Application Type. My status is (Select only one box). 1. B. Select Permanent Resident - In Commuter Status. (Proceed to Section A.)",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.1.B.A",
+      "pdf_position": {
+        "page": 2,
+        "y": 588
+      },
+      "spoken_name": "application type. my status is",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. my status is]"
+      }
+    },
+    {
+      "id": "p2_checkbox1[2]",
+      "name": "Part 2. Application Type. My status is (Select only one box). 1. C. Select Conditional Permanent Res",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox1[2]",
+      "label": "Part 2. Application Type. My status is (Select only one box). 1. C. Select Conditional Permanent Resident. (Proceed to Section B.)",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.1.C.B",
+      "pdf_position": {
+        "page": 2,
+        "y": 618
+      },
+      "spoken_name": "application type. my status is",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. my status is]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[5]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[5]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. A. Select My previous card has been lost, stolen, or destroyed.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.A",
+      "pdf_position": {
+        "page": 2,
+        "y": 120
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[6]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[6]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. B. Select My previous card was issued but never received. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.B",
+      "pdf_position": {
+        "page": 2,
+        "y": 138
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[7]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[7]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. C. Select My existing card has been mutilated. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.C",
+      "pdf_position": {
+        "page": 2,
+        "y": 156
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[4]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[4]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. D. Select My existing card has incorrect data because of Department of Homeland Security (D H S) error. (Attach your existing card with incorrect data along with this application.)  ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.D",
+      "pdf_position": {
+        "page": 2,
+        "y": 174
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[0]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[0]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. E. Select My name or other biographic information has been legally changed since issuance of my existing card.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.E",
+      "pdf_position": {
+        "page": 2,
+        "y": 228
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[1]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[1]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. F. Select My existing card has already expired or will expire within six months. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.F",
+      "pdf_position": {
+        "page": 2,
+        "y": 258
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[2]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[2]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. G. 1. Select I have reached my 14th birthday and am registering as required. My existing card will expire AFTER my 16th birthday. NOTE: If you are filing this application before your\r14th birthday, or more than 30 days after your 14th\rbirthday, you must select reason 2.j. However, if\ryour card has expired, you must select reason 2.f.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.G.1.2.2",
+      "pdf_position": {
+        "page": 2,
+        "y": 288
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[3]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[3]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. G. 2. Select I have reached my 14th birthday and am registering as required. My existing card will expire BEFORE my 16th birthday. NOTE:  If you are filing this application before your 14th birthday, or more than 30 days after your 14th birthday, you must select reason 2. J. However, if your card has expired, you must select reason 2. F.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.G.2.2.J.2.F",
+      "pdf_position": {
+        "page": 2,
+        "y": 345
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[11]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[11]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. H. 1. Select I am a permanent resident who is taking up commuter status. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.H.1",
+      "pdf_position": {
+        "page": 2,
+        "y": 456
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_line2h1_cityandstate[0]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "text",
+      "pdf_field_name": "P2_Line2h1_CityandState[0]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. H. 1. A. My Port of Entry (P O E) into the United States will be.  Enter City or Town and State.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.H.1.A",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 2,
+        "y": 515
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[9]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[9]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. H. 2. Select I am a commuter who is taking up actual residence in the United States. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.H.2",
+      "pdf_position": {
+        "page": 2,
+        "y": 540
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[10]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[10]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.) 2. I. Select I have been automatically converted to lawful permanent resident status.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.I",
+      "pdf_position": {
+        "page": 2,
+        "y": 570
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox2[8]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox2[8]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section A. (To be used only by a lawful permanent resident or a permanent resident in commuter status.). 2. J. Select I have a prior edition of the Alien Registration Card, or I am applying to replace my current Permanent Resident Card for a reason that is not specified above.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.A.2.J",
+      "pdf_position": {
+        "page": 2,
+        "y": 600
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox3[4]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox3[4]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. A. Select My previous card has been lost, stolen, or destroyed.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.B.3.A",
+      "pdf_position": {
+        "page": 3,
+        "y": 102
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox3[0]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox3[0]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. B. Select My previous card was issued but never received.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.B.3.B",
+      "pdf_position": {
+        "page": 3,
+        "y": 120
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox3[1]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox3[1]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. C. Select My existing card has been mutilated. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.B.3.C",
+      "pdf_position": {
+        "page": 3,
+        "y": 138
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox3[2]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox3[2]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. D. Select My existing card has incorrect data because of Department of Homeland Security (D H S) error. (Attach your existing permanent resident card with incorrect data along with this application.)",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.B.3.D",
+      "pdf_position": {
+        "page": 3,
+        "y": 156
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p2_checkbox3[3]",
+      "name": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only ",
+      "type": "checkbox",
+      "pdf_field_name": "P2_checkbox3[3]",
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. E. Select My name or other biographical information has legally changed since the issuance of my existing card. ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 2 - Application Type",
+      "question_number": "2.B.3.E",
+      "pdf_position": {
+        "page": 3,
+        "y": 198
+      },
+      "spoken_name": "application type. reason for application",
+      "help": {
+        "instructions": "[TODO: Add help text for application type. reason for application]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Blue.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 295
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[5]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[5]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Brown.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 295
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[6]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[6]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Black.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 295
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[1]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[1]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Green.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 310
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[2]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[2]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Hazel.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 310
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[8]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[8]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Gray.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 310
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[3]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[3]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Pink.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 325
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[4]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[4]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Maroon.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 325
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_checkbox10[7]",
+      "name": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select ",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox10[7]",
+      "label": "Part 3. Processing Information. Biographic Information. 10. Eye Color (Select only one box). Select Unknown / Other.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.0",
+      "pdf_position": {
+        "page": 3,
+        "y": 325
+      },
+      "spoken_name": "processing information. biographic information. ey",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ey]"
+      }
+    },
+    {
+      "id": "p3_line1_locationappliedvisa[0]",
+      "name": "Part 3. Processing Information. 1. Enter Location where you applied for an immigrant visa or adjustm",
+      "type": "text",
+      "pdf_field_name": "P3_Line1_LocationAppliedVisa[0]",
+      "label": "Part 3. Processing Information. 1. Enter Location where you applied for an immigrant visa or adjustment of status.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 3,
+        "y": 287
+      },
+      "spoken_name": "processing information. location where you applied",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. location where you applied]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Bald (No hair).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 361
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[1]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[1]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Blond.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 361
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[8]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[8]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Black.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 361
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[2]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[2]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Gray.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 376
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[6]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[6]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Red.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 376
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[7]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[7]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Brown.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 376
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[3]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[3]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Sandy.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 391
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[4]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[4]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select Unknown / Other.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 391
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_checkbox11[5]",
+      "name": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox11[5]",
+      "label": "Part 3. Processing Information. Biographic Information. 11. Hair Color (Select only one box). Select White.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 391
+      },
+      "spoken_name": "processing information. biographic information. ha",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ha]"
+      }
+    },
+    {
+      "id": "p3_line2_locationissuedvisa[0]",
+      "name": "Part 3. Processing Information. 2. Enter Location where your immigrant visa was issued or U S C I S ",
+      "type": "text",
+      "pdf_field_name": "P3_Line2_LocationIssuedVisa[0]",
+      "label": "Part 3. Processing Information. 2. Enter Location where your immigrant visa was issued or U S C I S office where you were granted adjustment of status.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.2",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 3,
+        "y": 335
+      },
+      "spoken_name": "processing information. location where your immigr",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. location where your immigr]"
+      }
+    },
+    {
+      "id": "p3_line3a_destination[0]",
+      "name": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United S",
+      "type": "text",
+      "pdf_field_name": "P3_Line3a_Destination[0]",
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 3. A. Enter Destination in the United States at time of admission.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.3.A.3.A.1.4.3.A",
+      "pdf_position": {
+        "page": 3,
+        "y": 413
+      },
+      "spoken_name": "processing information. complete item numbers and ",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. complete item numbers and ]"
+      }
+    },
+    {
+      "id": "p3_line3a1_cityandstate[0]",
+      "name": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United S",
+      "type": "text",
+      "pdf_field_name": "P3_Line3a1_CityandState[0]",
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 3. A. 1. Port of Entry where admitted to the United States. Enter City or Town and State.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.3.A.3.A.1.4.3.A.1",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 3,
+        "y": 461
+      },
+      "spoken_name": "processing information. complete item numbers and ",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. complete item numbers and ]"
+      }
+    },
+    {
+      "id": "p3_checkbox4[0]",
+      "name": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United S",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox4[0]",
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 4. Have you ever been in exclusion, deportation, or removal proceedings or ordered removed from the United States? Select No.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.3.A.3.A.1.4.4",
+      "pdf_position": {
+        "page": 3,
+        "y": 520
+      },
+      "spoken_name": "processing information. complete item numbers and ",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. complete item numbers and ]"
+      }
+    },
+    {
+      "id": "p3_checkbox4[1]",
+      "name": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United S",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox4[1]",
+      "label": "Part 3. Processing Information. Complete Item Numbers 3. A. and 3. A. 1. if you entered the United States with an immigrant visa. (If you were granted adjustment of status, proceed to Item Number 4.) 4. Have you ever been in exclusion, deportation, or removal proceedings or ordered removed from the United States? Select Yes. NOTE:  If you answered \"Yes\" to Item Numbers 4. or 5. above, provide a detailed explanation in the space provided in Part 8. Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.3.A.3.A.1.4.4.4.5.8",
+      "pdf_position": {
+        "page": 3,
+        "y": 520
+      },
+      "spoken_name": "processing information. complete item numbers and ",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. complete item numbers and ]"
+      }
+    },
+    {
+      "id": "p3_checkbox5[0]",
+      "name": "Part 3. Processing Information. 5. Since you were granted permanent residence, have you ever filed F",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox5[0]",
+      "label": "Part 3. Processing Information. 5. Since you were granted permanent residence, have you ever filed Form I-4 07, Abandonment by Alien of Status as Lawful Permanent Resident, or otherwise been judged to have abandoned your status? Select No.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.5",
+      "pdf_position": {
+        "page": 3,
+        "y": 580
+      },
+      "spoken_name": "processing information. since you were granted per",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. since you were granted per]"
+      }
+    },
+    {
+      "id": "p3_checkbox5[1]",
+      "name": "Part 3. Processing Information. 5. Since you were granted permanent residence, have you ever filed F",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox5[1]",
+      "label": "Part 3. Processing Information. 5. Since you were granted permanent residence, have you ever filed Form I-4 07, Abandonment by Alien of Status as Lawful Permanent Resident, or otherwise been judged to have abandoned your status? Select Yes. NOTE:  If you answered \"Yes\" to Item Numbers 4. or 5. above, provide a detailed explanation in the space provided in Part 8. Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.5.4.5.8",
+      "pdf_position": {
+        "page": 3,
+        "y": 580
+      },
+      "spoken_name": "processing information. since you were granted per",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. since you were granted per]"
+      }
+    },
+    {
+      "id": "p3_checkbox6[1]",
+      "name": "Part 3. Processing Information. Biographic Information. 6. Ethnicity (Select only one box). Select H",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox6[1]",
+      "label": "Part 3. Processing Information. Biographic Information. 6. Ethnicity (Select only one box). Select Hispanic or Latino.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.6",
+      "pdf_position": {
+        "page": 3,
+        "y": 100
+      },
+      "spoken_name": "processing information. biographic information. et",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. et]"
+      }
+    },
+    {
+      "id": "p3_checkbox6[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 6. Ethnicity (Select only one box). Select N",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox6[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 6. Ethnicity (Select only one box). Select Not Hispanic or Latino.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.6",
+      "pdf_position": {
+        "page": 3,
+        "y": 115
+      },
+      "spoken_name": "processing information. biographic information. et",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. et]"
+      }
+    },
+    {
+      "id": "p3_checkbox7_white[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Selec",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox7_White[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Select White.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.7",
+      "pdf_position": {
+        "page": 3,
+        "y": 148
+      },
+      "spoken_name": "processing information. biographic information. ra",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ra]"
+      }
+    },
+    {
+      "id": "p3_checkbox7_asian[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Selec",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox7_Asian[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Select Asian.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.7",
+      "pdf_position": {
+        "page": 3,
+        "y": 163
+      },
+      "spoken_name": "processing information. biographic information. ra",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ra]"
+      }
+    },
+    {
+      "id": "p3_checkbox7_black[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Selec",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox7_Black[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Select Black or African American.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.7",
+      "pdf_position": {
+        "page": 3,
+        "y": 178
+      },
+      "spoken_name": "processing information. biographic information. ra",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ra]"
+      }
+    },
+    {
+      "id": "p3_checkbox7_indian[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Selec",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox7_Indian[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Select American Indian or Alaska Native.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.7",
+      "pdf_position": {
+        "page": 3,
+        "y": 193
+      },
+      "spoken_name": "processing information. biographic information. ra",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ra]"
+      }
+    },
+    {
+      "id": "p3_checkbox7_hawaiian[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Selec",
+      "type": "checkbox",
+      "pdf_field_name": "P3_checkbox7_Hawaiian[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 7. Race (Select all applicable boxes). Select Native Hawaiian or Other Pacific Islander.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.7",
+      "pdf_position": {
+        "page": 3,
+        "y": 208
+      },
+      "spoken_name": "processing information. biographic information. ra",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. ra]"
+      }
+    },
+    {
+      "id": "p3_line8_heightfeet[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 8. Height. Feet. Select Number of Feet from ",
+      "type": "select",
+      "pdf_field_name": "P3_Line8_HeightFeet[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 8. Height. Feet. Select Number of Feet from List.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.8",
+      "pdf_position": {
+        "page": 3,
+        "y": 228
+      },
+      "spoken_name": "processing information. biographic information. he",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. he]"
+      }
+    },
+    {
+      "id": "p3_line8_heightinches[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 8. Height. Inches. Select Number of Inches f",
+      "type": "select",
+      "pdf_field_name": "P3_Line8_HeightInches[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 8. Height. Inches. Select Number of Inches from List.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.8",
+      "pdf_position": {
+        "page": 3,
+        "y": 228
+      },
+      "spoken_name": "processing information. biographic information. he",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. he]"
+      }
+    },
+    {
+      "id": "p3_line9_heightinches1[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter First Digit of Weig",
+      "type": "text",
+      "pdf_field_name": "P3_Line9_HeightInches1[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter First Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.9",
+      "max_length": 1,
+      "pdf_position": {
+        "page": 3,
+        "y": 252
+      },
+      "spoken_name": "processing information. biographic information. we",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. we]"
+      }
+    },
+    {
+      "id": "p3_line9_heightinches2[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Second Digit of Wei",
+      "type": "text",
+      "pdf_field_name": "P3_Line9_HeightInches2[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Second Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.9",
+      "max_length": 1,
+      "pdf_position": {
+        "page": 3,
+        "y": 252
+      },
+      "spoken_name": "processing information. biographic information. we",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. we]"
+      }
+    },
+    {
+      "id": "p3_line9_heightinches3[0]",
+      "name": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Third Digit of Weig",
+      "type": "text",
+      "pdf_field_name": "P3_Line9_HeightInches3[0]",
+      "label": "Part 3. Processing Information. Biographic Information. 9. Weight. Pounds. Enter Third Digit of Weight in Pounds.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 3 - Processing Information",
+      "question_number": "3.9",
+      "max_length": 1,
+      "pdf_position": {
+        "page": 3,
+        "y": 252
+      },
+      "spoken_name": "processing information. biographic information. we",
+      "help": {
+        "instructions": "[TODO: Add help text for processing information. biographic information. we]"
+      }
+    },
+    {
+      "id": "p4_checkbox1[0]",
+      "name": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information i",
+      "type": "checkbox",
+      "pdf_field_name": "P4_checkbox1[0]",
+      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. Are you requesting an accommodation because of a disabilities and/or impairments? Select No.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "question_number": "4.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 529
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_checkbox1a[0]",
+      "name": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information i",
+      "type": "checkbox",
+      "pdf_field_name": "P4_checkbox1a[0]",
+      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. A. Select I am deaf or hard of hearing and request the following accommodation (if you are requesting a sign-language interpreter, indicate for which language (e. g., American Sign Language)).",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "question_number": "4.1.A",
+      "pdf_position": {
+        "page": 3,
+        "y": 568
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_line1a_accomodationrequested[0]",
+      "name": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in t",
+      "type": "textarea",
+      "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. A. Enter Language.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "question_number": "4.1.A",
+      "max_length": 140,
+      "pdf_position": {
+        "page": 3,
+        "y": 615
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_checkbox1b[0]",
+      "name": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in t",
+      "type": "checkbox",
+      "pdf_field_name": "P4_checkbox1b[0]",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. B. Select I am blind or have low vision and request the following accommodation.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "question_number": "4.1.B",
+      "pdf_position": {
+        "page": 4,
+        "y": 97
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_line1b_accomodationrequested[0]",
+      "name": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in t",
+      "type": "textarea",
+      "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. B. Enter Accommodation Requested.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "question_number": "4.1.B",
+      "max_length": 140,
+      "pdf_position": {
+        "page": 4,
+        "y": 120
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_checkbox1c[0]",
+      "name": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in t",
+      "type": "checkbox",
+      "pdf_field_name": "P4_checkbox1c[0]",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) If you answered \"Yes,\" select any applicable boxes. 1. C. Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting). ",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "question_number": "4.1.C",
+      "pdf_position": {
+        "page": 4,
+        "y": 205
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_line1c_accomodationrequested[0]",
+      "name": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in t",
+      "type": "textarea",
+      "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
+      "label": "Part 4. Accommodations for Individuals With Disabilities and Impairments. (Read the information in the Form I-90 instructions before completing this part.) 1. C. Enter Description of Disability and/or Impairment and the Accommodations Requested.",
+      "read_only": true,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "question_number": "4.1.C",
+      "max_length": 140,
+      "pdf_position": {
+        "page": 4,
+        "y": 252
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p4_checkbox1[1]",
+      "name": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information i",
+      "type": "checkbox",
+      "pdf_field_name": "P4_checkbox1[1]",
+      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments. (Read the information in the Form I-90 instructions before completing this part.) NOTE:  If you need extra space to complete this section, use the space provided in Part 8. Additional Information. 1. Are you requesting an accommodation because of your disabilities and/or impairments? Select Yes.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "question_number": "4.8.1",
+      "pdf_position": {
+        "page": 3,
+        "y": 529
+      },
+      "spoken_name": "accommodations for individuals with disabilities a",
+      "help": {
+        "instructions": "[TODO: Add help text for accommodations for individuals with disabilities a]"
+      }
+    },
+    {
+      "id": "p5_checkbox1a[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. NOTE: Read the Pen",
+      "type": "checkbox",
+      "pdf_field_name": "P5_Checkbox1a[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. NOTE: Read the Penalties section of the Form I-90 instructions before completing this part. Applicant's Statement. NOTE: Select the box for either Item Number 1. A. or 1. B.  If applicable, select the box for Item Number 2. 1. A. Select I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question.  ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.1.A.1.B.2.1.A",
+      "pdf_position": {
+        "page": 4,
+        "y": 475
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_checkbox1b[0]",
+      "name": "Part 5.  Applicant's Statement, Contact Information, Certification, and Signature. Applicant's State",
+      "type": "checkbox",
+      "pdf_field_name": "P5_Checkbox1b[0]",
+      "label": "Part 5.  Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. NOTE: Select the box for either Item Number 1. A. or 1. B.  If applicable, select the box for Item Number 2. 1. B. Select The interpreter named in Part 6. has read to me every question and instruction on this application and my answer to every question in a language in which I am fluent and I understood everything.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.1.A.1.B.2.1.B.6",
+      "pdf_position": {
+        "page": 4,
+        "y": 523
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_checkbox2[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statem",
+      "type": "checkbox",
+      "pdf_field_name": "P5_Checkbox2[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. NOTE: Select the box for either Item Number 1. A. or 1. B.  If applicable, select the box for Item Number 2. 2. Select At my request, the preparer named in Part 7. prepared this application for me based only upon information I provided or authorized.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.1.A.1.B.2.2.7",
+      "pdf_position": {
+        "page": 4,
+        "y": 619
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line1b_language[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statem",
+      "type": "signature",
+      "pdf_field_name": "P5_Line1b_Language[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. 1. B. Enter Language.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.1.B",
+      "pdf_position": {
+        "page": 4,
+        "y": 564
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line2_nameofrepresentative[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statem",
+      "type": "signature",
+      "pdf_field_name": "P5_Line2_NameofRepresentative[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Statement. 2. Enter Name of Preparer.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.2",
+      "pdf_position": {
+        "page": 4,
+        "y": 633
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line3_daytimephonenumber[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contac",
+      "type": "signature",
+      "pdf_field_name": "P5_Line3_DaytimePhoneNumber[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 3. Enter Applicant's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.3",
+      "max_length": 13,
+      "pdf_position": {
+        "page": 4,
+        "y": 90
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line4_mobilephonenumber[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contac",
+      "type": "signature",
+      "pdf_field_name": "P5_Line4_MobilePhoneNumber[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 4. Enter Applicant's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.4",
+      "max_length": 13,
+      "pdf_position": {
+        "page": 4,
+        "y": 126
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line5_emailaddress[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contac",
+      "type": "signature",
+      "pdf_field_name": "P5_Line5_EmailAddress[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Contact Information. 5. Enter Applicant's Email Address (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.5",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 4,
+        "y": 162
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line6a_signatureofapplicant[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signat",
+      "type": "signature",
+      "pdf_field_name": "P5_Line6a_SignatureofApplicant[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signature. 6. A. Applicant's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.6.A",
+      "pdf_position": {
+        "page": 4,
+        "y": 615
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p5_line6b_dateofsignature[0]",
+      "name": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signat",
+      "type": "signature",
+      "pdf_field_name": "P5_Line6b_DateofSignature[0]",
+      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature. Applicant's Signature. 6. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "question_number": "5.6.B",
+      "pdf_position": {
+        "page": 4,
+        "y": 639
+      },
+      "spoken_name": "applicant's statement, contact information, certif",
+      "help": {
+        "instructions": "[TODO: Add help text for applicant's statement, contact information, certif]"
+      }
+    },
+    {
+      "id": "p6_line1a_interpretersfamilyname[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Provide the following info",
+      "type": "signature",
+      "pdf_field_name": "P6_Line1a_InterpretersFamilyName[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Provide the following information about the interpreter. Interpreter's Full Name. 1. A. Enter Interpreter's Family Name (Last Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.1.A",
+      "pdf_position": {
+        "page": 5,
+        "y": 150
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line1b_interpretersgivenname[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 1",
+      "type": "signature",
+      "pdf_field_name": "P6_Line1b_InterpretersGivenName[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 1. B. Enter Interpreter's Given Name (First Name).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.1.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 186
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line2_nameofbusinessor[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 2",
+      "type": "signature",
+      "pdf_field_name": "P6_Line2_NameofBusinessor[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Full Name. 2. Enter Interpreter's Business or Organization Name (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.2",
+      "max_length": 30,
+      "pdf_position": {
+        "page": 5,
+        "y": 222
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3a_streetnumbername[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3a_StreetNumberName[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.A",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 5,
+        "y": 276
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3b_aptsteflrnumber[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Addr",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3b_AptSteFlrNumber[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. B. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.B",
+      "max_length": 6,
+      "pdf_position": {
+        "page": 5,
+        "y": 300
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_checkbox3b_unit[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "checkbox",
+      "pdf_field_name": "P6_checkbox3b_Unit[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. B. Select Apartment.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 304
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_checkbox3b_unit[1]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "checkbox",
+      "pdf_field_name": "P6_checkbox3b_Unit[1]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. B. Select Suite.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 304
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_checkbox3b_unit[2]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "checkbox",
+      "pdf_field_name": "P6_checkbox3b_Unit[2]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. B. Select Floor.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 304
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3c_citytown[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3c_CityTown[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.C",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 5,
+        "y": 324
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3d_state[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Add",
+      "type": "select",
+      "pdf_field_name": "P6_Line3d_State[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature.  Interpreter's Mailing Address. 3. D. Select State from List of States.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.D",
+      "pdf_position": {
+        "page": 5,
+        "y": 348
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3e_zipcode[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Addr",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3e_ZipCode[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. E. Enter ZIP Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.E",
+      "max_length": 5,
+      "pdf_position": {
+        "page": 5,
+        "y": 348
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3f_province[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Addr",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3f_Province[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. F. Enter Province.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.F",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 5,
+        "y": 372
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3g_postalcode[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Addr",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3g_PostalCode[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.G",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 5,
+        "y": 396
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line3h_country[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Addr",
+      "type": "signature",
+      "pdf_field_name": "P6_Line3h_Country[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Mailing Address. 3. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.3.H",
+      "pdf_position": {
+        "page": 5,
+        "y": 432
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line4_interpretersdaytimephonenumber[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Info",
+      "type": "signature",
+      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 4. Enter Interpreter's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.4",
+      "max_length": 10,
+      "pdf_position": {
+        "page": 5,
+        "y": 498
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line4_interpretersdaytimephonenumber[1]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Info",
+      "type": "signature",
+      "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[1]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 5. Enter Interpreter's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.5",
+      "max_length": 10,
+      "pdf_position": {
+        "page": 5,
+        "y": 534
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_language[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Certificatio",
+      "type": "signature",
+      "pdf_field_name": "P6_Language[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Certification. I certify, under penalty of perjury, that: I am fluent in English and (another language), which is the same language provided in Part 5., Item Number 1. B., and I have read to this applicant in the identified language every question and instruction on this application and his or her answer to every question.  The applicant informed me that he or she understands every instruction, question, and answer on the application, including the Applicant's Certification, and has verified the accuracy of every answer. Enter Language.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.5.1.B",
+      "max_length": 18,
+      "pdf_position": {
+        "page": 5,
+        "y": 636
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line5_interpretersemailaddress[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Info",
+      "type": "signature",
+      "pdf_field_name": "P6_Line5_InterpretersEmailAddress[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Contact Information. 6. Enter Interpreter's Email Address, (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.6",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 5,
+        "y": 570
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line6a_signature[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7",
+      "type": "signature",
+      "pdf_field_name": "P6_Line6a_Signature[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7. A. Interpreter's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.7.A",
+      "max_length": 1,
+      "pdf_position": {
+        "page": 5,
+        "y": 96
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p6_line6b_dateofsignature[0]",
+      "name": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7",
+      "type": "signature",
+      "pdf_field_name": "P6_Line6b_DateofSignature[0]",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature. Interpreter's Signature. 7. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
+      "question_number": "6.7.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 117
+      },
+      "spoken_name": "interpreter's contact information, certification, ",
+      "help": {
+        "instructions": "[TODO: Add help text for interpreter's contact information, certification, ]"
+      }
+    },
+    {
+      "id": "p7_line1a_familyname[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing this Application, i",
+      "type": "signature",
+      "pdf_field_name": "P7_Line1a_FamilyName[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant. Provide the following information about the preparer. Preparer's Full Name. 1. A. Enter Preparer's Family Name (Last Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "question_number": "7.1.A",
+      "pdf_position": {
+        "page": 5,
+        "y": 264
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line1b_preparersgivenname[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line1b_PreparersGivenName[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Full Name. 1.B. Enter Preparer's Given Name (First Name). ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.1.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 300
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line2_nameofbusinessor[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line2_NameofBusinessor[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Full Name. 2. Enter Preparer's Business or Organization Name (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.2",
+      "max_length": 34,
+      "pdf_position": {
+        "page": 5,
+        "y": 336
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3a_streetnumbername[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3a_StreetNumberName[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. A. Enter Street Number and Name.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.A",
+      "max_length": 25,
+      "pdf_position": {
+        "page": 5,
+        "y": 389
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3b_aptsteflrnumber[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3b_AptSteFlrNumber[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. B. Enter Apartment, Suite, or Floor Number.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.B",
+      "max_length": 6,
+      "pdf_position": {
+        "page": 5,
+        "y": 414
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox3b_unit[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox3b_Unit[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. B. Select Apartment.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 417
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox3b_unit[1]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox3b_Unit[1]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. B. Select Suite.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 417
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox3b_unit[2]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox3b_Unit[2]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant.  Preparer's Mailing Address. 3. B. Select Floor.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.B",
+      "pdf_position": {
+        "page": 5,
+        "y": 417
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3c_citytown[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3c_CityTown[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. C. Enter City or Town.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.C",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 5,
+        "y": 438
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3d_state[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "select",
+      "pdf_field_name": "P7_Line3d_State[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. D. Select State from List of States. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.D",
+      "pdf_position": {
+        "page": 5,
+        "y": 461
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3e_zipcode[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3e_ZipCode[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. E. Enter Zip Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.E",
+      "max_length": 5,
+      "pdf_position": {
+        "page": 5,
+        "y": 461
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3f_province[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3f_Province[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. F. Enter Province. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.F",
+      "max_length": 20,
+      "pdf_position": {
+        "page": 5,
+        "y": 485
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3g_postalcode[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3g_PostalCode[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. G. Enter Postal Code.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.G",
+      "max_length": 9,
+      "pdf_position": {
+        "page": 5,
+        "y": 509
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line3h_country[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line3h_Country[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Mailing Address. 3. H. Enter Country.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.3.H",
+      "pdf_position": {
+        "page": 5,
+        "y": 545
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line4_preparersdaytimephonenumber[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line4_PreparersDaytimePhoneNumber[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Contact Information. 4. Enter Preparer's Daytime Telephone Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.4",
+      "max_length": 10,
+      "pdf_position": {
+        "page": 5,
+        "y": 615
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line5_preparersfaxnumber[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line5_PreparersFaxNumber[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant.  Preparer's Contact Information. 5. Enter Preparer's Mobile Telephone Number (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.5",
+      "max_length": 10,
+      "pdf_position": {
+        "page": 5,
+        "y": 654
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line6_preparersemailaddress[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line6_PreparersEmailAddress[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Contact Information. 6. Enter Preparer's Email Address (if any).",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.6",
+      "max_length": 38,
+      "pdf_position": {
+        "page": 5,
+        "y": 687
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox7[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox7[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. A. Select I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.7.A",
+      "pdf_position": {
+        "page": 6,
+        "y": 150
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox7[1]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox7[1]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. B. Select I am an attorney or accredited representative and my representation of the applicant in this case extends / does not extend beyond the preparation of this application. NOTE:  If you are an attorney or accredited representative whose representation extends beyond preparation of this application, you may be obliged to submit a completed Form G-28, Notice of Entry of Appearance as Attorney or Accredited Representative, with this application. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.7.B",
+      "pdf_position": {
+        "page": 6,
+        "y": 196
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox7extend[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox7Extend[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. B. Select I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.7.B",
+      "pdf_position": {
+        "page": 6,
+        "y": 221
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_checkbox7extend[1]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "checkbox",
+      "pdf_field_name": "P7_checkbox7Extend[1]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Statement. 7. B. Select I am an attorney or accredited representative and my representation of the applicant in this case does not extend beyond the preparation of this application.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.7.B",
+      "pdf_position": {
+        "page": 6,
+        "y": 221
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line8a_signatureofpreparer[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line8a_SignatureofPreparer[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant. Preparer's Signature. 8. A. Preparer's Signature. This signature field can not be signed with a digital signature and the signee's name can not be typewritten into this space. This is a protected field. Print and sign in ink.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.8.A",
+      "max_length": 1,
+      "pdf_position": {
+        "page": 6,
+        "y": 533
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p7_line8b_dateofsignature[0]",
+      "name": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, I",
+      "type": "signature",
+      "pdf_field_name": "P7_Line8b_DateofSignature[0]",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant.  Preparer's Signature. 8. B. Enter Date of Signature. Enter as 2-digit Month, 2-digit Day, and 4-digit Year. ",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
+      "question_number": "7.8.B",
+      "pdf_position": {
+        "page": 6,
+        "y": 557
+      },
+      "spoken_name": "contact information, declaration, and signature of",
+      "help": {
+        "instructions": "[TODO: Add help text for contact information, declaration, and signature of]"
+      }
+    },
+    {
+      "id": "p1_line3b_givenname[1]",
+      "name": "Part 8. Additional Information. Your Full Name. 1. B. Given Name (First Name). This is a read only f",
+      "type": "text",
+      "pdf_field_name": "P1_Line3b_GivenName[1]",
+      "label": "Part 8. Additional Information. Your Full Name. 1. B. Given Name (First Name). This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.1.B.1",
+      "pdf_position": {
+        "page": 7,
+        "y": 234
+      },
+      "spoken_name": "additional information. your full name. given name",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. your full name. given name]"
+      }
+    },
+    {
+      "id": "p1_line3c_middlename[1]",
+      "name": "Part 8. Additional Information. Your Full Name. 1. C. Middle Name. This is a read only field. This f",
+      "type": "text",
+      "pdf_field_name": "P1_Line3c_MiddleName[1]",
+      "label": "Part 8. Additional Information. Your Full Name. 1. C. Middle Name. This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.1.C.1",
+      "pdf_position": {
+        "page": 7,
+        "y": 258
+      },
+      "spoken_name": "additional information. your full name. middle nam",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. your full name. middle nam]"
+      }
+    },
+    {
+      "id": "p8_line3a_pagenumber[0]",
+      "name": "Part 8. Additional Information. 3. A. Enter Page Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line3a_PageNumber[0]",
+      "label": "Part 8. Additional Information. 3. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.3.A",
+      "max_length": 2,
+      "pdf_position": {
+        "page": 7,
+        "y": 335
+      },
+      "spoken_name": "additional information. page number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. page number]"
+      }
+    },
+    {
+      "id": "p8_line3b_partnumber[0]",
+      "name": "Part 8. Additional Information. 3. B. Enter Part Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line3b_PartNumber[0]",
+      "label": "Part 8. Additional Information. 3. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.3.B",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 335
+      },
+      "spoken_name": "additional information. part number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. part number]"
+      }
+    },
+    {
+      "id": "p8_line3c_itemnumber[0]",
+      "name": "Part 8. Additional Information. 3. C. Enter Item Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line3c_ItemNumber[0]",
+      "label": "Part 8. Additional Information. 3. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.3.C",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 335
+      },
+      "spoken_name": "additional information. item number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. item number]"
+      }
+    },
+    {
+      "id": "p8_line3d_additionalinfo[0]",
+      "name": "Part 8. Additional Information. 3. D. Enter Additional Information.",
+      "type": "textarea",
+      "pdf_field_name": "P8_Line3d_AdditionalInfo[0]",
+      "label": "Part 8. Additional Information. 3. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.3.D",
+      "pdf_position": {
+        "page": 7,
+        "y": 360
+      },
+      "spoken_name": "additional information. additional information",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. additional information]"
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber[1]",
+      "name": "Part 8. Additional Information. 4. A. Enter Page Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5a_PageNumber[1]",
+      "label": "Part 8. Additional Information. 4. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.4.A",
+      "max_length": 2,
+      "pdf_position": {
+        "page": 7,
+        "y": 563
+      },
+      "spoken_name": "additional information. page number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. page number]"
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber[1]",
+      "name": "Part 8. Additional Information. 4. B. Enter Part Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5b_PartNumber[1]",
+      "label": "Part 8. Additional Information. 4. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.4.B",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 563
+      },
+      "spoken_name": "additional information. part number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. part number]"
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber[1]",
+      "name": "Part 8. Additional Information. 4. C. Enter Item Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5c_ItemNumber[1]",
+      "label": "Part 8. Additional Information. 4. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.4.C",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 563
+      },
+      "spoken_name": "additional information. item number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. item number]"
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo[1]",
+      "name": "Part 8. Additional Information. 4. D. Enter Additional Information.",
+      "type": "textarea",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[1]",
+      "label": "Part 8. Additional Information. 4. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.4.D",
+      "pdf_position": {
+        "page": 7,
+        "y": 587
+      },
+      "spoken_name": "additional information. additional information",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. additional information]"
+      }
+    },
+    {
+      "id": "p8_line4a_pagenumber[0]",
+      "name": "Part 8. Additional Information. 5. A. Enter Page Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line4a_PageNumber[0]",
+      "label": "Part 8. Additional Information. 5. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.5.A",
+      "max_length": 2,
+      "pdf_position": {
+        "page": 7,
+        "y": 65
+      },
+      "spoken_name": "additional information. page number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. page number]"
+      }
+    },
+    {
+      "id": "p8_line4b_partnumber[0]",
+      "name": "Part 8. Additional Information. 5. B. Enter Part Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line4b_PartNumber[0]",
+      "label": "Part 8. Additional Information. 5. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.5.B",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 65
+      },
+      "spoken_name": "additional information. part number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. part number]"
+      }
+    },
+    {
+      "id": "p8_line4c_itemnumber[0]",
+      "name": "Part 8. Additional Information. 5. C. Enter Item Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line4c_ItemNumber[0]",
+      "label": "Part 8. Additional Information. 5. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.5.C",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 65
+      },
+      "spoken_name": "additional information. item number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. item number]"
+      }
+    },
+    {
+      "id": "p8_line4d_additionalinfo[0]",
+      "name": "Part 8. Additional Information. 5. D. Enter Additional Information.",
+      "type": "textarea",
+      "pdf_field_name": "P8_Line4d_AdditionalInfo[0]",
+      "label": "Part 8. Additional Information. 5. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.5.D",
+      "pdf_position": {
+        "page": 7,
+        "y": 90
+      },
+      "spoken_name": "additional information. additional information",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. additional information]"
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber[0]",
+      "name": "Part 8. Additional Information. 6. A. Enter Page Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5a_PageNumber[0]",
+      "label": "Part 8. Additional Information. 6. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.6.A",
+      "max_length": 2,
+      "pdf_position": {
+        "page": 7,
+        "y": 294
+      },
+      "spoken_name": "additional information. page number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. page number]"
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber[0]",
+      "name": "Part 8. Additional Information. 6. B. Enter Part Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5b_PartNumber[0]",
+      "label": "Part 8. Additional Information. 6. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.6.B",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 294
+      },
+      "spoken_name": "additional information. part number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. part number]"
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber[0]",
+      "name": "Part 8. Additional Information. 6. C. Enter Item Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5c_ItemNumber[0]",
+      "label": "Part 8. Additional Information. 6. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.6.C",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 294
+      },
+      "spoken_name": "additional information. item number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. item number]"
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo[0]",
+      "name": "Part 8. Additional Information. 6. D. Enter Additional Information.",
+      "type": "textarea",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[0]",
+      "label": "Part 8. Additional Information. 6. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.6.D",
+      "pdf_position": {
+        "page": 7,
+        "y": 317
+      },
+      "spoken_name": "additional information. additional information",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. additional information]"
+      }
+    },
+    {
+      "id": "p8_line5a_pagenumber[2]",
+      "name": "Part 8. Additional Information. 7. A. Enter Page Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5a_PageNumber[2]",
+      "label": "Part 8. Additional Information. 7. A. Enter Page Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.7.A",
+      "max_length": 2,
+      "pdf_position": {
+        "page": 7,
+        "y": 522
+      },
+      "spoken_name": "additional information. page number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. page number]"
+      }
+    },
+    {
+      "id": "p8_line5b_partnumber[2]",
+      "name": "Part 8. Additional Information. 7. B. Enter Part Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5b_PartNumber[2]",
+      "label": "Part 8. Additional Information. 7. B. Enter Part Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": false,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.7.B",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 522
+      },
+      "spoken_name": "additional information. part number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. part number]"
+      }
+    },
+    {
+      "id": "p8_line5c_itemnumber[2]",
+      "name": "Part 8. Additional Information. 7. C. Enter Item Number.",
+      "type": "text",
+      "pdf_field_name": "P8_Line5c_ItemNumber[2]",
+      "label": "Part 8. Additional Information. 7. C. Enter Item Number.",
+      "read_only": false,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.7.C",
+      "max_length": 4,
+      "pdf_position": {
+        "page": 7,
+        "y": 522
+      },
+      "spoken_name": "additional information. item number",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. item number]"
+      }
+    },
+    {
+      "id": "p8_line5d_additionalinfo[2]",
+      "name": "Part 8. Additional Information. 7. D. Enter Additional Information.",
+      "type": "textarea",
+      "pdf_field_name": "P8_Line5d_AdditionalInfo[2]",
+      "label": "Part 8. Additional Information. 7. D. Enter Additional Information.",
+      "read_only": false,
+      "required": false,
+      "multiline": true,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.7.D",
+      "pdf_position": {
+        "page": 7,
+        "y": 545
+      },
+      "spoken_name": "additional information. additional information",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. additional information]"
+      }
+    },
+    {
+      "id": "p1_line3a_familyname[1]",
+      "name": "Part 8. Additional Information. If you need extra space to provide any additional information within",
+      "type": "text",
+      "pdf_field_name": "P1_Line3a_FamilyName[1]",
+      "label": "Part 8. Additional Information. If you need extra space to provide any additional information within this application, use the space below.  If you need more space than what is provided, you may make copies of this page to complete and file with this application or attach a separate sheet of paper.  Include your name and. A. Number (if any) at the top of each sheet; indicate the Page Number, Part Number, and Item Number to which your answer refers; and sign and date each sheet. Your Full Name. 1. A. Family Name (Last Name). This is a read only field. This field pre-populates from page 1.",
+      "read_only": true,
+      "required": false,
+      "multiline": false,
+      "is_comb": true,
+      "hidden": false,
+      "section_id": "Part 8 - Additional Information",
+      "question_number": "8.A.1.A.1",
+      "pdf_position": {
+        "page": 7,
+        "y": 209
+      },
+      "spoken_name": "additional information. if you need extra space to",
+      "help": {
+        "instructions": "[TODO: Add help text for additional information. if you need extra space to]"
+      }
+    }
+  ],
+  "extraction_notes": {
+    "radio_checkbox_groups_detected": 16,
+    "sections_detected": 10,
+    "select_options_extracted": 0,
+    "needs_human_review": [
+      "Help text (all fields)",
+      "Validation rules",
+      "Conditional dependencies",
+      "Spoken names (placeholders generated)",
+      "Field grouping verification"
+    ]
+  }
+}
