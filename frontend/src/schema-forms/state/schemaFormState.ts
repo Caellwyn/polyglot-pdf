@@ -237,32 +237,11 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Mark current part as completed
-   */
-  static markPartComplete(state: SchemaFormState, partId: string): SchemaFormState {
-    const newState = {
-      ...state,
-      completedParts: new Set([...state.completedParts, partId]),
-      lastUpdated: Date.now(),
-    };
-
-    this.save(newState);
-    return newState;
-  }
-
-  /**
    * Mark section as completed (backwards compatibility wrapper)
    * @deprecated Use markPartComplete() instead
    */
   static markSectionComplete(state: SchemaFormState, sectionId: string): SchemaFormState {
     return this.markPartComplete(state, sectionId);
-  }
-
-  /**
-   * Get current part from schema
-   */
-  static getCurrentPart(state: SchemaFormState) {
-    return state.schema.parts?.find((p) => p.id === state.currentPartId) || null;
   }
 
   /**
@@ -635,6 +614,88 @@ export class SchemaFormStateManager {
     const newState = {
       ...state,
       sessionId,
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Get field ID by spoken name (for WebSocket field lookups)
+   * Searches current part + completed parts for field with matching spoken_name or alias
+   */
+  static getFieldBySpokenName(state: SchemaFormState, spokenName: string): string | null {
+    const lowerSpokenName = spokenName.toLowerCase();
+
+    // Get all parts to search (current + completed)
+    const partsToSearch = new Set([state.currentPartId, ...state.completedParts]);
+
+    for (const partId of partsToSearch) {
+      const part = state.schema.parts?.find(p => p.id === partId);
+      if (!part) continue;
+
+      // Get sections in this part
+      const partSections = state.schema.sections.filter(s => part.section_ids.includes(s.id));
+
+      // Search fields in these sections
+      for (const section of partSections) {
+        for (const fieldId of section.fields) {
+          const field = state.schema.fields.find(f => f.id === fieldId);
+          if (!field) continue;
+
+          // Check spoken_name
+          if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
+            return field.id;
+          }
+
+          // Check spoken_aliases
+          if (field.spoken_aliases) {
+            for (const alias of field.spoken_aliases) {
+              if (alias.toLowerCase() === lowerSpokenName) {
+                return field.id;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get part label by order number
+   */
+  static getPartLabel(state: SchemaFormState, orderNumber: number): string {
+    const part = state.schema.parts?.find(p => p.order === orderNumber);
+    return part?.label || '';
+  }
+
+  /**
+   * Find part ID by label (case-insensitive)
+   */
+  static findPartByLabel(state: SchemaFormState, label: string): string | null {
+    const lowerLabel = label.toLowerCase();
+    const part = state.schema.parts?.find(p =>
+      p.label.toLowerCase() === lowerLabel
+    );
+    return part?.id || null;
+  }
+
+  /**
+   * Get current part from state
+   */
+  static getCurrentPart(state: SchemaFormState) {
+    return state.schema.parts?.find(p => p.id === state.currentPartId) || null;
+  }
+
+  /**
+   * Mark a part as completed
+   */
+  static markPartComplete(state: SchemaFormState, partId: string): SchemaFormState {
+    const newState = {
+      ...state,
+      completedParts: new Set([...state.completedParts, partId]),
       lastUpdated: Date.now()
     };
     this.save(newState);
