@@ -17,6 +17,118 @@
 
 ## Recent Accomplishments
 
+### November 5, 2025 - Phase 1: WebSocket State Manager Consolidation ✅
+
+**Problem Solved:** Align schema-forms state management with existing WebSocket voice integration patterns.
+
+**Branch:** `claude/align-websockets-011CUpAutS2MaBKLNxYFQRQM`
+
+#### 🎯 Features Implemented
+
+**1. WebSocket-Compatible State Management**
+- ✅ Added `FieldValue` wrapper type for tracking AI-filled vs user-filled fields
+- ✅ Updated `SchemaFormState` interface with WebSocket-specific properties:
+  - `fieldValues: Record<string, FieldValue>` (was `Record<string, any>`)
+  - `currentPartId` (renamed from `currentSectionId`)
+  - `completedParts` (renamed from `completedSections`)
+  - `sessionId` (set by backend during handshake)
+- ✅ Backwards compatibility migration in `load()` method
+- ✅ WebSocket integration methods:
+  - `getCurrentPartNumber()` - Maps parts[].order to section_number
+  - `switchToPart()` - Section switching with completion tracking
+  - `extractPartFields()` - Extract schema subset for current part
+  - `getPreviousSpokenNames()` - Collect spoken names from completed parts
+  - `getHandshakePayload()` - Generate WebSocket handshake data
+  - `setSessionId()` - Store backend session ID
+
+**2. Schema Support Improvements**
+- ✅ Fixed section deduplication to skip non-"Part N" patterns
+- ✅ Legacy schema support (schemas without parts array)
+- ✅ Handles schemas with `section-*` IDs vs `Part N` IDs
+
+**3. Comprehensive Testing**
+- ✅ Created 40 unit tests with 100% pass rate
+- ✅ Test coverage for:
+  - FieldValue wrapping/unwrapping
+  - Backwards compatibility migration
+  - WebSocket handshake payload generation
+  - Part extraction and filtering
+  - Spoken name collection (including aliases)
+  - State persistence (save/load round-trip)
+  - Legacy schema support
+
+#### 📁 Files Created/Modified
+
+**Frontend:**
+- `frontend/src/schema-forms/types/schema.ts` - UPDATED: Added FieldValue interface
+- `frontend/src/schema-forms/state/schemaFormState.ts` - UPDATED: WebSocket methods (+263 lines, -32 lines)
+- `frontend/src/schema-forms/components/SchemaForm.tsx` - UPDATED: currentSectionId → currentPartId
+- `frontend/src/schema-forms/state/schemaFormState.test.ts` - NEW: 40 comprehensive unit tests (792 lines)
+
+**Documentation:**
+- `planning_documents/FRONTEND_CONSOLIDATION_PLAN.md` - NEW: Consolidation strategy (960 lines)
+- `planning_documents/TECHNICAL_GUIDE.md` - UPDATED: Marked activity watchdog as deprecated
+
+#### 📊 Metrics
+
+- **Commits:** 2 (planning + phase 1 implementation)
+- **Files Changed:** 6 files (3 src, 1 test, 2 docs)
+- **Lines Added:** ~1,055 new, ~40 modified
+- **Tests:** 40/40 passing (100%)
+- **Estimated Time:** 3 hours actual vs 4 hours planned
+
+#### 🚀 Next Steps
+
+**Phase 3: Voice Overlay Integration** (~3 hours)
+- Wire voice overlay components into schema forms
+- Update VoiceOverlay to use SchemaFormStateManager
+- Test end-to-end voice form filling
+
+---
+
+### November 5, 2025 - Phase 2: WebSocket Connection Layer ✅ COMPLETE
+
+**Problem Solved:** Update entire WebSocket connection layer to use new parts-based SchemaFormStateManager
+
+**Branch:** `claude/align-websockets-011CUpAutS2MaBKLNxYFQRQM`
+
+#### 🎯 Features Implemented
+
+**1. Navigation Functions Updated**
+- ✅ Updated `navigation.ts` to use `SchemaFormState` instead of `WebFormState`
+- ✅ Updated property references: `current_values` → `fieldValues`
+- ✅ Updated field validation: `field.required` → `field.validation?.required`
+- ✅ All navigation functions now TypeScript-clean
+
+**2. Helper Methods Added to SchemaFormStateManager**
+- ✅ `getFieldBySpokenName()` - Lookup field ID by spoken name
+- ✅ `getPartLabel()` - Get part label by order number
+- ✅ `findPartByLabel()` - Find part ID by label
+- ✅ `getCurrentPart()` - Get current part from state
+- ✅ `markPartComplete()` - Mark a part as completed
+
+**3. All WebSocket Connection Methods Reimplemented**
+- ✅ Core Methods: init, handshake, session ready, field updates, progress
+- ✅ Backend Request Handlers: handleGetFieldValue, handlePrepareSwitch, handleSwitch, handleComplete
+- ✅ Public Section Methods: startSection, switchSection, completeSection, get methods
+
+#### 📁 Files Modified
+
+- `frontend/src/navigation.ts` - Updated for SchemaFormState
+- `frontend/src/schema-forms/state/schemaFormState.ts` - Added 5 helper methods
+- `frontend/src/webFormConnection.ts` - All 20+ methods reimplemented
+- `planning_documents/PHASE2_STATUS.md` - Marked complete
+
+#### 📊 Metrics
+
+- **Time Spent:** ~5 hours (as estimated)
+- **Methods Updated:** 20/20 (100%)
+- **TypeScript Errors:** 0 (all resolved)
+- **Lines Modified:** ~500 lines
+
+---
+
+### November 3-4, 2025 - Phase 3A: Backend PDF Filling (Partial) ⚠️ 🔧
 ### November 3-4, 2025 - Phase 3A: Backend PDF Filling ✅ COMPLETE
 
 **Problem Solved:** Enable round-trip PDF filling for USCIS XFA forms using backend PyMuPDF integration, including radio buttons and checkboxes.

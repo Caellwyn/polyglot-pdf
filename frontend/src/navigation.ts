@@ -1,19 +1,19 @@
 /**
  * Navigation - Client-side form field navigation logic
- * 
+ *
  * Phase 1 Implementation: Linear navigation for MVP
- * 
+ *
  * Purpose: Determine which field to fill next, calculate progress,
  * and detect form completion. All logic is client-side for stateless
  * backend architecture.
- * 
+ *
  * MVP Scope:
  * - ✅ Linear iteration (field order from schema)
  * - ✅ Skip confirmed fields
  * - ✅ Required field prioritization
  * - ✅ Progress calculation
  * - ✅ Completion detection
- * 
+ *
  * Out of Scope (Post-MVP):
  * - ❌ Hidden fields (display:none)
  * - ❌ Disabled fields
@@ -22,7 +22,8 @@
  * - ❌ Section-based navigation
  */
 
-import { WebFormState, FormSchema } from './webFormState';
+import type { SchemaFormState } from './schema-forms/state/schemaFormState';
+import type { FormSchema } from './schema-forms/types/schema';
 
 /**
  * Options for customizing navigation behavior
@@ -98,28 +99,28 @@ export interface ProgressMetrics {
  * ```
  */
 export function computeNextField(
-  state: WebFormState,
+  state: SchemaFormState,
   options?: NavigationOptions
 ): FormField | null {
   const {
     requiredOnly = false,
     skipConfirmed = true,
   } = options || {};
-  
+
   // Handle empty schema
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return null;
   }
-  
+
   // Iterate through fields in schema order
   for (const field of state.schema.fields) {
     // Apply required filter if requested
-    if (requiredOnly && !field.required) {
+    if (requiredOnly && !field.validation?.required) {
       continue;
     }
-    
+
     // Check if field is confirmed
-    const currentValue = state.current_values[field.id];
+    const currentValue = state.fieldValues[field.id];
     const isConfirmed = currentValue?.confirmed === true;
     
     // Skip confirmed fields if requested (default behavior)
@@ -162,7 +163,7 @@ export function computeNextField(
  * console.log(`Required: ${progress.requiredConfirmed}/${progress.required}`);
  * ```
  */
-export function getFormProgress(state: WebFormState): ProgressMetrics {
+export function getFormProgress(state: SchemaFormState): ProgressMetrics {
   // Handle empty schema
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return {
@@ -173,23 +174,23 @@ export function getFormProgress(state: WebFormState): ProgressMetrics {
       percentage: 0,
     };
   }
-  
+
   const total = state.schema.fields.length;
   let confirmed = 0;
   let required = 0;
   let requiredConfirmed = 0;
-  
+
   for (const field of state.schema.fields) {
-    const currentValue = state.current_values[field.id];
+    const currentValue = state.fieldValues[field.id];
     const isConfirmed = currentValue?.confirmed === true;
-    
+
     // Count confirmed fields
     if (isConfirmed) {
       confirmed++;
     }
-    
+
     // Count required fields
-    if (field.required) {
+    if (field.validation?.required) {
       required++;
       if (isConfirmed) {
         requiredConfirmed++;
@@ -229,40 +230,40 @@ export function getFormProgress(state: WebFormState): ProgressMetrics {
  * }
  * ```
  */
-export function isFormComplete(state: WebFormState): boolean {
+export function isFormComplete(state: SchemaFormState): boolean {
   // Handle empty schema - consider empty form as "complete"
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return true;
   }
-  
+
   // Check if form has any required fields
-  const hasRequiredFields = state.schema.fields.some(field => field.required);
-  
+  const hasRequiredFields = state.schema.fields.some(field => field.validation?.required);
+
   if (hasRequiredFields) {
     // If form has required fields, ALL required fields must be confirmed
     for (const field of state.schema.fields) {
-      if (field.required) {
-        const currentValue = state.current_values[field.id];
+      if (field.validation?.required) {
+        const currentValue = state.fieldValues[field.id];
         const isConfirmed = currentValue?.confirmed === true;
-        
+
         if (!isConfirmed) {
           return false; // Found an unconfirmed required field
         }
       }
     }
-    
+
     return true; // All required fields are confirmed
   } else {
     // If form has no required fields, ALL fields must be confirmed
     for (const field of state.schema.fields) {
-      const currentValue = state.current_values[field.id];
+      const currentValue = state.fieldValues[field.id];
       const isConfirmed = currentValue?.confirmed === true;
-      
+
       if (!isConfirmed) {
         return false; // Found an unconfirmed field
       }
     }
-    
+
     return true; // All fields are confirmed
   }
 }
@@ -301,16 +302,16 @@ export function formatNextFieldHint(
 
 /**
  * Get the order/index of a field in the schema (1-based)
- * 
+ *
  * @param state - Current form state
  * @param fieldId - ID of the field to find
  * @returns 1-based index of the field, or null if not found
  */
-export function getFieldOrder(state: WebFormState, fieldId: string): number | null {
+export function getFieldOrder(state: SchemaFormState, fieldId: string): number | null {
   if (!state.schema || !state.schema.fields) {
     return null;
   }
-  
+
   const index = state.schema.fields.findIndex(field => field.id === fieldId);
   return index >= 0 ? index + 1 : null;
 }

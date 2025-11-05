@@ -1,23 +1,20 @@
 /**
- * WebFormConnection - WebSocket connection manage  async connect(wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      return;
-    }
-    
-    this.setStatus("connecting");
-    
-    try:
-      this.ws = new WebSocket(wsUrl); * 
+ * WebFormConnection - WebSocket connection manager
+ *
  * Handles WebSocket lifecycle with auto-reconnect and state preservation.
- * Works with WebFormStateManager for stateless architecture.
+ * Works with SchemaFormStateManager for stateless architecture.
  */
 
-import { WebFormStateManager, WebFormState, FormSchema } from "./webFormState";
-import { 
-  computeNextField, 
-  formatNextFieldHint, 
+import {
+  SchemaFormStateManager,
+  type SchemaFormState
+} from "./schema-forms/state/schemaFormState";
+import type { FormSchema } from "./schema-forms/types/schema";
+import {
+  computeNextField,
+  formatNextFieldHint,
   getFieldOrder,
-  isFormComplete 
+  isFormComplete
 } from "./navigation";
 
 export type ConnectionStatus = 
@@ -40,7 +37,7 @@ export interface ConnectionCallbacks {
 
 export class WebFormConnection {
   private ws: WebSocket | null = null;
-  private state: WebFormState;
+  private state: SchemaFormState;
   private callbacks: ConnectionCallbacks;
   private status: ConnectionStatus = "disconnected";
   private reconnectAttempts = 0;
@@ -59,7 +56,7 @@ export class WebFormConnection {
   private fillLanguage: string = "English";
   
   constructor(schema: FormSchema, callbacks: ConnectionCallbacks = {}, fillLanguage: string = "English") {
-    this.state = WebFormStateManager.init(schema);
+    this.state = SchemaFormStateManager.init(schema);
     this.callbacks = callbacks;
     this.fillLanguage = fillLanguage;
   }
@@ -151,17 +148,17 @@ export class WebFormConnection {
   private handleOpen(): void {
     this.reconnectAttempts = 0;
     this.reconnectDelay = 1000;
-    
+
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
-    
+
     // Skip automatic handshake during section switches (startSection will send it)
     if (this.isSectionSwitching) {
       return;
     }
-    
+
     // Send handshake with schema + current_values + fill_language
-    const handshake = WebFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
+    const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
     this.send(handshake);
   }
   
@@ -274,15 +271,15 @@ export class WebFormConnection {
    */
   private handleSessionReady(message: any): void {
     const { session_id, ephemeral } = message;
-    
+
     // Update state with session ID
-    this.state = WebFormStateManager.setSessionId(this.state, session_id);
+    this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
     this.setStatus("connected");
-    
+
     if (this.callbacks.onSessionReady) {
       this.callbacks.onSessionReady(session_id);
     }
-    
+
     // No need to send initial hint - backend will request it as part of initial message
   }
   
@@ -348,7 +345,7 @@ export class WebFormConnection {
         continue;
       }
 
-      const currentValue = this.state.current_values[field.id]?.value;
+      const currentValue = this.state.fieldValues[field.id]?.value;
       const shouldUpdate = isApplied || !Object.is(currentValue, value);
       if (!shouldUpdate) {
         continue;
@@ -357,25 +354,25 @@ export class WebFormConnection {
       this.updateField(field.id, value as any, { confirmed: isApplied, emit: false });
       updatedFields.push({ fieldId: field.id, value });
     }
-    
+
     // Also check for fields where Gemini dropped the [] suffix (e.g., "functioningConcerns" instead of "functioningConcerns[]")
     for (const [key, value] of Object.entries(formState)) {
       // Skip if we already processed this field
       if (this.state.schema.fields.some(f => f.id === key || f.name === key)) {
         continue;
       }
-      
+
       // Try appending [] to see if that matches a field
       const keyWithBrackets = key + '[]';
       const field = this.state.schema.fields.find(f => f.id === keyWithBrackets || f.name === keyWithBrackets);
-      
+
       if (field) {
         const isApplied = appliedSet.has(key) || appliedSet.has(keyWithBrackets);
         if (limitToApplied && !isApplied) {
           continue;
         }
-        
-        const currentValue = this.state.current_values[field.id]?.value;
+
+        const currentValue = this.state.fieldValues[field.id]?.value;
         const shouldUpdate = isApplied || !Object.is(currentValue, value);
         if (!shouldUpdate) {
           continue;
@@ -422,7 +419,7 @@ export class WebFormConnection {
     
     if (requestedFieldIds.length === 0) {
       // No specific fields requested - return all
-      for (const [fieldId, fieldValue] of Object.entries(this.state.current_values)) {
+      for (const [fieldId, fieldValue] of Object.entries(this.state.fieldValues)) {
         fieldValues[fieldId] = {
           value: fieldValue.value,
           confirmed: fieldValue.confirmed,
@@ -431,16 +428,16 @@ export class WebFormConnection {
     } else {
       // Return only requested fields
       for (const fieldId of requestedFieldIds) {
-        let fieldValue = this.state.current_values[fieldId];
-        
+        let fieldValue = this.state.fieldValues[fieldId];
+
         // Fallback: Try with [] appended if not found (Gemini sometimes drops the [])
         if (!fieldValue && !fieldId.endsWith('[]')) {
-          fieldValue = this.state.current_values[fieldId + '[]'];
+          fieldValue = this.state.fieldValues[fieldId + '[]'];
         }
-        
+
         // Fallback: Try without [] if not found (in case query has [] but state doesn't)
         if (!fieldValue && fieldId.endsWith('[]')) {
-          fieldValue = this.state.current_values[fieldId.slice(0, -2)];
+          fieldValue = this.state.fieldValues[fieldId.slice(0, -2)];
         }
         
         if (fieldValue) {
@@ -528,44 +525,38 @@ export class WebFormConnection {
    */
   private async handleSwitchSectionRequest(message: any): Promise<void> {
     const identifier = message.identifier;
-    
+
     try {
-      // Parse identifier - try as number first
-      let targetNumber: number | undefined;
-      
+      // Parse identifier - try as number first, then label
+      let targetPartId: string | undefined;
+
       if (typeof identifier === 'number') {
-        targetNumber = identifier;
+        const part = this.state.schema.parts?.find(p => p.order === identifier);
+        targetPartId = part?.id;
       } else if (typeof identifier === 'string') {
-        // Try to parse as number
         const parsed = parseInt(identifier, 10);
         if (!isNaN(parsed)) {
-          targetNumber = parsed;
+          const part = this.state.schema.parts?.find(p => p.order === parsed);
+          targetPartId = part?.id;
         } else {
-          // Look up by label (case-insensitive)
-          const currentState = WebFormStateManager.load();
-          if (currentState?.section_index) {
-            const identifierLower = identifier.toLowerCase();
-            const section = currentState.section_index.sections.find(
-              s => s.section_label.toLowerCase() === identifierLower ||
-                   s.section_id.toLowerCase() === identifierLower
-            );
-            
-            if (section) {
-              targetNumber = section.section_number;
-            }
-          }
+          targetPartId = SchemaFormStateManager.findPartByLabel(this.state, identifier);
         }
       }
-      
-      if (!targetNumber) {
+
+      if (!targetPartId) {
+        console.warn('[WebFormConnection] Invalid section identifier:', identifier);
         return;
       }
-      
+
       // Call existing switchSection method using the stored connected URL
-      await this.switchSection(targetNumber, this.connectedUrl);
-      
+      // switchSection expects order number
+      const part = this.state.schema.parts?.find(p => p.id === targetPartId);
+      if (part) {
+        await this.switchSection(part.order, this.connectedUrl);
+      }
+
     } catch (error) {
-      // Error switching section - ignore
+      console.error('[WebFormConnection] Error switching section:', error);
     }
   }
 
@@ -575,16 +566,16 @@ export class WebFormConnection {
   private handlePrepareSectionSwitchRequest(message: any): void {
     const requestId = message.request_id;
     const identifier = message.identifier;
-    
+
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
-    
+
     try {
-      const currentState = WebFormStateManager.load();
-      console.log('[WebFormConnection] Loaded state', { hasState: !!currentState, hasSectionIndex: !!currentState?.section_index });
-      
-      if (!currentState || !currentState.section_index) {
+      const currentState = SchemaFormStateManager.load();
+      console.log('[WebFormConnection] Loaded state', { hasState: !!currentState, hasParts: !!currentState?.schema.parts });
+
+      if (!currentState || !currentState.schema.parts) {
         // Send error response
-        console.log('[WebFormConnection] No state/section_index, sending null response');
+        console.log('[WebFormConnection] No state/parts, sending null response');
         this.send({
           type: "section_info_response",
           request_id: requestId,
@@ -592,33 +583,30 @@ export class WebFormConnection {
         });
         return;
       }
-      
-      // Parse identifier - try as number first
-      let targetNumber: number | undefined;
-      
+
+      // Parse identifier - try as order number first, then label
+      let targetPartId: string | null | undefined;
+
       if (typeof identifier === 'number') {
-        targetNumber = identifier;
+        // Find part by order number
+        const part = currentState.schema.parts.find(p => p.order === identifier);
+        targetPartId = part?.id;
       } else if (typeof identifier === 'string') {
         const parsed = parseInt(identifier, 10);
         if (!isNaN(parsed)) {
-          targetNumber = parsed;
+          // Numeric string - find by order
+          const part = currentState.schema.parts.find(p => p.order === parsed);
+          targetPartId = part?.id;
         } else {
-          // Look up by label
-          const identifierLower = identifier.toLowerCase();
-          const section = currentState.section_index.sections.find(
-            s => s.section_label.toLowerCase() === identifierLower ||
-                 s.section_id.toLowerCase() === identifierLower
-          );
-          if (section) {
-            targetNumber = section.section_number;
-          }
+          // Non-numeric string - find by label
+          targetPartId = SchemaFormStateManager.findPartByLabel(currentState, identifier);
         }
       }
-      
-      console.log('[WebFormConnection] Parsed target number:', targetNumber);
-      
-      if (!targetNumber) {
-        console.log('[WebFormConnection] Invalid target number, sending null response');
+
+      console.log('[WebFormConnection] Parsed target part ID:', targetPartId);
+
+      if (!targetPartId) {
+        console.log('[WebFormConnection] Invalid target identifier, sending null response');
         this.send({
           type: "section_info_response",
           request_id: requestId,
@@ -626,64 +614,66 @@ export class WebFormConnection {
         });
         return;
       }
-      
-      // Switch to target section in local state (no disconnect!)
-      console.log('[WebFormConnection] Switching to section', targetNumber);
-      const updatedState = WebFormStateManager.switchSection(currentState, targetNumber);
+
+      // Switch to target part in local state (no disconnect!)
+      console.log('[WebFormConnection] Switching to part', targetPartId);
+      const updatedState = SchemaFormStateManager.switchToPart(currentState, targetPartId);
       this.state = updatedState;
-      
-      // Get section schema and values
-      console.log('[WebFormConnection] Building section schema and values');
-      const sectionSchema = updatedState.schema;
-      const sectionFieldIds = new Set(sectionSchema.fields.map(f => f.id));
-      const sectionValues: Record<string, any> = {};
-      
-      for (const [fieldId, fieldValue] of Object.entries(updatedState.current_values)) {
-        if (sectionFieldIds.has(fieldId)) {
-          sectionValues[fieldId] = fieldValue;
+
+      // Get part schema and values
+      console.log('[WebFormConnection] Building part schema and values');
+      const partSchema = SchemaFormStateManager.extractPartFields(updatedState.schema, targetPartId);
+      const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
+      const partValues: Record<string, any> = {};
+
+      for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
+        if (partFieldIds.has(fieldId)) {
+          partValues[fieldId] = fieldValue;
         }
       }
-      
-      // Build previous spoken names from completed sections
+
+      // Build previous spoken names from completed parts
       console.log('[WebFormConnection] Building previous spoken names');
-      const spokenNameMap = WebFormStateManager.getSpokenNameMap(updatedState);
-      const previousSpokenNames = Array.from(spokenNameMap.keys());
-      
+      const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
+
       // Compute initial field hint
       console.log('[WebFormConnection] Computing initial field hint');
       const initialFieldHint = this.computeNextFieldHintString();
-      
+
       // Store last field hint for recovery prompts
       if (initialFieldHint) {
         sessionStorage.setItem('vff_last_field_hint', initialFieldHint);
       }
-      
-      console.log('[WebFormConnection] Sending section_info_response', { 
-        requestId, 
-        sectionNumber: targetNumber,
-        fieldCount: sectionSchema.fields.length,
-        valueCount: Object.keys(sectionValues).length
+
+      // Get part metadata
+      const currentPart = updatedState.schema.parts!.find(p => p.id === targetPartId);
+
+      console.log('[WebFormConnection] Sending section_info_response', {
+        requestId,
+        sectionNumber: currentPart?.order,
+        fieldCount: partSchema.fields.length,
+        valueCount: Object.keys(partValues).length
       });
-      
-      // Send section info back to backend
+
+      // Send section info back to backend (using section_number for compatibility)
       this.send({
         type: "section_info_response",
         request_id: requestId,
         section_info: {
-          schema: sectionSchema,
-          current_values: sectionValues,
+          schema: partSchema,
+          current_values: partValues,
           metadata: {
-            section_number: targetNumber,
-            total_sections: updatedState.section_index!.total_sections,
-            section_label: WebFormStateManager.getSectionLabel(updatedState, targetNumber) || '',
+            section_number: currentPart?.order ?? 1, // Backend expects section_number
+            total_sections: updatedState.schema.parts!.length,
+            section_label: currentPart?.label || '',
             previous_spoken_names: previousSpokenNames,
           },
           initial_field_hint: initialFieldHint,
         },
       });
-      
+
       console.log('[WebFormConnection] handlePrepareSectionSwitchRequest COMPLETE');
-      
+
     } catch (error) {
       console.error('[WebFormConnection] Error preparing section switch:', error);
       this.send({
@@ -714,38 +704,35 @@ export class WebFormConnection {
   private handleGetFieldValueRequest(message: any): void {
     const requestId = message.request_id;
     const spokenName = message.spoken_name;
-    
+
     try {
-      const currentState = WebFormStateManager.load();
+      const currentState = SchemaFormStateManager.load();
       if (!currentState) {
         this.sendFieldValueResponse(requestId, null, false);
         return;
       }
-      
-      // Get spoken name map (includes current + completed sections)
-      const spokenNameMap = WebFormStateManager.getSpokenNameMap(currentState);
-      
-      // Lookup field ID by spoken name (case-insensitive)
-      const fieldId = spokenNameMap.get(spokenName.toLowerCase());
-      
+
+      // Lookup field ID by spoken name (searches current + completed parts)
+      const fieldId = SchemaFormStateManager.getFieldBySpokenName(currentState, spokenName);
+
       if (!fieldId) {
         // Field doesn't exist in schema
         this.sendFieldValueResponse(requestId, null, false);
         return;
       }
-      
-      // Field exists - get value from current_values
-      const value = currentState.current_values[fieldId];
-      
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
+
+      // Field exists - get value from fieldValues
+      const fieldValue = currentState.fieldValues[fieldId];
+
+      if (fieldValue && fieldValue.value !== undefined && fieldValue.value !== null && String(fieldValue.value).trim() !== '') {
         // Field has a value
-        this.sendFieldValueResponse(requestId, value, true);
+        this.sendFieldValueResponse(requestId, fieldValue.value, true);
       } else {
         // Field exists but is empty/unfilled - send found=true with null value
         // This lets backend distinguish "field exists but empty" from "field doesn't exist"
         this.sendFieldValueResponse(requestId, null, true);
       }
-      
+
     } catch (error) {
       this.sendFieldValueResponse(requestId, null, false);
     }
@@ -768,41 +755,48 @@ export class WebFormConnection {
    */
   private async handleCompleteSectionRequest(message: any): Promise<void> {
     try {
-      // Mark current section as complete in state
-      const currentState = WebFormStateManager.load();
-      if (!currentState || !currentState.current_section) {
-        throw new Error('Section state not initialized');
+      // Mark current part as complete in state
+      const currentState = SchemaFormStateManager.load();
+      if (!currentState || !currentState.currentPartId) {
+        throw new Error('Part state not initialized');
       }
-      
-      const currentSection = currentState.current_section;
-      const updatedState = WebFormStateManager.completeSection(currentState, currentSection);
+
+      const currentPart = SchemaFormStateManager.getCurrentPart(currentState);
+      if (!currentPart) {
+        throw new Error('Current part not found');
+      }
+
+      // Mark part as completed
+      const updatedState = SchemaFormStateManager.markPartComplete(currentState, currentState.currentPartId);
       this.state = updatedState;
-      
-      // Check if this was the last section
-      if (currentSection >= updatedState.section_index!.total_sections) {
-        // Form is complete - stay connected but don't start new section
+
+      const totalParts = currentState.schema.parts?.length ?? 0;
+
+      // Check if this was the last part
+      if (currentPart.order >= totalParts) {
+        // Form is complete - stay connected but don't start new part
         this.send({
           type: "section_completed",
-          next_section: currentSection, // Same section (we're done)
+          next_section: currentPart.order, // Same section (we're done)
           form_complete: true,
         });
         return;
       }
-      
-      // Move to next section using backend-side reconnect (switchSection pattern)
-      const nextSection = currentSection + 1;
-      
+
+      // Move to next part using backend-side reconnect (switchSection pattern)
+      const nextPartOrder = currentPart.order + 1;
+
       // Use the switchSection method which uses manual_section_switch message
       // This keeps WebSocket alive and lets backend restart Gemini session
-      await this.switchSection(nextSection, this.connectedUrl);
-      
+      await this.switchSection(nextPartOrder, this.connectedUrl);
+
       // Send response to backend confirming section completed
       this.send({
         type: "section_completed",
-        next_section: nextSection,
+        next_section: nextPartOrder,
         form_complete: false,
       });
-      
+
     } catch (error) {
       console.error('[WebFormConnection] Error completing section:', error);
       // Send error response to backend
@@ -1160,7 +1154,7 @@ export class WebFormConnection {
     const confirmed = options?.confirmed;
     const emit = options?.emit ?? false;
 
-    this.state = WebFormStateManager.updateFieldValue(this.state, fieldId, value, { confirmed });
+    this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, { confirmed });
 
     if (emit) {
       this.flushField(fieldId);
@@ -1172,7 +1166,7 @@ export class WebFormConnection {
       return;
     }
 
-    const fieldState = this.state.current_values[fieldId];
+    const fieldState = this.state.fieldValues[fieldId];
     if (!fieldState) {
       return;
     }
@@ -1215,7 +1209,7 @@ export class WebFormConnection {
   /**
    * Get current state
    */
-  getState(): WebFormState {
+  getState(): SchemaFormState {
     return this.state;
   }
   
@@ -1223,81 +1217,87 @@ export class WebFormConnection {
    * Get completion percentage
    */
   getCompletionPercentage(): number {
-    return WebFormStateManager.getCompletionPercentage(this.state);
+    return SchemaFormStateManager.getProgress(this.state);
   }
-  
+
   /**
    * Clear state and disconnect
    */
   reset(): void {
     this.disconnect();
-    WebFormStateManager.clear();
+    SchemaFormStateManager.clear();
   }
   
   /**
-   * Phase 3: Start a specific section (closes current session, starts new one)
+   * Phase 3: Start a specific part (closes current session, starts new one)
+   * @param sectionNumber - Part order number (1-indexed, named sectionNumber for compatibility)
    */
   async startSection(sectionNumber: number, wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
     try {
       // Set switching status
       this.isSectionSwitching = true;
       this.setStatus("switching_section");
-      
+
       // Disconnect current session if connected
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.disconnect();
         // Wait a moment for cleanup
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       // Load current state
-      let currentState = WebFormStateManager.load();
-      if (!currentState || !currentState.section_index || !currentState.full_schema) {
-        throw new Error('Section index or full schema not initialized');
+      let currentState = SchemaFormStateManager.load();
+      if (!currentState || !currentState.schema.parts) {
+        throw new Error('Parts not initialized in schema');
       }
-      
-      // Switch to target section
-      currentState = WebFormStateManager.switchSection(currentState, sectionNumber);
+
+      // Find part by order number
+      const targetPart = currentState.schema.parts.find(p => p.order === sectionNumber);
+      if (!targetPart) {
+        throw new Error(`Part with order ${sectionNumber} not found`);
+      }
+
+      // Switch to target part
+      currentState = SchemaFormStateManager.switchToPart(currentState, targetPart.id);
       this.state = currentState;
-      
-      // Get section schema and current values for this section
-      const sectionSchema = currentState.schema;
-      const sectionValues: Record<string, any> = {};
-      
-      // Filter current_values to only include fields in this section
-      const sectionFieldIds = new Set(sectionSchema.fields.map(f => f.id));
-      for (const [fieldId, fieldValue] of Object.entries(currentState.current_values)) {
-        if (sectionFieldIds.has(fieldId)) {
-          sectionValues[fieldId] = fieldValue;
+
+      // Get part schema and current values for this part
+      const partSchema = SchemaFormStateManager.extractPartFields(currentState.schema, targetPart.id);
+      const partValues: Record<string, any> = {};
+
+      // Filter fieldValues to only include fields in this part
+      const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
+      for (const [fieldId, fieldValue] of Object.entries(currentState.fieldValues)) {
+        if (partFieldIds.has(fieldId)) {
+          partValues[fieldId] = fieldValue;
         }
       }
-      
-      // Build previous_spoken_names from completed sections
-      const spokenNameMap = WebFormStateManager.getSpokenNameMap(currentState);
-      const previousSpokenNames = Array.from(spokenNameMap.keys());
-      
-      // Connect to backend with section-specific handshake
+
+      // Build previous_spoken_names from completed parts
+      const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(currentState);
+
+      // Connect to backend with part-specific handshake
       await this.connect(wsUrl);
       this.isSectionSwitching = false; // Reset flag after successful reconnect
-      
-      // Compute initial field hint (first unfilled field in this section)
+
+      // Compute initial field hint (first unfilled field in this part)
       const initialFieldHint = this.computeNextFieldHintString();
-      
-      // Send handshake with section metadata and initial field hint
+
+      // Send handshake with section metadata and initial field hint (backend expects "section" terminology)
       this.send({
         type: "handshake",
-        schema: sectionSchema,
-        current_values: sectionValues,
+        schema: partSchema,
+        current_values: partValues,
         fill_language: this.fillLanguage,
-        // Phase 3: Section metadata
-        section_number: sectionNumber,
-        total_sections: currentState.section_index!.total_sections,
-        section_label: WebFormStateManager.getSectionLabel(currentState, sectionNumber) || '',
+        // Phase 3: Section metadata (using parts[].order as section_number)
+        section_number: targetPart.order,
+        total_sections: currentState.schema.parts!.length,
+        section_label: targetPart.label,
         previous_spoken_names: previousSpokenNames,
         // Include initial field hint so backend can use it immediately
         initial_field_hint: initialFieldHint,
       });
-      
+
     } catch (error) {
       // Reset flag on error
       this.isSectionSwitching = false;
@@ -1306,86 +1306,92 @@ export class WebFormConnection {
   }
   
   /**
-   * Phase 3: Switch to a different section (NEW: backend-side reconnect pattern)
-   * 
+   * Phase 3: Switch to a different part (NEW: backend-side reconnect pattern)
+   *
    * This now uses the backend-side Gemini reconnect pattern instead of disconnecting
    * the WebSocket. The backend closes/recreates the Gemini session with fresh context.
-   * 
-   * @param target - Section number (1-indexed) or section label
+   *
+   * @param target - Part order number (1-indexed) or part label
    * @param wsUrl - Backend WebSocket URL (kept for API compatibility but not used)
    */
   async switchSection(target: number | string, wsUrl: string): Promise<void> {
-    const currentState = WebFormStateManager.load();
-    if (!currentState || !currentState.section_index) {
-      throw new Error('Section index not initialized');
+    const currentState = SchemaFormStateManager.load();
+    if (!currentState || !currentState.schema.parts) {
+      throw new Error('Parts not initialized');
     }
-    
-    let targetNumber: number;
-    
+
+    let targetPartId: string | null;
+    let targetPart;
+
     // Parse target: number or label
     if (typeof target === 'number') {
-      targetNumber = target;
-    } else {
-      // Try to find by label
-      const found = WebFormStateManager.findSectionByLabel(currentState, target);
-      if (!found) {
-        throw new Error(`Section not found: ${target}`);
+      // Find part by order number
+      targetPart = currentState.schema.parts.find(p => p.order === target);
+      if (!targetPart) {
+        throw new Error(`Part with order ${target} not found`);
       }
-      targetNumber = found;
+      targetPartId = targetPart.id;
+    } else {
+      // Find by label
+      targetPartId = SchemaFormStateManager.findPartByLabel(currentState, target);
+      if (!targetPartId) {
+        throw new Error(`Part not found: ${target}`);
+      }
+      targetPart = currentState.schema.parts.find(p => p.id === targetPartId);
     }
-    
+
     // Validate range
-    if (targetNumber < 1 || targetNumber > currentState.section_index.total_sections) {
-      throw new Error(`Invalid section number: ${targetNumber} (must be 1-${currentState.section_index.total_sections})`);
+    if (targetPart && (targetPart.order < 1 || targetPart.order > currentState.schema.parts.length)) {
+      throw new Error(`Invalid part number: ${targetPart.order} (must be 1-${currentState.schema.parts.length})`);
     }
-    
+
     // Wait for WebSocket send buffer to drain before sending control message
     // This prevents the control message from being queued behind audio frames
     console.log('[WebFormConnection] Waiting for buffer to drain before section switch');
     await this.waitForBufferDrain(1000);
-    
+
     // Update status
     this.setStatus('switching_section');
-    
-    // Switch to target section in local state
-    const updatedState = WebFormStateManager.switchSection(currentState, targetNumber);
+
+    // Switch to target part in local state
+    const updatedState = SchemaFormStateManager.switchToPart(currentState, targetPartId);
     this.state = updatedState;
-    
-    // Build section info to send to backend (avoid round-trip delay)
-    const sectionSchema = updatedState.schema;
-    const sectionFieldIds = new Set(sectionSchema.fields.map(f => f.id));
-    const sectionValues: Record<string, any> = {};
-    
-    for (const [fieldId, fieldValue] of Object.entries(updatedState.current_values)) {
-      if (sectionFieldIds.has(fieldId)) {
-        sectionValues[fieldId] = fieldValue;
+
+    // Build part info to send to backend (avoid round-trip delay)
+    const partSchema = SchemaFormStateManager.extractPartFields(updatedState.schema, targetPartId);
+    const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
+    const partValues: Record<string, any> = {};
+
+    for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
+      if (partFieldIds.has(fieldId)) {
+        partValues[fieldId] = fieldValue;
       }
     }
-    
-    // Build previous spoken names from completed sections
-    const spokenNameMap = WebFormStateManager.getSpokenNameMap(updatedState);
-    const previousSpokenNames = Array.from(spokenNameMap.keys());
-    
+
+    // Build previous spoken names from completed parts
+    const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
+
     // Compute initial field hint
     const initialFieldHint = this.computeNextFieldHintString();
-    
+
     console.log('[WebFormConnection] Sending section switch with embedded info', {
-      sectionNumber: targetNumber,
-      fieldCount: sectionSchema.fields.length,
-      valueCount: Object.keys(sectionValues).length
+      sectionNumber: targetPart?.order,
+      fieldCount: partSchema.fields.length,
+      valueCount: Object.keys(partValues).length
     });
-    
+
     // Send section switch with all info embedded (no round-trip needed)
+    // Backend expects "section" terminology, so use parts[].order as section_number
     this.send({
       type: "manual_section_switch",
-      identifier: targetNumber.toString(),
+      identifier: targetPart?.order.toString(),
       section_info: {
-        schema: sectionSchema,
-        current_values: sectionValues,
+        schema: partSchema,
+        current_values: partValues,
         metadata: {
-          section_number: targetNumber,
-          total_sections: updatedState.section_index!.total_sections,
-          section_label: WebFormStateManager.getSectionLabel(updatedState, targetNumber) || '',
+          section_number: targetPart?.order,
+          total_sections: updatedState.schema.parts!.length,
+          section_label: targetPart?.label || '',
           previous_spoken_names: previousSpokenNames,
         },
         initial_field_hint: initialFieldHint,
@@ -1394,47 +1400,59 @@ export class WebFormConnection {
   }
   
   /**
-   * Phase 3: Complete current section and move to next
-   * 
+   * Phase 3: Complete current part and move to next
+   *
    * @param wsUrl - Backend WebSocket URL (REQUIRED - no default to prevent localhost fallback in production)
    */
   async completeSection(wsUrl: string): Promise<void> {
     if (!wsUrl) {
       throw new Error('wsUrl is required for completeSection - must pass the connected backend URL');
     }
-    const currentState = WebFormStateManager.load();
-    if (!currentState || !currentState.current_section || !currentState.section_index) {
-      throw new Error('Section state not initialized');
+    const currentState = SchemaFormStateManager.load();
+    if (!currentState || !currentState.currentPartId || !currentState.schema.parts) {
+      throw new Error('Part state not initialized');
     }
-    
-    const currentSection = currentState.current_section;
-    
-    // Mark section as complete
-    const updatedState = WebFormStateManager.completeSection(currentState, currentSection);
+
+    const currentPart = SchemaFormStateManager.getCurrentPart(currentState);
+    if (!currentPart) {
+      throw new Error('Current part not found');
+    }
+
+    // Mark part as complete
+    const updatedState = SchemaFormStateManager.markPartComplete(currentState, currentState.currentPartId);
     this.state = updatedState;
-    
-    // Check if this was the last section
-    if (currentSection >= updatedState.section_index!.total_sections) {
-      this.setStatus('connected'); // Stay connected but don't start new section
+
+    // Check if this was the last part
+    if (currentPart.order >= currentState.schema.parts.length) {
+      this.setStatus('connected'); // Stay connected but don't start new part
       return;
     }
-    
-    // Move to next section
-    const nextSection = currentSection + 1;
-    await this.startSection(nextSection, wsUrl);
+
+    // Move to next part
+    const nextPartOrder = currentPart.order + 1;
+    await this.startSection(nextPartOrder, wsUrl);
   }
   
   /**
-   * Phase 3: Get current section number
+   * Phase 3: Get current section number (returns part order)
    */
   getCurrentSection(): number | undefined {
-    return this.state.current_section;
+    const currentPart = SchemaFormStateManager.getCurrentPart(this.state);
+    return currentPart?.order;
   }
-  
+
   /**
-   * Phase 3: Get completed sections
+   * Phase 3: Get completed sections (returns part orders)
    */
   getCompletedSections(): Set<number> {
-    return this.state.completed_sections || new Set();
+    // Convert completed part IDs to order numbers
+    const orderNumbers = new Set<number>();
+    for (const partId of this.state.completedParts) {
+      const part = this.state.schema.parts?.find(p => p.id === partId);
+      if (part) {
+        orderNumbers.add(part.order);
+      }
+    }
+    return orderNumbers;
   }
 }

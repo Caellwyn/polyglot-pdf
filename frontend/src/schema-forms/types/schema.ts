@@ -329,3 +329,17 @@ export interface FormSession {
   // Status
   status: SessionStatus;
 }
+
+// ============================================================================
+// WebSocket Integration Types
+// ============================================================================
+
+/**
+ * Field value wrapper for WebSocket compatibility
+ * Used to track AI-filled vs user-filled fields
+ */
+export interface FieldValue {
+  value: string | boolean | null;
+  confirmed?: boolean;  // Set to true when AI fills the field
+  lastModified?: number;  // Timestamp for conflict resolution
+}
