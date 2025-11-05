@@ -45,36 +45,47 @@ This plan outlines the transformation from a web-form-first system to a **PDF-dr
 
 ---
 
-## Current Session Context (November 2, 2025)
+## Current Session Context (November 5, 2025)
 
-**Active Work**: Phase 2A Complete ✅ - MVP Schema → WebForm renderer working with bug fixes
+**Active Work**: Phase 4A - Voice Integration with Schema Forms
 
-**System Architecture Goals:**
-1. **Cloud Repository**: Schemas + PDFs served via dropdown (future)
-2. **Generic Renderer**: Schema → WebForm with preserved validation, dependencies, ordering
-3. **Backend Schema**: Optimized version for Gemini (spoken names, hints, dependencies)
-4. **Round-Trip System**: WebForm data → PDF via pdf-lib (fill, preview, download, print)
+**Completed**:
+- ✅ Phase 1: PDF → Schema Foundation (I-90 schema complete)
+- ✅ Phase 2A: Schema → WebForm MVP (all field types, validation, conditional logic)
+- ✅ Phase 2 Consolidation: SchemaFormStateManager with WebSocket support (40/40 tests passing)
+- ✅ Phase 3A: WebSocket handlers updated for schema-based forms
+- ✅ Phase 3B: Backend tool definitions (5 tools: update_form_fields, get_form_status, switch_section, get_field_value, complete_section)
 
-**Why WebForm Instead of PDF Display:**
-- PDF doesn't scale to mobile (fixed layout)
-- WebForm can be responsive (mobile + desktop)
-- Lower resources, more responsive UX
-- Better accessibility for voice interaction
+**In Progress**:
+- 🔄 Phase 4A: Voice overlay integration (see todo list below)
 
-**Critical Design Principle:**
+**System Architecture Status**:
+- **Backend**: ✅ Fully schema-driven, tools defined, WebSocket handlers ready
+- **Frontend State**: ✅ SchemaFormStateManager replaces WebFormStateManager
+- **Voice Components**: ⏸️ Exist but still reference old WebFormStateManager
+- **Integration**: ⏸️ Voice overlay not yet wired into SchemaFormDemo
+
+**Key Architectural Note - Tool Validation Flow**:
+> Tool validation happens **AFTER** Gemini extracts values from speech.
+> Flow: User speaks → Gemini extracts → Gemini calls tool → **Frontend validates tool call** → Either success or error response sent back to Gemini
+> 
+> This is NOT about validating audio before sending to Gemini - it's about validating the tool calls Gemini generates.
+
+**Critical Design Principle**:
 > This must be GENERIC - work for ANY PDF where schema is accurately extracted, not just I-90.
-> Build a deterministic pipeline: PDF → Schema → WebForm → PDF
+> Build a deterministic pipeline: PDF → Schema → WebForm → Voice AI → PDF Export
 
-**Current Schema:**
+**Current Schema**:
 - I-90 v11 (132 fields, 8 parts, 100% validated)
 - Conforms to `backend/models/form_models.py` v1.1.0
 - Location: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
 
-**Tech Stack Decisions:**
+**Tech Stack Decisions**:
 - Frontend: React 18.3 + TypeScript
-- State: sessionStorage pattern for form persistence
+- State: SchemaFormStateManager with sessionStorage persistence
+- Voice: Gemini Live 2.5 Flash (native audio I/O, 24+ languages)
+- WebSocket: Bidirectional communication (audio + tool calls)
 - Responsive: Mobile + desktop support
-- Field Types: text, textarea, radio, checkbox, date, select (MVP complete)
 
 ---
 
@@ -366,62 +377,114 @@ Update WebSocket handlers and design Gemini tool definitions.
 
 ---
 
-### **Phase 4: Gemini Integration** (Week 6)
+### **Phase 4: Voice Integration & Frontend Validation** (Week 6)
 
-Integrate Gemini Live with new tools, implement frontend validation.
+Wire voice overlay into schema forms and implement frontend tool validation.
 
-#### **Phase 4A: Integrate Gemini with New Tools & Test**
+#### **Phase 4A: Wire Voice Overlay + End-to-End Testing**
 
-**Goal**: Connect Gemini Live to schema-driven tools.
+**Goal**: Integrate voice functionality with schema-driven forms and verify complete flow.
+
+**Current State** (November 5, 2025):
+- ✅ Backend tools defined and working (update_form_fields, get_form_status, switch_section, get_field_value, complete_section)
+- ✅ WebSocket connection layer updated to use SchemaFormStateManager
+- ✅ Voice overlay components exist (VoiceOverlay.tsx, VoiceOverlayMobile.tsx)
+- ⏸️ Voice overlay NOT yet integrated with SchemaFormDemo
+- ⏸️ Voice overlay still references old WebFormStateManager (needs update)
 
 **Tasks**:
-- Update Gemini session initialization with new tool definitions
-- Implement tool call routing from Gemini to backend handlers
-- Test basic voice interactions:
-  - "Set my first name to John"
-  - "Go to the address section"
-  - "What's in field 5?"
-- Add error handling for failed tool calls
-- Implement retry logic for transient failures
+1. **Update VoiceOverlay to use SchemaFormStateManager**:
+   - Replace WebFormStateManager imports with SchemaFormStateManager
+   - Update state type from WebFormState to SchemaFormState
+   - Update navigation logic to use parts instead of sections
+   - Remove section_index dependency (use schema.parts directly)
+
+2. **Integrate voice overlay into SchemaFormDemo**:
+   - Add connection manager state
+   - Add voice overlay component (desktop + mobile)
+   - Add shared audio stream setup (prevents race conditions)
+   - Add language selection UI
+   - Add connection controls (Connect/Disconnect/Pause/Resume)
+
+3. **Test end-to-end voice flow**:
+   - Voice → Gemini → Tool Call → Frontend → Field Update → Response
+   - Section switching via voice
+   - Field value queries
+   - Manual edits detected and sent to Gemini
+   - Session persistence across page reload
 
 **Deliverables**:
-- Updated `backend/gemini_client.py` with new tool support
-- Integration tests: Voice → Tool Call → Field Update → Validation
-- Test script for common voice commands
+- Updated `frontend/src/demo/VoiceOverlay.tsx` - uses SchemaFormState
+- Updated `frontend/src/demo/VoiceOverlayMobile.tsx` - uses SchemaFormState
+- Updated `frontend/src/schema-forms/SchemaFormDemo.tsx` - voice integration
+- Test checklist documenting all scenarios
 
 **Success Criteria**:
-- Voice commands successfully update fields
-- Tool call latency <500ms
-- Error messages readable and actionable
+- ✅ Voice overlay renders in SchemaFormDemo
+- ✅ Voice commands update fields correctly
+- ✅ Section switching works via voice ("go to part 2")
+- ✅ Field queries work ("what's my phone number?")
+- ✅ Manual edits trigger Gemini notification
+- ✅ Session persists across page reload
+- ✅ No console errors or WebSocket disconnects
 
 ---
 
-#### COMPLETE **Phase 4B: Implement Schema-Based Frontend Validation**
+#### COMPLETE **Phase 4B: Implement Frontend Tool Call Validation**
 
-**Goal**: Real-time validation based on schema constraints.
+**Goal**: Validate Gemini's tool calls against schema before applying to form state.
+
+**Current State** (November 5, 2025):
+- ✅ Schema-level validation exists (required, format, patterns)
+- ✅ Real-time validation on field blur/submit
+- ⏸️ Tool call validation NOT implemented yet
+
+**Tool Validation Flow**:
+1. Gemini generates tool call: `update_form_fields({field_id: 'phone', value: 'abc123'})`
+2. Frontend receives tool call via WebSocket
+3. **Frontend validates** (this is what needs to be implemented):
+   - Field exists in current section schema
+   - Value matches field type (text/checkbox/radio/date/select)
+   - Value respects constraints (maxLength, pattern, allowed_values)
+   - Format is correct (date format, email format, phone format)
+4. **Two outcomes**:
+   - Valid → Update fieldValues → Send success tool_response
+   - Invalid → Send error tool_response with helpful message (don't update state)
+5. Gemini receives tool_response and either confirms or explains error to user
 
 **Tasks**:
-- Implement validation on field blur and submit:
-  - Required fields (show error if empty)
-  - Type validation (email, phone, date formats)
-  - Length constraints (min/max characters)
-  - Custom regex patterns
-- Add visual feedback:
-  - Red border + error message for invalid fields
-  - Green checkmark for valid fields
-  - Inline validation messages
-- Prevent section navigation if required fields incomplete
-- Validate multi-entry lists (e.g., at least 1 child if "Do you have children?" = Yes)
+
+- Create `frontend/src/utils/toolValidator.ts`:
+  - `validateFieldUpdate(fieldId, value, schema)` - Main validation function
+  - `validateFieldExists(fieldId, schema)` - Check field exists in current section
+  - `validateFieldType(value, fieldType)` - Type checking (string/boolean/number)
+  - `validateFieldConstraints(value, field)` - Constraint validation (maxLength, pattern, allowed_values)
+  - `buildValidationErrorResponse(errors)` - Format error for Gemini
+  
+- Update `webFormConnection.ts` to call validator before updating state:
+  - Intercept `update_form_fields` tool call
+  - Run validation
+  - If valid: update state + send success response
+  - If invalid: send error response (don't update state)
+
+- Add validation error messages that Gemini can understand:
+  - "Phone number can only contain digits and dashes"
+  - "Date must be in format YYYY-MM-DD"
+  - "Field 'marital_status' must be one of: Single, Married, Divorced, Widowed"
+  - "Text too long (max 50 characters)"
 
 **Deliverables**:
-- `frontend/src/utils/validator.ts` - Validation logic
-- Visual validation components
+
+- `frontend/src/utils/toolValidator.ts` - Tool validation logic
+- Updated `frontend/src/webFormConnection.ts` - validation integration
 - Unit tests for all validation rules
 
 **Success Criteria**:
-- Invalid entries caught immediately on blur
-- Clear error messages guide user to fix issues
-- Cannot submit form with validation errors
+
+- Invalid tool calls rejected before updating state
+- Clear error messages returned to Gemini
+- Valid tool calls processed normally
+- Gemini can explain errors to user in natural language
 
 ---
 
