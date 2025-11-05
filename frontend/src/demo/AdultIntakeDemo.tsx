@@ -1,6 +1,12 @@
 /**
  * Adult Intake Demo - Voice Form Filling Demo
  * 
+ * ⚠️ DEPRECATED: This demo uses the old WebFormStateManager approach.
+ * Use schema-form-demo.html instead, which uses SchemaFormStateManager.
+ * 
+ * This file is kept for reference only and will be removed in a future cleanup.
+ * See: frontend/schema-form-demo.html for the current demo system.
+ * 
  * This component loads the adult intake form HTML and initializes
  * the voice form filler with a pre-defined schema (production-style).
  * 
