@@ -1,7 +1,7 @@
 # PDF Schema Extractor - Project Status
 
 **Date:** November 4, 2025
-**Status:** Phase 3A In Progress - Backend PDF filling with XFA support (partial)
+**Status:** Multiple systems progressing - Schema Editor MVP complete, WebSocket voice ready for Phase 3, Schema Extractor ready for Gemini integration
 
 ---
 
@@ -12,6 +12,75 @@
 **Quality Bar:** 100% correctness required, not 99%. A wrong field = rejected application.
 
 **Scale:** Need to support 50+ different government forms.
+
+---
+
+## System Status Overview
+
+### 🎉 Schema Editor - MVP Complete (November 4, 2025)
+**Status**: Phase 1 Complete - Ready for next features
+
+**What Works**:
+- ✅ Visual schema editor with field list, property editor, validation panel
+- ✅ Load/edit/save schemas from dropdown selector
+- ✅ All field types supported with full property editing
+- ✅ Real-time validation and completion tracking
+- ✅ Conditional logic editor (show_if)
+- ✅ Help text and validation rules
+- ✅ File serving from `public/schemas/` folder
+- ✅ ES module configuration (postcss, tailwind)
+
+**Next Steps**:
+1. Update extractor field ordering regex: `(\d+|[A-Z])\.`
+2. Drag-and-drop field reordering
+3. PDF.js integration with interactive overlays
+4. Bulk operations
+5. Help text templates
+6. Gemini AI suggestions
+7. Undo/redo
+
+**Branch**: `fix-download-form-selections`
+
+---
+
+### 🚀 WebSocket Voice System - Ready for Phase 3 (November 2025)
+**Status**: Phase 2A+ Complete - Schema-driven webform renderer working
+
+**What Works**:
+- ✅ Schema → WebForm rendering with all field types
+- ✅ Conditional logic (show_if, unlock_method, copy_to)
+- ✅ Validation (required, format, digits_only)
+- ✅ Section navigation with progress tracking
+- ✅ SessionStorage persistence
+- ✅ Auto-copy fields (Part 1 → Part 8)
+
+**Next Steps** (Phase 3):
+1. Wire voice overlay to schema forms
+2. Connect backend WebSocket handlers
+3. Test end-to-end voice → form → PDF flow
+
+**Branch**: `feature/schema-webform-renderer` (ready to merge)
+
+---
+
+### 🔧 Schema Extractor - Ready for Gemini Integration
+**Status**: Manual extraction working, ready for AI enhancement
+
+**What Works**:
+- ✅ PyMuPDF field extraction
+- ✅ Widget analysis and field grouping
+- ✅ Manual schema building tools
+- ✅ Comparison and validation tools
+
+**Next Steps**:
+1. Update field ordering regex: `(\d+|[A-Z])\.` 
+2. Integrate Gemini for field classification
+3. Integrate Gemini for help text generation
+4. Integrate Gemini for validation pattern suggestions
+5. Automated field type detection
+6. Smart grouping (checkbox → radio consolidation)
+
+**Priority**: Regex update, then Gemini integration
 
 ---
 

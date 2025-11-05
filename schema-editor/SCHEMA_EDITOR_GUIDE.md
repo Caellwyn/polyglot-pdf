@@ -204,46 +204,76 @@ Target metrics:
 
 ---
 
-## Adding New Forms
+## Setup & Installation
 
-### 1. Extract with Automated Tool
+### First Time Setup
 
+The schema editor requires the schema and PDF files to be available in its `public/schemas/` folder.
+
+**Automated Setup** (Recommended):
+```bash
+# From project root
+./scripts/run-schema-editor.sh
+```
+
+The script will:
+1. Install npm dependencies if needed
+2. Start the dev server at http://localhost:3001
+
+**Manual Setup**:
+```bash
+cd schema-editor
+npm install
+
+# Copy schema files to public folder
+mkdir -p public/schemas/i-90 public/schemas/i-589
+cp ../pdf_schema_extractor/test_schemas/test_pdfs/i-90/*.{json,pdf} public/schemas/i-90/
+cp ../pdf_schema_extractor/test_schemas/test_pdfs/i-589/*.{json,pdf} public/schemas/i-589/
+
+# Start dev server
+npm run dev
+```
+
+### Adding New Forms
+
+When adding a new form to the editor:
+
+1. **Extract with Automated Tool**:
 ```bash
 cd pdf_schema_extractor
 python automated_extractor.py path/to/form.pdf
 ```
 
-Creates `form_draft_schema.json`
+2. **Copy files to public folder**:
+```bash
+mkdir -p schema-editor/public/schemas/your-form
+cp pdf_schema_extractor/test_schemas/test_pdfs/your-form/*.{json,pdf} schema-editor/public/schemas/your-form/
+```
 
-### 2. Add to Editor
-
-Edit `schema-editor/src/utils/schemaLoader.ts`:
+3. **Update schemaLoader.ts**:
+Edit `schema-editor/src/utils/schemaLoader.ts` and add to `AVAILABLE_FORMS`:
 
 ```typescript
 {
-  name: 'I-485 (Adjust Status)',
-  pdfPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-485/i-485.pdf',
-  schemaPath: '../pdf_schema_extractor/test_schemas/test_pdfs/i-485/i-485_draft_schema.json',
+  name: 'Your Form Name',
+  pdfPath: '/schemas/your-form/form.pdf',
+  schemaPath: '/schemas/your-form/schema.json',
 }
 ```
 
-### 3. Edit in UI
+4. **Restart the dev server** to see the new form in the dropdown.
 
-1. Restart editor: `./scripts/run-schema-editor.sh`
-2. Select new form from dropdown
-3. Complete fields (~20-30 min)
-4. Save
+5. **Edit in UI**:
+   - Select new form from dropdown
+   - Complete fields (~20-30 min)
+   - Save with Cmd+S
 
-### 4. Validate
-
+6. **Validate**:
 ```bash
 # Basic validation
 python pdf_schema_extractor/compare_schemas.py \
-  i-485_edited.json \
-  i-485_draft_schema.json
-
-# Advanced: Round-trip test (if available)
-python pdf_schema_extractor/round_trip_tester.py i-485_edited.json
+  your-form_edited.json \
+  your-form_draft_schema.json
 ```
 
 ---
@@ -285,7 +315,35 @@ Keep it simple:
 
 ## Troubleshooting
 
-### Editor Won't Start
+### Editor Won't Start - PostCSS/Module Errors
+
+If you see errors about `module is not defined` or PostCSS config:
+
+```bash
+cd schema-editor
+# Ensure postcss.config.js uses ES module syntax:
+# export default { ... } not module.exports = { ... }
+```
+
+The `package.json` has `"type": "module"`, so all `.js` files must use ES module syntax.
+
+### Editor Won't Start - Tailwind Class Errors
+
+If you see errors about missing Tailwind classes (e.g., `border-primary-400`):
+
+1. Check `tailwind.config.js` has all color shades defined (50, 100, 400, 500, 600, 700)
+2. Ensure the class is using standard Tailwind naming
+3. For custom classes, define them in `@layer` directives
+
+### Schemas Won't Load - 404 or HTML Response
+
+If schemas fail to load with "Unexpected token '<', is not valid JSON":
+
+1. Ensure schema files are in `schema-editor/public/schemas/` folder
+2. Check paths in `schemaLoader.ts` use `/schemas/...` not `../...`
+3. Restart the dev server after copying files
+
+### Editor Won't Start - Clean Install
 
 ```bash
 # Clean install
@@ -339,35 +397,224 @@ Fix by:
 
 ---
 
-## Roadmap
+## Current Status & Roadmap
 
-### Phase 1: Core Editor ✅ (Complete)
-- Field list with status
-- Property editor
-- Validation panel
-- Form selector
-- Save functionality
+### ✅ Phase 1: Core Editor (Complete)
+**Status**: MVP Complete - Fully functional schema editor
 
-### Phase 2: PDF Integration (Next)
-- Full PDF.js rendering
-- Interactive field overlays
-- Click fields on PDF to select
-- Zoom and navigation
+**Completed Features**:
+- ✅ Field list with section grouping and status icons (complete/review/error)
+- ✅ Property editor for all field types
+- ✅ Real-time validation panel with progress tracking
+- ✅ Form selector dropdown for multiple schemas
+- ✅ Save functionality (Cmd+S to download edited JSON)
+- ✅ Keyboard shortcuts (Cmd+S, unsaved changes warning)
+- ✅ Conditional logic editor (show_if)
+- ✅ Help text and validation rules editor
+- ✅ Options editor for select/radio fields
+- ✅ All field types supported: text, textarea, date, number, tel, email, select, radio, checkbox, signature
 
-### Phase 3: Advanced Features
-- **Undo/Redo** - Multi-level history
-- **Bulk Operations** - Change type for selected fields
-- **Field Consolidation** - Visual merge tool for groups
-- **Drag-and-Drop** - Reorder fields in list
-- **Templates** - Help text patterns for common fields
-- **Conditional Graph** - Visual dependency map
-- **Export Formats** - JSON, CSV, Excel
+**Technical Stack**:
+- React 18.3 + TypeScript
+- Vite 5.4.1 (fast dev server with ES modules)
+- TailwindCSS 3.4.13 (styling)
+- Files served from `public/schemas/` folder
 
-### Phase 4: Gemini Integration
-- **Auto-complete help text** - AI suggestions
-- **Smart grouping** - AI-detected field groups
-- **Type inference** - Better field type detection
-- **Validation suggestions** - AI-suggested patterns
+---
+
+### 🚧 Next Development Priorities
+
+#### 1. **Update Extractor Field Ordering** (Immediate)
+**Goal**: Improve field order parsing to handle alphabetic labels
+
+**Change**: Update label parsing regex in extractor from `\d+\.` to `(\d+|[A-Z])\.`
+
+**Why**: Some forms use mixed numbering (1., 2., A., B., etc.)
+
+**Files to Update**:
+- `pdf_schema_extractor/extract_field_order_from_labels.py`
+- Test with forms that have alphabetic section labels
+
+---
+
+#### 2. **Drag-and-Drop Field Reordering** (High Priority)
+**Goal**: Allow users to reorder fields within sections via drag-and-drop
+
+**Features**:
+- Visual drag handle on each field in the list
+- Drag fields within same section
+- Auto-update `question_number` or field order
+- Save updated order to schema
+
+**Libraries to Consider**:
+- `@dnd-kit/core` (modern, accessible)
+- `react-beautiful-dnd` (popular, well-documented)
+
+**UX Considerations**:
+- Only allow reordering within same section
+- Visual feedback during drag
+- Persist order in schema structure
+
+---
+
+#### 3. **PDF.js Integration** (High Priority)
+**Goal**: Full PDF rendering with interactive field overlays
+
+**Features**:
+- Render actual PDF in left panel (replace placeholder)
+- Click field boxes on PDF to select in editor
+- Highlight selected field on PDF with colored border
+- Zoom controls (fit-width, fit-page, custom zoom)
+- Page navigation for multi-page forms
+- Field overlays show validation status (green/yellow/red borders)
+
+**Technical Approach**:
+- Use `pdfjs-dist` (already in package.json v4.0.379)
+- Canvas-based rendering
+- Position overlays using `pdf_position` data from schema
+- Sync selection between PDF viewer and field list
+
+**Files to Update**:
+- `schema-editor/src/components/PDFViewer.tsx` (currently placeholder)
+
+---
+
+#### 4. **Bulk Operations** (Medium Priority)
+**Goal**: Edit multiple fields at once
+
+**Features**:
+- Multi-select fields (Cmd+Click, Shift+Click)
+- Bulk actions:
+  - Change field type for all selected
+  - Set required/read-only flags
+  - Apply validation pattern to all
+  - Copy help text to selected fields
+  - Move to different section
+- Selection toolbar with action buttons
+- Confirmation dialogs for destructive changes
+
+**UX Design**:
+- Checkbox selection mode toggle
+- "Select All in Section" button
+- Clear selection button
+- Action menu with common operations
+
+---
+
+#### 5. **Templates - Common Help Text Patterns** (Medium Priority)
+**Goal**: Speed up help text entry with pre-written templates
+
+**Features**:
+- Template library for common field types:
+  - A-Number (alien registration number)
+  - SSN (social security number)
+  - Date fields (various formats)
+  - Phone numbers
+  - Email addresses
+  - Names (given, middle, family)
+  - Addresses (US and international)
+- Template selector in help text editor
+- One-click insert with customization
+- User can save custom templates
+
+**Template Structure**:
+```typescript
+interface HelpTemplate {
+  name: string;
+  category: string; // 'identification', 'contact', 'address', etc.
+  instructions: string;
+  format_hint?: string;
+  validation_pattern?: string;
+}
+```
+
+**Storage**:
+- Built-in templates in JSON file
+- User templates in localStorage
+
+---
+
+#### 6. **Gemini Integration - AI-Suggested Help Text** (Future)
+**Goal**: Use AI to generate help text suggestions
+
+**Features**:
+- Analyze field name, type, and PDF label
+- Generate contextual help text suggestions
+- Multiple suggestions to choose from
+- User can edit before accepting
+- Learn from user edits to improve suggestions
+
+**API Integration**:
+- Call Gemini API with field context
+- Prompt: "Generate help text for field: {name}, type: {type}, label: {label}"
+- Stream response for real-time preview
+- Rate limiting and error handling
+
+**Privacy Considerations**:
+- Only send field metadata (name, type, label)
+- Never send user data from filled forms
+- Optional feature (can be disabled)
+
+---
+
+#### 7. **Undo/Redo - Multi-Level History** (Future)
+**Goal**: Allow users to undo/redo changes
+
+**Features**:
+- Multi-level undo/redo (20+ steps)
+- Keyboard shortcuts: Cmd+Z (undo), Cmd+Shift+Z (redo)
+- Visual history timeline (optional)
+- Undo/redo buttons in header
+- State snapshot on each change
+
+**Implementation**:
+- History stack in React state
+- Immutable state updates
+- Snapshot entire schema on change
+- Memory-efficient (limit history depth)
+
+**Technical Approach**:
+- Use `useReducer` with history middleware
+- Libraries: `use-undo` or custom implementation
+
+---
+
+### 📋 Future Enhancements (Backlog)
+
+- **Field Consolidation Tool** - Visual merge for checkbox groups → radio
+- **Conditional Logic Graph** - Visual dependency map
+- **Export Formats** - CSV, Excel export for bulk editing
+- **Import Formats** - Import from CSV/Excel
+- **Schema Diff Viewer** - Compare two versions of a schema
+- **Real-time Collaboration** - Multiple users editing simultaneously
+- **Field Search** - Search by name, type, or content
+- **Validation Rules Builder** - Visual regex pattern builder
+- **Keyboard Navigation** - Arrow keys to navigate fields
+- **Field Preview** - Show how field will render in form
+- **Dark Mode** - UI theme toggle
+- **Accessibility Improvements** - WCAG 2.1 AA compliance
+
+---
+
+### 🐛 Known Issues & Limitations
+
+**Current Limitations**:
+- PDF viewer is placeholder (no actual PDF rendering yet)
+- No undo/redo functionality
+- No bulk operations
+- No drag-and-drop reordering
+- No field search/filter
+- Changes are local only (no server sync)
+
+**Browser Compatibility**:
+- Tested on Chrome/Edge (Chromium-based)
+- Should work on Firefox and Safari
+- Not tested on mobile browsers
+
+**Performance**:
+- Handles schemas with 200+ fields smoothly
+- Large schemas (500+ fields) may have minor lag
+- PDF rendering performance TBD (depends on PDF.js integration)
 
 ---
 
@@ -418,6 +665,7 @@ Key areas:
 
 ---
 
-**Version:** 1.0.0
-**Last Updated:** November 5, 2025
-**Status:** MVP Complete, PDF integration in progress
+**Version:** 1.0.0  
+**Last Updated:** November 4, 2025  
+**Status:** MVP Complete - Core editing functionality working  
+**Next Priority:** Field ordering regex update, then drag-and-drop reordering
