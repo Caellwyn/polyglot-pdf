@@ -162,8 +162,8 @@
       "label": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "order": 4,
       "fields": [
-        "p4_checkbox1a",
         "p4_checkbox1[1]",
+        "p4_checkbox1a",
         "p4_line1a_accomodationrequested",
         "p4_checkbox1b",
         "p4_line1b_accomodationrequested",
@@ -2325,7 +2325,7 @@
     {
       "id": "p2_checkbox3",
       "name": "Select My previous card was issued but never received",
-      "type": "checkbox",
+      "type": "radio",
       "section_id": "Part 2 - Application Type",
       "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]",
       "consolidated_widgets": [
@@ -2520,12 +2520,12 @@
       "options": [
         {
           "value": "P3_checkbox4[0]",
-          "label": "Select No",
+          "label": "No",
           "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[0]"
         },
         {
           "value": "P3_checkbox4[1]",
-          "label": "Select Yes",
+          "label": "Yes",
           "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[1]"
         }
       ],
@@ -2559,12 +2559,12 @@
       "options": [
         {
           "value": "P3_checkbox5[0]",
-          "label": "Select No",
+          "label": "No",
           "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[0]"
         },
         {
           "value": "P3_checkbox5[1]",
-          "label": "Select Yes",
+          "label": "Yes",
           "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[1]"
         }
       ],
@@ -3356,7 +3356,7 @@
       "hidden": false,
       "spoken_name": "language of interpreter",
       "help": {
-        "instructions": "This field is automatically populated with the language the interpreter used."
+        "instructions": "Enter the language in which the interpreter communicated with the applicant."
       },
       "show_if": {
         "field": "p5_checkbox1",
@@ -3400,7 +3400,7 @@
       "hidden": false,
       "spoken_name": "name of preparer",
       "help": {
-        "instructions": "This field is automatically populated with the name of the person who prepared the form for you."
+        "instructions": "Name of the person who prepared this application for you."
       },
       "show_if": {
         "field": "p5_checkbox2",
@@ -3555,7 +3555,7 @@
     {
       "id": "p5_line6b_dateofsignature",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
-      "type": "signature",
+      "type": "date",
       "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "pdf_field_name": "form1[0].#subform[3].P5_Line6b_DateofSignature[0]",
       "consolidated_widgets": [
