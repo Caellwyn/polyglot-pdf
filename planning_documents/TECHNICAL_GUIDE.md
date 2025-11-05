@@ -89,6 +89,8 @@ export type ConnectionStatus =
 - Frontend sets `idleTimedOut` flag, prevents auto-reconnect
 - User must click "Reconnect to Voice" button
 
+> **Note (Nov 2025)**: The multi-level activity watchdog escalation system documented in earlier versions has been deprecated. Current implementation uses a simple 60-second idle timeout without escalating warnings/nudges.
+
 ---
 
 ## Project Structure

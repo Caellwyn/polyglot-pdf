@@ -45,9 +45,9 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   // Notify parent of section changes
   useEffect(() => {
     if (onSectionChange) {
-      onSectionChange(state.currentSectionId);
+      onSectionChange(state.currentPartId); // Can be part ID or section ID
     }
-  }, [state.currentSectionId, onSectionChange]);
+  }, [state.currentPartId, onSectionChange]);
 
   const handleFieldChange = (fieldId: string, value: any) => {
     console.log(`[SchemaForm] handleFieldChange called: ${fieldId} = ${JSON.stringify(value)}`);
@@ -229,13 +229,13 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
 
   // Sort sections by order for progress display
   const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
-  const currentSectionIndex = sortedSections.findIndex((s) => s.id === state.currentSectionId);
+  const currentSectionIndex = sortedSections.findIndex((s) => s.id === state.currentPartId);
 
   // Debug: Log current state's fieldValues at TOP of render
   console.log(`[SchemaForm] ===== RENDER START =====`);
   console.log(`[SchemaForm] RENDER - state.fieldValues:`, Object.keys(state.fieldValues).length, 'fields with values');
   console.log(`[SchemaForm] RENDER - actual state.fieldValues:`, state.fieldValues);
-  console.log(`[SchemaForm] RENDER - state.currentSectionId:`, state.currentSectionId);
+  console.log(`[SchemaForm] RENDER - state.currentPartId:`, state.currentPartId);
 
   // Debug section navigation
   console.log(`[SchemaForm] Current section: ${currentSection?.id} (${currentSectionIndex + 1}/${sortedSections.length})`);
