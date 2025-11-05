@@ -18,7 +18,8 @@ declare global {
 
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { createConnectionManager, type ConnectionManager } from '../shared/connection'
-import { WebFormStateManager, type FormSchema, type SectionIndex } from '../webFormState'
+import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { GreetingCarousel } from './GreetingCarousel'
@@ -26,7 +27,6 @@ import { SPOKEN_LANGUAGES } from '../shared/languages'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
-	sectionIndex: SectionIndex
 	wsUrl?: string
 	onClose?: () => void
 	connectionManager?: ConnectionManager
@@ -37,14 +37,14 @@ interface VoiceOverlayProps {
 	streamError?: string | null
 }
 
-export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayProps) {
+export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
-	const [currentSection, setCurrentSection] = useState(1)
-	const [completedSections, setCompletedSections] = useState<Set<number>>(new Set())
+	const [currentPartId, setCurrentPartId] = useState<string>('')
+	const [completedParts, setCompletedParts] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
@@ -56,6 +56,25 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
 	const offsetRef = useRef({ x: 0, y: 0 })
+	
+	// Helper functions for part navigation
+	const getCurrentPartOrder = (): number => {
+		if (!schema.parts || !currentPartId) return 0
+		const part = schema.parts.find(p => p.id === currentPartId)
+		return part?.order ?? 0
+	}
+
+	const getCurrentPartLabel = (): string => {
+		if (!schema.parts || !currentPartId) return ''
+		const part = schema.parts.find(p => p.id === currentPartId)
+		return part?.label ?? ''
+	}
+
+	const getPartIdFromOrder = (order: number): string | undefined => {
+		if (!schema.parts) return undefined
+		const part = schema.parts.find(p => p.order === order)
+		return part?.id
+	}
 	
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
@@ -200,41 +219,39 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 			return
 		}
 
-		// Otherwise create our own (standalone mode)
-		if (connectionManagerRef.current) {
-			return
-		}
+	// Otherwise create our own (standalone mode)
+	if (connectionManagerRef.current) {
+		return
+	}
 
-		// Phase 3: Initialize with section-based state
-		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
+	// Initialize with schema-based state
+	const state = SchemaFormStateManager.init(schema)
 
-		// FIX #1: Connection manager receives stream from parent (already created)
-		const manager = createConnectionManager(
-			state.schema,
-			(newStatus) => {
-				setStatus(newStatus)
-				setError(null)
-			},
-			'English', // Default to English
-			sharedStream || undefined // Pass shared stream from parent
-		)
-		
-		connectionManagerRef.current = manager
-		setConnectionManager(manager)
+	// FIX #1: Connection manager receives stream from parent (already created)
+	const manager = createConnectionManager(
+		state.schema,
+		(newStatus) => {
+			setStatus(newStatus)
+			setError(null)
+		},
+		'English', // Default to English
+		sharedStream || undefined // Pass shared stream from parent
+	)
+	
+	connectionManagerRef.current = manager
+	setConnectionManager(manager)
 
-		return () => {
-			// Only cleanup if we created the manager (not shared)
-			if (!sharedConnectionManager) {
-				if (connectionManagerRef.current) {
-					connectionManagerRef.current.disconnect()
-					connectionManagerRef.current = null
-				}
-				setConnectionManager(null)
+	return () => {
+		// Only cleanup if we created the manager (not shared)
+		if (!sharedConnectionManager) {
+			if (connectionManagerRef.current) {
+				connectionManagerRef.current.disconnect()
+				connectionManagerRef.current = null
 			}
+			setConnectionManager(null)
 		}
-	}, [schema, sectionIndex, sharedConnectionManager]) // Recreate when schema or index changes
-
-	// Sync status from shared prop
+	}
+}, [schema, sharedConnectionManager]) // Recreate when schema changes	// Sync status from shared prop
 	useEffect(() => {
 		if (sharedStatus !== undefined) {
 			setStatus(sharedStatus)
@@ -500,51 +517,61 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 		window.addEventListener('keyup', handleKeyUp)
 
 		return () => {
-			window.removeEventListener('keydown', handleKeyDown)
-			window.removeEventListener('keyup', handleKeyUp)
-		}
-	}, [pushToTalkMode, status])
+		window.removeEventListener('keydown', handleKeyDown)
+		window.removeEventListener('keyup', handleKeyUp)
+	}
+}, [pushToTalkMode, status])
 
-	// Phase 3: Initialize section-based state and update section UI
-	useEffect(() => {
-		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
-		setCurrentSection(state.current_section || 1)
-		setCompletedSections(state.completed_sections || new Set())
-		
-		// Update field counter
-		const fieldCount = WebFormStateManager.getSectionFieldCount(state)
-		setSectionFieldCount(fieldCount)
-	}, [schema, sectionIndex])
+// Initialize schema-based state and update part UI
+useEffect(() => {
+	const state = SchemaFormStateManager.init(schema)
+	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
+	setCompletedParts(state.completedParts || new Set())
+	
+	// Update field counter
+	const totalFields = schema.fields.length
+	const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+		const fieldValue = state.fieldValues[fieldId]
+		const actualValue = fieldValue?.value
+		return actualValue !== null && actualValue !== undefined && actualValue !== ""
+	}).length
+	setSectionFieldCount({ filled: filledFields, total: totalFields })
+}, [schema])
 
-	// Phase 3: Poll field count AND section state (updates as AI switches sections)
-	useEffect(() => {
-		const interval = setInterval(() => {
-			const state = WebFormStateManager.load()
-			if (state) {
-				const fieldCount = WebFormStateManager.getSectionFieldCount(state)
-				setSectionFieldCount(fieldCount)
+// Poll field count AND part state (updates as AI switches parts)
+useEffect(() => {
+	const interval = setInterval(() => {
+		const state = SchemaFormStateManager.load()
+		if (state) {
+			const totalFields = schema.fields.length
+			const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+				const fieldValue = state.fieldValues[fieldId]
+				const actualValue = fieldValue?.value
+				return actualValue !== null && actualValue !== undefined && actualValue !== ""
+			}).length
+			setSectionFieldCount({ filled: filledFields, total: totalFields })
+			
+			// Update part if changed (AI completed part and moved forward)
+			if (state.currentPartId && state.currentPartId !== currentPartId) {
+				setCurrentPartId(state.currentPartId)
+			}
+			
+			// Update completed parts if changed
+			if (state.completedParts) {
+				const currentCompleted = new Set(Array.from(completedParts))
+				const newCompleted = new Set(Array.from(state.completedParts))
 				
-				// Update section if changed (AI completed section and moved forward)
-				if (state.current_section && state.current_section !== currentSection) {
-					setCurrentSection(state.current_section)
-				}
-				
-				// Update completed sections if changed
-				if (state.completed_sections) {
-					const currentCompleted = new Set(Array.from(completedSections))
-					const newCompleted = new Set(Array.from(state.completed_sections))
-					
-					// Check if sets are different
-					if (currentCompleted.size !== newCompleted.size || 
-					    ![...currentCompleted].every(s => newCompleted.has(s))) {
-						setCompletedSections(newCompleted)
-					}
+				// Check if sets are different
+				if (currentCompleted.size !== newCompleted.size || 
+				    ![...currentCompleted].every(p => newCompleted.has(p))) {
+					setCompletedParts(newCompleted)
 				}
 			}
-		}, 1000) // Update every second
-		
-		return () => clearInterval(interval)
-	}, [currentSection, completedSections])
+		}
+	}, 1000) // Update every second
+	
+	return () => clearInterval(interval)
+}, [currentPartId, completedParts])
 
 	// Handle language selection change
 	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -553,41 +580,39 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 
 		console.log('[VoiceOverlay] Language changed to:', newLanguage)
 
-		// Send initiating message if connected
-		if (connectionManager && isConnected) {
-			try {
-				// Compute next field hint for the initiating message
-				const state = WebFormStateManager.load()
-				if (!state) {
-					console.error('[VoiceOverlay] No state found for next field hint')
-					return
-				}
-
-				// Compute next unfilled field
-				const nextField = computeNextField(state)
-				const nextFieldHint = nextField
-					? formatNextFieldHint(nextField, state.schema)
-					: 'all fields are complete'
-
-				// Send spoken language change message via connection manager
-				connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
-			} catch (err) {
-				console.error('[VoiceOverlay] Failed to change spoken language:', err)
-				setError(err instanceof Error ? err.message : 'Failed to change language')
+	// Send initiating message if connected
+	if (connectionManager && isConnected) {
+		try {
+			// Compute next field hint for the initiating message
+			const state = SchemaFormStateManager.load()
+			if (!state) {
+				console.error('[VoiceOverlay] No state found for next field hint')
+				return
 			}
+
+			// Compute next unfilled field
+			const nextField = computeNextField(state)
+			const nextFieldHint = nextField
+				? formatNextFieldHint(nextField)
+				: 'all fields are complete'
+
+			// Send spoken language change message via connection manager
+			connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
+		} catch (err) {
+			console.error('[VoiceOverlay] Failed to change spoken language:', err)
+			setError(err instanceof Error ? err.message : 'Failed to change language')
 		}
 	}
+}
 
-	// Handle clear form button
-	const handleClearForm = () => {
-		if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
-			return
-		}
+// Handle clear form button
+const handleClearForm = () => {
+	if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
+		return
+	}
 
-		// Clear sessionStorage
-		WebFormStateManager.clear()
-		
-		// Clear all DOM fields
+	// Clear sessionStorage
+	SchemaFormStateManager.clear()		// Clear all DOM fields
 		const inputs = document.querySelectorAll('input, textarea, select')
 		let clearedCount = 0
 		
@@ -672,7 +697,7 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'
 	const fieldCount = schema.fields.length
-	const requiredCount = schema.fields.filter(f => f.required).length
+	const requiredCount = schema.fields.filter(f => f.validation?.required).length
 
 	// Debug logging removed - was causing 100+ logs per second in development mode
 
@@ -747,73 +772,77 @@ export function VoiceOverlay({ schema, sectionIndex, wsUrl, onClose, connectionM
 				)}
 
 				{/* Section Navigation */}
-				<div className="vff-section-nav">
-					<div 
-						className="vff-section-display"
-						onClick={() => setShowSectionDropdown(!showSectionDropdown)}
-					>
-						<span className="vff-section-label">
-							Section {currentSection} of {sectionIndex.total_sections}: {sectionIndex.sections[currentSection - 1]?.section_label}
-						</span>
-						<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
-					</div>
-					<div className="vff-field-counter">
-						📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
-					</div>
-					{showSectionDropdown && (
-						<div className="vff-section-dropdown">
-							{sectionIndex.sections.map((section) => (
-								<div
-									key={section.section_number}
-									className={`vff-section-item ${currentSection === section.section_number ? 'active' : ''}`}
-									onClick={async () => {
-										if (!connectionManager) return
-										
-										setShowSectionDropdown(false)
-										
-										// Don't switch if already on this section
-										if (section.section_number === currentSection) {
-											return
-										}
-										
-										try {
-											setError(null)
-											
-											// Update UI immediately for responsiveness
-											setCurrentSection(section.section_number)
-											setStatus('Reconnecting to section ' + section.section_number)
-											
-											// Update field count for new section (from state, before reconnect)
-											const state = WebFormStateManager.load()
-											if (state) {
-												// Switch section in state first
-												const updatedState = WebFormStateManager.switchSection(state, section.section_number)
-												const fieldCount = WebFormStateManager.getSectionFieldCount(updatedState)
-												setSectionFieldCount(fieldCount)
-											}
-											
-											// Now do the actual connection switch (async, may take time)
-											await connectionManager.switchSection(section.section_number)
-										} catch (err) {
-											console.error('[VoiceOverlay] Section switch error:', err)
-											setError(err instanceof Error ? err.message : 'Section switch failed')
-										}
-									}}
-								>
-									<span className="vff-section-status">
-										{completedSections.has(section.section_number) ? '✓' : 
-										 currentSection === section.section_number ? '→' : '○'}
-									</span>
-									<span className="vff-section-text">
-										{section.section_number}. {section.section_label}
-									</span>
-								</div>
-							))}
-						</div>
-					)}
+			<div className="vff-section-nav">
+				<div 
+					className="vff-section-display"
+					onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+				>
+					<span className="vff-section-label">
+						Part {getCurrentPartOrder()}: {getCurrentPartLabel()}
+					</span>
+					<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
 				</div>
-
-				{/* Push-to-Talk Toggle */}
+				<div className="vff-field-counter">
+					📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
+				</div>
+				{showSectionDropdown && (
+					<div className="vff-section-dropdown">
+						{schema.parts?.map((part) => (
+							<div
+								key={part.id}
+								className={`vff-section-item ${currentPartId === part.id ? 'active' : ''}`}
+								onClick={async () => {
+									if (!connectionManager) return
+									
+									setShowSectionDropdown(false)
+									
+									// Don't switch if already on this part
+									if (part.id === currentPartId) {
+										return
+									}
+									
+									try {
+										setError(null)
+										
+										// Update UI immediately for responsiveness
+										setCurrentPartId(part.id)
+										setStatus('Reconnecting to part ' + part.order)
+										
+										// Update field count for new part (from state, before reconnect)
+										const state = SchemaFormStateManager.load()
+										if (state) {
+											// Switch part in state first
+											const updatedState = SchemaFormStateManager.switchToPart(state, part.id)
+											const totalFields = schema.fields.length
+											const filledFields = Object.keys(updatedState.fieldValues).filter(fieldId => {
+												const fieldValue = updatedState.fieldValues[fieldId]
+												const actualValue = fieldValue?.value
+												return actualValue !== null && actualValue !== undefined && actualValue !== ""
+											}).length
+											setSectionFieldCount({ filled: filledFields, total: totalFields })
+										}
+										
+										// Now do the actual connection switch (async, may take time)
+										// TODO Phase 4A: Implement switchToPart in connection manager
+									// await connectionManager.switchToPart(part.id)
+									} catch (err) {
+										console.error('[VoiceOverlay] Part switch error:', err)
+										setError(err instanceof Error ? err.message : 'Part switch failed')
+									}
+								}}
+							>
+								<span className="vff-section-status">
+									{completedParts.has(part.id) ? '✓' : 
+									 currentPartId === part.id ? '→' : '○'}
+								</span>
+								<span className="vff-section-text">
+									{part.order}. {part.label}
+								</span>
+							</div>
+						))}
+					</div>
+				)}
+			</div>				{/* Push-to-Talk Toggle */}
 				<div className="vff-ptt-toggle-container">
 					<label className="vff-ptt-toggle-label">
 						<span className="vff-ptt-label-text">Input Mode:</span>
