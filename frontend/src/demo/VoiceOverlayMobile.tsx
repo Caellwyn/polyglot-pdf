@@ -10,7 +10,8 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { createConnectionManager, type ConnectionManager } from '../shared/connection'
-import { WebFormStateManager, type FormSchema, type SectionIndex } from '../webFormState'
+import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { GreetingCarousel } from './GreetingCarousel'
@@ -18,7 +19,6 @@ import { SPOKEN_LANGUAGES } from '../shared/languages'
 
 interface VoiceOverlayMobileProps {
 	schema: FormSchema
-	sectionIndex: SectionIndex
 	wsUrl?: string
 	connectionManager?: ConnectionManager
 	status?: string
@@ -28,15 +28,15 @@ interface VoiceOverlayMobileProps {
 	streamError?: string | null
 }
 
-export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayMobileProps) {
+export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayMobileProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
-	const [currentSection, setCurrentSection] = useState(1)
-	const [completedSections, setCompletedSections] = useState<Set<number>>(new Set())
+	const [currentPartId, setCurrentPartId] = useState<string>('')
+	const [completedParts, setCompletedParts] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
@@ -52,6 +52,22 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 	const speechStartTimeRef = useRef<number | null>(null)
 	const bargeInTriggeredRef = useRef<boolean>(false)  // Track if we triggered barge-in for this speech event
 	const MIN_TURN_DURATION_MS = 450  // Minimum 450ms of speech before triggering barge-in
+
+	// Helper functions for part-based navigation (parts use string IDs, not numbers)
+	const getCurrentPartOrder = (): number => {
+		const part = schema.parts?.find(p => p.id === currentPartId)
+		return part?.order ?? 1
+	}
+
+	const getCurrentPartLabel = (): string => {
+		const part = schema.parts?.find(p => p.id === currentPartId)
+		return part?.label ?? 'Unknown Part'
+	}
+
+	const getPartIdFromOrder = (order: number): string => {
+		const part = schema.parts?.find(p => p.order === order)
+		return part?.id ?? ''
+	}
 
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
@@ -183,41 +199,39 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 			return
 		}
 
-		// Otherwise create our own (standalone mode)
-		if (connectionManagerRef.current) {
-			return
-		}
+	// Otherwise create our own (standalone mode)
+	if (connectionManagerRef.current) {
+		return
+	}
 
-		// Phase 3: Initialize with section-based state
-		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
+	// Initialize with schema-based state
+	const state = SchemaFormStateManager.init(schema)
 
-		// FIX #1: Connection manager receives stream from parent (already created)
-		const manager = createConnectionManager(
-			state.schema,
-			(newStatus) => {
-				setStatus(newStatus)
-				setError(null)
-			},
-			'English',
-			sharedStream || undefined // Pass shared stream from parent
-		)
-		
-		connectionManagerRef.current = manager
-		setConnectionManager(manager)
+	// FIX #1: Connection manager receives stream from parent (already created)
+	const manager = createConnectionManager(
+		state.schema,
+		(newStatus) => {
+			setStatus(newStatus)
+			setError(null)
+		},
+		'English',
+		sharedStream || undefined // Pass shared stream from parent
+	)
+	
+	connectionManagerRef.current = manager
+	setConnectionManager(manager)
 
-		return () => {
-			// Only cleanup if we created the manager (not shared)
-			if (!sharedConnectionManager) {
-				if (connectionManagerRef.current) {
-					connectionManagerRef.current.disconnect()
-					connectionManagerRef.current = null
-				}
-				setConnectionManager(null)
+	return () => {
+		// Only cleanup if we created the manager (not shared)
+		if (!sharedConnectionManager) {
+			if (connectionManagerRef.current) {
+				connectionManagerRef.current.disconnect()
+				connectionManagerRef.current = null
 			}
+			setConnectionManager(null)
 		}
-	}, [schema, sectionIndex, sharedConnectionManager]) // Recreate when schema or index changes
-
-	// Sync status from shared prop
+	}
+}, [schema, sharedConnectionManager]) // Recreate when schema changes	// Sync status from shared prop
 	useEffect(() => {
 		if (sharedStatus !== undefined) {
 			setStatus(sharedStatus)
@@ -300,7 +314,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		if (connectionManager && isCurrentlyConnected) {
 			try {
 				// Compute next field hint for the initiating message
-				const state = WebFormStateManager.load()
+				const state = SchemaFormStateManager.load()
 				if (!state) {
 					console.error('[VoiceOverlayMobile] No state found for next field hint')
 					return
@@ -309,7 +323,7 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 				// Compute next unfilled field
 				const nextField = computeNextField(state)
 				const nextFieldHint = nextField
-					? formatNextFieldHint(nextField, state.schema)
+					? formatNextFieldHint(nextField)
 					: 'all fields are complete'
 
 				// Send spoken language change message via connection manager
@@ -451,46 +465,71 @@ export function VoiceOverlayMobile({ schema, sectionIndex, wsUrl, connectionMana
 		setIsHoldingPushToTalk(false)
 
 		// MUTE: Send silence instead of real audio
-		const audioManager = connectionManager?.getAudioManager()
-		audioManager?.muteInput()
+	const audioManager = connectionManager?.getAudioManager()
+	audioManager?.muteInput()
 
-		// Send audio_stream_end to flush Gemini's audio buffer
-		// (sendActivityEnd now sends audio_stream_end on backend)
-		connectionManager?.sendActivityEnd()
-	}
+	// Send audio_stream_end to flush Gemini's audio buffer
+	// (sendActivityEnd now sends audio_stream_end on backend)
+	connectionManager?.sendActivityEnd()
+}
 
-	// Phase 3: Initialize section-based state and update section UI
-	useEffect(() => {
-		const state = WebFormStateManager.initWithSections(schema, sectionIndex)
-		setCurrentSection(state.current_section || 1)
-		setCompletedSections(state.completed_sections || new Set())
-		
-		// Update field counter
-		const fieldCount = WebFormStateManager.getSectionFieldCount(state)
-		setSectionFieldCount(fieldCount)
-	}, [schema, sectionIndex])
+// Initialize schema-based state and update part UI
+useEffect(() => {
+	const state = SchemaFormStateManager.init(schema)
+	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
+	setCompletedParts(state.completedParts || new Set())
+	
+	// Update field counter
+	const totalFields = schema.fields.length
+	const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+		const fieldValue = state.fieldValues[fieldId]
+		const actualValue = fieldValue?.value
+		return actualValue !== null && actualValue !== undefined && actualValue !== ""
+	}).length
+	setSectionFieldCount({ filled: filledFields, total: totalFields })
+}, [schema])
 
-	// Phase 3: Poll field count (updates as user fills fields)
-	useEffect(() => {
-		const interval = setInterval(() => {
-			const state = WebFormStateManager.load()
-			if (state) {
-				const fieldCount = WebFormStateManager.getSectionFieldCount(state)
-				setSectionFieldCount(fieldCount)
+// Poll field count AND part state (updates as AI switches parts)
+useEffect(() => {
+	const interval = setInterval(() => {
+		const state = SchemaFormStateManager.load()
+		if (state) {
+			const totalFields = schema.fields.length
+			const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+				const fieldValue = state.fieldValues[fieldId]
+				const actualValue = fieldValue?.value
+				return actualValue !== null && actualValue !== undefined && actualValue !== ""
+			}).length
+			setSectionFieldCount({ filled: filledFields, total: totalFields })
+			
+			// Update part if changed (AI completed part and moved forward)
+			if (state.currentPartId && state.currentPartId !== currentPartId) {
+				setCurrentPartId(state.currentPartId)
 			}
-		}, 1000) // Update every second
-		
-		return () => clearInterval(interval)
-	}, [])
+			
+			// Update completed parts if changed
+			if (state.completedParts) {
+				const currentCompleted = new Set(Array.from(completedParts))
+				const newCompleted = new Set(Array.from(state.completedParts))
+				
+				// Check if sets are different
+				if (currentCompleted.size !== newCompleted.size || 
+				    ![...currentCompleted].every(p => newCompleted.has(p))) {
+					setCompletedParts(newCompleted)
+				}
+			}
+		}
+	}, 1000) // Update every second
+	
+	return () => clearInterval(interval)
+}, [currentPartId, completedParts])
 
-	const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
-	const isPausedState = status.toLowerCase() === 'paused'
-	const isWarming = status.toLowerCase().includes('warming')
-	const isReady = status.toLowerCase() === 'ready'
-	const fieldCount = schema.fields.length
-	const requiredCount = schema.fields.filter(f => f.required).length
-
-	// Status color
+const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+const isPausedState = status.toLowerCase() === 'paused'
+const isWarming = status.toLowerCase().includes('warming')
+const isReady = status.toLowerCase() === 'ready'
+const fieldCount = schema.fields.length
+const requiredCount = schema.fields.filter(f => f.validation?.required).length	// Status color
 	const statusColor = isConnected ? '#10b981' : isPausedState ? '#f59e0b' : isWarming ? '#f59e0b' : isReady ? '#3b82f6' : '#6b7280'
 
 	return (
