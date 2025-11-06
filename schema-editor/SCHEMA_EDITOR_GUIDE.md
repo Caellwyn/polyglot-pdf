@@ -399,8 +399,53 @@ Fix by:
 
 ## Current Status & Roadmap
 
-### ✅ Phase 1: Core Editor (Complete)
-**Status**: MVP Complete - Fully functional schema editor
+### ✅ Phase 1: PDF.js Core Setup (Complete - Nov 5, 2025)
+**Status**: PDF document loading and basic rendering working
+
+**Completed Features**:
+- ✅ PDF.js worker configuration with Vite/ES modules
+- ✅ usePDFDocument hook for document lifecycle management
+- ✅ PDFPage component for canvas-based rendering
+- ✅ Zoom controls (50% - 200%, +/- buttons)
+- ✅ Loading states and error handling
+- ✅ Static toolbar with controls
+- ✅ Comprehensive test suite (19 tests passing)
+
+**Technical Implementation**:
+- PDF.js v4.0.379 with ES modules
+- Canvas-based rendering
+- React hooks for state management
+- Vitest + React Testing Library
+
+**Documentation**: See `PHASE1_SUMMARY.md`
+
+---
+
+### ✅ Phase 2: Multi-Page Support (Complete - Nov 5, 2025)
+**Status**: All pages render with full navigation
+
+**Completed Features**:
+- ✅ Render all PDF pages vertically (not just first page)
+- ✅ Page navigation controls (prev/next buttons)
+- ✅ Page number input with validation
+- ✅ Current page indicator ("Page X of Y")
+- ✅ Auto-scroll to field's page when selected
+- ✅ Page number overlays on each page
+- ✅ Scroll-based page tracking
+- ✅ 15 new tests (34 total tests passing)
+
+**User Experience**:
+- Select field in list → PDF auto-scrolls to that page
+- Use ← → buttons for quick page navigation
+- Type page number to jump directly
+- See all 9 pages of I-90 form at once
+
+**Documentation**: See `PHASE2_SUMMARY.md`
+
+---
+
+### ✅ Schema Editor MVP (Complete)
+**Status**: Fully functional schema editor (original Phase 1)
 
 **Completed Features**:
 - ✅ Field list with section grouping and status icons (complete/review/error)
@@ -422,9 +467,111 @@ Fix by:
 
 ---
 
+### ✅ Phase 3: Field Overlays (Complete - Nov 5, 2025)
+**Status**: Color-coded field overlays render on PDF
+
+**Completed Features**:
+- ✅ Color-coded borders over PDF fields (Green/Yellow/Red)
+- ✅ PDF coordinate transformation (`pdfCoordinates.ts`)
+- ✅ FieldOverlay component with status-based colors
+- ✅ Hover tooltips showing field name and type
+- ✅ Correct positioning with Y-axis inversion
+- ✅ Dynamic updates when zooming
+- ✅ Thicker border for selected fields
+- ✅ 39 new tests (22 coordinate + 17 overlay)
+- ✅ 73 total tests passing
+
+**Color Coding**:
+- 🟢 Green: Complete (all required info filled)
+- 🟡 Yellow: Needs review (missing help text or spoken name)
+- 🔴 Red: Has errors (missing required properties)
+
+**Technical Implementation**:
+- Y-axis inversion: `screenY = (pageHeight - pdfY - fieldHeight) * scale`
+- Per-page overlay rendering with dimension tracking
+- Existing `checkFieldComplete()` for status determination
+- Absolute positioning over PDF canvas
+
+**Documentation**: See `PHASE3_SUMMARY.md`
+
+---
+
+### ✅ Phase 4: Click Interactions (Complete - Nov 5, 2025)
+**Status**: Click-to-select fully functional (integrated in Phase 3)
+
+**Completed Features**:
+- ✅ Click overlay → Select field in editor
+- ✅ Highlight selected field with thicker border (3px vs 2px)
+- ✅ Hover effects (pointer cursor, background color change)
+- ✅ Tooltips on hover (show field name and type)
+- ✅ Visual selection feedback (darker color, higher z-index)
+- ✅ Accessibility features (title, cursor, data attributes)
+- ✅ 13 new documentation tests (86 total tests passing)
+
+**Key Insight**: Click functionality was already integrated in Phase 3 when connecting FieldOverlay components. Phase 4 focused on documenting and testing the workflow.
+
+**User Experience**:
+- Click field in list → PDF scrolls to field's page ✅
+- Click field overlay on PDF → Field selected in editor ✅
+- Hover over overlay → See field name + type tooltip ✅
+- Selected fields clearly highlighted ✅
+
+**Future Enhancements** (Phase 6):
+- Keyboard navigation (Tab to cycle, Enter to select)
+- Scroll field list when PDF clicked (currently only scrolls PDF when list clicked)
+
+**Documentation**: See `PHASE4_SUMMARY.md`
+
+---
+
+###✅ Phase 5: Zoom Presets (Complete - Nov 5, 2025)
+**Status**: Fit Width and Fit Page fully functional
+
+**Completed Features**:
+- ✅ Fit Width button - Scales page to fit container width
+- ✅ Fit Page button - Scales entire page to fit viewport
+- ✅ Dynamic scale calculation based on container and page dimensions
+- ✅ Bounds clamping (0.5 - 2.0) respects Phase 1 limits
+- ✅ Safety checks for missing refs and dimensions
+- ✅ 27 new tests (113 total tests passing)
+
+**Implementation**:
+- `handleFitWidth()`: Calculates optimal scale for page width
+- `handleFitPage()`: Calculates optimal scale for entire page (uses smaller of width/height scale)
+- Both account for p-8 padding (64px per axis)
+- Both use first page dimensions as reference
+- Overlays automatically update with scale changes
+
+**Calculation Examples**:
+- **Fit Width**: Container 800px - 64px padding = 736px / Page 612px = **120% scale**
+- **Fit Page**: Min(width scale, height scale) = **93% scale** (entire page visible)
+
+**User Experience**:
+- Click "Fit Width" → Page scales to fill horizontal space
+- Click "Fit Page" → Entire page visible without scrolling
+- Can mix manual zoom (+/-) and presets seamlessly
+- Field overlays remain pixel-perfect at any zoom level
+
+**Documentation**: See `PHASE5_SUMMARY.md`
+
+---
+
 ### 🚧 Next Development Priorities
 
-#### 1. **Update Extractor Field Ordering** (Immediate)
+#### 1. **Phase 6: Polish & Performance** (Next - Upcoming)
+**Goal**: Production-ready with great UX
+
+**Features**:
+- Keyboard shortcuts (+ / - for zoom, arrows for pages)
+- Debounce zoom changes
+- Throttle scroll events
+- Virtual scrolling for large PDFs (if needed)
+- Responsive layout
+- Comments and documentation
+
+---
+
+#### 3. **Update Extractor Field Ordering** (Backlog)
 **Goal**: Improve field order parsing to handle alphabetic labels
 
 **Change**: Update label parsing regex in extractor from `\d+\.` to `(\d+|[A-Z])\.`
@@ -437,7 +584,7 @@ Fix by:
 
 ---
 
-#### 2. **Drag-and-Drop Field Reordering** (High Priority)
+#### 4. **Drag-and-Drop Field Reordering** (Backlog)
 **Goal**: Allow users to reorder fields within sections via drag-and-drop
 
 **Features**:
@@ -457,29 +604,7 @@ Fix by:
 
 ---
 
-#### 3. **PDF.js Integration** (High Priority)
-**Goal**: Full PDF rendering with interactive field overlays
-
-**Features**:
-- Render actual PDF in left panel (replace placeholder)
-- Click field boxes on PDF to select in editor
-- Highlight selected field on PDF with colored border
-- Zoom controls (fit-width, fit-page, custom zoom)
-- Page navigation for multi-page forms
-- Field overlays show validation status (green/yellow/red borders)
-
-**Technical Approach**:
-- Use `pdfjs-dist` (already in package.json v4.0.379)
-- Canvas-based rendering
-- Position overlays using `pdf_position` data from schema
-- Sync selection between PDF viewer and field list
-
-**Files to Update**:
-- `schema-editor/src/components/PDFViewer.tsx` (currently placeholder)
-
----
-
-#### 4. **Bulk Operations** (Medium Priority)
+#### 5. **Bulk Operations** (Medium Priority)
 **Goal**: Edit multiple fields at once
 
 **Features**:
@@ -501,7 +626,7 @@ Fix by:
 
 ---
 
-#### 5. **Templates - Common Help Text Patterns** (Medium Priority)
+#### 6. **Templates - Common Help Text Patterns** (Medium Priority)
 **Goal**: Speed up help text entry with pre-written templates
 
 **Features**:
@@ -534,7 +659,7 @@ interface HelpTemplate {
 
 ---
 
-#### 6. **Gemini Integration - AI-Suggested Help Text** (Future)
+#### 7. **Gemini Integration - AI-Suggested Help Text** (Future)
 **Goal**: Use AI to generate help text suggestions
 
 **Features**:
@@ -557,7 +682,7 @@ interface HelpTemplate {
 
 ---
 
-#### 7. **Undo/Redo - Multi-Level History** (Future)
+#### 8. **Undo/Redo - Multi-Level History** (Future)
 **Goal**: Allow users to undo/redo changes
 
 **Features**:
@@ -599,12 +724,13 @@ interface HelpTemplate {
 ### 🐛 Known Issues & Limitations
 
 **Current Limitations**:
-- PDF viewer is placeholder (no actual PDF rendering yet)
 - No undo/redo functionality
 - No bulk operations
 - No drag-and-drop reordering
 - No field search/filter
 - Changes are local only (no server sync)
+- Keyboard navigation not yet implemented (Phase 6)
+- Field list doesn't auto-scroll when clicking PDF field (Phase 6)
 
 **Browser Compatibility**:
 - Tested on Chrome/Edge (Chromium-based)
@@ -666,6 +792,6 @@ Key areas:
 ---
 
 **Version:** 1.0.0  
-**Last Updated:** November 4, 2025  
+**Last Updated:** November 5, 2025  
 **Status:** MVP Complete - Core editing functionality working  
 **Next Priority:** Field ordering regex update, then drag-and-drop reordering
