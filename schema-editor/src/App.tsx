@@ -69,6 +69,52 @@ export const App: React.FC = () => {
     setHasUnsavedChanges(true);
   }, [schema]);
 
+  // Move option from one field to another
+  const handleMoveOption = React.useCallback((sourceFieldId: string, optionIndex: number, targetFieldId: string) => {
+    if (!schema) return;
+
+    const sourceField = schema.fields.find(f => f.id === sourceFieldId);
+    const targetField = schema.fields.find(f => f.id === targetFieldId);
+
+    if (!sourceField?.options || !targetField || (targetField.type !== 'radio' && targetField.type !== 'checkbox')) {
+      return;
+    }
+
+    // Get the option being moved
+    const optionToMove = sourceField.options[optionIndex];
+    if (!optionToMove) return;
+
+    // Remove from source
+    const newSourceOptions = sourceField.options.filter((_, idx) => idx !== optionIndex);
+    const newSourceWidgets = sourceField.consolidated_widgets?.filter(w => w !== optionToMove.value);
+
+    // Add to target
+    const newTargetOptions = [...(targetField.options || []), optionToMove];
+    const newTargetWidgets = [...(targetField.consolidated_widgets || []), optionToMove.value];
+
+    // Update both fields
+    const newFields = schema.fields.map(f => {
+      if (f.id === sourceFieldId) {
+        return {
+          ...f,
+          options: newSourceOptions,
+          consolidated_widgets: newSourceWidgets,
+        };
+      }
+      if (f.id === targetFieldId) {
+        return {
+          ...f,
+          options: newTargetOptions,
+          consolidated_widgets: newTargetWidgets,
+        };
+      }
+      return f;
+    });
+
+    setSchema({ ...schema, fields: newFields });
+    setHasUnsavedChanges(true);
+  }, [schema]);
+
   // Save schema
   const handleSave = React.useCallback(() => {
     if (!schema || !selectedForm) return;
@@ -254,6 +300,7 @@ export const App: React.FC = () => {
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
                 onReorderFields={handleReorderFields}
+                onMoveOption={handleMoveOption}
               />
             </div>
           </div>

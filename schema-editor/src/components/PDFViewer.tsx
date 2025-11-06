@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FormSchema, FormField } from '../types/schema';
+import type { FormSchema } from '../types/schema';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import { usePDFDocument } from '../hooks/usePDFDocument';
 import { PDFPage } from './PDFPage';
@@ -110,15 +110,42 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   };
 
-  // Auto-scroll to field's page when field is selected
+  // Auto-scroll to field's position when field is selected
   React.useEffect(() => {
-    if (selectedFieldId && schema) {
-      const field = schema.fields.find(f => f.id === selectedFieldId);
-      if (field?.pdf_position?.page) {
-        scrollToPage(field.pdf_position.page);
-      }
-    }
-  }, [selectedFieldId, schema]);
+    if (!selectedFieldId || !schema) return;
+
+    const field = schema.fields.find(f => f.id === selectedFieldId);
+    if (!field?.pdf_position?.page) return;
+
+    const pageNum = field.pdf_position.page;
+    const pageEl = pageRefs.current.get(pageNum);
+    const pageDims = pageDimensions.current.get(pageNum);
+    const scrollContainer = containerRef.current?.querySelector('.overflow-auto');
+
+    if (!pageEl || !pageDims || !scrollContainer) return;
+
+    // Calculate field position on the page
+    const fieldY = field.pdf_position.y ?? 0;
+    const fieldHeight = field.pdf_position.height ?? 0;
+    const fieldCenterY = (fieldY + fieldHeight / 2) * scale;
+
+    // Get page offset relative to scroll container
+    const pageRect = pageEl.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    
+    // Calculate scroll position to center the field
+    const fieldAbsoluteY = pageRect.top - containerRect.top + scrollContainer.scrollTop + fieldCenterY;
+    const containerHalfHeight = scrollContainer.clientHeight / 2;
+    const targetScrollTop = fieldAbsoluteY - containerHalfHeight;
+
+    // Smooth scroll to center the field
+    scrollContainer.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    });
+
+    setCurrentPage(pageNum);
+  }, [selectedFieldId, schema, scale]);
 
   // Track current page based on scroll position
   React.useEffect(() => {

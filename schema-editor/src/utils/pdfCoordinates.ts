@@ -31,22 +31,25 @@ export interface PageDimensions {
 /**
  * Convert PDF coordinates to screen coordinates
  *
- * @param pdfPos - Position from schema (bottom-left origin)
- * @param pageHeight - Height of the PDF page in points
+ * @param pdfPos - Position from schema (already in top-left screen format from PDF.js extraction)
+ * @param pageHeight - Height of the PDF page in points (unused - kept for API compatibility)
  * @param scale - Current zoom scale (1.0 = 100%)
  * @returns Screen position (top-left origin, scaled)
  *
+ * Note: Our extracted schemas use PDF.js coordinates which are already in screen/top-left format,
+ * so we only need to scale, not transform the coordinate system.
+ *
  * @example
  * const screenPos = pdfToScreenCoords(
- *   { x: 100, y: 700, width: 150, height: 30 },
- *   792,  // US Letter height
+ *   { x: 100, y: 300, width: 150, height: 30 },
+ *   792,  // US Letter height (unused)
  *   1.5   // 150% zoom
  * );
- * // Returns: { x: 150, y: 93, width: 225, height: 45 }
+ * // Returns: { x: 150, y: 450, width: 225, height: 45 }
  */
 export function pdfToScreenCoords(
   pdfPos: PDFPosition,
-  pageHeight: number,
+  _pageHeight: number,  // Kept for API compatibility; unused since coords are already screen format
   scale: number = 1.0
 ): ScreenPosition {
   // Extract PDF coordinates (default to 0 if undefined)
@@ -56,12 +59,15 @@ export function pdfToScreenCoords(
   const pdfHeight = pdfPos.height ?? 0;
 
   // Transform coordinates
-  // X: Same direction, just scale
+  // Note: Our PDF schema coordinates are already in screen/top-left format
+  // (extracted from PDF.js which uses screen coordinates)
+  // So we just need to scale, not flip the Y-axis
+  
+  // X: Just scale
   const screenX = pdfX * scale;
 
-  // Y: Flip axis (PDF origin is bottom-left, screen is top-left)
-  // Formula: screenY = (pageHeight - pdfY - pdfHeight) * scale
-  const screenY = (pageHeight - pdfY - pdfHeight) * scale;
+  // Y: Just scale (coordinates already in top-left origin format)
+  const screenY = pdfY * scale;
 
   // Width and height: Just scale
   const screenWidth = pdfWidth * scale;

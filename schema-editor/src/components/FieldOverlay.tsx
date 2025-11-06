@@ -2,6 +2,12 @@
  * FieldOverlay Component
  *
  * Renders a colored border overlay on top of a PDF field.
+ * 
+ * Features:
+ * - Clickable: Click to select the field (syncs with field list)
+ * - Visual feedback: Selected fields have thicker borders, blue glow, and stronger background
+ * - Hover tooltips: Shows field name and type on hover
+ * 
  * Color indicates field completion status:
  * - Green: Complete
  * - Yellow: Needs review
@@ -52,20 +58,21 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
 
   if (status.isComplete) {
     borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgb(74, 222, 128)';  // green-500 : green-400
-    bgColor = 'rgba(34, 197, 94, 0.05)';  // Very light green
+    bgColor = isSelected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.05)';  // Stronger highlight when selected
   } else if (status.needsReview) {
     borderColor = isSelected ? 'rgb(234, 179, 8)' : 'rgb(250, 204, 21)';  // yellow-500 : yellow-400
-    bgColor = 'rgba(234, 179, 8, 0.05)';  // Very light yellow
+    bgColor = isSelected ? 'rgba(234, 179, 8, 0.15)' : 'rgba(234, 179, 8, 0.05)';  // Stronger highlight when selected
   } else {
     borderColor = isSelected ? 'rgb(239, 68, 68)' : 'rgb(248, 113, 113)';  // red-500 : red-400
-    bgColor = 'rgba(239, 68, 68, 0.05)';  // Very light red
+    bgColor = isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.05)';  // Stronger highlight when selected
   }
 
-  // Selected fields get thicker border
-  const borderWidth = isSelected ? 3 : 2;
+  // Selected fields get thicker border and shadow
+  const borderWidth = isSelected ? 4 : 2;
+  const boxShadow = isSelected ? '0 0 0 2px rgba(59, 130, 246, 0.5)' : 'none';  // Blue glow when selected
 
   // Hovered fields get lighter background
-  const finalBgColor = isHovered ? bgColor : 'transparent';
+  const finalBgColor = (isHovered || isSelected) ? bgColor : 'transparent';
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -88,6 +95,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
         height: `${screenPos.height}px`,
         border: `${borderWidth}px solid ${borderColor}`,
         backgroundColor: finalBgColor,
+        boxShadow: boxShadow,
         pointerEvents: 'auto',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
