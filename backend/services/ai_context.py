@@ -150,12 +150,21 @@ def build_form_context(
         
         if "allowed_values" in field_info and field_info["allowed_values"]:
             allowed = field_info["allowed_values"]
-            if len(allowed) <= 5:
+            # Handle both string lists and dict lists (with 'value' and 'label')
+            allowed_strs = []
+            for item in allowed:
+                if isinstance(item, dict):
+                    # Use label if available, otherwise value
+                    allowed_strs.append(item.get("label") or item.get("value", str(item)))
+                else:
+                    allowed_strs.append(str(item))
+            
+            if len(allowed_strs) <= 5:
                 # Show all options if 5 or fewer
-                line_parts.append(f"Options: [{', '.join(allowed)}]")
+                line_parts.append(f"Options: [{', '.join(allowed_strs)}]")
             else:
                 # Show first 3 and count for longer lists
-                line_parts.append(f"Options: [{', '.join(allowed[:3])}, ... ({len(allowed)} total)]")
+                line_parts.append(f"Options: [{', '.join(allowed_strs[:3])}, ... ({len(allowed_strs)} total)]")
         
         # Add validation constraints if present
         if "format" in field_info and field_info["format"]:
