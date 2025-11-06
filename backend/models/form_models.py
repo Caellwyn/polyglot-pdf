@@ -263,6 +263,22 @@ class TableColumn(BaseModel):
         description="Available option choices when the column captures radios/checkbox groups"
     )
 
+    @field_validator('options', mode='before')
+    @classmethod
+    def normalize_options(cls, v):
+        """
+        Normalize options to FieldOption objects.
+        Accepts both List[str] and List[FieldOption] formats.
+        """
+        if v is None or not isinstance(v, list) or not v:
+            return v
+        
+        # Check if first item is a string (simple format)
+        if isinstance(v[0], str):
+            return [FieldOption(value=opt, label=opt) for opt in v]
+        
+        return v
+
 
 class MultiEntryConfig(BaseModel):
     """Multi-entry configuration for tables and repeating fields"""
@@ -404,6 +420,29 @@ class FormField(BaseModel):
         None,
         description="Which supplement to overflow to (for long narratives or repeating fields)"
     )
+
+    @field_validator('options', mode='before')
+    @classmethod
+    def normalize_options(cls, v):
+        """
+        Normalize options to FieldOption objects.
+        Accepts both List[str] and List[FieldOption] formats.
+        Converts simple string lists to FieldOption objects for consistency.
+        """
+        if v is None or not isinstance(v, list):
+            return v
+        
+        # If empty list, return as-is
+        if not v:
+            return v
+        
+        # Check if first item is a string (simple format)
+        if isinstance(v[0], str):
+            # Convert all strings to FieldOption objects
+            return [FieldOption(value=opt, label=opt) for opt in v]
+        
+        # Already in correct format (dict or FieldOption)
+        return v
 
     @field_validator('options')
     @classmethod

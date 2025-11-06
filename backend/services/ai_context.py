@@ -150,14 +150,12 @@ def build_form_context(
         
         if "allowed_values" in field_info and field_info["allowed_values"]:
             allowed = field_info["allowed_values"]
-            # Handle both string lists and dict lists (with 'value' and 'label')
-            allowed_strs = []
-            for item in allowed:
-                if isinstance(item, dict):
-                    # Use label if available, otherwise value
-                    allowed_strs.append(item.get("label") or item.get("value", str(item)))
-                else:
-                    allowed_strs.append(str(item))
+            # Options are now guaranteed to be FieldOption objects (normalized at model level)
+            # Extract labels for display
+            allowed_strs = [
+                opt.get("label") or opt.get("value", str(opt)) if isinstance(opt, dict) else opt.label
+                for opt in allowed
+            ]
             
             if len(allowed_strs) <= 5:
                 # Show all options if 5 or fewer
