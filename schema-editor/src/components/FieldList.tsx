@@ -1,21 +1,75 @@
 import React from 'react';
-import type { FormSchema, FormField, FormSection } from '../types/schema';
+import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
 
 interface FieldListProps {
   schema: FormSchema;
   selectedFieldId: string | null;
   onSelectField: (fieldId: string) => void;
+  onReorderFields?: (sectionId: string, fieldIds: string[]) => void;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
   schema,
   selectedFieldId,
   onSelectField,
+  onReorderFields,
 }) => {
   const [expandedSections, setExpandedSections] = React.useState<Set<string>>(
     new Set(schema.sections.map(s => s.id))
   );
+  const [draggedField, setDraggedField] = React.useState<{ fieldId: string; sectionId: string } | null>(null);
+  const [dragOverField, setDragOverField] = React.useState<string | null>(null);
+
+  const handleDragStart = (fieldId: string, sectionId: string) => (e: React.DragEvent) => {
+    setDraggedField({ fieldId, sectionId });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (fieldId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverField(fieldId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverField(null);
+  };
+
+  const handleDrop = (targetFieldId: string, targetSectionId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverField(null);
+
+    if (!draggedField || !onReorderFields) return;
+    if (draggedField.fieldId === targetFieldId) return;
+    
+    // Only allow reordering within the same section
+    if (draggedField.sectionId !== targetSectionId) {
+      setDraggedField(null);
+      return;
+    }
+
+    const section = schema.sections.find(s => s.id === targetSectionId);
+    if (!section) return;
+
+    const currentFields = [...section.fields];
+    const draggedIndex = currentFields.indexOf(draggedField.fieldId);
+    const targetIndex = currentFields.indexOf(targetFieldId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Remove dragged field and insert at new position
+    currentFields.splice(draggedIndex, 1);
+    currentFields.splice(targetIndex, 0, draggedField.fieldId);
+
+    onReorderFields(targetSectionId, currentFields);
+    setDraggedField(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedField(null);
+    setDragOverField(null);
+  };
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
@@ -139,23 +193,42 @@ export const FieldList: React.FC<FieldListProps> = ({
                   {fields.map(field => {
                     const status = getFieldStatus(field);
                     const isSelected = field.id === selectedFieldId;
+                    const isDragOver = dragOverField === field.id;
+                    const isDragging = draggedField?.fieldId === field.id;
 
                     return (
-                      <button
+                      <div
                         key={field.id}
-                        className={`w-full flex items-center gap-2 p-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                          isSelected ? 'bg-primary-50 border-l-2 border-primary-500' : ''
-                        }`}
-                        onClick={() => onSelectField(field.id)}
+                        draggable={true}
+                        onDragStart={handleDragStart(field.id, section.id)}
+                        onDragOver={handleDragOver(field.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop(field.id, section.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`
+                          ${isDragOver ? 'border-t-2 border-primary-500' : ''}
+                          ${isDragging ? 'opacity-50' : ''}
+                        `}
                       >
-                        {getFieldIcon(status)}
-                        <span className="flex-1 truncate text-gray-700">
-                          {field.spoken_name || field.id}
-                        </span>
-                        <span className="text-xs text-gray-400 font-mono">
-                          [{field.type}]
-                        </span>
-                      </button>
+                        <button
+                          className={`w-full flex items-center gap-2 p-2 text-left text-sm hover:bg-gray-50 transition-colors cursor-move ${
+                            isSelected ? 'bg-primary-50 border-l-2 border-primary-500' : ''
+                          }`}
+                          onClick={() => onSelectField(field.id)}
+                        >
+                          {/* Drag handle icon */}
+                          <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2z" />
+                          </svg>
+                          {getFieldIcon(status)}
+                          <span className="flex-1 truncate text-gray-700 font-mono text-xs">
+                            {field.id}
+                          </span>
+                          <span className="text-xs text-gray-400 font-mono">
+                            [{field.type}]
+                          </span>
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -173,23 +246,42 @@ export const FieldList: React.FC<FieldListProps> = ({
             {(sectionedFields.get('_orphan') || []).map(field => {
               const status = getFieldStatus(field);
               const isSelected = field.id === selectedFieldId;
+              const isDragOver = dragOverField === field.id;
+              const isDragging = draggedField?.fieldId === field.id;
 
               return (
-                <button
+                <div
                   key={field.id}
-                  className={`w-full flex items-center gap-2 p-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                    isSelected ? 'bg-primary-50 border-l-2 border-primary-500' : ''
-                  }`}
-                  onClick={() => onSelectField(field.id)}
+                  draggable={true}
+                  onDragStart={handleDragStart(field.id, '_orphan')}
+                  onDragOver={handleDragOver(field.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop(field.id, '_orphan')}
+                  onDragEnd={handleDragEnd}
+                  className={`
+                    ${isDragOver ? 'border-t-2 border-primary-500' : ''}
+                    ${isDragging ? 'opacity-50' : ''}
+                  `}
                 >
-                  {getFieldIcon(status)}
-                  <span className="flex-1 truncate text-gray-700">
-                    {field.spoken_name || field.id}
-                  </span>
-                  <span className="text-xs text-gray-400 font-mono">
-                    [{field.type}]
-                  </span>
-                </button>
+                  <button
+                    className={`w-full flex items-center gap-2 p-2 text-left text-sm hover:bg-gray-50 transition-colors cursor-move ${
+                      isSelected ? 'bg-primary-50 border-l-2 border-primary-500' : ''
+                    }`}
+                    onClick={() => onSelectField(field.id)}
+                  >
+                    {/* Drag handle icon */}
+                    <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2z" />
+                    </svg>
+                    {getFieldIcon(status)}
+                    <span className="flex-1 truncate text-gray-700 font-mono text-xs">
+                      {field.id}
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">
+                      [{field.type}]
+                    </span>
+                  </button>
+                </div>
               );
             })}
           </div>
