@@ -4,8 +4,8 @@ import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
 import { ValidationPanel } from './components/ValidationPanel';
-import { loadSchema, saveSchema, type FormConfig } from './utils/schemaLoader';
-import type { FormSchema, FormField } from './types/schema';
+import { loadSchema, saveSchema } from './utils/schemaLoader';
+import type { FormSchema, FormField, FormConfig } from './types/schema';
 
 export const App: React.FC = () => {
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
@@ -51,6 +51,21 @@ export const App: React.FC = () => {
     };
 
     setSchema(newSchema);
+    setHasUnsavedChanges(true);
+  }, [schema]);
+
+  // Reorder fields within a section
+  const handleReorderFields = React.useCallback((sectionId: string, fieldIds: string[]) => {
+    if (!schema) return;
+
+    const newSections = schema.sections.map(section => {
+      if (section.id === sectionId) {
+        return { ...section, fields: fieldIds };
+      }
+      return section;
+    });
+
+    setSchema({ ...schema, sections: newSections });
     setHasUnsavedChanges(true);
   }, [schema]);
 
@@ -238,6 +253,7 @@ export const App: React.FC = () => {
                 schema={schema}
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
+                onReorderFields={handleReorderFields}
               />
             </div>
           </div>
