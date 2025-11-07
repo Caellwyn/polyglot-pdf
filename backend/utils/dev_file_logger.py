@@ -2,7 +2,17 @@
 Development file logger for Gemini API messages and tool calls.
 
 Writes detailed logs to daily .jsonl files in backend/logs/ for analysis.
-Only active when VFF_DEV_LOGGING=true.
+Only active in DEVELOPMENT mode (automatic detection).
+
+ENVIRONMENT DETECTION (AUTOMATIC - NO MANUAL FLAGS):
+- Development: If backend/.env.DEV file exists → Enable detailed logging (includes PHI)
+- Production: If backend/.env.DEV does NOT exist → Disable detailed logging (HIPAA safe)
+
+This approach prevents human error:
+- .env* files are gitignored and dockerignored
+- Production containers never have .env.DEV
+- Developers create .env.DEV locally to enable debug logs
+- No manual flag flipping needed!
 
 Files are named: gemini_YYYY-MM-DD.jsonl
 Format: One JSON object per line for easy DataFrame loading
@@ -16,8 +26,33 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-# Check if dev logging is enabled
-DEV_LOGGING_ENABLED = os.getenv("VFF_DEV_LOGGING", "false").lower() in ("true", "1", "yes")
+def _is_development_mode() -> bool:
+    """
+    Detect if we're running in development mode.
+
+    Checks for existence of backend/.env.DEV marker file.
+    This file should ONLY exist in local development environments.
+
+    Returns:
+        True if running in development mode (PHI logging allowed)
+        False if running in production mode (PHI logging disabled)
+    """
+    # Check multiple possible locations for the marker file
+    marker_paths = [
+        Path("backend/.env.DEV"),           # From project root
+        Path(".env.DEV"),                   # From backend/ directory
+        Path(__file__).parent.parent / ".env.DEV",  # Relative to this file
+    ]
+
+    for marker_path in marker_paths:
+        if marker_path.exists():
+            return True
+
+    return False
+
+
+# Automatic environment detection - no manual flags!
+DEV_LOGGING_ENABLED = _is_development_mode()
 
 
 class DevFileLogger:
@@ -44,6 +79,14 @@ class DevFileLogger:
         if self.enabled:
             # Create logs directory
             self.log_dir.mkdir(parents=True, exist_ok=True)
+            # Use sys.stdout.write for emoji-safe output
+            msg = f"[DevLogger] Development mode ENABLED - Logging field values to: {self.log_dir}\n"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+        else:
+            msg = "[DevLogger] Production mode - Field values will NOT be logged (HIPAA compliant)\n"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
 
     def _get_log_file_path(self) -> Path:
         """Get the path for today's log file."""

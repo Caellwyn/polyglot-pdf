@@ -312,13 +312,16 @@ class FormFillingService:
         )
         
         # Restart Gemini session (doesn't re-accept WebSocket)
+        # Use deepcopy to avoid mutating the original declarations
+        tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
+
         await self._live_ai.set_callbacks(
             on_form_update=self.handle_form_update,
             on_transcript=self.handle_transcript if self._send_transcript else None,
             on_audio=self.handle_audio,
             on_tool_call=self.handle_tool_call,
             system_instruction=system_instruction,
-            tool_declarations=self._settings.GEMINI_TOOLS,
+            tool_declarations=tool_declarations,
             enable_transcripts=self._send_transcript,
         )
         

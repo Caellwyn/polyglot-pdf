@@ -160,19 +160,41 @@ class CallbackHandler:
     ) -> Optional[Dict[str, Any]]:
         """
         Handle tool call callback from Gemini.
-        
+
         Routes tool calls to appropriate handlers and manages response formatting.
-        
+
         Args:
             tool_name: Name of the tool being called
             arguments: Arguments passed to the tool
-            
+
         Returns:
             Tool response dictionary for Gemini
         """
-        # Dev logging: Log tool call to daily file
+        # ============================================================================
+        # LOGGING POLICY (HIPAA COMPLIANCE)
+        # ============================================================================
+        # Production (_log): NEVER log field values - only log:
+        #   - Tool names
+        #   - Argument KEYS (not values)
+        #   - Counts (field count, error count)
+        #   - Field IDs (not field values)
+        #   - Session metadata
+        #
+        # Development (_dev_log): MAY log field values ONLY when VFF_DEV_LOGGING=true
+        #   - Writes to local files: backend/logs/gemini_YYYY-MM-DD.jsonl
+        #   - Never deployed to production
+        #   - Used for local debugging only
+        # ============================================================================
+
+        # Production logging: Log tool name and argument KEYS only (no values)
+        _log.info("🔧 tool_call_received",
+                 tool_name=tool_name,
+                 session_id=self._session_id,
+                 arg_keys=list(arguments.keys()) if arguments else [])
+
+        # Dev logging: Log full arguments (includes field values - dev only!)
         _dev_log.log_tool_call(tool_name, arguments, session_id=self._session_id)
-        
+
         if self._session_id is None:
             _log.error("tool_call_no_session", tool_name=tool_name)
             return None
