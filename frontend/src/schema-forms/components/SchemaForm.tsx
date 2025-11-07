@@ -29,7 +29,6 @@ export interface SchemaFormProps {
 
 export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: SchemaFormProps) {
   const [state, setState] = useState<SchemaFormState>(() => {
-    console.log('[SchemaForm] Initial state setup');
     return SchemaFormStateManager.init(schema);
   });
 
@@ -51,74 +50,54 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   }, [state.currentPartId, onSectionChange]);
 
   const handleFieldChange = (fieldId: string, value: any) => {
-    console.log(`[SchemaForm] handleFieldChange called: ${fieldId} = ${JSON.stringify(value)}`);
-
     // Use functional update to avoid stale closure issues
     setState(prevState => {
-      console.log(`[SchemaForm] setState functional update - prevState.fieldValues:`, prevState.fieldValues);
       let newState = SchemaFormStateManager.updateField(prevState, fieldId, value);
 
       // Handle copy_to logic: auto-copy value to target fields
       const field = prevState.schema.fields.find(f => f.id === fieldId);
       if (field?.copy_to && field.copy_to.length > 0) {
-        console.log(`[SchemaForm] Field ${fieldId} has copy_to:`, field.copy_to);
         // Copy value to all target fields
         field.copy_to.forEach(targetFieldId => {
-          console.log(`[SchemaForm] Copying value from ${fieldId} to ${targetFieldId}`);
           newState = SchemaFormStateManager.updateField(newState, targetFieldId, value);
         });
       }
 
-      console.log(`[SchemaForm] setState functional update - newState.fieldValues:`, newState.fieldValues);
       return newState;
     });
-
-    console.log(`[SchemaForm] setState called with functional update - waiting for React to re-render...`);
   };
 
   const handleFieldBlur = (fieldId: string) => {
-    console.log(`[SchemaForm] handleFieldBlur called for: ${fieldId}`);
-
     // Validate field on blur
     setState(prevState => {
       const field = prevState.schema.fields.find((f) => f.id === fieldId);
       if (!field) return prevState;
 
       const value = prevState.fieldValues[fieldId];
-      console.log(`[SchemaForm] handleFieldBlur - validating ${fieldId}, value:`, value);
       const error = validateField(field, value);
 
       const newState = SchemaFormStateManager.setValidationError(prevState, fieldId, error);
-      console.log(`[SchemaForm] handleFieldBlur - newState.fieldValues:`, newState.fieldValues);
       return newState;
     });
   };
 
   const handleNextSection = () => {
-    console.log('[handleNextSection] Called, isNavigating:', isNavigating);
     if (isNavigating) {
-      console.log('[handleNextSection] Already navigating - ignoring');
       return;
     }
 
     const nextSection = SchemaFormStateManager.getNextSection(state);
-    console.log('[handleNextSection] nextSection:', nextSection?.id);
     if (!nextSection) return;
 
     // Validate current section before moving
     const currentSection = SchemaFormStateManager.getCurrentSection(state);
-    console.log('[handleNextSection] currentSection:', currentSection?.id);
 
     const isValid = SchemaFormStateManager.isSectionValid(state, currentSection!.id);
-    console.log('[handleNextSection] isSectionValid:', isValid);
 
     if (currentSection && !isValid) {
-      console.log('[handleNextSection] Section invalid - showing alert');
       alert("Please complete all required fields before continuing.");
       return;
     }
-
-    console.log('[handleNextSection] Section valid - navigating');
 
     // Set navigation flag
     setIsNavigating(true);
@@ -132,11 +111,9 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     // Navigate to next section
     newState = SchemaFormStateManager.navigateToSection(newState, nextSection.id);
     setState(newState);
-    console.log('[handleNextSection] Navigation complete');
 
     // Clear navigation flag after a short delay
     setTimeout(() => {
-      console.log('[handleNextSection] Clearing navigation flag');
       setIsNavigating(false);
     }, 300);
   };
@@ -202,7 +179,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     }
 
     setIsDownloadingPDF(true);
-    console.log('[SchemaForm] Starting PDF download...');
 
     try {
       const filledPDFBytes = await fillPDF(pdfUrl, state.fieldValues, state.schema);
@@ -213,7 +189,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
       const filename = `${formNumber}-filled-${timestamp}.pdf`;
 
       downloadPDF(filledPDFBytes, filename);
-      console.log('[SchemaForm] PDF downloaded successfully:', filename);
     } catch (error) {
       console.error('[SchemaForm] PDF download failed:', error);
       alert('Failed to download PDF. Check console for details.');
@@ -231,17 +206,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   // Sort sections by order for progress display
   const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
   const currentSectionIndex = sortedSections.findIndex((s) => s.id === state.currentPartId);
-
-  // Debug: Log current state's fieldValues at TOP of render
-  console.log(`[SchemaForm] ===== RENDER START =====`);
-  console.log(`[SchemaForm] RENDER - state.fieldValues:`, Object.keys(state.fieldValues).length, 'fields with values');
-  console.log(`[SchemaForm] RENDER - actual state.fieldValues:`, state.fieldValues);
-  console.log(`[SchemaForm] RENDER - state.currentPartId:`, state.currentPartId);
-
-  // Debug section navigation
-  console.log(`[SchemaForm] Current section: ${currentSection?.id} (${currentSectionIndex + 1}/${sortedSections.length})`);
-  console.log(`[SchemaForm] Next section:`, nextSection?.id || "NONE (last section)");
-  console.log(`[SchemaForm] Prev section:`, prevSection?.id || "NONE (first section)");
 
   return (
     <>
@@ -296,22 +260,19 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
           </button>
         )}
 
-        {(() => {
-          console.log(`[SchemaForm] Rendering navigation button. nextSection = ${nextSection ? nextSection.id : 'NULL'}`);
-          return nextSection ? (
-            <button
-              type="button"
-              onClick={handleNextSection}
-              className="schema-form__nav-button schema-form__nav-button--next"
-            >
-              Next →
-            </button>
-          ) : (
-            <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
-              Submit Form
-            </button>
-          );
-        })()}
+        {nextSection ? (
+          <button
+            type="button"
+            onClick={handleNextSection}
+            className="schema-form__nav-button schema-form__nav-button--next"
+          >
+            Next →
+          </button>
+        ) : (
+          <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
+            Submit Form
+          </button>
+        )}
       </div>
 
       {/* PDF Download Section */}

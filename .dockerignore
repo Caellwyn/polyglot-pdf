@@ -1,0 +1,39 @@
+# Prevent local dev files from entering production containers
+.env
+.env.*
+.env.local
+backend/.env
+backend/.env.*
+
+# Development logs (contain PHI/PII)
+backend/logs/
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node modules
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Development scripts
+scripts/dev/
+
+# Temporary files
+tmp_*
+*.tmp

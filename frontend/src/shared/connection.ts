@@ -65,9 +65,8 @@ export interface ConnectionManager {
  * Ensures DOM and sessionStorage stay in sync across page refreshes
  */
 function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema): void {
-	console.log('[VFF Connection] 🔄 Restoring DOM from sessionStorage...')
 	let restoredCount = 0
-	
+
 	for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
 		const value = fieldValue.value
 		if (value === null || value === undefined || value === '') continue
@@ -101,8 +100,10 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 		
 		restoredCount++
 	}
-	
-	console.log(`[VFF Connection] ✅ Restored ${restoredCount} fields from sessionStorage to DOM`)
+
+	if (restoredCount > 0) {
+		console.log(`[VFF Connection] ✅ Restored ${restoredCount} fields from sessionStorage`)
+	}
 }
 
 /**
@@ -110,7 +111,6 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
  * Called before connecting to capture values user entered before activating voice
  */
 function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
-	console.log('[VFF Connection] 🔍 Scanning DOM for pre-filled values...')
 	let capturedCount = 0
 	
 	for (const field of schema.fields) {
@@ -155,11 +155,12 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 		if (value !== null && value !== '' && value !== false) {
 			connection.updateField(fieldId, value, { confirmed: true, emit: false })
 			capturedCount++
-			console.log('[VFF Connection] ✓ Captured pre-filled:', fieldId, '=', value)
 		}
 	}
-	
-	console.log(`[VFF Connection] ✅ Captured ${capturedCount} pre-filled values from DOM`)
+
+	if (capturedCount > 0) {
+		console.log(`[VFF Connection] ✅ Captured ${capturedCount} pre-filled values`)
+	}
 }
 
 /**
@@ -193,39 +194,31 @@ export function createConnectionManager(
 	// Create audio manager immediately (doesn't need WebSocket to be ready)
 	// Pass shared stream if provided (for VAD coordination)
 	audioManager = createAudioManager(sharedStream)
-	if (sharedStream) {
-		console.log('[VFF Connection] 🔗 Audio manager using shared stream (VAD coordination)')
-	}
 	
 	// Create field manager immediately to listen for manual edits from the start
 	// This captures any fields the user fills BEFORE clicking Connect
 	fieldManager = createFieldManager({
 		schema: schema,
 		onManualEdit: (fieldId, value) => {
-			console.log('[VFF Connection] 🖊️ Manual edit detected:', fieldId, '=', value)
-			
 			// Update sessionStorage immediately using SchemaFormStateManager
 			// Manual edits are marked as confirmed (user explicitly filled them)
 			const updatedState = SchemaFormStateManager.updateField(
-				state, 
-				fieldId, 
-				value, 
+				state,
+				fieldId,
+				value,
 				{ confirmed: true }
 			)
 			// Update the reference (though SchemaFormStateManager.updateField already saves)
 			Object.assign(state, updatedState)
-			console.log('[VFF Connection] ✓ Updated sessionStorage for:', fieldId)
-			
+
 			// If connected, also notify Gemini
 			if (connection) {
 				const field = schema.fields.find(f => f.id === fieldId)
 				const fieldName = field?.name || fieldId
 				connection.sendManualFieldUpdate(fieldId, fieldName, value)
-				console.log('[VFF Connection] ✓ Notified Gemini about:', fieldId)
 			}
 		}
 	})
-	console.log('[VFF Connection] ✅ Field manager created - listening for manual edits')
 
 	const callbacks: ConnectionCallbacks = {
 		onStatusChange: (status) => {
@@ -242,15 +235,11 @@ export function createConnectionManager(
 		},
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
-			console.log('[VFF Connection] ✅ Gemini session restarted - updating status')
 			onStatusChange('connected')
 		},
 		onFieldUpdate: (updates) => {
-			console.log('[VFF Connection] 📥 Tool call received: update_form_fields with', updates.length, 'field(s)')
-			updates.forEach((update, idx) => {
-				console.log(`  [${idx + 1}] fieldId:`, update.fieldId, '→ value:', update.value)
-			})
-			
+			console.log('[VFF Connection] 🔧 Tool call: update_form_fields (' + updates.length + ' field(s))')
+
 			// Track tool calls in metrics and filter out hallucinations
 			const acceptedUpdates: typeof updates = []
 			const rejectedUpdates: typeof updates = []
@@ -271,11 +260,8 @@ export function createConnectionManager(
 			}
 			
 			if (rejectedUpdates.length > 0) {
-				console.warn('[VFF Connection] ⚠️ Rejected', rejectedUpdates.length, 'hallucinated update(s):', 
-					rejectedUpdates.map(u => u.fieldId))
+				console.warn('[VFF Connection] ⚠️ Rejected', rejectedUpdates.length, 'hallucinated update(s)')
 			}
-			
-			console.log('[VFF Connection] ✅ Accepted', acceptedUpdates.length, 'update(s) for processing')
 			
 			// S6: Apply ONLY accepted field updates to DOM
 			if (fieldManager && acceptedUpdates.length > 0) {
@@ -301,19 +287,18 @@ export function createConnectionManager(
 		async connect() {
 			// Check if WebSocket is connected but Gemini is closed (post-Level 3 scenario)
 			const isWebSocketConnected = connection && connection.getStatus() === 'connected'
-			
+
 			if (isWebSocketConnected && connection) {
-				console.log('[VFF Connection] 🔄 WebSocket alive - restarting Gemini session')
+				console.log('[VFF Connection] 🔄 Restarting Gemini session')
 				// Compute next field hint for smooth progression
 				const nextFieldHint = connection.getNextFieldHint()
 				// Send restart message to backend with hint
 				try {
 					onStatusChange('reconnecting')  // Set status to reconnecting while waiting
-					connection.send({ 
+					connection.send({
 						type: 'restart_gemini_session',
-						next_field_hint: nextFieldHint 
+						next_field_hint: nextFieldHint
 					})
-					console.log('[VFF Connection] ⏳ Gemini session restart requested', { nextFieldHint })
 					// Status will be updated to 'connected' when backend confirms restart
 					// (via gemini_session_restarted message handler)
 					return
@@ -330,34 +315,28 @@ export function createConnectionManager(
 				
 				// Reinitialize audio manager if destroyed (reconnect scenario)
 				if (!audioManager) {
-					console.log('[VFF Connection] 🔄 Reinitializing audio manager (reconnect)')
 					audioManager = createAudioManager(sharedStream)
 				}
-				
+
 				// Reinitialize field manager if destroyed (reconnect scenario)
 				if (!fieldManager) {
-					console.log('[VFF Connection] 🔄 Reinitializing field manager (reconnect)')
 					fieldManager = createFieldManager({
 						schema: schema,
 						onManualEdit: (fieldId, value) => {
-							console.log('[VFF Connection] 🖊️ Manual edit detected:', fieldId, '=', value)
-							
 							// Update sessionStorage immediately using SchemaFormStateManager
 							const updatedState = SchemaFormStateManager.updateField(
-								state, 
-								fieldId, 
-								value, 
+								state,
+								fieldId,
+								value,
 								{ confirmed: true }
 							)
 							Object.assign(state, updatedState)
-							console.log('[VFF Connection] ✓ Updated sessionStorage for:', fieldId)
-							
+
 							// If connected, also notify Gemini
 							if (connection) {
 								const field = schema.fields.find(f => f.id === fieldId)
 								const fieldName = field?.name || fieldId
 								connection.sendManualFieldUpdate(fieldId, fieldName, value)
-								console.log('[VFF Connection] ✓ Notified Gemini about:', fieldId)
 							}
 						}
 					})
@@ -373,10 +352,9 @@ export function createConnectionManager(
 				
 				// Try to connect to localhost first
 				try {
-					console.log('[VFF Connection] Trying localhost...')
 					await connection.connect(wsUrl)
 					connectedUrl = wsUrl  // Track successful connection
-					console.log('[VFF Connection] ✅ Connected to localhost')
+					console.log('[VFF Connection] ✅ Connected:', wsUrl)
 				} catch (localError) {
 					// Localhost failed, try cloud fallback
 					const cloudUrl = getCloudBackendUrl()

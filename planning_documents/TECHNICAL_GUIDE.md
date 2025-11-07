@@ -459,10 +459,19 @@ downloadPDF(pdfBytes, 'i-90-filled-2025-11-03.pdf');
 
 ### Input Modes
 
-**Push-to-Talk (PTT) - Default Mode** (Oct 30, 2025):
+**Push-to-Talk (PTT) - Default Mode** (Nov 7, 2025 update):
+
 - User manually controls audio transmission via button/spacebar
-- Mic stays recording but sends silence when button not pressed
-- Gemini's automatic VAD processes audio only during button press
+- Mic capture stays active for heartbeat/diagnostics, but **no audio chunks are transmitted** while idle (silence streaming removed)
+- Press flow (mouse or spacebar):
+  1. Flush Gemini playback queue (full barge-in)
+  2. Send `activity_start` over WebSocket
+  3. Unmute mic → audio stream begins (still passes through browser cleanup/high-pass filter)
+- Release flow:
+  1. Send `activity_end`
+  2. Mute mic immediately (prevents trailing silence)
+  3. Resume Gemini playback/context so responses render as soon as the user stops talking
+- Gemini never sees idle silence; manual activity signals bracket every burst of audio
 - **Desktop**: Toggle switch (🎤 Auto / ⌨️ PTT) + PTT button + Spacebar hotkey
 - **Mobile**: Toggle switch + full-width bar button
 - **Why default**: Reduces false positives, gives users explicit control

@@ -11,7 +11,7 @@ class Settings(BaseModel):
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = True  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
+	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
 	
 	# Audio settings
 	AUDIO_IN_RATE: int = 16000
