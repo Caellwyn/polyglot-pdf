@@ -474,8 +474,11 @@ export function createConnectionManager(
 		},
 
 		sendActivityStart() {
+			console.log('[ConnectionManager] sendActivityStart called, connection:', connection, 'isNull:', connection === null)
 			if (connection) {
 				connection.sendActivityStart()
+			} else {
+				console.error('[ConnectionManager] ❌ Cannot send activity_start - inner connection is null')
 			}
 		},
 
@@ -513,6 +516,7 @@ export function createConnectionManager(
 		},
 
 		getAudioManager() {
+			console.log('[ConnectionManager] getAudioManager called, audioManager:', audioManager, 'isNull:', audioManager === null)
 			return audioManager
 		},
 

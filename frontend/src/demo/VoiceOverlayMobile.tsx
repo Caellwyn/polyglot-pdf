@@ -53,6 +53,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const bargeInTriggeredRef = useRef<boolean>(false)  // Track if we triggered barge-in for this speech event
 	const MIN_TURN_DURATION_MS = 450  // Minimum 450ms of speech before triggering barge-in
 
+	// CRITICAL: Use ref for pushToTalkMode to avoid closure capture in VAD callbacks
+	// Without this, old callbacks fire with stale pushToTalkMode=false value
+	const pushToTalkModeRef = useRef<boolean>(pushToTalkMode)
+
 	// Helper functions for part-based navigation (parts use string IDs, not numbers)
 	const getCurrentPartOrder = (): number => {
 		const part = schema.parts?.find(p => p.id === currentPartId)
@@ -75,11 +79,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		console.log('[VoiceOverlayMobile] 🔗 Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
 
+	// Keep pushToTalkMode ref updated
+	useEffect(() => {
+		pushToTalkModeRef.current = pushToTalkMode
+	}, [pushToTalkMode])
+
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
 		onSpeechStart: () => {
 			// In push-to-talk mode, ignore VAD
-			if (pushToTalkMode) return
+			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
+			if (pushToTalkModeRef.current) return
 
 			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
 
@@ -139,7 +149,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		},
 		onSpeechEnd: (audio: Float32Array) => {
 			// In push-to-talk mode, ignore VAD
-			if (pushToTalkMode) return
+			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
+			if (pushToTalkModeRef.current) return
 
 			// Calculate speech duration
 			const speechDuration = speechStartTimeRef.current
@@ -178,7 +189,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// VAD false positive - clear start time
 			speechStartTimeRef.current = null
 		},
-	}), [pushToTalkMode, connectionManager])
+	}), [connectionManager])  // Removed pushToTalkMode - using ref now to avoid closure capture
 
 	// FIX #1: VAD options with shared stream (stream is already ready from parent)
 	const vadOptions = useMemo(() => ({
@@ -433,12 +444,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Handle push-to-talk button press (touch)
 	const handlePushToTalkPress = async () => {
 		if (!pushToTalkMode) return
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' || 
-		                            status.toLowerCase().startsWith('connected ') || 
-		                            status.toLowerCase() === 'switching_section' || 
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
+		                            status.toLowerCase().startsWith('connected ') ||
+		                            status.toLowerCase() === 'switching_section' ||
 		                            status.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) return
-		
+
 		setIsHoldingPushToTalk(true)
 
 		// UNMUTE: Allow real audio through
@@ -450,12 +461,16 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			audioManager.flushAudioQueue()
 		}
 
-		// No need to send activity_start - Gemini's automatic VAD will detect
-		// the incoming audio stream and start processing automatically
+		// CRITICAL: Send activity_start to open Gemini turn for PTT mode
+		// Without this, activity_end will close the turn before audio arrives
+		connectionManager?.sendActivityStart()
 	}
 
 	const handlePushToTalkRelease = () => {
 		if (!pushToTalkMode) return
+		// CRITICAL: Prevent duplicate calls (onTouchEnd + touchcancel/touchleave might both fire)
+		if (!isHoldingPushToTalk) return
+
 		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
 		                            status.toLowerCase().startsWith('connected ') ||
 		                            status.toLowerCase() === 'switching_section' ||

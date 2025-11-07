@@ -5,18 +5,15 @@ import os
 
 
 class Settings(BaseModel):
-	MODEL_LIVE: str = "gemini-live-2.5-flash-preview"
+	MODEL_LIVE: str = "gemini-live-2.5-flash"
 	MODEL_NATIVE: str = "gemini-live-2.5-flash-preview-native-audio-09-2025"
-	# Whether to use Vertex AI for LLM and embedding operations.
-	VERTEXAI: bool = True
-	USE_NATIVE_AUDIO: bool = True
+	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
+	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
-	# LLM normalizer settings
-	ENABLE_LLM_FIELD_NORMALIZATION: bool = True
-	LLM_NORMALIZER_MODEL: str = "gemini-2.5-flash-lite"
-	LLM_NORMALIZER_MAX_FIELDS: int = 120
-	LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
-	LLM_NORMALIZER_TEMPERATURE: float = 0.2
+	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+	PROACTIVE_AUDIO: bool = True  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
+	
+	# Audio settings
 	AUDIO_IN_RATE: int = 16000
 	AUDIO_OUT_RATE: int = 24000
 	MAX_UPLOAD_MB: int = 5
@@ -25,8 +22,14 @@ class Settings(BaseModel):
 	WS_IDLE_TIMEOUT_SEC: int = 60  # Close WebSocket after 60s of no activity (saves resources)
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
-	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = True  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
+	
+	# LLM normalizer settings
+	ENABLE_LLM_FIELD_NORMALIZATION: bool = True
+	LLM_NORMALIZER_MODEL: str = "gemini-2.5-pro"
+	LLM_NORMALIZER_MAX_FIELDS: int = 120
+	LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
+	LLM_NORMALIZER_TEMPERATURE: float = 0.2
+	
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start
@@ -57,8 +60,8 @@ class Settings(BaseModel):
 				'  You ask: "Phone number?" → User: "555-1234" → Call tool with field_id="phone", value="555-1234"\n'
 				"For single checkbox: send boolean True/False (not strings) as value. "
 				"For radio/select/grouped checkboxes: use an allowed_value exactly as shown for value. "
-				"IMPORTANT: This tool updates fields in CURRENT SECTION ONLY. "
-				"For fields in previous sections, tell user to switch_section first."
+				"IMPORTANT: This tool updates fields in CURRENT PART ONLY. "
+				"For fields in previous parts, tell user to switch_section first."
 			),
 			"parameters": {
 				"type": "object",
@@ -104,9 +107,9 @@ class Settings(BaseModel):
 		{
 			"name": "switch_section",
 			"description": (
-				"Navigate to a different section by number (1-8) or name. "
-				"Use when user says 'go to section X', 'skip this section', 'go back to [section name]', or similar navigation requests. "
-				"Examples: 'go to section 3', 'skip to relationships', 'go back to client information'."
+				"Navigate to a different part by number (1-8) or name. "
+				"Use when user says 'go to part X', 'skip this part', 'go back to [part name]', or similar navigation requests. "
+				"Examples: 'go to part 3', 'skip to relationships', 'go back to client information'."
 			),
 			"parameters": {
 				"type": "object",

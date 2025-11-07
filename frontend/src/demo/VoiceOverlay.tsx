@@ -79,11 +79,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
 	const sharedStreamRef = useRef<MediaStream | null>(sharedStream || null)
-	
+
 	// Track speech duration to prevent short grunts/noises from interrupting Gemini
 	const speechStartTimeRef = useRef<number | null>(null)
 	const bargeInTriggeredRef = useRef<boolean>(false)  // Track if we triggered barge-in for this speech event
 	const MIN_TURN_DURATION_MS = 450  // Minimum 450ms of speech before triggering barge-in
+
+	// CRITICAL: Use ref for pushToTalkMode to avoid closure capture in VAD callbacks
+	// Without this, old callbacks fire with stale pushToTalkMode=false value
+	const pushToTalkModeRef = useRef<boolean>(pushToTalkMode)
+
+	// CRITICAL: Use ref for status to avoid closure capture in keyboard handlers
+	// This allows keyboard handlers to check current connection status without adding status to useEffect deps
+	const statusRef = useRef<string>(status)
 
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
@@ -91,11 +99,36 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		console.log('[VoiceOverlay] 🔗 Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
 
+	// Keep pushToTalkMode ref updated
+	useEffect(() => {
+		pushToTalkModeRef.current = pushToTalkMode
+	}, [pushToTalkMode])
+
+		// Ensure connection manager + audio pipeline reflect current PTT mode
+		useEffect(() => {
+			if (!connectionManager) return
+
+			connectionManager.setPushToTalkMode(pushToTalkMode)
+			const audioManager = connectionManager.getAudioManager()
+
+			if (pushToTalkMode) {
+				audioManager?.muteInput()
+			} else {
+				audioManager?.unmuteInput()
+			}
+		}, [connectionManager, pushToTalkMode])
+
+	// Keep status ref updated
+	useEffect(() => {
+		statusRef.current = status
+	}, [status])
+
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
 		onSpeechStart: () => {
 			// In push-to-talk mode, ignore VAD
-			if (pushToTalkMode) return
+			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
+			if (pushToTalkModeRef.current) return
 
 			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
 
@@ -159,7 +192,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		},
 		onSpeechEnd: (audio: Float32Array) => {
 			// In push-to-talk mode, ignore VAD
-			if (pushToTalkMode) return
+			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
+			if (pushToTalkModeRef.current) return
 
 			// Calculate speech duration
 			const speechDuration = speechStartTimeRef.current
@@ -198,7 +232,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// VAD false positive - clear start time
 			speechStartTimeRef.current = null
 		},
-	}), [pushToTalkMode, connectionManager])
+	}), [connectionManager])  // Removed pushToTalkMode - using ref now to avoid closure capture
 
 	// FIX #1: VAD options with shared stream (stream is already ready from parent)
 	const vadOptions = useMemo(() => ({
@@ -432,95 +466,170 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Handle push-to-talk button press (mouse/touch)
 	const handlePushToTalkPress = async () => {
-		if (!pushToTalkMode) return
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' || 
-		                            status.toLowerCase().startsWith('connected ') || 
-		                            status.toLowerCase() === 'switching_section' || 
-		                            status.toLowerCase().startsWith('reconnecting')
-		if (!isCurrentlyConnected) return
-		
+		// Use statusRef for current status (avoids closure capture issues)
+		const currentStatus = statusRef.current
+		console.log('[PTT] Press handler called, pushToTalkMode:', pushToTalkMode, 'isHoldingPushToTalk:', isHoldingPushToTalk, 'status:', currentStatus)
+
+		if (!pushToTalkMode) {
+			console.log('[PTT] Ignoring press - not in PTT mode')
+			return
+		}
+
+		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
+		                            currentStatus.toLowerCase().startsWith('connected ') ||
+		                            currentStatus.toLowerCase() === 'switching_section' ||
+		                            currentStatus.toLowerCase().startsWith('reconnecting')
+		if (!isCurrentlyConnected) {
+			console.log('[PTT] Ignoring press - not connected, status:', currentStatus)
+			return
+		}
+
+		console.log('[PTT] Processing press - flushing audio and opening Gemini turn')
+		console.log('[PTT] connectionManager:', connectionManager, 'isNull:', connectionManager === null, 'isUndefined:', connectionManager === undefined)
 		setIsHoldingPushToTalk(true)
 
-		// UNMUTE: Allow real audio through
 		const audioManager = connectionManager?.getAudioManager()
-		audioManager?.unmuteInput()
+		console.log('[PTT] audioManager:', audioManager, 'isNull:', audioManager === null, 'isUndefined:', audioManager === undefined)
 
-		// BARGE-IN: Stop Gemini's audio if she's talking
-		if (audioManager?.isSpeaking()) {
+		// BARGE-IN: Clear any pending Gemini audio before opening mic
+		if (audioManager) {
 			audioManager.flushAudioQueue()
 		}
 
-		// No need to send activity_start - Gemini's automatic VAD will detect
-		// the incoming audio stream and start processing automatically
+		// CRITICAL: Send activity_start to open Gemini turn for PTT mode
+		// Without this, activity_end will close the turn before audio arrives
+		console.log('[PTT] About to call sendActivityStart, connectionManager:', connectionManager)
+		connectionManager?.sendActivityStart()
+		console.log('[PTT] sendActivityStart call completed')
+
+		// UNMUTE: Allow real audio through only after Gemini turn is open
+		audioManager?.unmuteInput()
 	}
 
 	const handlePushToTalkRelease = () => {
-		if (!pushToTalkMode) return
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
-		                            status.toLowerCase().startsWith('connected ') ||
-		                            status.toLowerCase() === 'switching_section' ||
-		                            status.toLowerCase().startsWith('reconnecting')
-		if (!isCurrentlyConnected) return
+		// Use statusRef for current status (avoids closure capture issues)
+		const currentStatus = statusRef.current
+		console.log('[PTT] Release handler called, pushToTalkMode:', pushToTalkMode, 'isHoldingPushToTalk:', isHoldingPushToTalk, 'status:', currentStatus)
 
+		if (!pushToTalkMode) {
+			console.log('[PTT] Ignoring release - not in PTT mode')
+			return
+		}
+
+		// CRITICAL: Prevent duplicate calls (onMouseUp + onMouseLeave both fire)
+		if (!isHoldingPushToTalk) {
+			console.log('[PTT] Ignoring release - already released (not holding)')
+			return
+		}
+
+		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
+		                            currentStatus.toLowerCase().startsWith('connected ') ||
+		                            currentStatus.toLowerCase() === 'switching_section' ||
+		                            currentStatus.toLowerCase().startsWith('reconnecting')
+		if (!isCurrentlyConnected) {
+			console.log('[PTT] Ignoring release - not connected, status:', currentStatus)
+			return
+		}
+
+		console.log('[PTT] Processing release - sending activity_end then muting')
 		setIsHoldingPushToTalk(false)
-
-		// MUTE: Send silence instead of real audio
-		const audioManager = connectionManager?.getAudioManager()
-		audioManager?.muteInput()
 
 		// Send audio_stream_end to flush Gemini's audio buffer
 		// (sendActivityEnd now sends audio_stream_end on backend)
 		connectionManager?.sendActivityEnd()
+
+		// MUTE: Stop streaming audio immediately after signaling end of turn
+		const audioManager = connectionManager?.getAudioManager()
+		audioManager?.muteInput()
+
+		// Allow Gemini's response to play now that the user released the mic
+		audioManager?.resumePlayback()
+		audioManager?.resumeAudioContext?.()
 	}
 
 	// Handle push-to-talk with spacebar (keyboard)
 	useEffect(() => {
-		if (!pushToTalkMode) return
-		
-		const isConnected = status.toLowerCase() === 'connected' || 
-		                   status.toLowerCase().startsWith('connected ') || 
-		                   status.toLowerCase() === 'switching_section' || 
-		                   status.toLowerCase().startsWith('reconnecting')
+		console.log('[PTT Keyboard] useEffect running, pushToTalkMode:', pushToTalkMode)
+
+		if (!pushToTalkMode) {
+			console.log('[PTT Keyboard] Not in PTT mode - not attaching listeners')
+			return
+		}
+
+		console.log('[PTT Keyboard] Attaching keyboard listeners')
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.code === 'Space') {
+				// Check connection status from ref (always current, doesn't cause re-renders)
+				const currentStatus = statusRef.current
+				const isConnected = currentStatus.toLowerCase() === 'connected' ||
+				                   currentStatus.toLowerCase().startsWith('connected ') ||
+				                   currentStatus.toLowerCase() === 'switching_section' ||
+				                   currentStatus.toLowerCase().startsWith('reconnecting')
+
+				console.log('[PTT Keyboard] Space down, repeat:', e.repeat, 'isConnected:', isConnected, 'status:', currentStatus)
+
 				// Only trigger if not typing in a form field
 				const target = e.target as HTMLElement
-				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-				
+				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+					console.log('[PTT Keyboard] Ignoring - typing in form field')
+					return
+				}
+
 				// ALWAYS prevent default to stop page scrolling in PTT mode
 				e.preventDefault()
-				
+
 				// Only trigger PTT if connected and not a repeat event
 				if (!e.repeat && isConnected) {
+					console.log('[PTT Keyboard] Calling handlePushToTalkPress()')
 					handlePushToTalkPress()
+				} else {
+					console.log('[PTT Keyboard] Not calling press - repeat:', e.repeat, 'isConnected:', isConnected)
 				}
 			}
 		}
 
 		const handleKeyUp = (e: KeyboardEvent) => {
 			if (e.code === 'Space') {
+				// Check connection status from ref (always current, doesn't cause re-renders)
+				const currentStatus = statusRef.current
+				const isConnected = currentStatus.toLowerCase() === 'connected' ||
+				                   currentStatus.toLowerCase().startsWith('connected ') ||
+				                   currentStatus.toLowerCase() === 'switching_section' ||
+				                   currentStatus.toLowerCase().startsWith('reconnecting')
+
+				console.log('[PTT Keyboard] Space up, isConnected:', isConnected, 'status:', currentStatus)
+
 				const target = e.target as HTMLElement
-				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-				
+				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+					console.log('[PTT Keyboard] Ignoring - typing in form field')
+					return
+				}
+
 				// ALWAYS prevent default to stop page scrolling in PTT mode
 				e.preventDefault()
-				
+
 				// Only trigger PTT if connected
 				if (isConnected) {
+					console.log('[PTT Keyboard] Calling handlePushToTalkRelease()')
 					handlePushToTalkRelease()
+				} else {
+					console.log('[PTT Keyboard] Not calling release - isConnected:', isConnected)
 				}
 			}
 		}
 
 		window.addEventListener('keydown', handleKeyDown)
 		window.addEventListener('keyup', handleKeyUp)
+		console.log('[PTT Keyboard] ✅ Keyboard listeners attached')
 
 		return () => {
-		window.removeEventListener('keydown', handleKeyDown)
-		window.removeEventListener('keyup', handleKeyUp)
-	}
-}, [pushToTalkMode, status])
+			console.log('[PTT Keyboard] ❌ Removing keyboard listeners')
+			window.removeEventListener('keydown', handleKeyDown)
+			window.removeEventListener('keyup', handleKeyUp)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pushToTalkMode])
 
 // Initialize schema-based state and update part UI
 useEffect(() => {
@@ -821,10 +930,9 @@ const handleClearForm = () => {
 											}).length
 											setSectionFieldCount({ filled: filledFields, total: totalFields })
 										}
-										
+
 										// Now do the actual connection switch (async, may take time)
-										// TODO Phase 4A: Implement switchToPart in connection manager
-									// await connectionManager.switchToPart(part.id)
+										await connectionManager.switchToPart(part.id)
 									} catch (err) {
 										console.error('[VoiceOverlay] Part switch error:', err)
 										setError(err instanceof Error ? err.message : 'Part switch failed')
@@ -874,7 +982,6 @@ const handleClearForm = () => {
 							className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
 							onMouseDown={handlePushToTalkPress}
 							onMouseUp={handlePushToTalkRelease}
-							onMouseLeave={handlePushToTalkRelease}
 							onTouchStart={handlePushToTalkPress}
 							onTouchEnd={handlePushToTalkRelease}
 						>

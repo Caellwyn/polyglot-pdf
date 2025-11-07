@@ -183,16 +183,27 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					}
 				}
 
+				// Skip transmitting all-zero chunks (deprecated silence streaming)
+				let hasSignal = false
+				for (let i = 0; i < pcmChunk.length; i++) {
+					if (pcmChunk[i] !== 0) {
+						hasSignal = true
+						break
+					}
+				}
+				if (!hasSignal) {
+					return
+				}
+
 				// Determine what to send based on VAD state and mute status
-				if (inputMuted) {
-					// Push-to-talk mode: muted, send silence to keep connection alive
-					const silenceBuffer = new Int16Array(pcmChunk.length) // zeros
-					onAudioDataCallback(silenceBuffer.buffer)
-				} else if (vadActive) {
-					// VAD active: send real audio
+				// CRITICAL: Only send audio when actually needed (saves API costs)
+				if (!inputMuted || vadActive) {
+					// PTT unmuted OR VAD active: send real audio
+					// !inputMuted covers PTT mode (when button is pressed and unmuted)
+					// vadActive covers VAD mode (when speech is detected)
 					onAudioDataCallback(pcmData)
 				}
-				// else: VAD inactive - don't send anything (no keepalive needed)
+				// else: PTT muted or VAD inactive - don't send anything (no silence needed)
 			}
 
 			// Connect audio nodes
