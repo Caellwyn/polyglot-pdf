@@ -9,7 +9,7 @@
  * - Progress tracking
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { FormSchema, FormSection } from "../types/schema";
 import {
   SchemaFormStateManager,
@@ -19,6 +19,8 @@ import { SectionRenderer } from "./SectionRenderer";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF } from "../utils/pdfFiller";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
+import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
+import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
 
 export interface SchemaFormProps {
   schema: FormSchema;
@@ -37,6 +39,109 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
 
   // PDF download state
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Voice overlay state
+  const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
+  const connectionManagerRef = useRef<ConnectionManager | null>(null);
+  const [status, setStatus] = useState<string>('Ready');
+  const [sharedStream, setSharedStream] = useState<MediaStream | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [streamReady, setStreamReady] = useState(false);
+
+  // WebSocket URL - using environment variable or default
+  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/form-filler';
+
+  // Detect mobile on mount and on resize
+  useEffect(() => {
+    const checkMobile = () => {
+      const nowMobile = window.innerWidth <= 768;
+      setIsMobile(prev => {
+        if (prev !== nowMobile) {
+          console.log('[SchemaForm] 📱 Mobile mode changed:', nowMobile, 'width:', window.innerWidth);
+        }
+        return nowMobile;
+      });
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Create shared audio stream EARLY (before overlays render)
+  useEffect(() => {
+    let mounted = true;
+
+    async function initSharedStream() {
+      try {
+        console.log('[SchemaForm] 🎤 Creating shared audio stream early...');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+
+        if (mounted) {
+          console.log('[SchemaForm] ✅ Shared audio stream created');
+          setSharedStream(stream);
+          setStreamReady(true);
+        } else {
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (error) {
+        console.error('[SchemaForm] ❌ Failed to create shared audio stream:', error);
+        if (mounted) {
+          setStreamError(error instanceof Error ? error.message : 'Unknown error');
+          setStreamReady(true); // Mark as ready even on error so UI can render
+        }
+      }
+    }
+
+    initSharedStream();
+
+    return () => {
+      mounted = false;
+      if (sharedStream) {
+        console.log('[SchemaForm] 🛑 Cleaning up shared audio stream');
+        sharedStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Create connection manager once (only when stream becomes ready)
+  useEffect(() => {
+    if (connectionManagerRef.current) return;
+    if (!streamReady) return; // Wait for stream to be ready
+
+    console.log('[SchemaForm] 🔗 Creating connection manager');
+    const manager = createConnectionManager(
+      schema, // Use prop schema, not state.schema
+      (newStatus: string) => setStatus(newStatus),
+      'English',
+      sharedStream || undefined
+    );
+    connectionManagerRef.current = manager;
+    setConnectionManager(manager);
+
+    return () => {
+      console.log('[SchemaForm] 🛑 Cleaning up connection manager');
+      manager.disconnect();
+      connectionManagerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamReady]); // Only create when stream is ready, ignore schema/sharedStream changes
+
+  // Build simple part index for voice overlay (just part ID -> order mapping)
+  const sectionIndex: Record<string, number> = {};
+  state.schema.parts?.forEach((part) => {
+    sectionIndex[part.id] = part.order;
+  });
 
   // NOTE: Removed useEffect that was wiping state on schema changes
   // Schema should not change during form filling, and if it does,
@@ -304,8 +409,27 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
       )}
     </form>
 
-    {/* Voice Overlay - Outside form to prevent submit triggers */}
-    <VoiceOverlay schema={state.schema} />
+    {/* Voice Overlay - Render mobile or desktop based on screen size */}
+    {/* Only render when stream is ready to prevent race conditions */}
+    {connectionManager && streamReady && (
+      isMobile ? (
+        <VoiceOverlayMobile
+          schema={state.schema}
+          connectionManager={connectionManager}
+          sharedStream={sharedStream}
+          streamError={streamError}
+          status={status}
+        />
+      ) : (
+        <VoiceOverlay
+          schema={state.schema}
+          connectionManager={connectionManager}
+          status={status}
+          sharedStream={sharedStream}
+          streamError={streamError}
+        />
+      )
+    )}
     </>
   );
 }

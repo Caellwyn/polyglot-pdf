@@ -30,7 +30,7 @@ export interface ConnectionManager {
 	getStatus: () => ConnectionStatus
 	sendAudio: (audioData: ArrayBuffer) => void
 	sendActivityStart: () => void  // Send activity_start signal (user started speaking)
-	sendActivityEnd: () => void    // Send activity_end signal (user stopped speaking)
+	sendActivityEnd: () => Promise<void>    // Send activity_end signal (user stopped speaking) - async to wait for buffer drain
 	sendPrompt: (prompt: string) => void  // Send text prompt to Gemini (for recovery, nudges, etc.)
 	sendRecoveryPrompt: (level: number, nextFieldHint?: string) => void  // Send recovery prompt (activity watchdog)
 	endGeminiSession: () => void  // End Gemini session only (keep WebSocket alive)
@@ -460,9 +460,9 @@ export function createConnectionManager(
 			}
 		},
 
-		sendActivityEnd() {
+		async sendActivityEnd() {
 			if (connection) {
-				connection.sendActivityEnd()
+				await connection.sendActivityEnd()
 			}
 		},
 
@@ -711,8 +711,11 @@ export function createConnectionManager(
 			}
 
 			// Send activity_end signal to flush Gemini's cached audio buffer
+			// CRITICAL: Wait for buffered audio to drain before signaling end
 			if (connection) {
-				connection.sendActivityEnd()
+				connection.sendActivityEnd().catch(err => {
+					console.error('[VFF Connection] Failed to send activity_end:', err)
+				})
 			}
 
 			console.log('[VFF Connection] 🎤 VAD speech ended - sent activity_end, audio playback resumed')
