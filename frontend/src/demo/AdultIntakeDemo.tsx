@@ -39,10 +39,18 @@ export function AdultIntakeDemo() {
 	const [streamError, setStreamError] = useState<string | null>(null)
 	const [streamReady, setStreamReady] = useState(false)
 
+	// Log whenever isMobile changes
+	useEffect(() => {
+		console.log('[AdultIntakeDemo] 🔄 isMobile state changed to:', isMobile, 'width:', window.innerWidth)
+	}, [isMobile])
+
 	// Detect mobile on mount
 	useEffect(() => {
 		const checkMobile = () => {
-			setIsMobile(window.innerWidth <= 768)
+			const wasMobile = isMobile
+			const nowMobile = window.innerWidth <= 768
+			setIsMobile(nowMobile)
+			console.log('[AdultIntakeDemo] 📱 Mobile check - width:', window.innerWidth, 'isMobile:', nowMobile, 'changed:', wasMobile !== nowMobile)
 		}
 		checkMobile()
 		window.addEventListener('resize', checkMobile)
@@ -267,31 +275,31 @@ export function AdultIntakeDemo() {
 			{/* Form Content (loaded from HTML) */}
 			<div ref={formContainerRef} className="form-content"></div>
 
-			{/* Voice Overlay (mobile vs desktop) */}
-			{/* FIX #1: Only render overlays when stream is ready (prevents race conditions) */}
-			{isFormLoaded && schema && sectionIndex && connectionManager && streamReady && (
-				isMobile ? (
-					<VoiceOverlayMobile 
+		{/* Voice Overlay (mobile vs desktop) */}
+		{/* FIX #1: Only render overlays when stream is ready (prevents race conditions) */}
+		{isFormLoaded && schema && sectionIndex && connectionManager && streamReady && (
+			isMobile ? (
+					<VoiceOverlayMobile
 						schema={schema} 
 						sectionIndex={sectionIndex} 
 						wsUrl={wsUrl}
 						connectionManager={connectionManager}
-						sharedStream={sharedStream}
-						streamError={streamError}
-						status={status}
-					/>
-				) : (
-					<VoiceOverlay 
-						schema={schema} 
-						sectionIndex={sectionIndex} 
-						wsUrl={wsUrl}
-						connectionManager={connectionManager}
-						status={status}
-						sharedStream={sharedStream}
-						streamError={streamError}
-					/>
-				)
-			)}
+					sharedStream={sharedStream}
+					streamError={streamError}
+					status={status}
+				/>
+			) : (
+				<VoiceOverlay 
+					schema={schema} 
+					sectionIndex={sectionIndex} 
+					wsUrl={wsUrl}
+					connectionManager={connectionManager}
+					status={status}
+					sharedStream={sharedStream}
+					streamError={streamError}
+				/>
+			)
+		)}
 		</div>
 	)
 }
