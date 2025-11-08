@@ -357,9 +357,8 @@ class LiveAIGemini(ILiveAI):
             return
 
         try:
-            self._log.info("🎤 [Adapter] Sending ACTIVITY_START to Gemini")
             await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
-            self._log.info("✅ [Adapter] ACTIVITY_START sent successfully")
+            # Success - no logging (noisy, system works)
         except Exception as e:
             self._log.error("❌ ACTIVITY_START_FAILED", error=str(e))
 
@@ -377,9 +376,8 @@ class LiveAIGemini(ILiveAI):
             return
 
         try:
-            self._log.info("🤐 [Adapter] Sending ACTIVITY_END to Gemini")
             await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
-            self._log.info("✅ [Adapter] ACTIVITY_END sent successfully")
+            # Success - no logging (noisy, system works)
         except Exception as e:
             self._log.error("❌ ACTIVITY_END_FAILED", error=str(e))
 
@@ -523,6 +521,11 @@ class LiveAIGemini(ILiveAI):
 
         if self._function_declarations:
             tools_config = [{"function_declarations": deepcopy(self._function_declarations)}]
+            # Log tool declarations being sent to Gemini
+            tool_names = [decl.get("name") for decl in self._function_declarations]
+            self._log.info("🔧 Sending tool declarations to Gemini",
+                          tool_count=len(tool_names),
+                          tool_names=tool_names)
         else:
             tools_config = [{
                 "function_declarations": [
@@ -530,6 +533,7 @@ class LiveAIGemini(ILiveAI):
                     {"name": "get_form_status"},
                 ]
             }]
+            self._log.warning("⚠️ No function_declarations provided - using fallback tools only")
 
         config = {
             "response_modalities": response_modalities,
@@ -611,6 +615,13 @@ class LiveAIGemini(ILiveAI):
             except Exception:
                 # Never let diagnostics break the session loop
                 pass
+
+            # Log session configuration before connecting
+            self._log.info("📋 Gemini session config",
+                          model=self._model_name,
+                          has_system_instruction=bool(self._system_instruction),
+                          system_instruction_length=len(self._system_instruction) if self._system_instruction else 0,
+                          tool_count=len(self._function_declarations) if self._function_declarations else 0)
 
             try:
                 connect_obj = self._client.aio.live.connect(model=self._model_name, config=config)
@@ -843,6 +854,14 @@ class LiveAIGemini(ILiveAI):
                                             if model_turn is not None:
                                                 parts = getattr(model_turn, "parts", [])
                                                 if parts:
+                                                    # Log what we're receiving from Gemini
+                                                    part_types = [type(p).__name__ for p in parts]
+                                                    has_function_calls = any(hasattr(p, 'function_call') and getattr(p, 'function_call', None) for p in parts)
+                                                    self._log.info("📦 Gemini model_turn received",
+                                                                  part_count=len(parts),
+                                                                  part_types=part_types,
+                                                                  has_function_calls=has_function_calls)
+
                                                     for part in parts:
                                                         # Check for audio in inline_data
                                                         inline_data = getattr(part, "inline_data", None)
@@ -858,11 +877,13 @@ class LiveAIGemini(ILiveAI):
                                                             tool_name = getattr(function_call, "name", None)
                                                             call_id = getattr(function_call, "id", None)
                                                             payload = getattr(function_call, "arguments", None) or getattr(function_call, "response", None) or getattr(function_call, "args", None)
-                                                            
-                                                            self._log.info("function_call_detected", 
+
+                                                            # PROMINENT logging for debugging
+                                                            self._log.info("🔧🔧🔧 GEMINI SENT TOOL CALL",
                                                                           tool_name=tool_name,
-                                                                          call_id=call_id,
-                                                                          has_payload=bool(payload))
+                                                                          call_id=call_id[:8] if call_id else None,
+                                                                          has_payload=bool(payload),
+                                                                          payload_type=type(payload).__name__)
 
                                                             if isinstance(payload, str):
                                                                 try:

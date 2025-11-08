@@ -9,9 +9,10 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
     __publicField(this, "smoothedRMS", 0);
     __publicField(this, "RMS_SMOOTHING_BETA", 0.6);
     // HALLUCINATION_REDUCTION (Oct 30, 2025): Audio preprocessing filters
-    // Noise gate: -40dB threshold (gentle - allows quiet speakers)
-    __publicField(this, "NOISE_GATE_THRESHOLD", 0.01);
-    // -40dB in linear scale (10^(-40/20))
+    // FIX (Nov 7, 2025): Lowered threshold from -40dB to -50dB for gentler gating
+    // Noise gate: -50dB threshold (gentler - preserves quiet speech)
+    __publicField(this, "NOISE_GATE_THRESHOLD", 316e-5);
+    // -50dB in linear scale (10^(-50/20))
     // High-pass filter: 80Hz cutoff, Q=0.7 (removes low-frequency rumble)
     // Biquad filter state variables (stores previous samples for IIR filtering)
     __publicField(this, "hpf_x1", 0);
@@ -28,6 +29,14 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
     __publicField(this, "hpf_b2");
     __publicField(this, "hpf_a1");
     __publicField(this, "hpf_a2");
+    // FIX (Nov 7, 2025): Track PTT mode to bypass noise gate when user explicitly controls audio
+    __publicField(this, "pttMode", false);
+    this.port.onmessage = (event) => {
+      if (event.data.type === "setPTTMode") {
+        this.pttMode = event.data.enabled;
+        console.log("[AudioWorklet] PTT mode:", this.pttMode ? "enabled (noise gate bypassed)" : "disabled (noise gate active)");
+      }
+    };
     const f0 = 80;
     const Fs = 16e3;
     const Q = 0.7;
@@ -63,13 +72,15 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
       this.hpf_y1 = y0;
       filteredData[i] = y0;
     }
-    let sumSquaresFiltered = 0;
-    for (let i = 0; i < filteredData.length; i++) {
-      sumSquaresFiltered += filteredData[i] * filteredData[i];
-    }
-    const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length);
-    if (rmsFiltered < this.NOISE_GATE_THRESHOLD) {
-      filteredData.fill(0);
+    if (!this.pttMode) {
+      let sumSquaresFiltered = 0;
+      for (let i = 0; i < filteredData.length; i++) {
+        sumSquaresFiltered += filteredData[i] * filteredData[i];
+      }
+      const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length);
+      if (rmsFiltered < this.NOISE_GATE_THRESHOLD) {
+        filteredData.fill(0);
+      }
     }
     const processedData = filteredData;
     let sumSquares = 0;
@@ -85,6 +96,11 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
     }
     if (Math.random() < 1e-3) {
       const clippedCount = processedData.filter((s) => Math.abs(s) > 0.99).length;
+      let sumSquaresFiltered = 0;
+      for (let i = 0; i < filteredData.length; i++) {
+        sumSquaresFiltered += filteredData[i] * filteredData[i];
+      }
+      const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length);
       console.log("[AudioWorklet] Quality check (post-filter):", {
         samples: processedData.length,
         rms: instantRMS.toFixed(4),
@@ -93,7 +109,8 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
         lastSample: processedData[processedData.length - 1].toFixed(4),
         clippedSamples: clippedCount,
         clippingRate: (clippedCount / processedData.length * 100).toFixed(2) + "%",
-        noiseGateActive: rmsFiltered < this.NOISE_GATE_THRESHOLD
+        pttMode: this.pttMode,
+        noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD
       });
     }
     const pcmData = new Int16Array(processedData.length);

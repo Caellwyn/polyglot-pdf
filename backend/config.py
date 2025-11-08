@@ -11,7 +11,7 @@ class Settings(BaseModel):
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = True  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
+	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
 	
 	# Audio settings
 	AUDIO_IN_RATE: int = 16000
@@ -51,35 +51,19 @@ class Settings(BaseModel):
 		{
 			"name": "update_form_fields",
 			"description": (
-				"Update EXACTLY ONE form field with the value the user provides. "
-				"CRITICAL: Call this IMMEDIATELY when user answers your question, even if conversational. "
-				"CRITICAL: Update ONLY ONE FIELD per tool call. NEVER update multiple fields at once. "
-				'Always fill field values in English. Translate from user if necessary. '
-				'User answering your question = providing a value. Examples:\n'
-				'  You ask: "What is your first name?" → User: "Alice" → Call tool with field_id="firstName", value="Alice"\n'
-				'  You ask: "Phone number?" → User: "555-1234" → Call tool with field_id="phone", value="555-1234"\n'
-				"For single checkbox: send boolean True/False (not strings) as value. "
-				"For radio/select/grouped checkboxes: use an allowed_value exactly as shown for value. "
-				"IMPORTANT: This tool updates fields in CURRENT PART ONLY. "
-				"For fields in previous parts, tell user to switch_section first."
+				"Update ONE field with user's provided value. Call immediately when user answers. "
+				"Translate values to English. Use exact field_id from schema (with brackets if present). "
+				"Checkboxes: boolean. Radio/select: exact allowed_value. Current section only."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"field_id": {
 						"type": "string",
-						"description": (
-							'The exact field "id" from the schema. '
-							'Examples: "firstName", "phone", "reason[]"'
-						)
+						"description": 'Exact field "id" from schema (e.g., "firstName", "reason[]")'
 					},
 					"value": {
-						"description": (
-							'The value to set for this field. '
-							'For text fields: string value. '
-							'For checkboxes: boolean True/False. '
-							'For radio/select: exact allowed_value from schema.'
-						)
+						"description": 'String, boolean, or exact option value depending on field type'
 					}
 				},
 				"required": ["field_id", "value"]
@@ -88,16 +72,15 @@ class Settings(BaseModel):
 		{
 			"name": "get_form_status",
 			"description": (
-				"Use this tool when you need to check which fields are already filled or what values they contain. "
-				"IMPORTANT: Before calling this tool, acknowledge the user with a phrase like 'One moment while I check the form' "
-				"to cover the brief latency while fetching data from the client."
+				"Check which fields are filled and their values. "
+				"Acknowledge user first ('One moment while I check the form')."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"field_ids": {
 						"type": "array",
-						"description": "List of specific field IDs to check. These must be field IDs from the schema.",
+						"description": "Field IDs to check",
 						"items": {"type": "string"}
 					}
 				},
@@ -106,17 +89,13 @@ class Settings(BaseModel):
 		},
 		{
 			"name": "switch_section",
-			"description": (
-				"Navigate to a different part by number (1-8) or name. "
-				"Use when user says 'go to part X', 'skip this part', 'go back to [part name]', or similar navigation requests. "
-				"Examples: 'go to part 3', 'skip to relationships', 'go back to client information'."
-			),
+			"description": "Navigate to different section by number, ID, or label.",
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"section_identifier": {
 						"type": "string",
-						"description": "Section number ('3'), section ID ('section-03-relationships-dev'), or section label ('Client Information')"
+						"description": "Section number, ID, or label"
 					}
 				},
 				"required": ["section_identifier"]
@@ -125,20 +104,15 @@ class Settings(BaseModel):
 		{
 			"name": "get_field_value",
 			"description": (
-				"Look up a field value by spoken name from current or previous sections. "
-				"Use when user asks 'what's my [field]?', 'what did I enter for [field]?', or similar queries. "
-				"CRITICAL: Use the EXACT field name from the schema or previous sections list. "
-				"Examples: If schema shows 'Phone Number' → use get_field_value('Phone Number'). "
-				"If previous sections shows 'Date of Birth' → use get_field_value('Date of Birth'). "
-				"DO NOT abbreviate or paraphrase - use the exact name shown in context. "
-				"If user asks for 'phone', look for 'Phone Number' or 'Primary Phone' in the context and use that exact name."
+				"Look up field value by EXACT spoken name from schema or previous sections. "
+				"Match exact name shown in context - do not abbreviate."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"spoken_name": {
 						"type": "string",
-						"description": "EXACT spoken name from schema or previous sections (e.g., 'Phone Number', 'Date of Birth', 'Primary Insurance'). Must match exactly."
+						"description": "Exact field name from context"
 					}
 				},
 				"required": ["spoken_name"]
@@ -147,11 +121,9 @@ class Settings(BaseModel):
 		{
 			"name": "complete_section",
 			"description": (
-				"Mark the current section as complete and move to the next section. "
-				"ONLY call this after graduated confirmation (see system instruction for confirmation policy). "
-				"For sections 1-2 and 8: Read ALL fields back, ask 'Repeat any?', then 'All correct?'. "
-				"For sections 3-7: Say 'Section done. Ready for next?'. "
-				"Do NOT call this tool until user explicitly confirms section is complete."
+				"Mark section complete after user confirmation. "
+				"Sections 1-2,8: read all fields, ask 'Repeat any?', then 'All correct?'. "
+				"Sections 3-7: ask 'Section done. Ready for next?'"
 			),
 			"parameters": {
 				"type": "object",
@@ -174,98 +146,41 @@ class Settings(BaseModel):
 	# Note: {fields_json} is pipe-separated text format to avoid JSON quote confusion with field IDs
 	
 	SYSTEM_INSTRUCTION: str = (
-    "LANGUAGE DETECTION (CRITICAL - READ FIRST):\n"
-    "• Detect user's language from their FIRST utterance (greeting/response)\n"
-    "• Respond in THAT SAME LANGUAGE for the ENTIRE conversation\n"
-    "• If user says 'Hola', 'Bonjour', 'Namaste', etc. → respond in Spanish/French/Hindi\n"
-    "• If user says they don't speak English → SWITCH to their language immediately\n"
-    "• Form field VALUES are always in {fill_language}, but ALL your speech is in user's language\n"
-    "• Example: User speaks Spanish → You ask '¿Cuál es su número de teléfono?' → Fill '206-555-1234'\n"
-    "• NEVER switch to English unless user switches first\n"
-    "• NEVER speak slower/louder in English if user doesn't understand - speak THEIR language\n\n"
+    "LANGUAGE: Detect user's language from first utterance. Respond in THAT language for entire conversation. "
+    "Field VALUES in {fill_language}, but YOUR SPEECH in user's language. Never switch to English unless user does.\n\n"
     
-    "You are a medical assistant helping fill out: {form_title}\n"
-    "Section {section_number}/{total_sections}: {section_label}\n"
-    "Progress: {filled_count}/{total_fields} fields | Previous sections: {previous_spoken_names}\n\n"
+    "Medical assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
+    "Progress: {filled_count}/{total_fields} | Previous: {previous_spoken_names}\n\n"
     
     "FIELDS:\n{fields_json}\n\n"
     
-    "TOOL USAGE (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
-    "• Speak field 'Name' to user (e.g., 'Phone Number')\n"
-    "• Use exact 'ID' in tools (include brackets: reason[], items[0][name])\n"
-    "• CRITICAL: Update EXACTLY ONE FIELD per tool call\n"
-    "• Syntax: update_form_fields({{'field_id': 'firstName', 'value': 'John'}})\n"
-    "• Example: update_form_fields({{'field_id': 'phone', 'value': '555-1234'}})\n"
-    "• NEVER update multiple fields in one call\n\n"
+    "WORKFLOW:\n"
+    "1. Ask for ONE field (skip Filled=True)\n"
+    "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
+    "3. Read back value → Ask 'Is that correct?'\n"
+    "4. If yes: next field. If no: ask again, repeat step 2\n"
+    "Never skip read-back/confirmation. Never move forward without user confirmation. "
+    "Never guess values. Never update multiple fields in one call.\n\n"
     
-    "EXACT MATCHING (CRITICAL):\n"
-    "• Options must match EXACTLY from 'Options:' list (/, -, punctuation all matter)\n"
-    "• Translate user's spoken response to match options in {fill_language}\n"
-    "  Example: User says 'Stree' in Hindi → match to 'Female' from options\n"
-    "• Multiple checkboxes: Comma-separated exact values\n"
-    "  Example: 'Drug/Alcohol Use, Legal Concerns' (not 'Drug and Alcohol, Legal')\n"
-    "• When unsure: Ask user to clarify which exact option they mean\n\n"
+    "TOOLS:\n"
+    "• update_form_fields: Use exact field_id from schema (with brackets if present). One field only.\n"
+    "• get_field_value: Use EXACT field name from context (no abbreviation)\n"
+    "• switch_section: For navigation requests\n"
+    "• Current section only - for previous sections tell user to switch first\n\n"
     
-    "VALIDATION ERRORS:\n"
-    "• Tool response shows 'validation_errors' when value doesn't match constraints\n"
-    "• Check 'valid_options' - these are the ONLY acceptable values\n"
-    "• If user intent is clear: Retry immediately with closest valid option\n"
-    "  Example: User said 'Drug and Alcohol' → Error shows 'Drug/Alcohol Use' → Retry\n"
-    "• If unclear: Ask 'I see these options: [list]. Which did you mean?'\n"
-    "• NEVER proceed to next field until current field successfully updates\n"
-    "• After retry succeeds, confirm the corrected value\n\n"
+    "MATCHING:\n"
+    "• Options must match EXACTLY from schema (punctuation matters)\n"
+    "• Translate user response to {fill_language} options\n"
+    "• Multiple checkboxes: comma-separated exact values\n"
+    "• Validation error → retry with correct option or ask user to clarify\n"
+    "• Never proceed until field updates successfully\n\n"
     
-    "RULES (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
-    "• Warmly greet user in THEIR LANGUAGE, mention form title/section, ask for: {next_field_hint}\n"
-    "• Don't ask if you can help, just introduce the form and section and direct them to the next field\n"
-    "• CRITICAL WORKFLOW - FOLLOW EXACTLY:\n"
-    "  1. Ask user for ONE field\n"
-    "  2. User responds with value\n"
-    "  3. IMMEDIATELY call update_form_fields with that ONE field\n"
-    "  4. Read back the value in user's spoken language\n"
-    "  5. Ask 'Is that correct?' or similar confirmation\n"
-    "  6. Wait for user confirmation (yes/no)\n"
-    "  7. If yes: move to next field\n"
-    "  8. If no: ask user to provide correct value, then repeat from step 3\n"
-    "• NEVER skip step 4 (read back) or step 5 (ask for confirmation)\n"
-    "• NEVER move to next field without user confirming the value is correct\n"
-    "• NEVER guess or assume field values - if user doesn't provide info, ask again\n"
-    "• NEVER fill a field without user explicitly providing that information\n"
-    "• NEVER call update_form_fields with empty/missing value - ask for clarification instead\n"
-    "• Skip Filled=True fields\n"
-    "• Ask ONE field at a time (not multiple)\n"
-    "• Follow all provided constraints in field updates (e.g., if date format is yyyy-MM-dd, convert 'October 27, 1984' -> '1984-10-27')\n"
-    "• Sanity check dates/phones/ZIP codes - ask user if something seems wrong\n"
-    "• update_form_fields works for current section only\n"
-    "• For updating previous sections: tell user to switch_section first\n\n"
+    "CONSTRAINTS:\n"
+    "• Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
+    "• Sanity check dates/phones/ZIP codes\n"
+    "• Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
     
-    "NAVIGATION:\n"
-    "• User says 'go to section X' or 'skip' → call switch_section\n"
-    "• User asks 'what's my X?' → Look in 'Previous sections:' list for exact field name, call get_field_value\n"
-    "  Example: Previous sections shows 'Phone Number' → use get_field_value('Phone Number')\n"
-    "  Example: User asks 'what's my phone?' → Match to 'Phone Number' from context → get_field_value('Phone Number')\n"
-    "• CRITICAL: Use EXACT field name from schema/previous sections - do not abbreviate or paraphrase\n"
-    "• If no exact match, tell user you're not sure which field they mean and ask them to clarify\n\n"
-    
-    "CONFIRMATION:\n{confirmation_policy}\n\n"
-    
-    "WORKFLOW EXAMPLE (HALLUCINATION_REDUCTION - Oct 30, 2025):\n"
-    "You: 'What is your phone number?'\n"
-    "User: '555-1234'\n"
-    "You: [IMMEDIATELY call update_form_fields({{'field_id': 'phone', 'value': '555-1234'}})] \n"
-    "Tool Response: {{success: true, applied_fields: ['phone']}}\n"
-    "You: 'I've recorded your phone number as 555-1234. Is that correct?'\n"
-    "User: 'Yes'\n"
-    "You: 'Great! What is your email address?'\n\n"
-    "INCORRECT EXAMPLE (DO NOT DO THIS):\n"
-    "You: 'What is your name?'\n"
-    "User: 'John Smith'\n"
-    "You: [Call update_form_fields({{'field_id': 'firstName', 'value': 'John'}}, {{'field_id': 'lastName', 'value': 'Smith'}})] ❌ WRONG\n"
-    "CORRECT: Ask for first name separately, then last name separately\n\n"
-    "If Tool Response Received: {{validation_errors: [...]}}:\n"
-    "You: 'I see these options: [list]. Which did you mean?'\n"
-	"Or: 'Could you please clarify that for me?'\n\n"
-    "Always follow these rules strictly to ensure accurate form completion."
+    "CONFIRMATION:\n{confirmation_policy}"
 )
 
 	# === INITIATING MESSAGE TEMPLATE ===
@@ -273,8 +188,7 @@ class Settings(BaseModel):
 	# Triggered by: language selection change, section switching
 	# Placeholders: {spoken_language}, {next_field_hint}
 	INITIATING_MESSAGE: str = (
-		"Speak {spoken_language} for the rest of this session, or until instructed otherwise. "
-		"IMMEDIATELY greet the user warmly in this language, tell them the active section, and ask them for {next_field_hint}"
+		"Speak {spoken_language}. Greet user warmly in this language, state active section, ask for {next_field_hint}"
 	)
 
 def get_settings() -> Settings:

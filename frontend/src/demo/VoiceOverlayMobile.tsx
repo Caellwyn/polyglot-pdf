@@ -57,6 +57,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Without this, old callbacks fire with stale pushToTalkMode=false value
 	const pushToTalkModeRef = useRef<boolean>(pushToTalkMode)
 
+	// CRITICAL: Use ref for status to avoid closure capture in global handlers
+	// This allows handlers to check current connection status without adding status to useEffect deps
+	const statusRef = useRef<string>(status)
+
+	// PTT release delay timer (allows final audio to be sent before muting)
+	const pttReleaseTimeoutRef = useRef<number | null>(null)
+	const isHoldingPushToTalkRef = useRef<boolean>(isHoldingPushToTalk)
+
 	// Helper functions for part-based navigation (parts use string IDs, not numbers)
 	const getCurrentPartOrder = (): number => {
 		const part = schema.parts?.find(p => p.id === currentPartId)
@@ -83,6 +91,26 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		pushToTalkModeRef.current = pushToTalkMode
 	}, [pushToTalkMode])
+
+	// Keep status ref updated
+	useEffect(() => {
+		statusRef.current = status
+	}, [status])
+
+	// Keep isHoldingPushToTalk ref updated
+	useEffect(() => {
+		isHoldingPushToTalkRef.current = isHoldingPushToTalk
+	}, [isHoldingPushToTalk])
+
+	// Cleanup PTT release timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (pttReleaseTimeoutRef.current !== null) {
+				clearTimeout(pttReleaseTimeoutRef.current)
+				pttReleaseTimeoutRef.current = null
+			}
+		}
+	}, [])
 
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
@@ -426,17 +454,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		                            status.toLowerCase() === 'switching_section' || 
 		                            status.toLowerCase().startsWith('reconnecting')
 		
+		const audioManager = connectionManager?.getAudioManager()
+		
+		// FIX (Nov 7, 2025): Notify audio worklet about PTT mode (bypasses noise gate)
+		audioManager?.setPTTMode(newMode)
+		
 		if (newMode) {
 			// Switching to PTT: pause VAD
 			vad.pause()
 			// Mute input so only silence is sent until button is pressed
-			const audioManager = connectionManager?.getAudioManager()
 			audioManager?.muteInput()
 		} else {
 			// Switching to VAD mode
 			// FIX #2: VAD will auto-start via consolidated useEffect (monitors pushToTalkMode)
 			// Unmute input for normal VAD operation
-			const audioManager = connectionManager?.getAudioManager()
 			audioManager?.unmuteInput()
 		}
 	}
@@ -444,6 +475,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// Handle push-to-talk button press (touch)
 	const handlePushToTalkPress = async () => {
 		if (!pushToTalkMode) return
+		
+		// Clear any pending release timeout (user pressed again before release completed)
+		if (pttReleaseTimeoutRef.current !== null) {
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+		
 		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
 		                            status.toLowerCase().startsWith('connected ') ||
 		                            status.toLowerCase() === 'switching_section' ||
@@ -477,18 +515,70 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		                            status.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) return
 
+		console.log('[PTT Mobile] Processing release - will delay 500ms before ending activity')
+		
+		// Clear any existing timeout (in case of rapid press/release)
+		if (pttReleaseTimeoutRef.current !== null) {
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+
+		// Update UI immediately to show button is no longer held
 		setIsHoldingPushToTalk(false)
 
-		// MUTE: Send silence instead of real audio
-	const audioManager = connectionManager?.getAudioManager()
-	audioManager?.muteInput()
+		// CRITICAL: Delay 500ms before sending activity_end and muting
+		// This allows final audio chunks to be recorded and sent to Gemini
+		// without being cut off by immediate muting
+		pttReleaseTimeoutRef.current = window.setTimeout(async () => {
+			console.log('[PTT Mobile] 500ms delay complete - sending activity_end and muting')
+			
+			// MUTE: Stop streaming audio after signaling end of turn
+			// All audio recorded during the 500ms delay has already been sent
+			const audioManager = connectionManager?.getAudioManager()
+			audioManager?.muteInput()
 
-	// Send audio_stream_end to flush Gemini's audio buffer
-	// (sendActivityEnd now sends audio_stream_end on backend)
-	connectionManager?.sendActivityEnd()
-}
+			// Send audio_stream_end to flush Gemini's audio buffer
+			// CRITICAL: Wait for all buffered audio to be sent before signaling end
+			// (sendActivityEnd now waits for WebSocket buffer drain)
+			await connectionManager?.sendActivityEnd()
+			
+			pttReleaseTimeoutRef.current = null
+		}, 500) // 500ms delay to capture final audio
+	}
 
-// Initialize schema-based state and update part UI
+// Handle global touch/mouse release (catch PTT release even if finger/mouse moves off button)
+useEffect(() => {
+	if (!pushToTalkMode) return
+
+	const handleGlobalRelease = (e: MouseEvent | TouchEvent) => {
+		// Only handle if we're currently holding PTT
+		if (isHoldingPushToTalkRef.current) {
+			const currentStatus = statusRef.current
+			const isConnected = currentStatus.toLowerCase() === 'connected' ||
+			                   currentStatus.toLowerCase().startsWith('connected ') ||
+			                   currentStatus.toLowerCase() === 'switching_section' ||
+			                   currentStatus.toLowerCase().startsWith('reconnecting')
+
+			if (isConnected) {
+				console.log('[PTT Mobile Global] Touch/mouse released - calling handlePushToTalkRelease()')
+				handlePushToTalkRelease()
+			}
+		}
+	}
+
+	document.addEventListener('mouseup', handleGlobalRelease)
+	document.addEventListener('touchend', handleGlobalRelease)
+	console.log('[PTT Mobile Global] ✅ Global touch/mouse release listeners attached')
+
+	return () => {
+		console.log('[PTT Mobile Global] ❌ Removing global touch/mouse release listeners')
+		document.removeEventListener('mouseup', handleGlobalRelease)
+		document.removeEventListener('touchend', handleGlobalRelease)
+	}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [pushToTalkMode])
+
+// Initialize schema-based state and update part UI (only once on mount)
 useEffect(() => {
 	const state = SchemaFormStateManager.init(schema)
 	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
@@ -502,7 +592,8 @@ useEffect(() => {
 		return actualValue !== null && actualValue !== undefined && actualValue !== ""
 	}).length
 	setSectionFieldCount({ filled: filledFields, total: totalFields })
-}, [schema])
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+}, []) // Only run once on mount, not when schema changes
 
 // Poll field count AND part state (updates as AI switches parts)
 useEffect(() => {

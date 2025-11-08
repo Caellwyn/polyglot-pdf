@@ -32,8 +32,9 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 	private readonly RMS_SMOOTHING_BETA = 0.6
 
 	// HALLUCINATION_REDUCTION (Oct 30, 2025): Audio preprocessing filters
-	// Noise gate: -40dB threshold (gentle - allows quiet speakers)
-	private readonly NOISE_GATE_THRESHOLD = 0.01 // -40dB in linear scale (10^(-40/20))
+	// FIX (Nov 7, 2025): Lowered threshold from -40dB to -50dB for gentler gating
+	// Noise gate: -50dB threshold (gentler - preserves quiet speech)
+	private readonly NOISE_GATE_THRESHOLD = 0.00316 // -50dB in linear scale (10^(-50/20))
 
 	// High-pass filter: 80Hz cutoff, Q=0.7 (removes low-frequency rumble)
 	// Biquad filter state variables (stores previous samples for IIR filtering)
@@ -49,8 +50,19 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 	private readonly hpf_a1: number
 	private readonly hpf_a2: number
 
+	// FIX (Nov 7, 2025): Track PTT mode to bypass noise gate when user explicitly controls audio
+	private pttMode = false
+
 	constructor() {
 		super()
+		
+		// Listen for PTT mode changes from main thread
+		this.port.onmessage = (event: MessageEvent) => {
+			if (event.data.type === 'setPTTMode') {
+				this.pttMode = event.data.enabled
+				console.log('[AudioWorklet] PTT mode:', this.pttMode ? 'enabled (noise gate bypassed)' : 'disabled (noise gate active)')
+			}
+		}
 
 		// Calculate high-pass filter coefficients
 		// f0 = 80 Hz, Fs = 16000 Hz, Q = 0.7
@@ -116,17 +128,21 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 			filteredData[i] = y0
 		}
 
-		// Step 2: Apply noise gate (-40dB threshold)
-		// Calculate RMS of filtered audio first to determine if it's above threshold
-		let sumSquaresFiltered = 0
-		for (let i = 0; i < filteredData.length; i++) {
-			sumSquaresFiltered += filteredData[i] * filteredData[i]
-		}
-		const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length)
+		// Step 2: Apply noise gate (-50dB threshold) - BUT ONLY IN VAD MODE
+		// FIX (Nov 7, 2025): Skip noise gate in PTT mode - user explicitly controls when to send audio
+		// In PTT mode, aggressive gating can clip quiet speech (consonants, pauses, quiet speakers)
+		if (!this.pttMode) {
+			// Calculate RMS of filtered audio first to determine if it's above threshold
+			let sumSquaresFiltered = 0
+			for (let i = 0; i < filteredData.length; i++) {
+				sumSquaresFiltered += filteredData[i] * filteredData[i]
+			}
+			const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length)
 
-		// If RMS is below noise gate threshold, replace with silence
-		if (rmsFiltered < this.NOISE_GATE_THRESHOLD) {
-			filteredData.fill(0)
+			// If RMS is below noise gate threshold, replace with silence (VAD mode only)
+			if (rmsFiltered < this.NOISE_GATE_THRESHOLD) {
+				filteredData.fill(0)
+			}
 		}
 
 		// Use filtered data for all downstream processing
@@ -153,6 +169,13 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 		// Sample 0.1% of frames to detect audio corruption without spamming logs
 		if (Math.random() < 0.001) {
 			const clippedCount = processedData.filter(s => Math.abs(s) > 0.99).length
+			// Check if this frame would trigger noise gate (only relevant in VAD mode)
+			let sumSquaresFiltered = 0
+			for (let i = 0; i < filteredData.length; i++) {
+				sumSquaresFiltered += filteredData[i] * filteredData[i]
+			}
+			const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length)
+			
 			console.log('[AudioWorklet] Quality check (post-filter):', {
 				samples: processedData.length,
 				rms: instantRMS.toFixed(4),
@@ -161,7 +184,8 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 				lastSample: processedData[processedData.length - 1].toFixed(4),
 				clippedSamples: clippedCount,
 				clippingRate: (clippedCount / processedData.length * 100).toFixed(2) + '%',
-				noiseGateActive: rmsFiltered < this.NOISE_GATE_THRESHOLD
+				pttMode: this.pttMode,
+				noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD
 			})
 		}
 
