@@ -1,9 +1,17 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Last Updated**: November 5, 2025
+**Last Updated**: November 7, 2025
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
+- ✅ **Audio Quality Fix** (Nov 7, 2025)
+  - **Issue**: Noise gate was too aggressive (-40dB), causing speech clipping in PTT mode
+  - **Fix #1**: Lowered noise gate threshold from -40dB to -50dB (gentler, preserves quiet speech)
+  - **Fix #2**: Noise gate now bypassed completely in PTT mode (user explicitly controls audio)
+  - **Fix #3**: Simplified audio flow logic - PTT mode only checks inputMuted flag (ignores vadActive)
+  - **Impact**: Improved recognition accuracy, especially for consonants, quiet speakers, and pauses
+  - **Files Changed**: `audio-processor.worklet.ts`, `audioManager.ts`, `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`
+
 - ✅ **Phase 4A Migration Complete** (Nov 5, 2025)
   - **Connection Layer**: Migrated connection.ts to SchemaFormStateManager (17/17 tests passing)
   - **Voice Overlays**: Completed VoiceOverlay.tsx and VoiceOverlayMobile.tsx migration
@@ -459,10 +467,19 @@ downloadPDF(pdfBytes, 'i-90-filled-2025-11-03.pdf');
 
 ### Input Modes
 
-**Push-to-Talk (PTT) - Default Mode** (Oct 30, 2025):
+**Push-to-Talk (PTT) - Default Mode** (Nov 7, 2025 update):
+
 - User manually controls audio transmission via button/spacebar
-- Mic stays recording but sends silence when button not pressed
-- Gemini's automatic VAD processes audio only during button press
+- Mic capture stays active for heartbeat/diagnostics, but **no audio chunks are transmitted** while idle (silence streaming removed)
+- Press flow (mouse or spacebar):
+  1. Flush Gemini playback queue (full barge-in)
+  2. Send `activity_start` over WebSocket
+  3. Unmute mic → audio stream begins (still passes through browser cleanup/high-pass filter)
+- Release flow:
+  1. Send `activity_end`
+  2. Mute mic immediately (prevents trailing silence)
+  3. Resume Gemini playback/context so responses render as soon as the user stops talking
+- Gemini never sees idle silence; manual activity signals bracket every burst of audio
 - **Desktop**: Toggle switch (🎤 Auto / ⌨️ PTT) + PTT button + Spacebar hotkey
 - **Mobile**: Toggle switch + full-width bar button
 - **Why default**: Reduces false positives, gives users explicit control
@@ -591,15 +608,25 @@ Comprehensive changes to minimize AI hallucinations and improve accuracy, target
 #### 1. Audio Preprocessing (Frontend)
 **Location**: `frontend/src/shared/audio-processor.worklet.ts`
 
-**Filters Applied Before VAD**:
+**Filters Applied Before VAD** (Updated Nov 7, 2025):
 - **High-Pass Filter**: 80Hz cutoff, Q=0.7 (Biquad IIR)
   - Removes low-frequency rumble (HVAC, traffic, handling noise)
   - Preserves speech frequencies (100Hz+)
-- **Noise Gate**: -40dB threshold (gentle)
+  - **Active in**: Both VAD and PTT modes
+- **Noise Gate**: -50dB threshold (gentle) - **Updated from -40dB Nov 7, 2025**
   - Filters background noise during pauses
-  - Preserves quiet speakers (threshold chosen to avoid false positives)
+  - Preserves quiet speakers, consonants, and soft speech
+  - **Active in**: VAD mode ONLY (bypassed in PTT mode as of Nov 7, 2025)
+  - **Rationale**: PTT mode = user explicitly controls when to send audio, aggressive gating counterproductive
 
-**Pipeline**: Raw Audio → High-Pass → Noise Gate → PCM16 Conversion → VAD/PTT
+**Pipeline**: 
+- **VAD Mode**: Raw Audio → High-Pass → Noise Gate → PCM16 Conversion → VAD Detection
+- **PTT Mode**: Raw Audio → High-Pass → PCM16 Conversion (noise gate bypassed)
+
+**PTT Mode Audio Flow** (Simplified Nov 7, 2025):
+- When PTT button pressed: `audioManager.unmuteInput()` → real audio flows
+- When PTT button released: `audioManager.muteInput()` → silence flows
+- No vadActive checks in PTT mode (only inputMuted flag matters)
 
 #### 2. Push-to-Talk (PTT) Mode - Default
 **Location**: `frontend/src/demo/VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`
@@ -609,15 +636,21 @@ Comprehensive changes to minimize AI hallucinations and improve accuracy, target
 - Accidental barge-ins
 - Background conversation pickup
 
+**Audio Quality Optimization** (Nov 7, 2025):
+- Noise gate automatically bypassed in PTT mode
+- Audio flows directly: Mic → High-Pass Filter → PCM16 → Backend
+- Preserves full audio fidelity when user controls recording
+- audioManager.setPTTMode(true) notifies worklet to skip gating
+
 **UI Components**:
 - Desktop: Toggle switch (🎤 Auto / ⌨️ PTT) + PTT button + Spacebar hotkey
 - Mobile: Toggle switch + full-width bar button (optimized for touch)
 
 **Behavior**:
 - Mic stays recording (for heartbeat/connection)
-- Sends silence when button not pressed
-- Sends real audio when button pressed
-- User can toggle back to Auto VAD if preferred
+- Sends silence when button not pressed (inputMuted=true)
+- Sends real audio when button pressed (inputMuted=false)
+- User can toggle back to Auto VAD if preferred (re-enables noise gate)
 
 #### 3. Single-Field Tool Constraint (Backend)
 **Location**: `backend/config.py`, `backend/services/callback_handler.py`

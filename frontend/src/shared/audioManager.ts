@@ -25,6 +25,7 @@ export interface AudioManager {
 	unmuteInput: () => void // Unmute mic input (send real audio)
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
+	setPTTMode: (enabled: boolean) => void // FIX (Nov 7, 2025): Notify worklet about PTT mode
 	destroy: () => void
 }
 
@@ -56,6 +57,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let playbackChunkCount = 0 // Track playback chunks for debugging
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
 	let inputMuted = false // Track if input should be muted (send silence)
+	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
 
 	// Privacy gate: VAD-controlled audio flow
 	let vadActive = false // When false, don't send audio; when true, send real audio
@@ -164,18 +166,35 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				const { type, pcmData } = event.data
 				if (type !== 'audio') return
 
-				// Privacy Gate: VAD-controlled audio flow with pre-buffering
-				// When VAD inactive: DON'T send audio (Gemini's automatic VAD requires no keepalive)
-				// When VAD active: send real audio
-				// On transition to active: flush pre-buffer first (prevents speech clipping)
+				// FIX (Nov 7, 2025): In PTT mode, bypass privacy gates when button is held
+				// PTT mode means user explicitly controls audio flow, so we don't need
+				// the inputMuted/vadActive checks that are designed for VAD mode
+				const isPTTActive = pttModeEnabled && !inputMuted
+				
+				// CRITICAL: Early exit logic depends on mode
+				// PTT mode: Only check inputMuted (vadActive is irrelevant)
+				// VAD mode: Check both inputMuted AND vadActive
+				if (pttModeEnabled) {
+					// PTT mode: Only send audio when button is held (inputMuted=false)
+					if (inputMuted) {
+						return // PTT button not pressed, don't send audio
+					}
+				} else {
+					// VAD mode: Require BOTH conditions
+					if (inputMuted && !vadActive) {
+						// PTT button not pressed AND VAD not detecting speech = don't send anything
+						return
+					}
+				}
 
 				const pcmChunk = new Int16Array(pcmData)
 
-				// Always update pre-buffer with recent audio (rolling window)
+				// Update pre-buffer for VAD mode (allows capturing speech start)
+				// In PTT mode, pre-buffer isn't used, but it's harmless to maintain it
 				audioPreBuffer.push(pcmChunk)
 				preBufferSampleCount += pcmChunk.length
 
-				// Trim pre-buffer to maintain 600ms window
+				// Trim pre-buffer to maintain 700ms window
 				while (preBufferSampleCount > PREBUFFER_SIZE_SAMPLES) {
 					const removed = audioPreBuffer.shift()
 					if (removed) {
@@ -183,7 +202,8 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					}
 				}
 
-				// Skip transmitting all-zero chunks (deprecated silence streaming)
+				// CRITICAL: Never send all-zero chunks (silence) to Gemini
+				// Check if chunk contains any non-zero samples
 				let hasSignal = false
 				for (let i = 0; i < pcmChunk.length; i++) {
 					if (pcmChunk[i] !== 0) {
@@ -192,18 +212,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					}
 				}
 				if (!hasSignal) {
+					// Skip silent chunks - Gemini doesn't need keepalive audio
 					return
 				}
 
-				// Determine what to send based on VAD state and mute status
-				// CRITICAL: Only send audio when actually needed (saves API costs)
-				if (!inputMuted || vadActive) {
-					// PTT unmuted OR VAD active: send real audio
-					// !inputMuted covers PTT mode (when button is pressed and unmuted)
-					// vadActive covers VAD mode (when speech is detected)
-					onAudioDataCallback(pcmData)
-				}
-				// else: PTT muted or VAD inactive - don't send anything (no silence needed)
+				// At this point: PTT unmuted OR VAD active, AND chunk has audio signal
+				// Send real audio to Gemini
+				onAudioDataCallback(pcmData)
 			}
 
 			// Connect audio nodes
@@ -518,12 +533,12 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	function muteInput(): void {
-		console.log('[AudioManager] Muting input - sending silence')
+		console.log('[AudioManager] 🔇 Muting input - audio processing stopped')
 		inputMuted = true
 	}
 
 	function unmuteInput(): void {
-		console.log('[AudioManager] Unmuting input - sending real audio')
+		console.log('[AudioManager] 🔊 Unmuting input - audio processing active')
 		inputMuted = false
 	}
 
@@ -533,6 +548,26 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 */
 	function getStream(): MediaStream | null {
 		return nodes.stream
+	}
+
+	/**
+	 * Set PTT mode (enables/disables noise gate in audio worklet)
+	 * FIX (Nov 7, 2025): In PTT mode, user explicitly controls audio flow,
+	 * so aggressive noise gating is counterproductive and can clip quiet speech
+	 * 
+	 * @param enabled - true for PTT mode (noise gate disabled), false for VAD mode (noise gate enabled)
+	 */
+	function setPTTMode(enabled: boolean): void {
+		console.log('[AudioManager] setPTTMode:', enabled)
+		pttModeEnabled = enabled
+		
+		// Notify worklet about PTT mode change (bypasses noise gate in PTT mode)
+		if (nodes.workletNode) {
+			nodes.workletNode.port.postMessage({
+				type: 'setPTTMode',
+				enabled: enabled
+			})
+		}
 	}
 
 	/**
@@ -555,8 +590,23 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// VAD just activated: flush pre-buffer to capture start of speech
 			console.log(`[AudioManager] VAD activated - flushing ${preBufferSampleCount} samples (${(preBufferSampleCount / RECORDING_SAMPLE_RATE * 1000).toFixed(0)}ms) from pre-buffer`)
 			
-			// Send all buffered chunks in order
+			// Send all buffered chunks in order, but skip all-zero chunks
+			let skippedSilence = 0
 			for (const chunk of audioPreBuffer) {
+				// Check if chunk is all zeros (silence)
+				let hasSignal = false
+				for (let i = 0; i < chunk.length; i++) {
+					if (chunk[i] !== 0) {
+						hasSignal = true
+						break
+					}
+				}
+				
+				if (!hasSignal) {
+					skippedSilence++
+					continue // Skip silent chunks
+				}
+				
 				// Create new ArrayBuffer copy to ensure correct type
 				const buffer = new ArrayBuffer(chunk.byteLength)
 				const view = new Int16Array(buffer)
@@ -564,6 +614,9 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				onAudioDataCallback(buffer)
 			}
 			
+			if (skippedSilence > 0) {
+				console.log(`[AudioManager] Skipped ${skippedSilence} silent chunks from pre-buffer`)
+			}
 			console.log('[AudioManager] Pre-buffer flushed, now sending live audio')
 		} else if (!active && wasActive) {
 			// VAD deactivated: stop sending audio (no keepalive needed)
@@ -586,6 +639,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		unmuteInput,
 		getStream,
 		setVADActive,
+		setPTTMode,
 		destroy,
 	}
 }

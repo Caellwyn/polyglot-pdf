@@ -1053,12 +1053,20 @@ export class WebFormConnection {
    * Send activity_end signal to Gemini (user stopped speaking).
    * Signals the end of user speech and flushes Gemini's cached audio buffer.
    */
-  sendActivityEnd(): void {
+  async sendActivityEnd(): Promise<void> {
     console.log(`[WebFormConnection] 📤 sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error(`[WebFormConnection] ❌ Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
+    }
+
+    // CRITICAL: Wait for all buffered audio to be sent before signaling activity_end
+    // This ensures Gemini receives all audio chunks before we close the turn
+    const bufferedBefore = this.ws.bufferedAmount;
+    if (bufferedBefore > 0) {
+      console.log(`[WebFormConnection] ⏳ Waiting for ${bufferedBefore} bytes of audio to drain before activity_end`)
+      await this.waitForBufferDrain(2000); // Wait up to 2 seconds for audio to send
     }
 
     console.log('[WebFormConnection] 📤 Sending activity_end message to backend')

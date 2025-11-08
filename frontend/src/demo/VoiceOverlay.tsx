@@ -93,6 +93,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// This allows keyboard handlers to check current connection status without adding status to useEffect deps
 	const statusRef = useRef<string>(status)
 
+	// PTT release delay timer (allows final audio to be sent before muting)
+	const pttReleaseTimeoutRef = useRef<number | null>(null)
+	const isHoldingPushToTalkRef = useRef<boolean>(isHoldingPushToTalk)
+
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
 		sharedStreamRef.current = sharedStream || null
@@ -104,24 +108,42 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		pushToTalkModeRef.current = pushToTalkMode
 	}, [pushToTalkMode])
 
-		// Ensure connection manager + audio pipeline reflect current PTT mode
-		useEffect(() => {
-			if (!connectionManager) return
+	// Ensure connection manager + audio pipeline reflect current PTT mode
+	useEffect(() => {
+		if (!connectionManager) return
 
-			connectionManager.setPushToTalkMode(pushToTalkMode)
-			const audioManager = connectionManager.getAudioManager()
+		connectionManager.setPushToTalkMode(pushToTalkMode)
+		const audioManager = connectionManager.getAudioManager()
 
-			if (pushToTalkMode) {
-				audioManager?.muteInput()
-			} else {
-				audioManager?.unmuteInput()
-			}
-		}, [connectionManager, pushToTalkMode])
+		// FIX (Nov 7, 2025): Notify audio worklet about PTT mode (bypasses noise gate)
+		audioManager?.setPTTMode(pushToTalkMode)
+
+		if (pushToTalkMode) {
+			audioManager?.muteInput()
+		} else {
+			audioManager?.unmuteInput()
+		}
+	}, [connectionManager, pushToTalkMode])
 
 	// Keep status ref updated
 	useEffect(() => {
 		statusRef.current = status
 	}, [status])
+
+	// Keep isHoldingPushToTalk ref updated
+	useEffect(() => {
+		isHoldingPushToTalkRef.current = isHoldingPushToTalk
+	}, [isHoldingPushToTalk])
+
+	// Cleanup PTT release timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (pttReleaseTimeoutRef.current !== null) {
+				clearTimeout(pttReleaseTimeoutRef.current)
+				pttReleaseTimeoutRef.current = null
+			}
+		}
+	}, [])
 
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
@@ -475,6 +497,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			return
 		}
 
+		// Clear any pending release timeout (user pressed again before release completed)
+		if (pttReleaseTimeoutRef.current !== null) {
+			console.log('[PTT] Clearing pending release timeout (re-press)')
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+
 		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
 		                            currentStatus.toLowerCase().startsWith('connected ') ||
 		                            currentStatus.toLowerCase() === 'switching_section' ||
@@ -531,20 +560,39 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			return
 		}
 
-		console.log('[PTT] Processing release - sending activity_end then muting')
+		console.log('[PTT] Processing release - will delay 500ms before ending activity')
+		
+		// Clear any existing timeout (in case of rapid press/release)
+		if (pttReleaseTimeoutRef.current !== null) {
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+
+		// Update UI immediately to show button is no longer held
 		setIsHoldingPushToTalk(false)
 
-		// Send audio_stream_end to flush Gemini's audio buffer
-		// (sendActivityEnd now sends audio_stream_end on backend)
-		connectionManager?.sendActivityEnd()
+		// CRITICAL: Delay 500ms before sending activity_end and muting
+		// This allows final audio chunks to be recorded and sent to Gemini
+		// without being cut off by immediate muting
+		pttReleaseTimeoutRef.current = window.setTimeout(async () => {
+			console.log('[PTT] 500ms delay complete - sending activity_end and muting')
+			
+			// Send audio_stream_end to flush Gemini's audio buffer
+			// CRITICAL: Wait for all buffered audio to be sent before signaling end
+			// (sendActivityEnd now waits for WebSocket buffer drain)
+			await connectionManager?.sendActivityEnd()
 
-		// MUTE: Stop streaming audio immediately after signaling end of turn
-		const audioManager = connectionManager?.getAudioManager()
-		audioManager?.muteInput()
+			// MUTE: Stop streaming audio after signaling end of turn
+			// All audio recorded during the 500ms delay has already been sent
+			const audioManager = connectionManager?.getAudioManager()
+			audioManager?.muteInput()
 
-		// Allow Gemini's response to play now that the user released the mic
-		audioManager?.resumePlayback()
-		audioManager?.resumeAudioContext?.()
+			// Allow Gemini's response to play now that the user released the mic
+			audioManager?.resumePlayback()
+			audioManager?.resumeAudioContext?.()
+			
+			pttReleaseTimeoutRef.current = null
+		}, 500) // 500ms delay to capture final audio
 	}
 
 	// Handle push-to-talk with spacebar (keyboard)
@@ -631,7 +679,39 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [pushToTalkMode])
 
-// Initialize schema-based state and update part UI
+	// Handle global mouse/touch release (catch PTT release even if mouse moves off button)
+	useEffect(() => {
+		if (!pushToTalkMode) return
+
+		const handleGlobalMouseUp = (e: MouseEvent | TouchEvent) => {
+			// Only handle if we're currently holding PTT
+			if (isHoldingPushToTalkRef.current) {
+				const currentStatus = statusRef.current
+				const isConnected = currentStatus.toLowerCase() === 'connected' ||
+				                   currentStatus.toLowerCase().startsWith('connected ') ||
+				                   currentStatus.toLowerCase() === 'switching_section' ||
+				                   currentStatus.toLowerCase().startsWith('reconnecting')
+
+				if (isConnected) {
+					console.log('[PTT Global] Mouse/touch released - calling handlePushToTalkRelease()')
+					handlePushToTalkRelease()
+				}
+			}
+		}
+
+		document.addEventListener('mouseup', handleGlobalMouseUp)
+		document.addEventListener('touchend', handleGlobalMouseUp)
+		console.log('[PTT Global] ✅ Global mouse/touch release listeners attached')
+
+		return () => {
+			console.log('[PTT Global] ❌ Removing global mouse/touch release listeners')
+			document.removeEventListener('mouseup', handleGlobalMouseUp)
+			document.removeEventListener('touchend', handleGlobalMouseUp)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pushToTalkMode])
+
+// Initialize schema-based state and update part UI (only once on mount)
 useEffect(() => {
 	const state = SchemaFormStateManager.init(schema)
 	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
@@ -645,7 +725,8 @@ useEffect(() => {
 		return actualValue !== null && actualValue !== undefined && actualValue !== ""
 	}).length
 	setSectionFieldCount({ filled: filledFields, total: totalFields })
-}, [schema])
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+}, []) // Only run once on mount, not when schema changes
 
 // Poll field count AND part state (updates as AI switches parts)
 useEffect(() => {
@@ -1478,21 +1559,21 @@ const handleClearForm = () => {
 					text-align: right;
 				}
 
-				.vff-ptt-button-container {
-					margin-bottom: 12px;
-				}
+			.vff-ptt-button-container {
+				margin-bottom: 12px;
+			}
 
-				.vff-ptt-button {
-					background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
-					color: white;
-					font-size: 15px;
-					padding: 16px;
-					user-select: none;
-					-webkit-user-select: none;
-					-webkit-touch-callout: none;
-				}
-
-				.vff-ptt-button:active,
+			.vff-ptt-button {
+				width: 100%; /* Full width regardless of text content */
+				background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
+				color: white;
+				font-size: 15px;
+				padding: 16px;
+				user-select: none;
+				-webkit-user-select: none;
+				-webkit-touch-callout: none;
+				text-align: center; /* Center text when width is fixed */
+			}				.vff-ptt-button:active,
 				.vff-ptt-button.active {
 					background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
 					transform: scale(0.98);
