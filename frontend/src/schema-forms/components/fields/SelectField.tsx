@@ -3,6 +3,7 @@
  */
 
 import type { FormField } from "../../types/schema";
+import { unwrapToString } from "../../utils/fieldValue";
 
 export interface SelectFieldProps {
   field: FormField;
@@ -24,6 +25,10 @@ export function SelectField({
   // Fallback: if select field has no options, render as text field
   if (!field.options || field.options.length === 0) {
     console.warn(`[SelectField] Field ${field.id} has no options - rendering as text input instead`);
+
+    // Bug Fix: Unwrap FieldValue objects in fallback case too
+    const displayValue = unwrapToString(value);
+
     return (
       <div className="form-field">
         <label htmlFor={field.id} className="form-field__label">
@@ -34,7 +39,7 @@ export function SelectField({
           type="text"
           id={field.id}
           name={field.id}
-          value={value || ""}
+          value={displayValue}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           disabled={disabled}
@@ -53,8 +58,8 @@ export function SelectField({
     );
   }
 
-  // Normalize value to string (handle undefined/null)
-  const currentValue = value !== null && value !== undefined ? String(value) : "";
+  // Bug Fix: Unwrap FieldValue objects to get primitive value
+  const currentValue = unwrapToString(value);
 
   // Debug: Log value being rendered
   console.log(`[SelectField] ${field.id} rendering with value:`, {

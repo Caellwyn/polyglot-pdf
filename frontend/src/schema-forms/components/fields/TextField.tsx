@@ -3,10 +3,11 @@
  */
 
 import type { FormField } from "../../types/schema";
+import { unwrapToString } from "../../utils/fieldValue";
 
 export interface TextFieldProps {
   field: FormField;
-  value: string;
+  value: any; // Accept any type (primitive or FieldValue wrapper)
   onChange: (value: string) => void;
   onBlur?: () => void;
   error?: string | null;
@@ -23,6 +24,9 @@ export function TextField({
 }: TextFieldProps) {
   const inputType = field.type === "email" ? "email" : field.type === "tel" ? "tel" : "text";
 
+  // Bug Fix: Unwrap FieldValue objects to get primitive value
+  const displayValue = unwrapToString(value);
+
   return (
     <div className="form-field">
       <label htmlFor={field.id} className="form-field__label">
@@ -38,7 +42,7 @@ export function TextField({
         type={inputType}
         id={field.id}
         name={field.id}
-        value={value || ""}
+        value={displayValue}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={field.placeholder}

@@ -3,10 +3,11 @@
  */
 
 import type { FormField } from "../../types/schema";
+import { unwrapToString } from "../../utils/fieldValue";
 
 export interface DateFieldProps {
   field: FormField;
-  value: string;
+  value: any; // Accept any type (primitive or FieldValue wrapper)
   onChange: (value: string) => void;
   onBlur?: () => void;
   error?: string | null;
@@ -27,6 +28,9 @@ export function DateField({
     return "date"; // Default to full date
   };
 
+  // Bug Fix: Unwrap FieldValue objects to get primitive value
+  const displayValue = unwrapToString(value);
+
   return (
     <div className="form-field">
       <label htmlFor={field.id} className="form-field__label">
@@ -42,7 +46,7 @@ export function DateField({
         type={getInputType()}
         id={field.id}
         name={field.id}
-        value={value || ""}
+        value={displayValue}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         min={field.min_date}

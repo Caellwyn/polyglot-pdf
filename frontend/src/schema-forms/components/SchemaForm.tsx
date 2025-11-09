@@ -154,6 +154,28 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     }
   }, [state.currentPartId, onSectionChange]);
 
+  // Listen for state changes from VoiceOverlay (which updates sessionStorage)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newState = SchemaFormStateManager.load();
+      if (newState && newState.currentPartId !== state.currentPartId) {
+        console.log('[SchemaForm] Detected part change in sessionStorage, updating state');
+        setState(newState);
+      }
+    };
+
+    // Listen to custom storage events (fired by SchemaFormStateManager.save())
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also listen to a custom event for same-window updates
+    window.addEventListener('schemaFormStateChange', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('schemaFormStateChange', handleStorageChange);
+    };
+  }, [state.currentPartId]);
+
   const handleFieldChange = (fieldId: string, value: any) => {
     // Use functional update to avoid stale closure issues
     setState(prevState => {
@@ -191,13 +213,14 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
       return;
     }
 
-    const nextSection = SchemaFormStateManager.getNextSection(state);
-    if (!nextSection) return;
+    // Use part-based navigation instead of section-based
+    const nextPart = SchemaFormStateManager.getNextPart(state);
+    if (!nextPart) return;
 
     // Validate current section before moving
     const currentSection = SchemaFormStateManager.getCurrentSection(state);
 
-    const isValid = SchemaFormStateManager.isSectionValid(state, currentSection!.id);
+    const isValid = currentSection ? SchemaFormStateManager.isSectionValid(state, currentSection.id) : true;
 
     if (currentSection && !isValid) {
       alert("Please complete all required fields before continuing.");
@@ -207,14 +230,15 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     // Set navigation flag
     setIsNavigating(true);
 
-    // Mark current section as complete
+    // Mark current part as complete
     let newState = state;
-    if (currentSection) {
-      newState = SchemaFormStateManager.markSectionComplete(state, currentSection.id);
+    const currentPart = SchemaFormStateManager.getCurrentPart(state);
+    if (currentPart) {
+      newState = SchemaFormStateManager.markPartComplete(state, currentPart.id);
     }
 
-    // Navigate to next section
-    newState = SchemaFormStateManager.navigateToSection(newState, nextSection.id);
+    // Navigate to next part (not section!)
+    newState = SchemaFormStateManager.navigateToPart(newState, nextPart.id);
     setState(newState);
 
     // Clear navigation flag after a short delay
@@ -224,10 +248,11 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   };
 
   const handlePreviousSection = () => {
-    const prevSection = SchemaFormStateManager.getPreviousSection(state);
-    if (!prevSection) return;
+    // Use part-based navigation instead of section-based
+    const prevPart = SchemaFormStateManager.getPreviousPart(state);
+    if (!prevPart) return;
 
-    const newState = SchemaFormStateManager.navigateToSection(state, prevSection.id);
+    const newState = SchemaFormStateManager.navigateToPart(state, prevPart.id);
     setState(newState);
   };
 
@@ -304,13 +329,14 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
 
   const currentSection = SchemaFormStateManager.getCurrentSection(state);
   const currentFields = SchemaFormStateManager.getCurrentSectionFields(state);
-  const nextSection = SchemaFormStateManager.getNextSection(state);
-  const prevSection = SchemaFormStateManager.getPreviousSection(state);
+  const nextPart = SchemaFormStateManager.getNextPart(state);
+  const prevPart = SchemaFormStateManager.getPreviousPart(state);
   const progress = SchemaFormStateManager.getProgress(state);
 
   // Sort sections by order for progress display
   const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
-  const currentSectionIndex = sortedSections.findIndex((s) => s.id === state.currentPartId);
+  // Bug Fix: currentPartId is a part ID, not a section ID - need to find section via getCurrentSection
+  const currentSectionIndex = currentSection ? sortedSections.findIndex((s) => s.id === currentSection.id) : -1;
 
   return (
     <>
@@ -355,7 +381,7 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
 
       {/* Navigation */}
       <div className="schema-form__navigation">
-        {prevSection && (
+        {prevPart && (
           <button
             type="button"
             onClick={handlePreviousSection}
@@ -365,7 +391,7 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
           </button>
         )}
 
-        {nextSection ? (
+        {nextPart ? (
           <button
             type="button"
             onClick={handleNextSection}
