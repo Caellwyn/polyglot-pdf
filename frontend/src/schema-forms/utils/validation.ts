@@ -5,12 +5,13 @@
  */
 
 import type { FormField, ValidationRules } from "../types/schema";
+import { unwrapFieldValue } from "./fieldValue";
 
 /**
  * Validate a field value against its validation rules
  *
  * @param field - The field to validate
- * @param value - The value to validate
+ * @param value - The value to validate (may be FieldValue wrapper or primitive)
  * @returns Error message if invalid, null if valid
  */
 export function validateField(field: FormField, value: any): string | null {
@@ -18,29 +19,32 @@ export function validateField(field: FormField, value: any): string | null {
     return null; // No validation rules
   }
 
+  // Bug Fix: Unwrap FieldValue object before validation
+  const actualValue = unwrapFieldValue(value);
+
   const rules = field.validation;
 
   // Required check
-  if (rules.required && (value === null || value === undefined || value === "")) {
+  if (rules.required && (actualValue === null || actualValue === undefined || actualValue === "")) {
     return `${field.name} is required`;
   }
 
   // Skip other checks if value is empty and not required
-  if (value === null || value === undefined || value === "") {
+  if (actualValue === null || actualValue === undefined || actualValue === "") {
     return null;
   }
 
   // Type-specific validation
   if (field.type === "text" || field.type === "textarea" || field.type === "email" || field.type === "tel") {
-    return validateTextValue(field, String(value), rules);
+    return validateTextValue(field, String(actualValue), rules);
   }
 
   if (field.type === "number") {
-    return validateNumberValue(field, value, rules);
+    return validateNumberValue(field, actualValue, rules);
   }
 
   if (field.type === "date") {
-    return validateDateValue(field, String(value), rules);
+    return validateDateValue(field, String(actualValue), rules);
   }
 
   return null;
@@ -233,7 +237,7 @@ function formatDate(date: Date): string {
  * Check if a field should be shown based on conditional logic
  *
  * @param field - The field to check
- * @param fieldValues - Current form values
+ * @param fieldValues - Current form values (may contain FieldValue wrappers)
  * @returns true if field should be shown
  */
 export function shouldShowField(field: FormField, fieldValues: Record<string, any>): boolean {
@@ -241,7 +245,8 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
     return !field.hidden; // No conditional logic, use default hidden state
   }
 
-  const triggerValue = fieldValues[field.show_if.field];
+  // Bug Fix: Unwrap FieldValue object before comparing
+  const triggerValue = unwrapFieldValue(fieldValues[field.show_if.field]);
 
   switch (field.show_if.operator) {
     case "equals":

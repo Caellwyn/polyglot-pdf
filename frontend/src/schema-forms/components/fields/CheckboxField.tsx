@@ -3,6 +3,7 @@
  */
 
 import type { FormField } from "../../types/schema";
+import { unwrapFieldValue, unwrapToBoolean } from "../../utils/fieldValue";
 
 export interface CheckboxFieldProps {
   field: FormField;
@@ -23,7 +24,8 @@ export function CheckboxField({
 }: CheckboxFieldProps) {
   // Single checkbox (no options)
   if (!field.options) {
-    const isChecked = value === true || value === "true" || value === 1;
+    // Bug Fix: Unwrap FieldValue objects for boolean fields
+    const isChecked = unwrapToBoolean(value);
 
     const handleChange = (checked: boolean) => {
       console.log(`[CheckboxField] ${field.id} changed to:`, checked);
@@ -63,7 +65,9 @@ export function CheckboxField({
   }
 
   // Multi-checkbox group
-  const selectedValues = Array.isArray(value) ? value : [];
+  // Bug Fix: Unwrap FieldValue if needed, then ensure it's an array
+  const unwrappedValue = unwrapFieldValue(value);
+  const selectedValues = Array.isArray(unwrappedValue) ? unwrappedValue : [];
 
   const handleToggle = (optionValue: string) => {
     const newValues = selectedValues.includes(optionValue)

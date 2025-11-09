@@ -12,7 +12,7 @@
  * - WebSocket handshake generation
  */
 
-import type { FormSchema, FormSection, FormField, FieldValue } from "../types/schema";
+import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -123,6 +123,9 @@ export class SchemaFormStateManager {
       // Silently save - no need for console spam
       const jsonString = JSON.stringify(toStore);
       sessionStorage.setItem(this.STORAGE_KEY, jsonString);
+
+      // Fire custom event so SchemaForm knows to reload
+      window.dispatchEvent(new CustomEvent('schemaFormStateChange', { detail: state }));
     } catch (error) {
       console.error("[SchemaFormState] Failed to save state:", error);
     }
@@ -308,6 +311,40 @@ export class SchemaFormStateManager {
     }
 
     return sortedSections[currentIndex - 1];
+  }
+
+  /**
+   * Get next part (for navigation)
+   */
+  static getNextPart(state: SchemaFormState): FormPart | null {
+    const currentPart = this.getCurrentPart(state);
+    if (!currentPart) return null;
+
+    const sortedParts = [...(state.schema.parts || [])].sort((a, b) => a.order - b.order);
+    const currentIndex = sortedParts.findIndex((p) => p.id === currentPart.id);
+
+    if (currentIndex === -1 || currentIndex === sortedParts.length - 1) {
+      return null; // No next part
+    }
+
+    return sortedParts[currentIndex + 1];
+  }
+
+  /**
+   * Get previous part (for navigation)
+   */
+  static getPreviousPart(state: SchemaFormState): FormPart | null {
+    const currentPart = this.getCurrentPart(state);
+    if (!currentPart) return null;
+
+    const sortedParts = [...(state.schema.parts || [])].sort((a, b) => a.order - b.order);
+    const currentIndex = sortedParts.findIndex((p) => p.id === currentPart.id);
+
+    if (currentIndex <= 0) {
+      return null; // No previous part
+    }
+
+    return sortedParts[currentIndex - 1];
   }
 
   /**

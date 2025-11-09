@@ -1,21 +1,53 @@
 # Polyglot PDF Form System - Project Context & Guidelines
 
-**Last Updated**: October 25, 2025
+**Last Updated**: November 8, 2025
 **Purpose**: AI onboarding guide for understanding the project and development practices
 
 ---
 
 ## What It Is
 
-Comprehensive multilingual form system with voice interaction, PDF generation, and admin UI. A translation and accessibility tool that enables organizations to create custom forms and allows users to complete them in their native language using voice, keyboard, or both.
+Voice-driven form-filling application specifically designed for USCIS immigration forms, enabling users to interact with Gemini AI through voice commands to complete complex government forms. Primary focus on serving non-English speakers in immigrant support environments like nonprofit offices.
+
+**Current Implementation Status**:
+- **Working**: Voice interaction with Gemini Live API, form field updates, manual edit detection
+- **In Progress**: Schema-driven forms with parts-based navigation, voice overlay integration
+- **Planned**: Full PDF round-trip (extract → fill → export), admin UI for schema management
 
 **Primary Use Cases**:
-1. Medical intake forms - Patients complete complex forms in their language
-2. Government services - Accessible forms for diverse populations
-3. Job applications - Multilingual application process
-4. Any multi-page form where voice guidance improves completion rates
+1. Immigration forms (I-90, I-589) - Non-English speakers complete forms via voice
+2. Nonprofit assistance - Staff help clients in busy office environments  
+3. Accessibility - Voice-only operation for users who cannot read/type
+4. Any complex form where voice guidance improves completion rates
 
-**Current Status**: Planning Phase - Major refactor from voice-only web forms to comprehensive PDF-based system with admin UI.
+**Current Forms**:
+- **I-90** (Green Card Replacement): v9 schema 100% conformant, 132 fields, 8 parts
+- **I-589** (Asylum): Schema extracted, needs conformance
+- **Future**: I-485, I-765, N-400 (50+ forms total planned)
+
+---
+
+## System Architecture Evolution
+
+### Current State (November 2025)
+The project is transitioning from a demo-based architecture to a schema-driven architecture:
+
+**Legacy System** (Being Deprecated):
+- `WebFormStateManager` + `AdultIntakeDemo.tsx`
+- Custom section index files
+- Working voice integration but not scalable
+
+**New System** (Being Enhanced):
+- `SchemaFormStateManager` + Schema-driven forms
+- Pydantic model conformance (v1.1.0)
+- Parts-based navigation matching PDF structure
+- WebSocket integration (40/40 tests passing)
+
+**Migration Status**:
+- ✅ State management consolidated (Phase 1)
+- ✅ WebSocket layer updated (Phase 2)
+- ⏳ Voice overlay integration (Phase 4A - in progress)
+- ⏰ Demo deprecation (pending)
 
 ---
 
@@ -34,38 +66,34 @@ Comprehensive multilingual form system with voice interaction, PDF generation, a
 - **Ephemeral processing**: Gemini processes audio in real-time, no persistence
 - **Zero PII/PHI storage**: Logs contain session IDs and metrics only, never user data
 - **TLS everywhere**: WSS for WebSocket, HTTPS for all connections
-- **PDF metadata only**: Embedded schema_name and session_id for validation, no direct user data exposure
 
 ### 3. Accuracy Over Speed
 - **Confirm every field**: Verbal readback before moving to next field
 - **Sanity checking**: Validate logical errors (1800s birthdate, 2-digit phone)
 - **No guessing**: AI asks for clarification if uncertain
 - **Easy corrections**: Natural language error recovery
-- **One field at a time**: No batching (reduces errors)
-- **Validation enforcement**: Required fields, format checks, length limits
+- **One field at a time**: Planned single-field constraint (reduces errors)
 
 ### 4. User Control & Confidence
 - **Transparent operation**: Visual confirmation of every field update
-- **Pause/resume**: User controls conversation flow
+- **Pause/resume**: User controls conversation flow via PTT (planned default)
 - **Skip and return**: Can defer difficult fields
-- **Clear progress**: "Question 4 of 10 in Section 2 of 12"
-- **Session resumption**: Upload previous PDF to continue where you left off
-- **No data lock-in**: User owns the PDF with all their data
+- **Clear progress**: Parts-based navigation (e.g., "Part 2 of 8")
+- **Session persistence**: sessionStorage maintains state across refreshes
 
 ### 5. Accessibility First
-- **Language translation**: Converse in native language, form fills in any language
+- **Language support**: 18+ spoken languages via Gemini Live
 - **Voice-only operation**: Complete entire form without typing or mouse
-- **Background noise handling**: Client-side VAD filters ambient noise
+- **Noise handling**: Adjustable noise gate (-50dB threshold), PTT mode available
 - **Visual + verbal feedback**: Multiple confirmation channels
-- **Error tolerance**: Handles accents, speech variations, interruptions
-- **Numbered paragraphs**: "Go to paragraph 4" for easier voice navigation
+- **Hardware constraints**: Designed for 8-inch tablets with disposable earbuds
 
-### 6. Organizational Flexibility
-- **Non-developer schema creation**: Visual admin UI for building forms
-- **No coding required**: Organizations can create forms without developers
-- **Section-based organization**: Group related fields logically
-- **Token-efficient design**: Smaller sections reduce AI context overhead
-- **Schema versioning**: Track changes and maintain backward compatibility
+### 6. Technical Robustness
+- **Field matching**: Fuzzy search with 52% similarity threshold
+- **Message queuing**: Handles race conditions during session startup
+- **Idle timeout**: Clean 60s timeout with manual reconnect
+- **Error recovery**: Graceful handling of WebSocket disconnections
+- **Modular architecture**: 6 specialized backend modules, 48% code reduction
 
 ---
 
@@ -79,238 +107,108 @@ Comprehensive multilingual form system with voice interaction, PDF generation, a
 4. **Update docs in place** - Never create new summary documents
 5. **No code in planning docs** - Schema examples OK, but no implementation code (prevents anchoring)
 6. **TECHNICAL_GUIDE.md reflects reality** - Only update after code changes, not before
-7. **Create New Branches** For each new feature, first create a new git branch
+7. **Create New Branches** - For each new feature, first create a new git branch
 
 ### Never Do
-- ❌ Write implementation code in planning documents
 - ❌ Store user data (PII/PHI) in backend - only store schemas and session metadata
 - ❌ Log field values (log IDs, types, counts only - NO PII/PHI)
 - ❌ Use `.innerHTML` with user/AI content (XSS risk)
 - ❌ Create new "summary" or "status" documents - update existing docs in place
-- ❌ Modify `.venv` or example files
-- ❌ Skip phases or exit criteria in implementation plan
+- ❌ Skip test coverage for new features
+- ❌ Mix planning and implementation in same document
 
 ### Always Do
 - ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
 - ✅ Write tests alongside implementation (not after)
 - ✅ Maintain stateless backend (client holds form state, server holds schemas)
-- ✅ Prioritize accuracy over speed
+- ✅ Prioritize accuracy over speed (especially for non-English speakers)
 - ✅ Use structured logging with metadata only (never PII/PHI in backend logs)
-- ✅ Verify all exit criteria before moving to next phase
-- ✅ Update TECHNICAL_GUIDE.md after code changes to reflect current state
+- ✅ Apply FieldValue unwrapping in all form components
 - ✅ Document technology decisions in implementation plan
 
 ---
 
-## Scope Definition
+## Current Technical Stack
 
-### In Scope - Current Refactor
-- **Schema Management**: Admin UI for creating/editing/deleting schemas visually
-- **Field Types**: text, textarea, numbered_paragraph (new), checkbox, radio, select, date, time
-- **PDF Generation**: Create PDFs with embedded metadata (schema_name, session_id)
-- **PDF Upload/Extract**: Parse PDFs to resume sessions
-- **Session Management**: Create, validate, track sessions
-- **Voice Interaction**: Gemini Live API with 18+ spoken languages
-- **Section-Based Forms**: Multi-section forms with progress tracking
-- **Hybrid Input**: Voice, keyboard, mouse - all work seamlessly
-- **Languages**: 18+ spoken languages for voice, form supports any language
-- **Environments**: Works in noisy backgrounds (client-side VAD)
+### Backend
+- **Language**: Python 3.11+
+- **Framework**: FastAPI with WebSocket support
+- **AI Integration**: Gemini Live 2.5 Flash Preview (native audio I/O)
+- **PDF Processing**: PyMuPDF for field extraction/filling
+- **Validation**: Pydantic models v1.1.0 for schema conformance
+- **Testing**: Pytest with 102 tests passing
 
-### In Scope - Existing Features (Maintain)
-- **Stateless Backend**: No user data storage, only schemas
-- **WebSocket Communication**: Real-time voice interaction
-- **Field Validation**: Required, format checking, sanity validation
-- **Next Field Guidance**: AI knows what to ask next
-- **Manual Edit Detection**: AI aware of keyboard input
-- **Background Noise Handling**: VAD with tested thresholds
+### Frontend
+- **Framework**: React 18.3 + TypeScript
+- **State Management**: SchemaFormStateManager (sessionStorage-backed)
+- **Audio**: 16kHz/24kHz PCM16 with WebRTC VAD
+- **Styling**: Tailwind CSS
+- **Build**: Vite
+- **Testing**: Vitest with 66+ tests passing
 
-### Out of Scope
-- **Complex PDF Parsing**: Only extract from PDFs we generated (known format)
-- **File Upload Fields**: Not supported in this version
-- **Conditional Logic**: Show/hide fields based on other values (future)
-- **Multi-Language Forms**: Labels in multiple languages (future - use separate schemas for now)
-- **Offline Mode**: Requires internet for Gemini API
-- **Batch Processing**: One session at a time
-- **Real-Time Collaboration**: Single user per session
-- **Database Backend**: File-based storage for MVP (DB migration later)
-- **Advanced Auth**: Simple password/IP whitelist for admin UI (OAuth later)
+### Infrastructure
+- **WebSocket**: Bidirectional communication for audio + tool calls
+- **Storage**: File-based schemas (future: database)
+- **Deployment**: GCS bucket + Cloud Run (planned)
+- **Monitoring**: Structured logging, tool call tracking
+
+---
+
+## Known Issues & Active Work
+
+### Critical Bugs (Blocking)
+1. **Bug 2: Radio Buttons Reset Form** ⚠️
+   - Impact: Data loss on radio button interaction
+   - Status: Fix planned, 1-2 hours estimated
+
+2. **Bug 3: Section Navigation Broken** 🔴
+   - Impact: Can only access 1/8 of form
+   - Status: Fix planned, 2-3 hours estimated
+
+### In Progress
+1. **Voice Overlay Integration** (Phase 4A)
+   - Migrating from WebFormStateManager to SchemaFormStateManager
+   - 61 code changes identified across 3 files
+   - Status: Audit complete, implementation partially done
+
+2. **Token Reduction**
+   - Goal: Reduce from 7,400 to <500 initial tokens
+   - Strategy: Just-in-time field loading
+   - Status: Plan complete, implementation pending
+
+3. **Hallucination Reduction**
+   - Multiple strategies: audio filters, PTT default, single-field updates
+   - Branch created, partial implementation (noise gate done)
+   - Status: Some features complete, others pending
+
+### Planned Features
+1. **Conditional Logic System**
+   - 26 string conditionals to convert to structured format
+   - Bidirectional index for trigger/dependent relationships
+   - JavaScript runtime evaluator needed
+
+2. **Multi-Form Conformance**
+   - I-90 complete, I-589 needs conformance
+   - Additional forms: I-485, I-765, N-400
+   - 6-step automated pipeline ready to apply
 
 ---
 
 ## Key Metrics & Success Criteria
 
-### Performance Targets
-- **Voice Interaction**:
-  - VAD latency: <50ms barge-in
-  - Field accuracy: >99%
-  - Tool hallucinations: <1%
-  - Successful corrections: >95%
-- **PDF Operations**:
-  - PDF generation: <3s for 100-field form
-  - PDF extraction accuracy: >95%
-  - Metadata round-trip: 100% success
-- **Admin UI**:
-  - Schema operations: <500ms response
-  - Form preview: <1s render for 200-field schema
-- **Frontend Performance**:
-  - Bundle size: <500KB gzipped
-  - Lighthouse score: >90
+### Current Performance
+- **Voice Accuracy**: >99% field accuracy when confirmed
+- **Tool Hallucinations**: ~5-10% (target <1% after fixes)
+- **Audio Quality**: -50dB noise gate, PTT mode available
+- **Session Handling**: 60s idle timeout working correctly
+- **Test Coverage**: Backend 102 tests, Frontend 66+ tests
 
-### Technical Success Criteria
-- **Voice System** (Maintain existing quality):
-  - Works in noisy environments
-  - <1% tool call errors
-  - Handles 174+ field forms without crashes
-  - Clean idle timeout handling (60s)
-- **PDF System** (New):
-  - Successfully embed and extract metadata
-  - PDF survives editing in Adobe, Preview, Chrome, Firefox
-  - Round-trip maintains data integrity
-  - Invalid PDFs handled gracefully
-- **Admin UI** (New):
-  - Non-developers can create schemas without assistance
-  - Schema validation prevents broken forms
-  - Real-time preview shows accurate rendering
-- **Testing**:
-  - Backend test coverage: >80%
-  - Frontend test coverage: >70%
-  - Zero critical security vulnerabilities
-  - WCAG 2.1 AA compliance
-
-### User Experience Success
-- **Form Filling**:
-  - User feels in control at all times
-  - Every field verbally confirmed (voice mode)
-  - Easy error correction via voice or keyboard
-  - Works in user's native language
-  - Clear progress indication
-- **Session Resumption**:
-  - Can upload PDF and continue from where they left off
-  - No data loss on refresh (sessionStorage)
-  - Expired sessions handled gracefully
-- **Admin Experience**:
-  - Can create 10+ field schema in <5 minutes
-  - Preview accurately represents final form
-  - Validation errors clearly explained
-
----
-
-## Development Workflow
-
-### Phased Implementation (Required for Refactor)
-
-**Follow the implementation plan phases systematically**:
-1. **Review Phase Plan**: Read all steps, exit criteria, and dependencies in REFACTOR_IMPLEMENTATION_PLAN.md
-2. **Complete Each Step**: Work through steps sequentially within a phase
-3. **Verify Exit Criteria**: Test all exit criteria before marking step complete
-4. **Document Decisions**: Add technology decisions and learnings to implementation plan
-5. **Update TECHNICAL_GUIDE.md**: After code changes, update to reflect current state
-6. **Phase Review**: Demo to stakeholder, get feedback before next phase
-
-### Step Completion Cycle
-
-For each step in a phase:
-1. **Understand**: Read step requirements and exit criteria
-2. **Plan**: Identify approach, dependencies, and risks
-3. **Implement**: Write code following design principles
-4. **Test**: Create unit/integration tests, run manual tests
-5. **Verify**: Check all exit criteria are met
-6. **Commit**: Clean commit message, reference phase and step
-7. **Update Docs**: Keep TECHNICAL_GUIDE.md current
-
-### Before Starting Any Task
-- Read this document (PROJECT_CONTEXT.md)
-- Review REFACTOR_IMPLEMENTATION_PLAN.md for current phase
-- Read TECHNICAL_GUIDE.md to understand current state
-- Understand stateless architecture and privacy requirements
-- Verify feature aligns with design principles
-- Check scope definition (in scope vs out of scope)
-
-### When Debugging
-- **Frontend**: Browser console for client errors, Network tab for WebSocket
-- **Backend**: Structured logs for API issues, Gemini tool call logs
-- **Voice**: Test in noisy environment (VAD is critical)
-- **PDF**: Test with different PDF readers (Adobe, Preview, Chrome, Firefox)
-- **State**: Check sessionStorage in DevTools
-- **Performance**: Use Lighthouse, Chrome DevTools profiler
-
----
-
-## Common Issues & Solutions
-
-### Voice System Issues
-
-**No WebSocket Connection**
-- ✓ Backend running on port 8000?
-- ✓ CORS configured correctly?
-- ✓ WebSocket URL matches environment?
-- ✓ GOOGLE_API_KEY or GEMINI_API_KEY set?
-
-**No Audio Input/Output**
-- ✓ GOOGLE_API_KEY or gcloud auth configured?
-- ✓ Microphone permissions granted?
-- ✓ Check browser console for Gemini connection errors
-- ✓ Using HTTPS or localhost (required for getUserMedia)?
-
-**Fields Not Updating**
-- ✓ Tool call errors in browser console?
-- ✓ Field IDs match schema exactly?
-- ✓ Check for extra quotes in field IDs (common Gemini error)
-- ✓ WebSocket messages flowing (Network tab → WS)?
-
-**State Mismatch**
-- Check sessionStorage in DevTools (Application tab)
-- Verify webFormState.ts persistence logic
-- Clear sessionStorage and reconnect if corrupted
-
-**VAD Issues**
-- ✓ VAD assets downloaded?
-- ✓ ONNX model files accessible?
-- ✓ Thresholds configured correctly (0.90 speech start, 0.70 speech end)?
-
-### PDF System Issues (New Features)
-
-**PDF Generation Fails**
-- ✓ Schema loaded correctly?
-- ✓ Form data in sessionStorage?
-- ✓ Check backend logs for PDF library errors
-- ✓ Special characters causing encoding issues?
-
-**PDF Upload Rejected**
-- ✓ File is actually a PDF (check MIME type)?
-- ✓ File size under limit (default 10MB)?
-- ✓ PDF generated by this system (has metadata)?
-- ✓ session_id valid and matches our format?
-
-**PDF Extraction Inaccurate**
-- ✓ PDF was generated by this system (not manually created)?
-- ✓ PDF not heavily edited after generation?
-- ✓ Check logs for parsing errors
-- ✓ Encoding issues with multilingual text?
-
-**Metadata Missing or Corrupted**
-- ✓ PDF edited in external tool that strips custom properties?
-- ✓ Check with different PDF reader (Adobe vs Preview vs Chrome)?
-- ✓ Verify metadata format matches expected structure
-
-### Admin UI Issues (New Features)
-
-**Schema Won't Save**
-- ✓ All validation errors resolved?
-- ✓ Unique schema name?
-- ✓ All required fields have labels?
-- ✓ Numbered paragraphs have max_length set?
-- ✓ At least one section defined?
-
-**Preview Not Updating**
-- ✓ Check browser console for React errors
-- ✓ Schema JSON valid?
-- ✓ Try refreshing the preview panel
-
-**Form Doesn't Match Preview**
-- ✓ Schema saved successfully?
-- ✓ Using correct schema version?
-- ✓ Clear sessionStorage and reload
+### Target Improvements
+- **Token Usage**: <500 initial (from 7,400 current)
+- **Hallucination Rate**: <1% (from 5-10% current)
+- **Confirmation Rate**: 100% verbal confirmation
+- **Form Coverage**: 50+ USCIS forms supported
+- **Navigation**: All 8 sections accessible (currently broken)
 
 ---
 
@@ -331,126 +229,113 @@ cd frontend
 npm install
 npm run dev  # Runs on http://localhost:5174
 
-# Test page: http://localhost:5174/test-demo-new.html
+# Test pages:
+# Schema-driven: http://localhost:5174/schema-form-demo.html
+# Legacy demo: http://localhost:5174/demo.html (deprecated)
 ```
 
 ### Testing
 ```bash
-# Unit tests
+# Backend tests
 pytest backend/tests/unit/ -v
 
 # Frontend tests
 cd frontend && npm test -- --run
 
 # Manual testing checklist
-1. Connect → Verify session_id appears
-2. Record → Speak → Playback is smooth
-3. Fields update → Green outline + checkmark
-4. Refresh page → DOM restored from sessionStorage
-5. Interrupt Gemini → TTS stops in <50ms
-```
-
-### Deployment
-```bash
-# Set environment variables
-export VOICE_GCS_BUCKET=your-bucket-name
-export VOICE_PROJECT_NAME=your-project-id
-
-# Deploy
-cd frontend
-./deploy-demo.sh
+1. Load schema-form-demo.html
+2. Select I-90 schema from dropdown
+3. Click microphone icon
+4. Speak "My name is John Smith"
+5. Verify field updates with green outline
+6. Check all sections are navigable (currently broken)
+7. Refresh page → verify state persistence
 ```
 
 ---
 
-## Project Status & Recent Changes
+## Development Workflow
 
-### October 25, 2025 - Major Refactor Planning
-- **Status**: Planning phase for comprehensive system refactor
-- **From**: Voice-only web form filler (working, production-ready)
-- **To**: Polyglot PDF Form System with admin UI, PDF generation/extraction, session management
-- **Approach**: Phased implementation with testable deliverables
-- **Documentation**: See REFACTOR_IMPLEMENTATION_PLAN.md for detailed roadmap
-- **Preservation**: Maintain all existing voice features and quality while adding new capabilities
+### For New Features
+1. Create feature branch: `git checkout -b feature/description`
+2. Read relevant planning documents
+3. Write tests first (TDD approach)
+4. Implement incrementally with frequent commits
+5. Update TECHNICAL_GUIDE.md after feature works
+6. Create PR with test results
 
-### Key Architecture Decisions
-- **Numbered Paragraphs**: Limited-length text boxes with numbers for voice navigation
-- **PDF Metadata**: Hidden schema_name + session_id for validation and session resumption
-- **Section Sizing**: Balance token efficiency with UX - keep related fields together
-- **Admin UI**: Enable non-developers to create schemas visually
-- **Code Reuse**: Leverage battle-tested existing components where possible
-- **Simplicity First**: Avoid over-engineering, keep MVP lean, iterate based on feedback
+### For Bug Fixes
+1. Create fix branch: `git checkout -b fix/bug-description`
+2. Add failing test that reproduces bug
+3. Fix bug until test passes
+4. Add additional edge case tests
+5. Update documentation if behavior changed
+6. Create PR with before/after test results
 
-### Maintained Features (Working System)
-
-The existing voice form filler is fully functional with these capabilities:
-
-**October 24, 2025 - Production Logging Infrastructure**
-- Comprehensive structured logging with HIPAA compliance
-- Token tracking with TEXT/AUDIO modality breakdown and cost calculation
-- Session cumulative metrics for cost visibility
-- Zero PHI in backend logs, frontend logs stay client-side only
-
-**October 23, 2025 - Race Condition Fix**
-- Messages queued until Gemini session ready
-- Section switching and language changes work reliably from first attempt
-
-**October 23, 2025 - Next Field Guidance**
-- AI always knows which field to ask about next
-- Guidance included in handshake, manual updates, section switches
-
-**October 22, 2025 - VAD Improvements**
-- Optimized thresholds (0.90/0.70) for better transcription accuracy
-- 700ms pre-buffer reduces missed speech
-- Works reliably in noisy environments
-
-**October 22, 2025 - Idle Timeout**
-- Clean 60s timeout handling
-- Manual reconnect button (no wasted resources)
-
-**Core Capabilities**:
-- 18+ spoken languages with real-time switching
-- 174-field forms tested and working
-- <50ms barge-in latency
-- Hybrid voice/keyboard workflow
-- Stateless backend (HIPAA compliant)
-- WebSocket real-time communication
+### For Documentation
+1. Update existing files in place (no new summaries)
+2. Move completed items to "Completed" sections
+3. Add dates and status markers
+4. Keep planning separate from implementation
+5. Technical guide = current reality only
 
 ---
 
-## Philosophy
+## Project Philosophy
 
 We're building a tool that empowers people to complete forms accurately in their own language, with confidence that their information is captured correctly and securely.
 
 **Core Values**:
-- **Accuracy Over Speed**: Confirm every field, validate inputs, prevent errors
-- **User Empowerment**: Users own their data (PDF), control the pace, choose input method
-- **Privacy by Design**: Stateless architecture, zero PII/PHI storage, client-side form state
-- **Accessibility First**: Voice works in 18+ languages, hybrid input, works in noisy environments
-- **Organizational Flexibility**: Non-developers can create and manage forms
-- **Transparency**: Users see every change, understand progress, know what data is stored where
+- **Accuracy Over Speed**: Better to be slow and correct for immigration forms
+- **User Empowerment**: Users control pace and input method
+- **Privacy by Design**: Stateless architecture, zero backend storage of user data
+- **Accessibility First**: Voice works in 18+ languages, handles various accents
+- **Progressive Enhancement**: Start with voice, add features incrementally
+- **Simplicity**: Avoid over-engineering, keep MVP lean
 
-**Why PDF-Based?**:
-- **User Data Ownership**: Users have ALL their data in a portable format they control
-- **Session Resumption**: Upload PDF to continue where you left off (no account required)
-- **No Vendor Lock-In**: Data not trapped in proprietary database
-- **Universal Format**: PDFs open anywhere, print anywhere, email anywhere
-- **Privacy**: No backend storage of sensitive data, just form templates
+**Why Voice-Driven?**:
+- **Language Barriers**: Non-English speakers can use native language
+- **Literacy Issues**: No reading required
+- **Physical Limitations**: No typing or mouse needed
+- **Efficiency**: Speaking faster than typing for most users
+- **Natural Interaction**: Conversational UI reduces anxiety
 
-**Why Admin UI?**:
-- **Scale Beyond One Developer**: Organizations need to create forms without engineering resources
-- **Iterate Quickly**: Change form structure without code deploys
-- **Domain Experts Lead**: Medical staff, HR teams, government workers design their own forms
-- **Reduce Bottlenecks**: No waiting for developers to modify schemas
+**Why Immigration Forms?**:
+- **High Stakes**: Errors can result in deportation or denial
+- **Complex Requirements**: 100+ fields, conditional logic, supplements
+- **Underserved Population**: Limited English proficiency common
+- **Clear Need**: Nonprofits struggle to help volume of clients
+- **Measurable Impact**: Success = approved applications
 
-**Why Numbered Paragraphs?**:
-- **Voice Navigation**: "Go to paragraph 4" is clearer than "go to field labeled..."
-- **Editing Precision**: "Change paragraph 2" vs "change my previous response about..."
-- **Token Efficiency**: Shorter field references in prompts
-- **User Mental Model**: Numbered items easier to track than unnamed text areas
+**Design Decisions**:
+- **Parts vs Sections**: Using "parts" to match PDF structure exactly
+- **FieldValue Wrapper**: Track AI-filled vs user-filled for accuracy metrics
+- **sessionStorage**: Auto-clears on tab close for privacy
+- **60s Timeout**: Balance server resources with user needs
+- **Manual Reconnect**: Prevent infinite reconnect loops
 
-**Why Sections?**:
-- **Cognitive Load**: 5-10 questions at a time vs 120 all at once
-- **Progress Clarity**: "Section 2 of 12" shows progress better than percentages
-- **Token Efficiency**: Smaller context windows for AI, faster responses
-- **Logical Grouping**: Related fields together improves UX and accuracy
+---
+
+## Contact & Resources
+
+### Key Files
+- **Schemas**: `frontend/public/pdf_schema_extractor/test_schemas/`
+- **Models**: `backend/models/form_models.py` (v1.1.0)
+- **Tests**: `backend/tests/`, `frontend/src/**/*.test.ts`
+- **Logs**: `backend/logs/` (dev only, no PHI)
+
+### Documentation
+- **Architecture**: TECHNICAL_GUIDE.md (current implementation)
+- **Context**: PROJECT_CONTEXT.md (this file)
+- **Status**: PROJECT_STATUS.md (feature tracking)
+- **Plans**: Various `*_PLAN.md` files (future work)
+
+### Branches
+- **Main**: `origin/shared-audio-stream`
+- **Fixes**: `fix/critical-bugs-and-token-reduction`
+- **Features**: `feature/hallucination-reduction`
+- **Migration**: `claude/align-websockets-011CUpAutS2MaBKLNxYFQRQM`
+
+---
+
+**Current Focus**: Fix critical bugs (radio buttons, section navigation), then implement token reduction for efficiency. Voice overlay integration and hallucination reduction features to follow.

@@ -3,6 +3,7 @@
  */
 
 import type { FormField } from "../../types/schema";
+import { unwrapToString } from "../../utils/fieldValue";
 
 export interface RadioFieldProps {
   field: FormField;
@@ -26,8 +27,8 @@ export function RadioField({
     return null;
   }
 
-  // Normalize value to string (handle undefined/null)
-  const currentValue = value !== null && value !== undefined ? String(value) : "";
+  // Bug Fix: Unwrap FieldValue objects to get primitive value
+  const currentValue = unwrapToString(value);
 
   const handleChange = (newValue: string) => {
     console.log(`[RadioField] ${field.id} changed to:`, newValue, `(previous: ${currentValue})`);
