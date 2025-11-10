@@ -1,9 +1,32 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Last Updated**: November 9, 2025
+**Last Updated**: November 10, 2025
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
+- ✅ **Critical Bug Fixes: Audio Leak & Reconnect** (Nov 10, 2025)
+  - **Bug 1 - Audio Streaming in VAD Mode**: Audio was continuously sent to Gemini even when VAD inactive
+    - **Root Cause**: Logic error in `audioManager.ts` - used `&&` instead of `||` for privacy gates
+    - **Impact**: High token usage, audio sent when user not speaking
+    - **Fix**: Changed `if (inputMuted && !vadActive)` to `if (inputMuted || !vadActive)` (line 183)
+    - **Added**: Debug logging to show when/why audio is blocked (0.1% sample rate)
+  - **Bug 2 - Desktop Reconnect After Timeout**: "Cannot resume - not connected" error on reconnect
+    - **Root Cause**: `paused` flag never reset after connection loss (idle timeout, error, disconnect)
+    - **Impact**: Reconnect button broken on desktop overlay after timeout
+    - **Fix**: Multi-layered paused flag reset in 6 locations:
+      - `onStatusChange` callback interceptor (automatic on connection loss)
+      - `connect()` method start (defensive reset)
+      - `onError()` callback (error scenarios)
+      - `resume()` failure path (self-healing)
+      - `resume()` success path (normal unpause)
+      - `disconnect()` method (explicit cleanup)
+  - **Quality Improvements**:
+    - Reduced AudioWorklet quality check log frequency from 0.1% to 0.01% (10x less spam)
+    - Added note to logs explaining worklet processes all audio, filtering happens in audioManager
+    - Enhanced `resume()` error messages with current status and helpful hints
+  - **Files Changed**: `frontend/src/shared/audioManager.ts`, `frontend/src/shared/connection.ts`, `frontend/src/shared/audio-processor.worklet.ts`
+  - **Impact**: Fixed audio token leak (should see dramatic reduction), desktop reconnect now works reliably
+
 - ✅ **Radio Button Tool Validation & Instructions** (Nov 9, 2025)
   - **Issue 1**: Gemini saw radio option labels ("Yes", "No") but didn't know the widget IDs to send ("P1_checkbox4[0]", "P1_checkbox4[1]")
   - **Issue 2**: Gemini didn't receive error feedback when radio updates failed (validation happened at frontend, not backend)

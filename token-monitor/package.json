@@ -1,0 +1,14 @@
+{
+  "name": "token-monitor",
+  "version": "1.0.0",
+  "description": "Real-time token usage monitor for Gemini API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2",
+    "chokidar": "^3.5.3"
+  }
+}

@@ -166,28 +166,41 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				const { type, pcmData } = event.data
 				if (type !== 'audio') return
 
-				// FIX (Nov 7, 2025): In PTT mode, bypass privacy gates when button is held
-				// PTT mode means user explicitly controls audio flow, so we don't need
-				// the inputMuted/vadActive checks that are designed for VAD mode
-				const isPTTActive = pttModeEnabled && !inputMuted
-				
-				// CRITICAL: Early exit logic depends on mode
-				// PTT mode: Only check inputMuted (vadActive is irrelevant)
-				// VAD mode: Check both inputMuted AND vadActive
-				if (pttModeEnabled) {
-					// PTT mode: Only send audio when button is held (inputMuted=false)
-					if (inputMuted) {
-						return // PTT button not pressed, don't send audio
+			// FIX (Nov 7, 2025): In PTT mode, bypass privacy gates when button is held
+			// PTT mode means user explicitly controls audio flow, so we don't need
+			// the inputMuted/vadActive checks that are designed for VAD mode
+			const isPTTActive = pttModeEnabled && !inputMuted
+			
+			// CRITICAL: Early exit logic depends on mode
+			// PTT mode: Only check inputMuted (vadActive is irrelevant)
+			// VAD mode: Check both inputMuted AND vadActive
+			if (pttModeEnabled) {
+				// PTT mode: Only send audio when button is held (inputMuted=false)
+				if (inputMuted) {
+					// DEBUG (Nov 10, 2025): Log blocked audio (sample 0.1% to avoid spam)
+					if (Math.random() < 0.001) {
+						console.log('[AudioManager] 🚫 PTT mode: Audio blocked (button not pressed)')
 					}
-				} else {
-					// VAD mode: Require BOTH conditions
-					if (inputMuted && !vadActive) {
-						// PTT button not pressed AND VAD not detecting speech = don't send anything
-						return
-					}
+					return // PTT button not pressed, don't send audio
 				}
-
-				const pcmChunk = new Int16Array(pcmData)
+			} else {
+				// VAD mode: Require EITHER privacy gate to be closed
+				// BUG FIX (Nov 10, 2025): Changed AND to OR - audio should be blocked if EITHER:
+				// - inputMuted=true (manual mute, shouldn't happen in VAD mode but defensive check)
+				// - vadActive=false (VAD hasn't detected speech - this is the primary gate)
+				if (inputMuted || !vadActive) {
+					// DEBUG (Nov 10, 2025): Log blocked audio (sample 0.1% to avoid spam)
+					if (Math.random() < 0.001) {
+						console.log('[AudioManager] 🚫 VAD mode: Audio blocked', {
+							inputMuted,
+							vadActive,
+							reason: inputMuted ? 'manual mute' : 'VAD inactive'
+						})
+					}
+					// Manual mute OR VAD not detecting speech = don't send audio
+					return
+				}
+			}				const pcmChunk = new Int16Array(pcmData)
 
 				// Update pre-buffer for VAD mode (allows capturing speech start)
 				// In PTT mode, pre-buffer isn't used, but it's harmless to maintain it

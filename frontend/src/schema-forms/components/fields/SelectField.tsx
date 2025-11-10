@@ -61,23 +61,7 @@ export function SelectField({
   // Bug Fix: Unwrap FieldValue objects to get primitive value
   const currentValue = unwrapToString(value);
 
-  // Debug: Log value being rendered
-  console.log(`[SelectField] ${field.id} rendering with value:`, {
-    rawValue: value,
-    currentValue,
-    hasOptions: field.options && field.options.length > 0,
-    optionCount: field.options?.length || 0
-  });
-
-  // Debug: Check if current value matches any option
-  const matchingOption = field.options.find(opt => opt.value === currentValue);
-  if (value && !matchingOption) {
-    console.warn(`[SelectField] ${field.id} value "${currentValue}" doesn't match any option:`,
-      field.options.map(o => o.value));
-  }
-
   const handleChange = (newValue: string) => {
-    console.log(`[SelectField] ${field.id} changed to:`, newValue);
     onChange(newValue);
   };
 

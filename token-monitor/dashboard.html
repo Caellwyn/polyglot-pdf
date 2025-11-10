@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token Usage Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      padding: 20px;
+    }
+
+    .header {
+      background: #1a1a1a;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #4CAF50;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .connection-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .connected {
+      background: #4CAF50;
+      color: white;
+    }
+
+    .disconnected {
+      background: #f44336;
+      color: white;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: #1a1a1a;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #2196F3;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #e0e0e0;
+    }
+
+    .stat-sub {
+      font-size: 14px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .chart-container {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 8px;
+      height: 300px; /* Fixed height */
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-container h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #e0e0e0;
+      flex-shrink: 0;
+    }
+
+    .chart-wrapper {
+      flex: 1;
+      position: relative;
+      min-height: 0; /* Important for flex child */
+    }
+
+    .chart-wrapper canvas {
+      position: absolute !important;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .events-table {
+      background: #1a1a1a;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    .events-table h3 {
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+
+    th {
+      background: #252525;
+      font-weight: 600;
+      font-size: 12px;
+      color: #aaa;
+      text-transform: uppercase;
+    }
+
+    td {
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-form {
+      background: #2196F3;
+      color: white;
+    }
+
+    .badge-part {
+      background: #FF9800;
+      color: white;
+    }
+
+    .filters {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .filter-group label {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+    }
+
+    select {
+      background: #252525;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔥 Token Usage Monitor</h1>
+    <span id="connectionStatus" class="connection-status disconnected">Disconnected</span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Tokens</div>
+      <div class="stat-value" id="totalTokens">0</div>
+      <div class="stat-sub" id="totalTokensSub">Across all sessions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cost</div>
+      <div class="stat-value" id="totalCost">$0.00</div>
+      <div class="stat-sub" id="totalCostSub">USD</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Sessions</div>
+      <div class="stat-value" id="activeSessions">0</div>
+      <div class="stat-sub">Gemini sessions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Events</div>
+      <div class="stat-value" id="totalEvents">0</div>
+      <div class="stat-sub">Token usage events</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>1. Form Type</label>
+      <select id="filterForm">
+        <option value="all">All Forms</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>2. Form Session</label>
+      <select id="filterFormSession">
+        <option value="all">All Form Sessions</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>3. Gemini Session</label>
+      <select id="filterGeminiSession">
+        <option value="all">All Gemini Sessions</option>
+      </select>
+    </div>
+    <button onclick="clearFilters()">Clear All Filters</button>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-container">
+      <h3>Cumulative Tokens Over Time</h3>
+      <div class="chart-wrapper">
+        <canvas id="tokensChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-container">
+      <h3>Token Distribution by Modality</h3>
+      <div class="chart-wrapper">
+        <canvas id="modalityChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-container">
+      <h3>Cost Breakdown</h3>
+      <div class="chart-wrapper">
+        <canvas id="costChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-container">
+      <h3>Tokens per Event</h3>
+      <div class="chart-wrapper">
+        <canvas id="eventChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="events-table">
+    <h3>Recent Events (Last 20)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Form</th>
+          <th>Session</th>
+          <th>Part</th>
+          <th>Tokens</th>
+          <th>Text In</th>
+          <th>Audio In</th>
+          <th>Text Out</th>
+          <th>Audio Out</th>
+          <th>Cost</th>
+        </tr>
+      </thead>
+      <tbody id="eventsTableBody">
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // WebSocket connection
+    let ws = null;
+    let allEvents = [];
+    let filteredEvents = [];
+    let currentFilter = {
+      form: 'all',
+      formSession: 'all',
+      geminiSession: 'all'
+    };
+
+    // Chart instances
+    let tokensChart, modalityChart, costChart, eventChart;
+
+    // Connect to WebSocket
+    function connect() {
+      ws = new WebSocket('ws://localhost:8765');
+
+      ws.onopen = () => {
+        console.log('Connected to token monitor');
+        document.getElementById('connectionStatus').textContent = 'Connected';
+        document.getElementById('connectionStatus').className = 'connection-status connected';
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected from token monitor');
+        document.getElementById('connectionStatus').textContent = 'Disconnected';
+        document.getElementById('connectionStatus').className = 'connection-status disconnected';
+
+        // Retry connection after 3 seconds
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+
+        if (data.type === 'history') {
+          allEvents = data.events;
+          console.log('Loaded', allEvents.length, 'historical events');
+          applyFilters();
+          updateDashboard();
+        } else if (data.type === 'event') {
+          allEvents.push(data.event);
+          applyFilters();
+          updateDashboard();
+        }
+      };
+    }
+
+    // Apply filters (hierarchical)
+    function applyFilters() {
+      filteredEvents = allEvents.filter(event => {
+        // Level 1: Form type
+        if (currentFilter.form !== 'all' && event.form_id !== currentFilter.form) {
+          return false;
+        }
+        // Level 2: Form session
+        if (currentFilter.formSession !== 'all' && event.form_session_id !== currentFilter.formSession) {
+          return false;
+        }
+        // Level 3: Gemini session
+        if (currentFilter.geminiSession !== 'all' && event.gemini_session_id !== currentFilter.geminiSession) {
+          return false;
+        }
+        return true;
+      });
+
+      // Update filter options based on hierarchy
+      updateFilterOptions();
+    }
+
+    // Update filter dropdowns (hierarchical)
+    function updateFilterOptions() {
+      const formSelect = document.getElementById('filterForm');
+      const formSessionSelect = document.getElementById('filterFormSession');
+      const geminiSessionSelect = document.getElementById('filterGeminiSession');
+
+      // Preserve current selections
+      const currentForm = currentFilter.form;
+      const currentFormSession = currentFilter.formSession;
+      const currentGeminiSession = currentFilter.geminiSession;
+
+      // Level 1: Get all unique forms
+      const forms = new Set(allEvents.map(e => e.form_id));
+      formSelect.innerHTML = '<option value="all">All Forms</option>';
+      forms.forEach(form => {
+        formSelect.innerHTML += `<option value="${form}">${form}</option>`;
+      });
+      formSelect.value = currentForm;
+
+      // Level 2: Get form sessions filtered by selected form
+      const formSessionEvents = currentFilter.form === 'all'
+        ? allEvents
+        : allEvents.filter(e => e.form_id === currentFilter.form);
+
+      // Group by form_session_id and get earliest timestamp for each
+      const formSessionMap = new Map();
+      formSessionEvents.forEach(event => {
+        const sessionId = event.form_session_id;
+        if (!formSessionMap.has(sessionId)) {
+          formSessionMap.set(sessionId, {
+            id: sessionId,
+            timestamp: event.timestamp,
+            form_id: event.form_id
+          });
+        } else {
+          // Keep earliest timestamp
+          const existing = formSessionMap.get(sessionId);
+          if (event.timestamp < existing.timestamp) {
+            existing.timestamp = event.timestamp;
+          }
+        }
+      });
+
+      // Sort by timestamp (newest first)
+      const formSessions = Array.from(formSessionMap.values())
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      formSessionSelect.innerHTML = '<option value="all">All Form Sessions</option>';
+      formSessions.forEach(session => {
+        const date = new Date(session.timestamp);
+        const timeStr = date.toLocaleString();
+        const shortId = session.id.substring(0, 8);
+        formSessionSelect.innerHTML += `<option value="${session.id}">${timeStr} (${shortId})</option>`;
+      });
+      formSessionSelect.value = currentFormSession;
+
+      // Level 3: Get Gemini sessions filtered by selected form session
+      const geminiSessionEvents = currentFilter.formSession === 'all'
+        ? (currentFilter.form === 'all' ? allEvents : formSessionEvents)
+        : allEvents.filter(e => e.form_session_id === currentFilter.formSession);
+
+      // Group by gemini_session_id and get earliest timestamp for each
+      const geminiSessionMap = new Map();
+      geminiSessionEvents.forEach(event => {
+        const sessionId = event.gemini_session_id;
+        if (!geminiSessionMap.has(sessionId)) {
+          geminiSessionMap.set(sessionId, {
+            id: sessionId,
+            timestamp: event.timestamp,
+            part_id: event.part_id
+          });
+        } else {
+          // Keep earliest timestamp
+          const existing = geminiSessionMap.get(sessionId);
+          if (event.timestamp < existing.timestamp) {
+            existing.timestamp = event.timestamp;
+            existing.part_id = event.part_id;
+          }
+        }
+      });
+
+      // Sort by timestamp (newest first)
+      const geminiSessions = Array.from(geminiSessionMap.values())
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      geminiSessionSelect.innerHTML = '<option value="all">All Gemini Sessions</option>';
+      geminiSessions.forEach(session => {
+        const date = new Date(session.timestamp);
+        const timeStr = date.toLocaleString();
+        const shortId = session.id.substring(0, 12);
+        const partInfo = session.part_id ? ` - ${session.part_id}` : '';
+        geminiSessionSelect.innerHTML += `<option value="${session.id}">${timeStr} (${shortId}${partInfo})</option>`;
+      });
+      geminiSessionSelect.value = currentGeminiSession;
+    }
+
+    // Clear filters
+    function clearFilters() {
+      currentFilter = { form: 'all', formSession: 'all', geminiSession: 'all' };
+      document.getElementById('filterForm').value = 'all';
+      document.getElementById('filterFormSession').value = 'all';
+      document.getElementById('filterGeminiSession').value = 'all';
+      applyFilters();
+      updateDashboard();
+    }
+
+    // Update dashboard
+    function updateDashboard() {
+      updateStats();
+      updateCharts();
+      updateTable();
+    }
+
+    // Update statistics
+    function updateStats() {
+      const events = filteredEvents;
+
+      if (events.length === 0) {
+        document.getElementById('totalTokens').textContent = '0';
+        document.getElementById('totalCost').textContent = '$0.00';
+        document.getElementById('activeSessions').textContent = '0';
+        document.getElementById('totalEvents').textContent = '0';
+        return;
+      }
+
+      // Aggregate by form_session_id
+      const sessionAggregates = {};
+      events.forEach(event => {
+        const sessionId = event.form_session_id;
+        if (!sessionAggregates[sessionId]) {
+          sessionAggregates[sessionId] = {
+            totalTokens: 0,
+            totalCost: 0,
+            geminiSessions: new Set()
+          };
+        }
+        sessionAggregates[sessionId].totalTokens += event.event.total_tokens;
+        sessionAggregates[sessionId].totalCost += event.cost.total_usd;
+        sessionAggregates[sessionId].geminiSessions.add(event.gemini_session_id);
+      });
+
+      const totalTokens = Object.values(sessionAggregates).reduce((sum, s) => sum + s.totalTokens, 0);
+      const totalCost = Object.values(sessionAggregates).reduce((sum, s) => sum + s.totalCost, 0);
+      const geminiSessionCount = new Set(events.map(e => e.gemini_session_id)).size;
+
+      document.getElementById('totalTokens').textContent = totalTokens.toLocaleString();
+      document.getElementById('totalCost').textContent = '$' + totalCost.toFixed(4);
+      document.getElementById('activeSessions').textContent = geminiSessionCount;
+      document.getElementById('totalEvents').textContent = events.length;
+    }
+
+    // Update charts
+    function updateCharts() {
+      const events = filteredEvents;
+
+      if (events.length === 0) {
+        return;
+      }
+
+      // Cumulative tokens over time
+      const timestamps = events.map(e => new Date(e.timestamp).toLocaleTimeString());
+      let cumulative = 0;
+      const cumulativeTokens = events.map(e => {
+        cumulative += e.event.total_tokens;
+        return cumulative;
+      });
+
+      if (tokensChart) {
+        tokensChart.data.labels = timestamps;
+        tokensChart.data.datasets[0].data = cumulativeTokens;
+        tokensChart.update();
+      }
+
+      // Modality distribution
+      const totalTextInput = events.reduce((sum, e) => sum + e.event.text_input, 0);
+      const totalAudioInput = events.reduce((sum, e) => sum + e.event.audio_input, 0);
+      const totalTextOutput = events.reduce((sum, e) => sum + e.event.text_output, 0);
+      const totalAudioOutput = events.reduce((sum, e) => sum + e.event.audio_output, 0);
+
+      if (modalityChart) {
+        modalityChart.data.datasets[0].data = [totalTextInput, totalAudioInput, totalTextOutput, totalAudioOutput];
+        modalityChart.update();
+      }
+
+      // Cost breakdown
+      const totalTextInCost = events.reduce((sum, e) => sum + e.cost.text_input_usd, 0);
+      const totalAudioInCost = events.reduce((sum, e) => sum + e.cost.audio_input_usd, 0);
+      const totalTextOutCost = events.reduce((sum, e) => sum + e.cost.text_output_usd, 0);
+      const totalAudioOutCost = events.reduce((sum, e) => sum + e.cost.audio_output_usd, 0);
+
+      if (costChart) {
+        costChart.data.datasets[0].data = [totalTextInCost, totalAudioInCost, totalTextOutCost, totalAudioOutCost];
+        costChart.update();
+      }
+
+      // Tokens per event
+      const eventTokens = events.map(e => e.event.total_tokens);
+
+      if (eventChart) {
+        eventChart.data.labels = timestamps;
+        eventChart.data.datasets[0].data = eventTokens;
+        eventChart.update();
+      }
+    }
+
+    // Update events table
+    function updateTable() {
+      const events = filteredEvents.slice(-20).reverse(); // Last 20, newest first
+      const tbody = document.getElementById('eventsTableBody');
+
+      tbody.innerHTML = events.map(event => {
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        const shortSession = event.form_session_id.substring(0, 8);
+        const part = event.part_id || '-';
+
+        return `
+          <tr>
+            <td>${time}</td>
+            <td><span class="badge badge-form">${event.form_id}</span></td>
+            <td>${shortSession}</td>
+            <td><span class="badge badge-part">${part}</span></td>
+            <td><strong>${event.event.total_tokens}</strong></td>
+            <td>${event.event.text_input}</td>
+            <td>${event.event.audio_input}</td>
+            <td>${event.event.text_output}</td>
+            <td>${event.event.audio_output}</td>
+            <td>$${event.cost.total_usd.toFixed(6)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Initialize charts
+    function initCharts() {
+      Chart.defaults.color = '#e0e0e0';
+      Chart.defaults.borderColor = '#333';
+
+      // Tokens over time
+      const tokensCtx = document.getElementById('tokensChart').getContext('2d');
+      tokensChart = new Chart(tokensCtx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Cumulative Tokens',
+            data: [],
+            borderColor: '#4CAF50',
+            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+            fill: true,
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+
+      // Modality distribution
+      const modalityCtx = document.getElementById('modalityChart').getContext('2d');
+      modalityChart = new Chart(modalityCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Text Input', 'Audio Input', 'Text Output', 'Audio Output'],
+          datasets: [{
+            data: [0, 0, 0, 0],
+            backgroundColor: ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+
+      // Cost breakdown
+      const costCtx = document.getElementById('costChart').getContext('2d');
+      costChart = new Chart(costCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Text In', 'Audio In', 'Text Out', 'Audio Out'],
+          datasets: [{
+            label: 'Cost (USD)',
+            data: [0, 0, 0, 0],
+            backgroundColor: ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+
+      // Event tokens
+      const eventCtx = document.getElementById('eventChart').getContext('2d');
+      eventChart = new Chart(eventCtx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Tokens per Event',
+            data: [],
+            backgroundColor: '#FF9800'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Event listeners (hierarchical - changing higher level resets lower levels)
+    document.getElementById('filterForm').addEventListener('change', (e) => {
+      currentFilter.form = e.target.value;
+      // Reset child filters when parent changes
+      currentFilter.formSession = 'all';
+      currentFilter.geminiSession = 'all';
+      document.getElementById('filterFormSession').value = 'all';
+      document.getElementById('filterGeminiSession').value = 'all';
+      applyFilters();
+      updateDashboard();
+    });
+
+    document.getElementById('filterFormSession').addEventListener('change', (e) => {
+      currentFilter.formSession = e.target.value;
+      // Reset child filter when parent changes
+      currentFilter.geminiSession = 'all';
+      document.getElementById('filterGeminiSession').value = 'all';
+      applyFilters();
+      updateDashboard();
+    });
+
+    document.getElementById('filterGeminiSession').addEventListener('change', (e) => {
+      currentFilter.geminiSession = e.target.value;
+      applyFilters();
+      updateDashboard();
+    });
+
+    // Initialize
+    initCharts();
+    connect();
+  </script>
+</body>
+</html>

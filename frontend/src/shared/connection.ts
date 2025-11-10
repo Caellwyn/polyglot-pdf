@@ -226,6 +226,15 @@ export function createConnectionManager(
 
 	const callbacks: ConnectionCallbacks = {
 		onStatusChange: (status) => {
+			// BUG FIX (Nov 10, 2025): Reset paused flag when connection is lost
+			// This ensures reconnect works properly after timeout/error/disconnect
+			// Keep paused flag ONLY if status is 'connected' or 'switching_section'
+			if (status !== 'connected' && status !== 'switching_section') {
+				if (paused) {
+					console.log('[VFF Connection] 🔄 Resetting paused flag due to status:', status)
+					paused = false
+				}
+			}
 			onStatusChange(status)
 		},
 		onSessionReady: (sessionId) => {
@@ -294,12 +303,19 @@ export function createConnectionManager(
 		},
 		onError: (error) => {
 			console.error('[VFF Connection] Error:', error)
+			// BUG FIX (Nov 10, 2025): Reset paused flag on error to allow reconnect
+			paused = false
 			onStatusChange('error')
 		},
 	}
 
 	return {
 		async connect() {
+			// BUG FIX (Nov 10, 2025): Reset paused flag on connect attempt
+			// This fixes the issue where after idle timeout, isPaused() returns true
+			// and handleConnect tries to resume() instead of connect()
+			paused = false
+			
 			// Check if WebSocket is connected but Gemini is closed (post-Level 3 scenario)
 			const isWebSocketConnected = connection && connection.getStatus() === 'connected'
 
@@ -419,7 +435,11 @@ export function createConnectionManager(
 			console.log('[VFF Connection] Resuming...')
 			
 			if (!connection || connection.getStatus() !== 'connected') {
-				console.error('[VFF Connection] Cannot resume - not connected')
+				const currentStatus = connection?.getStatus() ?? 'no connection'
+				console.error('[VFF Connection] Cannot resume - not connected (status:', currentStatus, ')')
+				console.log('[VFF Connection] Hint: After timeout/disconnect, use connect() instead of resume()')
+				// BUG FIX (Nov 10, 2025): Reset paused flag so connect() can work
+				paused = false
 				onStatusChange('error')
 				return
 			}
@@ -440,6 +460,9 @@ export function createConnectionManager(
 		disconnect() {
 			// End metrics session and print summary
 			metrics.endSession()
+			
+			// BUG FIX (Nov 10, 2025): Reset paused flag on disconnect
+			paused = false
 			
 			if (connection) {
 				connection.disconnect()

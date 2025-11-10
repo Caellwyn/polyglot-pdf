@@ -81,7 +81,7 @@ def _prepare_handshake_context(self, section_data):
 - ⚠️ High-pass filter at 80Hz (needs confirmation)
 - ✅ PTT mode bypasses noise gate
 
-### 2. Push-to-Talk Default Mode
+### ✅ 2. Push-to-Talk Default Mode
 **Files**: `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`
 - Set `pushToTalkMode: true` as default
 - Add PTT bar button for mobile
@@ -99,7 +99,7 @@ def _prepare_handshake_context(self, section_data):
 - Pattern: Ask → Respond → Update → Read Back → Confirm → Next
 - Never skip confirmation for non-English speakers
 
-### 5. Proactive Audio Activation
+### 5. [Deprecated] Proactive Audio Activation
 **Files**: `backend/config.py`, `backend/adapters/live_ai_gemini.py`
 - Set `PROACTIVE_AUDIO: bool = True`
 - Add to session config: `"proactivity": {"proactive_audio": True}`

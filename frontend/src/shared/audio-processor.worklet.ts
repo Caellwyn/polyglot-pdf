@@ -167,7 +167,9 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 
 		// FIX #3 (Oct 22, 2025): Audio quality diagnostics
 		// Sample 0.1% of frames to detect audio corruption without spamming logs
-		if (Math.random() < 0.001) {
+		// FIX (Nov 10, 2025): Reduced sampling rate from 0.1% to 0.01% (10x less frequent)
+		// These logs are for diagnosing audio quality issues, not for monitoring audio flow
+		if (Math.random() < 0.0001) {
 			const clippedCount = processedData.filter(s => Math.abs(s) > 0.99).length
 			// Check if this frame would trigger noise gate (only relevant in VAD mode)
 			let sumSquaresFiltered = 0
@@ -185,7 +187,8 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 				clippedSamples: clippedCount,
 				clippingRate: (clippedCount / processedData.length * 100).toFixed(2) + '%',
 				pttMode: this.pttMode,
-				noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD
+				noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD,
+				note: 'Worklet processes all audio - filtering happens in audioManager.ts'
 			})
 		}
 

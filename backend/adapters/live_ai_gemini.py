@@ -20,6 +20,7 @@ import structlog
 from backend.utils.json_recovery import extract_json_from_part
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.structured_logger import get_logger as get_structured_logger
+from backend.utils.token_file_logger import get_token_logger
 from backend.config import GEMINI_PRICING
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
@@ -169,6 +170,11 @@ class LiveAIGemini(ILiveAI):
             vertexai=self._vertexai,
             instance_id=self._instance_id  # Track which instance is logging
         )
+
+        # Session context for token logging (set by service)
+        self._form_session_id: Optional[str] = None
+        self._form_id: Optional[str] = None
+        self._current_part_id: Optional[str] = None
     
     @asynccontextmanager
     async def connect(self, model: str, config: Dict[str, Any]) -> AsyncIterator[LiveAISession]:
@@ -213,6 +219,23 @@ class LiveAIGemini(ILiveAI):
                         await result
                 except Exception:
                     pass
+
+    def set_session_context(
+        self,
+        form_session_id: str,
+        form_id: str,
+        current_part_id: Optional[str] = None,
+    ):
+        """Set session context for token logging.
+
+        Args:
+            form_session_id: Overall form filling session ID (persists across Gemini sessions)
+            form_id: Form identifier (e.g., "I-90")
+            current_part_id: Current part ID (e.g., "part_1")
+        """
+        self._form_session_id = form_session_id
+        self._form_id = form_id
+        self._current_part_id = current_part_id
 
     def set_callbacks(
         self,
@@ -1142,6 +1165,54 @@ class LiveAIGemini(ILiveAI):
                                                 session_text_output=self._session_text_output_tokens,
                                                 session_audio_output=self._session_audio_output_tokens,
                                             )
+
+                                            # Log to file for token dashboard (local dev only)
+                                            # Only log if session context is available
+                                            if self._form_session_id and self._form_id:
+                                                try:
+                                                    token_logger = get_token_logger()
+                                                    self._log.debug("token_file_logging",
+                                                                  form_id=self._form_id,
+                                                                  form_session_id=self._form_session_id,
+                                                                  gemini_session_id=self._instance_id)
+                                                    token_logger.log_token_event(
+                                                        form_id=self._form_id,
+                                                        form_session_id=self._form_session_id,
+                                                        gemini_session_id=self._instance_id,
+                                                        part_id=self._current_part_id,
+                                                        # This event's token counts
+                                                        prompt_tokens=prompt_tokens,
+                                                        response_tokens=response_tokens,
+                                                        total_tokens=total_tokens,
+                                                        # Modality breakdown
+                                                        text_input=text_input_tokens,
+                                                        audio_input=audio_input_tokens,
+                                                        text_output=text_output_tokens,
+                                                        audio_output=audio_output_tokens,
+                                                        # Costs
+                                                        text_input_cost=text_input_cost,
+                                                        audio_input_cost=audio_input_cost,
+                                                        text_output_cost=text_output_cost,
+                                                        audio_output_cost=audio_output_cost,
+                                                        total_cost_usd=total_cost,
+                                                        # Session cumulative
+                                                        session_total_tokens=self._session_total_tokens,
+                                                        session_total_cost_usd=self._session_total_cost,
+                                                        session_text_input=self._session_text_input_tokens,
+                                                        session_audio_input=self._session_audio_input_tokens,
+                                                        session_text_output=self._session_text_output_tokens,
+                                                        session_audio_output=self._session_audio_output_tokens,
+                                                    )
+                                                except Exception as log_err:
+                                                    # Don't fail silently - we need to know if logging fails
+                                                    self._log.warning("token_file_logging_error", error=str(log_err))
+                                            else:
+                                                # Debug: Why didn't we log?
+                                                self._log.debug("token_file_logging_skipped",
+                                                              has_form_session_id=bool(self._form_session_id),
+                                                              has_form_id=bool(self._form_id),
+                                                              form_session_id=self._form_session_id,
+                                                              form_id=self._form_id)
                                         except Exception as e:
                                             self._log.warning("token_extraction_error", error=str(e), exc_info=True)
 

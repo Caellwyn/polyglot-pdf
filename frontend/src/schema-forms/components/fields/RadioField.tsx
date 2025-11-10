@@ -31,13 +31,9 @@ export function RadioField({
   const currentValue = unwrapToString(value);
 
   const handleChange = (newValue: string) => {
-    console.log(`[RadioField] ${field.id} changed to:`, newValue, `(previous: ${currentValue})`);
     onChange(newValue);
     if (onBlur) onBlur();
   };
-
-  // Debug: log what value we received and what we're comparing
-  console.log(`[RadioField] ${field.id} RENDER - received value prop:`, JSON.stringify(value), `-> currentValue="${currentValue}"`);
 
   return (
     <div className="form-field">

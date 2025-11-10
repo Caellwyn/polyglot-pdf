@@ -77,7 +77,7 @@
 **Needs Confirmation**:
 - [Deferred] Was conformance applied to I-589 form?
 - [No] Were conformance scripts created for other forms (I-485, I-765, N-400)?
-- [?] Is the field ordering regex updated (`(\d+|[A-Z])\.`)?
+- [ ] Is the field ordering regex updated (`(\d+|[A-Z])\.`)?
 
 ### 7. Idle Timeout Implementation
 **Status**: Technical guide says deprecated multi-level escalation, but current state unclear
@@ -114,7 +114,7 @@
 **Needs Confirmation**:
 - [False] What is current `PROACTIVE_AUDIO` setting in config.py?
 - [Yes] Is `DISABLE_GEMINI_VAD` set correctly?
-- [ ] Are noise gate thresholds at correct levels (-50dB vs -40dB)?
+- [Yes] Are noise gate thresholds at correct levels (-50dB vs -40dB)?
 - [No, but that's a good idea!] Is `USE_TOKEN_REDUCTION` flag available?
 
 ---
