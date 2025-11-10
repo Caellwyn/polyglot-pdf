@@ -185,9 +185,13 @@ export function createConnectionManager(
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
 	
-	// Initialize sessionStorage state immediately
-	const state = SchemaFormStateManager.init(schema)
-	
+	// Load existing state from sessionStorage (don't call init() - SchemaForm already did)
+	// If no state exists, create a minimal one (shouldn't happen in normal flow)
+	let state = SchemaFormStateManager.load()
+	if (!state) {
+		state = SchemaFormStateManager.init(schema)
+	}
+
 	// Restore DOM fields from sessionStorage (if any values exist from previous session)
 	restoreDOMFromSessionStorage(state, schema)
 	
@@ -240,32 +244,43 @@ export function createConnectionManager(
 		onFieldUpdate: (updates) => {
 			console.log('[VFF Connection] 🔧 Tool call: update_form_fields (' + updates.length + ' field(s))')
 
+			// Log each update attempt for debugging
+			updates.forEach(update => {
+				const valuePreview = typeof update.value === 'string' && update.value.length > 50
+					? update.value.substring(0, 50) + '...'
+					: update.value
+				console.log(`[VFF Connection]   → ${update.fieldId} = ${JSON.stringify(valuePreview)}`)
+			})
+
 			// Track tool calls in metrics and filter out hallucinations
 			const acceptedUpdates: typeof updates = []
 			const rejectedUpdates: typeof updates = []
-			
+
 			for (const update of updates) {
 				// Generate a pseudo-call-id from field ID and timestamp
 				const callId = `field_${update.fieldId}_${Date.now()}`
 				const decision = metrics.recordToolCall('update_form_fields', callId)
-				
+
 				if (decision === 'reject') {
 					// Don't apply this update - it's a hallucination from interrupted generation
 					rejectedUpdates.push(update)
 					continue
 				}
-				
+
 				// Update accepted - add to list
 				acceptedUpdates.push(update)
 			}
-			
+
 			if (rejectedUpdates.length > 0) {
 				console.warn('[VFF Connection] ⚠️ Rejected', rejectedUpdates.length, 'hallucinated update(s)')
 			}
-			
+
 			// S6: Apply ONLY accepted field updates to DOM
 			if (fieldManager && acceptedUpdates.length > 0) {
+				console.log(`[VFF Connection] 📝 Applying ${acceptedUpdates.length} accepted update(s) to DOM`)
 				fieldManager.applyUpdates(acceptedUpdates)
+			} else if (acceptedUpdates.length === 0) {
+				console.warn('[VFF Connection] ⚠️ No updates to apply (all rejected or empty)')
 			}
 		},
 		onAudioData: async (audioData) => {

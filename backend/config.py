@@ -53,17 +53,19 @@ class Settings(BaseModel):
 			"description": (
 				"Update ONE field with user's provided value. Call immediately when user answers. "
 				"Translate values to English. Use exact field_id from schema (with brackets if present). "
-				"Checkboxes: boolean. Radio/select: exact allowed_value. Current section only."
+				"For radio/select fields: Use the 'value' from the option object shown in schema "
+				"(e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). "
+				"For checkboxes: boolean (true/false). For text fields: string. Current section only."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"field_id": {
 						"type": "string",
-						"description": 'Exact field "id" from schema (e.g., "firstName", "reason[]")'
+						"description": 'Exact field "id" from schema (e.g., "firstName", "p1_checkbox4")'
 					},
 					"value": {
-						"description": 'String, boolean, or exact option value depending on field type'
+						"description": 'For radio/select: exact "value" from option object. For checkbox: boolean. For text: string.'
 					}
 				},
 				"required": ["field_id", "value"]

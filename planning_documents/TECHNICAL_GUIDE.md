@@ -1,9 +1,32 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Last Updated**: November 8, 2025
+**Last Updated**: November 9, 2025
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
+- ✅ **Radio Button Tool Validation & Instructions** (Nov 9, 2025)
+  - **Issue 1**: Gemini saw radio option labels ("Yes", "No") but didn't know the widget IDs to send ("P1_checkbox4[0]", "P1_checkbox4[1]")
+  - **Issue 2**: Gemini didn't receive error feedback when radio updates failed (validation happened at frontend, not backend)
+  - **Fix #1 - AI Context**: Updated `ai_context.py` to show both label AND value in options display
+    - Before: `Options: [Yes (Proceed to...), No (Proceed to...)]`
+    - After: `Options: ["Yes (Proceed to...)" (use value: P1_checkbox4[0]), "No (Proceed to...)" (use value: P1_checkbox4[1])]`
+  - **Fix #2 - Tool Description**: Updated `update_form_fields` tool in `config.py` with explicit instructions
+    - Added: "For radio/select fields: Use the 'value' from the option object shown in schema"
+    - Example provided in tool description for clarity
+  - **Fix #3 - Backend Validation**: Added radio field validation to `field_validator.py`
+    - Added "radio" to validated field types (line 68)
+    - Updated `_validate_select()` to extract values from option dicts and validate
+    - Now returns proper ValidationError with `valid_options` list
+  - **Fix #4 - Frontend Logging**: Enhanced connection.ts logging to show exact values being sent
+    - Shows each field update: `→ p1_checkbox4 = "P1_checkbox4[0]"`
+    - Logs application status and rejection reasons
+  - **Fix #5 - React Re-rendering**: Fixed SchemaForm.tsx to re-render on field value changes
+    - Previously only re-rendered on `currentPartId` changes
+    - Now also checks `lastUpdated` timestamp to catch Gemini's field updates
+  - **Files Changed**: `backend/services/ai_context.py`, `backend/config.py`, `backend/utils/field_validator.py`, `frontend/src/shared/connection.ts`, `frontend/src/schema-forms/components/SchemaForm.tsx`
+  - **Impact**: Gemini now correctly fills radio buttons, receives validation feedback, and can self-correct when errors occur
+
+
 - ✅ **Bug Fixes: FieldValue Wrapper Issues** (Nov 8, 2025)
   - **Bug 1 - [object Object] Display**: Form fields showed wrapper object instead of values
   - **Bug 2 - Radio Buttons Reset**: Fixed as side effect of Bug 1 unwrapping

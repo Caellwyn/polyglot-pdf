@@ -65,11 +65,11 @@ def validate_field_value(field: Dict[str, Any], value: Any) -> Optional[Validati
         return _validate_date(field, value, field_id, field_name)
     elif field_type in ["text", "email", "textarea"]:
         return _validate_text(field, value, field_id, field_name)
-    elif field_type == "select":
+    elif field_type in ["select", "radio"]:
         return _validate_select(field, value, field_id, field_name)
     elif field_type == "checkbox":
         return _validate_checkbox(field, value, field_id, field_name)
-    
+
     return None
 
 
@@ -201,17 +201,29 @@ def _validate_select(field: Dict[str, Any], value: Any, field_id: str, field_nam
     options = field.get("options", [])
     if not options:
         return None  # No options defined, can't validate
-    
+
     value_str = str(value)
-    
-    # Check if value is in options
-    if value_str not in options:
+
+    # Extract valid values from options (handle both string and dict formats)
+    valid_values = []
+    for opt in options:
+        if isinstance(opt, dict):
+            # Option is {value: "...", label: "..."}
+            opt_value = opt.get("value")
+            if opt_value is not None:
+                valid_values.append(str(opt_value))
+        else:
+            # Option is a plain string
+            valid_values.append(str(opt))
+
+    # Check if value is in valid values
+    if value_str not in valid_values:
         return ValidationError(
             field_id, field_name, value, "options",
             f"Invalid option",
-            valid_options=options
+            valid_options=valid_values
         )
-    
+
     return None
 
 

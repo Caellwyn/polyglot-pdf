@@ -151,12 +151,27 @@ def build_form_context(
         if "allowed_values" in field_info and field_info["allowed_values"]:
             allowed = field_info["allowed_values"]
             # Options are now guaranteed to be FieldOption objects (normalized at model level)
-            # Extract labels for display
-            allowed_strs = [
-                opt.get("label") or opt.get("value", str(opt)) if isinstance(opt, dict) else opt.label
-                for opt in allowed
-            ]
-            
+            # For radio/select fields, we need to show BOTH the label (what user hears/sees)
+            # AND the value (what to send in the tool call)
+            allowed_strs = []
+            for opt in allowed:
+                if isinstance(opt, dict):
+                    # Extract both value and label
+                    opt_value = opt.get("value", "")
+                    opt_label = opt.get("label", "")
+                    # Show label first (user-facing), then value (for tool call)
+                    if opt_label and opt_value and opt_label != opt_value:
+                        allowed_strs.append(f'"{opt_label}" (use value: {opt_value})')
+                    elif opt_label:
+                        allowed_strs.append(opt_label)
+                    elif opt_value:
+                        allowed_strs.append(opt_value)
+                    else:
+                        allowed_strs.append(str(opt))
+                else:
+                    # Fallback for non-dict options
+                    allowed_strs.append(str(opt))
+
             if len(allowed_strs) <= 5:
                 # Show all options if 5 or fewer
                 line_parts.append(f"Options: [{', '.join(allowed_strs)}]")

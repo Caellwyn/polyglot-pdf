@@ -76,7 +76,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
 
     async function initSharedStream() {
       try {
-        console.log('[SchemaForm] 🎤 Creating shared audio stream early...');
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
@@ -88,14 +87,13 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
         });
 
         if (mounted) {
-          console.log('[SchemaForm] ✅ Shared audio stream created');
           setSharedStream(stream);
           setStreamReady(true);
         } else {
           stream.getTracks().forEach(track => track.stop());
         }
       } catch (error) {
-        console.error('[SchemaForm] ❌ Failed to create shared audio stream:', error);
+        console.error('[SchemaForm] Failed to create audio stream:', error);
         if (mounted) {
           setStreamError(error instanceof Error ? error.message : 'Unknown error');
           setStreamReady(true); // Mark as ready even on error so UI can render
@@ -108,7 +106,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     return () => {
       mounted = false;
       if (sharedStream) {
-        console.log('[SchemaForm] 🛑 Cleaning up shared audio stream');
         sharedStream.getTracks().forEach(track => track.stop());
       }
     };
@@ -119,7 +116,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     if (connectionManagerRef.current) return;
     if (!streamReady) return; // Wait for stream to be ready
 
-    console.log('[SchemaForm] 🔗 Creating connection manager');
     const manager = createConnectionManager(
       schema, // Use prop schema, not state.schema
       (newStatus: string) => setStatus(newStatus),
@@ -130,7 +126,6 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     setConnectionManager(manager);
 
     return () => {
-      console.log('[SchemaForm] 🛑 Cleaning up connection manager');
       manager.disconnect();
       connectionManagerRef.current = null;
     };
@@ -158,8 +153,13 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
   useEffect(() => {
     const handleStorageChange = () => {
       const newState = SchemaFormStateManager.load();
-      if (newState && newState.currentPartId !== state.currentPartId) {
-        console.log('[SchemaForm] Detected part change in sessionStorage, updating state');
+      if (!newState) return;
+
+      // Update if part changed OR if field values changed (for Gemini updates)
+      const partChanged = newState.currentPartId !== state.currentPartId;
+      const fieldsChanged = newState.lastUpdated !== state.lastUpdated;
+
+      if (partChanged || fieldsChanged) {
         setState(newState);
       }
     };
@@ -174,7 +174,7 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('schemaFormStateChange', handleStorageChange);
     };
-  }, [state.currentPartId]);
+  }, [state.currentPartId, state.lastUpdated]);
 
   const handleFieldChange = (fieldId: string, value: any) => {
     // Use functional update to avoid stale closure issues
