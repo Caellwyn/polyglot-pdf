@@ -125,6 +125,20 @@ class FormFillingService:
         tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
 
         if self._live_ai is not None:
+            # Set session context for token logging
+            form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+            _log.info("Setting token logging context", form_id=form_id, session_id=session_id)
+            try:
+                self._live_ai.set_session_context(
+                    form_session_id=session_id,
+                    form_id=form_id,
+                    current_part_id=None,  # Will be updated on section switch
+                )
+                _log.info("Token logging context set successfully")
+            except AttributeError as e:
+                # Older adapters may not have this method
+                _log.warning("set_session_context not available on adapter", error=str(e))
+
             # Register callbacks with Gemini Live AI
             # System instruction is passed from caller and included in the initial
             # Gemini connection config.

@@ -31,9 +31,7 @@ export class SchemaFormStateManager {
    * Initialize or load existing form state
    */
   static init(schema: FormSchema): SchemaFormState {
-    console.log('[SchemaFormStateManager] init() called');
     const existing = this.load();
-    console.log('[SchemaFormStateManager] Loaded existing state:', existing ? `has ${Object.keys(existing.fieldValues).length} field values` : 'NULL');
 
     // Clean up duplicate sections (e.g., Part 7 appears twice with different capitalization)
     const cleanedSchema = this.deduplicateSections(schema);
@@ -45,12 +43,8 @@ export class SchemaFormStateManager {
       existing.schema.form_metadata.version === cleanedSchema.form_metadata.version &&
       Date.now() - existing.lastUpdated < 60 * 60 * 1000
     ) {
-      console.log('[SchemaFormStateManager] Returning EXISTING state with', Object.keys(existing.fieldValues).length, 'field values');
-      console.log('[SchemaFormStateManager] existing.fieldValues:', existing.fieldValues);
       return existing;
     }
-
-    console.log('[SchemaFormStateManager] Creating NEW empty state');
 
     // New session - initialize with first part (or first section if no parts)
     const firstPart = this.getFirstPart(cleanedSchema);
@@ -414,10 +408,10 @@ export class SchemaFormStateManager {
       section.order = index + 1;
     });
 
-    console.log(`[SchemaFormState] Deduplicated ${schema.sections.length} sections -> ${deduplicatedSections.length} sections`);
-    deduplicatedSections.forEach((section, i) => {
-      console.log(`  ${i + 1}. ${section.id} (order: ${section.order}, ${section.fields.length} fields)`);
-    });
+    // Deduplication complete - only log if changes were made
+    if (schema.sections.length !== deduplicatedSections.length) {
+      console.log(`[SchemaFormState] Deduplicated ${schema.sections.length} sections -> ${deduplicatedSections.length} sections`);
+    }
 
     return {
       ...schema,

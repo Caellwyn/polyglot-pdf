@@ -46,7 +46,7 @@ export function SchemaFormDemo() {
   };
 
   const handleSectionChange = (sectionId: string) => {
-    console.log("[SchemaFormDemo] Section changed to:", sectionId);
+    // Section change handler (currently unused)
   };
 
   const handleClearSession = () => {

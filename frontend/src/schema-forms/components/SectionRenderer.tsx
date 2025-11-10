@@ -34,10 +34,6 @@ export function SectionRenderer({
       <div className="section__fields">
         {fields.map((field) => {
           const fieldValue = fieldValues[field.id];
-          // Debug radio/checkbox fields
-          if (field.type === 'radio' || field.type === 'checkbox') {
-            console.log(`[SectionRenderer] Passing to ${field.type} ${field.id}: value=${JSON.stringify(fieldValue)}`);
-          }
           return (
             <FieldRenderer
               key={field.id}

@@ -4,6 +4,37 @@
 
 # Navigate to project root
 cd "$(dirname "$0")/.." || exit 1
+
+# Check for gcloud application default credentials
+# Note: Credentials may need to be refreshed periodically for security
+echo "Checking gcloud authentication..."
+gcloud auth application-default print-access-token &>/dev/null
+
+if [ $? -ne 0 ]; then
+    echo "=========================================="
+    echo " GCloud Authentication Required"
+    echo "=========================================="
+    echo ""
+    echo "Application Default Credentials are required for Gemini API access."
+    echo "This needs to be refreshed periodically for security."
+    echo ""
+    echo "Running: gcloud auth application-default login"
+    echo ""
+    gcloud auth application-default login
+    
+    # Check if login was successful
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to authenticate with gcloud"
+        exit 1
+    fi
+    echo ""
+    echo "✓ Authentication successful!"
+    echo ""
+else
+    echo "✓ GCloud credentials are valid"
+fi
+echo ""
+
 # Activate virtual environment
 if [ -f ".venv/Scripts/activate" ]; then
     source .venv/Scripts/activate
