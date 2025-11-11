@@ -367,30 +367,31 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - After update_form_fields (next field schema in response)
   - From get_field_value (if schema not already sent)
 
-#### 3.2 Manifest Generation Utilities
+#### 3.2 Manifest Generation Utilities ✅ COMPLETE
 - **Task**: Create frontend manifest builders
-- **Location**: `frontend/src/schema-forms/utils/manifestUtils.ts` (new)
-- **Core Functions**:
-  ```typescript
-  // Generate manifest for current part (called "section" in backend)
-  function generatePartManifest(part: Part, sections: Section[]): FieldManifest {
-    // Extract all fields from sections within this part
-    // Return only field_id and spoken_name
-    // Maintain field order
-  }
-  
-  // Determine if schema needed for get_field_value response
-  function shouldIncludeSchema(fieldId: string, state: SchemaFormState): boolean {
-    return !state.loadedFieldIds.has(fieldId);
-  }
-  
-  // Build complete manifest for handshake
-  function buildHandshakeManifest(currentPart: Part, state: SchemaFormState) {
-    // Current part manifest
-    // Previous part manifests from state
-    // Calculate token estimate
-  }
-  ```
+- **Location**: `frontend/src/schema-forms/utils/manifestUtils.ts` ✅ CREATED
+- **Status**: ✅ All utilities implemented and tested (20 tests passing)
+- **Implementation Details**:
+  - Created manifestUtils.ts with complete manifest generation system
+  - Created manifestUtils.test.ts with comprehensive test coverage
+- **Functions Implemented**:
+  - `generatePartManifest(part, schema)` - Extracts field_id|spoken_name pairs from part
+  - `shouldIncludeSchema(fieldId, state)` - Checks if schema needed in response
+  - `buildHandshakeManifest(partId, schema, state)` - Builds complete manifest with previous parts
+  - `formatManifestForContext(manifest)` - Formats as pipe-separated text
+  - `estimateManifestTokens(manifest)` - Estimates token count (~1.3 tokens/word)
+  - `getFieldSchema(fieldId, schema)` - Helper to extract field by ID
+- **Types Defined**:
+  - `FieldManifestEntry` - {field_id, spoken_name}
+  - `PartManifest` - {part_id, part_label, fields[]}
+  - `HandshakeManifest` - {current_part, previous_parts[]}
+- **Test Coverage** (20 tests):
+  - generatePartManifest: 5 tests (field extraction, ordering, fallbacks)
+  - shouldIncludeSchema: 3 tests (loaded/unloaded state)
+  - buildHandshakeManifest: 4 tests (current part, previous parts, errors)
+  - formatManifestForContext: 3 tests (text format, separators, previous parts)
+  - estimateManifestTokens: 2 tests (positive estimate, scaling)
+  - getFieldSchema: 3 tests (lookup, not found, complete object)
 
 #### 3.3 Connection Manager Updates
 - **Task**: Modify WebSocket connection for JIT mode
