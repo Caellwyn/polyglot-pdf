@@ -4,6 +4,22 @@
 **Purpose**: Technical reference for navigating and understanding the codebase
 
 **Recent Updates**:
+- ✅ **Radio Button Validation & Single-Field Constraint** (Nov 10, 2025)
+  - **Bug - Radio Button Validation**: Gemini sent correct values (e.g., "P1_checkbox4[2]") but validation rejected them
+    - **Root Cause**: FieldOption Pydantic models were being stringified instead of extracting values
+    - **Fix**: Updated `validation_handler.py` to convert Pydantic models to dicts before validation
+    - **Result**: Clean error messages with actual values: `['P1_checkbox4[0]', 'P1_checkbox4[1]', 'P1_checkbox4[2]']`
+  - **Enhancement - Single-Field Enforcement**: Added validation to ensure exactly one field per tool call
+    - **Strategy**: Accept first field, reject additional fields with clear error message
+    - **Benefits**: Reduces round trips while teaching Gemini the constraint
+    - **Implementation**: `callback_handler.py` detects multiple fields, processes first, adds others to validation_errors
+    - **Error Message**: "⚠️ IMPORTANT: You sent 3 fields but can only update ONE field per call. First field was processed, others rejected."
+  - **Files Changed**: 
+    - `backend/services/validation_handler.py` - Convert FieldOption models to dicts
+    - `backend/services/callback_handler.py` - Enforce single-field constraint
+    - `backend/tests/test_callback_handler.py` - Updated tests to new single-field format
+  - **Impact**: Radio buttons work correctly, Gemini learns to send one field at a time, reduced hallucinations
+
 - ✅ **Critical Bug Fixes: Audio Leak & Reconnect** (Nov 10, 2025)
   - **Bug 1 - Audio Streaming in VAD Mode**: Audio was continuously sent to Gemini even when VAD inactive
     - **Root Cause**: Logic error in `audioManager.ts` - used `&&` instead of `||` for privacy gates

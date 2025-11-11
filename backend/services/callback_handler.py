@@ -234,6 +234,16 @@ class CallbackHandler:
             _log.warning("empty_tool_call_rejected", session_id=self._session_id)
             return self._build_empty_tool_call_error()
         
+        # Handle multiple field updates: process first, reject rest
+        rejected_fields = []
+        if len(normalized_updates) > 1:
+            _log.warning("multiple_fields_sent", field_count=len(normalized_updates), 
+                        fields=list(normalized_updates.keys()), session_id=self._session_id)
+            # Keep only the first field, track the rest as rejected
+            first_field = next(iter(normalized_updates))
+            rejected_fields = [k for k in normalized_updates.keys() if k != first_field]
+            normalized_updates = {first_field: normalized_updates[first_field]}
+        
         # Execute update via service
         result = self._handle_update_fields(self._session_id, normalized_updates)
         
@@ -251,6 +261,17 @@ class CallbackHandler:
         unknown_fields = result.get("unknown_fields", [])
         applied_fields = result.get("applied_fields", [])
         
+        # Add rejected fields to validation errors if multiple fields were sent
+        if rejected_fields:
+            for field_id in rejected_fields:
+                validation_errors.append({
+                    "field_id": field_id,
+                    "field_name": field_id,
+                    "value": updates_payload.get(field_id, ""),
+                    "constraint": "single_field_only",
+                    "message": "Rejected - only one field per call allowed"
+                })
+        
         # Request next hint only if ALL fields were valid
         next_field_hint = None
         if not validation_errors and not unknown_fields and applied_fields:
@@ -265,7 +286,8 @@ class CallbackHandler:
             validation_errors,
             unknown_fields,
             applied_fields,
-            next_field_hint
+            next_field_hint,
+            rejected_count=len(rejected_fields)
         )
 
         # Dev logging: Log tool response to daily file
@@ -395,12 +417,20 @@ class CallbackHandler:
         validation_errors: list,
         unknown_fields: list,
         applied_fields: list,
-        next_field_hint: Optional[str]
+        next_field_hint: Optional[str],
+        rejected_count: int = 0
     ) -> Dict[str, Any]:
         """Build tool response for update_form_fields."""
         if validation_errors or unknown_fields:
             # Build error response
             error_lines = []
+            
+            # Add warning for multiple fields if any were rejected
+            if rejected_count > 0:
+                error_lines.append(
+                    f"⚠️ IMPORTANT: You sent {rejected_count + len(applied_fields)} fields but can only update ONE field per call. "
+                    f"First field was processed, others rejected. Call update_form_fields separately for each field."
+                )
             
             # Format validation errors concisely
             for err in validation_errors:
@@ -415,6 +445,8 @@ class CallbackHandler:
                 if constraint_value is not None:
                     parts.append(f"{constraint}={constraint_value}")
                 elif valid_options:
+                    # Extract just the 'value' from each option for display
+                    # (valid_options is now a list of strings, not dict representations)
                     opts_sample = ", ".join(valid_options[:3])
                     if len(valid_options) > 3:
                         opts_sample += f"... ({len(valid_options)} total)"

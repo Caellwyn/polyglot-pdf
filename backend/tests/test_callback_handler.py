@@ -126,10 +126,10 @@ class TestToolRouting:
 
     @pytest.mark.asyncio
     async def test_update_form_fields_routes_to_handler(self, callback_handler, mock_handlers):
-        """Test that update_form_fields tool routes correctly."""
+        """Test that update_form_fields tool routes correctly with new single-field format."""
         await callback_handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"updates": {"name": "John"}}
+            arguments={"field_id": "name", "value": "John"}
         )
         
         mock_handlers["update_fields"].assert_called_once()
@@ -194,10 +194,10 @@ class TestArgumentParsing:
 
     @pytest.mark.asyncio
     async def test_parse_update_arguments_handles_dict(self, callback_handler, mock_handlers):
-        """Test parsing single update as a dict."""
+        """Test parsing single update with new single-field format."""
         await callback_handler.on_tool_call(
             tool_name="update_form_fields",
-            arguments={"updates": {"email": "test@example.com"}}
+            arguments={"field_id": "email", "value": "test@example.com"}
         )
         
         # Handler should have been called with parsed args
