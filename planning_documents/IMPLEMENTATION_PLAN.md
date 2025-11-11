@@ -285,24 +285,33 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - `update_form_fields` response: Includes hint + schema (guides forward)
   - `get_field_value` response: Schema only if not sent (user-directed, no hint)
 
-#### 2.6 Handshake Context Preparation
-- **Location**: `backend/services/form_filling_service.py` - `_prepare_handshake_context()`
-- **Current**: Sends entire section schema (7,400 tokens)
-- **New**: Send manifest only (first field schema sent via next_field_hint)
-  ```python
-  if USE_JIT_SCHEMA:
-      manifest = generate_part_manifest(current_part, previous_parts)
-
-      # First field schema attached to next_field_hint in system instructions
-      # No need to send separately - unified delivery via hint mechanism
-      context = {
-          "manifest": format_manifest_for_context(manifest),
-          "token_count": estimate_manifest_tokens(manifest)  # For monitoring
-      }
-  else:
-      context = existing_full_schema_logic()
+#### 2.6 Handshake Context Preparation ✅ COMPLETE
+- **Location**: `backend/services/ai_context.py` - `build_form_context()`
+- **Status**: ✅ JIT manifest-first approach implemented
+- **Implementation Details**:
+  - Modified `build_form_context()` to check `USE_JIT_SCHEMA` flag (ai_context.py:241-313)
+  - When JIT enabled:
+    * Generates manifest using `generate_part_manifest()` (line 244)
+    * Formats manifest with `format_manifest_for_context()` (line 245)
+    * Gets first field schema with `get_next_field_schema(schema, None)` (line 248)
+    * Formats first field schema as readable text (lines 251-277)
+    * Uses `JIT_SYSTEM_INSTRUCTION` template (line 282)
+  - When JIT disabled:
+    * Uses legacy full schema approach (lines 296-311)
+    * Uses `SYSTEM_INSTRUCTION` template (line 298)
+  - Added imports from manifest_service (ai_context.py:6-10)
+- **Behavior**:
+  - JIT mode: Sends lightweight manifest + first field schema (~500 tokens)
+  - Legacy mode: Sends full field details (~7,400 tokens)
+  - Feature flag provides seamless toggle between modes
+- **First Field Schema Format**:
   ```
-- **Note**: First field schema delivered via `next_field_hint` in system instructions, not as separate payload
+  ID: firstName | Spoken: first name | Name: First Name | Type: text | Required: true
+  ```
+- **Manifest Integration**:
+  - Manifest delivered in system instruction via `{manifest_text}` placeholder
+  - First field schema via `{next_field_schema}` placeholder
+  - Both available to Gemini from initial handshake
 
 ### Exit Criteria
 - [ ] Feature flag toggles successfully between modes

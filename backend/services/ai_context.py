@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import json
 from backend.config import get_settings
+from backend.services.manifest_service import (
+    generate_part_manifest,
+    format_manifest_for_context,
+    get_next_field_schema
+)
 
 
 def get_confirmation_policy(section_number: int, total_sections: int) -> str:
@@ -232,20 +237,77 @@ def build_form_context(
             "Only proceed after user confirms."
         )
 
-    # Use SYSTEM_INSTRUCTION template from settings
-    system_instruction = settings.SYSTEM_INSTRUCTION.format(
-        form_title=form_title,
-        section_number=section_num_text,
-        total_sections=total_sections_text,
-        section_label=section_label_text,
-        filled_count=filled_count,
-        total_fields=total_fields,
-        unfilled_count=unfilled_count,
-        fields_json=fields_text,  # Still using fields_json placeholder name for compatibility
-        fill_language=fill_language,
-        previous_spoken_names=previous_names_text,
-        confirmation_policy=confirmation_policy,
-        next_field_hint=next_field_hint or "the first unfilled field"
-    )
-    
+    # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled
+    if settings.USE_JIT_SCHEMA:
+        # Generate manifest instead of full schema
+        # For now, treat entire schema as a single part (future: handle multi-part forms)
+        manifest = generate_part_manifest(schema, previous_parts_manifests=[])
+        manifest_text = format_manifest_for_context(manifest)
+
+        # Get first unfilled field's schema to include with next_field_hint
+        first_field_schema = get_next_field_schema(schema, current_field_id=None)
+
+        # Format first field schema as readable text (similar to fields_text format above)
+        if first_field_schema:
+            field_id = first_field_schema.get("id", "")
+            field_name = first_field_schema.get("name", "")
+            spoken_name = first_field_schema.get("spoken_name", field_name)
+            field_type = first_field_schema.get("type", "text")
+            required = first_field_schema.get("required", False)
+
+            next_field_schema_text = f"ID: {field_id} | Spoken: {spoken_name} | Name: {field_name} | Type: {field_type} | Required: {required}"
+
+            # Add options if present
+            allowed_values = first_field_schema.get("allowed_values") or first_field_schema.get("options")
+            if allowed_values:
+                allowed_strs = []
+                for opt in allowed_values:
+                    if isinstance(opt, dict):
+                        opt_value = opt.get("value", "")
+                        opt_label = opt.get("label", "")
+                        if opt_label and opt_value and opt_label != opt_value:
+                            allowed_strs.append(f'"{opt_label}" (use value: {opt_value})')
+                        elif opt_label:
+                            allowed_strs.append(opt_label)
+                        else:
+                            allowed_strs.append(opt_value)
+                    else:
+                        allowed_strs.append(str(opt))
+
+                next_field_schema_text += f" | Options: [{', '.join(allowed_strs)}]"
+        else:
+            next_field_schema_text = "No fields available"
+
+        # Use JIT_SYSTEM_INSTRUCTION template
+        system_instruction = settings.JIT_SYSTEM_INSTRUCTION.format(
+            form_title=form_title,
+            section_number=section_num_text,
+            total_sections=total_sections_text,
+            section_label=section_label_text,
+            filled_count=filled_count,
+            total_fields=total_fields,
+            manifest_text=manifest_text,
+            fill_language=fill_language,
+            previous_spoken_names=previous_names_text,
+            next_field_hint=next_field_hint or "the first unfilled field",
+            next_field_schema=next_field_schema_text,
+            confirmation_policy=confirmation_policy
+        )
+    else:
+        # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template
+        system_instruction = settings.SYSTEM_INSTRUCTION.format(
+            form_title=form_title,
+            section_number=section_num_text,
+            total_sections=total_sections_text,
+            section_label=section_label_text,
+            filled_count=filled_count,
+            total_fields=total_fields,
+            unfilled_count=unfilled_count,
+            fields_json=fields_text,  # Still using fields_json placeholder name for compatibility
+            fill_language=fill_language,
+            previous_spoken_names=previous_names_text,
+            confirmation_policy=confirmation_policy,
+            next_field_hint=next_field_hint or "the first unfilled field"
+        )
+
     return system_instruction
