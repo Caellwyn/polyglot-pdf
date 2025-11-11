@@ -29,7 +29,12 @@ class Settings(BaseModel):
 	LLM_NORMALIZER_MAX_FIELDS: int = 120
 	LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
 	LLM_NORMALIZER_TEMPERATURE: float = 0.2
-	
+
+	# === JIT (Just-In-Time) Schema Loading Settings ===
+	# Token Reduction: Send manifests instead of full schemas
+	# Full schema loaded on-demand per field as needed
+	USE_JIT_SCHEMA: bool = os.getenv("USE_JIT_SCHEMA", "false").lower() == "true"  # Feature flag: enable JIT schema loading
+
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start
