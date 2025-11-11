@@ -35,8 +35,8 @@ python pdf_annotator.py path/to/form.pdf
 # Extract full schema (heuristic only - Phase 1)
 python extractor.py path/to/form.pdf -o output_schema.json
 
-# [Phase 2+] Extract with Gemini enhancement
-python extraction_pipeline.py path/to/form.pdf -o output_schema.json
+# [Phase 2] Extract with Gemini V2 enhancement
+python test_gemini_extraction_v2.py path/to/form.pdf path/to/heuristic_schema.json -o output_enhanced.json
 ```
 
 ## 📦 What Gets Extracted
@@ -92,7 +92,7 @@ extractor.py → Generate initial schema (heuristic)
 FormSchema (JSON)
 ```
 
-### Enhanced Pipeline (Phase 2+ - In Development)
+### Enhanced Pipeline (Phase 2 - V2 Implemented)
 
 ```
 PDF File
@@ -101,11 +101,14 @@ PDF File
     ↓
 pdf_annotator.py → Create annotated PDF with field IDs
     ↓
-gemini_enhancer.py → AI enhancement (groupings, spoken names, help text)
+gemini_enhancer_v2.py → AI enhancement with batching (50 fields/call)
+    │   ├── Spoken names + help text (3 separate batched calls)
+    │   ├── Widget groupings (radio/checkbox only)
+    │   └── Conditional rules (optional, batched)
     ↓
-schema_merger.py → Merge heuristic + Gemini → final schema
+schema_merger_v2.py → Merge heuristic + Gemini → final schema
     ↓
-validation → Ensure 100% coverage, conformance to form_models.py
+validation → Ensure 100% coverage, unique spoken names
     ↓
 Enhanced FormSchema (JSON)
 ```
@@ -195,11 +198,12 @@ pytest tests/ -v
 - [ ] Refactor extractor.py (Phase 1.2 - In Progress)
 - [ ] Improve PDF annotator (Phase 1.3 - Pending)
 
-### 🚧 Phase 2: Gemini Integration (In Development)
-- [ ] Design Gemini schemas (gemini_models.py)
-- [ ] Implement Gemini enhancer
-- [ ] Build schema merger
-- [ ] Prompt engineering
+### ✅ Phase 2: Gemini Integration (V2 Complete)
+- [x] Design Gemini V2 schemas (gemini_models_v2.py) - 3 separate response types
+- [x] Implement Gemini V2 enhancer with batching (gemini_enhancer_v2.py)
+- [x] Build schema merger V2 (schema_merger_v2.py)
+- [x] Test and optimize batch size (50 fields per call)
+- [x] Validate unique spoken names and coverage
 
 ### 📋 Phase 3: Testing & Optimization (Planned)
 - [ ] Build extraction_pipeline.py orchestrator
@@ -271,7 +275,7 @@ Yes! The pipeline is designed to be general-purpose, though some heuristics (Par
 
 ### How much does Gemini cost per PDF?
 
-Estimated $0.10-0.50 per PDF depending on size (using gemini-2.0-flash-exp). Results are cached, so re-processing is free. See Phase 3 for cost optimization features.
+Estimated $0.0015-0.005 per PDF depending on size (using gemini-2.0-flash-exp with V2 batching). Tested on I-90 form (132 fields): $0.0015 total cost. PDF uploads are cached across all API calls.
 
 ## 📞 Support
 
@@ -282,5 +286,5 @@ For issues or questions:
 
 ---
 
-**Current Version**: Phase 1.1 (Foundation & Cleanup)
-**Last Updated**: 2025-11-05
+**Current Version**: Phase 2.0 (Gemini V2 Integration Complete)
+**Last Updated**: 2025-11-10
