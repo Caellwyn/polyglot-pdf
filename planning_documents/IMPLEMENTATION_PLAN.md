@@ -345,26 +345,27 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 ### Steps
 
-#### 3.1 State Tracking Implementation
+#### 3.1 State Tracking Implementation ✅ COMPLETE
 - **Task**: Add JIT tracking to state manager
 - **Location**: `frontend/src/schema-forms/state/schemaFormState.ts`
-- **New State Properties**:
-  ```typescript
-  interface SchemaFormState {
-    // existing properties...
-    loadedFieldIds: Set<string>;  // Fields where Gemini has full schema
-    previousPartManifests: Map<string, FieldManifest>;  // Note: using "part" 
-    jitModeEnabled: boolean;  // From backend feature flag
-  }
-  ```
-- **SessionStorage Serialization**:
-  - Convert Set to Array for JSON: `Array.from(loadedFieldIds)`
-  - Convert Map to Object: `Object.fromEntries(previousPartManifests)`
-  - Deserialize on load: `new Set(saved.loadedFieldIds)`
-- **Update Timing**: Add field to loadedFieldIds when:
-  - Included in initial handshake (first field)
-  - Returned from get_field_value with schema
-  - Included in next_field_hint
+- **Status**: ✅ State properties and utilities implemented
+- **Implementation Details**:
+  - Added `loadedFieldIds: Set<string>` to SchemaFormState interface (line 27)
+  - Added `jitModeEnabled: boolean` to SchemaFormState interface (line 28)
+  - Note: Removed previousPartManifests - not needed (backend tracks this)
+  - Initialized in `init()` method (lines 68-69)
+  - Serialization in `save()` method: `Array.from(loadedFieldIds)` (line 134)
+  - Deserialization in `load()` method: `new Set(parsed.loadedFieldIds)` (lines 105-116)
+  - Backward compatibility: old states get empty Set and false flag
+- **Utility Methods Added**:
+  - `markFieldSchemaLoaded(state, fieldId)` - Adds field to tracking (lines 758-771)
+  - `isFieldSchemaLoaded(state, fieldId)` - Checks if schema sent (lines 776-778)
+  - `setJitMode(state, enabled)` - Toggles JIT mode (lines 785-797)
+  - `clearLoadedFieldIds(state)` - Resets tracking on section switch (lines 804-812)
+- **Update Timing**: Field marked as loaded when:
+  - Initial handshake (first field) - via markFieldSchemaLoaded()
+  - After update_form_fields (next field schema in response)
+  - From get_field_value (if schema not already sent)
 
 #### 3.2 Manifest Generation Utilities
 - **Task**: Create frontend manifest builders
