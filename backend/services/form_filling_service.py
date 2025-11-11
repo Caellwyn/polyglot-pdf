@@ -17,6 +17,7 @@ from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
+from .manifest_service import get_next_field_schema, should_include_schema_in_response
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
@@ -39,6 +40,8 @@ class FormFillingService:
         self._schema: Optional[Dict[str, Any]] = None  # Schema for context only
         self._fill_language: str = "English"  # Default fill language
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
+        # JIT schema loading: Track which field schemas have been sent to Gemini
+        self._loaded_field_ids: set = set()  # Prevents duplicate schemas in context
         # Store callbacks for reuse during section switching
         self._on_form_update = None
         self._on_transcript = None
@@ -119,6 +122,7 @@ class FormFillingService:
             handle_get_field_value=self.handle_get_field_value,
             handle_complete_section=self.handle_complete_section,
             request_form_state_from_client=self.request_form_state_from_client,
+            get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
         )
         
         # Use web form tool declarations (stateless)
@@ -643,6 +647,41 @@ class FormFillingService:
             return
         
         self._request_coordinator.handle_next_field_hint_response(request_id, hint)
+
+    def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get next field's full schema for JIT loading (Phase 2.5: Token Reduction).
+
+        Called after successful field update to include next field schema in tool response.
+        Tracks loaded_field_ids to prevent duplicate schemas in Gemini context.
+
+        Args:
+            updated_field_id: ID of the field that was just updated
+
+        Returns:
+            Next field's complete schema dict, or None if no next field
+        """
+        if not self._settings.USE_JIT_SCHEMA:
+            return None
+
+        if not self._schema:
+            return None
+
+        # Get current part data from schema
+        # For now, assume single part/section - in future this could be enhanced
+        # to handle multi-part forms by tracking current part
+        part_data = self._schema
+
+        # Get next field schema using manifest service
+        next_schema = get_next_field_schema(part_data, updated_field_id)
+
+        if next_schema and next_schema.get('id'):
+            # Mark as sent to prevent duplicates
+            self._loaded_field_ids.add(next_schema['id'])
+            _log.debug("jit_schema_sent", field_id=next_schema['id'],
+                      total_loaded=len(self._loaded_field_ids))
+
+        return next_schema
 
     def get_form_status_for_ai(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
