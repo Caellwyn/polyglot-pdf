@@ -132,35 +132,37 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 ### Steps
 
-#### 2.1 Configuration & Feature Flag
+#### 2.1 Configuration & Feature Flag ✅ COMPLETE
 - **Task**: Add toggleable JIT schema mode
 - **Location**: `backend/config.py`
 - **Actions**:
-  - Add `USE_JIT_SCHEMA = os.getenv("USE_JIT_SCHEMA", "false").lower() == "true"`
-  - Log mode on startup: `logger.info(f"JIT Schema Mode: {USE_JIT_SCHEMA}")`
-  - Pass flag to form_filling_service initialization
+  - ✅ Added `USE_JIT_SCHEMA = os.getenv("USE_JIT_SCHEMA", "false").lower() == "true"`
+  - ✅ Documented in `.env.example` with usage instructions
+  - ✅ Default: `False` (disabled until Phase 3 testing complete)
+  - 🔄 Logging on startup pending (Phase 2.2)
+  - 🔄 Pass flag to form_filling_service initialization (Phase 2.2)
 - **Rollback**: Setting flag to false reverts to current behavior instantly
 
-#### 2.2 Manifest Generation Service
+#### 2.2 Manifest Generation Service ✅ COMPLETE
 - **Task**: Create service to generate field manifests
-- **Location**: `backend/services/manifest_service.py` (new)
-- **Actions**:
-  ```python
-  def generate_manifest(part_data: dict, previous_parts: list) -> dict:
-      """
-      Extracts minimal field information for Gemini context.
-      Note: 'part' in UI corresponds to 'section' in backend code.
-      """
-      # Extract only field_id and spoken_name
-      # Preserve field order from schema
-      # Include part metadata (label, order, counts)
-  ```
+- **Location**: `backend/services/manifest_service.py` ✅ CREATED
+- **Functions Implemented**:
+  - ✅ `generate_part_manifest()`: Creates lightweight field_id/spoken_name manifest
+  - ✅ `get_next_field_schema()`: Gets schema for next field (used with next_field_hint)
+  - ✅ `should_include_schema_in_response()`: Checks if schema already sent
+  - ✅ `format_manifest_for_context()`: Pipe-separated format for Gemini
+  - ✅ `estimate_manifest_tokens()`: Token counting utility
 - **Key Design Decisions**:
+  - Pipe-separated format: `field_id|spoken_name` (avoids JSON quote issues with brackets)
   - NO validation rules in manifest
   - NO help text in manifest
   - NO options for select/radio/checkbox fields
   - NO conditional logic in manifest
-- **Token Calculation**: Include utility to measure actual tokens
+  - Includes previous_parts for cross-section lookups (read-only)
+- **Schema Delivery Strategy** (Critical):
+  - **next_field_hint**: Always includes schema for the hinted field (guides Gemini forward)
+  - **get_field_value**: Includes schema ONLY if not already sent (user-directed, no redirect)
+  - **Tracked state**: loaded_field_ids set prevents duplicate schemas in context
 
 #### 2.3 System Instruction Template Updates
 - **Task**: Create JIT-specific instruction template
@@ -195,13 +197,20 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
       };
   }
 
-  // Field is accessible - return value + schema if needed
+  // Field is accessible - return value + schema if NOT already sent
+  // NOTE: NO next_field_hint here (prevents redirect from user's question)
+  const includeSchema = !loadedFieldIds.has(fieldId);
+  if (includeSchema) {
+      loadedFieldIds.add(fieldId);  // Mark as sent
+  }
+
   return {
       found: true,
       accessible: true,
       value: fieldValues[fieldId],
-      schema_included: !loadedFieldIds.has(fieldId),
-      schema: loadedFieldIds.has(fieldId) ? null : getFullFieldSchema(fieldId)
+      schema_included: includeSchema,
+      schema: includeSchema ? getFullFieldSchema(fieldId) : null
+      // NO next_field_hint - user stays in control
   };
   ```
 
@@ -244,36 +253,46 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 #### 2.5 Update Tool Response Enhancement
 - **Location**: `backend/services/callback_handler.py` - `handle_update_form_fields()`
-- **Current Behavior**: Returns success message
-- **New Behavior**: Include next field hint with full schema
+- **Current Behavior**: Returns success message with next_field_hint (spoken name only)
+- **New Behavior**: Include next field hint WITH full schema (guides Gemini forward)
   ```python
-  def build_update_response(self, updated_field, next_field):
+  def build_update_response(self, updated_field, next_field, loaded_field_ids):
+      # Get next field schema using manifest_service
+      next_schema = get_next_field_schema(part_data, updated_field.id)
+
+      if next_schema:
+          loaded_field_ids.add(next_schema['id'])  # Mark as sent
+
       return {
           "success": True,
           "message": f"Updated {updated_field.spoken_name}",
-          "next_field_hint": {
-              "field_id": next_field.id,
-              "spoken_name": next_field.spoken_name,
-              "full_schema": next_field.to_dict(),  # Complete details
-              "prompt": f"Now ask about {next_field.spoken_name}"
-          }
+          "next_field_hint": next_field.spoken_name,
+          "next_field_schema": next_schema  # ALWAYS included with hint
+          # This guides Gemini to the next field naturally
       }
   ```
+- **Key Distinction**:
+  - `update_form_fields` response: Includes hint + schema (guides forward)
+  - `get_field_value` response: Schema only if not sent (user-directed, no hint)
 
 #### 2.6 Handshake Context Preparation
 - **Location**: `backend/services/form_filling_service.py` - `_prepare_handshake_context()`
 - **Current**: Sends entire section schema (7,400 tokens)
-- **New**: Send manifest + first field
+- **New**: Send manifest only (first field schema sent via next_field_hint)
   ```python
   if USE_JIT_SCHEMA:
+      manifest = generate_part_manifest(current_part, previous_parts)
+
+      # First field schema attached to next_field_hint in system instructions
+      # No need to send separately - unified delivery via hint mechanism
       context = {
-          "manifest": generate_manifest(current_part, previous_parts),
-          "first_field": get_full_field_schema(first_field_id),
-          "token_count": count_tokens(manifest)  # For monitoring
+          "manifest": format_manifest_for_context(manifest),
+          "token_count": estimate_manifest_tokens(manifest)  # For monitoring
       }
   else:
       context = existing_full_schema_logic()
   ```
+- **Note**: First field schema delivered via `next_field_hint` in system instructions, not as separate payload
 
 ### Exit Criteria
 - [ ] Feature flag toggles successfully between modes
