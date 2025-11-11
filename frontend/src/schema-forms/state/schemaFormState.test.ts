@@ -792,4 +792,161 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(loaded).toBeNull()
     })
   })
+
+  // ============================================================================
+  // Phase 3: JIT Schema Loading Tests
+  // ============================================================================
+
+  describe('JIT Schema Loading - State Tracking', () => {
+    const testSchema = createTestSchema()
+
+    it('should initialize with empty loadedFieldIds Set', () => {
+      const state = SchemaFormStateManager.init(testSchema)
+
+      expect(state.loadedFieldIds).toBeInstanceOf(Set)
+      expect(state.loadedFieldIds.size).toBe(0)
+    })
+
+    it('should initialize with jitModeEnabled false', () => {
+      const state = SchemaFormStateManager.init(testSchema)
+
+      expect(state.jitModeEnabled).toBe(false)
+    })
+
+    it('should mark field schema as loaded', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+
+      expect(state.loadedFieldIds.has('firstName')).toBe(true)
+      expect(state.loadedFieldIds.size).toBe(1)
+    })
+
+    it('should track multiple loaded fields', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'email')
+
+      expect(state.loadedFieldIds.size).toBe(3)
+      expect(state.loadedFieldIds.has('firstName')).toBe(true)
+      expect(state.loadedFieldIds.has('lastName')).toBe(true)
+      expect(state.loadedFieldIds.has('email')).toBe(true)
+    })
+
+    it('should not duplicate field IDs in loadedFieldIds', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+
+      expect(state.loadedFieldIds.size).toBe(1)
+    })
+
+    it('should check if field schema is loaded', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+
+      expect(SchemaFormStateManager.isFieldSchemaLoaded(state, 'firstName')).toBe(false)
+
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+
+      expect(SchemaFormStateManager.isFieldSchemaLoaded(state, 'firstName')).toBe(true)
+      expect(SchemaFormStateManager.isFieldSchemaLoaded(state, 'lastName')).toBe(false)
+    })
+
+    it('should enable JIT mode', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+
+      state = SchemaFormStateManager.setJitMode(state, true)
+
+      expect(state.jitModeEnabled).toBe(true)
+    })
+
+    it('should disable JIT mode', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+      state = SchemaFormStateManager.setJitMode(state, true)
+
+      state = SchemaFormStateManager.setJitMode(state, false)
+
+      expect(state.jitModeEnabled).toBe(false)
+    })
+
+    it('should clear loaded field IDs', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
+
+      state = SchemaFormStateManager.clearLoadedFieldIds(state)
+
+      expect(state.loadedFieldIds.size).toBe(0)
+    })
+
+    it('should serialize loadedFieldIds to array for storage', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
+
+      SchemaFormStateManager.save(state)
+
+      const stored = JSON.parse(sessionStorageMock['schema_form_state'])
+      expect(Array.isArray(stored.loadedFieldIds)).toBe(true)
+      expect(stored.loadedFieldIds).toContain('firstName')
+      expect(stored.loadedFieldIds).toContain('lastName')
+    })
+
+    it('should deserialize loadedFieldIds array to Set on load', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
+      SchemaFormStateManager.save(state)
+
+      const loaded = SchemaFormStateManager.load()
+
+      expect(loaded).not.toBeNull()
+      expect(loaded!.loadedFieldIds).toBeInstanceOf(Set)
+      expect(loaded!.loadedFieldIds.size).toBe(2)
+      expect(loaded!.loadedFieldIds.has('firstName')).toBe(true)
+      expect(loaded!.loadedFieldIds.has('lastName')).toBe(true)
+    })
+
+    it('should handle old state without loadedFieldIds', () => {
+      // Simulate old state saved before JIT feature
+      const oldState = {
+        schema: testSchema,
+        fieldValues: {},
+        currentPartId: 'part-1',
+        completedParts: [],
+        validationErrors: {},
+        lastUpdated: Date.now()
+      }
+      sessionStorageMock['schema_form_state'] = JSON.stringify(oldState)
+
+      const loaded = SchemaFormStateManager.load()
+
+      expect(loaded).not.toBeNull()
+      expect(loaded!.loadedFieldIds).toBeInstanceOf(Set)
+      expect(loaded!.loadedFieldIds.size).toBe(0)
+      expect(loaded!.jitModeEnabled).toBe(false)
+    })
+
+    it('should preserve loadedFieldIds across save/load cycles', () => {
+      let state = SchemaFormStateManager.init(testSchema)
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'field1')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'field2')
+      state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'field3')
+      state = SchemaFormStateManager.setJitMode(state, true)
+
+      SchemaFormStateManager.save(state)
+      const loaded = SchemaFormStateManager.load()
+
+      expect(loaded).not.toBeNull()
+      expect(loaded!.loadedFieldIds.size).toBe(3)
+      expect(loaded!.loadedFieldIds.has('field1')).toBe(true)
+      expect(loaded!.loadedFieldIds.has('field2')).toBe(true)
+      expect(loaded!.loadedFieldIds.has('field3')).toBe(true)
+      expect(loaded!.jitModeEnabled).toBe(true)
+    })
+  })
 })
