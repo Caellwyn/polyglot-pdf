@@ -301,7 +301,7 @@
       "is_comb": true,
       "hidden": false,
       "max_length": 9,
-      "spoken_name": "alien registration number",
+      "spoken_name": "alien registration number 1",
       "help": {
         "instructions": "Your alien registration number (A-Number) is a 7-9 digit number found on your green card or other immigration documents. It begins with an 'A'.",
         "format_hint": "7-9 digits"
@@ -371,7 +371,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "family name",
+      "spoken_name": "family name 1",
       "help": {
         "instructions": "Enter your family name (last name) as it appears on your official documents."
       },
@@ -402,7 +402,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "given name",
+      "spoken_name": "given name 1",
       "help": {
         "instructions": "Enter your given name (first name) as it appears on your official documents."
       },
@@ -433,7 +433,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "middle name",
+      "spoken_name": "middle name 1",
       "help": {
         "instructions": "Enter your middle name as it appears on your official documents. If you do not have a middle name, enter 'N/A'."
       },
@@ -729,7 +729,7 @@
           "pdf_field_name": "P1_checkbox6c_Unit[0]"
         }
       ],
-      "spoken_name": "unit type",
+      "spoken_name": "mailing unit type",
       "help": {
         "instructions": "Select the appropriate unit type for your mailing address: Apartment, Suite, or Floor."
       },
@@ -770,7 +770,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 6,
-      "spoken_name": "apartment suite or floor number",
+      "spoken_name": "mailing apartment suite or floor number",
       "help": {
         "instructions": "Enter the apartment, suite, or floor number of your mailing address, if applicable."
       },
@@ -815,7 +815,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 20,
-      "spoken_name": "city or town",
+      "spoken_name": "mailing city or town",
       "help": {
         "instructions": "Enter the city or town of your mailing address."
       },
@@ -843,7 +843,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "state",
+      "spoken_name": "mailing state",
       "help": {
         "instructions": "Select the state of your mailing address from the dropdown menu.",
         "format_hint": "2 letter state code"
@@ -873,7 +873,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 5,
-      "spoken_name": "zip code",
+      "spoken_name": "mailing zip code",
       "help": {
         "instructions": "Enter the 5-digit ZIP code of your mailing address.",
         "format_hint": "5 digits"
@@ -907,7 +907,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 20,
-      "spoken_name": "province",
+      "spoken_name": "mailing province",
       "help": {
         "instructions": "Enter the province of your mailing address, if applicable. This is usually for addresses outside the United States."
       },
@@ -936,7 +936,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 9,
-      "spoken_name": "postal code",
+      "spoken_name": "mailing postal code",
       "help": {
         "instructions": "Enter the postal code of your mailing address, if applicable. This is usually for addresses outside the United States.",
         "format_hint": "Alphanumeric postal code"
@@ -969,7 +969,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "country",
+      "spoken_name": "mailing country",
       "help": {
         "instructions": "Enter the country of your mailing address."
       },
@@ -1038,7 +1038,7 @@
           "pdf_field_name": "P1_checkbox7b_Unit[2]"
         }
       ],
-      "spoken_name": "unit type",
+      "spoken_name": "physical unit type",
       "help": {
         "instructions": "Select the appropriate unit type for your physical address: Apartment, Suite, or Floor."
       },
@@ -1079,7 +1079,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 6,
-      "spoken_name": "apartment suite or floor number",
+      "spoken_name": "physical apartment suite or floor number",
       "help": {
         "instructions": "Enter the apartment, suite, or floor number of your physical address, if applicable."
       },
@@ -1124,7 +1124,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 20,
-      "spoken_name": "city or town",
+      "spoken_name": "physical city or town",
       "help": {
         "instructions": "Enter the city or town of your physical address."
       },
@@ -1152,7 +1152,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "state",
+      "spoken_name": "physical state",
       "help": {
         "instructions": "Select the state of your physical address from the dropdown menu.",
         "format_hint": "2 letter state code"
@@ -1182,7 +1182,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 5,
-      "spoken_name": "zip code",
+      "spoken_name": "physical zip code",
       "help": {
         "instructions": "Enter the 5-digit ZIP code of your physical address.",
         "format_hint": "5 digits"
@@ -1216,7 +1216,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 20,
-      "spoken_name": "province",
+      "spoken_name": "physical province",
       "help": {
         "instructions": "Enter the province of your physical address, if applicable. This is usually for addresses outside the United States."
       },
@@ -1245,7 +1245,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 9,
-      "spoken_name": "postal code",
+      "spoken_name": "physical postal code",
       "help": {
         "instructions": "Enter the postal code of your physical address, if applicable. This is usually for addresses outside the United States.",
         "format_hint": "Alphanumeric postal code"
@@ -1278,7 +1278,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "country",
+      "spoken_name": "physical country",
       "help": {
         "instructions": "Enter the country of your physical address."
       },
@@ -1664,7 +1664,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 25,
-      "spoken_name": "port of entry city and state",
+      "spoken_name": "commuter status port of entry city and state",
       "help": {
         "instructions": "Enter the City and State of your Port-of-Entry into the United States. This is needed if you are a permanent resident who is taking up commuter status.",
         "format_hint": "12 digits"
@@ -1980,7 +1980,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 25,
-      "spoken_name": "port of entry city and state",
+      "spoken_name": "original entry port of entry city and state",
       "help": {
         "instructions": "Enter the City or Town and State of the Port-of-Entry where you were admitted to the United States."
       },
@@ -3164,7 +3164,7 @@
           "pdf_field_name": "P6_checkbox3b_Unit[0]"
         }
       ],
-      "spoken_name": "unit type",
+      "spoken_name": "interpreter's unit type",
       "help": {
         "instructions": "Select the appropriate unit type for the interpreter's mailing address: Apartment, Suite, or Floor."
       },
@@ -3751,7 +3751,7 @@
           "pdf_field_name": "P7_checkbox3b_Unit[0]"
         }
       ],
-      "spoken_name": "unit type",
+      "spoken_name": "preparer's unit type",
       "help": {
         "instructions": "Select the appropriate unit type for the preparer's mailing address: Apartment, Suite, or Floor."
       },
@@ -4293,7 +4293,7 @@
       "is_comb": true,
       "hidden": false,
       "max_length": 9,
-      "spoken_name": "alien registration number",
+      "spoken_name": "alien registration number 2",
       "help": {
         "instructions": "Your alien registration number (A-Number) is a 7-9 digit number found on your green card or other immigration documents. It begins with an 'A'.",
         "format_hint": "7-9 digits"
@@ -4327,7 +4327,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "family name",
+      "spoken_name": "entry 1 family name",
       "help": {
         "instructions": "This field automatically populates with the family name you provided earlier in the form."
       },
@@ -4356,7 +4356,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "given name",
+      "spoken_name": "entry 1 given name",
       "help": {
         "instructions": "This field pre-populates from page 1."
       },
@@ -4385,7 +4385,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "middle name",
+      "spoken_name": "entry 1 middle name",
       "help": {
         "instructions": "This field pre-populates from page 1."
       },
@@ -4415,7 +4415,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 2,
-      "spoken_name": "page number",
+      "spoken_name": "entry 1 page number",
       "help": {
         "instructions": "Enter the page number this additional information refers to."
       },
@@ -4444,7 +4444,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "part number",
+      "spoken_name": "entry 1 part number",
       "help": {
         "instructions": "Enter the part number this additional information refers to."
       },
@@ -4530,7 +4530,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 2,
-      "spoken_name": "page number",
+      "spoken_name": "entry 4 page number",
       "help": {
         "instructions": "Enter the page number this additional information refers to."
       },
@@ -4559,7 +4559,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "part number",
+      "spoken_name": "entry 4 part number",
       "help": {
         "instructions": "Enter the part number this additional information refers to."
       },
@@ -4588,7 +4588,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, item number",
+      "spoken_name": "entry 4 Page 8, item number",
       "help": {
         "instructions": "Enter the item number from the original form that you are providing additional information for."
       },
@@ -4616,7 +4616,7 @@
       "multiline": true,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "Page 8, additional information",
+      "spoken_name": "entry 4 Page 8, additional information",
       "help": {
         "instructions": "Enter any additional information that you need to provide for the item number you specified."
       },
@@ -4645,7 +4645,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 2,
-      "spoken_name": "Page 8, page number",
+      "spoken_name": "entry 2 Page 8, page number",
       "help": {
         "instructions": "Enter the page number from the original form that you are providing additional information for."
       },
@@ -4674,7 +4674,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, part number",
+      "spoken_name": "entry 2 Page 8, part number",
       "help": {
         "instructions": "Enter the part number from the original form that you are providing additional information for."
       },
@@ -4703,7 +4703,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, item number",
+      "spoken_name": "entry 2 Page 8, item number",
       "help": {
         "instructions": "Enter the item number from the original form that you are providing additional information for."
       },
@@ -4731,7 +4731,7 @@
       "multiline": true,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "Page 8, additional information",
+      "spoken_name": "entry 2 Page 8, additional information",
       "help": {
         "instructions": "Enter any additional information that you need to provide for the item number you specified."
       },
@@ -4760,7 +4760,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 2,
-      "spoken_name": "Page 8, page number",
+      "spoken_name": "entry 3 Page 8, page number",
       "help": {
         "instructions": "Enter the page number from the original form that you are providing additional information for."
       },
@@ -4789,7 +4789,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, part number",
+      "spoken_name": "entry 3 Page 8, part number",
       "help": {
         "instructions": "Enter the part number from the original form that you are providing additional information for."
       },
@@ -4818,7 +4818,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, item number",
+      "spoken_name": "entry 3 Page 8, item number",
       "help": {
         "instructions": "Enter the item number from the original form that you are providing additional information for."
       },
@@ -4846,7 +4846,7 @@
       "multiline": true,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "Page 8, additional information",
+      "spoken_name": "entry 3 Page 8, additional information",
       "help": {
         "instructions": "Enter any additional information that you need to provide for the item number you specified."
       },
@@ -4875,7 +4875,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 2,
-      "spoken_name": "Page 8, page number",
+      "spoken_name": "entry 5 Page 8, page number",
       "help": {
         "instructions": "Enter the page number from the original form that you are providing additional information for."
       },
@@ -4904,7 +4904,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, part number",
+      "spoken_name": "entry 5 Page 8, part number",
       "help": {
         "instructions": "Enter the part number from the original form that you are providing additional information for."
       },
@@ -4933,7 +4933,7 @@
       "is_comb": false,
       "hidden": false,
       "max_length": 4,
-      "spoken_name": "Page 8, item number",
+      "spoken_name": "entry 5 Page 8, item number",
       "help": {
         "instructions": "Enter the item number from the original form that you are providing additional information for."
       },
@@ -4961,7 +4961,7 @@
       "multiline": true,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "Page 8, additional information",
+      "spoken_name": "entry 5 Page 8, additional information",
       "help": {
         "instructions": "Enter any additional information that you need to provide for the item number you specified."
       },

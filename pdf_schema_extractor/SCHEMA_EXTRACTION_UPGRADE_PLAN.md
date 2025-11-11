@@ -250,6 +250,8 @@ print(f'✓ PDF uploaded: {file_uri}')
 ### 2.3: Implement Gemini Prompt Engineering
 **Goal**: Craft effective prompts for Gemini to extract semantic understanding
 
+**CRITICAL REQUIREMENT**: All spoken names must be **unique** across the entire form to support JIT field loading for token reduction.
+
 **Tasks**:
 - [ ] Write detailed system prompt explaining task:
   ```
@@ -263,8 +265,18 @@ print(f'✓ PDF uploaded: {file_uri}')
      - Related fields (first name, middle name, last name)
 
   2. **Spoken Names**: Short, natural names for voice interaction
-     - "A-Number" instead of "Alien Registration Number (A-Number), if any"
-     - "Date of Birth" instead of "Enter Date of Birth (Mo/Day/Yr)"
+     - **CRITICAL**: Each spoken name must be UNIQUE across the entire form
+     - Add context prefixes for disambiguation:
+       * Address fields: "mailing street", "home street", "prior street"
+       * Name fields: "your last name", "spouse's last name", "child's last name"
+       * Date fields: "birth date", "entry date", "marriage date"
+     - Keep names concise (2-4 words maximum)
+     - Use natural conversational language
+     - Prefer common abbreviations: "SSN", "A-Number", "I-94"
+     - Examples:
+       * "A-Number" instead of "Alien Registration Number (A-Number), if any"
+       * "birth date" instead of "Enter Date of Birth (Mo/Day/Yr)"
+       * "mailing zip code" instead of "ZIP Code (mailing address)"
 
   3. **Help Text**: User-friendly instructions for each field
      - inline: Brief hints like "(if any)" or "(optional)"
@@ -286,8 +298,13 @@ print(f'✓ PDF uploaded: {file_uri}')
   - A simplified JSON schema mapping field IDs to labels and types
 
   Analyze the visual layout and semantic meaning to provide enhancements.
+
+  **UNIQUENESS VALIDATION**: Before returning your response, verify that all
+  spoken names are unique. If duplicates exist, add context prefixes to
+  disambiguate them.
   ```
 - [ ] Add examples of good groupings/spoken names/help text
+- [ ] Add spoken name uniqueness validation examples
 - [ ] Test prompt with sample PDFs and iterate
 
 **Testing**:
@@ -348,10 +365,15 @@ python test_gemini_enhancement.py test_pdfs/i-589.pdf
       def _validate_conformance(self, schema: FormSchema) -> bool:
           """Ensure schema conforms to form_models.py"""
           pass
+
+      def _validate_spoken_name_uniqueness(self, schema: FormSchema) -> bool:
+          """Ensure all spoken names are unique (CRITICAL for JIT field loading)"""
+          pass
   ```
 - [ ] Implement fuzzy matching for field IDs (adapt from `schema_builder_from_groupings.py`)
 - [ ] Implement conflict resolution (Gemini wins if valid)
 - [ ] Add validation checks:
+  - **100% unique spoken names** (CRITICAL - blocks JIT field loading if violated)
   - 100% widget coverage
   - All field IDs unique
   - All references valid (section_ids, conditional field_ids, etc.)
@@ -475,6 +497,7 @@ python validate_schema.py test_output/i-589_final.json
   - `test_gemini_enhancer.py` - Gemini integration tests (may need mocks)
   - `test_schema_merger.py` - Merge logic tests
   - `test_validation.py` - Schema validation tests
+  - `test_spoken_name_uniqueness.py` - **Spoken name uniqueness validation tests (CRITICAL)**
   - `test_integration.py` - Full pipeline tests
 - [ ] Create test fixtures:
   - Sample PDFs (i-589, i-90, etc.)
@@ -633,6 +656,7 @@ python cli.py --help
 - [ ] Gemini API integration works reliably
 - [ ] Enhanced schemas show improvement over heuristic-only
 - [ ] Gemini suggestions are >90% accurate
+- [ ] **100% unique spoken names across all test forms** (CRITICAL - blocks token reduction)
 - [ ] Cost per PDF is <$0.50
 
 ### Phase 3 (Integration)
@@ -702,6 +726,72 @@ python cli.py --help
 
 ---
 
+## Spoken Name Uniqueness - Integration with Token Reduction
+
+### Why This Matters
+
+The **Token Reduction Implementation Plan** (Phase 1) requires unique spoken names to support Just-In-Time (JIT) field loading. The manifest-first approach sends only field_id/spoken_name pairs initially, then loads complete field schemas as needed via voice commands.
+
+**Without unique spoken names**, Gemini cannot reliably identify which field the user is referring to, breaking the JIT system.
+
+### Implementation Strategy
+
+1. **Gemini-Driven Generation** (Phase 2.3)
+   - Gemini analyzes full form context to generate contextually-aware spoken names
+   - Explicitly instructed to ensure uniqueness before returning results
+   - Leverages visual understanding from annotated PDF
+
+2. **Validation at Multiple Levels**
+   - Schema merger validates uniqueness after Gemini enhancement (Phase 2.4)
+   - Integration tests verify uniqueness on all test forms (Phase 3.2)
+   - Success criteria blocks completion if any duplicates found
+
+3. **Disambiguation Strategy**
+   - Context prefixes: "mailing street" vs "home street" vs "prior street"
+   - Relationship prefixes: "your last name" vs "spouse's last name"
+   - Event prefixes: "birth date" vs "entry date" vs "marriage date"
+
+### Fallback Strategy
+
+If Gemini fails to produce unique names:
+
+1. **Auto-fix in Schema Merger**: Detect duplicates and apply systematic disambiguation
+2. **Manual Review Flag**: Mark schema for human review before deployment
+3. **Block Production**: Do not deploy schemas with duplicate spoken names
+
+### Verification Command
+
+After schema extraction, verify uniqueness:
+
+```bash
+python -c "
+from form_models import FormSchema
+import json
+from collections import Counter
+
+with open('output_schema.json') as f:
+    schema = FormSchema(**json.load(f))
+    spoken_names = [field.spoken_name for field in schema.fields]
+    duplicates = [name for name, count in Counter(spoken_names).items() if count > 1]
+
+    if duplicates:
+        print(f'❌ FAILED: Found {len(duplicates)} duplicate spoken names:')
+        for name in duplicates:
+            print(f'  - {name}')
+        exit(1)
+    else:
+        print(f'✅ PASSED: All {len(spoken_names)} spoken names are unique')
+"
+```
+
+### Impact on Timeline
+
+- **No additional time required**: Uniqueness constraint integrates into existing Gemini prompt engineering (Phase 2.3)
+- **Validation adds <5 minutes per form**: Automated check during testing
+- **Blocks**: Token Reduction Phase 2 cannot begin until all schemas have unique spoken names
+
+---
+
 ## Notes
 
 - Each phase builds on previous phases
@@ -709,3 +799,4 @@ python cli.py --help
 - Gemini integration is modular - can be disabled if needed
 - Focus on maintainability and clear interfaces
 - Document as you go, not at the end
+- **Spoken name uniqueness is a CRITICAL requirement for token reduction**
