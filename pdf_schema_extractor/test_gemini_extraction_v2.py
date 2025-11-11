@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 from form_models import FormSchema
-from pdf_annotator import PDFAnnotator
+from pdf_annotator import annotate_pdf_with_field_names
 from gemini_enhancer_v2 import GeminiEnhancerV2
 from schema_merger_v2 import SchemaMergerV2
 
@@ -35,52 +35,52 @@ def build_simplified_fields(schema: FormSchema) -> List[Dict[str, Any]]:
     """Build simplified field list for Gemini API."""
     fields = []
     for field in schema.fields:
-        fields.append({
-            "field_id": field.field_id,
-            "name": field.name,
-            "field_type": field.field_type,
-            "position": {
-                "page": field.page_number,
-                "x": round(field.x, 2),
-                "y": round(field.y, 2)
+        # Extract position if it exists
+        position = None
+        if field.pdf_position:
+            position = {
+                "page": field.pdf_position.page,
+                "x": round(field.pdf_position.x, 2),
+                "y": round(field.pdf_position.y, 2)
             }
+
+        fields.append({
+            "field_id": field.id,
+            "name": field.name,
+            "field_type": str(field.type),
+            "position": position
         })
     return fields
 
 
 def extract_form_metadata(schema: FormSchema) -> Dict[str, Any]:
     """Extract form metadata."""
-    return {
-        "form_title": schema.metadata.get("form_title", "Unknown Form"),
-        "form_number": schema.metadata.get("form_number", ""),
-        "total_pages": schema.metadata.get("page_count", 0)
-    }
+    if schema.form_metadata:
+        return {
+            "form_title": schema.form_metadata.title or "Unknown Form",
+            "form_number": schema.form_metadata.form_number or "",
+            "total_pages": schema.form_metadata.page_count or 0
+        }
+    else:
+        return {
+            "form_title": "Unknown Form",
+            "form_number": "",
+            "total_pages": 0
+        }
 
 
 def annotate_pdf(pdf_path: str, schema: FormSchema) -> str:
     """Annotate PDF with field IDs and return path to annotated PDF."""
     print("\n[ANNOTATE] Creating annotated PDF with field IDs...")
 
-    annotator = PDFAnnotator(pdf_path)
     output_path = pdf_path.replace('.pdf', '_annotated.pdf')
 
-    # Build field list for annotation
-    fields_to_annotate = [
-        {
-            "field_id": field.field_id,
-            "page": field.page_number,
-            "x": field.x,
-            "y": field.y,
-            "width": field.width,
-            "height": field.height
-        }
-        for field in schema.fields
-    ]
+    # Use the function from pdf_annotator
+    annotated_path = annotate_pdf_with_field_names(pdf_path, output_path)
 
-    annotator.annotate_fields(fields_to_annotate, output_path)
-    print(f"[OK] Annotated PDF: {output_path}")
+    print(f"[OK] Annotated PDF: {annotated_path}")
 
-    return output_path
+    return annotated_path
 
 
 def calculate_cost(

@@ -59,11 +59,15 @@ class SchemaMergerV2:
         # Apply enhancements
         enhanced_count = 0
         for field in self.schema.fields:
-            if field.field_id in enhancement_map:
-                enh = enhancement_map[field.field_id]
+            if field.id in enhancement_map:
+                enh = enhancement_map[field.id]
                 field.spoken_name = enh.spoken_name
                 if enh.help_text:
-                    field.help_text = enh.help_text
+                    # Store in field.help if it exists
+                    if not field.help:
+                        from form_models import FieldHelp
+                        field.help = FieldHelp()
+                    field.help.inline = enh.help_text
                 enhanced_count += 1
 
         return enhanced_count
@@ -86,7 +90,7 @@ class SchemaMergerV2:
                 continue
 
             # Verify all field IDs exist
-            valid_field_ids = {field.field_id for field in self.schema.fields}
+            valid_field_ids = {field.id for field in self.schema.fields}
             group_field_ids = [
                 fid for fid in group.field_ids
                 if fid in valid_field_ids
@@ -101,14 +105,11 @@ class SchemaMergerV2:
 
             # Apply grouping to fields
             for field in self.schema.fields:
-                if field.field_id in group_field_ids:
-                    if not field.widget_group:
-                        field.widget_group = {}
-                    field.widget_group.update({
-                        "group_name": group.group_name,
-                        "group_label": group.group_label,
-                        "is_exclusive": group.is_exclusive
-                    })
+                if field.id in group_field_ids:
+                    # Set group_id and group_label
+                    field.group_id = group.group_name
+                    field.group_label = group.group_label
+                    # Note: is_exclusive is handled by field type (radio vs checkbox)
 
             applied_count += 1
 
@@ -137,7 +138,7 @@ class SchemaMergerV2:
         ]
 
         # Build field ID lookup
-        valid_field_ids = {field.field_id for field in self.schema.fields}
+        valid_field_ids = {field.id for field in self.schema.fields}
 
         applied_count = 0
         for rule in valid_rules:
@@ -151,16 +152,13 @@ class SchemaMergerV2:
 
             # Find target field and apply rule
             for field in self.schema.fields:
-                if field.field_id == rule.field_id:
-                    if not field.conditionals:
-                        field.conditionals = []
+                if field.id == rule.field_id:
+                    # Store conditional in show_if or controls_fields
+                    # For now, just track in conditional_fields
+                    if not field.conditional_fields:
+                        field.conditional_fields = []
 
-                    field.conditionals.append({
-                        "condition_type": rule.condition_type,
-                        "trigger_field_id": rule.trigger_field_id,
-                        "trigger_value": rule.trigger_value,
-                        "description": rule.description
-                    })
+                    field.conditional_fields.append(rule.trigger_field_id)
                     applied_count += 1
                     break
 
@@ -186,13 +184,13 @@ class SchemaMergerV2:
                 stats["fields_with_spoken_names"] += 1
                 stats["unique_spoken_names"].add(field.spoken_name)
 
-            if field.help_text:
+            if field.help and field.help.inline:
                 stats["fields_with_help_text"] += 1
 
-            if field.widget_group:
+            if field.group_id:
                 stats["fields_with_groups"] += 1
 
-            if field.conditionals:
+            if field.conditional_fields:
                 stats["fields_with_conditionals"] += 1
 
         stats["unique_spoken_names"] = len(stats["unique_spoken_names"])
