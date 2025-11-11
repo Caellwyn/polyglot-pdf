@@ -181,7 +181,14 @@ class ValidationHandler:
                     value = getattr(field_obj, attr)
                     # Only add non-None/non-empty values
                     if value is not None and (not isinstance(value, (list, str)) or value):
-                        field_dict[attr] = value
+                        # Special handling for options: convert Pydantic models to dicts
+                        if attr == 'options' and isinstance(value, list):
+                            field_dict[attr] = [
+                                opt.dict() if hasattr(opt, 'dict') else opt
+                                for opt in value
+                            ]
+                        else:
+                            field_dict[attr] = value
             
             field_dicts.append(field_dict)
         
