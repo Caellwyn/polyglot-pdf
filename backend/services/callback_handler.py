@@ -47,7 +47,8 @@ class CallbackHandler:
         self._handle_get_field_value = None
         self._handle_complete_section = None
         self._request_form_state_from_client = None
-    
+        self._get_next_field_schema_for_jit = None
+
     def set_tool_handlers(
         self,
         handle_update_fields,
@@ -55,6 +56,7 @@ class CallbackHandler:
         handle_get_field_value,
         handle_complete_section,
         request_form_state_from_client,
+        get_next_field_schema_for_jit,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -62,6 +64,7 @@ class CallbackHandler:
         self._handle_get_field_value = handle_get_field_value
         self._handle_complete_section = handle_complete_section
         self._request_form_state_from_client = request_form_state_from_client
+        self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
     
     async def send_form_update(
         self,
@@ -274,10 +277,17 @@ class CallbackHandler:
         
         # Request next hint only if ALL fields were valid
         next_field_hint = None
+        next_field_schema = None
         if not validation_errors and not unknown_fields and applied_fields:
             next_field_hint = await self.send_form_update(result.get("form_state"), applied_fields)
-            _log.info("field_update_success", applied=len(applied_fields), 
+            _log.info("field_update_success", applied=len(applied_fields),
                      next_hint_length=len(next_field_hint) if next_field_hint else 0)
+
+            # Get next field's schema for JIT loading (Phase 2.5: Token Reduction)
+            if self._get_next_field_schema_for_jit and applied_fields:
+                # Get the first (and only) applied field ID
+                updated_field_id = applied_fields[0]
+                next_field_schema = self._get_next_field_schema_for_jit(updated_field_id)
         else:
             await self.send_form_update(result.get("form_state"), applied_fields)
 
@@ -287,6 +297,7 @@ class CallbackHandler:
             unknown_fields,
             applied_fields,
             next_field_hint,
+            next_field_schema,
             rejected_count=len(rejected_fields)
         )
 
@@ -418,9 +429,22 @@ class CallbackHandler:
         unknown_fields: list,
         applied_fields: list,
         next_field_hint: Optional[str],
+        next_field_schema: Optional[Dict[str, Any]] = None,
         rejected_count: int = 0
     ) -> Dict[str, Any]:
-        """Build tool response for update_form_fields."""
+        """Build tool response for update_form_fields.
+
+        Args:
+            validation_errors: List of validation error objects
+            unknown_fields: List of unknown field IDs
+            applied_fields: List of successfully applied field IDs
+            next_field_hint: Spoken name hint for next field
+            next_field_schema: Full schema for next field (JIT loading - Phase 2.5)
+            rejected_count: Number of fields rejected due to multi-field constraint
+
+        Returns:
+            Tool response dict for Gemini
+        """
         if validation_errors or unknown_fields:
             # Build error response
             error_lines = []
@@ -473,12 +497,16 @@ class CallbackHandler:
                 "message": "\n".join(message_parts)
             }
         else:
-            # All fields valid - include next_field_hint
+            # All fields valid - include next_field_hint and schema (if JIT enabled)
             tool_response = {
                 "success": True,
                 "applied_fields": applied_fields,
                 "message": next_field_hint or "Fields updated successfully.",
             }
+
+            # Include next field schema if available (Phase 2.5: JIT schema loading)
+            if next_field_schema:
+                tool_response["next_field_schema"] = next_field_schema
         
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", success=tool_response.get("success"), 

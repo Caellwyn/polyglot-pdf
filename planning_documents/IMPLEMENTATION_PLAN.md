@@ -260,26 +260,27 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - 🔄 Backend integration pending (needs to call frontend utility)
   - 🔄 WebSocket message handling pending
 
-#### 2.5 Update Tool Response Enhancement
-- **Location**: `backend/services/callback_handler.py` - `handle_update_form_fields()`
-- **Current Behavior**: Returns success message with next_field_hint (spoken name only)
-- **New Behavior**: Include next field hint WITH full schema (guides Gemini forward)
-  ```python
-  def build_update_response(self, updated_field, next_field, loaded_field_ids):
-      # Get next field schema using manifest_service
-      next_schema = get_next_field_schema(part_data, updated_field.id)
-
-      if next_schema:
-          loaded_field_ids.add(next_schema['id'])  # Mark as sent
-
-      return {
-          "success": True,
-          "message": f"Updated {updated_field.spoken_name}",
-          "next_field_hint": next_field.spoken_name,
-          "next_field_schema": next_schema  # ALWAYS included with hint
-          # This guides Gemini to the next field naturally
-      }
-  ```
+#### 2.5 Update Tool Response Enhancement ✅ COMPLETE
+- **Location**: `backend/services/callback_handler.py` - `_handle_update_form_fields_tool()`
+- **Status**: ✅ Implemented with JIT schema loading
+- **Implementation Details**:
+  - Added `loaded_field_ids: Set[str]` tracking to `FormFillingService.__init__` (form_filling_service.py:43)
+  - Created `get_next_field_schema_for_jit()` method in FormFillingService (form_filling_service.py:650-683):
+    * Checks `USE_JIT_SCHEMA` feature flag
+    * Calls `get_next_field_schema()` from manifest_service
+    * Tracks loaded field IDs to prevent duplicates
+    * Returns None if JIT disabled or no next field
+  - Injected method via `set_tool_handlers()` (form_filling_service.py:125, callback_handler.py:59)
+  - Updated `_handle_update_form_fields_tool()` (callback_handler.py:286-290):
+    * Calls `get_next_field_schema_for_jit()` after successful update
+    * Passes schema to response builder
+  - Updated `_build_update_fields_response()` (callback_handler.py:426-509):
+    * Accepts `next_field_schema` parameter
+    * Includes in response when available: `tool_response["next_field_schema"]`
+- **Behavior**:
+  - When `USE_JIT_SCHEMA=true`: Tool response includes next field's full schema
+  - When `USE_JIT_SCHEMA=false`: Response only includes hint (legacy behavior)
+  - Schema automatically tracked in `loaded_field_ids` to prevent duplicates
 - **Key Distinction**:
   - `update_form_fields` response: Includes hint + schema (guides forward)
   - `get_field_value` response: Schema only if not sent (user-directed, no hint)
