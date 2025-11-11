@@ -22,6 +22,10 @@ export interface SchemaFormState {
   validationErrors: Record<string, string>; // field_id → error message
   lastUpdated: number;
   sessionId?: string; // Set by backend during handshake
+
+  // Phase 3: JIT (Just-In-Time) Schema Loading - Token Reduction
+  loadedFieldIds: Set<string>; // Field IDs where Gemini has received full schema
+  jitModeEnabled: boolean; // Whether JIT mode is active (from backend feature flag)
 }
 
 export class SchemaFormStateManager {
@@ -60,6 +64,9 @@ export class SchemaFormStateManager {
       completedParts: new Set(),
       validationErrors: {},
       lastUpdated: Date.now(),
+      // JIT schema loading (Phase 3: Token Reduction)
+      loadedFieldIds: new Set(),
+      jitModeEnabled: false, // Will be set during handshake based on backend flag
     };
 
     this.save(newState);
@@ -95,6 +102,19 @@ export class SchemaFormStateManager {
         delete parsed.currentSectionId;
       }
 
+      // Phase 3: JIT schema loading - Restore loadedFieldIds Set
+      if (parsed.loadedFieldIds) {
+        parsed.loadedFieldIds = new Set(parsed.loadedFieldIds);
+      } else {
+        // Initialize if missing (old state)
+        parsed.loadedFieldIds = new Set();
+      }
+
+      // Initialize jitModeEnabled if missing (old state)
+      if (parsed.jitModeEnabled === undefined) {
+        parsed.jitModeEnabled = false;
+      }
+
       return parsed as SchemaFormState;
     } catch (error) {
       console.error("[SchemaFormState] Failed to load state:", error);
@@ -107,10 +127,11 @@ export class SchemaFormStateManager {
    */
   static save(state: SchemaFormState): void {
     try {
-      // Convert Set to array for JSON serialization
+      // Convert Sets to arrays for JSON serialization
       const toStore = {
         ...state,
         completedParts: Array.from(state.completedParts),
+        loadedFieldIds: Array.from(state.loadedFieldIds), // Phase 3: JIT schema loading
         lastUpdated: Date.now(),
       };
 
@@ -720,6 +741,70 @@ export class SchemaFormStateManager {
     const newState = {
       ...state,
       completedParts: new Set([...state.completedParts, partId]),
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Phase 3: JIT Schema Loading - Mark field schema as loaded
+   *
+   * Called when Gemini receives a field's complete schema:
+   * - Initial handshake (first field)
+   * - After update_form_fields (next field schema)
+   * - From get_field_value (if schema not already sent)
+   */
+  static markFieldSchemaLoaded(state: SchemaFormState, fieldId: string): SchemaFormState {
+    if (state.loadedFieldIds.has(fieldId)) {
+      // Already loaded, no state change needed
+      return state;
+    }
+
+    const newState = {
+      ...state,
+      loadedFieldIds: new Set([...state.loadedFieldIds, fieldId]),
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Phase 3: JIT Schema Loading - Check if field schema has been sent to Gemini
+   */
+  static isFieldSchemaLoaded(state: SchemaFormState, fieldId: string): boolean {
+    return state.loadedFieldIds.has(fieldId);
+  }
+
+  /**
+   * Phase 3: JIT Schema Loading - Enable/disable JIT mode
+   *
+   * Called during handshake based on backend USE_JIT_SCHEMA flag
+   */
+  static setJitMode(state: SchemaFormState, enabled: boolean): SchemaFormState {
+    if (state.jitModeEnabled === enabled) {
+      return state;
+    }
+
+    const newState = {
+      ...state,
+      jitModeEnabled: enabled,
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Phase 3: JIT Schema Loading - Clear loaded field IDs
+   *
+   * Called when switching parts/sections to reset tracking
+   */
+  static clearLoadedFieldIds(state: SchemaFormState): SchemaFormState {
+    const newState = {
+      ...state,
+      loadedFieldIds: new Set(),
       lastUpdated: Date.now()
     };
     this.save(newState);
