@@ -172,19 +172,20 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - **get_field_value**: Includes schema ONLY if not already sent (user-directed, no redirect)
   - **Tracked state**: loaded_field_ids set prevents duplicate schemas in context
 
-#### 2.3 System Instruction Template Updates
+#### 2.3 System Instruction Template Updates ✅ COMPLETE
 - **Task**: Create JIT-specific instruction template
-- **Location**: `backend/config.py` - New `JIT_SYSTEM_INSTRUCTION_TEMPLATE`
-- **Key Instructions to Add**:
-  ```
-  You receive a field manifest with spoken names and IDs.
-  Use get_field_value to retrieve full field details when needed.
-  The next_field_hint after each update includes complete schema for the next field.
-  Users cannot see conditional fields on the UI until unlocked.
-  If a user asks about a locked field, check its dependencies first.
-  Previous section manifests allow lookups but not updates across sections.
-  ```
-- **Swap Logic**: Use JIT template when `USE_JIT_SCHEMA=true`
+- **Location**: `backend/config.py` - New `JIT_SYSTEM_INSTRUCTION` (lines 200-250)
+- **Status**: ✅ Template created and integrated
+- **Implementation Details**:
+  - Manifest-first explanation (lightweight field_id|spoken_name pairs)
+  - JIT schema loading workflow documented
+  - Schema delivery strategy clarified:
+    * next_field_hint: ALWAYS includes schema (guides forward)
+    * get_field_value: Includes schema ONLY if not already sent (user-directed)
+  - Conditional field handling explained (locked fields return dependency info)
+  - Previous section manifest lookup documented (read-only)
+  - All placeholders properly defined: {form_title}, {section_number}, {manifest_text}, {next_field_hint}, {next_field_schema}, {confirmation_policy}
+- **Swap Logic**: Use JIT_SYSTEM_INSTRUCTION when `USE_JIT_SCHEMA=true`
 
 #### 2.4 Enhanced get_field_value Tool ✅ DESIGN COMPLETE
 - **Location**: `backend/services/callback_handler.py` - `handle_get_field_value()`
