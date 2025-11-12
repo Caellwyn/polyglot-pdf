@@ -270,10 +270,19 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral } = message;
+    const { session_id, ephemeral, jit_mode_enabled } = message;
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
+
+    // Enable JIT mode if backend supports it
+    if (jit_mode_enabled !== undefined) {
+      this.state = SchemaFormStateManager.setJitMode(this.state, jit_mode_enabled);
+      if (jit_mode_enabled) {
+        console.log('[WebFormConnection] ✅ JIT mode enabled by backend');
+      }
+    }
+
     this.setStatus("connected");
 
     if (this.callbacks.onSessionReady) {
@@ -319,12 +328,18 @@ export class WebFormConnection {
   private handleFormUpdated(message: any): void {
     const data = (message && message.data) || {};
     const formState = data.form_state || {};
-    const applied = data.applied_fields || [];
+    const applied = data.applied_fields || {};
     const requestNextFieldHint = data.request_next_field_hint || false;
     const requestId = data.request_id;
+    const nextFieldSchema = data.next_field_schema; // JIT mode: backend sends next field schema
 
     if (!formState || typeof formState !== "object") {
       return;
+    }
+
+    // Handle JIT mode: mark next field as loaded if schema provided
+    if (nextFieldSchema && nextFieldSchema.id) {
+      this.state = SchemaFormStateManager.markFieldSchemaLoaded(this.state, nextFieldSchema.id);
     }
 
     const appliedSet = new Set(applied.map((entry: any) => String(entry)));

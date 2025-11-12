@@ -509,6 +509,8 @@ export class SchemaFormStateManager {
   /**
    * Switch to a different part by ID
    * Used for section switching via WebSocket
+   *
+   * JIT Mode: Clears loadedFieldIds because Gemini context resets on part switch
    */
   static switchToPart(state: SchemaFormState, partId: string): SchemaFormState {
     // Only mark current part as completed if switching to a different part
@@ -516,10 +518,15 @@ export class SchemaFormStateManager {
       ? new Set([...state.completedParts, state.currentPartId])
       : state.completedParts;
 
+    // JIT mode: Clear loaded field IDs when switching parts
+    // (Gemini context resets, so we need to send manifests again)
+    const loadedFieldIds = state.jitModeEnabled ? new Set<string>() : state.loadedFieldIds;
+
     const newState = {
       ...state,
       currentPartId: partId,
       completedParts,
+      loadedFieldIds,
       lastUpdated: Date.now()
     };
     this.save(newState);
@@ -631,8 +638,15 @@ export class SchemaFormStateManager {
   /**
    * Generate WebSocket handshake payload
    * Used when connecting to backend or switching sections
+   * Automatically uses JIT mode if enabled in state
    */
   static getHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
+    // Check if JIT mode is enabled
+    if (state.jitModeEnabled) {
+      return this.getJITHandshakePayload(state, fillLanguage);
+    }
+
+    // Legacy mode: send full schema
     const currentPart = state.schema.parts?.find(p => p.id === state.currentPartId);
 
     // Extract schema for current part only
@@ -648,6 +662,40 @@ export class SchemaFormStateManager {
       section_label: currentPart?.label ?? '',
       total_sections: state.schema.parts?.length ?? 1,
       previous_spoken_names: previousSpokenNames,
+      fill_language: fillLanguage
+    };
+  }
+
+  /**
+   * Generate JIT mode handshake payload with manifest
+   * Only sends field_id|spoken_name pairs, not full schemas
+   */
+  static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
+    // Import manifest utilities (dynamic import to avoid circular dependency)
+    const { buildHandshakeManifest, getFieldSchema } = require('../utils/manifestUtils');
+
+    const currentPart = state.schema.parts?.find(p => p.id === state.currentPartId);
+
+    // Build manifest with current + previous parts
+    const manifest = buildHandshakeManifest(state.currentPartId, state.schema, state);
+
+    // Get first field schema for current part
+    let firstFieldSchema = null;
+    const partSchema = this.extractPartFields(state.schema, state.currentPartId);
+    if (partSchema.fields.length > 0) {
+      const firstFieldId = partSchema.fields[0].id;
+      firstFieldSchema = getFieldSchema(firstFieldId, state.schema);
+    }
+
+    return {
+      type: 'handshake_jit',
+      manifest: manifest,
+      first_field_schema: firstFieldSchema,
+      loaded_field_ids: Array.from(state.loadedFieldIds),
+      current_values: state.fieldValues,
+      section_number: currentPart?.order ?? 1,
+      section_label: currentPart?.label ?? '',
+      total_sections: state.schema.parts?.length ?? 1,
       fill_language: fillLanguage
     };
   }
