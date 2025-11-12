@@ -165,18 +165,21 @@ The project is transitioning from a demo-based architecture to a schema-driven a
    - Impact: Can only access 1/8 of form
    - Status: Fix planned, 2-3 hours estimated
 
+### Recently Completed (November 11, 2025)
+1. **Token Reduction - Phase 4.1** ✅
+   - Goal: Reduce from 7,400 to <500 initial tokens
+   - Achievement: **458 tokens (94% reduction)**
+   - Strategy: JIT (just-in-time) field loading with lightweight manifests
+   - Status: Integration tests complete (8/8 passing)
+   - Next: Live Gemini API testing (Phase 4.2)
+
 ### In Progress
 1. **Voice Overlay Integration** (Phase 4A)
    - Migrating from WebFormStateManager to SchemaFormStateManager
    - 61 code changes identified across 3 files
    - Status: Audit complete, implementation partially done
 
-2. **Token Reduction**
-   - Goal: Reduce from 7,400 to <500 initial tokens
-   - Strategy: Just-in-time field loading
-   - Status: Plan complete, implementation pending
-
-3. **Hallucination Reduction**
+2. **Hallucination Reduction**
    - Multiple strategies: audio filters, PTT default, single-field updates
    - Branch created, partial implementation (noise gate done)
    - Status: Some features complete, others pending
@@ -198,17 +201,18 @@ The project is transitioning from a demo-based architecture to a schema-driven a
 
 ### Current Performance
 - **Voice Accuracy**: >99% field accuracy when confirmed
+- **Token Usage**: **458 initial tokens** (94% reduction achieved) ✅
 - **Tool Hallucinations**: ~5-10% (target <1% after fixes)
 - **Audio Quality**: -50dB noise gate, PTT mode available
 - **Session Handling**: 60s idle timeout working correctly
-- **Test Coverage**: Backend 102 tests, Frontend 66+ tests
+- **Test Coverage**: Backend 102+ tests, Frontend 66+ tests
 
 ### Target Improvements
-- **Token Usage**: <500 initial (from 7,400 current)
 - **Hallucination Rate**: <1% (from 5-10% current)
 - **Confirmation Rate**: 100% verbal confirmation
 - **Form Coverage**: 50+ USCIS forms supported
 - **Navigation**: All 8 sections accessible (currently broken)
+- **JIT Mode**: Enable in production after Phase 4.2-4.5 testing
 
 ---
 
@@ -338,4 +342,4 @@ We're building a tool that empowers people to complete forms accurately in their
 
 ---
 
-**Current Focus**: Fix critical bugs (radio buttons, section navigation), then implement token reduction for efficiency. Voice overlay integration and hallucination reduction features to follow.
+**Current Focus** (November 11, 2025): Token reduction Phase 4.1 complete with 94% reduction achieved. Next: Live Gemini API testing (Phase 4.2), then fix critical bugs (radio buttons, section navigation). Voice overlay integration and hallucination reduction features to follow.
