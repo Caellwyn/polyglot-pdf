@@ -1,9 +1,17 @@
 # Token Reduction Implementation Plan
 
-**Version**: 1.1  
-**Created**: November 10, 2025  
-**Last Updated**: November 10, 2025  
+**Version**: 1.2
+**Created**: November 10, 2025
+**Last Updated**: November 12, 2025
 **Purpose**: Reduce Gemini context tokens from ~7,400 to <500 initial tokens through just-in-time field loading
+
+**Status Update (Nov 12, 2025)**:
+- ✅ **Phases 1-2**: Backend implementation complete, 8/8 tests passing, 94% token reduction achieved
+- ✅ **Phase 3.1-3.2**: Frontend state tracking and utilities complete
+- ❌ **Phase 3.3**: Frontend connection integration **NOT COMPLETE** - blocks end-to-end JIT mode
+- ✅ **Phase 3.4-3.5**: Checkbox handling and cross-part navigation working
+- ✅ **Phase 4.1**: Integration tests complete
+- ⏸️ **Phases 4.2-4.5**: Pending Phase 3.3 completion
 
 ---
 
@@ -340,8 +348,9 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 ## Phase 3: Frontend State Management
 
-**Duration**: 2-3 days  
+**Duration**: 2-3 days
 **Goal**: Track field information delivery and coordinate with backend
+**Status**: ⚠️ **MOSTLY COMPLETE** - Phase 3.3 integration pending (Verified Nov 12, 2025)
 
 ### Steps
 
@@ -393,10 +402,15 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - estimateManifestTokens: 2 tests (positive estimate, scaling)
   - getFieldSchema: 3 tests (lookup, not found, complete object)
 
-#### 3.3 Connection Manager Updates
+#### 3.3 Connection Manager Updates ❌ NOT COMPLETE
 - **Task**: Modify WebSocket connection for JIT mode
-- **Location**: `frontend/src/shared/connection.ts`
-- **Handshake Changes**:
+- **Location**: `frontend/src/shared/connection.ts`, `frontend/src/webFormConnection.ts`
+- **Status**: ❌ NOT INTEGRATED - Frontend still uses full schema handshake
+- **Current Implementation**:
+  - Handshake uses `SchemaFormStateManager.getHandshakePayload()` (lines 161)
+  - Sends full part schema, not manifest
+  - Manifest utilities (`manifestUtils.ts`) exist but not used in connection
+- **Required Changes**:
   ```typescript
   private prepareHandshakePayload() {
     if (this.jitModeEnabled) {
@@ -415,36 +429,37 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - Extract next_field_hint from update responses
   - Add field to loadedFieldIds when schema received
   - Update state after each tool call
+- **Blocker**: Frontend integration needed before JIT mode can work end-to-end
 
-#### 3.4 Checkbox Group Optimization
+#### 3.4 Checkbox Group Optimization ✅ N/A
 - **Task**: Handle checkbox groups as single units
 - **Location**: `frontend/src/schema-forms/components/fields/CheckboxField.tsx`
+- **Status**: ✅ Already works as expected
 - **Special Handling**:
   - Checkbox groups already treated as single field in schema
   - When loading schema for checkbox field, all options included
   - No special JIT handling needed (works with existing structure)
 - **Manifest Entry**: Single entry like `{"field_id": "Part1_Checkbox4", "spoken_name": "race categories"}`
 
-#### 3.5 Cross-Part Navigation Support
+#### 3.5 Cross-Part Navigation Support ✅ COMPLETE
 - **Task**: Enable queries across parts without updates
-- **Location**: `frontend/src/shared/connection.ts`
+- **Location**: `frontend/src/webFormConnection.ts`
+- **Status**: ✅ Parts-based navigation implemented
 - **Implementation**:
-  - When switching parts, retain manifests in state
+  - Part switching implemented via `switchToPart()` (lines 620, 1269, 1365)
+  - Backend retains previous part spoken names in handshake
   - get_field_value can query any part's fields
   - update_form_fields restricted to current part only
-  - Clear loadedFieldIds on part switch (Gemini context reset)
-- **User Messaging**: If user tries to update previous part field:
-  ```
-  "To change that field, would you like to go back to Part X?"
-  ```
+  - loadedFieldIds clearing on part switch handled by backend
+- **Note**: Works with full schema mode; will continue to work with JIT mode once Phase 3.3 complete
 
 ### Exit Criteria
-- [ ] State correctly tracks all loaded field IDs
-- [ ] SessionStorage properly serializes Sets and Maps
-- [ ] Manifest generation completes in <50ms
-- [ ] Handshake uses manifests when JIT enabled
-- [ ] Previous part manifests retained for lookups
-- [ ] Checkbox groups handled as single fields
+- [x] State correctly tracks all loaded field IDs (SchemaFormState.loadedFieldIds)
+- [x] SessionStorage properly serializes Sets and Maps (Array.from/new Set pattern)
+- [x] Manifest generation completes in <50ms (20 tests passing)
+- [ ] Handshake uses manifests when JIT enabled (**BLOCKED: Phase 3.3 not complete**)
+- [x] Previous part manifests retained for lookups (backend handles this)
+- [x] Checkbox groups handled as single fields (works in existing implementation)
 
 ---
 

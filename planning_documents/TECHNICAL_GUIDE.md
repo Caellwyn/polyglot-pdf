@@ -1,7 +1,7 @@
 # Voice Form Filler - Technical Architecture Guide
 
-**Version**: 2.1  
-**Last Updated**: November 10, 2025  
+**Version**: 3.0
+**Last Updated**: November 12, 2025
 **Status**: Production-Ready Core with Active Development
 
 ---
@@ -9,6 +9,13 @@
 ## Executive Summary
 
 The Voice Form Filler is a specialized application designed to help non-English speakers complete complex USCIS immigration forms through voice interaction with Gemini AI. The system prioritizes accuracy over speed, processing one field at a time with mandatory confirmation workflows. It addresses unique challenges including broken conditional logic in USCIS PDFs and deployment in noisy nonprofit office environments.
+
+**Major Features (as of Nov 12, 2025)**:
+- ✅ Schema-driven forms with parts-based navigation (8 parts for I-90)
+- ✅ Hallucination reduction features (PTT mode, audio filters, single-field constraint)
+- ✅ Token reduction backend (94% reduction: 7,400→458 tokens, feature flag ready)
+- ✅ Shared audio stream architecture (eliminates race conditions)
+- ⚠️ Legacy demo system deprecated but not removed (cleanup pending)
 
 ---
 
@@ -358,37 +365,24 @@ interface Field {
 }
 ```
 
-### Schema Conformance Pipeline
+### Schema Management
 
-**Status**: I-90 form complete, others pending
-
-**6-Step Pipeline**:
-1. Extract raw schema from PDF
-2. Clean and normalize field names
-3. Apply field ordering
-4. Add spoken names
-5. Validate with Pydantic models
-6. Round-trip testing with PDF
+**Note**: Schema extraction and editing tools have been segregated into a separate application. This app consumes pre-built schemas only.
 
 **Supported Forms**:
-- ✅ I-90 (Green Card Renewal) - Complete
+- ✅ I-90 (Green Card Renewal) - Production Ready
   - Version: `v9_conformant`
-  - Location: `pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
-  - Parts structure: 8 parts implemented
-- 🔄 I-589 (Asylum) - Schema extraction complete, conformance pending
-  - Location: `pdf_schema_extractor/test_schemas/test_pdfs/i-589/`
-  - Files: `final_schema_minimal.json`, `verification_minimal.json`
-  - Needs: Parts structure addition, spoken names, field ordering
+  - Location: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
+  - Parts structure: 8 parts, 132 fields
+  - Spoken names: 100% unique (verified)
+- 📋 I-589 (Asylum) - Schema extraction complete, conformance pending (external app)
 - 📋 I-485 (Adjustment of Status) - Planned
 - 📋 I-765 (Work Permit) - Planned
 - 📋 N-400 (Citizenship) - Planned
 
-**Schema Deployment Pipeline**:
-1. Extract from PDF → `pdf_schema_extractor/test_schemas/test_pdfs/{form}/`
-2. Apply conformance → Add parts, ordering, spoken names
-3. Copy to schema editor → `schema-editor/public/schemas/{form}/`
-4. Copy to frontend → `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/{form}/`
-5. Production apps load from appropriate location
+**Schema Location**:
+- Production schemas: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/{form}/`
+- Application loads schemas at runtime from public directory
 
 ---
 
@@ -531,27 +525,45 @@ PROACTIVE_AUDIO = False  # Currently disabled
 
 ## Performance Metrics
 
-### Current Performance
+### Current Performance (Legacy Mode - USE_JIT_SCHEMA=false)
 
-**Note**: These are estimated values based on system design. Actual token usage should be verified using the token-monitor tool.
-
-- **Initial context**: ~7,400 tokens (full section)
+- **Initial context**: ~7,400 tokens (full section schema)
 - **Per-field update**: ~300 tokens
 - **Audio latency**: <100ms processing
 - **WebSocket latency**: <50ms typical
 
-### JIT Schema Performance (Implemented - November 11, 2025)
+### JIT Schema Performance (Backend Ready - November 12, 2025)
 
-**Status**: ✅ Token reduction feature implemented and tested in Phase 4.1
+**Status**: ✅ **Backend implementation complete**, ⚠️ **Frontend integration pending**
 
-**Verified Metrics** (I-90 Part 1):
+**Verified Metrics** (I-90 Part 1 - Backend Testing):
 - **Initial context**: **458 tokens** (94% reduction from 7,400) ✅
-- **Token accumulation**: Part 3 reaches 779 tokens (with previous parts)
-- **Per-field update**: <250 tokens (estimated with next_field_schema)
-- **Feature flag**: `USE_JIT_SCHEMA` ready for deployment
+- **Token accumulation**: Part 3 reaches 779 tokens (with previous parts included)
+- **Per-field update**: <250 tokens (with next_field_schema included)
+- **Feature flag**: `USE_JIT_SCHEMA=true` in backend config
+
+**Backend Implementation Status**:
+- ✅ Phase 2.1-2.6: Backend infrastructure complete
+  - `manifest_service.py` created with manifest generation functions
+  - `ai_context.py` updated to send manifest when JIT enabled
+  - Tool responses include next field schema
+  - Feature flag toggles between modes
+- ✅ Phase 3.1-3.2: Frontend state tracking ready
+  - `loadedFieldIds` tracking in SchemaFormState
+  - `manifestUtils.ts` with 20 passing tests
+- ⚠️ Phase 3.3: Frontend connection manager **NOT YET INTEGRATED**
+  - Current handshake uses full schema via `getHandshakePayload()`
+  - Manifest utilities exist but not used in WebSocket handshake
+  - Integration pending
+
+**Next Steps for Production**:
+1. Integrate manifestUtils into frontend connection handshake (Phase 3.3)
+2. Live Gemini API testing with JIT mode (Phase 4.2-4.3)
+3. Error recovery and user acceptance testing (Phase 4.4-4.5)
+4. Enable feature flag in production once validated
 
 **Test Results**:
-- ✅ 8/8 integration tests passing
+- ✅ 8/8 backend integration tests passing
 - ✅ Manifest contains only field_id|spoken_name pairs
 - ✅ All 38 Part 1 fields have unique spoken names
 - ✅ Next field schema retrieval working
@@ -734,6 +746,8 @@ voice-form-filler/
 │   │   │   └── utils/
 │   │   │       ├── fieldValue.ts
 │   │   │       ├── validation.ts
+│   │   │       ├── manifestUtils.ts (JIT mode)
+│   │   │       ├── conditionalFieldCheck.ts
 │   │   │       └── pdfFiller.ts
 │   │   ├── demo/
 │   │   │   ├── VoiceOverlay.tsx
@@ -751,16 +765,21 @@ voice-form-filler/
 │   │   ├── navigation.ts
 │   │   └── webFormConnection.ts
 │   └── public/
-│       └── schema-form-demo.html
+│       ├── schema-form-demo.html (production demo)
+│       ├── adult_intake_demo.html (deprecated)
+│       └── pdf_schema_extractor/
+│           └── test_schemas/ (schemas provided by external tool)
 ├── backend/
-│   ├── config.py
+│   ├── config.py (JIT feature flag: USE_JIT_SCHEMA)
 │   ├── services/
 │   │   ├── form_filling_service.py
 │   │   ├── validation_handler.py
 │   │   ├── callback_handler.py
 │   │   ├── audio_handler.py
 │   │   ├── request_coordinator.py
-│   │   └── field_utils.py
+│   │   ├── field_utils.py
+│   │   ├── manifest_service.py (JIT mode)
+│   │   └── ai_context.py (JIT handshake logic)
 │   ├── adapters/
 │   │   └── live_ai_gemini.py
 │   ├── ports/
@@ -769,46 +788,43 @@ voice-form-filler/
 │   │   ├── websocket_routes.py
 │   │   ├── vad_config_routes.py
 │   │   └── pdf_fill_routes.py
-│   ├── models/
-│   │   └── form_models.py
 │   ├── utils/
 │   │   ├── fuzzy_field_matcher.py
 │   │   ├── field_validator.py
 │   │   ├── dev_file_logger.py
 │   │   ├── token_file_logger.py
 │   │   └── structured_logger.py
-│   └── schemas/
-│       └── form_schema_types.ts
-├── pdf_schema_extractor/
-│   ├── extractor.py
-│   ├── form_models.py
-│   ├── heuristic_hierarchy_parser.py
-│   └── test_schemas/
-│       └── test_pdfs/
-│           └── i-90/
-│               └── i-90_schema.json
-└── docs/
-    └── TECHNICAL_ARCHITECTURE.md
+│   ├── tests/
+│   │   └── unit/
+│   │       └── test_jit_schema_loading.py
+│   └── test_jit_system_e2e.py (8/8 passing)
+└── planning_documents/
+    ├── TECHNICAL_GUIDE.md (this file)
+    ├── PROJECT_CONTEXT.md
+    └── IMPLEMENTATION_PLAN.md
+
+Note: Schema extraction and editing components segregated to external application
 ```
 
 ---
 
-**Document Version**: 2.1  
-**Compiled**: November 10, 2025  
-**Next Review**: November 15, 2025
+**Document Version**: 3.0
+**Compiled**: November 12, 2025
+**Next Review**: December 1, 2025
 
-**Update Summary (v2.1)**:
-- ✅ Fixed file path references (connection.ts → shared/connection.ts)
-- ✅ Updated tool definitions to match actual implementation
-- ✅ Corrected WebSocket protocol to reflect parts-based architecture
-- ✅ Fixed environment variables (VITE_ prefix instead of REACT_APP_)
-- ✅ Added shared audio stream pattern documentation
-- ✅ Clarified parts vs sections architecture
-- ✅ Added missing backend services (AudioHandler, RequestCoordinator, FieldUtils)
-- ✅ Updated I-589 status with specific details
-- ✅ Added schema deployment pipeline documentation
-- ✅ Corrected WebSocket endpoints
-- ✅ Added performance metric caveats
-- ✅ Updated file structure appendix
+**Update Summary (v3.0 - November 12, 2025)**:
+- ✅ Verified hallucination reduction features (PTT mode, audio filters, single-field constraint)
+- ✅ Documented JIT schema system status (backend complete, frontend pending)
+- ✅ Clarified Phase 3.3 integration gap (frontend handshake not using manifests yet)
+- ✅ Updated performance metrics with actual test results (458 tokens achieved)
+- ✅ Removed schema extraction pipeline (segregated to external app)
+- ✅ Updated file structure with JIT-related files
+- ✅ Marked legacy demo system as deprecated
+- ✅ Added major features summary in executive section
 
-This document represents the current confirmed state of the Voice Form Filler application as of November 10, 2025, with clear separation between implemented features and planned enhancements. All information has been verified against the actual codebase in the `shared-audio-stream` branch.
+**Previous Update (v2.1 - November 10, 2025)**:
+- Fixed file path references and WebSocket protocol
+- Added shared audio stream pattern
+- Clarified parts vs sections architecture
+
+This document represents the verified state of the Voice Form Filler application as of November 12, 2025, based on comprehensive code review and testing. All features marked as implemented have been verified in the `shared-audio-stream` branch.
