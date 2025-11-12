@@ -69,19 +69,21 @@ class CallbackHandler:
     async def send_form_update(
         self,
         data: Optional[Dict[str, Any]],
-        applied_fields: Optional[list] = None
+        applied_fields: Optional[list] = None,
+        next_field_schema: Optional[dict] = None
     ) -> Optional[str]:
         """
         Send form state update to frontend.
-        
+
         Sends the form state to the connected websocket client and includes
         the list of fields that were actually applied. Also requests next_field_hint
         in the same message to reduce round trips.
-        
+
         Args:
             data: Form state data to send
             applied_fields: List of field IDs that were actually applied
-            
+            next_field_schema: Schema for next field (JIT mode only)
+
         Returns:
             Next field hint string or None
         """
@@ -89,9 +91,11 @@ class CallbackHandler:
             payload = {"form_state": data}
             if applied_fields is not None:
                 payload["applied_fields"] = applied_fields
-            
+            if next_field_schema is not None:
+                payload["next_field_schema"] = next_field_schema
+
             await self._websocket.send_json({"type": "form_updated", "data": payload})
-            
+
             # Request next field hint via coordinator
             if self._request_coordinator:
                 hint = await self._request_coordinator.request_next_field_hint()
@@ -279,15 +283,21 @@ class CallbackHandler:
         next_field_hint = None
         next_field_schema = None
         if not validation_errors and not unknown_fields and applied_fields:
-            next_field_hint = await self.send_form_update(result.get("form_state"), applied_fields)
-            _log.info("field_update_success", applied=len(applied_fields),
-                     next_hint_length=len(next_field_hint) if next_field_hint else 0)
-
             # Get next field's schema for JIT loading (Phase 2.5: Token Reduction)
             if self._get_next_field_schema_for_jit and applied_fields:
                 # Get the first (and only) applied field ID
                 updated_field_id = applied_fields[0]
                 next_field_schema = self._get_next_field_schema_for_jit(updated_field_id)
+
+            # Send form update to frontend (includes next_field_schema if available)
+            next_field_hint = await self.send_form_update(
+                result.get("form_state"),
+                applied_fields,
+                next_field_schema
+            )
+            _log.info("field_update_success", applied=len(applied_fields),
+                     next_hint_length=len(next_field_hint) if next_field_hint else 0,
+                     has_next_schema=next_field_schema is not None)
         else:
             await self.send_form_update(result.get("form_state"), applied_fields)
 
