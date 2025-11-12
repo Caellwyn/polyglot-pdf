@@ -540,14 +540,22 @@ PROACTIVE_AUDIO = False  # Currently disabled
 - **Audio latency**: <100ms processing
 - **WebSocket latency**: <50ms typical
 
-### Planned Performance (Token Reduction - Not Yet Implemented)
+### JIT Schema Performance (Implemented - November 11, 2025)
 
-**Status**: Token reduction feature is planned but not yet implemented in the codebase.
+**Status**: ✅ Token reduction feature implemented and tested in Phase 4.1
 
-When implemented, target metrics:
-- **Initial context**: <500 tokens (manifest + current)
-- **Per-field update**: <250 tokens
-- **Total section tokens**: <2,500 (vs 7,400)
+**Verified Metrics** (I-90 Part 1):
+- **Initial context**: **458 tokens** (94% reduction from 7,400) ✅
+- **Token accumulation**: Part 3 reaches 779 tokens (with previous parts)
+- **Per-field update**: <250 tokens (estimated with next_field_schema)
+- **Feature flag**: `USE_JIT_SCHEMA` ready for deployment
+
+**Test Results**:
+- ✅ 8/8 integration tests passing
+- ✅ Manifest contains only field_id|spoken_name pairs
+- ✅ All 38 Part 1 fields have unique spoken names
+- ✅ Next field schema retrieval working
+- ✅ Previous part manifests retained for cross-section queries
 
 ### Accuracy Metrics
 - **Field accuracy**: >99% with confirmation
@@ -566,16 +574,18 @@ When implemented, target metrics:
 - ✅ Conditional field visibility
 
 ### Current Limitations
-- Token usage high without reduction implementation
+- JIT mode requires `USE_JIT_SCHEMA=true` flag (disabled by default)
 - Manual context reset not possible with Gemini Live
 - Some USCIS PDF conditional logic requires workarounds
 - Background noise handling relies on PTT mode
+- Conditional field access checking needs frontend integration
 
 ### In Development
-- Just-in-time field loading for token reduction
-- Enhanced conditional logic evaluation
-- Multi-form conformance pipeline
-- Proactive audio features
+- Live Gemini API testing with JIT mode (Phase 4.3)
+- Conditional field dependency checking (Phase 2.4 backend integration)
+- Error recovery and edge case testing (Phase 4.3)
+- Multi-form conformance pipeline (I-589 pending)
+- User acceptance testing (Phase 4.5)
 
 ---
 
