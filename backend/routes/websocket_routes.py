@@ -627,6 +627,7 @@ async def fill_form_from_schema(
 		"type": "session_ready",
 		"session_id": ephemeral_id,
 		"ephemeral": True,  # Signal to client this is stateless
+		"jit_mode_enabled": settings.USE_JIT_SCHEMA,  # Signal if JIT schema loading is active
 	})
 
 	# Start form filling session with schema and current values
