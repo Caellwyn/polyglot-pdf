@@ -14,63 +14,52 @@ from backend.services.form_filling_service import FormFillingService
 
 
 @pytest.mark.asyncio
-async def test_handle_switch_section_requests_section_info():
-    """handle_switch_section should request section info from frontend."""
+async def test_handle_switch_section_requests_via_coordinator_and_switches():
+    """handle_switch_section should delegate to RequestCoordinator then switch sections."""
     service = FormFillingService()
-    
-    # Mock websocket
-    websocket = AsyncMock()
-    service._websocket = websocket
+    coordinator = AsyncMock()
+    service._request_coordinator = coordinator
     service._session_id = "test-session"
-    
-    # Call handle_switch_section
-    task = asyncio.create_task(service.handle_switch_section("2"))
-    
-    # Wait a moment for request to be sent
-    await asyncio.sleep(0.1)
-    
-    # Should have sent prepare_section_switch message
-    assert websocket.send_json.call_count == 1
-    call_args = websocket.send_json.call_args[0][0]
-    assert call_args["type"] == "prepare_section_switch"
-    assert call_args["identifier"] == "2"
-    assert "request_id" in call_args
-    
-    # Cancel task (it's waiting for response)
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+
+    section_info = {
+        "schema": {"fields": []},
+        "current_values": {"name": "Jane"},
+        "metadata": {"section_number": 2, "section_label": "Personal", "total_sections": 4},
+        "initial_field_hint": "Next field: name",
+    }
+    coordinator.request_section_info.return_value = section_info
+
+    # Patch switch_to_section so we can assert on the arguments without invoking Gemini
+    service.switch_to_section = AsyncMock()
+
+    result = await service.handle_switch_section("2")
+
+    coordinator.request_section_info.assert_awaited_once_with("2")
+    service.switch_to_section.assert_awaited_once_with(
+        section_schema=section_info["schema"],
+        section_values=section_info["current_values"],
+        section_metadata=section_info["metadata"],
+        initial_field_hint=section_info["initial_field_hint"],
+    )
+    assert result["success"] is True
+    assert "Switched to section" in result["message"]
 
 
 @pytest.mark.asyncio
-async def test_handle_section_info_response_resolves_future():
-    """handle_section_info_response should resolve the pending future."""
+async def test_handle_switch_section_returns_failure_on_missing_section_info():
+    """If section info cannot be retrieved, the handler should fail gracefully."""
     service = FormFillingService()
-    
-    # Create a pending request
-    request_id = "test-request-123"
-    future = asyncio.Future()
-    service._pending_section_switch = {
-        "request_id": request_id,
-        "future": future,
+    coordinator = AsyncMock()
+    service._request_coordinator = coordinator
+    coordinator.request_section_info.return_value = None
+
+    result = await service.handle_switch_section("missing")
+
+    coordinator.request_section_info.assert_awaited_once_with("missing")
+    assert result == {
+        "success": False,
+        "message": "Section switch request failed or timed out.",
     }
-    
-    # Send response
-    section_info = {
-        "schema": {"fields": []},
-        "current_values": {},
-        "metadata": {"section_number": 2},
-        "initial_field_hint": "Next field: name",
-    }
-    
-    service.handle_section_info_response(request_id, section_info)
-    
-    # Future should be resolved
-    assert future.done()
-    result = await future
-    assert result == section_info
 
 
 @pytest.mark.asyncio
@@ -147,31 +136,21 @@ async def test_switch_to_section_handles_no_live_ai():
     # No exception raised = success
 
 
-def test_handle_section_info_response_ignores_mismatched_request_id():
-    """handle_section_info_response should ignore responses with wrong request ID."""
+def test_handle_section_info_response_delegates_to_request_coordinator():
+    """Responses should be forwarded to the RequestCoordinator for resolution."""
     service = FormFillingService()
-    
-    # Create pending request
-    future = asyncio.Future()
-    service._pending_section_switch = {
-        "request_id": "correct-id",
-        "future": future,
-    }
-    
-    # Send response with wrong ID
-    service.handle_section_info_response("wrong-id", {"schema": {}})
-    
-    # Future should NOT be resolved
-    assert not future.done()
-    
-    # Pending request should still exist
-    assert service._pending_section_switch is not None
+    coordinator = MagicMock()
+    service._request_coordinator = coordinator
+
+    payload = {"schema": {"fields": []}}
+    service.handle_section_info_response("req-1", payload)
+
+    coordinator.handle_section_info_response.assert_called_once_with("req-1", payload)
 
 
-def test_handle_section_info_response_ignores_when_no_pending():
-    """handle_section_info_response should handle no pending request gracefully."""
+def test_handle_section_info_response_no_coordinator_is_noop():
+    """Handler should not raise when coordinator is missing (legacy sessions)."""
     service = FormFillingService()
-    service._pending_section_switch = None
-    
-    # Should not raise
-    service.handle_section_info_response("any-id", {"schema": {}})
+    service._request_coordinator = None
+
+    service.handle_section_info_response("req-1", {"schema": {}})

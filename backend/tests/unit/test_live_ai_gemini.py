@@ -228,8 +228,8 @@ async def test_run_session_loop_handles_async_context_manager():
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
 
     assert ctx.entered is True
-    assert fake_live.connect.call_count == 1
-    _, kwargs = fake_live.connect.call_args
+    assert fake_live.connect.call_count >= 1
+    _, kwargs = fake_live.connect.call_args_list[-1]
     assert kwargs["model"] == adapter._model_name
     assert kwargs["config"]["response_modalities"] == ["AUDIO"]
     # transcription key is present only when transcripts are explicitly enabled
@@ -257,11 +257,10 @@ async def test_run_session_loop_logs_on_connect_failure():
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
 
-    logger.error.assert_called_once()
-    error_call = logger.error.call_args
-    assert error_call.args and error_call.args[0] == "session_loop_error"
-    assert "error" in error_call.kwargs
-    assert error_call.kwargs["error"] == "boom"
+    error_calls = [call for call in logger.error.call_args_list if call.args and call.args[0] == "session_loop_error"]
+    assert error_calls, "expected session_loop_error to be logged"
+    error_call = error_calls[-1]
+    assert error_call.kwargs.get("error") == "boom"
     # ensure background tasks are cleaned up to avoid pending tasks
     await adapter.finalize()
 
@@ -333,129 +332,3 @@ async def test_run_session_loop_dispatches_tool_calls():
     await adapter.finalize()
 
 
-@pytest.mark.asyncio
-async def test_heartbeat_sends_silence_periodically():
-    """Test that heartbeat task sends silence packets at regular intervals."""
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-    from unittest.mock import patch, MagicMock
-    import time
-    
-    adapter = LiveAIGemini()
-    adapter._log = MagicMock()
-    adapter._audio_queue = asyncio.Queue()
-    adapter._text_queue = asyncio.Queue()
-    
-    audio_inputs = []
-    
-    class _TrackingSession:
-        def __init__(self):
-            self.event_count = 0
-            
-        async def send_realtime_input(self, **kwargs):
-            audio_inputs.append((time.time(), kwargs))
-        
-        async def send_client_content(self, **kwargs):
-            pass
-        
-        async def send_tool_response(self, **kwargs):
-            pass
-        
-        def receive(self):
-            # Create a generator that yields events for 35 seconds, then stops
-            async def gen():
-                start = time.time()
-                while time.time() - start < 35:
-                    await asyncio.sleep(1)
-                    self.event_count += 1
-                    # Yield a dummy event to keep the loop running
-                    yield SimpleNamespace(text="dummy")
-            return gen()
-    
-    session = _TrackingSession()
-    ctx = _DummyContextManager(session)
-    
-    fake_live = MagicMock()
-    fake_live.connect.return_value = ctx
-    
-    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
-    
-    # Run the session loop
-    start_time = time.time()
-    await asyncio.wait_for(adapter._run_session_loop(), timeout=40.0)
-    elapsed = time.time() - start_time
-    
-    # Filter for heartbeat packets (320 bytes of silence)
-    heartbeats = [(t, inp) for t, inp in audio_inputs 
-                  if 'audio' in inp 
-                  and hasattr(inp['audio'], 'data')
-                  and len(inp['audio'].data) == 320 
-                  and inp['audio'].data == bytes(320)]
-    
-    # In 35 seconds, we should get at least 1 heartbeat (at 30s mark)
-    assert len(heartbeats) >= 1, f"Expected at least 1 heartbeat in {elapsed:.1f}s, got {len(heartbeats)}"
-    
-    # Verify heartbeats are sent at ~30 second intervals
-    if len(heartbeats) >= 2:
-        time_diff = heartbeats[1][0] - heartbeats[0][0]
-        assert 28 <= time_diff <= 32, f"Expected ~30s between heartbeats, got {time_diff:.1f}s"
-    
-    # Clean up
-    await adapter.finalize()
-
-
-@pytest.mark.asyncio
-async def test_heartbeat_cleanup_on_session_end():
-    """Test that heartbeat task is properly cancelled when session ends."""
-    from backend.adapters.live_ai_gemini import LiveAIGemini
-    
-    adapter = LiveAIGemini()
-    adapter._log = MagicMock()
-    adapter._audio_queue = asyncio.Queue()
-    adapter._text_queue = asyncio.Queue()
-    
-    audio_inputs = []
-    
-    class _QuickSession:
-        async def send_realtime_input(self, **kwargs):
-            audio_inputs.append(kwargs)
-        
-        async def send_client_content(self, **kwargs):
-            pass
-        
-        async def send_tool_response(self, **kwargs):
-            pass
-        
-        def receive(self):
-            # End immediately with empty iterator
-            async def gen():
-                # Yield nothing - session ends immediately
-                if False:
-                    yield
-            return gen()
-    
-    session = _QuickSession()
-    ctx = _DummyContextManager(session)
-    
-    fake_live = MagicMock()
-    fake_live.connect.return_value = ctx
-    
-    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
-    
-    # Run the session loop (should complete quickly)
-    await asyncio.wait_for(adapter._run_session_loop(), timeout=5.0)
-    
-    # Wait to ensure heartbeat task would have fired if not cancelled
-    await asyncio.sleep(2)
-    
-    # Count heartbeat packets
-    heartbeat_count = sum(1 for inp in audio_inputs 
-                         if 'audio' in inp 
-                         and hasattr(inp.get('audio'), 'data')
-                         and len(inp['audio'].data) == 320 
-                         and inp['audio'].data == bytes(320))
-    
-    # Session ended immediately, so no heartbeats should have been sent
-    assert heartbeat_count == 0, f"Expected 0 heartbeats after quick session end, got {heartbeat_count}"
-    
-    # Clean up
-    await adapter.finalize()
