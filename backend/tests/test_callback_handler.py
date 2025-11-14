@@ -54,6 +54,10 @@ def mock_handlers():
         "get_field_value": AsyncMock(return_value={"found": True, "value": "test"}),
         "complete_section": AsyncMock(return_value={"success": True}),
         "request_form_state": AsyncMock(return_value={}),
+        "get_next_field_schema": MagicMock(return_value={
+            "id": "next_field",
+            "spoken_name": "Next Field"
+        })
     }
 
 
@@ -73,6 +77,7 @@ def callback_handler(mock_websocket, mock_coordinator, mock_handlers):
         handle_get_field_value=mock_handlers["get_field_value"],
         handle_complete_section=mock_handlers["complete_section"],
         request_form_state_from_client=mock_handlers["request_form_state"],
+        get_next_field_schema_for_jit=mock_handlers["get_next_field_schema"],
     )
     
     return handler
@@ -107,6 +112,7 @@ class TestCallbackRegistration:
             handle_get_field_value=get_value_handler,
             handle_complete_section=complete_handler,
             request_form_state_from_client=request_state_handler,
+            get_next_field_schema_for_jit=MagicMock(return_value=None),
         )
         
         assert handler._handle_update_fields == update_handler

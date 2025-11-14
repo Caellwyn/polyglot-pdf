@@ -30,6 +30,7 @@ backend/logs/
 # Build outputs
 .frontend/dist/
 frontend/dist/
+frontend/public/form-kits/
 
 # Temporary files
 tmp_*

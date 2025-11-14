@@ -24,12 +24,13 @@ import { createConnectionManager, type ConnectionManager } from "../../shared/co
 
 export interface SchemaFormProps {
   schema: FormSchema;
+  kitId: string;
   pdfUrl?: string; // URL to original PDF for filling (optional)
   onSubmit?: (fieldValues: Record<string, any>) => void;
   onSectionChange?: (sectionId: string) => void;
 }
 
-export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: SchemaFormProps) {
+export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }: SchemaFormProps) {
   const [state, setState] = useState<SchemaFormState>(() => {
     return SchemaFormStateManager.init(schema);
   });
@@ -311,7 +312,7 @@ export function SchemaForm({ schema, pdfUrl, onSubmit, onSectionChange }: Schema
     setIsDownloadingPDF(true);
 
     try {
-      const filledPDFBytes = await fillPDF(pdfUrl, state.fieldValues, state.schema);
+      const filledPDFBytes = await fillPDF(kitId, pdfUrl, state.fieldValues, state.schema);
 
       // Generate filename from form metadata
       const formNumber = state.schema.form_metadata.form_number || 'form';

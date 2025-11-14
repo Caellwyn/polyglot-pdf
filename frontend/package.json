@@ -4,8 +4,11 @@
 	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
+		"form-kits:prepare": "tsx scripts/generate-form-manifest.ts",
 		"dev": "vite",
+		"predev": "npm run form-kits:prepare",
 		"build": "vite build",
+		"prebuild": "npm run form-kits:prepare",
 		"build:worklet": "esbuild src/shared/audio-processor.worklet.ts --bundle --format=esm --target=es2020 --outfile=dist/shared/audio-processor.worklet.js && node -e \"require('fs').mkdirSync('public/shared', {recursive:true})\" && node -e \"require('fs').copyFileSync('dist/shared/audio-processor.worklet.js', 'public/shared/audio-processor.worklet.js')\"",
 		"build:bookmarklet": "npm run build:worklet && vite build --config vite.config.bookmarklet.ts",
 		"dev:demo": "npm run build:worklet && vite --config vite.config.demo.ts",
@@ -13,13 +16,20 @@
 		"dev:vad": "npm run build:worklet && vite --config vite.config.vad.ts",
 		"build:vad": "npm run build:worklet && vite build --config vite.config.vad.ts",
 		"dev:schema": "vite --config vite.config.schema.ts",
+		"predev:schema": "npm run form-kits:prepare",
 		"build:schema": "vite build --config vite.config.schema.ts",
+		"prebuild:schema": "npm run form-kits:prepare",
 		"preview": "vite preview --port 5173",
+		"prepreview": "npm run form-kits:prepare",
 		"preview:demo": "vite preview --config vite.config.demo.ts --port 5174 --outDir dist/demo",
 		"preview:vad": "vite preview --config vite.config.vad.ts --port 5175 --outDir dist/vad-tuning",
 		"preview:schema": "vite preview --config vite.config.schema.ts --port 5176 --outDir dist/schema-forms",
+		"prepreview:schema": "npm run form-kits:prepare",
 		"test": "vitest --environment jsdom",
-		"parse": "tsx scripts/parse-form.ts"
+		"pretest": "npm run form-kits:prepare",
+		"parse": "tsx scripts/parse-form.ts",
+		"gen:form-manifest": "tsx scripts/generate-form-manifest.ts",
+		"postinstall": "npm run form-kits:prepare"
 	},
 	"dependencies": {
 		"@ricky0123/vad-react": "^0.0.34",
