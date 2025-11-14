@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 import os
+from pathlib import Path
+
 
 
 class Settings(BaseModel):
 	MODEL_LIVE: str = "gemini-live-2.5-flash"
 	MODEL_NATIVE: str = "gemini-live-2.5-flash-preview-native-audio-09-2025"
+	MODEL_LABELING: str | None = None
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
@@ -139,6 +142,17 @@ class Settings(BaseModel):
 			}
 		}
 	]
+
+	# Form kit storage (schema/PDF pairs)
+	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")
+	FORM_KITS_LOCAL_ROOT: str = os.getenv(
+		"FORM_KITS_LOCAL_ROOT",
+		str(Path(__file__).resolve().parents[1] / "form-kits")
+	)
+	FORM_KITS_GCS_BUCKET: str | None = os.getenv("FORM_KITS_GCS_BUCKET")
+	FORM_KITS_REMOTE_BASE_URL: str | None = os.getenv("FORM_KITS_REMOTE_BASE_URL")
+	FORM_KITS_REMOTE_PREFIX: str = os.getenv("FORM_KITS_REMOTE_PREFIX", "form-kits")
+	FORM_KITS_REMOTE_TIMEOUT_SEC: float = float(os.getenv("FORM_KITS_REMOTE_TIMEOUT_SEC", "30"))
 
 
 	# Bump this when parser behavior/logic changes in a breaking way so

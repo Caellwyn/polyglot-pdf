@@ -4,15 +4,21 @@ PDF Filling Routes - Backend endpoint for filling PDFs with form data
 Uses PyMuPDF to fill PDF forms (supports XFA and AcroForm).
 Stateless: receives data → fills PDF → returns bytes (no storage).
 """
+from typing import Any, Dict, Optional
+import os
+import tempfile
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Dict, Any
 import fitz  # PyMuPDF
-from pathlib import Path
 import structlog
-import tempfile
-import os
+
+from backend.services.form_kits import (
+	FormKitNotFound,
+	FormKitStoreError,
+	get_form_kit_store,
+)
 
 _log = structlog.get_logger().bind(module="pdf_fill_routes")
 
@@ -20,379 +26,321 @@ router = APIRouter(prefix="/api", tags=["pdf"])
 
 
 class PDFFillRequest(BaseModel):
-    """Request to fill a PDF with form values"""
-    pdf_filename: str = Field(..., description="PDF filename (e.g., 'i-90.pdf')")
-    field_values: Dict[str, Any] = Field(..., description="Field ID → value mapping from schema")
-    form_schema: Dict[str, Any] = Field(..., description="Full schema with pdf_field_name mappings")
+	"""Request to fill a PDF with form values"""
+
+	kit_id: str = Field(..., description="Form kit identifier (matches manifest entry)")
+	pdf_filename: str = Field(..., description="PDF filename (e.g., 'i-90.pdf')")
+	field_values: Dict[str, Any] = Field(..., description="Field ID → value mapping from schema")
+	form_schema: Dict[str, Any] = Field(..., description="Full schema with pdf_field_name mappings")
 
 
 @router.post("/fill-pdf")
 async def fill_pdf(request: PDFFillRequest) -> Response:
-    """
-    Fill a PDF form with provided values using PyMuPDF.
+	"""Fill a PDF form with provided values using PyMuPDF."""
 
-    Flow:
-    1. Load PDF from disk (pdf_schema_extractor/test_schemas/test_pdfs/...)
-    2. Map schema field IDs → PDF field names (using schema.fields[].pdf_field_name)
-    3. Fill PDF fields with provided values
-    4. Return filled PDF as bytes
+	store = get_form_kit_store()
+	_log.info(
+		"pdf_fill_request",
+		kit=request.kit_id,
+		pdf=request.pdf_filename,
+		field_count=len(request.field_values),
+	)
 
-    Args:
-        request: PDF filename, field values, and schema
+	try:
+		pdf_bytes = await store.load_pdf_bytes(request.kit_id, request.pdf_filename)
+	except FormKitNotFound as exc:
+		_log.error("kit_pdf_not_found", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		raise HTTPException(status_code=404, detail=str(exc)) from exc
+	except FormKitStoreError as exc:
+		_log.error("kit_pdf_load_failed", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		raise HTTPException(status_code=502, detail="Unable to load PDF for requested kit") from exc
 
-    Returns:
-        PDF bytes with Content-Disposition header for download
+	doc = None
+	temp_path = None
 
-    Raises:
-        HTTPException: If PDF not found or filling fails
-    """
-    _log.info("pdf_fill_request",
-             pdf=request.pdf_filename,
-             field_count=len(request.field_values))
+	try:
+		doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+		_log.info("pdf_loaded", kit=request.kit_id, pages=doc.page_count)
 
-    # Construct PDF path
-    # Expected: pdf_schema_extractor/test_schemas/test_pdfs/{form}/{filename}
-    form_name = request.pdf_filename.replace('.pdf', '')  # e.g., "i-90"
-    pdf_path = Path(f"pdf_schema_extractor/test_schemas/test_pdfs/{form_name}/{request.pdf_filename}")
+		field_mappings: Dict[str, str] = {}
+		field_lookup: Dict[str, Dict[str, Any]] = {}
+		for field in request.form_schema.get("fields", []):
+			field_id = field.get("id")
+			if not field_id:
+				continue
+			field_lookup[field_id] = field
+			pdf_field_name = field.get("pdf_field_name")
+			if pdf_field_name:
+				field_mappings[field_id] = pdf_field_name
 
-    if not pdf_path.exists():
-        _log.error("pdf_not_found", path=str(pdf_path))
-        raise HTTPException(status_code=404, detail=f"PDF not found: {request.pdf_filename}")
+		_log.info("field_mappings_built", kit=request.kit_id, mapping_count=len(field_mappings))
 
-    try:
-        # Open PDF with PyMuPDF
-        doc = fitz.open(str(pdf_path))
-        _log.info("pdf_loaded", pages=len(doc))
+		def get_button_on_state(widget) -> str:
+			"""Derive the 'on' appearance state for a checkbox/radio widget."""
+			try:
+				states = widget.button_states()
+				if states and "normal" in states:
+					normal_states = states["normal"]
+					if isinstance(normal_states, list):
+						for state in normal_states:
+							if state and state.lower() not in {"off", ""}:
+								return state
+			except Exception:
+				pass
+			return "Yes"
 
-        # Build field mappings and lookup
-        field_mappings = {}  # field_id → pdf_field_name (for text fields)
-        field_lookup = {}    # field_id → full field object (for radio/checkbox)
+		def fill_widget(widget, value, field_type: Optional[str] = None) -> None:
+			"""Apply a value to a widget, handling button vs. text fields."""
+			if widget.field_type == 2 or widget.field_type_string in {"CheckBox", "RadioButton"}:
+				if value in {True, "true", "True", "1", 1}:
+					target_value = get_button_on_state(widget)
+				elif value in {False, "false", "False", "0", 0}:
+					target_value = "Off"
+				else:
+					target_value = str(value)
 
-        for field in request.form_schema.get('fields', []):
-            field_id = field.get('id')
-            if not field_id:
-                continue
+				try:
+					doc.xref_set_key(widget.xref, "V", f"/{target_value}")
+					doc.xref_set_key(widget.xref, "AS", f"/{target_value}")
+				except Exception:
+					widget.field_value = target_value
+					widget.update()
+			else:
+				widget.field_value = str(value)
+				widget.update()
 
-            field_lookup[field_id] = field
-            pdf_field_name = field.get('pdf_field_name')
-            if pdf_field_name:
-                field_mappings[field_id] = pdf_field_name
+		def find_widget(field_name: str):
+			for page_index in range(doc.page_count):
+				page = doc[page_index]
+				widgets = page.widgets() or []
+				for widget in widgets:
+					if widget.field_name == field_name:
+						return widget
+			return None
 
-        _log.info("field_mappings_built", mapping_count=len(field_mappings))
+		filled_count = 0
+		skipped_count = 0
+		error_count = 0
 
-        # Helper function to get button "on" state
-        def get_button_on_state(widget) -> str:
-            """Extract the 'on' state from a button widget's button_states()"""
-            try:
-                states = widget.button_states()
-                if states and 'normal' in states:
-                    normal_states = states['normal']
-                    if isinstance(normal_states, list):
-                        # Find the first non-Off, non-empty state
-                        for state in normal_states:
-                            if state and state.lower() not in ['off', '']:
-                                return state
-            except:
-                pass
-            # Fallback to common values
-            return 'Yes'
+		for field_id, value in request.field_values.items():
+			if value is None or value == "":
+				skipped_count += 1
+				continue
 
-        # Helper function to fill a widget
-        def fill_widget(widget, value, field_type: str = None):
-            """Fill a widget with appropriate value based on field type"""
-            # Check if this is a button field (checkbox/radio)
-            # Type 2 = PDF_WIDGET_TYPE_CHECKBOX (includes both checkboxes and radios in XFA forms)
-            if widget.field_type == 2 or widget.field_type_string in ['CheckBox', 'RadioButton']:
-                # For buttons, we need to set to the "on" state
-                old_value = widget.field_value
-                target_value = None
+			field_obj = field_lookup.get(field_id)
+			if not field_obj:
+				_log.warning("field_not_in_schema", kit=request.kit_id, field_id=field_id)
+				skipped_count += 1
+				continue
 
-                if value in [True, 'true', 'True', '1', 1]:
-                    # Get the actual on-state value from the widget
-                    on_state = get_button_on_state(widget)
-                    target_value = on_state
-                elif value in [False, 'false', 'False', '0', 0]:
-                    target_value = 'Off'
-                else:
-                    # Value might already be the on-state
-                    target_value = str(value)
+			field_type = field_obj.get("type", "text")
 
-                # For XFA forms, we need to set both /V and /AS keys directly in PDF structure
-                # widget.field_value doesn't persist correctly for XFA
-                # IMPORTANT: Do NOT call widget.update() after this, as it will overwrite our changes
-                try:
-                    # Set /V (value) key
-                    doc.xref_set_key(widget.xref, "V", f"/{target_value}")
-                    # Set /AS (appearance state) key - tells which appearance stream to use
-                    doc.xref_set_key(widget.xref, "AS", f"/{target_value}")
-                    _log.info("button_set_xref", field=widget.field_name,
-                             old=old_value, new=target_value, xref=widget.xref)
-                except Exception as e:
-                    _log.error("button_set_xref_failed", field=widget.field_name,
-                              error=str(e))
-                    # Fallback to widget API
-                    widget.field_value = target_value
-                    widget.update()
-            else:
-                # Regular text/date/select field
-                if isinstance(value, bool):
-                    widget.field_value = str(value)
-                elif isinstance(value, (int, float)):
-                    widget.field_value = str(value)
-                else:
-                    widget.field_value = str(value)
+			if field_type == "radio":
+				options = field_obj.get("options", []) or []
+				selected_option = next((opt for opt in options if opt.get("value") == value), None)
+				if not selected_option:
+					_log.warning("radio_option_not_found", kit=request.kit_id, field_id=field_id, value=value)
+					skipped_count += 1
+					continue
 
-                # Only call update for non-button fields
-                widget.update()
+				field_filled = False
+				for option in options:
+					option_pdf_field = option.get("pdf_field_name")
+					if not option_pdf_field:
+						continue
 
-        # Fill fields
-        filled_count = 0
-        skipped_count = 0
-        error_count = 0
+					widget = find_widget(option_pdf_field)
+					if not widget:
+						continue
 
-        for field_id, value in request.field_values.items():
-            # Skip empty values
-            if value is None or value == "":
-                skipped_count += 1
-                continue
+					is_selected = option.get("value") == value
+					try:
+						fill_widget(widget, is_selected, field_type="radio")
+						if is_selected:
+							field_filled = True
+							filled_count += 1
+							_log.debug(
+								"radio_selected",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=option_pdf_field,
+								value=value,
+							)
+					except Exception as exc:
+						_log.error(
+							"radio_fill_error",
+							kit=request.kit_id,
+							field_id=field_id,
+							pdf_field=option_pdf_field,
+							error=str(exc),
+						)
+						error_count += 1
 
-            # Get field metadata from schema
-            field_obj = field_lookup.get(field_id)
-            if not field_obj:
-                _log.warning("field_not_in_schema", field_id=field_id)
-                skipped_count += 1
-                continue
+				if not field_filled:
+					_log.warning("radio_widget_not_found", kit=request.kit_id, field_id=field_id)
+					skipped_count += 1
 
-            field_type = field_obj.get('type', 'text')
+			elif field_type == "checkbox":
+				if isinstance(value, bool):
+					pdf_field_name = field_obj.get("pdf_field_name")
+					if not pdf_field_name:
+						_log.warning("checkbox_no_pdf_mapping", kit=request.kit_id, field_id=field_id)
+						skipped_count += 1
+						continue
 
-            # Handle different field types
-            if field_type == 'radio':
-                # Radio button: value is like "P1_checkbox4[0]"
-                # Need to find which option matches and get its pdf_field_name
-                selected_option = None
-                for option in field_obj.get('options', []):
-                    if option.get('value') == value:
-                        selected_option = option
-                        break
+					widget = find_widget(pdf_field_name)
+					if not widget:
+						_log.warning("checkbox_widget_missing", kit=request.kit_id, field_id=field_id)
+						skipped_count += 1
+						continue
 
-                if not selected_option:
-                    _log.warning("radio_option_not_found", field_id=field_id, value=value)
-                    skipped_count += 1
-                    continue
+					try:
+						fill_widget(widget, value, field_type="checkbox")
+						filled_count += 1
+					except Exception as exc:
+						_log.error(
+							"checkbox_fill_error",
+							kit=request.kit_id,
+							field_id=field_id,
+							error=str(exc),
+						)
+						error_count += 1
 
-                pdf_field_name = selected_option.get('pdf_field_name')
-                if not pdf_field_name:
-                    _log.warning("radio_no_pdf_mapping", field_id=field_id, option=value)
-                    skipped_count += 1
-                    continue
+				elif isinstance(value, list):
+					options = field_obj.get("options", []) or []
+					for selected_value in value:
+						selected_option = next((opt for opt in options if opt.get("value") == selected_value), None)
+						if not selected_option:
+							_log.warning(
+								"checkbox_option_not_found",
+								kit=request.kit_id,
+								field_id=field_id,
+								value=selected_value,
+							)
+							continue
 
-                # For radio buttons, first set all options in the group to Off
-                # then set the selected one to On
-                for option in field_obj.get('options', []):
-                    option_pdf_field = option.get('pdf_field_name')
-                    if not option_pdf_field:
-                        continue
+						option_pdf_field = selected_option.get("pdf_field_name")
+						if not option_pdf_field:
+							_log.warning(
+								"checkbox_option_no_pdf_mapping",
+								kit=request.kit_id,
+								field_id=field_id,
+								value=selected_value,
+							)
+							continue
 
-                    # Find this option's widget and set to Off (unless it's the selected one)
-                    is_selected = (option.get('value') == value)
+						widget = find_widget(option_pdf_field)
+						if not widget:
+							_log.warning(
+								"checkbox_widget_not_found",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=option_pdf_field,
+							)
+							continue
 
-                    for page_num in range(len(doc)):
-                        page = doc[page_num]
-                        for widget in page.widgets():
-                            if widget.field_name == option_pdf_field:
-                                try:
-                                    if is_selected:
-                                        fill_widget(widget, True, field_type='radio')
-                                        filled_count += 1
-                                        _log.debug("radio_selected", field_id=field_id,
-                                                  pdf_field=option_pdf_field, value=value)
-                                    else:
-                                        fill_widget(widget, False, field_type='radio')
-                                        _log.debug("radio_deselected", field_id=field_id,
-                                                  pdf_field=option_pdf_field)
-                                except Exception as e:
-                                    _log.error("radio_fill_error", field_id=field_id,
-                                              pdf_field=option_pdf_field, error=str(e))
-                                    error_count += 1
-                                break
-                        else:
-                            continue
-                        break
+						try:
+							fill_widget(widget, True, field_type="checkbox")
+							filled_count += 1
+							_log.debug(
+								"checkbox_group_filled",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=option_pdf_field,
+								value=selected_value,
+							)
+						except Exception as exc:
+							_log.error(
+								"checkbox_group_fill_error",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=option_pdf_field,
+								error=str(exc),
+							)
+							error_count += 1
+				else:
+					_log.warning("checkbox_unsupported_value", kit=request.kit_id, field_id=field_id, value=value)
+					skipped_count += 1
 
-                # Mark as processed
-                if filled_count > 0:
-                    field_filled = True
-                else:
-                    _log.warning("radio_widget_not_found", field_id=field_id,
-                                pdf_field=pdf_field_name)
-                    skipped_count += 1
+			else:
+				pdf_field_name = field_mappings.get(field_id)
+				if not pdf_field_name:
+					_log.warning("text_field_no_mapping", kit=request.kit_id, field_id=field_id)
+					skipped_count += 1
+					continue
 
-            elif field_type == 'checkbox':
-                # Checkbox: value can be boolean (single) or array (group)
-                if isinstance(value, bool):
-                    # Single checkbox - use main pdf_field_name
-                    pdf_field_name = field_obj.get('pdf_field_name')
-                    if not pdf_field_name:
-                        _log.warning("checkbox_no_pdf_mapping", field_id=field_id)
-                        skipped_count += 1
-                        continue
+				widget = find_widget(pdf_field_name)
+				if not widget:
+					_log.warning("text_widget_not_found", kit=request.kit_id, field_id=field_id)
+					skipped_count += 1
+					continue
 
-                    field_filled = False
-                    for page_num in range(len(doc)):
-                        page = doc[page_num]
-                        for widget in page.widgets():
-                            if widget.field_name == pdf_field_name:
-                                try:
-                                    fill_widget(widget, value, field_type='checkbox')
-                                    field_filled = True
-                                    filled_count += 1
-                                    break
-                                except Exception as e:
-                                    _log.error("checkbox_fill_error", field_id=field_id,
-                                              pdf_field=pdf_field_name, error=str(e))
-                                    error_count += 1
-                                    break
-                        if field_filled:
-                            break
+				try:
+					fill_widget(widget, value, field_type=field_type)
+					filled_count += 1
+				except Exception as exc:
+					_log.error(
+						"field_fill_error",
+						kit=request.kit_id,
+						field_id=field_id,
+						error=str(exc),
+					)
+					error_count += 1
 
-                    if not field_filled:
-                        _log.warning("checkbox_widget_not_found", field_id=field_id,
-                                    pdf_field=pdf_field_name)
-                        skipped_count += 1
+		_log.info(
+			"fill_complete",
+			kit=request.kit_id,
+			filled=filled_count,
+			skipped=skipped_count,
+			errors=error_count,
+		)
 
-                elif isinstance(value, list):
-                    # Checkbox group - multiple selections
-                    # Each selected value needs to map to a checkbox widget
-                    for selected_value in value:
-                        # Find the option that matches
-                        selected_option = None
-                        for option in field_obj.get('options', []):
-                            if option.get('value') == selected_value:
-                                selected_option = option
-                                break
+		try:
+			doc.need_appearances(True)
+			_log.info("need_appearances_set", kit=request.kit_id, value=True)
+		except Exception as exc:
+			_log.warning("need_appearances_failed", kit=request.kit_id, error=str(exc))
 
-                        if not selected_option:
-                            _log.warning("checkbox_option_not_found",
-                                        field_id=field_id, value=selected_value)
-                            continue
+		with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+			temp_path = tmp_file.name
 
-                        pdf_field_name = selected_option.get('pdf_field_name')
-                        if not pdf_field_name:
-                            # Some checkbox groups might not have individual pdf_field_names
-                            # Try using consolidated_widgets or field name pattern
-                            _log.warning("checkbox_option_no_pdf_mapping",
-                                        field_id=field_id, option=selected_value)
-                            continue
+		try:
+			doc.save(
+				temp_path,
+				garbage=4,
+				clean=True,
+				deflate=True,
+				incremental=False,
+				expand=255,
+			)
+			doc.close()
+			doc = None
 
-                        # Find and check this checkbox
-                        field_filled = False
-                        for page_num in range(len(doc)):
-                            page = doc[page_num]
-                            for widget in page.widgets():
-                                if widget.field_name == pdf_field_name:
-                                    try:
-                                        fill_widget(widget, True, field_type='checkbox')
-                                        field_filled = True
-                                        filled_count += 1
-                                        _log.debug("checkbox_group_filled",
-                                                  field_id=field_id,
-                                                  pdf_field=pdf_field_name,
-                                                  value=selected_value)
-                                        break
-                                    except Exception as e:
-                                        _log.error("checkbox_group_fill_error",
-                                                  field_id=field_id,
-                                                  pdf_field=pdf_field_name,
-                                                  error=str(e))
-                                        error_count += 1
-                                        break
-                            if field_filled:
-                                break
+			with open(temp_path, "rb") as file_obj:
+				filled_pdf_bytes = file_obj.read()
+		finally:
+			if temp_path and os.path.exists(temp_path):
+				os.remove(temp_path)
+				temp_path = None
 
-            else:
-                # Text, textarea, date, select, tel - use existing logic
-                pdf_field_name = field_mappings.get(field_id)
-                if not pdf_field_name:
-                    _log.warning("no_pdf_mapping", field_id=field_id)
-                    skipped_count += 1
-                    continue
+		_log.info("pdf_generated", kit=request.kit_id, size_kb=len(filled_pdf_bytes) // 1024)
 
-                field_filled = False
-                for page_num in range(len(doc)):
-                    page = doc[page_num]
-                    for widget in page.widgets():
-                        if widget.field_name == pdf_field_name:
-                            try:
-                                fill_widget(widget, value, field_type=field_type)
-                                field_filled = True
-                                filled_count += 1
-                                break
-                            except Exception as e:
-                                _log.error("field_fill_error",
-                                         field_id=field_id,
-                                         pdf_field=pdf_field_name,
-                                         error=str(e))
-                                error_count += 1
-                                break
-                    if field_filled:
-                        break
+		return Response(
+			content=filled_pdf_bytes,
+			media_type="application/pdf",
+			headers={
+				"Content-Disposition": f"attachment; filename={request.pdf_filename}",
+				"Content-Length": str(len(filled_pdf_bytes)),
+			},
+		)
 
-                if not field_filled:
-                    _log.warning("field_not_found", field_id=field_id,
-                                pdf_field=pdf_field_name)
-                    skipped_count += 1
-
-        _log.info("fill_complete",
-                 filled=filled_count,
-                 skipped=skipped_count,
-                 errors=error_count)
-
-        # Set NeedAppearances flag to tell PDF viewers to regenerate form field appearances
-        # This is critical for radio buttons and checkboxes to display correctly
-        try:
-            doc.need_appearances(True)
-            _log.info("need_appearances_set", value=True)
-        except Exception as e:
-            _log.warning("need_appearances_failed", error=str(e))
-
-        # For XFA forms, we need to save to a temp file first, then read it back
-        # This ensures all XFA field values are properly written
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            temp_path = tmp_file.name
-
-        try:
-            # Save with incremental=False to force full rewrite
-            # This should commit all field changes including XFA
-            doc.save(
-                temp_path,
-                garbage=4,          # Maximum garbage collection
-                clean=True,         # Clean up unused objects
-                deflate=True,       # Compress streams
-                incremental=False,  # Full rewrite (important for XFA)
-                expand=255          # Expand all object streams
-            )
-            doc.close()
-
-            # Read the saved PDF back into bytes
-            with open(temp_path, 'rb') as f:
-                pdf_bytes = f.read()
-        finally:
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-        _log.info("pdf_generated", size_kb=len(pdf_bytes) // 1024)
-
-        # Return PDF with download headers
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename={request.pdf_filename}",
-                "Content-Length": str(len(pdf_bytes))
-            }
-        )
-
-    except Exception as e:
-        _log.error("pdf_fill_failed", error=str(e), pdf=request.pdf_filename)
-        raise HTTPException(status_code=500, detail=f"PDF filling failed: {str(e)}")
+	except HTTPException:
+		raise
+	except Exception as exc:
+		_log.error("pdf_fill_failed", kit=request.kit_id, pdf=request.pdf_filename, error=str(exc))
+		raise HTTPException(status_code=500, detail=f"PDF filling failed: {exc}") from exc
+	finally:
+		if doc is not None and not doc.is_closed:
+			doc.close()
+		if temp_path and os.path.exists(temp_path):
+			os.remove(temp_path)

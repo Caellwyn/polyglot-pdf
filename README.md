@@ -134,6 +134,17 @@ Frontend available at: <http://localhost:5173>
 6. Watch fields auto-fill with confirmation!
 7. Try switching sections or changing languages mid-session
 
+### Form Kit Workflow (Schemas + PDFs)
+
+The repo-level `form-kits/` directory is the single source of truth for every schema/PDF pair. To add or update a kit:
+
+1. Create a folder under `form-kits/<kit-id>/` containing at least `schema.json` and the PDF(s) referenced by that schema.
+2. Run `npm run form-kits:prepare` (or any frontend command that triggers it automatically) to copy kits into `frontend/public/form-kits/` and refresh the manifest at `frontend/public/form-kits/index.json`.
+3. Launch the frontend; the schema demo dropdown now shows the new kit, and its `kitId` is sent to the backend when filling PDFs.
+4. Ensure the backend sees those kits by leaving the default env vars (`FORM_KITS_MODE=local`, `FORM_KITS_LOCAL_ROOT=./form-kits`) or, if serving remotely, configure the remote store vars documented in `backend/config.py` (`FORM_KITS_MODE=gcs`, bucket/base URL, optional prefix, timeout).
+
+This workflow keeps dev and prod aligned: the frontend manifest and the backend `/api/fill-pdf` route both load assets through the same kit IDs, so a single `npm run form-kits:prepare` run guards against mismatched schemas or missing PDFs.
+
 ## 🏗️ Architecture
 
 ### Current Architecture (Voice Form Filler)

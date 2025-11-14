@@ -42,26 +42,31 @@ function getBackendHttpUrl(): string {
  *
  * Calls backend /api/fill-pdf endpoint which uses PyMuPDF to handle XFA forms.
  *
- * @param pdfUrl - URL to the original PDF file (e.g., '/pdfs/i-90.pdf')
+ * @param kitId - Selected form kit identifier (matches manifest entry)
+ * @param pdfUrl - URL to the original PDF file (e.g., '/form-kits/i-90/form.pdf')
  * @param fieldValues - Current form values (field_id → value)
  * @param schema - Form schema containing field metadata and PDF mappings
  * @returns Filled PDF as Uint8Array ready for download
  *
  * @example
  * const filledPDF = await fillPDF(
- *   '/pdfs/i-90.pdf',
+ *   '/form-kits/i-90/form.pdf',
  *   { 'p1_line1_aliennumber': '123456789' },
  *   schema
  * );
  * downloadPDF(filledPDF, 'i-90-filled.pdf');
  */
 export async function fillPDF(
-  pdfUrl: string,
+  kitId: string,
+  pdfUrl: string | undefined,
   fieldValues: Record<string, any>,
   schema: FormSchema
 ): Promise<Uint8Array> {
+  if (!pdfUrl) {
+    throw new Error("PDF URL is required to fill the form");
+  }
   const backendUrl = getBackendHttpUrl();
-  console.log('[pdfFiller] Calling backend to fill PDF:', pdfUrl);
+  console.log('[pdfFiller] Calling backend to fill PDF:', pdfUrl, 'kit:', kitId);
   console.log('[pdfFiller] Backend URL:', backendUrl);
   console.log('[pdfFiller] Field values to fill:', Object.keys(fieldValues).length);
 
@@ -78,6 +83,7 @@ export async function fillPDF(
   const pdfFilename = pdfUrl.split('/').pop() || 'form.pdf';
 
   const requestPayload = {
+    kit_id: kitId,
     pdf_filename: pdfFilename,
     field_values: fieldValues,
     form_schema: schema,
@@ -85,6 +91,7 @@ export async function fillPDF(
 
   console.log('[pdfFiller] Request URL:', `${backendUrl}/api/fill-pdf`);
   console.log('[pdfFiller] Request payload:', {
+    kit_id: kitId,
     pdf_filename: pdfFilename,
     field_count: Object.keys(fieldValues).length,
     schema_fields: schema.fields?.length || 0,
