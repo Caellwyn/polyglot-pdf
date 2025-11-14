@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD022 MD031 MD032 MD036 MD040 -->
+
 # Voice Form Filler - Technical Architecture Guide
 
 **Version**: 3.0
@@ -216,6 +218,20 @@ SchemaFormState
 - Manages frontend state queries
 - Handles timeouts and error recovery
 - Ensures tool responses match requests
+- Owns section-switching handshake (`prepare_section_switch` → `section_info_response`), decoupling
+  `FormFillingService` from raw WebSocket traffic.
+
+#### Section Switching Flow (Nov 2025 refresh)
+
+1. Gemini calls the `switch_section` tool via Live AI.
+2. `FormFillingService.handle_switch_section` awaits `request_section_info(...)` on the
+  `RequestCoordinator`, which emits a `prepare_section_switch` message to the frontend.
+3. The frontend responds with `section_info_response` containing schema, current values,
+  metadata, and the next prompt hint; the coordinator resolves the awaiting future.
+4. `FormFillingService.switch_to_section` finalizes the old Gemini session, rebuilds the
+  callbacks/system instruction, and confirms the change back to the client.
+5. The corresponding pytest coverage focuses on coordinator delegation instead of private
+  futures on `FormFillingService` so the tests mirror production behavior.
 
 **FieldUtils** (`backend/services/field_utils.py`)
 - Builds field objects from schema
@@ -383,6 +399,45 @@ interface Field {
 **Schema Location**:
 - Production schemas: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/{form}/`
 - Application loads schemas at runtime from public directory
+
+### Form Kit Workflow (Schemas + PDFs)
+
+Form kits are the canonical definition of a schema/PDF bundle. They live at the
+repo root inside `form-kits/<kit-id>/` with at least:
+
+- `schema.json` (the voice-friendly schema consumed by Gemini)
+- One or more reference PDFs that match the schema (e.g., `i-90.pdf`)
+- Optional supplemental files (instructions, audio hints, etc.)
+
+**Publishing steps** (mirrors the README quick start):
+
+1. Create/modify `form-kits/<kit-id>/` with the updated schema/PDF files.
+2. Run the sync script so the frontend demo + manifest stay in lockstep:
+
+   ```bash
+   npm run form-kits:prepare
+   ```
+
+   This invokes `frontend/scripts/generate-form-manifest.ts`, which copies every
+   kit into `frontend/public/form-kits/<kit-id>/` and regenerates
+   `frontend/public/form-kits/index.json` (the dropdown + backend manifest).
+3. Launch the frontend; the schema/demo picker now exposes the new kit and its
+   `kitId` flows through every `/api/fill-pdf` call.
+
+**Backend consumption**:
+
+- `FORM_KITS_MODE` (default `local`) selects the storage backend. `local` reads
+  directly from `FORM_KITS_LOCAL_ROOT` (defaults to `<repo>/form-kits`).
+- `FORM_KITS_MODE=gcs` switches to `RemoteFormKitStore`, which fetches assets via
+  HTTPS. Configure either:
+  - `FORM_KITS_REMOTE_BASE_URL` (full prefix to public objects), or
+  - `FORM_KITS_GCS_BUCKET` + optional `FORM_KITS_REMOTE_PREFIX` (defaults to
+    `form-kits`).
+- `FORM_KITS_REMOTE_TIMEOUT_SEC` tunes the HTTP fetch timeout (default 30s).
+
+The backend service `backend/services/form_kits.py` centralizes this logic so
+both PDF generation routes and `/api/fill-pdf` read from the same resolved kit
+location, keeping dev/prd behavior identical.
 
 ---
 
