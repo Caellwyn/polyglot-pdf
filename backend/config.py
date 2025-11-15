@@ -38,6 +38,32 @@ class Settings(BaseModel):
 	# Full schema loaded on-demand per field as needed
 	USE_JIT_SCHEMA: bool = os.getenv("USE_JIT_SCHEMA", "false").lower() == "true"  # Feature flag: enable JIT schema loading
 
+	# === Half-Cascade Architecture Settings ===
+	# Migration from Gemini Live API (speech-to-speech) to half-cascade:
+	# - ASR: Gemini 2.5 Flash-Lite Preview (audio→structured text with language tags)
+	# - Processing: Existing form-filling logic with tool calls
+	# - TTS: Gemini 2.5 Flash-TTS (text→audio with dynamic language switching)
+	HALF_CASCADE_ENABLED: bool = os.getenv("HALF_CASCADE_ENABLED", "false").lower() == "true"
+	HALF_CASCADE_ROLLOUT_PERCENTAGE: int = int(os.getenv("HALF_CASCADE_ROLLOUT_PERCENTAGE", "0"))
+	HALF_CASCADE_FALLBACK_TO_LIVE_API: bool = os.getenv("HALF_CASCADE_FALLBACK_TO_LIVE_API", "true").lower() == "true"
+
+	# Half-Cascade Model Configuration
+	FLASH_LITE_MODEL: str = "gemini-2.5-flash-lite-preview"
+	FLASH_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"
+
+	# Half-Cascade Audio Settings
+	HALF_CASCADE_USE_STRUCTURED_OUTPUT: bool = True
+	HALF_CASCADE_AUDIO_BUFFER_TIMEOUT_MS: int = int(os.getenv("HALF_CASCADE_AUDIO_BUFFER_TIMEOUT_MS", "1500"))
+	HALF_CASCADE_MAX_BUFFER_SIZE_MB: int = 20  # Flash-Lite API limit
+
+	# Half-Cascade Supported Languages
+	HALF_CASCADE_SUPPORTED_LANGUAGES: list[str] = [
+		"en-US", "es-ES", "zh-CN", "zh-TW", "ko-KR",
+		"ar-SA", "fr-FR", "pt-BR", "ru-RU", "ja-JP",
+		"hi-IN", "de-DE", "it-IT", "vi-VN", "tl-PH",
+		"bn-BD", "ur-PK", "fa-IR", "tr-TR", "pl-PL"
+	]
+
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start

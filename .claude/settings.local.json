@@ -3,7 +3,10 @@
     "allow": [
       "Bash(test:*)",
       "Bash(python -m pytest:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git checkout:*)",
+      "Bash(timeout 5 python:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
