@@ -21,6 +21,25 @@ import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl } from './config'
+import type {
+	HalfCascadeState,
+	ProcessingStatusMessage,
+	LanguageStatusMessage,
+	TranscriptMessage,
+	AudioResponseChunk,
+	HalfCascadeError
+} from './halfCascadeTypes'
+import {
+	createHalfCascadeState,
+	loadHalfCascadeState,
+	updateProcessingStatus,
+	updateLanguageStatus,
+	updateWithTranscript,
+	updateWithError,
+	shouldShowLatencyWarning,
+	getCurrentLatency,
+	formatLatency
+} from './halfCascadeState'
 
 export interface ConnectionManager {
 	connect: () => Promise<void>
@@ -58,6 +77,11 @@ export interface ConnectionManager {
 	// VAD-based barge-in callbacks
 	onVADSpeechStart: () => void
 	onVADSpeechEnd: () => void
+	// Half-cascade state accessors
+	getHalfCascadeState: () => HalfCascadeState
+	isHalfCascadeProcessing: () => boolean
+	getDetectedLanguage: () => string | null
+	getCurrentLatencyMs: () => number | null
 }
 
 /**
@@ -184,6 +208,7 @@ export function createConnectionManager(
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
+	let halfCascadeState: HalfCascadeState = loadHalfCascadeState()  // Load half-cascade state
 	
 	// Load existing state from sessionStorage (don't call init() - SchemaForm already did)
 	// If no state exists, create a minimal one (shouldn't happen in normal flow)
@@ -239,10 +264,10 @@ export function createConnectionManager(
 		},
 		onSessionReady: (sessionId) => {
 			onStatusChange('connected')
-			
+
 			// Initialize metrics for this session
 			metrics.startSession(sessionId)
-			
+
 			// Field manager already created at initialization
 			// Now it will start syncing manual edits to Gemini
 		},
@@ -306,6 +331,49 @@ export function createConnectionManager(
 			// BUG FIX (Nov 10, 2025): Reset paused flag on error to allow reconnect
 			paused = false
 			onStatusChange('error')
+		},
+
+		// Half-cascade callbacks
+		onProcessingStatus: (message) => {
+			halfCascadeState = updateProcessingStatus(halfCascadeState, message)
+
+			// Check for latency warning
+			if (shouldShowLatencyWarning(halfCascadeState)) {
+				const latency = getCurrentLatency(halfCascadeState)
+				console.warn(`[VFF Connection] ⚠️ High latency: ${formatLatency(latency)}`)
+			}
+
+			// Trigger custom event for UI components
+			window.dispatchEvent(new CustomEvent('vff:processing-status', { detail: message }))
+		},
+
+		onLanguageStatus: (message) => {
+			halfCascadeState = updateLanguageStatus(halfCascadeState, message)
+
+			// Trigger custom event for UI components
+			window.dispatchEvent(new CustomEvent('vff:language-status', { detail: message }))
+		},
+
+		onTranscript: (message) => {
+			halfCascadeState = updateWithTranscript(halfCascadeState, message)
+
+			// Trigger custom event for UI components
+			window.dispatchEvent(new CustomEvent('vff:transcript', { detail: message }))
+		},
+
+		onAudioResponse: (message) => {
+			// Audio chunks handled by onAudioData callback
+			// This is called first to track metadata
+
+			// Trigger custom event for UI components (for language indicator)
+			window.dispatchEvent(new CustomEvent('vff:audio-response', { detail: message }))
+		},
+
+		onHalfCascadeError: (error) => {
+			halfCascadeState = updateWithError(halfCascadeState, error)
+
+			// Trigger custom event for UI components
+			window.dispatchEvent(new CustomEvent('vff:half-cascade-error', { detail: error }))
 		},
 	}
 
@@ -757,6 +825,23 @@ export function createConnectionManager(
 			}
 
 			console.log('[VFF Connection] 🎤 VAD speech ended - sent activity_end, audio playback resumed')
+		},
+
+		// Half-cascade state accessors
+		getHalfCascadeState(): HalfCascadeState {
+			return halfCascadeState
+		},
+
+		isHalfCascadeProcessing(): boolean {
+			return halfCascadeState.isProcessing
+		},
+
+		getDetectedLanguage(): string | null {
+			return halfCascadeState.detectedLanguage
+		},
+
+		getCurrentLatencyMs(): number | null {
+			return getCurrentLatency(halfCascadeState)
 		},
 	}
 }

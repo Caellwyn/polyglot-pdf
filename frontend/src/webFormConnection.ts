@@ -16,15 +16,23 @@ import {
   getFieldOrder,
   isFormComplete
 } from "./navigation";
+import type {
+  ProcessingStatusMessage,
+  LanguageStatusMessage,
+  TranscriptMessage,
+  AudioResponseChunk,
+  HalfCascadeError
+} from "./shared/halfCascadeTypes";
 
-export type ConnectionStatus = 
+export type ConnectionStatus =
   | "disconnected"
   | "connecting"
   | "connected"
   | "switching_section"
   | "reconnecting"
   | "idle_timeout"
-  | "error";
+  | "error"
+  | "processing";  // Half-cascade processing state
 
 export interface ConnectionCallbacks {
   onStatusChange?: (status: ConnectionStatus) => void;
@@ -33,6 +41,13 @@ export interface ConnectionCallbacks {
   onFieldUpdate?: (updates: { fieldId: string; value: any }[]) => void;
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
+
+  // Half-cascade callbacks
+  onProcessingStatus?: (message: ProcessingStatusMessage) => void;
+  onLanguageStatus?: (message: LanguageStatusMessage) => void;
+  onTranscript?: (message: TranscriptMessage) => void;
+  onAudioResponse?: (message: AudioResponseChunk) => void;
+  onHalfCascadeError?: (message: HalfCascadeError) => void;
 }
 
 export class WebFormConnection {
@@ -256,7 +271,28 @@ export class WebFormConnection {
           this.setStatus("idle_timeout");
           // WebSocket will close shortly, handleClose() will see idleTimedOut flag
           break;
-          
+
+        // Half-cascade message types
+        case "processing_status":
+          this.handleProcessingStatus(message);
+          break;
+
+        case "language_status":
+          this.handleLanguageStatus(message);
+          break;
+
+        case "transcript":
+          this.handleTranscript(message);
+          break;
+
+        case "audio_response":
+          this.handleAudioResponse(message);
+          break;
+
+        case "half_cascade_error":
+          this.handleHalfCascadeError(message);
+          break;
+
         default:
           // Unknown message type - ignore
           break;
@@ -1495,5 +1531,124 @@ export class WebFormConnection {
       }
     }
     return orderNumbers;
+  }
+
+  // ============================================================================
+  // Phase 4A: Half-Cascade Message Handlers
+  // ============================================================================
+
+  /**
+   * Handle processing_status message from half-cascade backend
+   */
+  private handleProcessingStatus(message: any): void {
+    const processingStatus = message as ProcessingStatusMessage;
+
+    // Update connection status to 'processing' during pipeline stages
+    if (processingStatus.stage === "transcribing" || processingStatus.stage === "generating") {
+      this.setStatus("processing");
+    }
+
+    // Notify callback
+    if (this.callbacks.onProcessingStatus) {
+      this.callbacks.onProcessingStatus(processingStatus);
+    }
+
+    console.log(`[WebFormConnection] 🔄 Processing: ${processingStatus.stage}${processingStatus.progress ? ` (${processingStatus.progress}%)` : ''}`);
+  }
+
+  /**
+   * Handle language_status message from half-cascade backend
+   */
+  private handleLanguageStatus(message: any): void {
+    const languageStatus = message as LanguageStatusMessage;
+
+    // Notify callback
+    if (this.callbacks.onLanguageStatus) {
+      this.callbacks.onLanguageStatus(languageStatus);
+    }
+
+    console.log(`[WebFormConnection] 🌐 Language: ${languageStatus.detected} (confidence: ${(languageStatus.confidence * 100).toFixed(1)}%)`);
+  }
+
+  /**
+   * Handle transcript message from half-cascade backend
+   * Saves to conversation history for context building
+   */
+  private handleTranscript(message: any): void {
+    const transcript = message as TranscriptMessage;
+
+    // Import helper at runtime to avoid circular dependency
+    import("./shared/halfCascadeTypes").then(({ appendToConversationHistory }) => {
+      // Append to conversation history in sessionStorage
+      appendToConversationHistory(transcript.user_transcript, transcript.assistant_response);
+    });
+
+    // Notify callback
+    if (this.callbacks.onTranscript) {
+      this.callbacks.onTranscript(transcript);
+    }
+
+    console.log(`[WebFormConnection] 📝 Transcript:`, {
+      user: transcript.user_transcript.substring(0, 50) + (transcript.user_transcript.length > 50 ? '...' : ''),
+      assistant: transcript.assistant_response.substring(0, 50) + (transcript.assistant_response.length > 50 ? '...' : ''),
+      language: transcript.language
+    });
+  }
+
+  /**
+   * Handle audio_response chunk from half-cascade backend
+   * Decodes base64 audio and plays it
+   */
+  private async handleAudioResponse(message: any): Promise<void> {
+    const audioResponse = message as AudioResponseChunk;
+
+    // Decode base64 audio data
+    const binaryString = atob(audioResponse.data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Convert to ArrayBuffer
+    const arrayBuffer = bytes.buffer;
+
+    // Notify callback with audio data (same as existing Live API)
+    if (this.callbacks.onAudioData) {
+      await this.callbacks.onAudioData(arrayBuffer);
+    }
+
+    // If this is the final chunk, return to connected status
+    if (audioResponse.is_final) {
+      this.setStatus("connected");
+      console.log('[WebFormConnection] ✅ Audio response complete');
+    }
+  }
+
+  /**
+   * Handle half_cascade_error message from backend
+   */
+  private handleHalfCascadeError(message: any): void {
+    const error = message as HalfCascadeError;
+
+    console.error(`[WebFormConnection] ❌ Half-cascade error [${error.error_code}]:`, error.message);
+
+    if (error.fallback_activated) {
+      console.log('[WebFormConnection] 🔄 Fallback to Live API activated');
+    }
+
+    // Notify callback
+    if (this.callbacks.onHalfCascadeError) {
+      this.callbacks.onHalfCascadeError(error);
+    }
+
+    // Trigger error callback for UI handling
+    if (this.callbacks.onError) {
+      this.callbacks.onError(new Error(`[${error.error_code}] ${error.message}`));
+    }
+
+    // Set error status if not recoverable
+    if (!error.recoverable) {
+      this.setStatus("error");
+    }
   }
 }
