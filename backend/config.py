@@ -38,6 +38,15 @@ class Settings(BaseModel):
 	# Full schema loaded on-demand per field as needed
 	USE_JIT_SCHEMA: bool = os.getenv("USE_JIT_SCHEMA", "false").lower() == "true"  # Feature flag: enable JIT schema loading
 
+	# === Half-Cascade Architecture Settings ===
+	# Migration from Gemini Live API to Flash-Lite ASR + Flash TTS
+	# Enables 90% cost reduction while maintaining quality
+	USE_HALF_CASCADE: bool = os.getenv("USE_HALF_CASCADE", "false").lower() == "true"  # Feature flag: enable half-cascade mode
+	FLASH_LITE_MODEL: str = "gemini-2.5-flash-lite-preview"  # ASR model for half-cascade
+	FLASH_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"  # TTS model for half-cascade
+	HALF_CASCADE_BUFFER_MODE: str = os.getenv("HALF_CASCADE_BUFFER_MODE", "ptt").lower()  # Audio buffer mode: "ptt" or "vad"
+	HALF_CASCADE_CONVERSATION_HISTORY_LIMIT: int = 10  # Max conversation turns to include in context
+
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start
