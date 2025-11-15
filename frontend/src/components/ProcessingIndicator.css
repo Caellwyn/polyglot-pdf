@@ -1,0 +1,319 @@
+/**
+ * Processing Indicator Styles - Phase 4C
+ *
+ * Visual feedback for half-cascade processing stages
+ * Includes progress bars, latency warnings, and error displays
+ */
+
+/* ============================================================================
+   Full Desktop View
+   ============================================================================ */
+
+.processing-indicator {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	padding: 1rem;
+	background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+	border: 1px solid #93c5fd;
+	border-radius: 0.5rem;
+	box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+	animation: slide-in 0.3s ease-out;
+}
+
+@keyframes slide-in {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.stage-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 1rem;
+}
+
+.stage-info {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.stage-icon {
+	font-size: 1.5rem;
+	animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	0%, 100% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(1.1);
+	}
+}
+
+.stage-label {
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #1e40af;
+}
+
+.latency-display {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: #6b7280;
+	padding: 0.25rem 0.5rem;
+	background: #ffffff;
+	border-radius: 0.25rem;
+}
+
+.latency-display.warning {
+	color: #dc2626;
+	background: #fef2f2;
+	animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.7;
+	}
+}
+
+/* Progress Bar */
+
+.progress-bar-container {
+	width: 100%;
+	height: 0.5rem;
+	background: #e0f2fe;
+	border-radius: 0.25rem;
+	overflow: hidden;
+}
+
+.progress-bar {
+	height: 100%;
+	background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+	border-radius: 0.25rem;
+	transition: width 0.3s ease-out;
+	animation: shimmer 2s linear infinite;
+	background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: -200% 0;
+	}
+	100% {
+		background-position: 200% 0;
+	}
+}
+
+/* Latency Warning */
+
+.latency-warning {
+	font-size: 0.75rem;
+	color: #dc2626;
+	background: #fef2f2;
+	border: 1px solid #fca5a5;
+	border-radius: 0.25rem;
+	padding: 0.5rem 0.75rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+	0%, 100% {
+		transform: translateX(0);
+	}
+	25% {
+		transform: translateX(-5px);
+	}
+	75% {
+		transform: translateX(5px);
+	}
+}
+
+/* ============================================================================
+   Compact Mobile View
+   ============================================================================ */
+
+.processing-indicator.compact {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+	border: 1px solid #93c5fd;
+	border-radius: 0.375rem;
+}
+
+.stage-indicator-compact {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 0;
+}
+
+.processing-indicator.compact .stage-icon {
+	font-size: 1rem;
+	flex-shrink: 0;
+}
+
+.processing-indicator.compact .stage-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #1e40af;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stage-progress {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: #6b7280;
+	flex-shrink: 0;
+}
+
+.latency-warning-compact {
+	font-size: 0.75rem;
+	color: #dc2626;
+	background: #fef2f2;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	flex-shrink: 0;
+	animation: blink 1s ease-in-out infinite;
+}
+
+/* ============================================================================
+   Error Display
+   ============================================================================ */
+
+.processing-indicator.error {
+	background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+	border-color: #fca5a5;
+	animation: shake 0.5s ease-in-out;
+}
+
+.error-icon {
+	font-size: 1.5rem;
+	flex-shrink: 0;
+}
+
+.error-content {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	flex: 1;
+}
+
+.error-title {
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: #991b1b;
+}
+
+.error-message {
+	font-size: 0.875rem;
+	color: #7f1d1d;
+}
+
+.error-fallback {
+	font-size: 0.75rem;
+	color: #15803d;
+	background: #f0fdf4;
+	padding: 0.5rem;
+	border-radius: 0.25rem;
+	border: 1px solid #86efac;
+}
+
+.error-nonrecoverable {
+	font-size: 0.75rem;
+	color: #9f1239;
+	background: #fff1f2;
+	padding: 0.5rem;
+	border-radius: 0.25rem;
+	border: 1px solid #fda4af;
+	font-weight: 600;
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+@media (max-width: 640px) {
+	.processing-indicator {
+		padding: 0.75rem;
+		gap: 0.5rem;
+	}
+
+	.stage-icon {
+		font-size: 1.25rem;
+	}
+
+	.stage-label {
+		font-size: 0.8125rem;
+	}
+
+	.latency-warning {
+		font-size: 0.6875rem;
+		padding: 0.375rem 0.5rem;
+	}
+}
+
+/* ============================================================================
+   Accessibility Enhancements
+   ============================================================================ */
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+	.processing-indicator,
+	.progress-bar,
+	.stage-icon,
+	.latency-display.warning,
+	.latency-warning,
+	.processing-indicator.error {
+		animation: none;
+	}
+
+	.progress-bar {
+		transition: width 0.1s linear;
+	}
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+	.processing-indicator {
+		border-width: 2px;
+	}
+
+	.progress-bar {
+		background: #1e40af;
+	}
+
+	.latency-warning,
+	.error-fallback,
+	.error-nonrecoverable {
+		border-width: 2px;
+	}
+}
+
+/* Focus visible for screen readers */
+.processing-indicator:focus-visible {
+	outline: 2px solid #3b82f6;
+	outline-offset: 2px;
+}
