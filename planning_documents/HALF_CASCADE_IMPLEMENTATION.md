@@ -36,6 +36,11 @@
 - [x] 4B: Language Controls ✅ (Nov 15, 2025)
 - [x] 4C: User Feedback Systems ✅ (Nov 15, 2025)
 
+**Phase 4.5: addendum**
+- [x] 4.5 A: Conversation Transcript Display [PARALLEL]
+- [x] 4.5 B: Explicit Context Caching Migration [DEPENDS: 2B]
+- [x] 4.5 C: Annotated PDF Context [PARALLEL]
+
 **Phase 5: Testing Suite**
 - [ ] 5A: Unit Test Coverage
 - [ ] 5B: Language Validation
@@ -861,6 +866,291 @@ Process this audio and continue the conversation.
 - [ ] Messages clear and actionable
 - [ ] No UI jank
 - [ ] Animations smooth
+
+---
+
+# Phase 4.5: Scalability & Transcript Display Enhancements
+
+**Purpose**: Add conversation transcript display with RTL support and migrate to explicit context caching for scalability  
+**Timeline**: Can be implemented in parallel with Phase 5 testing  
+**Dependencies**: Phase 4 completion
+
+---
+
+## Step 4.5A: Conversation Transcript Display [PARALLEL]
+**Owner**: Frontend Engineer  
+**Duration**: 3 days
+
+### Requirements
+
+**Transcript UI Component**:
+```typescript
+interface TranscriptDisplay {
+  showTranscript: boolean  // User toggle
+  language: string  // Current conversation language
+  messages: Array<{
+    role: "user" | "assistant"
+    content: string
+    language: string
+    timestamp: number
+  }>
+}
+```
+
+**RTL Language Support**:
+```css
+/* Automatic RTL detection based on language */
+.transcript-message[data-lang="ar-SA"],
+.transcript-message[data-lang="he-IL"],
+.transcript-message[data-lang="fa-IR"],
+.transcript-message[data-lang="ur-PK"] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Mixed direction support for code-switching */
+.transcript-container {
+  unicode-bidi: plaintext;  /* Let browser handle mixed text */
+}
+```
+
+**Languages Requiring RTL**:
+- Arabic (ar-SA)
+- Hebrew (he-IL) 
+- Persian/Farsi (fa-IR)
+- Urdu (ur-PK)
+
+**UI Features**:
+- Collapsible transcript panel
+- Auto-scroll to latest message
+- Copy transcript button
+- Clear conversation button
+- Language indicator per message
+- Timestamp display (optional)
+
+**Exit Criteria**:
+- [ ] Transcript displays correctly for all languages
+- [ ] RTL languages render right-to-left
+- [ ] Mixed language conversations display properly
+- [ ] Smooth scrolling and animations
+- [ ] Mobile responsive design
+- [ ] Accessibility compliant (screen readers work)
+- [ ] User can hide/show transcript
+- [ ] Copy function works with RTL text
+
+---
+
+## Step 4.5B: Explicit Context Caching Migration [DEPENDS: 2B]
+**Owner**: Backend Engineer  
+**Duration**: 3 days
+
+### Architecture Change
+
+**From Implicit (Current Plan)**:
+- Schema included in every request
+- Each user pays full token cost
+- No control over cache lifecycle
+
+**To Explicit (Scalability)**:
+- Schema cached once on server startup
+- All concurrent users share cache reference
+- Annotated PDF can be added to cache
+- Full control over TTL and refresh
+
+### Implementation
+
+**Cache Manager Service**:
+```python
+class ExplicitCacheManager:
+    def __init__(self):
+        self.cache_registry = {}  # form_type -> cache_id
+        self.cache_metadata = {}  # cache_id -> metadata
+        
+    async def initialize_caches(self):
+        """Called on server startup"""
+        for form_type in ["I-90", "I-589", "I-485"]:
+            cache_id = await self.create_form_cache(form_type)
+            self.cache_registry[form_type] = cache_id
+            
+    async def create_form_cache(self, form_type: str):
+        """Create shared cache for a form type"""
+        # Load schema and annotated PDF
+        schema = load_form_schema(form_type)
+        annotated_pdf = load_annotated_pdf(form_type)  # Optional
+        
+        # Create cache with 24-hour TTL
+        cache_content = {
+            "schema": schema,
+            "annotated_context": annotated_pdf,
+            "form_type": form_type,
+            "version": "1.0"
+        }
+        
+        cache_response = await gemini.create_cache(
+            content=cache_content,
+            ttl_hours=24
+        )
+        
+        return cache_response.cache_id
+        
+    def get_cache_id(self, form_type: str):
+        """Get cache ID for user session"""
+        return self.cache_registry.get(form_type)
+```
+
+**Request Structure with Explicit Cache**:
+```python
+# Instead of including schema in request:
+request = {
+    "cached_content": cache_id,  # Reference only
+    "contents": [
+        {
+            "text": f"""
+            Current form state: {form_state}
+            Current field: {current_field}
+            Conversation history: {history}
+            """
+        },
+        {"audio": audio_data}
+    ]
+}
+```
+
+**Monitoring & Management**:
+```python
+class CacheMonitor:
+    def track_metrics(self):
+        return {
+            "cache_hit_rate": 0.98,  # Should be near 100%
+            "concurrent_users": 47,   # All sharing same cache
+            "token_savings": 0.91,    # 91% reduction
+            "storage_cost_per_hour": 1.50,  # For all caches
+            "per_user_cost": 0.03    # Storage cost / concurrent users
+        }
+        
+    async def refresh_expiring_caches(self):
+        """Run every hour to refresh caches before expiry"""
+        for cache_id, metadata in self.cache_metadata.items():
+            if metadata["expires_in_hours"] < 2:
+                await self.refresh_cache(cache_id)
+```
+
+**Cost Analysis at Scale**:
+```
+1 user:   $0.10 (base cost) + $1.00/hour storage = High per-user
+10 users: $1.00 (10x savings) + $1.00/hour = $0.20/user  
+100 users: $10.00 (100x savings) + $1.00/hour = $0.11/user
+1000 users: $100.00 (1000x savings) + $1.00/hour = $0.10/user
+
+Break-even: ~2-3 concurrent users
+Optimal: 10+ concurrent users
+```
+
+**Exit Criteria**:
+- [ ] Cache manager service implemented
+- [ ] Shared caches created on startup
+- [ ] Cache refresh before expiry
+- [ ] Monitoring dashboard shows savings
+- [ ] Tested with 50+ concurrent users
+- [ ] Annotated PDF included and working
+- [ ] Cache failover strategy tested
+- [ ] Zero-downtime cache refresh verified
+
+---
+
+## Step 4.5C: Annotated PDF Context [PARALLEL]
+**Owner**: Content Team + Backend Engineer  
+**Duration**: 2 days
+
+### Annotated PDF Structure
+
+**Content to Include**:
+```json
+{
+  "form_type": "I-90",
+  "annotations": {
+    "field_123": {
+      "name": "applicant_name",
+      "help_text": "Full legal name as shown on green card",
+      "common_mistakes": ["Using nicknames", "Wrong name order"],
+      "examples": ["John Michael Smith", "Maria Garcia Lopez"]
+    },
+    "field_456": {
+      "name": "alien_number", 
+      "help_text": "9-digit number starting with A",
+      "format": "A#########",
+      "location_on_card": "Front of green card, labeled 'USCIS#'"
+    }
+  },
+  "sections": {
+    "part_1": {
+      "title": "Information About You",
+      "purpose": "Verify your identity and current status",
+      "required_documents": ["Green card", "Passport"]
+    }
+  },
+  "general_tips": [
+    "Use black ink only",
+    "Write N/A if not applicable", 
+    "Don't leave fields blank"
+  ]
+}
+```
+
+**Integration with Cache**:
+- Include in explicit cache alongside schema
+- Provides context for better user assistance
+- Reduces hallucination on form-specific questions
+- Enables "Why do you need this?" type queries
+
+**Exit Criteria**:
+- [ ] Annotated PDFs created for I-90, I-589
+- [ ] JSON structure validated
+- [ ] Successfully included in cache
+- [ ] Model uses context appropriately
+- [ ] Help text improves response quality
+
+---
+
+## Integration Notes
+
+**Backwards Compatibility**:
+- Implicit caching remains functional during migration
+- Feature flag controls cache strategy
+- Gradual rollout possible
+
+**Deployment Strategy**:
+1. Deploy cache manager with feature flag OFF
+2. Create and validate caches
+3. Test with internal users
+4. Monitor cost savings
+5. Roll out to percentage of users
+6. Full deployment when stable
+
+**Monitoring Additions**:
+- Cache hit rate by form type
+- Concurrent users per cache
+- Token savings per user
+- Storage cost amortization
+- Cache refresh success rate
+
+---
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Cache expiry during high load | Refresh caches 2 hours before expiry |
+| Cache corruption | Validate cache on creation, maintain backup |
+| RTL display issues | Test with native speakers |
+| Mixed text rendering | Use unicode-bidi: plaintext |
+| Scale beyond cache limits | Implement cache sharding strategy |
+
+---
+
+**Phase Status**: Ready for parallel implementation  
+**Estimated Impact**: 90%+ cost reduction at 10+ concurrent users  
+**Priority**: HIGH - Implement before user growth
 
 ---
 
