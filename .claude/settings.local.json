@@ -6,7 +6,8 @@
       "Bash(python:*)",
       "Bash(git checkout:*)",
       "Bash(timeout 5 python:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

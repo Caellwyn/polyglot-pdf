@@ -17,6 +17,7 @@ from backend.models.half_cascade_schema import (
     SUPPORTED_LANGUAGES
 )
 from backend.services.structured_output_parser import get_parser
+from backend.services.context_cache_manager import create_cache_manager, ContextCacheManager
 
 _log = structlog.get_logger().bind(module="flash_lite_asr")
 
@@ -59,21 +60,30 @@ class FlashLiteASR:
         # HTTP client for API requests
         self._client = httpx.AsyncClient(timeout=30.0)
 
-        # System instruction template
-        self._system_instruction = self._build_system_instruction()
+        # Context cache manager (Phase 2B)
+        self._cache_manager = create_cache_manager(session_id=session_id)
+
+        # Base system instruction template (schema added by cache manager)
+        self._base_instruction = self._build_base_instruction()
+
+        # Cached system instruction (built per-schema)
+        self._cached_system_instruction: Optional[str] = None
 
         _log.info(
             "flash_lite_asr_initialized",
             model=model,
-            session_id=session_id
+            session_id=session_id,
+            cache_manager_enabled=True
         )
 
-    def _build_system_instruction(self) -> str:
+    def _build_base_instruction(self) -> str:
         """
-        Build system instruction for Flash-Lite.
+        Build base system instruction (without schema).
+
+        Schema is added separately by cache manager for optimal caching.
 
         Returns:
-            str: System instruction template
+            str: Base instruction template
         """
         return """You are a multilingual form-filling assistant for USCIS immigration forms.
 
@@ -105,8 +115,7 @@ ACCURACY REQUIREMENTS:
 - Validate logical consistency (e.g., dates, ages, phone numbers)
 - One field at a time for accuracy
 
-CURRENT FORM SCHEMA:
-{schema}"""
+The complete form schema is provided at the top of this instruction for your reference."""
 
     async def transcribe_and_respond(
         self,
@@ -193,54 +202,39 @@ CURRENT FORM SCHEMA:
         current_part: Optional[str]
     ) -> str:
         """
-        Build context string for Flash-Lite prompt.
+        Build dynamic context string for Flash-Lite prompt.
 
-        Context includes:
-        - Form schema (for caching)
-        - Current form state
-        - Current field/part
-        - Recent conversation history
+        Schema is now in system instruction (cached).
+        This context contains only dynamic data (uncached).
 
         Args:
-            form_schema: Form schema dict
+            form_schema: Form schema dict (for cache validation)
             form_state: Current field values
             conversation_history: Recent conversation turns
             current_field: Current field ID
             current_part: Current part ID
 
         Returns:
-            str: Formatted context string
+            str: Formatted dynamic context string
         """
-        # Format schema (simplified for token efficiency)
-        schema_str = json.dumps(form_schema, indent=None, separators=(',', ':'))
+        # Validate schema hasn't changed (would break cache)
+        self._cache_manager.validate_schema_consistency(form_schema)
 
-        # Format form state (compact pipe-separated format)
-        if form_state:
-            state_entries = [
-                f"{field_id}:{value}"
-                for field_id, value in form_state.items()
-                if value  # Only include non-empty values
-            ]
-            form_state_str = "|".join(state_entries)
-        else:
-            form_state_str = "(empty)"
+        # Build system instruction with cached schema (first request only)
+        if self._cached_system_instruction is None:
+            self._cached_system_instruction = self._cache_manager.build_cached_system_instruction(
+                form_schema=form_schema,
+                base_instruction=self._base_instruction
+            )
 
-        # Format conversation history (last 5-10 turns)
-        history_lines = []
-        for turn in conversation_history[-10:]:  # Last 10 turns max
-            role = turn.get("role", "unknown")
-            content = turn.get("content", "")
-            history_lines.append(f"{role.capitalize()}: {content}")
-        history_str = "\n".join(history_lines) if history_lines else "(no history)"
-
-        # Build complete context
-        context = f"""---
-Current form values: {form_state_str}
-Current field: {current_field or "(none)"}
-Current part: {current_part or "(none)"}
-Recent conversation:
-{history_str}
----"""
+        # Build dynamic context using cache manager
+        context = self._cache_manager.build_dynamic_context(
+            form_state=form_state,
+            conversation_history=conversation_history,
+            current_field=current_field,
+            current_part=current_part,
+            max_history_turns=10
+        )
 
         return context
 
@@ -252,15 +246,21 @@ Recent conversation:
         """
         Build API request payload for Flash-Lite.
 
+        Uses cached system instruction with embedded schema for cost optimization.
+
         Args:
             audio_b64: Base64-encoded audio
-            context: Context string
+            context: Dynamic context string (uncached)
 
         Returns:
             dict: Request payload for Gemini API
         """
         # Get structured output schema
         output_schema = generate_json_schema_for_gemini()
+
+        # Use cached system instruction (schema embedded)
+        if self._cached_system_instruction is None:
+            raise RuntimeError("System instruction not initialized - call _build_context first")
 
         payload = {
             "contents": [
@@ -281,9 +281,7 @@ Recent conversation:
             "systemInstruction": {
                 "parts": [
                     {
-                        "text": self._system_instruction.format(
-                            schema="(See form schema in context)"
-                        )
+                        "text": self._cached_system_instruction
                     }
                 ]
             },
@@ -373,6 +371,19 @@ Recent conversation:
                 session_id=self._session_id
             )
             raise
+
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """
+        Get context caching metrics for monitoring.
+
+        Returns:
+            dict: Cache metrics (schema hash, cache status)
+        """
+        metrics = self._cache_manager.get_cache_metrics()
+        metrics["cached_instruction_length"] = (
+            len(self._cached_system_instruction) if self._cached_system_instruction else 0
+        )
+        return metrics
 
     async def cleanup(self) -> None:
         """Cleanup resources."""
