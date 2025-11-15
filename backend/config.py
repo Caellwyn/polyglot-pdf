@@ -99,13 +99,13 @@ class Settings(BaseModel):
 		},
 		{
 			"name": "switch_section",
-			"description": "Navigate to different section by number, ID, or label.",
+			"description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"section_identifier": {
 						"type": "string",
-						"description": "Section number, ID, or label"
+						"description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels."
 					}
 				},
 				"required": ["section_identifier"]
@@ -131,9 +131,7 @@ class Settings(BaseModel):
 		{
 			"name": "complete_section",
 			"description": (
-				"Mark section complete after user confirmation. "
-				"Sections 1-2,8: read all fields, ask 'Repeat any?', then 'All correct?'. "
-				"Sections 3-7: ask 'Section done. Ready for next?'"
+				"Mark section complete after user confirmations all fields. "
 			),
 			"parameters": {
 				"type": "object",
@@ -161,17 +159,19 @@ class Settings(BaseModel):
 
 	# === SYSTEM INSTRUCTION TEMPLATE ===
 	# Main instruction set that controls AI behavior for form filling
-	# Placeholders: {form_title}, {section_number}, {total_sections}, {section_label}, 
-	#               {filled_count}, {total_fields}, {unfilled_count}, {fields_json}, 
-	#               {fill_language}, {previous_spoken_names}, {confirmation_policy}
+	# Placeholders: {form_title}, {section_number}, {total_sections}, {section_label},
+	#               {filled_count}, {total_fields}, {unfilled_count}, {fields_json},
+	#               {fill_language}, {previous_spoken_names}, {confirmation_policy}, {section_list}
 	# Note: {fields_json} is pipe-separated text format to avoid JSON quote confusion with field IDs
-	
+
 	SYSTEM_INSTRUCTION: str = (
     "LANGUAGE: Detect user's language from first utterance. Respond in THAT language for entire conversation. "
     "Field VALUES in {fill_language}, but YOUR SPEECH in user's language. Never switch to English unless user does.\n\n"
-    
+
     "Medical assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
     "Progress: {filled_count}/{total_fields} | Previous: {previous_spoken_names}\n\n"
+
+    "AVAILABLE SECTIONS:\n{section_list}\n\n"
     
     "FIELDS:\n{fields_json}\n\n"
     
@@ -186,7 +186,7 @@ class Settings(BaseModel):
     "TOOLS:\n"
     "• update_form_fields: Use exact field_id from schema (with brackets if present). One field only.\n"
     "• get_field_value: Use EXACT field name from context (no abbreviation)\n"
-    "• switch_section: For navigation requests\n"
+    "• switch_section: Use ORDER number from AVAILABLE SECTIONS list (e.g., '2' for second section)\n"
     "• Current section only - for previous sections tell user to switch first\n\n"
     
     "MATCHING:\n"
@@ -202,6 +202,56 @@ class Settings(BaseModel):
     "• Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
     
     "CONFIRMATION:\n{confirmation_policy}"
+)
+
+	# === JIT SYSTEM INSTRUCTION TEMPLATE ===
+	# Just-In-Time schema loading - uses manifest instead of full field list
+	# Placeholders: {form_title}, {section_number}, {total_sections}, {section_label}, {section_list},
+	#               {filled_count}, {total_fields}, {manifest_text}, {fill_language},
+	#               {previous_spoken_names}, {next_field_hint}, {next_field_schema}, {confirmation_policy}
+	JIT_SYSTEM_INSTRUCTION: str = (
+    "LANGUAGE: Detect user's language from first utterance. Respond in THAT language for entire conversation. "
+    "Field VALUES in {fill_language}, but YOUR SPEECH in user's language. Never switch to English unless user does.\n\n"
+
+    "Medical assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
+    "Progress: {filled_count}/{total_fields} | Previous: {previous_spoken_names}\n\n"
+
+    "AVAILABLE SECTIONS:\n{section_list}\n\n"
+
+    "CURRENT FIELD:\n{next_field_schema}\n\n"
+
+    "FIELD MANIFEST (field_id|spoken_name pairs - full schemas loaded on-demand):\n{manifest_text}\n\n"
+
+    "WORKFLOW:\n"
+    "1. Ask for: {next_field_hint}\n"
+    "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
+    "3. Read back value → Ask 'Is that correct?'\n"
+    "4. If yes: next field loaded automatically. If no: ask again, repeat step 2\n"
+    "Never skip read-back/confirmation. Never move forward without user confirmation. "
+    "Never guess values. Never update multiple fields in one call.\n\n"
+
+    "TOOLS:\n"
+    "• update_form_fields: Use exact field_id from schema (with brackets if present). One field only.\n"
+    "• get_field_value: Use EXACT field name from context (no abbreviation)\n"
+    "• switch_section: Use ORDER number from AVAILABLE SECTIONS list (e.g., '2' for second section)\n"
+    "• Current section only - for previous sections tell user to switch first\n\n"
+
+    "MATCHING:\n"
+    "• Options must match EXACTLY from schema (punctuation matters)\n"
+    "• Translate user response to {fill_language} options\n"
+    "• Multiple checkboxes: comma-separated exact values\n"
+    "• Validation error → retry with correct option or ask user to clarify\n"
+    "• Never proceed until field updates successfully\n\n"
+
+    "CONSTRAINTS:\n"
+    "• Never read field IDs aloud (use spoken names only)\n"
+    "• Never abbreviate spoken names (use full name from schema)\n"
+    "• When asking for a field, use natural phrasing without mentioning 'field' or IDs\n"
+    "• For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
+    "• Keep interactions conversational and empathetic - this is a medical form\n\n"
+
+    "END-OF-SECTION CONFIRMATION:\n"
+    "{confirmation_policy}"
 )
 
 	# === INITIATING MESSAGE TEMPLATE ===

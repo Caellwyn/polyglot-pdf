@@ -738,12 +738,16 @@ class LiveAIGemini(ILiveAI):
                 # Store session reference for potential direct sends
                 self._current_session = session
 
-                self._log.info("gemini_session_established",
-                             instance_id=self._instance_id,
-                             message="Gemini Live session active and ready - waiting for user to speak")
-
                 # Mark session as ready and send any queued client content messages
                 self._session_ready = True
+
+                # Clear console output for focused logging
+                print(f"\n{'='*80}")
+                print(f"✅ GEMINI SESSION READY")
+                print(f"Instance: {self._instance_id}")
+                print(f"Model: {self._model_name}")
+                print(f"Waiting for user to speak...")
+                print(f"{'='*80}\n")
                 if self._pending_client_content:
                     self._log.info("📤 SENDING_QUEUED_CLIENT_CONTENT",
                                   queued_count=len(self._pending_client_content))
@@ -958,6 +962,14 @@ class LiveAIGemini(ILiveAI):
                                                                     
                                                                     self._log.info("tool_callback_completed", tool=tool_name, response_ok=bool(response_payload))
                                                                 except Exception as e:
+                                                                    # Print full traceback to console for debugging
+                                                                    import traceback
+                                                                    print(f"\n{'='*80}")
+                                                                    print(f"TOOL CALLBACK ERROR: {tool_name}")
+                                                                    print(f"{'='*80}")
+                                                                    traceback.print_exc()
+                                                                    print(f"{'='*80}\n")
+
                                                                     self._log.exception("tool_callback_error", tool=tool_name, error=str(e))
 
                                                                     # Dev logging: Log tool errors
@@ -1040,7 +1052,14 @@ class LiveAIGemini(ILiveAI):
                                                 try:
                                                     response_payload = await self._on_tool_call(tool_name, parsed_arguments)
                                                     self._log.info("tool_callback_returned", tool_name=tool_name, has_response=response_payload is not None, response_keys=list(response_payload.keys()) if isinstance(response_payload, dict) else None)
-                                                except Exception:
+                                                except Exception as e:
+                                                    # Print full traceback to console for debugging (PATH 2)
+                                                    import traceback
+                                                    print(f"\n{'='*80}")
+                                                    print(f"TOOL CALLBACK ERROR (PATH 2): {tool_name}")
+                                                    print(f"{'='*80}")
+                                                    traceback.print_exc()
+                                                    print(f"{'='*80}\n")
                                                     self._log.exception("tool_callback_error", tool=tool_name)
                                             elif tool_name == "update_form_fields" and self._on_form_update:
                                                 await self._on_form_update(parsed_arguments)
@@ -1052,19 +1071,28 @@ class LiveAIGemini(ILiveAI):
                                             if tool_name:
                                                 # According to Google's example code, FunctionResponse should NOT include 'id'
                                                 # The SDK matches responses to calls internally
-                                                self._log.info("preparing_function_response", tool_name=tool_name, response_has_success=response_payload.get("success") if isinstance(response_payload, dict) else None)
                                                 responses.append(
                                                     types.FunctionResponse(
                                                         name=tool_name,
                                                         response=response_payload,
                                                     )
                                                 )
-                                                self._log.debug("tool_response_prepared", tool_name=tool_name, call_id=call_id)
 
                                     if responses:
-                                        self._log.info("sending_tool_responses", count=len(responses), response_ids=[r.id for r in responses])
+                                        # Log tool responses being sent to Gemini (for token analysis)
+                                        print(f"\n{'='*80}")
+                                        print(f"📤 TOOL RESPONSE → Gemini")
+                                        print(f"{'='*80}")
+                                        for resp in responses:
+                                            print(f"Tool: {resp.name}")
+                                            print(f"Response: {resp.response}")
+                                            # Estimate token count (rough: 1 token ≈ 4 chars)
+                                            response_str = str(resp.response)
+                                            estimated_tokens = len(response_str) // 4
+                                            print(f"Estimated tokens: ~{estimated_tokens} ({len(response_str)} chars)")
+                                        print(f"{'='*80}\n")
+
                                         await session.send_tool_response(function_responses=responses)
-                                        self._log.info("tool_responses_sent_successfully", waiting_for_model_response=True)
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
 
@@ -1139,32 +1167,16 @@ class LiveAIGemini(ILiveAI):
                                             self._session_text_output_tokens += text_output_tokens
                                             self._session_audio_output_tokens += audio_output_tokens
 
-                                            # Log detailed token breakdown
-                                            self._log.info(
-                                                "gemini_tokens",
-                                                # This event's totals
-                                                prompt_tokens=prompt_tokens,
-                                                response_tokens=response_tokens,
-                                                total_tokens=total_tokens,
-                                                # This event's modality breakdown
-                                                text_input=text_input_tokens,
-                                                audio_input=audio_input_tokens,
-                                                text_output=text_output_tokens,
-                                                audio_output=audio_output_tokens,
-                                                # This event's costs
-                                                text_input_cost=round(text_input_cost, 8),
-                                                audio_input_cost=round(audio_input_cost, 8),
-                                                text_output_cost=round(text_output_cost, 8),
-                                                audio_output_cost=round(audio_output_cost, 8),
-                                                total_cost_usd=round(total_cost, 8),
-                                                # Session cumulative totals
-                                                session_total_tokens=self._session_total_tokens,
-                                                session_total_cost_usd=round(self._session_total_cost, 8),
-                                                session_text_input=self._session_text_input_tokens,
-                                                session_audio_input=self._session_audio_input_tokens,
-                                                session_text_output=self._session_text_output_tokens,
-                                                session_audio_output=self._session_audio_output_tokens,
-                                            )
+                                            # Clear console logging for token usage
+                                            print(f"\n{'='*80}")
+                                            print(f"💰 TOKEN USAGE")
+                                            print(f"{'='*80}")
+                                            print(f"Prompt: {prompt_tokens:,} tokens (text: {text_input_tokens:,}, audio: {audio_input_tokens:,})")
+                                            print(f"Response: {response_tokens:,} tokens (text: {text_output_tokens:,}, audio: {audio_output_tokens:,})")
+                                            print(f"Total this turn: {total_tokens:,} tokens")
+                                            print(f"Cost this turn: ${total_cost:.6f}")
+                                            print(f"Session total: {self._session_total_tokens:,} tokens (${self._session_total_cost:.6f})")
+                                            print(f"{'='*80}\n")
 
                                             # Log to file for token dashboard (local dev only)
                                             # Only log if session context is available
@@ -1220,9 +1232,18 @@ class LiveAIGemini(ILiveAI):
                                     self._log.exception("event_handling_error")
                                     continue
                         except ConnectionClosed as exc:
-                            self._log.error("gemini_session_connection_closed", 
-                                          reason=str(exc), 
-                                          event_count=event_count)
+                            print(f"\n{'='*80}")
+                            print(f"❌ GEMINI CONNECTION DROPPED")
+                            print(f"{'='*80}")
+                            print(f"Reason: {str(exc)}")
+                            print(f"Events received before disconnect: {event_count}")
+                            print(f"Intentional shutdown: {self._intentional_shutdown}")
+                            print(f"{'='*80}\n")
+
+                            self._log.error("gemini_session_connection_closed",
+                                          reason=str(exc),
+                                          event_count=event_count,
+                                          intentional_shutdown=self._intentional_shutdown)
                             break
 
                         if not received_any:
@@ -1342,14 +1363,33 @@ class LiveAIGemini(ILiveAI):
             attempt = 0
             last_exc = None
             websocket_base_override = os.environ.get('GENAI_WEBSOCKET_BASE')
+
+            print(f"\n{'='*80}")
+            print(f"🔄 GEMINI SESSION STARTING")
+            print(f"{'='*80}")
+            print(f"Max connection attempts: {max_attempts}")
+            print(f"Model: {self._model_name}")
+            print(f"{'='*80}\n")
+
             while attempt < max_attempts:
                 # Check if session was intentionally finalized (Level 3 timeout, manual disconnect)
                 # If so, don't retry - just exit cleanly
                 if self._intentional_shutdown:
+                    print(f"\n{'='*80}")
+                    print(f"⏹️  SESSION INTENTIONALLY CLOSED - NO RETRY")
+                    print(f"{'='*80}\n")
+
                     self._log.info("session_intentionally_closed_no_retry")
                     return
-                    
+
                 attempt += 1
+
+                if attempt > 1:
+                    print(f"\n{'='*80}")
+                    print(f"🔁 RETRY ATTEMPT {attempt}/{max_attempts}")
+                    print(f"{'='*80}")
+                    print(f"Previous error: {str(last_exc) if last_exc else 'Unknown'}")
+                    print(f"{'='*80}\n")
                 try:
                     # Re-create connect_obj each attempt to avoid reusing a failed object
                     if websocket_base_override:
@@ -1371,7 +1411,19 @@ class LiveAIGemini(ILiveAI):
                         # Assume awaitable/coroutine returning a session object
                         session = await connect_obj
                         await _handle_session(session)
+
                     # success, break out
+                    if attempt > 1:
+                        print(f"\n{'='*80}")
+                        print(f"✅ RETRY SUCCESSFUL - CONNECTION RESTORED")
+                        print(f"{'='*80}")
+                        print(f"Successful attempt: {attempt}/{max_attempts}")
+                        print(f"{'='*80}\n")
+
+                        self._log.info("retry_successful",
+                                      attempt=attempt,
+                                      max_attempts=max_attempts)
+
                     last_exc = None
                     break
                 except Exception as e:
@@ -1414,17 +1466,47 @@ class LiveAIGemini(ILiveAI):
                             dns_result = str(de)
 
                     try:
-                        self._log.error('connect_attempt_failed', attempt=attempt, error=str(e), host=host, dns=dns_result)
+                        print(f"\n{'='*80}")
+                        print(f"⚠️  CONNECTION ATTEMPT FAILED")
+                        print(f"{'='*80}")
+                        print(f"Attempt: {attempt}/{max_attempts}")
+                        print(f"Error: {str(e)}")
+                        print(f"Host: {host}")
+                        print(f"DNS result: {dns_result}")
+                        print(f"Is name error: {is_name_err}")
+                        print(f"{'='*80}\n")
+
+                        self._log.error('connect_attempt_failed',
+                                       attempt=attempt,
+                                       max_attempts=max_attempts,
+                                       error=str(e),
+                                       host=host,
+                                       dns=dns_result,
+                                       is_name_error=is_name_err)
                     except Exception:
                         pass
 
                     if attempt >= max_attempts or not is_name_err:
+                        print(f"\n{'='*80}")
+                        print(f"💥 ALL RETRY ATTEMPTS EXHAUSTED")
+                        print(f"{'='*80}")
+                        print(f"Failed after {attempt} attempts")
+                        print(f"Final error: {str(e)}")
+                        print(f"{'='*80}\n")
+
+                        self._log.error("all_retries_exhausted",
+                                       attempts=attempt,
+                                       final_error=str(e))
+
                         # Give up and re-raise the last exception
                         raise
 
                     # Backoff before retrying
+                    backoff_seconds = 0.5 * (2 ** (attempt - 1))
+                    print(f"⏳ Waiting {backoff_seconds}s before retry...")
+
                     try:
-                        await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
+                        await asyncio.sleep(backoff_seconds)
                     except Exception:
                         pass
 

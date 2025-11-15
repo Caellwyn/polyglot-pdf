@@ -193,11 +193,13 @@ class CallbackHandler:
         #   - Used for local debugging only
         # ============================================================================
 
-        # Production logging: Log tool name and argument KEYS only (no values)
-        _log.info("🔧 tool_call_received",
-                 tool_name=tool_name,
-                 session_id=self._session_id,
-                 arg_keys=list(arguments.keys()) if arguments else [])
+        # Console logging for token analysis
+        print(f"\n{'='*80}")
+        print(f"🔧 TOOL CALL ← Gemini")
+        print(f"{'='*80}")
+        print(f"Tool: {tool_name}")
+        print(f"Arguments: {arguments}")
+        print(f"{'='*80}\n")
 
         # Dev logging: Log full arguments (includes field values - dev only!)
         _dev_log.log_tool_call(tool_name, arguments, session_id=self._session_id)

@@ -75,12 +75,13 @@ class FormFillingService:
         schema: Optional[Dict[str, Any]] = None,
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
+        form_session_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
-        
+
         Initializes the session and registers callbacks with system instruction
         included in the initial Gemini connection config.
-        
+
         Args:
             websocket: WebSocket connection
             session_id: Ephemeral session ID for logging
@@ -89,6 +90,7 @@ class FormFillingService:
             schema: Form schema (stored for context generation, not for state)
             current_values: Pre-filled values (ignored by backend - client is source of truth)
             system_instruction: System instruction to include in initial Gemini config
+            form_session_id: Persistent form session ID from frontend (survives reconnects)
         """
         self._websocket = websocket
         self._session_id = session_id
@@ -131,14 +133,18 @@ class FormFillingService:
         if self._live_ai is not None:
             # Set session context for token logging
             form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
-            _log.info("Setting token logging context", form_id=form_id, session_id=session_id)
+            _log.info("Setting token logging context",
+                     form_id=form_id,
+                     session_id=session_id,
+                     form_session_id=form_session_id)
             try:
                 self._live_ai.set_session_context(
-                    form_session_id=session_id,
+                    form_session_id=form_session_id or session_id,  # Use persistent ID if available
                     form_id=form_id,
                     current_part_id=None,  # Will be updated on section switch
                 )
-                _log.info("Token logging context set successfully")
+                _log.info("Token logging context set successfully",
+                         form_session_id=form_session_id or session_id)
             except AttributeError as e:
                 # Older adapters may not have this method
                 _log.warning("set_session_context not available on adapter", error=str(e))
@@ -537,13 +543,13 @@ class FormFillingService:
         self, session_id: str, updates: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Apply updates from the AI for web sessions (validation only, no persistence).
-        
+
         Delegates to ValidationHandler for field matching and validation.
         """
         # Build field list on-demand from schema for validation
         # Values are not persisted - this is just for acknowledgment
         fields = self._build_fields_from_schema()
-        
+
         # Use ValidationHandler to match and validate fields
         validator = ValidationHandler(session_id=session_id)
         return validator.validate_field_updates(fields, updates)

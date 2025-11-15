@@ -87,8 +87,12 @@
         "p1_line3b_givenname",
         "p1_line3c_middlename",
         "p1_checkbox4",
+        "p1_line5a_familyname",
+        "p1_line5b_givenname",
+        "p1_line5c_middlename",
         "p1_line6a_incareofname",
         "p1_line6b_streetnumbername",
+        "p1_unit_type6c_unit",
         "p1_line6c_aptsteflrnumber",
         "p1_line6d_cityortown",
         "p1_line6e_state",
@@ -96,7 +100,9 @@
         "p1_line6g_province",
         "p1_line6h_postalcode",
         "p1_line6i_country",
+        "p1_line7a_streetnumbername",
         "p1_line7b_aptsteflrnumber",
+        "p1_unit_type7b_unit",
         "p1_line7c_cityortown",
         "p1_line7d_state",
         "p1_line7e_zipcode",
@@ -107,17 +113,11 @@
         "p1_line9_dateofbirth",
         "p1_line10_citytownofbirth",
         "p1_line11_countryofbirth",
-        "p1_line14_classofadmission",
-        "p1_line15_dateofadmission",
-        "p1_line16_ssn",
-        "p1_line7a_streetnumbername",
-        "p1_line5a_familyname",
-        "p1_line5b_givenname",
-        "p1_line5c_middlename",
         "p1_line12_mothergivenname",
         "p1_line13_fathergivenname",
-        "p1_unit_type6c_unit",
-        "p1_unit_type7b_unit"
+        "p1_line14_classofadmission",
+        "p1_line15_dateofadmission",
+        "p1_line16_ssn"
       ]
     },
     {
@@ -126,13 +126,13 @@
       "order": 2,
       "fields": [
         "p2_checkbox1",
-        "p2_line2h1_cityandstate",
         "p2_checkbox3",
         "p2_checkbox3[1]",
         "p2_checkbox3[2]",
         "p2_checkbox3[3]",
         "p2_checkbox3[4]",
-        "p2_checkbox2[5]"
+        "p2_checkbox2[5]",
+        "p2_line2h1_cityandstate"
       ]
     },
     {
@@ -162,15 +162,8 @@
       "label": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "order": 4,
       "fields": [
+        "p4_checkbox1[1]",
         "p4_checkbox1a",
-        "p4_checkbox1[1]"
-      ]
-    },
-    {
-      "id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
-      "label": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
-      "order": 5,
-      "fields": [
         "p4_line1a_accomodationrequested",
         "p4_checkbox1b",
         "p4_line1b_accomodationrequested",
@@ -179,18 +172,24 @@
       ]
     },
     {
+      "id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "label": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "order": 5,
+      "fields": []
+    },
+    {
       "id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
       "order": 6,
       "fields": [
+        "p5_checkbox1a",
         "p5_line1b_language",
         "p5_line2_nameofrepresentative",
         "p5_line3_daytimephonenumber",
         "p5_line4_mobilephonenumber",
         "p5_line5_emailaddress",
         "p5_line6a_signatureofapplicant",
-        "p5_line6b_dateofsignature",
-        "p5_checkbox1a"
+        "p5_line6b_dateofsignature"
       ]
     },
     {
@@ -198,9 +197,11 @@
       "label": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
       "order": 7,
       "fields": [
+        "p6_line1a_interpretersfamilyname",
         "p6_line1b_interpretersgivenname",
         "p6_line2_nameofbusinessor",
         "p6_line3a_streetnumbername",
+        "p6_unit_type3b_unit",
         "p6_line3b_aptsteflrnumber",
         "p6_line3c_citytown",
         "p6_line3d_state",
@@ -213,9 +214,7 @@
         "p6_line5_interpretersemailaddress",
         "p6_line6a_signature",
         "p6_line6b_dateofsignature",
-        "p6_line1a_interpretersfamilyname",
-        "p6_language",
-        "p6_unit_type3b_unit"
+        "p6_language"
       ]
     },
     {
@@ -223,9 +222,11 @@
       "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
       "order": 8,
       "fields": [
+        "p7_line1a_familyname",
         "p7_line1b_preparersgivenname",
         "p7_line2_nameofbusinessor",
         "p7_line3a_streetnumbername",
+        "p7_unit_type3b_unit",
         "p7_line3b_aptsteflrnumber",
         "p7_line3c_citytown",
         "p7_line3d_state",
@@ -240,17 +241,14 @@
         "p7_checkbox7extend",
         "p7_checkbox7extend[1]",
         "p7_line8a_signatureofpreparer",
-        "p7_line8b_dateofsignature",
-        "p7_unit_type3b_unit"
+        "p7_line8b_dateofsignature"
       ]
     },
     {
       "id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
       "label": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
       "order": 9,
-      "fields": [
-        "p7_line1a_familyname"
-      ]
+      "fields": []
     },
     {
       "id": "Part 8 - Additional Information",
@@ -258,16 +256,13 @@
       "order": 10,
       "fields": [
         "p1_line1_aliennumber[1]",
+        "p1_line3a_familyname[1]",
         "p1_line3b_givenname[1]",
         "p1_line3c_middlename[1]",
         "p8_line3a_pagenumber",
         "p8_line3b_partnumber",
         "p8_line3c_itemnumber",
         "p8_line3d_additionalinfo",
-        "p8_line5a_pagenumber[1]",
-        "p8_line5b_partnumber[1]",
-        "p8_line5c_itemnumber[1]",
-        "p8_line5d_additionalinfo[1]",
         "p8_line4a_pagenumber",
         "p8_line4b_partnumber",
         "p8_line4c_itemnumber",
@@ -276,11 +271,14 @@
         "p8_line5b_partnumber",
         "p8_line5c_itemnumber",
         "p8_line5d_additionalinfo",
+        "p8_line5a_pagenumber[1]",
+        "p8_line5b_partnumber[1]",
+        "p8_line5c_itemnumber[1]",
+        "p8_line5d_additionalinfo[1]",
         "p8_line5a_pagenumber[2]",
         "p8_line5b_partnumber[2]",
         "p8_line5c_itemnumber[2]",
-        "p8_line5d_additionalinfo[2]",
-        "p1_line3a_familyname[1]"
+        "p8_line5d_additionalinfo[2]"
       ]
     }
   ],
@@ -371,7 +369,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "family name 1",
+      "spoken_name": "current family name",
       "help": {
         "instructions": "Enter your family name (last name) as it appears on your official documents."
       },
@@ -402,7 +400,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "given name 1",
+      "spoken_name": "current given name",
       "help": {
         "instructions": "Enter your given name (first name) as it appears on your official documents."
       },
@@ -433,7 +431,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "middle name 1",
+      "spoken_name": "current middle name",
       "help": {
         "instructions": "Enter your middle name as it appears on your official documents. If you do not have a middle name, enter 'N/A'."
       },
@@ -527,7 +525,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "family name as printed on green card",
+      "spoken_name": "previous family name as printed on green card",
       "help": {
         "instructions": "Enter your family name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
       },
@@ -571,7 +569,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "given name as printed on green card",
+      "spoken_name": "previous given name as printed on green card",
       "help": {
         "instructions": "Enter your given name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
       },
@@ -615,7 +613,7 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "middle name as printed on green card",
+      "spoken_name": "previous middle name as printed on green card",
       "help": {
         "instructions": "Enter your middle name exactly as it appears on your current Permanent Resident Card. This is required if your name has legally changed."
       },
@@ -716,22 +714,25 @@
         {
           "value": "P1_checkbox6c_Unit[1]",
           "label": "Suite",
-          "pdf_field_name": "P1_checkbox6c_Unit[1]"
+          "pdf_field_name": "P1_checkbox6c_Unit[1]",
+          "spoken_label": "Suite"
         },
         {
           "value": "P1_checkbox6c_Unit[2]",
           "label": "Floor",
-          "pdf_field_name": "P1_checkbox6c_Unit[2]"
+          "pdf_field_name": "P1_checkbox6c_Unit[2]",
+          "spoken_label": "Floor"
         },
         {
           "value": "P1_checkbox6c_Unit[0]",
           "label": "Apartment",
-          "pdf_field_name": "P1_checkbox6c_Unit[0]"
+          "pdf_field_name": "P1_checkbox6c_Unit[0]",
+          "spoken_label": "Apartment"
         }
       ],
       "spoken_name": "mailing unit type",
       "help": {
-        "instructions": "Select the appropriate unit type for your mailing address: Apartment, Suite, or Floor."
+        "instructions": "Select the appropriate unit type for your mailing address: Apartment, Suite, or Floor, if applicable."
       },
       "conditional_fields": [
         "p1_line6c_aptsteflrnumber"
@@ -776,7 +777,7 @@
       },
       "show_if": {
         "field": "p1_unit_type6c_unit",
-        "operator": "not_equals",
+        "operator": "is_not_empty",
         "value": ""
       },
       "conditional_logic": {
@@ -855,7 +856,209 @@
         "width": 36,
         "height": 18
       },
-      "question_number": "1.6.E"
+      "question_number": "1.6.E",
+      "options": [
+        {
+          "value": "AL",
+          "label": "Alabama"
+        },
+        {
+          "value": "AK",
+          "label": "Alaska"
+        },
+        {
+          "value": "AZ",
+          "label": "Arizona"
+        },
+        {
+          "value": "AR",
+          "label": "Arkansas"
+        },
+        {
+          "value": "CA",
+          "label": "California"
+        },
+        {
+          "value": "CO",
+          "label": "Colorado"
+        },
+        {
+          "value": "CT",
+          "label": "Connecticut"
+        },
+        {
+          "value": "DE",
+          "label": "Delaware"
+        },
+        {
+          "value": "FL",
+          "label": "Florida"
+        },
+        {
+          "value": "GA",
+          "label": "Georgia"
+        },
+        {
+          "value": "HI",
+          "label": "Hawaii"
+        },
+        {
+          "value": "ID",
+          "label": "Idaho"
+        },
+        {
+          "value": "IL",
+          "label": "Illinois"
+        },
+        {
+          "value": "IN",
+          "label": "Indiana"
+        },
+        {
+          "value": "IA",
+          "label": "Iowa"
+        },
+        {
+          "value": "KS",
+          "label": "Kansas"
+        },
+        {
+          "value": "KY",
+          "label": "Kentucky"
+        },
+        {
+          "value": "LA",
+          "label": "Louisiana"
+        },
+        {
+          "value": "ME",
+          "label": "Maine"
+        },
+        {
+          "value": "MD",
+          "label": "Maryland"
+        },
+        {
+          "value": "MA",
+          "label": "Massachusetts"
+        },
+        {
+          "value": "MI",
+          "label": "Michigan"
+        },
+        {
+          "value": "MN",
+          "label": "Minnesota"
+        },
+        {
+          "value": "MS",
+          "label": "Mississippi"
+        },
+        {
+          "value": "MO",
+          "label": "Missouri"
+        },
+        {
+          "value": "MT",
+          "label": "Montana"
+        },
+        {
+          "value": "NE",
+          "label": "Nebraska"
+        },
+        {
+          "value": "NV",
+          "label": "Nevada"
+        },
+        {
+          "value": "NH",
+          "label": "New Hampshire"
+        },
+        {
+          "value": "NJ",
+          "label": "New Jersey"
+        },
+        {
+          "value": "NM",
+          "label": "New Mexico"
+        },
+        {
+          "value": "NY",
+          "label": "New York"
+        },
+        {
+          "value": "NC",
+          "label": "North Carolina"
+        },
+        {
+          "value": "ND",
+          "label": "North Dakota"
+        },
+        {
+          "value": "OH",
+          "label": "Ohio"
+        },
+        {
+          "value": "OK",
+          "label": "Oklahoma"
+        },
+        {
+          "value": "OR",
+          "label": "Oregon"
+        },
+        {
+          "value": "PA",
+          "label": "Pennsylvania"
+        },
+        {
+          "value": "RI",
+          "label": "Rhode Island"
+        },
+        {
+          "value": "SC",
+          "label": "South Carolina"
+        },
+        {
+          "value": "SD",
+          "label": "South Dakota"
+        },
+        {
+          "value": "TN",
+          "label": "Tennessee"
+        },
+        {
+          "value": "TX",
+          "label": "Texas"
+        },
+        {
+          "value": "UT",
+          "label": "Utah"
+        },
+        {
+          "value": "VT",
+          "label": "Vermont"
+        },
+        {
+          "value": "VA",
+          "label": "Virginia"
+        },
+        {
+          "value": "WA",
+          "label": "Washington"
+        },
+        {
+          "value": "WV",
+          "label": "West Virginia"
+        },
+        {
+          "value": "WI",
+          "label": "Wisconsin"
+        },
+        {
+          "value": "WY",
+          "label": "Wyoming"
+        }
+      ]
     },
     {
       "id": "p1_line6f_zipcode",
@@ -957,7 +1160,7 @@
     {
       "id": "p1_line6i_country",
       "name": "Country",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line6i_Country[0]",
       "consolidated_widgets": [
@@ -1025,22 +1228,25 @@
         {
           "value": "P1_checkbox7b_Unit[0]",
           "label": "Apartment",
-          "pdf_field_name": "P1_checkbox7b_Unit[0]"
+          "pdf_field_name": "P1_checkbox7b_Unit[0]",
+          "spoken_label": "Apartment"
         },
         {
           "value": "P1_checkbox7b_Unit[1]",
           "label": "Suite",
-          "pdf_field_name": "P1_checkbox7b_Unit[1]"
+          "pdf_field_name": "P1_checkbox7b_Unit[1]",
+          "spoken_label": "Suite"
         },
         {
           "value": "P1_checkbox7b_Unit[2]",
           "label": "Floor",
-          "pdf_field_name": "P1_checkbox7b_Unit[2]"
+          "pdf_field_name": "P1_checkbox7b_Unit[2]",
+          "spoken_label": "Floor"
         }
       ],
       "spoken_name": "physical unit type",
       "help": {
-        "instructions": "Select the appropriate unit type for your physical address: Apartment, Suite, or Floor."
+        "instructions": "Select the appropriate unit type for your physical address: Apartment, Suite, or Floor, if applicable."
       },
       "conditional_fields": [
         "p1_line7b_aptsteflrnumber"
@@ -1085,7 +1291,7 @@
       },
       "show_if": {
         "field": "p1_unit_type7b_unit",
-        "operator": "not_equals",
+        "operator": "is_not_empty",
         "value": ""
       },
       "conditional_logic": {
@@ -1164,7 +1370,209 @@
         "width": 36,
         "height": 18
       },
-      "question_number": "1.7.D"
+      "question_number": "1.7.D",
+      "options": [
+        {
+          "value": "AL",
+          "label": "Alabama"
+        },
+        {
+          "value": "AK",
+          "label": "Alaska"
+        },
+        {
+          "value": "AZ",
+          "label": "Arizona"
+        },
+        {
+          "value": "AR",
+          "label": "Arkansas"
+        },
+        {
+          "value": "CA",
+          "label": "California"
+        },
+        {
+          "value": "CO",
+          "label": "Colorado"
+        },
+        {
+          "value": "CT",
+          "label": "Connecticut"
+        },
+        {
+          "value": "DE",
+          "label": "Delaware"
+        },
+        {
+          "value": "FL",
+          "label": "Florida"
+        },
+        {
+          "value": "GA",
+          "label": "Georgia"
+        },
+        {
+          "value": "HI",
+          "label": "Hawaii"
+        },
+        {
+          "value": "ID",
+          "label": "Idaho"
+        },
+        {
+          "value": "IL",
+          "label": "Illinois"
+        },
+        {
+          "value": "IN",
+          "label": "Indiana"
+        },
+        {
+          "value": "IA",
+          "label": "Iowa"
+        },
+        {
+          "value": "KS",
+          "label": "Kansas"
+        },
+        {
+          "value": "KY",
+          "label": "Kentucky"
+        },
+        {
+          "value": "LA",
+          "label": "Louisiana"
+        },
+        {
+          "value": "ME",
+          "label": "Maine"
+        },
+        {
+          "value": "MD",
+          "label": "Maryland"
+        },
+        {
+          "value": "MA",
+          "label": "Massachusetts"
+        },
+        {
+          "value": "MI",
+          "label": "Michigan"
+        },
+        {
+          "value": "MN",
+          "label": "Minnesota"
+        },
+        {
+          "value": "MS",
+          "label": "Mississippi"
+        },
+        {
+          "value": "MO",
+          "label": "Missouri"
+        },
+        {
+          "value": "MT",
+          "label": "Montana"
+        },
+        {
+          "value": "NE",
+          "label": "Nebraska"
+        },
+        {
+          "value": "NV",
+          "label": "Nevada"
+        },
+        {
+          "value": "NH",
+          "label": "New Hampshire"
+        },
+        {
+          "value": "NJ",
+          "label": "New Jersey"
+        },
+        {
+          "value": "NM",
+          "label": "New Mexico"
+        },
+        {
+          "value": "NY",
+          "label": "New York"
+        },
+        {
+          "value": "NC",
+          "label": "North Carolina"
+        },
+        {
+          "value": "ND",
+          "label": "North Dakota"
+        },
+        {
+          "value": "OH",
+          "label": "Ohio"
+        },
+        {
+          "value": "OK",
+          "label": "Oklahoma"
+        },
+        {
+          "value": "OR",
+          "label": "Oregon"
+        },
+        {
+          "value": "PA",
+          "label": "Pennsylvania"
+        },
+        {
+          "value": "RI",
+          "label": "Rhode Island"
+        },
+        {
+          "value": "SC",
+          "label": "South Carolina"
+        },
+        {
+          "value": "SD",
+          "label": "South Dakota"
+        },
+        {
+          "value": "TN",
+          "label": "Tennessee"
+        },
+        {
+          "value": "TX",
+          "label": "Texas"
+        },
+        {
+          "value": "UT",
+          "label": "Utah"
+        },
+        {
+          "value": "VT",
+          "label": "Vermont"
+        },
+        {
+          "value": "VA",
+          "label": "Virginia"
+        },
+        {
+          "value": "WA",
+          "label": "Washington"
+        },
+        {
+          "value": "WV",
+          "label": "West Virginia"
+        },
+        {
+          "value": "WI",
+          "label": "Wisconsin"
+        },
+        {
+          "value": "WY",
+          "label": "Wyoming"
+        }
+      ]
     },
     {
       "id": "p1_line7e_zipcode",
@@ -1266,7 +1674,7 @@
     {
       "id": "p1_line7h_country",
       "name": "Country",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line7h_Country[0]",
       "consolidated_widgets": [
@@ -1395,7 +1803,7 @@
     {
       "id": "p1_line11_countryofbirth",
       "name": "Country of Birth",
-      "type": "select",
+      "type": "text",
       "section_id": "Part 1 - Information About You",
       "pdf_field_name": "P1_Line11_CountryofBirth[0]",
       "consolidated_widgets": [
@@ -1784,9 +2192,9 @@
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "previous card lost, stolen, or destroyed",
+      "spoken_name": "Reason for New Card Request",
       "help": {
-        "instructions": "Select if your previous card has been lost, stolen, or destroyed."
+        "instructions": "Select why you need a new card"
       },
       "controls_fields": [
         {
@@ -2472,7 +2880,7 @@
       "id": "p4_line1a_accomodationrequested",
       "name": "Language",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1a_AccomodationRequested[0]"
@@ -2517,7 +2925,7 @@
       "id": "p4_checkbox1b",
       "name": "Select I am blind or have low vision and request the following accommodation",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "pdf_field_name": "P4_checkbox1b[0]",
       "consolidated_widgets": [
         "P4_checkbox1b[0]"
@@ -2571,7 +2979,7 @@
       "id": "p4_line1b_accomodationrequested",
       "name": "Accommodation Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1b_AccomodationRequested[0]"
@@ -2616,7 +3024,7 @@
       "id": "p4_checkbox1c",
       "name": "Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting)",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "pdf_field_name": "P4_checkbox1c[0]",
       "consolidated_widgets": [
         "P4_checkbox1c[0]"
@@ -2670,7 +3078,7 @@
       "id": "p4_line1c_accomodationrequested",
       "name": "Description of Disability and/or Impairment and the Accommodations Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals With Disabilities and Impairments",
+      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
       "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1c_AccomodationRequested[0]"
@@ -3151,17 +3559,20 @@
         {
           "value": "P6_checkbox3b_Unit[1]",
           "label": "Suite",
-          "pdf_field_name": "P6_checkbox3b_Unit[1]"
+          "pdf_field_name": "P6_checkbox3b_Unit[1]",
+          "spoken_label": "Suite"
         },
         {
           "value": "P6_checkbox3b_Unit[2]",
           "label": "Floor",
-          "pdf_field_name": "P6_checkbox3b_Unit[2]"
+          "pdf_field_name": "P6_checkbox3b_Unit[2]",
+          "spoken_label": "Floor"
         },
         {
           "value": "P6_checkbox3b_Unit[0]",
           "label": "Apartment",
-          "pdf_field_name": "P6_checkbox3b_Unit[0]"
+          "pdf_field_name": "P6_checkbox3b_Unit[0]",
+          "spoken_label": "Apartment"
         }
       ],
       "spoken_name": "interpreter's unit type",
@@ -3211,7 +3622,7 @@
       },
       "show_if": {
         "field": "p6_unit_type3b_unit",
-        "operator": "not_equals",
+        "operator": "is_not_empty",
         "value": ""
       },
       "conditional_logic": {
@@ -3266,7 +3677,7 @@
     {
       "id": "p6_line3d_state",
       "name": "Select State from List of States",
-      "type": "radio",
+      "type": "select",
       "section_id": "Part 6 - Interpreter's Contact Information, Certification, and Signature",
       "pdf_field_name": "P6_Line3d_State[0]",
       "consolidated_widgets": [
@@ -3289,7 +3700,209 @@
         "width": 36,
         "height": 18
       },
-      "question_number": "6.3.D"
+      "question_number": "6.3.D",
+      "options": [
+        {
+          "value": "AL",
+          "label": "Alabama"
+        },
+        {
+          "value": "AK",
+          "label": "Alaska"
+        },
+        {
+          "value": "AZ",
+          "label": "Arizona"
+        },
+        {
+          "value": "AR",
+          "label": "Arkansas"
+        },
+        {
+          "value": "CA",
+          "label": "California"
+        },
+        {
+          "value": "CO",
+          "label": "Colorado"
+        },
+        {
+          "value": "CT",
+          "label": "Connecticut"
+        },
+        {
+          "value": "DE",
+          "label": "Delaware"
+        },
+        {
+          "value": "FL",
+          "label": "Florida"
+        },
+        {
+          "value": "GA",
+          "label": "Georgia"
+        },
+        {
+          "value": "HI",
+          "label": "Hawaii"
+        },
+        {
+          "value": "ID",
+          "label": "Idaho"
+        },
+        {
+          "value": "IL",
+          "label": "Illinois"
+        },
+        {
+          "value": "IN",
+          "label": "Indiana"
+        },
+        {
+          "value": "IA",
+          "label": "Iowa"
+        },
+        {
+          "value": "KS",
+          "label": "Kansas"
+        },
+        {
+          "value": "KY",
+          "label": "Kentucky"
+        },
+        {
+          "value": "LA",
+          "label": "Louisiana"
+        },
+        {
+          "value": "ME",
+          "label": "Maine"
+        },
+        {
+          "value": "MD",
+          "label": "Maryland"
+        },
+        {
+          "value": "MA",
+          "label": "Massachusetts"
+        },
+        {
+          "value": "MI",
+          "label": "Michigan"
+        },
+        {
+          "value": "MN",
+          "label": "Minnesota"
+        },
+        {
+          "value": "MS",
+          "label": "Mississippi"
+        },
+        {
+          "value": "MO",
+          "label": "Missouri"
+        },
+        {
+          "value": "MT",
+          "label": "Montana"
+        },
+        {
+          "value": "NE",
+          "label": "Nebraska"
+        },
+        {
+          "value": "NV",
+          "label": "Nevada"
+        },
+        {
+          "value": "NH",
+          "label": "New Hampshire"
+        },
+        {
+          "value": "NJ",
+          "label": "New Jersey"
+        },
+        {
+          "value": "NM",
+          "label": "New Mexico"
+        },
+        {
+          "value": "NY",
+          "label": "New York"
+        },
+        {
+          "value": "NC",
+          "label": "North Carolina"
+        },
+        {
+          "value": "ND",
+          "label": "North Dakota"
+        },
+        {
+          "value": "OH",
+          "label": "Ohio"
+        },
+        {
+          "value": "OK",
+          "label": "Oklahoma"
+        },
+        {
+          "value": "OR",
+          "label": "Oregon"
+        },
+        {
+          "value": "PA",
+          "label": "Pennsylvania"
+        },
+        {
+          "value": "RI",
+          "label": "Rhode Island"
+        },
+        {
+          "value": "SC",
+          "label": "South Carolina"
+        },
+        {
+          "value": "SD",
+          "label": "South Dakota"
+        },
+        {
+          "value": "TN",
+          "label": "Tennessee"
+        },
+        {
+          "value": "TX",
+          "label": "Texas"
+        },
+        {
+          "value": "UT",
+          "label": "Utah"
+        },
+        {
+          "value": "VT",
+          "label": "Vermont"
+        },
+        {
+          "value": "VA",
+          "label": "Virginia"
+        },
+        {
+          "value": "WA",
+          "label": "Washington"
+        },
+        {
+          "value": "WV",
+          "label": "West Virginia"
+        },
+        {
+          "value": "WI",
+          "label": "Wisconsin"
+        },
+        {
+          "value": "WY",
+          "label": "Wyoming"
+        }
+      ]
     },
     {
       "id": "p6_line3e_zipcode",
@@ -3642,7 +4255,7 @@
       "id": "p7_line1a_familyname",
       "name": "Preparer's Family Name (Last Name). ",
       "type": "text",
-      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "section_id": "Part 7 - Contact Information, Declaration, and Signature of the Person Preparing This Application, If Other Than the Applicant",
       "pdf_field_name": "P7_Line1a_FamilyName[0]",
       "consolidated_widgets": [
         "P7_Line1a_FamilyName[0]"
@@ -3738,17 +4351,20 @@
         {
           "value": "P7_checkbox3b_Unit[1]",
           "label": "Suite",
-          "pdf_field_name": "P7_checkbox3b_Unit[1]"
+          "pdf_field_name": "P7_checkbox3b_Unit[1]",
+          "spoken_label": "Suite"
         },
         {
           "value": "P7_checkbox3b_Unit[2]",
           "label": "Floor",
-          "pdf_field_name": "P7_checkbox3b_Unit[2]"
+          "pdf_field_name": "P7_checkbox3b_Unit[2]",
+          "spoken_label": "Floor"
         },
         {
           "value": "P7_checkbox3b_Unit[0]",
           "label": "Apartment",
-          "pdf_field_name": "P7_checkbox3b_Unit[0]"
+          "pdf_field_name": "P7_checkbox3b_Unit[0]",
+          "spoken_label": "Apartment"
         }
       ],
       "spoken_name": "preparer's unit type",
@@ -3798,7 +4414,7 @@
       },
       "show_if": {
         "field": "p7_unit_type3b_unit",
-        "operator": "not_equals",
+        "operator": "is_not_empty",
         "value": ""
       },
       "conditional_logic": {
@@ -3876,7 +4492,209 @@
         "width": 36,
         "height": 18
       },
-      "question_number": "7.3.D"
+      "question_number": "7.3.D",
+      "options": [
+        {
+          "value": "AL",
+          "label": "Alabama"
+        },
+        {
+          "value": "AK",
+          "label": "Alaska"
+        },
+        {
+          "value": "AZ",
+          "label": "Arizona"
+        },
+        {
+          "value": "AR",
+          "label": "Arkansas"
+        },
+        {
+          "value": "CA",
+          "label": "California"
+        },
+        {
+          "value": "CO",
+          "label": "Colorado"
+        },
+        {
+          "value": "CT",
+          "label": "Connecticut"
+        },
+        {
+          "value": "DE",
+          "label": "Delaware"
+        },
+        {
+          "value": "FL",
+          "label": "Florida"
+        },
+        {
+          "value": "GA",
+          "label": "Georgia"
+        },
+        {
+          "value": "HI",
+          "label": "Hawaii"
+        },
+        {
+          "value": "ID",
+          "label": "Idaho"
+        },
+        {
+          "value": "IL",
+          "label": "Illinois"
+        },
+        {
+          "value": "IN",
+          "label": "Indiana"
+        },
+        {
+          "value": "IA",
+          "label": "Iowa"
+        },
+        {
+          "value": "KS",
+          "label": "Kansas"
+        },
+        {
+          "value": "KY",
+          "label": "Kentucky"
+        },
+        {
+          "value": "LA",
+          "label": "Louisiana"
+        },
+        {
+          "value": "ME",
+          "label": "Maine"
+        },
+        {
+          "value": "MD",
+          "label": "Maryland"
+        },
+        {
+          "value": "MA",
+          "label": "Massachusetts"
+        },
+        {
+          "value": "MI",
+          "label": "Michigan"
+        },
+        {
+          "value": "MN",
+          "label": "Minnesota"
+        },
+        {
+          "value": "MS",
+          "label": "Mississippi"
+        },
+        {
+          "value": "MO",
+          "label": "Missouri"
+        },
+        {
+          "value": "MT",
+          "label": "Montana"
+        },
+        {
+          "value": "NE",
+          "label": "Nebraska"
+        },
+        {
+          "value": "NV",
+          "label": "Nevada"
+        },
+        {
+          "value": "NH",
+          "label": "New Hampshire"
+        },
+        {
+          "value": "NJ",
+          "label": "New Jersey"
+        },
+        {
+          "value": "NM",
+          "label": "New Mexico"
+        },
+        {
+          "value": "NY",
+          "label": "New York"
+        },
+        {
+          "value": "NC",
+          "label": "North Carolina"
+        },
+        {
+          "value": "ND",
+          "label": "North Dakota"
+        },
+        {
+          "value": "OH",
+          "label": "Ohio"
+        },
+        {
+          "value": "OK",
+          "label": "Oklahoma"
+        },
+        {
+          "value": "OR",
+          "label": "Oregon"
+        },
+        {
+          "value": "PA",
+          "label": "Pennsylvania"
+        },
+        {
+          "value": "RI",
+          "label": "Rhode Island"
+        },
+        {
+          "value": "SC",
+          "label": "South Carolina"
+        },
+        {
+          "value": "SD",
+          "label": "South Dakota"
+        },
+        {
+          "value": "TN",
+          "label": "Tennessee"
+        },
+        {
+          "value": "TX",
+          "label": "Texas"
+        },
+        {
+          "value": "UT",
+          "label": "Utah"
+        },
+        {
+          "value": "VT",
+          "label": "Vermont"
+        },
+        {
+          "value": "VA",
+          "label": "Virginia"
+        },
+        {
+          "value": "WA",
+          "label": "Washington"
+        },
+        {
+          "value": "WV",
+          "label": "West Virginia"
+        },
+        {
+          "value": "WI",
+          "label": "Wisconsin"
+        },
+        {
+          "value": "WY",
+          "label": "Wyoming"
+        }
+      ]
     },
     {
       "id": "p7_line3e_zipcode",

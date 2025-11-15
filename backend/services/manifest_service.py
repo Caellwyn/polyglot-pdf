@@ -6,9 +6,9 @@ Used to reduce initial token count from ~7,400 to <500 tokens.
 """
 
 from typing import Dict, List, Any
-import logging
+import structlog
 
-_log = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 
 def generate_part_manifest(
@@ -59,34 +59,83 @@ def generate_part_manifest(
 
 def get_next_field_schema(part_data: dict, current_field_id: str | None = None) -> dict | None:
     """
-    Get the full schema for the next unfilled field in the part.
+    Get minimal schema for the next unfilled field - only what Gemini needs for voice interaction.
 
-    Used for next_field_hint to attach schema when guiding Gemini forward.
+    Filters field schema to include only essential properties:
+    - Identity: id, name, spoken_name, spoken_aliases
+    - Type and validation: type, required, options/allowed_values
+    - Guidance: placeholder, help_text
+
+    Excludes internal properties like section_id, group_id, show_if logic, etc.
 
     Args:
         part_data: Full part schema
         current_field_id: ID of current field (None = get first field)
 
     Returns:
-        Next field's complete schema, or None if no more fields
+        Next field's minimal schema for voice interaction, or None if no more fields
     """
     fields = part_data.get("fields", [])
     if not fields:
         return None
 
-    # If no current field, return first field
+    # Find the next field
+    next_field = None
     if current_field_id is None:
-        return fields[0]
+        # Return first field
+        next_field = fields[0]
+    else:
+        # Find next field after current
+        try:
+            current_index = next(i for i, f in enumerate(fields) if f.get("id") == current_field_id)
+            if current_index + 1 < len(fields):
+                next_field = fields[current_index + 1]
+        except StopIteration:
+            pass
 
-    # Find next field after current
-    try:
-        current_index = next(i for i, f in enumerate(fields) if f.get("id") == current_field_id)
-        if current_index + 1 < len(fields):
-            return fields[current_index + 1]
-    except StopIteration:
-        pass
+    if not next_field:
+        return None
 
-    return None
+    # Filter to only properties Gemini needs for voice interaction
+    minimal_schema = {
+        "id": next_field.get("id"),
+        "name": next_field.get("name"),
+        "spoken_name": next_field.get("spoken_name"),
+        "type": next_field.get("type"),
+    }
+
+    # Add optional properties if present
+    if next_field.get("spoken_aliases"):
+        minimal_schema["spoken_aliases"] = next_field["spoken_aliases"]
+
+    if next_field.get("required"):
+        minimal_schema["required"] = next_field["required"]
+
+    # Include options/allowed_values for select/radio/checkbox fields
+    if next_field.get("options"):
+        minimal_schema["options"] = next_field["options"]
+    elif next_field.get("allowed_values"):
+        minimal_schema["allowed_values"] = next_field["allowed_values"]
+
+    # Include validation hints if present
+    if next_field.get("placeholder"):
+        minimal_schema["placeholder"] = next_field["placeholder"]
+
+    if next_field.get("help_text"):
+        minimal_schema["help_text"] = next_field["help_text"]
+
+    # Include validation rules for format guidance
+    validation = next_field.get("validation")
+    if validation:
+        minimal_validation = {}
+        # Only include constraints that help Gemini guide the user
+        for key in ["format", "pattern", "min", "max", "minLength", "maxLength"]:
+            if key in validation:
+                minimal_validation[key] = validation[key]
+        if minimal_validation:
+            minimal_schema["validation"] = minimal_validation
+
+    return minimal_schema
 
 
 def should_include_schema_in_response(field_id: str, loaded_field_ids: set) -> bool:

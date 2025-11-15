@@ -11,44 +11,59 @@ from backend.models.form_models import FormField, FieldType
 
 def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
     """Build field list from schema (stateless).
-    
+
     Constructs FormField objects from a form schema dictionary.
     Used by web sessions to build field objects for validation.
-    
+
     Args:
         schema: Form schema dictionary with 'fields' array
-        
+
     Returns:
         List of FormField objects with populated metadata
-        
+
     Note:
         The backend doesn't persist these fields - they're rebuilt each time.
     """
     fields = []
-    
+
     for field_data in schema.get("fields", []):
-        # Build FormField object from schema
-        # Extract only the properties that exist in the current FormField model
-        field_type_str = field_data.get("type", "text")
-        
-        # Convert string type to FieldType enum
         try:
-            field_type = FieldType(field_type_str)
-        except ValueError:
-            field_type = FieldType.TEXT
-        
-        field = FormField(
-            id=field_data.get("id"),
-            name=field_data.get("name"),
-            spoken_name=field_data.get("spoken_name") or field_data.get("name"),
-            spoken_aliases=field_data.get("spoken_aliases") or [],
-            type=field_type,
-            section_id=field_data.get("section_id", ""),  # Required field
-            validation=field_data.get("validation"),
-            options=field_data.get("options"),
-        )
-        fields.append(field)
-    
+            # Build FormField object from schema
+            # Extract only the properties that exist in the current FormField model
+            field_type_str = field_data.get("type", "text")
+
+            # Convert string type to FieldType enum
+            try:
+                field_type = FieldType(field_type_str)
+            except ValueError:
+                field_type = FieldType.TEXT
+
+            # Handle SELECT/RADIO fields that require options
+            options = field_data.get("options")
+            if field_type in [FieldType.SELECT, FieldType.RADIO]:
+                # If options are missing, skip this field
+                # This shouldn't happen in production, but prevents crashes
+                if not options:
+                    print(f"WARNING: Skipping field {field_data.get('id')} - type {field_type} requires options but none provided")
+                    continue
+
+            field = FormField(
+                id=field_data.get("id"),
+                name=field_data.get("name"),
+                spoken_name=field_data.get("spoken_name") or field_data.get("name"),
+                spoken_aliases=field_data.get("spoken_aliases") or [],
+                type=field_type,
+                section_id=field_data.get("section_id", ""),  # Required field
+                validation=field_data.get("validation"),
+                options=options,
+            )
+            fields.append(field)
+        except Exception as e:
+            # Log field that failed to build but continue processing others
+            field_id = field_data.get("id", "unknown")
+            print(f"ERROR: Failed to build field {field_id}: {e}")
+            continue
+
     return fields
 
 
