@@ -599,7 +599,7 @@ export class WebFormConnection {
         return;
       }
 
-      // Parse identifier - try as order number first, then label
+      // Parse identifier - try multiple strategies
       let targetPartId: string | null | undefined;
 
       if (typeof identifier === 'number') {
@@ -613,19 +613,37 @@ export class WebFormConnection {
           const part = currentState.schema.parts.find(p => p.order === parsed);
           targetPartId = part?.id;
         } else {
-          // Non-numeric string - find by label
+          // Try exact label match first
           targetPartId = SchemaFormStateManager.findPartByLabel(currentState, identifier);
+
+          // If not found, try fuzzy matching (e.g., "Section 2" -> part with order 2)
+          if (!targetPartId) {
+            const sectionMatch = identifier.match(/section\s+(\d+)/i);
+            if (sectionMatch) {
+              const sectionNum = parseInt(sectionMatch[1], 10);
+              const part = currentState.schema.parts.find(p => p.order === sectionNum);
+              targetPartId = part?.id;
+              console.log('[WebFormConnection] Fuzzy matched "' + identifier + '" to part order', sectionNum);
+            }
+          }
         }
       }
 
       console.log('[WebFormConnection] Parsed target part ID:', targetPartId);
 
       if (!targetPartId) {
-        console.log('[WebFormConnection] Invalid target identifier, sending null response');
+        console.log('[WebFormConnection] Invalid target identifier, sending error with available sections');
+
+        // Build list of available sections for error message
+        const availableSections = currentState.schema.parts?.map(p =>
+          `${p.order}: ${p.label}`
+        ).join(', ') || 'none';
+
         this.send({
           type: "section_info_response",
           request_id: requestId,
           section_info: null,
+          error: `Section '${identifier}' not found. Available sections: ${availableSections}`
         });
         return;
       }

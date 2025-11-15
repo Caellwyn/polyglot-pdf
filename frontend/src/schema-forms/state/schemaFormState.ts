@@ -13,6 +13,7 @@
  */
 
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
+import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -21,7 +22,8 @@ export interface SchemaFormState {
   completedParts: Set<string>; // Track completed parts (renamed from completedSections)
   validationErrors: Record<string, string>; // field_id → error message
   lastUpdated: number;
-  sessionId?: string; // Set by backend during handshake
+  sessionId?: string; // Set by backend during handshake (Gemini session ID)
+  formSessionId: string; // Persistent ID for this form filling session (survives reconnects)
 
   // Phase 3: JIT (Just-In-Time) Schema Loading - Token Reduction
   loadedFieldIds: Set<string>; // Field IDs where Gemini has received full schema
@@ -30,6 +32,16 @@ export interface SchemaFormState {
 
 export class SchemaFormStateManager {
   private static readonly STORAGE_KEY = "schema_form_state";
+
+  /**
+   * Generate a unique form session ID
+   * Format: fss_<timestamp>_<random>
+   */
+  private static generateFormSessionId(): string {
+    const timestamp = Date.now().toString(36); // Base36 encoded timestamp
+    const random = Math.random().toString(36).substring(2, 10); // 8 random chars
+    return `fss_${timestamp}_${random}`;
+  }
 
   /**
    * Initialize or load existing form state
@@ -47,6 +59,11 @@ export class SchemaFormStateManager {
       existing.schema.form_metadata.version === cleanedSchema.form_metadata.version &&
       Date.now() - existing.lastUpdated < 60 * 60 * 1000
     ) {
+      // Ensure formSessionId exists (migration for existing sessions)
+      if (!existing.formSessionId) {
+        existing.formSessionId = this.generateFormSessionId();
+        this.save(existing);
+      }
       return existing;
     }
 
@@ -64,6 +81,7 @@ export class SchemaFormStateManager {
       completedParts: new Set(),
       validationErrors: {},
       lastUpdated: Date.now(),
+      formSessionId: this.generateFormSessionId(), // Persistent ID for this form session
       // JIT schema loading (Phase 3: Token Reduction)
       loadedFieldIds: new Set(),
       jitModeEnabled: false, // Will be set during handshake based on backend flag
@@ -656,6 +674,7 @@ export class SchemaFormStateManager {
     const previousSpokenNames = this.getPreviousSpokenNames(state);
 
     return {
+      form_session_id: state.formSessionId, // Persistent ID for logging/metrics
       schema: partSchema,
       current_values: state.fieldValues, // Already in FieldValue format
       section_number: currentPart?.order ?? 1, // Use order as section_number
@@ -671,9 +690,6 @@ export class SchemaFormStateManager {
    * Only sends field_id|spoken_name pairs, not full schemas
    */
   static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
-    // Import manifest utilities (dynamic import to avoid circular dependency)
-    const { buildHandshakeManifest, getFieldSchema } = require('../utils/manifestUtils');
-
     const currentPart = state.schema.parts?.find(p => p.id === state.currentPartId);
 
     // Build manifest with current + previous parts
@@ -689,6 +705,7 @@ export class SchemaFormStateManager {
 
     return {
       type: 'handshake_jit',
+      form_session_id: state.formSessionId, // Persistent ID for logging/metrics
       manifest: manifest,
       first_field_schema: firstFieldSchema,
       loaded_field_ids: Array.from(state.loadedFieldIds),

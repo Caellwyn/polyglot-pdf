@@ -207,6 +207,22 @@ def build_form_context(
     
     fields_text = "\n".join(fields_lines)
 
+    # Build section list for navigation
+    # Format: "1. Personal Information, 2. Employment History, 3. References"
+    # This helps Gemini understand section names, order, and handle requests like "go to last section"
+    section_list_text = ""
+    if schema.get("parts"):
+        # Multi-part form - list all parts
+        section_items = []
+        for part in schema.get("parts", []):
+            order = part.get("order", "?")
+            label = part.get("label", f"Part {order}")
+            section_items.append(f"{order}. {label}")
+        section_list_text = ", ".join(section_items)
+    else:
+        # Single section form
+        section_list_text = f"1. {form_title}"
+
     # Prepare section-specific context
     # Default values for non-sectioned forms (backward compatibility)
     section_num_text = section_number if section_number is not None else "1"
@@ -284,6 +300,7 @@ def build_form_context(
             section_number=section_num_text,
             total_sections=total_sections_text,
             section_label=section_label_text,
+            section_list=section_list_text,
             filled_count=filled_count,
             total_fields=total_fields,
             manifest_text=manifest_text,
@@ -300,6 +317,7 @@ def build_form_context(
             section_number=section_num_text,
             total_sections=total_sections_text,
             section_label=section_label_text,
+            section_list=section_list_text,
             filled_count=filled_count,
             total_fields=total_fields,
             unfilled_count=unfilled_count,

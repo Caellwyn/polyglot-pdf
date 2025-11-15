@@ -168,8 +168,9 @@ async def _handle_fill_session(
 	total_sections: int | None = None,  # Phase 3: Total sections
 	previous_spoken_names: list | None = None,  # Phase 3: Spoken names from completed sections
 	initial_field_hint: str | None = None,  # Initial field hint from frontend (pre-computed)
+	form_session_id: str | None = None,  # Persistent form session ID from frontend
 ) -> None:
-	log = _log.bind(session_id=session_id)
+	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
 	# Build system instruction BEFORE starting session
 	# System instruction goes in Gemini config
@@ -204,6 +205,7 @@ async def _handle_fill_session(
 			schema=schema,  # Form schema for AI context
 			current_values=current_values,  # Pre-filled values for reconnect
 			system_instruction=system_instruction,  # Include in initial Gemini config
+			form_session_id=form_session_id,  # Persistent ID from frontend
 		)
 	
 	try:
@@ -581,24 +583,54 @@ async def fill_form_from_schema(
 		return
 
 	# Extract handshake data
-	schema = handshake.get("schema")
+	# Check for JIT mode (manifest-based) vs legacy mode (full schema)
+	handshake_type = handshake.get("type", "handshake")
+	is_jit_mode = handshake_type == "handshake_jit"
+
+	# Extract persistent form session ID (frontend-managed, survives reconnects)
+	form_session_id = handshake.get("form_session_id")
+
+	if is_jit_mode:
+		# JIT mode: Extract manifest and first field schema
+		manifest = handshake.get("manifest")
+		first_field_schema = handshake.get("first_field_schema")
+		loaded_field_ids = handshake.get("loaded_field_ids", [])
+
+		# Build minimal schema from manifest for validation
+		# The manifest contains field_id|spoken_name pairs, we'll use it for context
+		schema = {
+			"source": "web",
+			"fields": [first_field_schema] if first_field_schema else [],
+			"manifest": manifest,  # Store manifest for JIT context building
+			"loaded_field_ids": loaded_field_ids,
+			"jit_mode": True,
+			# Copy parts array from manifest for section list building
+			"parts": manifest.get("parts", []) if manifest else []
+		}
+		log.info("jit_handshake_received",
+		         manifest_fields=len(manifest.get("fields", [])) if manifest else 0,
+		         has_first_field=bool(first_field_schema),
+		         parts_count=len(manifest.get("parts", [])) if manifest else 0)
+	else:
+		# Legacy mode: Full schema provided
+		schema = handshake.get("schema")
+		if not schema or not isinstance(schema, dict):
+			log.error("schema_missing_or_invalid", schema_type=type(schema).__name__)
+			await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "schema_required"})
+			await websocket.close(code=1007)
+			return
+
 	current_values = handshake.get("current_values") or {}
 	fill_language = handshake.get("fill_language", "English")  # Default to English
-	
+
 	# Phase 3: Extract section metadata
 	section_number = handshake.get("section_number")
 	section_label = handshake.get("section_label")
 	total_sections = handshake.get("total_sections")
 	previous_spoken_names = handshake.get("previous_spoken_names") or []
-	
+
 	# Extract initial field hint (computed by frontend before connection)
 	initial_field_hint = handshake.get("initial_field_hint")  # Can be None if form is complete
-	
-	if not schema or not isinstance(schema, dict):
-		log.error("schema_missing_or_invalid", schema_type=type(schema).__name__)
-		await websocket.send_json({"type": "error", "code": "invalid_schema", "reason": "schema_required"})
-		await websocket.close(code=1007)
-		return
 
 	source = str(schema.get("source") or "web").lower().strip() or "web"
 	# Accept both "web" and "pdf" sources - PDF schemas can be voice-filled via web interface
@@ -614,14 +646,26 @@ async def fill_form_from_schema(
 	ephemeral_id = f"web_{secrets.token_urlsafe(8)}"
 	log = log.bind(
 		session_id=ephemeral_id,
+		form_session_id=form_session_id,  # Persistent ID from frontend (survives reconnects)
 		field_count=len(schema.get("fields", [])),
 		has_prefilled=bool(current_values),
 		fill_language=fill_language,
 		section_number=section_number,
 		total_sections=total_sections,
 	)
-	log.info("web_session_starting")
-	
+	log.info("web_session_starting",
+	         ephemeral_id=ephemeral_id,
+	         form_session_id=form_session_id)
+
+	print(f"\n{'='*80}")
+	print(f"🎯 NEW FORM SESSION")
+	print(f"{'='*80}")
+	print(f"Form Session ID: {form_session_id}")
+	print(f"Ephemeral ID: {ephemeral_id}")
+	print(f"Section: {section_number}/{total_sections} - {section_label}")
+	print(f"JIT Mode: {is_jit_mode}")
+	print(f"{'='*80}\n")
+
 	# Acknowledge handshake
 	await websocket.send_json({
 		"type": "session_ready",
@@ -645,4 +689,5 @@ async def fill_form_from_schema(
 		total_sections=total_sections,  # Phase 3: Total sections
 		previous_spoken_names=previous_spoken_names,  # Phase 3: Completed sections lookup
 		initial_field_hint=initial_field_hint,  # Computed by frontend before connection
+		form_session_id=form_session_id,  # Persistent ID from frontend (survives reconnects)
 	)

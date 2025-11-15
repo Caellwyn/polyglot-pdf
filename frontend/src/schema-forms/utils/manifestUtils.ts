@@ -137,7 +137,13 @@ export function buildHandshakeManifest(
 
   return {
     current_part,
-    previous_parts
+    previous_parts,
+    // Include parts metadata for section navigation
+    parts: schema.parts.map(p => ({
+      id: p.id,
+      order: p.order,
+      label: p.label
+    }))
   };
 }
 
