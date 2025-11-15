@@ -331,7 +331,7 @@ Audio Input → Flash-Lite ASR → Processing Logic → Flash-TTS → Audio Outp
               (Gemini 2.5)      (Existing Tools)    (Gemini 2.5)
 ```
 
-**Status**: Foundation & Core Integration Complete (Phase 1 & 2 - 34.8%)
+**Status**: Core Pipeline & Frontend Complete (Phase 1-4 - 60.9%)
 
 ### Key Innovation
 
@@ -557,6 +557,248 @@ User Content (UNCACHED):
 
 **Backward Compatibility**: Existing Live API messages unchanged
 
+### Phase 3: Pipeline Assembly (COMPLETE ✅)
+
+#### 3A: Streaming Pipeline Core
+
+**Service**: `backend/services/half_cascade_pipeline.py` (467 lines)
+
+**Purpose**: End-to-end orchestration of half-cascade components
+
+**Pipeline Flow**:
+1. **Buffering** (Progress: 10%) - Decode audio from base64, parse form state
+2. **Transcribing** (Progress: 30%) - Send to Flash-Lite ASR with context
+3. **Generating** (Progress: 50%) - Execute tool calls, prepare response
+4. **Synthesizing** (Progress: 70%) - Queue TTS segments, stream audio
+5. **Complete** (Progress: 100%) - Send transcript for history
+
+**Key Features**:
+- Stateless design (frontend sends complete state)
+- WebSocket status updates at each stage
+- Audio chunk streaming (base64 encoded)
+- Tool call execution integration
+- Graceful error handling with fallback
+
+**Performance Targets**:
+- P95 latency: <1 second
+- First audio chunk: <400ms
+- Chunk streaming: 50ms intervals
+
+**Code Example**:
+```python
+async def process_utterance(self, request: PipelineRequest, schema: Dict) -> PipelineResponse:
+    # Step 1: Decode and buffer
+    await self._send_status("buffering", progress=10)
+    audio_bytes = base64.b64decode(request.audio_data_base64)
+
+    # Step 2: Transcribe via Flash-Lite
+    await self._send_status("transcribing", progress=30)
+    flash_response = await self._asr.transcribe_and_respond(
+        audio_bytes=audio_bytes,
+        form_schema=schema,
+        form_state=form_state_dict,
+        conversation_history=request.conversation_history
+    )
+
+    # Step 3: Execute tools
+    await self._send_status("generating", progress=50)
+    if tool_calls:
+        await self._execute_tools(tool_calls)
+
+    # Step 4: Synthesize audio
+    await self._send_status("synthesizing", progress=70)
+    async for chunk in self._segment_queue.stream_audio():
+        await self._send_audio_chunk(chunk)
+
+    return PipelineResponse(...)
+```
+
+#### 3B: Tool Integration
+
+**Service**: `backend/services/half_cascade_tool_executor.py` (276 lines)
+
+**Purpose**: Execute form-filling tools from Flash-Lite responses
+
+**Supported Tools**:
+- `update_form_fields` - Update field values
+- `get_form_status` - Retrieve current state
+- `switch_section` - Navigate to different section
+- `get_field_value` - Look up specific field
+- `complete_section` - Mark section complete
+
+**Architecture**:
+- Injected tool handler pattern (dependency injection)
+- Async execution with error isolation
+- Tool failures don't crash pipeline
+- WebSocket notifications for form updates
+
+**Integration**:
+```python
+# Register tool handlers
+executor = HalfCascadeToolExecutor(websocket, session_id)
+executor.register_tool("update_form_fields", update_handler)
+executor.register_tool("get_form_status", status_handler)
+
+# Execute from pipeline
+result = await executor.execute(tool_name, tool_args)
+```
+
+#### 3C: Error Recovery
+
+**Service**: `backend/services/half_cascade_error_recovery.py` (451 lines)
+
+**Purpose**: Graceful handling of all error scenarios
+
+**Error Scenarios**:
+
+| Error Type | Recovery Strategy | User Feedback |
+|------------|------------------|---------------|
+| Audio too large (>20MB) | User guidance | "Please speak in shorter segments" |
+| JSON parse error | Fallback to Live API | "Processing via alternative method" |
+| Unsupported language | Default to English | "Continuing in English" |
+| TTS quota exceeded | Text-only response | "Audio temporarily unavailable" |
+| Network timeout | Retry with backoff (3x) | "Connection issue. Retrying..." |
+| Tool call failure | Log and continue | Silent (non-critical) |
+
+**Fallback Mechanism**:
+- If `HALF_CASCADE_FALLBACK_TO_LIVE_API=true`, critical errors trigger automatic switch
+- Frontend notified via `half_cascade_error` message with `fallback_activated: true`
+- Seamless user experience during fallback
+- Error logged with full context for monitoring
+
+**Retry Logic**:
+```python
+async def retry_with_backoff(operation, max_attempts=3):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await operation()
+        except Exception as e:
+            if attempt < max_attempts:
+                delay = 2 ** attempt  # Exponential backoff
+                await asyncio.sleep(delay)
+            else:
+                await self._send_error("operation_failed", ...)
+```
+
+### Phase 4: Frontend Integration (COMPLETE ✅)
+
+#### 4A: Connection Manager
+
+**Files**:
+- `frontend/src/shared/connection.ts` (Phase 4A integration)
+- `frontend/src/shared/halfCascadeState.ts` (state management)
+- `frontend/src/shared/halfCascadeTypes.ts` (TypeScript types)
+
+**Purpose**: WebSocket message handling for half-cascade mode
+
+**New Message Handlers**:
+- `processing_status` → Update UI progress indicators
+- `language_status` → Display detected language with confidence
+- `transcript` → Append to conversation history (sessionStorage)
+- `audio_response` → Queue audio chunks for playback
+- `half_cascade_error` → Display error with recovery info
+
+**State Management**:
+```typescript
+interface HalfCascadeState {
+  isProcessing: boolean
+  currentStage: 'buffering' | 'transcribing' | 'generating' | 'synthesizing' | null
+  processingProgress: number | null
+
+  detectedLanguage: string | null
+  currentLanguage: string | null
+  languageConfidence: number | null
+
+  conversationHistory: Array<{role: string, content: string}>
+
+  audioBuffer: ArrayBuffer | null
+  isBuffering: boolean
+
+  lastError: HalfCascadeError | null
+  lastProcessingStartTime: number | null
+  averageLatency: number | null
+}
+```
+
+**Event System**: Custom events dispatched for UI components
+- `vff:processing-status`
+- `vff:language-status`
+- `vff:transcript`
+- `vff:half-cascade-error`
+
+#### 4B: Language Controls
+
+**Component**: `frontend/src/components/LanguageSelector.tsx` (267 lines)
+
+**Purpose**: User language preference and auto-detection UI
+
+**Features**:
+- Dropdown with 20+ supported languages
+- Auto-detect toggle (default: ON)
+- Current language indicator with confidence percentage
+- sessionStorage persistence (`vff_language_preference`, `vff_auto_detect_language`)
+- Mobile-friendly compact mode
+- Keyboard accessible (WCAG 2.1)
+
+**UI Modes**:
+
+*Desktop View*:
+- Full dropdown with all language options
+- Auto-detect checkbox
+- Detection confidence display (e.g., "95% confident")
+- Disabled dropdown when auto-detect is ON
+
+*Mobile/Compact View*:
+- Flag icon + language name + confidence
+- Auto/Manual toggle button
+- Minimal screen space
+
+**Behavior**:
+- Auto-detect: Language updates based on backend detection
+- Manual: User selects preferred language
+- Preference persists across session
+- Callbacks for parent component integration
+
+#### 4C: User Feedback Systems
+
+**Component**: `frontend/src/components/ProcessingIndicator.tsx` (229 lines)
+
+**Purpose**: Visual feedback for half-cascade processing stages
+
+**Display Elements**:
+
+1. **Stage Indicators**:
+   - 📦 Buffering audio
+   - 🎤 Transcribing speech
+   - 🤖 Generating response
+   - 🔊 Synthesizing speech
+
+2. **Progress Bar**: Optional percentage display (0-100%)
+
+3. **Latency Warnings**: Yellow badge if processing >2 seconds
+
+4. **Error Display**:
+   - Error code and message
+   - Fallback status (if Live API activated)
+   - Recoverable vs. non-recoverable indicator
+
+**Code Example**:
+```tsx
+<ProcessingIndicator
+  latencyWarningThreshold={2000}
+  compact={isMobile}
+/>
+```
+
+**Responsive Design**:
+- Desktop: Full stage labels, progress bar, latency timing
+- Mobile: Compact icons, percentage only, minimal space
+
+**Accessibility**:
+- `role="status"` with `aria-live="polite"`
+- Screen reader announcements for stage changes
+- Color-blind friendly error indicators
+
 ### State Management Strategy
 
 **Core Principle**: Backend remains stateless. Frontend sends complete state snapshot with each utterance.
@@ -592,20 +834,35 @@ User Content (UNCACHED):
 
 ### Implementation Status
 
-**Completed (8/23 steps - 34.8%)**:
-- ✅ Phase 1A: Feature Flag Framework
-- ✅ Phase 1B: Audio Buffer Management
-- ✅ Phase 1C: Structured Output Schema
-- ✅ Phase 1D: TTS Service Foundation
-- ✅ Phase 2A: Flash-Lite Integration
-- ✅ Phase 2B: Context Caching Setup
-- ✅ Phase 2C: Language-Aware TTS
-- ✅ Phase 2D: WebSocket Protocol Layer
+**Completed (14/23 steps - 60.9%)**:
 
-**Next Phase (3: Pipeline Assembly)**:
-- 3A: Streaming Pipeline Core (integrate all components)
-- 3B: Tool Integration (form filling tools)
-- 3C: Error Recovery (fallback mechanisms)
+*Phase 1: Foundation*
+- ✅ 1A: Feature Flag Framework
+- ✅ 1B: Audio Buffer Management
+- ✅ 1C: Structured Output Schema
+- ✅ 1D: TTS Service Foundation
+
+*Phase 2: Core Integration*
+- ✅ 2A: Flash-Lite Integration
+- ✅ 2B: Context Caching Setup
+- ✅ 2C: Language-Aware TTS
+- ✅ 2D: WebSocket Protocol Layer
+
+*Phase 3: Pipeline Assembly*
+- ✅ 3A: Streaming Pipeline Core
+- ✅ 3B: Tool Integration
+- ✅ 3C: Error Recovery
+
+*Phase 4: Frontend Integration*
+- ✅ 4A: Connection Manager
+- ✅ 4B: Language Controls
+- ✅ 4C: User Feedback Systems
+
+**Next Phase (5: Testing Suite)**:
+- 5A: Unit Test Coverage
+- 5B: Language Validation
+- 5C: Integration Testing
+- 5D: Hardware Testing
 
 **Test Coverage**: 76+ tests passing
 - Feature flags: 12 tests
@@ -638,6 +895,26 @@ backend/routes/
 └── websocket_routes.py           # New message handlers
 ```
 
+**Phase 3 Services**:
+```
+backend/services/
+├── half_cascade_pipeline.py       # End-to-end orchestration
+├── half_cascade_tool_executor.py  # Tool call execution
+└── half_cascade_error_recovery.py # Error handling & fallback
+```
+
+**Phase 4 Frontend**:
+```
+frontend/src/
+├── components/
+│   ├── LanguageSelector.tsx       # Language controls UI
+│   └── ProcessingIndicator.tsx    # Processing feedback
+├── shared/
+│   ├── connection.ts              # WebSocket manager (Phase 4A)
+│   ├── halfCascadeState.ts        # State management
+│   └── halfCascadeTypes.ts        # TypeScript types
+```
+
 **Tests**:
 ```
 backend/tests/unit/
@@ -646,18 +923,26 @@ backend/tests/unit/
 ├── test_context_cache_manager.py
 ├── test_flash_tts_service.py
 ├── test_tts_segment_queue.py
-└── test_flash_lite_asr.py
+├── test_flash_lite_asr.py
+├── test_half_cascade_pipeline.py
+├── test_half_cascade_tool_executor.py
+└── test_half_cascade_error_recovery.py
+
+frontend/src/
+├── components/
+│   ├── LanguageSelector.test.tsx
+│   └── ProcessingIndicator.test.tsx
+└── shared/
+    ├── connection.test.ts
+    ├── halfCascadeState.test.ts
+    └── halfCascadeTypes.test.ts
 ```
 
 ### Future Phases
 
-**Phase 3-6 (Pending)**:
-- Pipeline assembly and integration
-- Frontend connection manager
-- Language controls UI
-- Comprehensive testing (unit, integration, language validation)
-- Load testing and monitoring
-- Staged rollout (1% → 10% → 50% → 100%)
+**Phase 5-6 (Pending)**:
+- Phase 5: Testing Suite (unit, integration, language validation, hardware)
+- Phase 6: Production Readiness (load testing, monitoring, staged rollout 1% → 100%)
 
 ---
 
