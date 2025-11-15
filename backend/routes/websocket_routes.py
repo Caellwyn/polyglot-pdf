@@ -504,15 +504,56 @@ async def _handle_fill_session(
 					# Frontend responds that section has been marked complete and advanced
 					# This is the response to backend's complete_section request
 					next_section = obj.get("next_section")
-					_log.info("section_completed_response", 
+					_log.info("section_completed_response",
 					         next_section=next_section,
 					         session_id=session_id)
 					# Acknowledge receipt (optional - frontend doesn't wait for this)
 					await websocket.send_json({"type": "section_completed_ack"})
 					continue
+				elif mtype == "audio_end":
+					# Half-cascade mode: Complete audio buffer with state snapshot
+					# Frontend sends this when audio collection is complete (PTT release or VAD silence)
+					audio_data = obj.get("audio_data")  # base64 encoded audio
+					form_state = obj.get("form_state")  # "field:value|field2:value2"
+					current_field = obj.get("current_field")
+					current_part = obj.get("current_part")
+					conversation_history = obj.get("conversation_history", [])
+
+					if not audio_data:
+						await websocket.send_json({"type": "error", "code": "invalid_audio_end", "reason": "audio_data_required"})
+						continue
+
+					_log.info("audio_end_received",
+					         session_id=session_id,
+					         has_form_state=bool(form_state),
+					         has_conversation_history=len(conversation_history) > 0,
+					         current_field=current_field,
+					         current_part=current_part)
+
+					# Process via half-cascade service
+					try:
+						# This will be implemented in Phase 2A/3A
+						# For now, log that we received the message
+						_log.info("audio_end_processing_placeholder",
+						         session_id=session_id,
+						         message="Half-cascade processing not yet implemented")
+
+						# Send acknowledgment
+						await websocket.send_json({
+							"type": "audio_end_ack",
+							"message": "Audio end received (processing pending)"
+						})
+					except Exception as e:
+						_log.error("audio_end_processing_failed", session_id=session_id, error=str(e))
+						await websocket.send_json({
+							"type": "error",
+							"code": "audio_end_processing_failed",
+							"message": str(e)
+						})
+					continue
 				else:
 					# Log unknown message type for debugging
-					_log.warning("unknown_control_message_type", 
+					_log.warning("unknown_control_message_type",
 					           message_type=mtype,
 					           session_id=session_id,
 					           available_keys=list(obj.keys()) if isinstance(obj, dict) else None)
