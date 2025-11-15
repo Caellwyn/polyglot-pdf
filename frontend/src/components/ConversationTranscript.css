@@ -1,0 +1,516 @@
+/**
+ * Conversation Transcript Styles
+ *
+ * Responsive design with RTL language support for:
+ * - Arabic (ar-SA)
+ * - Hebrew (he-IL)
+ * - Persian/Farsi (fa-IR)
+ * - Urdu (ur-PK)
+ */
+
+.conversation-transcript {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 800px;
+	margin: 0 auto;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ============================================================================
+   Toggle Button
+   ============================================================================ */
+
+.transcript-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1rem;
+	background: #f8f9fa;
+	border: 1px solid #dee2e6;
+	border-radius: 0.375rem;
+	cursor: pointer;
+	font-size: 0.9375rem;
+	font-weight: 500;
+	color: #495057;
+	transition: all 0.2s ease;
+	width: 100%;
+	text-align: left;
+}
+
+.transcript-toggle:hover {
+	background: #e9ecef;
+	border-color: #adb5bd;
+}
+
+.transcript-toggle:focus {
+	outline: 2px solid #0d6efd;
+	outline-offset: 2px;
+}
+
+.transcript-toggle:active {
+	background: #dee2e6;
+}
+
+.toggle-icon {
+	font-size: 0.75rem;
+	transition: transform 0.2s ease;
+	display: inline-block;
+	line-height: 1;
+}
+
+.toggle-label {
+	flex: 1;
+}
+
+.message-count {
+	font-size: 0.875rem;
+	color: #6c757d;
+	font-weight: 400;
+}
+
+/* ============================================================================
+   Transcript Panel
+   ============================================================================ */
+
+.transcript-panel {
+	margin-top: 0.5rem;
+	border: 1px solid #dee2e6;
+	border-radius: 0.375rem;
+	background: #ffffff;
+	box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+	overflow: hidden;
+	animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		transform: translateY(-0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ============================================================================
+   Toolbar
+   ============================================================================ */
+
+.transcript-toolbar {
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.75rem;
+	background: #f8f9fa;
+	border-bottom: 1px solid #dee2e6;
+}
+
+.toolbar-button {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid #ced4da;
+	border-radius: 0.25rem;
+	background: #ffffff;
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	color: #495057;
+}
+
+.toolbar-button:hover:not(:disabled) {
+	background: #e9ecef;
+	border-color: #adb5bd;
+}
+
+.toolbar-button:focus {
+	outline: 2px solid #0d6efd;
+	outline-offset: 2px;
+}
+
+.toolbar-button:active:not(:disabled) {
+	background: #dee2e6;
+	transform: translateY(1px);
+}
+
+.toolbar-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.copy-button:hover:not(:disabled) {
+	border-color: #0d6efd;
+	color: #0d6efd;
+}
+
+.clear-button:hover:not(:disabled) {
+	border-color: #dc3545;
+	color: #dc3545;
+}
+
+/* ============================================================================
+   Messages Container
+   ============================================================================ */
+
+.messages-container {
+	padding: 1rem;
+	max-height: 400px;
+	overflow-y: auto;
+	scroll-behavior: smooth;
+	/* Allow browser to handle mixed text direction */
+	unicode-bidi: plaintext;
+}
+
+/* Custom scrollbar for better UX */
+.messages-container::-webkit-scrollbar {
+	width: 0.5rem;
+}
+
+.messages-container::-webkit-scrollbar-track {
+	background: #f1f3f5;
+	border-radius: 0.25rem;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+	background: #adb5bd;
+	border-radius: 0.25rem;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+	background: #868e96;
+}
+
+/* ============================================================================
+   Empty State
+   ============================================================================ */
+
+.empty-state {
+	text-align: center;
+	padding: 3rem 1rem;
+	color: #6c757d;
+}
+
+.empty-state p {
+	margin: 0.5rem 0;
+}
+
+.empty-state .hint {
+	font-size: 0.875rem;
+	color: #adb5bd;
+}
+
+/* ============================================================================
+   Messages
+   ============================================================================ */
+
+.message {
+	margin-bottom: 1.25rem;
+	padding: 0.75rem;
+	border-radius: 0.5rem;
+	animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.message:last-child {
+	margin-bottom: 0;
+}
+
+/* User message (right-aligned for LTR, left-aligned for RTL) */
+.message-user {
+	background: #e3f2fd;
+	border-left: 3px solid #2196f3;
+}
+
+/* Assistant message (left-aligned for LTR, right-aligned for RTL) */
+.message-assistant {
+	background: #f3e5f5;
+	border-left: 3px solid #9c27b0;
+}
+
+/* ============================================================================
+   RTL Language Support
+   ============================================================================ */
+
+/* RTL languages: Arabic, Hebrew, Persian, Urdu */
+.message[data-lang="ar-SA"],
+.message[data-lang="he-IL"],
+.message[data-lang="fa-IR"],
+.message[data-lang="ur-PK"] {
+	direction: rtl;
+	text-align: right;
+}
+
+/* Flip border side for RTL messages */
+.message-user[data-lang="ar-SA"],
+.message-user[data-lang="he-IL"],
+.message-user[data-lang="fa-IR"],
+.message-user[data-lang="ur-PK"] {
+	border-left: none;
+	border-right: 3px solid #2196f3;
+}
+
+.message-assistant[data-lang="ar-SA"],
+.message-assistant[data-lang="he-IL"],
+.message-assistant[data-lang="fa-IR"],
+.message-assistant[data-lang="ur-PK"] {
+	border-left: none;
+	border-right: 3px solid #9c27b0;
+}
+
+/* RTL-specific fonts for better rendering */
+.message[data-lang="ar-SA"],
+.message[data-lang="ur-PK"] {
+	font-family: "Segoe UI", "Tahoma", Arial, sans-serif;
+}
+
+.message[data-lang="he-IL"] {
+	font-family: "Arial Hebrew", "Helvetica", Arial, sans-serif;
+}
+
+.message[data-lang="fa-IR"] {
+	font-family: "Tahoma", "Segoe UI", Arial, sans-serif;
+}
+
+/* ============================================================================
+   Message Header
+   ============================================================================ */
+
+.message-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.5rem;
+	font-size: 0.8125rem;
+	color: #6c757d;
+	flex-wrap: wrap;
+}
+
+.message-speaker {
+	font-weight: 600;
+	color: #495057;
+}
+
+.message-language {
+	padding: 0.125rem 0.375rem;
+	background: rgba(0, 0, 0, 0.05);
+	border-radius: 0.25rem;
+	font-size: 0.75rem;
+}
+
+.message-time {
+	margin-left: auto;
+	font-size: 0.75rem;
+}
+
+/* RTL: flip margin for time */
+.message[data-lang="ar-SA"] .message-time,
+.message[data-lang="he-IL"] .message-time,
+.message[data-lang="fa-IR"] .message-time,
+.message[data-lang="ur-PK"] .message-time {
+	margin-left: 0;
+	margin-right: auto;
+}
+
+/* ============================================================================
+   Message Content
+   ============================================================================ */
+
+.message-content {
+	line-height: 1.5;
+	color: #212529;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+}
+
+/* Preserve whitespace and line breaks */
+.message-content {
+	white-space: pre-wrap;
+}
+
+/* ============================================================================
+   Mobile Responsive Design
+   ============================================================================ */
+
+@media (max-width: 768px) {
+	.transcript-toggle {
+		padding: 0.625rem 0.875rem;
+		font-size: 0.875rem;
+	}
+
+	.transcript-toolbar {
+		padding: 0.5rem;
+		gap: 0.375rem;
+	}
+
+	.toolbar-button {
+		padding: 0.375rem 0.625rem;
+		font-size: 0.8125rem;
+	}
+
+	.messages-container {
+		max-height: 300px;
+		padding: 0.75rem;
+	}
+
+	.message {
+		padding: 0.625rem;
+		font-size: 0.9375rem;
+	}
+
+	.message-header {
+		font-size: 0.75rem;
+	}
+}
+
+/* Tablet responsive */
+@media (max-width: 1024px) and (min-width: 769px) {
+	.messages-container {
+		max-height: 350px;
+	}
+}
+
+/* ============================================================================
+   Accessibility
+   ============================================================================ */
+
+/* Focus visible for keyboard navigation */
+.message:focus-visible {
+	outline: 2px solid #0d6efd;
+	outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+	.message-user {
+		border-left-width: 4px;
+	}
+
+	.message-assistant {
+		border-left-width: 4px;
+	}
+
+	.message[data-lang="ar-SA"],
+	.message[data-lang="he-IL"],
+	.message[data-lang="fa-IR"],
+	.message[data-lang="ur-PK"] {
+		border-right-width: 4px;
+	}
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+	.transcript-panel {
+		animation: none;
+	}
+
+	.message {
+		animation: none;
+	}
+
+	.messages-container {
+		scroll-behavior: auto;
+	}
+
+	.toolbar-button:active:not(:disabled) {
+		transform: none;
+	}
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+	.conversation-transcript {
+		color: #e9ecef;
+	}
+
+	.transcript-toggle {
+		background: #343a40;
+		border-color: #495057;
+		color: #e9ecef;
+	}
+
+	.transcript-toggle:hover {
+		background: #495057;
+		border-color: #6c757d;
+	}
+
+	.transcript-panel {
+		background: #212529;
+		border-color: #495057;
+	}
+
+	.transcript-toolbar {
+		background: #343a40;
+		border-bottom-color: #495057;
+	}
+
+	.toolbar-button {
+		background: #495057;
+		border-color: #6c757d;
+		color: #e9ecef;
+	}
+
+	.toolbar-button:hover:not(:disabled) {
+		background: #6c757d;
+	}
+
+	.messages-container::-webkit-scrollbar-track {
+		background: #343a40;
+	}
+
+	.messages-container::-webkit-scrollbar-thumb {
+		background: #6c757d;
+	}
+
+	.message-user {
+		background: #1a3a52;
+		border-left-color: #4da3ff;
+	}
+
+	.message-assistant {
+		background: #3d1a52;
+		border-left-color: #ce93d8;
+	}
+
+	.message-content {
+		color: #f8f9fa;
+	}
+
+	.empty-state {
+		color: #adb5bd;
+	}
+}
+
+/* Print styles */
+@media print {
+	.transcript-toggle,
+	.transcript-toolbar {
+		display: none;
+	}
+
+	.transcript-panel {
+		border: none;
+		box-shadow: none;
+	}
+
+	.messages-container {
+		max-height: none;
+		overflow: visible;
+	}
+
+	.message {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+}
