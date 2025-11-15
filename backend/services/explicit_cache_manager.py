@@ -26,9 +26,14 @@ from datetime import datetime, timedelta
 import structlog
 from pathlib import Path
 
-# NOTE: This is a placeholder for the actual Gemini API client
-# Replace with actual imports when available
-# from google.ai.generativelanguage import CachingService
+# Gemini Flash API client for explicit caching
+try:
+    from backend.adapters.gemini_flash_api import create_flash_client, GeminiFlashClient
+    FLASH_API_AVAILABLE = True
+except ImportError:
+    FLASH_API_AVAILABLE = False
+    create_flash_client = None
+    GeminiFlashClient = None
 
 _log = structlog.get_logger().bind(module="explicit_cache_manager")
 
@@ -93,22 +98,53 @@ class ExplicitCacheManager:
     # Supported form types
     SUPPORTED_FORMS = ["i-90", "i-589", "i-485"]
 
-    def __init__(self, form_kits_root: Path):
+    def __init__(
+        self,
+        form_kits_root: Path,
+        project_id: Optional[str] = None,
+        location: str = "us-central1"
+    ):
         """
         Initialize explicit cache manager.
 
         Args:
             form_kits_root: Root directory containing form kits
+            project_id: Google Cloud project ID (required for caching)
+            location: GCP region for Vertex AI
         """
         self.form_kits_root = form_kits_root
         self.cache_registry: Dict[str, CacheInfo] = {}
         self._refresh_task: Optional[asyncio.Task] = None
         self._enabled = False
+        self.project_id = project_id
+        self.location = location
+
+        # Initialize Gemini Flash client if available
+        if FLASH_API_AVAILABLE and project_id:
+            try:
+                self.flash_client: Optional[GeminiFlashClient] = create_flash_client(
+                    project_id=project_id,
+                    location=location
+                )
+            except Exception as e:
+                _log.error(
+                    "failed_to_initialize_flash_client",
+                    error=str(e),
+                    exc_info=True
+                )
+                self.flash_client = None
+        else:
+            self.flash_client = None
+            if not FLASH_API_AVAILABLE:
+                _log.warning("flash_api_not_available", reason="import_failed")
+            if not project_id:
+                _log.warning("flash_api_not_available", reason="no_project_id")
 
         _log.info(
             "explicit_cache_manager_initialized",
             form_kits_root=str(form_kits_root),
-            supported_forms=self.SUPPORTED_FORMS
+            supported_forms=self.SUPPORTED_FORMS,
+            flash_client_available=self.flash_client is not None
         )
 
     async def initialize_caches(self):
@@ -180,26 +216,26 @@ class ExplicitCacheManager:
         # Load form schema
         schema = self._load_form_schema(form_type)
 
-        # Load annotated PDF if available
-        annotated_context = self._load_annotated_pdf(form_type)
+        # Load annotated PDF path
+        pdf_path = self.form_kits_root / form_type / f"{form_type}-annotated.pdf"
 
-        # Build cache content
-        cache_content = {
-            "schema": schema,
-            "form_type": form_type,
-            "version": schema.get("version", "1.0")
-        }
-
-        if annotated_context:
-            cache_content["annotated_context"] = annotated_context
+        if not pdf_path.exists():
+            _log.warning(
+                "annotated_pdf_not_found",
+                form_type=form_type,
+                pdf_path=str(pdf_path)
+            )
+            # Could fall back to regular PDF or skip caching
+            return None
 
         # Calculate schema hash for tracking
         schema_hash = self._hash_content(json.dumps(schema, sort_keys=True))
 
         # Create cache via Gemini API
-        # NOTE: Placeholder - replace with actual API call
         cache_id = await self._create_gemini_cache(
-            content=cache_content,
+            form_type=form_type,
+            schema=schema,
+            pdf_path=pdf_path,
             ttl_hours=self.CACHE_TTL_HOURS
         )
 
@@ -207,12 +243,14 @@ class ExplicitCacheManager:
         now = datetime.now()
         expires_at = now + timedelta(hours=self.CACHE_TTL_HOURS)
 
+        version = schema.get("form_metadata", {}).get("version", "1.0")
+
         cache_info = CacheInfo(
             cache_id=cache_id,
             form_type=form_type,
             created_at=now,
             expires_at=expires_at,
-            version=cache_content["version"],
+            version=version,
             schema_hash=schema_hash
         )
 
@@ -221,7 +259,7 @@ class ExplicitCacheManager:
             form_type=form_type,
             cache_id=cache_id,
             schema_hash=schema_hash,
-            has_annotated_context=annotated_context is not None,
+            has_annotated_pdf=True,
             ttl_hours=self.CACHE_TTL_HOURS
         )
 
@@ -229,40 +267,59 @@ class ExplicitCacheManager:
 
     async def _create_gemini_cache(
         self,
-        content: Dict[str, Any],
+        form_type: str,
+        schema: Dict[str, Any],
+        pdf_path: Path,
         ttl_hours: int
     ) -> str:
         """
         Create cache via Gemini API.
 
-        NOTE: This is a placeholder implementation.
-        Replace with actual Gemini caching API call when available.
+        Uses the Gemini Flash client to create an explicit cache with:
+        - System instruction
+        - Annotated PDF (for visual cross-reference)
+        - Form schema (for structure)
 
         Args:
-            content: Content to cache
+            form_type: Form type (e.g., "i-90")
+            schema: Form schema dict
+            pdf_path: Path to annotated PDF
             ttl_hours: Time-to-live in hours
 
         Returns:
             str: Cache ID from Gemini
-        """
-        # Placeholder: Generate deterministic cache ID
-        content_json = json.dumps(content, sort_keys=True)
-        cache_id = f"cache_{self._hash_content(content_json)[:16]}"
 
-        _log.debug(
-            "gemini_cache_api_call",
-            cache_id=cache_id,
-            ttl_hours=ttl_hours,
-            content_size=len(content_json)
+        Raises:
+            Exception: If cache creation fails
+        """
+        if not self.flash_client:
+            raise Exception("Flash API client not initialized")
+
+        ttl_days = ttl_hours / 24.0
+        if ttl_days > 1:
+            _log.warning(
+                "ttl_exceeds_gemini_max",
+                requested_hours=ttl_hours,
+                max_hours=24
+            )
+            ttl_days = 1  # Gemini max is 24 hours
+
+        cache_id = await self.flash_client.create_explicit_cache(
+            form_type=form_type,
+            schema=schema,
+            pdf_path=pdf_path,
+            ttl_days=ttl_days
         )
 
-        # TODO: Replace with actual API call:
-        # cache_service = CachingService(...)
-        # cache_response = await cache_service.create_cache(
-        #     content=content,
-        #     ttl=timedelta(hours=ttl_hours)
-        # )
-        # return cache_response.cache_id
+        if not cache_id:
+            raise Exception(f"Failed to create cache for {form_type}")
+
+        _log.info(
+            "gemini_cache_created",
+            form_type=form_type,
+            cache_id=cache_id,
+            ttl_hours=ttl_hours
+        )
 
         return cache_id
 
@@ -314,45 +371,56 @@ class ExplicitCacheManager:
 
     def _load_annotated_pdf(self, form_type: str) -> Optional[Dict[str, Any]]:
         """
-        Load annotated PDF context if available.
+        Load annotated PDF for visual cross-referencing.
+
+        Gemini can visually read the PDF to understand the form layout and
+        cross-reference it with the extracted schema structure.
 
         Args:
             form_type: Form type (e.g., "i-90")
 
         Returns:
-            dict: Annotated context, or None if not found
+            dict: PDF file data and metadata, or None if not found
         """
-        # Check for JSON annotation file first
-        annotation_path = self.form_kits_root / form_type / f"{form_type}-annotations.json"
-
-        if annotation_path.exists():
-            with open(annotation_path, "r", encoding="utf-8") as f:
-                annotations = json.load(f)
-
-            _log.debug(
-                "annotations_loaded",
-                form_type=form_type,
-                annotation_path=str(annotation_path),
-                field_count=len(annotations.get("field_annotations", {}))
-            )
-
-            return annotations
-
-        # Check for annotated PDF (extract text later if needed)
+        # Look for annotated PDF file
         pdf_path = self.form_kits_root / form_type / f"{form_type}-annotated.pdf"
 
-        if pdf_path.exists():
-            _log.debug(
-                "annotated_pdf_found",
-                form_type=form_type,
-                pdf_path=str(pdf_path)
-            )
-            # TODO: Extract annotations from PDF if needed
-            # For now, just note its presence
-            return {"annotated_pdf_path": str(pdf_path)}
+        if not pdf_path.exists():
+            _log.debug("no_annotated_pdf_found", form_type=form_type)
+            return None
 
-        _log.debug("no_annotations_found", form_type=form_type)
-        return None
+        # Read PDF file as binary
+        try:
+            with open(pdf_path, "rb") as f:
+                pdf_data = f.read()
+
+            file_size_mb = len(pdf_data) / (1024 * 1024)
+
+            _log.info(
+                "annotated_pdf_loaded",
+                form_type=form_type,
+                pdf_path=str(pdf_path),
+                file_size_mb=round(file_size_mb, 2)
+            )
+
+            # Return PDF data for caching
+            # Gemini will visually read this to cross-reference with schema
+            return {
+                "pdf_path": str(pdf_path),
+                "pdf_data": pdf_data,  # Binary PDF data
+                "file_size_bytes": len(pdf_data),
+                "purpose": "Visual cross-reference for schema mapping"
+            }
+
+        except Exception as e:
+            _log.error(
+                "failed_to_load_annotated_pdf",
+                form_type=form_type,
+                pdf_path=str(pdf_path),
+                error=str(e),
+                exc_info=True
+            )
+            return None
 
     def _hash_content(self, content: str) -> str:
         """
@@ -473,16 +541,26 @@ class ExplicitCacheManager:
 _cache_manager: Optional[ExplicitCacheManager] = None
 
 
-async def initialize_global_cache_manager(form_kits_root: Path):
+async def initialize_global_cache_manager(
+    form_kits_root: Path,
+    project_id: Optional[str] = None,
+    location: str = "us-central1"
+):
     """
     Initialize global cache manager on server startup.
 
     Args:
         form_kits_root: Root directory containing form kits
+        project_id: Google Cloud project ID (required for caching)
+        location: GCP region for Vertex AI
     """
     global _cache_manager
 
-    _cache_manager = ExplicitCacheManager(form_kits_root)
+    _cache_manager = ExplicitCacheManager(
+        form_kits_root=form_kits_root,
+        project_id=project_id,
+        location=location
+    )
     await _cache_manager.initialize_caches()
 
     _log.info("global_cache_manager_initialized")
