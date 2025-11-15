@@ -6,9 +6,9 @@
 **Purpose**: Complete implementation guide for migrating from Gemini Live API to half-cascade architecture
 **Target Outcomes**: 90% cost reduction, <1 second latency, 24+ language support
 
-**Current Status**: Phases 1A, 1B, 1C, 2A, 2D Complete (5/23 steps = 21.7% complete)
+**Current Status**: Phases 1A, 1B, 1C, 1D, 2A, 2C, 2D Complete (7/23 steps = 30.4% complete)
 **Branch**: `halfcascade`
-**Last Commit**: `e648332`
+**Last Commit**: `cba2b63` (TTS services)
 
 ---
 
@@ -18,12 +18,12 @@
 - [x] 1A: Feature Flag Framework ✅ (Nov 15, 2025)
 - [x] 1B: Audio Buffer Management ✅ (Nov 15, 2025)
 - [x] 1C: Structured Output Schema ✅ (Nov 15, 2025)
-- [ ] 1D: TTS Service Foundation
+- [x] 1D: TTS Service Foundation ✅ (Nov 15, 2025)
 
 **Phase 2: Core Integration**
 - [x] 2A: Flash-Lite Integration ✅ (Nov 15, 2025)
 - [ ] 2B: Context Caching Setup
-- [ ] 2C: Language-Aware TTS
+- [x] 2C: Language-Aware TTS ✅ (Nov 15, 2025)
 - [x] 2D: WebSocket Protocol Layer ✅ (Nov 15, 2025)
 
 **Phase 3: Pipeline Assembly**
@@ -48,7 +48,7 @@
 - [ ] 6C: Staged Rollout
 - [ ] 6D: Documentation
 
-**Overall Progress**: 5/23 phases complete (21.7%)
+**Overall Progress**: 7/23 phases complete (30.4%)
 
 ---
 
@@ -65,13 +65,15 @@ Migration from single Gemini Live API (speech-to-speech) to a cost-optimized hal
 - ✅ Phase 1A: Feature Flag Framework (Nov 15, 2025)
 - ✅ Phase 1B: Audio Buffer Management (Nov 15, 2025)
 - ✅ Phase 1C: Structured Output Schema (Nov 15, 2025)
+- ✅ Phase 1D: TTS Service Foundation (Nov 15, 2025)
 - ✅ Phase 2A: Flash-Lite Integration (Nov 15, 2025)
+- ✅ Phase 2C: Language-Aware TTS (Nov 15, 2025)
 - ✅ Phase 2D: WebSocket Protocol Layer (Nov 15, 2025)
 
 **Next Steps**:
-- Phase 1D: TTS Service Foundation
 - Phase 2B: Context Caching Setup
-- Phase 2C: Language-Aware TTS
+- Phase 3A: Streaming Pipeline Core
+- Phase 3B: Tool Integration
 
 ---
 
@@ -109,12 +111,12 @@ Phase 1: Foundation (Week 1, Days 1-3)
     ├── 1A: Feature Flag Framework [PARALLEL-START-DAY-1] ✅ COMPLETE
     ├── 1B: Audio Buffer Management [PARALLEL-START-DAY-1] ✅ COMPLETE
     ├── 1C: Structured Output Schema [PARALLEL-START-DAY-1] ✅ COMPLETE
-    └── 1D: TTS Service Foundation [PARALLEL-START-DAY-1] [PENDING]
+    └── 1D: TTS Service Foundation [PARALLEL-START-DAY-1] ✅ COMPLETE
 
 Phase 2: Core Integration (Week 1, Days 3-5)
     ├── 2A: Flash-Lite Integration [DEPENDS: 1B, 1C] ✅ COMPLETE
     ├── 2B: Context Caching Setup [DEPENDS: 2A] [PENDING]
-    ├── 2C: Language-Aware TTS [DEPENDS: 1D] [BLOCKED - needs 1D]
+    ├── 2C: Language-Aware TTS [DEPENDS: 1D] ✅ COMPLETE
     └── 2D: WebSocket Protocol Layer [DEPENDS: 1A] ✅ COMPLETE
 
 Phase 3: Pipeline Assembly (Week 2, Days 1-3)
@@ -330,9 +332,10 @@ feature_flags:
 
 ---
 
-### Step 1D: TTS Service Foundation [PARALLEL]
-**Owner**: Audio Engineer  
+### Step 1D: TTS Service Foundation [PARALLEL] ✅ COMPLETE
+**Owner**: Audio Engineer
 **Duration**: 2 days
+**Status**: ✅ **COMPLETED November 15, 2025**
 
 **Requirements**:
 - Support 20+ languages with configurations
@@ -464,9 +467,10 @@ Recent conversation:
 
 ---
 
-### Step 2C: Language-Aware TTS [DEPENDS: 1D]
-**Owner**: Audio Engineer  
+### Step 2C: Language-Aware TTS [DEPENDS: 1D] ✅ COMPLETE
+**Owner**: Audio Engineer
 **Duration**: 2 days
+**Status**: ✅ **COMPLETED November 15, 2025**
 
 **Requirements**:
 - Parse language from each JSON segment
@@ -1150,16 +1154,17 @@ frontend/
 
 ---
 
-**Document Status**: IN PROGRESS - 21.7% Complete
-**Version**: 4.2
+**Document Status**: IN PROGRESS - 30.4% Complete
+**Version**: 4.3
 **Last Review**: November 15, 2025
-**Next Review**: Phase 1D & 2B/2C Completion
+**Next Review**: After Phase 2B & 3A Completion
 
 **Implementation Notes**:
-- Phases 1A, 1B, 1C, 2A, 2D completed November 15, 2025
-- 5/23 phases complete (21.7% progress)
-- Foundation largely complete, core integration in progress
-- Next phases: 1D (TTS Foundation), 2B (Context Caching), 2C (Language-Aware TTS)
+- Phases 1A-1D, 2A, 2C, 2D completed November 15, 2025
+- 7/23 phases complete (30.4% progress)
+- Phase 1 (Foundation) COMPLETE ✅
+- Phase 2 (Core Integration) 3/4 complete
+- Next phases: 2B (Context Caching), 3A (Streaming Pipeline Core)
 ---
 
 ## Implementation Progress Tracking
@@ -1189,11 +1194,36 @@ frontend/
   - `backend/services/structured_output_parser.py`
 - **Exit Criteria**: Verified ✅
 
+#### Phase 1D: TTS Service Foundation ✅
+- **Completed**: November 15, 2025
+- **Files Created**:
+  - `backend/services/flash_tts_service.py`
+  - `backend/tests/unit/test_flash_tts_service.py` (20+ tests)
+- **Features**:
+  - 20+ language support with VoiceConfig
+  - Streaming synthesis with async iteration
+  - 3-tier fallback (exact → language family → English)
+- **Test Coverage**: 20+ tests passing
+- **Exit Criteria**: 3/5 verified (2 deferred to Phase 5B) ✅
+
 #### Phase 2A: Flash-Lite Integration ✅
 - **Completed**: November 15, 2025
 - **Files Created**:
   - `backend/services/flash_lite_asr.py`
 - **Exit Criteria**: Verified ✅
+
+#### Phase 2C: Language-Aware TTS ✅
+- **Completed**: November 15, 2025
+- **Files Created**:
+  - `backend/services/tts_segment_queue.py`
+  - `backend/tests/unit/test_tts_segment_queue.py` (30+ tests)
+- **Features**:
+  - Segment parsing with language tag extraction
+  - Pre-buffering system (3 chunks = ~150ms buffer)
+  - Language pre-loading for smooth transitions
+  - Concurrent synthesis with configurable limits
+- **Test Coverage**: 30+ tests passing
+- **Exit Criteria**: 5/5 verified ✅
 
 #### Phase 2D: WebSocket Protocol Layer ✅
 - **Completed**: November 15, 2025
@@ -1208,21 +1238,21 @@ frontend/
 - None
 
 ### Upcoming (Next) 📅
-- Phase 1D: TTS Service Foundation
 - Phase 2B: Context Caching Setup
-- Phase 2C: Language-Aware TTS
+- Phase 3A: Streaming Pipeline Core
+- Phase 3B: Tool Integration
 
 ### Overall Progress
-- **Steps Complete**: 5/23 (21.7%)
-- **Test Coverage**: 12+ tests passing
-- **Foundation**: Phase 1 nearly complete (3/4 steps)
-- **Core Integration**: Phase 2 in progress (2/4 steps)
+- **Steps Complete**: 7/23 (30.4%)
+- **Test Coverage**: 62+ tests passing (12 feature flags + 20 TTS + 30 queue)
+- **Foundation**: Phase 1 COMPLETE (4/4 steps) ✅
+- **Core Integration**: Phase 2 mostly complete (3/4 steps)
 
 ---
 
-**Document Status**: IN PROGRESS - 21.7% Complete
-**Version**: 4.2
+**Document Status**: IN PROGRESS - 30.4% Complete
+**Version**: 4.3
 **Last Review**: November 15, 2025
-**Next Review**: After Phase 1D & 2B/2C completion
+**Next Review**: After Phase 2B & 3A completion
 
 **Sign-off**: This plan has been reviewed and approved for implementation.
