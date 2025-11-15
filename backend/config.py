@@ -47,6 +47,13 @@ class Settings(BaseModel):
 	HALF_CASCADE_ROLLOUT_PERCENTAGE: int = int(os.getenv("HALF_CASCADE_ROLLOUT_PERCENTAGE", "0"))
 	HALF_CASCADE_FALLBACK_TO_LIVE_API: bool = os.getenv("HALF_CASCADE_FALLBACK_TO_LIVE_API", "true").lower() == "true"
 
+	# === Explicit Context Caching Settings (Phase 4.5B) ===
+	# Shared context caches for concurrent users (90%+ cost reduction at scale)
+	# Uses Gemini's explicit caching API instead of implicit caching
+	USE_EXPLICIT_CACHING: bool = os.getenv("USE_EXPLICIT_CACHING", "false").lower() == "true"
+	EXPLICIT_CACHE_TTL_HOURS: int = int(os.getenv("EXPLICIT_CACHE_TTL_HOURS", "24"))  # Max: 24 hours
+	EXPLICIT_CACHE_REFRESH_THRESHOLD_HOURS: int = int(os.getenv("EXPLICIT_CACHE_REFRESH_THRESHOLD_HOURS", "2"))  # Refresh before expiry
+
 	# Half-Cascade Model Configuration
 	FLASH_LITE_MODEL: str = "gemini-2.5-flash-lite-preview"
 	FLASH_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"
