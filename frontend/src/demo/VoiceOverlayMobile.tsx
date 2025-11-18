@@ -434,9 +434,22 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		// Pause instead of disconnect (keeps connection warm)
 		connectionManager.pause()
-		
+
 		// Pause VAD
 		vad.pause()
+	}
+
+	const handleClearForm = () => {
+		// Confirm before clearing
+		if (!confirm('Are you sure you want to clear all form data? This cannot be undone.')) {
+			return
+		}
+
+		// Clear the form state
+		SchemaFormStateManager.clear()
+
+		// Reload the page to reset everything
+		window.location.reload()
 	}
 
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
@@ -505,14 +518,19 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}
 
 	const handlePushToTalkRelease = () => {
-		if (!pushToTalkMode) return
-		// CRITICAL: Prevent duplicate calls (onTouchEnd + touchcancel/touchleave might both fire)
-		if (!isHoldingPushToTalk) return
+		// Use refs for current values (avoids closure capture issues)
+		const currentPTTMode = pushToTalkModeRef.current
+		const currentlyHolding = isHoldingPushToTalkRef.current
+		const currentStatus = statusRef.current
 
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
-		                            status.toLowerCase().startsWith('connected ') ||
-		                            status.toLowerCase() === 'switching_section' ||
-		                            status.toLowerCase().startsWith('reconnecting')
+		if (!currentPTTMode) return
+		// CRITICAL: Prevent duplicate calls (onTouchEnd + touchcancel/touchleave might both fire)
+		if (!currentlyHolding) return
+
+		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
+		                            currentStatus.toLowerCase().startsWith('connected ') ||
+		                            currentStatus.toLowerCase() === 'switching_section' ||
+		                            currentStatus.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) return
 
 		console.log('[PTT Mobile] Processing release - will delay 500ms before ending activity')
@@ -531,17 +549,21 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// without being cut off by immediate muting
 		pttReleaseTimeoutRef.current = window.setTimeout(async () => {
 			console.log('[PTT Mobile] 500ms delay complete - sending activity_end and muting')
-			
-			// MUTE: Stop streaming audio after signaling end of turn
-			// All audio recorded during the 500ms delay has already been sent
-			const audioManager = connectionManager?.getAudioManager()
-			audioManager?.muteInput()
 
 			// Send audio_stream_end to flush Gemini's audio buffer
 			// CRITICAL: Wait for all buffered audio to be sent before signaling end
 			// (sendActivityEnd now waits for WebSocket buffer drain)
 			await connectionManager?.sendActivityEnd()
-			
+
+			// MUTE: Stop streaming audio after signaling end of turn
+			// All audio recorded during the 500ms delay has already been sent
+			const audioManager = connectionManager?.getAudioManager()
+			audioManager?.muteInput()
+
+			// Allow Gemini's response to play now that the user released the mic
+			audioManager?.resumePlayback()
+			audioManager?.resumeAudioContext?.()
+
 			pttReleaseTimeoutRef.current = null
 		}, 500) // 500ms delay to capture final audio
 	}
@@ -711,7 +733,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					{/* Push-to-Talk Toggle */}
 					<div className="vff-ptt-toggle-container-mobile">
 						<label className="vff-ptt-toggle-label-mobile">
-							<span className="vff-ptt-label-text-mobile">Input Mode:</span>
+							<span className="vff-ptt-icon-left">🎤</span>
 							<div className="vff-ptt-toggle-switch-mobile">
 								<input
 									type="checkbox"
@@ -719,12 +741,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 									onChange={handlePushToTalkToggle}
 									className="vff-ptt-toggle-input-mobile"
 								/>
-								<span className="vff-ptt-toggle-slider-mobile">
-									<span className="vff-ptt-toggle-icon-mobile vff-ptt-toggle-icon-auto-mobile">🎤</span>
-									<span className="vff-ptt-toggle-icon-mobile vff-ptt-toggle-icon-ptt-mobile">⌨️</span>
-								</span>
+								<span className="vff-ptt-toggle-slider-mobile"></span>
 							</div>
-							<span className="vff-ptt-mode-label-mobile">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+							<span className="vff-ptt-icon-right">⌨️</span>
 						</label>
 					</div>
 
@@ -734,17 +753,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
 								onTouchStart={handlePushToTalkPress}
-								onTouchEnd={handlePushToTalkRelease}
 								onMouseDown={handlePushToTalkPress}
-								onMouseUp={handlePushToTalkRelease}
-								onMouseLeave={handlePushToTalkRelease}
 							>
 								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
 							</button>
 						</div>
 					)}
 
-					{/* Action Button */}
+					{/* Action Buttons */}
 					{!isConnected && !isPausedState ? (
 						<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
 							{status === 'idle_timeout' ? '🗣️ Reconnect' : '🗣️ Connect'}
@@ -757,7 +773,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
 							⏸️ Pause
 						</button>
-					)}						{/* Error */}
+					)}
+
+					{/* Clear Form Button */}
+					<button className="vff-action-btn vff-clear-btn" onClick={handleClearForm}>
+						🗑️ Clear Form
+					</button>
+
+					{/* Error */}
 						{/* FIX #4: Show both connection errors and stream errors */}
 						{(error || streamError) && (
 							<div className="vff-error-compact">
@@ -862,18 +885,23 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					}
 				}
 
-				/* Compact Panel */
+				/* Horizontal Panel - Bottom 1/3 of screen */
 				.vff-panel-mobile {
 					position: fixed;
-					bottom: 90px;
-					right: 20px;
-					width: 240px;
+					bottom: 0;
+					left: 0;
+					right: 0;
+					height: auto;
+					max-height: 33vh;
 					background: white;
-					border-radius: 16px;
-					box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+					border-radius: 16px 16px 0 0;
+					box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
 					z-index: 9998;
 					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-					animation: vff-slide-up 0.2s ease-out;
+					animation: vff-slide-up 0.3s ease-out;
+					display: flex;
+					flex-direction: column;
+					overflow: hidden;
 				}
 
 				@keyframes vff-slide-up {
@@ -891,13 +919,13 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					padding: 12px 16px;
+					padding: 8px 12px;
 					border-bottom: 1px solid #e5e7eb;
 				}
 
 				.vff-title {
 					font-weight: 600;
-					font-size: 14px;
+					font-size: 13px;
 					color: #111827;
 				}
 
@@ -914,20 +942,25 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				}
 
 				.vff-panel-body {
-					padding: 16px;
-					display: flex;
-					flex-direction: column;
-					gap: 12px;
+					padding: 10px;
+					display: grid;
+					grid-template-columns: repeat(6, 1fr);
+					grid-template-rows: auto auto auto auto;
+					gap: 8px;
+					flex: 1;
+					align-items: start;
 				}
 
 				.vff-status-compact {
+					grid-column: 1 / 3;
+					grid-row: 1;
 					display: flex;
 					align-items: center;
-					gap: 8px;
-					padding: 8px 12px;
+					gap: 6px;
+					padding: 6px 10px;
 					background: #f9fafb;
-					border-radius: 8px;
-					margin-bottom: 12px;
+					border-radius: 6px;
+					white-space: nowrap;
 				}
 
 				.vff-status-dot {
@@ -943,27 +976,28 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				}
 
 				.vff-language-selector-mobile {
-					margin-bottom: 12px;
-					padding: 10px;
+					grid-column: 1 / 4;
+					grid-row: 2;
+					padding: 6px 10px;
 					background: #f0f9ff;
-					border-radius: 8px;
+					border-radius: 6px;
 					border: 1px solid #bae6fd;
 				}
 
 				.vff-language-label-mobile {
 					display: block;
-					font-size: 12px;
+					font-size: 11px;
 					font-weight: 600;
 					color: #0369a1;
-					margin-bottom: 6px;
+					margin-bottom: 4px;
 				}
 
 				.vff-language-select-mobile {
 					width: 100%;
-					padding: 6px 10px;
-					font-size: 13px;
+					padding: 4px 8px;
+					font-size: 12px;
 					border: 1px solid #7dd3fc;
-					border-radius: 6px;
+					border-radius: 4px;
 					background: white;
 					color: #0c4a6e;
 					cursor: pointer;
@@ -1055,16 +1089,29 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 				.vff-action-btn {
 					width: 100%;
-					padding: 12px;
+					padding: 10px;
 					border: none;
-					border-radius: 8px;
-					font-size: 14px;
+					border-radius: 6px;
+					font-size: 13px;
 					font-weight: 600;
 					cursor: pointer;
 					transition: all 0.2s;
 					user-select: none;
 					-webkit-user-select: none;
 					-webkit-touch-callout: none;
+				}
+
+				/* Connect/Pause/Resume button - row 2, columns 4-6 (50% width), 50% taller */
+				.vff-connect-btn,
+				.vff-pause-btn,
+				.vff-resume-btn {
+					grid-column: 4 / 7;
+					grid-row: 2;
+					padding: 15px;
+					min-height: 60px;
+					display: flex;
+					align-items: center;
+					justify-content: center;
 				}
 
 				.vff-ptt-btn {
@@ -1117,42 +1164,67 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				}
 
 				.vff-error-compact {
-					padding: 8px 12px;
+					grid-column: 1 / -1;
+					grid-row: 4;
+					padding: 6px 10px;
 					background: #fef2f2;
 					border: 1px solid #fecaca;
-					border-radius: 8px;
+					border-radius: 6px;
 					color: #991b1b;
-					font-size: 12px;
+					font-size: 11px;
 				}
 
 				.vff-info-compact {
+					grid-column: 1 / -1;
+					grid-row: 4;
 					text-align: center;
-					font-size: 11px;
+					font-size: 10px;
 					color: #6b7280;
+					padding: 4px 0;
+					margin-top: 4px;
+				}
+
+				/* Clear form button - row 1, columns 5-6 */
+				.vff-clear-btn {
+					grid-column: 5 / 7;
+					grid-row: 1;
+					background: #ef4444;
+					color: white;
+				}
+
+				.vff-clear-btn:active {
+					transform: scale(0.98);
+					background: #dc2626;
 				}
 
 				/* Mobile Adjustments */
-				/* Mobile PTT Toggle Styles */
+				/* Mobile PTT Toggle Styles - Row 1, columns 3-4 */
 			.vff-ptt-toggle-container-mobile {
-				padding: 10px;
+				grid-column: 3 / 5;
+				grid-row: 1;
+				padding: 8px;
 				background: #f8f9ff;
-				border-radius: 8px;
+				border-radius: 6px;
 				border: 1px solid #d0dbff;
-				margin-bottom: 12px;
+				display: flex;
+				justify-content: center;
 			}
 
 			.vff-ptt-toggle-label-mobile {
 				display: flex;
 				align-items: center;
-				justify-content: space-between;
-				gap: 10px;
+				justify-content: center;
+				gap: 6px;
 				cursor: pointer;
 			}
 
 			.vff-ptt-label-text-mobile {
-				font-size: 13px;
-				font-weight: 600;
-				color: #374151;
+				display: none;
+			}
+
+			.vff-ptt-icon-left,
+			.vff-ptt-icon-right {
+				font-size: 16px;
 			}
 
 			.vff-ptt-toggle-switch-mobile {
@@ -1178,10 +1250,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				background-color: #667eea;
 				transition: 0.3s;
 				border-radius: 24px;
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				padding: 0 4px;
 			}
 
 			.vff-ptt-toggle-slider-mobile:before {
@@ -1195,7 +1263,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				transition: 0.3s;
 				border-radius: 50%;
 				box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-				z-index: 1;
 			}
 
 			.vff-ptt-toggle-input-mobile:checked + .vff-ptt-toggle-slider-mobile {
@@ -1210,79 +1277,57 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
 			}
 
-			.vff-ptt-toggle-icon-mobile {
-				font-size: 12px;
-				opacity: 0.7;
-				transition: opacity 0.3s;
-			}
-
-			.vff-ptt-toggle-icon-auto-mobile {
-				order: 1;
-			}
-
-			.vff-ptt-toggle-icon-ptt-mobile {
-				order: 2;
-			}
-
-			.vff-ptt-toggle-input-mobile:not(:checked) ~ .vff-ptt-toggle-slider-mobile .vff-ptt-toggle-icon-auto-mobile {
-				opacity: 1;
-			}
-
-			.vff-ptt-toggle-input-mobile:checked ~ .vff-ptt-toggle-slider-mobile .vff-ptt-toggle-icon-ptt-mobile {
-				opacity: 1;
-			}
-
-			.vff-ptt-mode-label-mobile {
-				font-size: 13px;
-				font-weight: 600;
-				color: #6b7280;
-				min-width: 40px;
-				text-align: right;
-			}
-
-			/* Mobile PTT Bar Button Styles */
+			/* Mobile PTT Bar Button - Row 3, full width, maximum accessibility */
 			.vff-ptt-bar-container {
-				margin-bottom: 12px;
+				grid-column: 1 / -1;
+				grid-row: 3;
 			}
 
 			.vff-ptt-bar-button {
 				width: 100%;
-				padding: 16px;
-				font-size: 16px;
-				font-weight: 600;
+				padding: 24px;
+				font-size: 18px;
+				font-weight: 700;
 				background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
 				color: white;
 				border: none;
-				border-radius: 8px;
+				border-radius: 10px;
 				cursor: pointer;
 				user-select: none;
 				-webkit-user-select: none;
 				-webkit-touch-callout: none;
 				transition: all 0.2s;
-				box-shadow: 0 2px 8px rgba(76, 81, 191, 0.3);
+				box-shadow: 0 4px 16px rgba(76, 81, 191, 0.4);
+				min-height: 80px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
 			}
 
 			.vff-ptt-bar-button:active,
 			.vff-ptt-bar-button.active {
 				background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
-				box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+				box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
 				transform: scale(0.98);
 			}
 
 			.vff-ptt-bar-button:hover:not(:active) {
-				box-shadow: 0 4px 12px rgba(76, 81, 191, 0.4);
+				box-shadow: 0 6px 20px rgba(76, 81, 191, 0.5);
 			}
 
 			@media (max-width: 480px) {
 					.vff-panel-mobile {
-						right: 10px;
-						width: calc(100vw - 20px);
-						max-width: 280px;
+						max-height: 350px;
 					}
 
 					.vff-fab {
 						bottom: 16px;
 						right: 16px;
+					}
+
+					.vff-ptt-bar-button {
+						min-height: 70px;
+						font-size: 16px;
 					}
 				}
 			`}</style>

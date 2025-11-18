@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Token Usage Monitor</title>
+  <title>Token & Latency Monitor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     * {
@@ -25,6 +25,47 @@
       border-radius: 8px;
       margin-bottom: 20px;
       border-left: 4px solid #4CAF50;
+    }
+
+    /* Tab Navigation */
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #333;
+      padding-bottom: 0;
+    }
+
+    .tab-button {
+      background: #1a1a1a;
+      color: #888;
+      border: none;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px 8px 0 0;
+      transition: all 0.2s;
+      border-bottom: 3px solid transparent;
+    }
+
+    .tab-button:hover {
+      background: #252525;
+      color: #e0e0e0;
+    }
+
+    .tab-button.active {
+      background: #2a2a2a;
+      color: #4CAF50;
+      border-bottom-color: #4CAF50;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
     }
 
     .header h1 {
@@ -222,10 +263,18 @@
 </head>
 <body>
   <div class="header">
-    <h1>🔥 Token Usage Monitor</h1>
+    <h1>🔥 Token & Latency Monitor</h1>
     <span id="connectionStatus" class="connection-status disconnected">Disconnected</span>
   </div>
 
+  <!-- Tab Navigation -->
+  <div class="tabs">
+    <button class="tab-button active" onclick="switchTab('tokens')">📊 Token Usage</button>
+    <button class="tab-button" onclick="switchTab('latency')">⚡ Latency Metrics</button>
+  </div>
+
+  <!-- Tokens Tab Content -->
+  <div id="tokensTab" class="tab-content active">
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">Total Tokens</div>
@@ -322,10 +371,111 @@
       </tbody>
     </table>
   </div>
+  </div> <!-- End Tokens Tab -->
+
+  <!-- Latency Tab Content -->
+  <div id="latencyTab" class="tab-content">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Events</div>
+        <div class="stat-value" id="latencyTotalEvents">0</div>
+        <div class="stat-sub">Latency events</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Latency</div>
+        <div class="stat-value" id="latencyAvgTime">0ms</div>
+        <div class="stat-sub">Pipeline completion</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sessions</div>
+        <div class="stat-value" id="latencySessions">0</div>
+        <div class="stat-sub">Tracked sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P95 Latency</div>
+        <div class="stat-value" id="latencyP95">0ms</div>
+        <div class="stat-sub">95th percentile</div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label>Form Type</label>
+        <select id="latencyFilterForm">
+          <option value="all">All Forms</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Form Session</label>
+        <select id="latencyFilterFormSession">
+          <option value="all">All Form Sessions</option>
+        </select>
+      </div>
+      <button onclick="clearLatencyFilters()">Clear Filters</button>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-container">
+        <h3>Pipeline Latency Over Time</h3>
+        <div class="chart-wrapper">
+          <canvas id="latencyTimelineChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-container">
+        <h3>Event Type Distribution</h3>
+        <div class="chart-wrapper">
+          <canvas id="eventTypeChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="events-table">
+      <h3>Recent Latency Events (Last 50)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Event</th>
+            <th>Source</th>
+            <th>Form ID</th>
+            <th>Session ID</th>
+            <th>Delta (ms)</th>
+          </tr>
+        </thead>
+        <tbody id="latencyEventsTableBody">
+        </tbody>
+      </table>
+    </div>
+  </div> <!-- End Latency Tab -->
 
   <script>
+    // Tab switching
+    function switchTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+
+      // Remove active from all buttons
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      // Show selected tab
+      if (tabName === 'tokens') {
+        document.getElementById('tokensTab').classList.add('active');
+        document.querySelectorAll('.tab-button')[0].classList.add('active');
+      } else if (tabName === 'latency') {
+        document.getElementById('latencyTab').classList.add('active');
+        document.querySelectorAll('.tab-button')[1].classList.add('active');
+        updateLatencyCharts(); // Refresh charts when tab becomes visible
+      }
+    }
+
     // WebSocket connection
     let ws = null;
+
+    // Token events
     let allEvents = [];
     let filteredEvents = [];
     let currentFilter = {
@@ -334,8 +484,17 @@
       geminiSession: 'all'
     };
 
+    // Latency events
+    let latencyEvents = [];
+    let filteredLatencyEvents = [];
+    let latencyFilter = {
+      form: 'all',
+      formSession: 'all'
+    };
+
     // Chart instances
     let tokensChart, modalityChart, costChart, eventChart;
+    let latencyTimelineChart, eventTypeChart;
 
     // Connect to WebSocket
     function connect() {
@@ -363,15 +522,28 @@
       ws.onmessage = (message) => {
         const data = JSON.parse(message.data);
 
-        if (data.type === 'history') {
+        // Token events
+        if (data.type === 'token_history') {
           allEvents = data.events;
-          console.log('Loaded', allEvents.length, 'historical events');
+          console.log('Loaded', allEvents.length, 'historical token events');
           applyFilters();
           updateDashboard();
-        } else if (data.type === 'event') {
+        } else if (data.type === 'token_event') {
           allEvents.push(data.event);
           applyFilters();
           updateDashboard();
+        }
+
+        // Latency events
+        else if (data.type === 'latency_history') {
+          latencyEvents = data.events;
+          console.log('Loaded', latencyEvents.length, 'historical latency events');
+          applyLatencyFilters();
+          updateLatencyDashboard();
+        } else if (data.type === 'latency_event') {
+          latencyEvents.push(data.event);
+          applyLatencyFilters();
+          updateLatencyDashboard();
         }
       };
     }
@@ -761,8 +933,192 @@
       updateDashboard();
     });
 
+    // ========== LATENCY TAB FUNCTIONS ==========
+
+    function applyLatencyFilters() {
+      filteredLatencyEvents = latencyEvents.filter(event => {
+        if (latencyFilter.form !== 'all' && event.form_id !== latencyFilter.form) return false;
+        if (latencyFilter.formSession !== 'all' && event.form_session_id !== latencyFilter.formSession) return false;
+        return true;
+      });
+      updateLatencyFilterOptions();
+    }
+
+    function updateLatencyFilterOptions() {
+      const formSelect = document.getElementById('latencyFilterForm');
+      const formSessionSelect = document.getElementById('latencyFilterFormSession');
+
+      const formIds = [...new Set(latencyEvents.map(e => e.form_id).filter(Boolean))];
+      formSelect.innerHTML = '<option value="all">All Forms</option>' +
+        formIds.map(id => `<option value="${id}">${id}</option>`).join('');
+      formSelect.value = latencyFilter.form;
+
+      const availableSessions = latencyEvents.filter(e =>
+        latencyFilter.form === 'all' || e.form_id === latencyFilter.form
+      );
+      const sessionIds = [...new Set(availableSessions.map(e => e.form_session_id).filter(Boolean))];
+      formSessionSelect.innerHTML = '<option value="all">All Form Sessions</option>' +
+        sessionIds.map(id => `<option value="${id}">${id.substring(0, 12)}...</option>`).join('');
+      formSessionSelect.value = latencyFilter.formSession;
+    }
+
+    function updateLatencyDashboard() {
+      const events = filteredLatencyEvents;
+      document.getElementById('latencyTotalEvents').textContent = events.length;
+
+      const sessions = new Set(events.map(e => e.session_id).filter(Boolean));
+      document.getElementById('latencySessions').textContent = sessions.size;
+
+      // Calculate pipeline latencies (time between pipeline_processing_started and completed)
+      const pipelineLatencies = calculatePipelineLatencies(events);
+      if (pipelineLatencies.length > 0) {
+        const avg = pipelineLatencies.reduce((a, b) => a + b, 0) / pipelineLatencies.length;
+        document.getElementById('latencyAvgTime').textContent = Math.round(avg) + 'ms';
+
+        const sorted = [...pipelineLatencies].sort((a, b) => a - b);
+        const p95Index = Math.floor(sorted.length * 0.95);
+        document.getElementById('latencyP95').textContent = Math.round(sorted[p95Index] || 0) + 'ms';
+      }
+
+      updateLatencyTable();
+      updateLatencyCharts();
+    }
+
+    function calculatePipelineLatencies(events) {
+      const latencies = [];
+      const sessionStarts = {};
+
+      events.forEach(event => {
+        if (event.event === 'pipeline_processing_started') {
+          sessionStarts[event.session_id] = event.timestamp_ms;
+        } else if (event.event === 'pipeline_processing_completed' && sessionStarts[event.session_id]) {
+          latencies.push(event.timestamp_ms - sessionStarts[event.session_id]);
+        }
+      });
+
+      return latencies;
+    }
+
+    function updateLatencyTable() {
+      const tbody = document.getElementById('latencyEventsTableBody');
+      const recent = filteredLatencyEvents.slice(-50).reverse();
+
+      tbody.innerHTML = recent.map((event, idx) => {
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        const formId = event.form_id || '-';
+        const sessionId = event.session_id ? event.session_id.substring(0, 12) + '...' : '-';
+
+        // Calculate delta from previous event
+        let delta = '-';
+        if (idx < recent.length - 1) {
+          const prevEvent = recent[idx + 1];
+          const diff = event.timestamp_ms - prevEvent.timestamp_ms;
+          delta = diff > 0 ? `+${diff}` : diff;
+        }
+
+        return `
+          <tr>
+            <td>${time}</td>
+            <td>${event.event}</td>
+            <td>${event.source}</td>
+            <td>${formId}</td>
+            <td>${sessionId}</td>
+            <td>${delta}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateLatencyCharts() {
+      if (!latencyTimelineChart || !eventTypeChart) return;
+
+      // Timeline chart
+      const pipelineEvents = filteredLatencyEvents.filter(e =>
+        e.event === 'pipeline_processing_started' || e.event === 'pipeline_processing_completed'
+      );
+
+      latencyTimelineChart.data.labels = pipelineEvents.map(e => new Date(e.timestamp).toLocaleTimeString());
+      latencyTimelineChart.data.datasets[0].data = calculatePipelineLatencies(filteredLatencyEvents);
+      latencyTimelineChart.update();
+
+      // Event type distribution
+      const eventCounts = {};
+      filteredLatencyEvents.forEach(e => {
+        eventCounts[e.event] = (eventCounts[e.event] || 0) + 1;
+      });
+
+      eventTypeChart.data.labels = Object.keys(eventCounts);
+      eventTypeChart.data.datasets[0].data = Object.values(eventCounts);
+      eventTypeChart.update();
+    }
+
+    function initLatencyCharts() {
+      latencyTimelineChart = new Chart(document.getElementById('latencyTimelineChart'), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Pipeline Latency (ms)',
+            data: [],
+            borderColor: '#4CAF50',
+            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#e0e0e0' } } },
+          scales: {
+            y: { ticks: { color: '#e0e0e0' }, grid: { color: '#333' } },
+            x: { ticks: { color: '#e0e0e0' }, grid: { color: '#333' } }
+          }
+        }
+      });
+
+      eventTypeChart = new Chart(document.getElementById('eventTypeChart'), {
+        type: 'doughnut',
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            backgroundColor: ['#4CAF50', '#2196F3', '#FFC107', '#FF5722', '#9C27B0', '#00BCD4']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#e0e0e0' } } }
+        }
+      });
+    }
+
+    function clearLatencyFilters() {
+      latencyFilter.form = 'all';
+      latencyFilter.formSession = 'all';
+      document.getElementById('latencyFilterForm').value = 'all';
+      document.getElementById('latencyFilterFormSession').value = 'all';
+      applyLatencyFilters();
+      updateLatencyDashboard();
+    }
+
+    document.getElementById('latencyFilterForm').addEventListener('change', (e) => {
+      latencyFilter.form = e.target.value;
+      latencyFilter.formSession = 'all';
+      document.getElementById('latencyFilterFormSession').value = 'all';
+      applyLatencyFilters();
+      updateLatencyDashboard();
+    });
+
+    document.getElementById('latencyFilterFormSession').addEventListener('change', (e) => {
+      latencyFilter.formSession = e.target.value;
+      applyLatencyFilters();
+      updateLatencyDashboard();
+    });
+
     // Initialize
     initCharts();
+    initLatencyCharts();
     connect();
   </script>
 </body>
