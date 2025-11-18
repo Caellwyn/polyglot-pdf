@@ -3,7 +3,9 @@
     "allow": [
       "Bash(test:*)",
       "Bash(python -m pytest:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(npm test:*)",
+      "Bash(timeout 5 node:*)"
     ],
     "deny": [],
     "ask": []

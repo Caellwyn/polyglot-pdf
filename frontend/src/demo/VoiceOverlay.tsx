@@ -536,17 +536,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}
 
 	const handlePushToTalkRelease = () => {
-		// Use statusRef for current status (avoids closure capture issues)
+		// Use refs for current values (avoids closure capture issues)
 		const currentStatus = statusRef.current
-		console.log('[PTT] Release handler called, pushToTalkMode:', pushToTalkMode, 'isHoldingPushToTalk:', isHoldingPushToTalk, 'status:', currentStatus)
+		const currentPTTMode = pushToTalkModeRef.current
+		const currentlyHolding = isHoldingPushToTalkRef.current
+		console.log('[PTT] Release handler called, pushToTalkMode:', currentPTTMode, 'isHoldingPushToTalk:', currentlyHolding, 'status:', currentStatus)
 
-		if (!pushToTalkMode) {
+		if (!currentPTTMode) {
 			console.log('[PTT] Ignoring release - not in PTT mode')
 			return
 		}
 
 		// CRITICAL: Prevent duplicate calls (onMouseUp + onMouseLeave both fire)
-		if (!isHoldingPushToTalk) {
+		if (!currentlyHolding) {
 			console.log('[PTT] Ignoring release - already released (not holding)')
 			return
 		}
@@ -1062,9 +1064,7 @@ const handleClearForm = () => {
 						<button
 							className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
 							onMouseDown={handlePushToTalkPress}
-							onMouseUp={handlePushToTalkRelease}
 							onTouchStart={handlePushToTalkPress}
-							onTouchEnd={handlePushToTalkRelease}
 						>
 							{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
 						</button>
