@@ -431,3 +431,35 @@
   margin-left: auto;
   margin-right: auto;
 }
+
+
+/* ============================================================================
+   AI Field Highlight (auto-scroll visual feedback)
+   ============================================================================ */
+
+.field-highlight {
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+}
+
+/* Ensure the highlight works on different field types */
+input.field-highlight,
+textarea.field-highlight,
+select.field-highlight {
+  border-color: #3b82f6;
+}
+

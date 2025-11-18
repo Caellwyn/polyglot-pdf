@@ -35,8 +35,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [error, setError] = useState<string | null>(null)
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
-	const [currentPartId, setCurrentPartId] = useState<string>('')
-	const [completedParts, setCompletedParts] = useState<Set<string>>(new Set())
+	const [currentSectionId, setCurrentSectionId] = useState<string>('')
+	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
@@ -65,20 +65,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const pttReleaseTimeoutRef = useRef<number | null>(null)
 	const isHoldingPushToTalkRef = useRef<boolean>(isHoldingPushToTalk)
 
-	// Helper functions for part-based navigation (parts use string IDs, not numbers)
-	const getCurrentPartOrder = (): number => {
-		const part = schema.parts?.find(p => p.id === currentPartId)
-		return part?.order ?? 1
+	// Helper functions for section-based navigation (parts use string IDs, not numbers)
+	const getCurrentSectionOrder = (): number => {
+		const section = schema.sections?.find(p => p.id === currentSectionId)
+		return section?.order ?? 1
 	}
 
-	const getCurrentPartLabel = (): string => {
-		const part = schema.parts?.find(p => p.id === currentPartId)
-		return part?.label ?? 'Unknown Part'
+	const getCurrentSectionLabel = (): string => {
+		const section = schema.sections?.find(p => p.id === currentSectionId)
+		return section?.label ?? 'Unknown Part'
 	}
 
-	const getPartIdFromOrder = (order: number): string => {
-		const part = schema.parts?.find(p => p.order === order)
-		return part?.id ?? ''
+	const getSectionIdFromOrder = (order: number): string => {
+		const section = schema.sections?.find(p => p.order === order)
+		return section?.id ?? ''
 	}
 
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
@@ -600,11 +600,11 @@ useEffect(() => {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [pushToTalkMode])
 
-// Initialize schema-based state and update part UI (only once on mount)
+// Initialize schema-based state and update section UI (only once on mount)
 useEffect(() => {
 	const state = SchemaFormStateManager.init(schema)
-	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
-	setCompletedParts(state.completedParts || new Set())
+	setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
+	setCompletedSections(state.completedSections || new Set())
 	
 	// Update field counter
 	const totalFields = schema.fields.length
@@ -617,7 +617,7 @@ useEffect(() => {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []) // Only run once on mount, not when schema changes
 
-// Poll field count AND part state (updates as AI switches parts)
+// Poll field count AND section state (updates as AI switches parts)
 useEffect(() => {
 	const interval = setInterval(() => {
 		const state = SchemaFormStateManager.load()
@@ -630,27 +630,27 @@ useEffect(() => {
 			}).length
 			setSectionFieldCount({ filled: filledFields, total: totalFields })
 			
-			// Update part if changed (AI completed part and moved forward)
-			if (state.currentPartId && state.currentPartId !== currentPartId) {
-				setCurrentPartId(state.currentPartId)
+			// Update section if changed (AI completed section and moved forward)
+			if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
+				setCurrentSectionId(state.currentSectionId)
 			}
 			
 			// Update completed parts if changed
-			if (state.completedParts) {
-				const currentCompleted = new Set(Array.from(completedParts))
-				const newCompleted = new Set(Array.from(state.completedParts))
+			if (state.completedSections) {
+				const currentCompleted = new Set(Array.from(completedSections))
+				const newCompleted = new Set(Array.from(state.completedSections))
 				
 				// Check if sets are different
 				if (currentCompleted.size !== newCompleted.size || 
 				    ![...currentCompleted].every(p => newCompleted.has(p))) {
-					setCompletedParts(newCompleted)
+					setCompletedSections(newCompleted)
 				}
 			}
 		}
 	}, 1000) // Update every second
 	
 	return () => clearInterval(interval)
-}, [currentPartId, completedParts])
+}, [currentSectionId, completedSections])
 
 const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 const isPausedState = status.toLowerCase() === 'paused'

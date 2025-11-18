@@ -5,11 +5,12 @@
 **Last Updated**: November 17, 2025
 **Purpose**: Reduce Gemini context tokens from ~7,400 to <500 initial tokens through just-in-time field loading
 
-**Status Update (Nov 17, 2025) - Implementation Verified**:
+**Status Update (Nov 18, 2025) - Section Navigation Refactoring Complete**:
 - ✅ **Phases 1-2**: Backend implementation complete, 5/5 manifest unit tests passing
 - ✅ **Phase 3.1-3.3**: Frontend integration COMPLETE - JIT mode ready, 20/20 tests passing
-- ✅ **Phase 3.4-3.5**: Checkbox handling and cross-part navigation working
+- ✅ **Phase 3.4-3.5**: Checkbox handling and cross-section navigation working
 - ✅ **Phase 4.1**: E2E tests fixed and verified - 8/8 passing, 456 tokens confirmed
+- ✅ **Section Navigation**: Complete refactor from parts to sections (Nov 18, 2025)
 - 🔄 **Phases 4.2-4.5**: Ready for live Gemini API testing
 
 **Total Test Coverage**: 33/33 JIT-related tests passing
@@ -25,17 +26,18 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 ### Key Principles
 - Manifest-first approach with on-demand schema loading
-- Section-based context resets to prevent token accumulation  
+- Section-based context resets to prevent token accumulation (16 sections in I-90)
 - Previous section manifests retained for cross-section queries
 - Dependency checking at tool execution time (not in manifest)
 - Frontend tracks which schemas have been sent to Gemini
 - Happy path (linear filling) optimized over edge cases
+- Schema-driven navigation: No hardcoded section logic
 
 ### Important Terminology
-- **Part**: User-facing navigation unit (e.g., "Part 1 - Information About You")
-- **Section**: Internal code term often referring to parts
+- **Section**: Primary navigation unit (e.g., "Part 1.1", "Part 1.2", "Part 2") - I-90 has 16 sections
 - **Field Manifest**: Lightweight field_id/spoken_name pairs
 - **Full Schema**: Complete field definition with validation, help text, options
+- **Gemini Session**: One session per section (resets on section switch)
 
 ---
 
@@ -54,10 +56,10 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 - **Context Growth**: Gradual increase, capped by section resets
 
 ### What Stays the Same
-- User experience (no visible changes)
+- User experience (no visible changes beyond navigation labels)
 - Form filling accuracy
 - Voice interaction patterns
-- Section/part navigation
+- Section navigation (now properly sequential: 1.1→1.2→1.3→2)
 - Manual edit capability
 
 ---
@@ -445,17 +447,24 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - No special JIT handling needed (works with existing structure)
 - **Manifest Entry**: Single entry like `{"field_id": "Part1_Checkbox4", "spoken_name": "race categories"}`
 
-#### 3.5 Cross-Part Navigation Support ✅ COMPLETE
-- **Task**: Enable queries across parts without updates
+#### 3.5 Cross-Section Navigation Support ✅ COMPLETE (Updated Nov 18, 2025)
+- **Task**: Enable queries across sections without updates
 - **Location**: `frontend/src/webFormConnection.ts`
-- **Status**: ✅ Parts-based navigation implemented
+- **Status**: ✅ Section-based navigation implemented
 - **Implementation**:
-  - Part switching implemented via `switchToPart()` (lines 620, 1269, 1365)
-  - Backend retains previous part spoken names in handshake
-  - get_field_value can query any part's fields
-  - update_form_fields restricted to current part only
-  - loadedFieldIds clearing on part switch handled by backend
+  - Section switching implemented via `switchToSection()` (lines 620, 1269, 1365)
+  - Backend retains previous section spoken names in handshake
+  - get_field_value can query any section's fields
+  - update_form_fields restricted to current section only
+  - loadedFieldIds clearing on section switch handled by backend
 - **Note**: Works with full schema mode; will continue to work with JIT mode once Phase 3.3 complete
+- **November 18 Update**: Complete refactor from parts to sections
+  - Fixed deduplication to use exact ID matching (no more aggressive pattern merging)
+  - Navigation now properly sequential: 1.1→1.2→1.3→2 (not skipping subsections)
+  - Section dropdowns updated in both desktop and mobile overlays
+  - Progress display counts total sections (16 for I-90)
+  - Gemini sessions reset per section (not per part)
+  - Auto-scroll feature added when Gemini fills fields (smooth scroll + highlight animation)
 
 ### Exit Criteria
 - [x] State correctly tracks all loaded field IDs (SchemaFormState.loadedFieldIds)

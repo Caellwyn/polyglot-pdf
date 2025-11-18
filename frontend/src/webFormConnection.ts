@@ -1185,7 +1185,7 @@ export class WebFormConnection {
   }
   
   /**
-   * Update field value (user edit)
+   * Update field value (user edit or AI fill)
    */
   updateField(
     fieldId: string,
@@ -1196,6 +1196,27 @@ export class WebFormConnection {
     const emit = options?.emit ?? false;
 
     this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, { confirmed });
+
+    // Auto-scroll to field when Gemini fills it (confirmed = true means AI filled)
+    if (confirmed && typeof document !== 'undefined') {
+      // Use setTimeout to allow React to update DOM first
+      setTimeout(() => {
+        const element = document.getElementById(fieldId);
+        if (element) {
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+
+          // Optional: Add a brief highlight effect to draw attention
+          element.classList.add('field-highlight');
+          setTimeout(() => {
+            element.classList.remove('field-highlight');
+          }, 1500);
+        }
+      }, 50);
+    }
 
     if (emit) {
       this.flushField(fieldId);
@@ -1270,10 +1291,10 @@ export class WebFormConnection {
   }
   
   /**
-   * Phase 3: Start a specific part (closes current session, starts new one)
-   * @param sectionNumber - Part order number (1-indexed, named sectionNumber for compatibility)
+   * Start a specific section (closes current session, starts new one)
+   * @param sectionId - Section ID (e.g., "part_1_2_addresses")
    */
-  async startSection(sectionNumber: number, wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
+  async startSection(sectionId: string, wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
     try {
       // Set switching status
       this.isSectionSwitching = true;
@@ -1288,52 +1309,53 @@ export class WebFormConnection {
 
       // Load current state
       let currentState = SchemaFormStateManager.load();
-      if (!currentState || !currentState.schema.parts) {
-        throw new Error('Parts not initialized in schema');
+      if (!currentState || !currentState.schema.sections) {
+        throw new Error('Sections not initialized in schema');
       }
 
-      // Find part by order number
-      const targetPart = currentState.schema.parts.find(p => p.order === sectionNumber);
-      if (!targetPart) {
-        throw new Error(`Part with order ${sectionNumber} not found`);
+      // Find section by ID
+      const targetSection = currentState.schema.sections.find(s => s.id === sectionId);
+      if (!targetSection) {
+        throw new Error(`Section with ID ${sectionId} not found`);
       }
 
-      // Switch to target part
-      currentState = SchemaFormStateManager.switchToPart(currentState, targetPart.id);
+      // Switch to target section
+      currentState = SchemaFormStateManager.switchToSection(currentState, targetSection.id);
       this.state = currentState;
 
-      // Get part schema and current values for this part
-      const partSchema = SchemaFormStateManager.extractPartFields(currentState.schema, targetPart.id);
-      const partValues: Record<string, any> = {};
+      // Get section schema and current values for this section
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(currentState.schema, targetSection.id);
+      const sectionValues: Record<string, any> = {};
 
-      // Filter fieldValues to only include fields in this part
-      const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
+      // Filter fieldValues to only include fields in this section
+      const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
       for (const [fieldId, fieldValue] of Object.entries(currentState.fieldValues)) {
-        if (partFieldIds.has(fieldId)) {
-          partValues[fieldId] = fieldValue;
+        if (sectionFieldIds.has(fieldId)) {
+          sectionValues[fieldId] = fieldValue;
         }
       }
 
-      // Build previous_spoken_names from completed parts
+      // Build previous_spoken_names from completed sections
       const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(currentState);
 
-      // Connect to backend with part-specific handshake
+      // Connect to backend with section-specific handshake
       await this.connect(wsUrl);
       this.isSectionSwitching = false; // Reset flag after successful reconnect
 
-      // Compute initial field hint (first unfilled field in this part)
+      // Compute initial field hint (first unfilled field in this section)
       const initialFieldHint = this.computeNextFieldHintString();
 
-      // Send handshake with section metadata and initial field hint (backend expects "section" terminology)
+      // Send handshake with section metadata and initial field hint
       this.send({
         type: "handshake",
-        schema: partSchema,
-        current_values: partValues,
+        schema: sectionSchema,
+        current_values: sectionValues,
         fill_language: this.fillLanguage,
-        // Phase 3: Section metadata (using parts[].order as section_number)
-        section_number: targetPart.order,
-        total_sections: currentState.schema.parts!.length,
-        section_label: targetPart.label,
+        // Section metadata
+        section_id: targetSection.id,
+        section_number: targetSection.order,
+        total_sections: currentState.schema.sections.length,
+        section_label: targetSection.label,
         previous_spoken_names: previousSpokenNames,
         // Include initial field hint so backend can use it immediately
         initial_field_hint: initialFieldHint,
@@ -1347,43 +1369,29 @@ export class WebFormConnection {
   }
   
   /**
-   * Phase 3: Switch to a different part (NEW: backend-side reconnect pattern)
+   * Switch to a different section (backend-side reconnect pattern)
    *
-   * This now uses the backend-side Gemini reconnect pattern instead of disconnecting
-   * the WebSocket. The backend closes/recreates the Gemini session with fresh context.
+   * Uses the backend-side Gemini reconnect pattern. The backend closes/recreates
+   * the Gemini session with fresh context for the new section.
    *
-   * @param target - Part order number (1-indexed) or part label
+   * @param sectionId - Section ID (e.g., "part_1_2_addresses")
    * @param wsUrl - Backend WebSocket URL (kept for API compatibility but not used)
    */
-  async switchSection(target: number | string, wsUrl: string): Promise<void> {
+  async switchToSection(sectionId: string, wsUrl: string): Promise<void> {
     const currentState = SchemaFormStateManager.load();
-    if (!currentState || !currentState.schema.parts) {
-      throw new Error('Parts not initialized');
+    if (!currentState || !currentState.schema.sections) {
+      throw new Error('Sections not initialized');
     }
 
-    let targetPartId: string | null;
-    let targetPart;
-
-    // Parse target: number or label
-    if (typeof target === 'number') {
-      // Find part by order number
-      targetPart = currentState.schema.parts.find(p => p.order === target);
-      if (!targetPart) {
-        throw new Error(`Part with order ${target} not found`);
-      }
-      targetPartId = targetPart.id;
-    } else {
-      // Find by label
-      targetPartId = SchemaFormStateManager.findPartByLabel(currentState, target);
-      if (!targetPartId) {
-        throw new Error(`Part not found: ${target}`);
-      }
-      targetPart = currentState.schema.parts.find(p => p.id === targetPartId);
+    // Find section by ID
+    const targetSection = currentState.schema.sections.find(s => s.id === sectionId);
+    if (!targetSection) {
+      throw new Error(`Section not found: ${sectionId}`);
     }
 
     // Validate range
-    if (targetPart && (targetPart.order < 1 || targetPart.order > currentState.schema.parts.length)) {
-      throw new Error(`Invalid part number: ${targetPart.order} (must be 1-${currentState.schema.parts.length})`);
+    if (targetSection.order < 1 || targetSection.order > currentState.schema.sections.length) {
+      throw new Error(`Invalid section number: ${targetSection.order} (must be 1-${currentState.schema.sections.length})`);
     }
 
     // Wait for WebSocket send buffer to drain before sending control message
@@ -1394,45 +1402,46 @@ export class WebFormConnection {
     // Update status
     this.setStatus('switching_section');
 
-    // Switch to target part in local state
-    const updatedState = SchemaFormStateManager.switchToPart(currentState, targetPartId);
+    // Switch to target section in local state
+    const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
     this.state = updatedState;
 
-    // Build part info to send to backend (avoid round-trip delay)
-    const partSchema = SchemaFormStateManager.extractPartFields(updatedState.schema, targetPartId);
-    const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
-    const partValues: Record<string, any> = {};
+    // Build section info to send to backend (avoid round-trip delay)
+    const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
+    const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
+    const sectionValues: Record<string, any> = {};
 
     for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
-      if (partFieldIds.has(fieldId)) {
-        partValues[fieldId] = fieldValue;
+      if (sectionFieldIds.has(fieldId)) {
+        sectionValues[fieldId] = fieldValue;
       }
     }
 
-    // Build previous spoken names from completed parts
+    // Build previous spoken names from completed sections
     const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
 
     // Compute initial field hint
     const initialFieldHint = this.computeNextFieldHintString();
 
     console.log('[WebFormConnection] Sending section switch with embedded info', {
-      sectionNumber: targetPart?.order,
-      fieldCount: partSchema.fields.length,
-      valueCount: Object.keys(partValues).length
+      sectionId: targetSection.id,
+      sectionNumber: targetSection.order,
+      fieldCount: sectionSchema.fields.length,
+      valueCount: Object.keys(sectionValues).length
     });
 
     // Send section switch with all info embedded (no round-trip needed)
-    // Backend expects "section" terminology, so use parts[].order as section_number
     this.send({
       type: "manual_section_switch",
-      identifier: targetPart?.order.toString(),
+      identifier: targetSection.id,
       section_info: {
-        schema: partSchema,
-        current_values: partValues,
+        schema: sectionSchema,
+        current_values: sectionValues,
         metadata: {
-          section_number: targetPart?.order,
-          total_sections: updatedState.schema.parts!.length,
-          section_label: targetPart?.label || '',
+          section_id: targetSection.id,
+          section_number: targetSection.order,
+          total_sections: updatedState.schema.sections.length,
+          section_label: targetSection.label,
           previous_spoken_names: previousSpokenNames,
         },
         initial_field_hint: initialFieldHint,
@@ -1441,7 +1450,7 @@ export class WebFormConnection {
   }
   
   /**
-   * Phase 3: Complete current part and move to next
+   * Complete current section and move to next
    *
    * @param wsUrl - Backend WebSocket URL (REQUIRED - no default to prevent localhost fallback in production)
    */
@@ -1450,50 +1459,44 @@ export class WebFormConnection {
       throw new Error('wsUrl is required for completeSection - must pass the connected backend URL');
     }
     const currentState = SchemaFormStateManager.load();
-    if (!currentState || !currentState.currentPartId || !currentState.schema.parts) {
-      throw new Error('Part state not initialized');
+    if (!currentState || !currentState.currentSectionId || !currentState.schema.sections) {
+      throw new Error('Section state not initialized');
     }
 
-    const currentPart = SchemaFormStateManager.getCurrentPart(currentState);
-    if (!currentPart) {
-      throw new Error('Current part not found');
+    const currentSection = SchemaFormStateManager.getCurrentSection(currentState);
+    if (!currentSection) {
+      throw new Error('Current section not found');
     }
 
-    // Mark part as complete
-    const updatedState = SchemaFormStateManager.markPartComplete(currentState, currentState.currentPartId);
+    // Mark section as complete
+    const updatedState = SchemaFormStateManager.markSectionComplete(currentState, currentState.currentSectionId);
     this.state = updatedState;
 
-    // Check if this was the last part
-    if (currentPart.order >= currentState.schema.parts.length) {
-      this.setStatus('connected'); // Stay connected but don't start new part
+    // Check if this was the last section
+    if (currentSection.order >= currentState.schema.sections.length) {
+      this.setStatus('connected'); // Stay connected but don't start new section
       return;
     }
 
-    // Move to next part
-    const nextPartOrder = currentPart.order + 1;
-    await this.startSection(nextPartOrder, wsUrl);
-  }
-  
-  /**
-   * Phase 3: Get current section number (returns part order)
-   */
-  getCurrentSection(): number | undefined {
-    const currentPart = SchemaFormStateManager.getCurrentPart(this.state);
-    return currentPart?.order;
+    // Move to next section
+    const nextSection = SchemaFormStateManager.getNextSection(updatedState);
+    if (nextSection) {
+      await this.startSection(nextSection.id, wsUrl);
+    }
   }
 
   /**
-   * Phase 3: Get completed sections (returns part orders)
+   * Get current section ID
    */
-  getCompletedSections(): Set<number> {
-    // Convert completed part IDs to order numbers
-    const orderNumbers = new Set<number>();
-    for (const partId of this.state.completedParts) {
-      const part = this.state.schema.parts?.find(p => p.id === partId);
-      if (part) {
-        orderNumbers.add(part.order);
-      }
-    }
-    return orderNumbers;
+  getCurrentSectionId(): string | undefined {
+    const currentSection = SchemaFormStateManager.getCurrentSection(this.state);
+    return currentSection?.id;
+  }
+
+  /**
+   * Get completed section IDs
+   */
+  getCompletedSections(): Set<string> {
+    return this.state.completedSections || new Set();
   }
 }
