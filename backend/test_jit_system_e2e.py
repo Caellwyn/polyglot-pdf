@@ -27,18 +27,25 @@ from config import get_settings
 
 def load_i90_schema():
     """Load I-90 conformant schema"""
-    # Try multiple locations
+    # Try multiple locations (Nov 2025: schemas moved to form-kits structure)
     possible_paths = [
-        Path("frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json"),
-        Path("../frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json"),
+        Path("../form-kits/i-90/schema.json"),  # NEW: form-kits architecture
+        Path("form-kits/i-90/schema.json"),
+        Path("frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json"),  # Legacy
+        Path("../frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json"),  # Legacy
     ]
 
     for schema_path in possible_paths:
         if schema_path.exists():
+            print(f"   Found schema at: {schema_path.absolute()}")
             with open(schema_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
-    raise FileNotFoundError("I-90 schema not found")
+    # Better error message
+    raise FileNotFoundError(
+        f"I-90 schema not found. Tried:\n" +
+        "\n".join(f"  - {p.absolute()}" for p in possible_paths)
+    )
 
 
 def test_feature_flag():

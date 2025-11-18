@@ -1,17 +1,21 @@
 # Token Reduction Implementation Plan
 
-**Version**: 1.2
+**Version**: 1.3
 **Created**: November 10, 2025
-**Last Updated**: November 12, 2025
+**Last Updated**: November 17, 2025
 **Purpose**: Reduce Gemini context tokens from ~7,400 to <500 initial tokens through just-in-time field loading
 
-**Status Update (Nov 12, 2025)**:
-- ✅ **Phases 1-2**: Backend implementation complete, 8/8 tests passing, 94% token reduction achieved
-- ✅ **Phase 3.1-3.2**: Frontend state tracking and utilities complete
-- ✅ **Phase 3.3**: Frontend connection integration COMPLETE (Nov 14, 2025) - JIT mode ready
+**Status Update (Nov 17, 2025) - Implementation Verified**:
+- ✅ **Phases 1-2**: Backend implementation complete, 5/5 manifest unit tests passing
+- ✅ **Phase 3.1-3.3**: Frontend integration COMPLETE - JIT mode ready, 20/20 tests passing
 - ✅ **Phase 3.4-3.5**: Checkbox handling and cross-part navigation working
-- ✅ **Phase 4.1**: Integration tests complete
-- 🔄 **Phases 4.2-4.5**: Ready for live testing with JIT enabled
+- ✅ **Phase 4.1**: E2E tests fixed and verified - 8/8 passing, 456 tokens confirmed
+- 🔄 **Phases 4.2-4.5**: Ready for live Gemini API testing
+
+**Total Test Coverage**: 33/33 JIT-related tests passing
+**Token Reduction Verified**: 94% reduction (7,400 → 456 tokens)
+
+**Architecture Change Note**: Schema location moved from `frontend/public/pdf_schema_extractor/` to `form-kits/` structure. All references and tests updated accordingly.
 
 ---
 
@@ -78,15 +82,12 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
     - Unit types: prefix with role ("interpreter's unit type", "preparer's unit type")
     - Part 8 fields: numbered by entry ("entry 1 page number", "entry 2 page number")
     - Pre-populated fields: marked with "page 8" prefix
-  - ✅ Deployed to all locations:
-    - `pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
-    - `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
-    - `schema-editor/public/schemas/i-90/i-90_schema.json`
+  - ✅ Deployed to production location: `form-kits/i-90/schema.json`
   - 🔄 I-589 schema pending (needs conformance first - no spoken names yet)
 - **Owner**: Schema extraction app team
-- **Location**: `pdf_schema_extractor/test_schemas/test_pdfs/*/`
-- **Tool**: `pdf_schema_extractor/fix_duplicate_spoken_names.py`
-- **Note**: This work happens in the schema extraction app, not main codebase
+- **Current Location**: `form-kits/i-90/schema.json` (Nov 2025 architecture)
+- **Tool**: `pdf_schema_extractor/fix_duplicate_spoken_names.py` (external app)
+- **Note**: Schema extraction and validation happens in external app, not main codebase
 
 #### 1.2 Field Dependency Simplification
 - **Task**: Keep conditionals out of manifests; handle at tool execution time
@@ -470,20 +471,21 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
 
 **Duration**: 3 days
 **Goal**: Integrate all components and thoroughly test the system
-**Status**: ✅ **PHASE 4.1 COMPLETE** (November 11, 2025)
+**Status**: ✅ **Phase 4.1 COMPLETE** (Tests fixed and verified: November 17, 2025)
 
 ### Steps
 
 #### 4.1 Integration Test Suite ✅ COMPLETE
 - **Location**: `backend/test_jit_system_e2e.py` ✅ CREATED
-- **Status**: ✅ All 8 tests passing
-- **Test Results Summary**:
-  - Token Count: **458 tokens** (42 under 500 target) ✅
-  - Token Reduction: **~94%** (from 7,400 to 458)
-  - Spoken Name Uniqueness: **38/38 unique** in Part 1 ✅
+- **Status**: ✅ **All 8 tests passing** (Fixed Nov 17, 2025)
+- **Fix Applied**: Updated schema paths to use new `form-kits/i-90/schema.json` location
+- **Test Results Summary** (Verified Nov 17, 2025):
+  - Token Count: **456 tokens** (44 under 500 target) ✅ **VERIFIED**
+  - Token Reduction: **~94%** (from 7,400 to 456) ✅ **VERIFIED**
+  - Spoken Name Uniqueness: **37/37 unique** in Part 1 ✅
   - Next Field Retrieval: Working correctly ✅
   - Linear Flow: 10 fields tested successfully ✅
-  - Token Accumulation: Part 3 at 779 tokens (acceptable) ✅
+  - Token Accumulation: Part 2 at 526 tokens, Part 3 at 773 tokens (acceptable) ✅
   - Part Switching: Previous parts retained ✅
 
 - **Test Scenarios Completed**:
@@ -579,12 +581,18 @@ This plan implements a just-in-time (JIT) schema loading system where Gemini rec
   - No complaints about response time
 
 ### Exit Criteria
-- [x] All integration tests passing (100%) - **8/8 tests passing** ✅
-- [x] Token reduction ≥85% verified for I-90 Part 1 - **94% reduction (7,400 → 458)** ✅
+- [x] All integration tests passing (100%) - **8/8 E2E tests passing** ✅
+- [x] Token reduction ≥85% verified for I-90 Part 1 - **94% reduction (7,400 → 456)** ✅
 - [ ] No regression in response time (±0.5s) - Pending live Gemini test
 - [ ] No regression in accuracy (error rate ≤1%) - Pending live Gemini test
 - [ ] Error scenarios handled gracefully - Pending Phase 4.3
 - [ ] 10+ internal users tested without issues - Pending Phase 4.5
+
+**Complete Test Status (Nov 17, 2025)**:
+- ✅ Manifest service unit tests: 5/5 passing (`backend/test_manifest_generation.py`)
+- ✅ Frontend manifest utils: 20/20 passing (`frontend/src/schema-forms/utils/manifestUtils.test.ts`)
+- ✅ E2E validation script: 8/8 passing (`backend/test_jit_system_e2e.py`)
+- **Total**: 33/33 JIT-related tests passing
 
 ---
 
