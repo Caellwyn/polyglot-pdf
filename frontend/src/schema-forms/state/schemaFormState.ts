@@ -18,8 +18,8 @@ import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
 export interface SchemaFormState {
   schema: FormSchema;
   fieldValues: Record<string, FieldValue>; // field_id → FieldValue (with confirmed flag)
-  currentPartId: string; // Part ID like "part_1" (renamed from currentSectionId for clarity)
-  completedParts: Set<string>; // Track completed parts (renamed from completedSections)
+  currentSectionId: string; // Section ID (e.g., "part_1_2_addresses")
+  completedSections: Set<string>; // Track completed sections
   validationErrors: Record<string, string>; // field_id → error message
   lastUpdated: number;
   sessionId?: string; // Set by backend during handshake (Gemini session ID)
@@ -67,18 +67,14 @@ export class SchemaFormStateManager {
       return existing;
     }
 
-    // New session - initialize with first part (or first section if no parts)
-    const firstPart = this.getFirstPart(cleanedSchema);
+    // New session - initialize with first section
     const firstSection = this.getFirstSection(cleanedSchema);
-
-    // currentPartId can be either a part ID or section ID depending on schema structure
-    const initialId = firstPart?.id || firstSection?.id || "";
 
     const newState: SchemaFormState = {
       schema: cleanedSchema,
       fieldValues: {},
-      currentPartId: initialId, // Can be part_1 or section ID
-      completedParts: new Set(),
+      currentSectionId: firstSection?.id || "",
+      completedSections: new Set(),
       validationErrors: {},
       lastUpdated: Date.now(),
       formSessionId: this.generateFormSessionId(), // Persistent ID for this form session
@@ -106,18 +102,18 @@ export class SchemaFormStateManager {
       const parsed = JSON.parse(stored);
 
       // Restore Set from array
-      if (parsed.completedParts) {
-        parsed.completedParts = new Set(parsed.completedParts);
-      } else if (parsed.completedSections) {
-        // Backwards compatibility: migrate completedSections → completedParts
-        parsed.completedParts = new Set(parsed.completedSections);
-        delete parsed.completedSections;
+      if (parsed.completedSections) {
+        parsed.completedSections = new Set(parsed.completedSections);
+      } else if (parsed.completedParts) {
+        // Backwards compatibility: migrate completedParts → completedSections
+        parsed.completedSections = new Set(parsed.completedParts);
+        delete parsed.completedParts;
       }
 
-      // Backwards compatibility: migrate currentSectionId → currentPartId
-      if (parsed.currentSectionId && !parsed.currentPartId) {
-        parsed.currentPartId = parsed.currentSectionId;
-        delete parsed.currentSectionId;
+      // Backwards compatibility: migrate currentPartId → currentSectionId
+      if (parsed.currentPartId && !parsed.currentSectionId) {
+        parsed.currentSectionId = parsed.currentPartId;
+        delete parsed.currentPartId;
       }
 
       // Phase 3: JIT schema loading - Restore loadedFieldIds Set
@@ -148,7 +144,7 @@ export class SchemaFormStateManager {
       // Convert Sets to arrays for JSON serialization
       const toStore = {
         ...state,
-        completedParts: Array.from(state.completedParts),
+        completedSections: Array.from(state.completedSections),
         loadedFieldIds: Array.from(state.loadedFieldIds), // Phase 3: JIT schema loading
         lastUpdated: Date.now(),
       };
@@ -244,12 +240,12 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Navigate to a different part (renamed from navigateToSection)
+   * Navigate to a different section
    */
-  static navigateToPart(state: SchemaFormState, partId: string): SchemaFormState {
+  static navigateToSection(state: SchemaFormState, sectionId: string): SchemaFormState {
     const newState = {
       ...state,
-      currentPartId: partId,
+      currentSectionId: sectionId,
       lastUpdated: Date.now(),
     };
 
@@ -258,31 +254,23 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Navigate to a different section (backwards compatibility wrapper)
-   * @deprecated Use navigateToPart() instead
-   */
-  static navigateToSection(state: SchemaFormState, sectionId: string): SchemaFormState {
-    return this.navigateToPart(state, sectionId);
-  }
-
-  /**
-   * Mark section as completed (backwards compatibility wrapper)
-   * @deprecated Use markPartComplete() instead
+   * Mark section as completed
    */
   static markSectionComplete(state: SchemaFormState, sectionId: string): SchemaFormState {
-    return this.markPartComplete(state, sectionId);
+    const newState = {
+      ...state,
+      completedSections: new Set([...state.completedSections, sectionId]),
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
   }
 
   /**
-   * Get current section from schema (finds section in current part)
+   * Get current section from schema
    */
   static getCurrentSection(state: SchemaFormState): FormSection | null {
-    const currentPart = this.getCurrentPart(state);
-    if (!currentPart) return null;
-
-    // Find first section in this part
-    const sectionId = currentPart.section_ids[0];
-    return state.schema.sections.find((s) => s.id === sectionId) || null;
+    return state.schema.sections.find((s) => s.id === state.currentSectionId) || null;
   }
 
   /**
@@ -346,48 +334,6 @@ export class SchemaFormStateManager {
     return sortedSections[currentIndex - 1];
   }
 
-  /**
-   * Get next part (for navigation)
-   */
-  static getNextPart(state: SchemaFormState): FormPart | null {
-    const currentPart = this.getCurrentPart(state);
-    if (!currentPart) return null;
-
-    const sortedParts = [...(state.schema.parts || [])].sort((a, b) => a.order - b.order);
-    const currentIndex = sortedParts.findIndex((p) => p.id === currentPart.id);
-
-    if (currentIndex === -1 || currentIndex === sortedParts.length - 1) {
-      return null; // No next part
-    }
-
-    return sortedParts[currentIndex + 1];
-  }
-
-  /**
-   * Get previous part (for navigation)
-   */
-  static getPreviousPart(state: SchemaFormState): FormPart | null {
-    const currentPart = this.getCurrentPart(state);
-    if (!currentPart) return null;
-
-    const sortedParts = [...(state.schema.parts || [])].sort((a, b) => a.order - b.order);
-    const currentIndex = sortedParts.findIndex((p) => p.id === currentPart.id);
-
-    if (currentIndex <= 0) {
-      return null; // No previous part
-    }
-
-    return sortedParts[currentIndex - 1];
-  }
-
-  /**
-   * Get first part from schema
-   */
-  private static getFirstPart(schema: FormSchema) {
-    if (!schema.parts || schema.parts.length === 0) return null;
-    const sortedParts = [...schema.parts].sort((a, b) => a.order - b.order);
-    return sortedParts[0] || null;
-  }
 
   /**
    * Get first section from schema
@@ -398,58 +344,33 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Deduplicate sections (e.g., Part 7 with different capitalization)
-   * Merges duplicate sections by combining their fields
+   * Deduplicate sections with EXACT duplicate IDs only
+   * (Disabled the aggressive "Part N" merging for section-based navigation)
    */
   private static deduplicateSections(schema: FormSchema): FormSchema {
-    // Check if any sections match the "Part N" pattern
-    const hasPartPattern = schema.sections.some(s => /^Part\s+\d+/i.test(s.id));
-
-    // If no sections match the pattern, skip deduplication
-    if (!hasPartPattern) {
-      return schema;
-    }
-
-    const seenParts = new Map<string, FormSection>();
+    // Only deduplicate if there are actual duplicate IDs (exact matches)
+    const seenIds = new Set<string>();
     const deduplicatedSections: FormSection[] = [];
 
-    // Extract part number from section ID (e.g., "Part 7" from "Part 7 - Some Title")
-    const getPartNumber = (sectionId: string): number => {
-      const match = sectionId.match(/^Part\s+(\d+)/i);
-      return match ? parseInt(match[1], 10) : 999;
-    };
-
     for (const section of schema.sections) {
-      const partNumber = getPartNumber(section.id);
-      const partKey = `part_${partNumber}`;
-
-      if (seenParts.has(partKey)) {
-        // Merge fields into existing section
-        const existing = seenParts.get(partKey)!;
-        existing.fields = [...existing.fields, ...section.fields];
+      if (!seenIds.has(section.id)) {
+        seenIds.add(section.id);
+        deduplicatedSections.push(section);
       } else {
-        // First occurrence of this part
-        const newSection = { ...section, fields: [...section.fields] };
-        seenParts.set(partKey, newSection);
-        deduplicatedSections.push(newSection);
+        // True duplicate found - merge fields
+        console.warn(`[SchemaFormState] Duplicate section ID found: ${section.id}`);
+        const existing = deduplicatedSections.find(s => s.id === section.id);
+        if (existing) {
+          existing.fields = [...existing.fields, ...section.fields];
+        }
       }
     }
 
-    // Sort by part number (extracted from ID), not by original order field
-    deduplicatedSections.sort((a, b) => {
-      const aNum = getPartNumber(a.id);
-      const bNum = getPartNumber(b.id);
-      return aNum - bNum;
-    });
+    // Sort by original order field
+    deduplicatedSections.sort((a, b) => a.order - b.order);
 
-    // Re-number sections to be sequential
-    deduplicatedSections.forEach((section, index) => {
-      section.order = index + 1;
-    });
-
-    // Deduplication complete - only log if changes were made
     if (schema.sections.length !== deduplicatedSections.length) {
-      console.log(`[SchemaFormState] Deduplicated ${schema.sections.length} sections -> ${deduplicatedSections.length} sections`);
+      console.log(`[SchemaFormState] Removed ${schema.sections.length - deduplicatedSections.length} duplicate sections`);
     }
 
     return {
@@ -516,34 +437,34 @@ export class SchemaFormStateManager {
   // ============================================================================
 
   /**
-   * Get current part number (for WebSocket section_number field)
-   * Maps parts[].order to section_number
+   * Get current section number (for WebSocket section_number field)
+   * Maps sections[].order to section_number
    */
-  static getCurrentPartNumber(state: SchemaFormState): number {
-    const part = state.schema.parts?.find(p => p.id === state.currentPartId);
-    return part?.order ?? 1;
+  static getCurrentSectionNumber(state: SchemaFormState): number {
+    const section = state.schema.sections.find(s => s.id === state.currentSectionId);
+    return section?.order ?? 1;
   }
 
   /**
-   * Switch to a different part by ID
+   * Switch to a different section by ID
    * Used for section switching via WebSocket
    *
-   * JIT Mode: Clears loadedFieldIds because Gemini context resets on part switch
+   * JIT Mode: Clears loadedFieldIds because Gemini context resets on section switch
    */
-  static switchToPart(state: SchemaFormState, partId: string): SchemaFormState {
-    // Only mark current part as completed if switching to a different part
-    const completedParts = partId !== state.currentPartId
-      ? new Set([...state.completedParts, state.currentPartId])
-      : state.completedParts;
+  static switchToSection(state: SchemaFormState, sectionId: string): SchemaFormState {
+    // Only mark current section as completed if switching to a different section
+    const completedSections = sectionId !== state.currentSectionId
+      ? new Set([...state.completedSections, state.currentSectionId])
+      : state.completedSections;
 
-    // JIT mode: Clear loaded field IDs when switching parts
+    // JIT mode: Clear loaded field IDs when switching sections
     // (Gemini context resets, so we need to send manifests again)
     const loadedFieldIds = state.jitModeEnabled ? new Set<string>() : state.loadedFieldIds;
 
     const newState = {
       ...state,
-      currentPartId: partId,
-      completedParts,
+      currentSectionId: sectionId,
+      completedSections,
       loadedFieldIds,
       lastUpdated: Date.now()
     };
@@ -552,12 +473,12 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Complete current part and add to completed set
+   * Complete current section and add to completed set
    */
-  static completePart(state: SchemaFormState, partId: string): SchemaFormState {
+  static completeSection(state: SchemaFormState, sectionId: string): SchemaFormState {
     const newState = {
       ...state,
-      completedParts: new Set([...state.completedParts, partId]),
+      completedSections: new Set([...state.completedSections, sectionId]),
       lastUpdated: Date.now()
     };
     this.save(newState);
@@ -565,36 +486,13 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Extract fields for a specific part (for WebSocket handshake)
-   * Returns schema with only fields from the specified part
+   * Extract fields for a specific section (for WebSocket handshake)
+   * Returns schema with only fields from the specified section
    */
-  static extractPartFields(schema: FormSchema, partId: string): FormSchema {
-    // Handle schemas without parts (legacy web forms) - treat sectionId as partId
-    if (!schema.parts || schema.parts.length === 0) {
-      const section = schema.sections.find(s => s.id === partId);
-      if (!section) {
-        console.warn(`[SchemaFormStateManager] Part ${partId} not found in schema`);
-        return {
-          ...schema,
-          fields: [],
-          sections: []
-        };
-      }
-
-      // Extract fields for this section
-      const sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
-
-      return {
-        ...schema,
-        fields: sectionFields,
-        sections: [section]
-      };
-    }
-
-    const part = schema.parts?.find(p => p.id === partId);
-    if (!part) {
-      console.warn(`[SchemaFormStateManager] Part ${partId} not found in schema`);
-      // Return schema with empty fields and sections
+  static extractSectionFields(schema: FormSchema, sectionId: string): FormSchema {
+    const section = schema.sections.find(s => s.id === sectionId);
+    if (!section) {
+      console.warn(`[SchemaFormStateManager] Section ${sectionId} not found in schema`);
       return {
         ...schema,
         fields: [],
@@ -602,51 +500,37 @@ export class SchemaFormStateManager {
       };
     }
 
-    // Find sections in this part
-    const partSections = schema.sections.filter(s => part.section_ids.includes(s.id));
-
-    // Collect all field IDs from these sections
-    const partFieldIds = new Set<string>();
-    partSections.forEach(section => {
-      section.fields.forEach(fieldId => partFieldIds.add(fieldId));
-    });
-
-    // Filter fields to only those in this part
-    const partFields = schema.fields.filter(f => partFieldIds.has(f.id));
+    // Extract fields for this section
+    const sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
 
     return {
       ...schema,
-      fields: partFields,
-      sections: partSections
+      fields: sectionFields,
+      sections: [section]
     };
   }
 
   /**
-   * Get spoken names from completed parts (for WebSocket previous_spoken_names)
-   * Returns array of spoken names from all completed parts
+   * Get spoken names from completed sections (for WebSocket previous_spoken_names)
+   * Returns array of spoken names from all completed sections
    */
   static getPreviousSpokenNames(state: SchemaFormState): string[] {
     const spokenNames: string[] = [];
 
-    for (const partId of state.completedParts) {
-      const part = state.schema.parts?.find(p => p.id === partId);
-      if (!part) continue;
+    for (const sectionId of state.completedSections) {
+      const section = state.schema.sections.find(s => s.id === sectionId);
+      if (!section) continue;
 
-      // Find sections in this part
-      const partSections = state.schema.sections.filter(s => part.section_ids.includes(s.id));
-
-      // Collect spoken names from all fields in these sections
-      partSections.forEach(section => {
-        section.fields.forEach(fieldId => {
-          const field = state.schema.fields.find(f => f.id === fieldId);
-          if (field?.spoken_name) {
-            spokenNames.push(field.spoken_name);
-            // Also include spoken aliases
-            if (field.spoken_aliases) {
-              spokenNames.push(...field.spoken_aliases);
-            }
+      // Collect spoken names from all fields in this section
+      section.fields.forEach(fieldId => {
+        const field = state.schema.fields.find(f => f.id === fieldId);
+        if (field?.spoken_name) {
+          spokenNames.push(field.spoken_name);
+          // Also include spoken aliases
+          if (field.spoken_aliases) {
+            spokenNames.push(...field.spoken_aliases);
           }
-        });
+        }
       });
     }
 
@@ -774,42 +658,22 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Get part label by order number
+   * Get section label by order number
    */
-  static getPartLabel(state: SchemaFormState, orderNumber: number): string {
-    const part = state.schema.parts?.find(p => p.order === orderNumber);
-    return part?.label || '';
+  static getSectionLabel(state: SchemaFormState, orderNumber: number): string {
+    const section = state.schema.sections.find(s => s.order === orderNumber);
+    return section?.label || '';
   }
 
   /**
-   * Find part ID by label (case-insensitive)
+   * Find section ID by label (case-insensitive)
    */
-  static findPartByLabel(state: SchemaFormState, label: string): string | null {
+  static findSectionByLabel(state: SchemaFormState, label: string): string | null {
     const lowerLabel = label.toLowerCase();
-    const part = state.schema.parts?.find(p =>
-      p.label.toLowerCase() === lowerLabel
+    const section = state.schema.sections.find(s =>
+      s.label.toLowerCase() === lowerLabel
     );
-    return part?.id || null;
-  }
-
-  /**
-   * Get current part from state
-   */
-  static getCurrentPart(state: SchemaFormState) {
-    return state.schema.parts?.find(p => p.id === state.currentPartId) || null;
-  }
-
-  /**
-   * Mark a part as completed
-   */
-  static markPartComplete(state: SchemaFormState, partId: string): SchemaFormState {
-    const newState = {
-      ...state,
-      completedParts: new Set([...state.completedParts, partId]),
-      lastUpdated: Date.now()
-    };
-    this.save(newState);
-    return newState;
+    return section?.id || null;
   }
 
   /**

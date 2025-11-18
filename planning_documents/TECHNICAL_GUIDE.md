@@ -12,11 +12,12 @@
 
 The Voice Form Filler is a specialized application designed to help non-English speakers complete complex USCIS immigration forms through voice interaction with Gemini AI. The system prioritizes accuracy over speed, processing one field at a time with mandatory confirmation workflows. It addresses unique challenges including broken conditional logic in USCIS PDFs and deployment in noisy nonprofit office environments.
 
-**Major Features (as of Nov 12, 2025)**:
-- ✅ Schema-driven forms with parts-based navigation (8 parts for I-90)
+**Major Features (as of Nov 18, 2025)**:
+- ✅ Schema-driven forms with section-based navigation (16 sections for I-90)
 - ✅ Hallucination reduction features (PTT mode, audio filters, single-field constraint)
 - ✅ Token reduction backend (94% reduction: 7,400→458 tokens, feature flag ready)
 - ✅ Shared audio stream architecture (eliminates race conditions)
+- ✅ Auto-scroll to fields when Gemini fills them (smooth scroll + highlight)
 - ⚠️ Legacy demo system deprecated but not removed (cleanup pending)
 
 ---
@@ -59,16 +60,17 @@ The application recently transitioned from a demo-based architecture to a schema
 **SchemaFormStateManager** (`frontend/src/schema-forms/state/schemaFormState.ts`)
 - Singleton state manager for all form operations
 - Handles field updates, validation, and persistence
-- Manages part/section navigation
-- Tracks completion status per part
+- Manages section-based navigation (e.g., section 1.1→1.2→1.3→2)
+- Tracks completion status per section
 - Stores data in sessionStorage for privacy
+- Deduplication uses exact ID matching (no pattern-based merging)
 
 **SchemaForm Component** (`frontend/src/schema-forms/components/SchemaForm.tsx`)
 - Main form rendering component
-- Handles 8-part USCIS form structure
-- Progress tracking and navigation
+- Handles section-based USCIS form structure (16 sections for I-90)
+- Progress tracking shows section count (e.g., "Section 3 of 16 • 25% complete")
 - Field rendering based on schema definitions
-- Fixed Nov 8: Progress bar calculation now correctly uses parts array
+- Navigation properly sequential: 1.1→1.2→1.3→2 (fixed Nov 18, 2025)
 
 **Field Components** (`frontend/src/schema-forms/components/fields/`)
 - TextField, TextAreaField, SelectField, RadioField, CheckboxField, DateField
@@ -142,13 +144,15 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 
 **Desktop Overlay** (`frontend/src/demo/VoiceOverlay.tsx`)
 - Push-to-Talk toggle (iOS-style switch)
-- Section dropdown for navigation
+- Section dropdown for navigation (shows all 16 sections for I-90)
+- Visual indicators: ✓ (completed), → (current), ○ (pending)
 - Field count display
 - Connection status indicator
 - Default: PTT mode enabled
 
 **Mobile Overlay** (`frontend/src/demo/VoiceOverlayMobile.tsx`)
 - Full-width PTT bar button at bottom
+- Section dropdown matching desktop functionality
 - Optimized for 8-inch tablets
 - Touch-friendly controls
 - Default: PTT mode enabled
@@ -158,21 +162,22 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 - Handshake protocol with backend
 - Tool call processing
 - State synchronization
-- Part-based navigation (Phase 4A)
+- Section-based navigation (16 sections for I-90)
 - Shared audio stream management
+- Auto-scroll to fields when Gemini updates them (smooth + highlight animation)
 
 ### State Management Architecture
 
 **Client-Side State Hierarchy**:
 ```
 SchemaFormState
-├── schema (form structure)
+├── schema (form structure with sections array)
 ├── fieldValues (user data with FieldValue wrappers)
-├── currentPartId (active part, e.g., "part_1")
-├── completedParts (Set of completed part IDs)
+├── currentSectionId (active section, e.g., "part_1_1" for section 1.1)
+├── completedSections (Set of completed section IDs)
 ├── validationErrors (field-level errors)
 ├── conditionalState (field visibility/requirements)
-└── loadedFieldIds (fields sent to Gemini - planned)
+└── loadedFieldIds (fields sent to Gemini - JIT mode)
 ```
 
 **Persistence Strategy**:
@@ -192,8 +197,9 @@ SchemaFormState
 - Prepares context for Gemini
 - Handles tool callbacks
 - Validates field updates
+- Section switching: Closes and restarts Gemini session with new section context
 - Current: Sends full section schema (~7,400 tokens)
-- Planned: Send field manifest + current field (~500 tokens)
+- Ready: Send field manifest + current field (~500 tokens with USE_JIT_SCHEMA=true)
 
 **ValidationHandler** (`backend/services/validation_handler.py`)
 - Field-level validation
@@ -489,6 +495,49 @@ process(inputs, outputs) {
 - User controls exactly when to speak
 - Critical for noisy office environments
 
+### Auto-Scroll Feature (Added Nov 18, 2025)
+
+**Implementation**: When Gemini fills a field, the UI automatically scrolls to bring that field into view with visual feedback.
+
+**Location**: `frontend/src/webFormConnection.ts` in `updateField()` method
+
+**Behavior**:
+```typescript
+// Only triggers when Gemini fills a field (confirmed: true)
+if (confirmed && typeof document !== 'undefined') {
+  setTimeout(() => {
+    const element = document.getElementById(fieldId);
+    if (element) {
+      // Smooth scroll to center the field
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+
+      // Add highlight animation (1.5s blue pulse)
+      element.classList.add('field-highlight');
+      setTimeout(() => {
+        element.classList.remove('field-highlight');
+      }, 1500);
+    }
+  }, 50);
+}
+```
+
+**Visual Feedback** (`frontend/src/schema-forms/styles/schema-form.css`):
+- 1.5-second blue pulse animation
+- Scales field slightly (1.02x) at peak
+- Blue border color during highlight
+- Works on text inputs, textareas, and select elements
+
+**Benefits**:
+- User sees which field Gemini just filled
+- No focus stealing (user can keep typing in another field)
+- No keyboard popup on mobile (doesn't call `.focus()`)
+- Works on both desktop and mobile
+- Smooth UX without disrupting user's workflow
+
 ---
 
 ## Conditional Logic System (In Development)
@@ -633,12 +682,14 @@ PROACTIVE_AUDIO = False  # Currently disabled
 
 ## Known Issues & Limitations
 
-### Resolved Issues (Nov 8, 2025)
+### Resolved Issues (Nov 18, 2025)
 - ✅ FieldValue wrapper display issues ([object Object])
 - ✅ Radio button state reset bug
-- ✅ Section navigation (only Part 1 accessible)
+- ✅ Section navigation skipping subsections (1.1→2 instead of 1.1→1.2→1.3→2)
 - ✅ Validation failures with FieldValue objects
 - ✅ Conditional field visibility
+- ✅ Voice overlay section dropdowns showing incorrect data
+- ✅ Aggressive section deduplication merging distinct sections
 
 ### Current Limitations
 - JIT mode requires `USE_JIT_SCHEMA=true` flag (disabled by default)

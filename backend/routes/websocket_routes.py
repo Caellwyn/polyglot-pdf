@@ -623,9 +623,10 @@ async def fill_form_from_schema(
 	current_values = handshake.get("current_values") or {}
 	fill_language = handshake.get("fill_language", "English")  # Default to English
 
-	# Phase 3: Extract section metadata
-	section_number = handshake.get("section_number")
-	section_label = handshake.get("section_label")
+	# Extract section metadata (schema-agnostic)
+	section_id = handshake.get("section_id")  # Section ID from schema (e.g., "part_1_2_addresses")
+	section_number = handshake.get("section_number")  # Section order number (1-indexed)
+	section_label = handshake.get("section_label")  # Display label
 	total_sections = handshake.get("total_sections")
 	previous_spoken_names = handshake.get("previous_spoken_names") or []
 
@@ -650,6 +651,7 @@ async def fill_form_from_schema(
 		field_count=len(schema.get("fields", [])),
 		has_prefilled=bool(current_values),
 		fill_language=fill_language,
+		section_id=section_id,
 		section_number=section_number,
 		total_sections=total_sections,
 	)
@@ -662,7 +664,7 @@ async def fill_form_from_schema(
 	print(f"{'='*80}")
 	print(f"Form Session ID: {form_session_id}")
 	print(f"Ephemeral ID: {ephemeral_id}")
-	print(f"Section: {section_number}/{total_sections} - {section_label}")
+	print(f"Section: {section_id} ({section_number}/{total_sections}) - {section_label}")
 	print(f"JIT Mode: {is_jit_mode}")
 	print(f"{'='*80}\n")
 

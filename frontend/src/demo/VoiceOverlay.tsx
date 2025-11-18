@@ -43,8 +43,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
-	const [currentPartId, setCurrentPartId] = useState<string>('')
-	const [completedParts, setCompletedParts] = useState<Set<string>>(new Set())
+	const [currentSectionId, setCurrentSectionId] = useState<string>('')
+	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
@@ -56,24 +56,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
 	const offsetRef = useRef({ x: 0, y: 0 })
-	
-	// Helper functions for part navigation
-	const getCurrentPartOrder = (): number => {
-		if (!schema.parts || !currentPartId) return 0
-		const part = schema.parts.find(p => p.id === currentPartId)
-		return part?.order ?? 0
+
+	// Helper functions for section navigation
+	const getCurrentSectionOrder = (): number => {
+		if (!schema.sections || !currentSectionId) return 0
+		const section = schema.sections.find(s => s.id === currentSectionId)
+		return section?.order ?? 0
 	}
 
-	const getCurrentPartLabel = (): string => {
-		if (!schema.parts || !currentPartId) return ''
-		const part = schema.parts.find(p => p.id === currentPartId)
-		return part?.label ?? ''
+	const getCurrentSectionLabel = (): string => {
+		if (!schema.sections || !currentSectionId) return ''
+		const section = schema.sections.find(s => s.id === currentSectionId)
+		return section?.label ?? ''
 	}
 
-	const getPartIdFromOrder = (order: number): string | undefined => {
-		if (!schema.parts) return undefined
-		const part = schema.parts.find(p => p.order === order)
-		return part?.id
+	const getSectionIdFromOrder = (order: number): string | undefined => {
+		if (!schema.sections) return undefined
+		const section = schema.sections.find(s => s.order === order)
+		return section?.id
 	}
 	
 	// FIX #1: Use shared stream from parent (created before React rendering)
@@ -713,12 +713,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [pushToTalkMode])
 
-// Initialize schema-based state and update part UI (only once on mount)
+// Initialize schema-based state and update section UI (only once on mount)
 useEffect(() => {
 	const state = SchemaFormStateManager.init(schema)
-	setCurrentPartId(state.currentPartId || schema.parts?.[0]?.id || '')
-	setCompletedParts(state.completedParts || new Set())
-	
+	setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
+	setCompletedSections(state.completedSections || new Set())
+
 	// Update field counter
 	const totalFields = schema.fields.length
 	const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
@@ -730,7 +730,7 @@ useEffect(() => {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []) // Only run once on mount, not when schema changes
 
-// Poll field count AND part state (updates as AI switches parts)
+// Poll field count AND section state (updates as AI switches sections)
 useEffect(() => {
 	const interval = setInterval(() => {
 		const state = SchemaFormStateManager.load()
@@ -742,28 +742,28 @@ useEffect(() => {
 				return actualValue !== null && actualValue !== undefined && actualValue !== ""
 			}).length
 			setSectionFieldCount({ filled: filledFields, total: totalFields })
-			
-			// Update part if changed (AI completed part and moved forward)
-			if (state.currentPartId && state.currentPartId !== currentPartId) {
-				setCurrentPartId(state.currentPartId)
+
+			// Update section if changed (AI completed section and moved forward)
+			if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
+				setCurrentSectionId(state.currentSectionId)
 			}
-			
-			// Update completed parts if changed
-			if (state.completedParts) {
-				const currentCompleted = new Set(Array.from(completedParts))
-				const newCompleted = new Set(Array.from(state.completedParts))
+
+			// Update completed sections if changed
+			if (state.completedSections) {
+				const currentCompleted = new Set(Array.from(completedSections))
+				const newCompleted = new Set(Array.from(state.completedSections))
 				
 				// Check if sets are different
-				if (currentCompleted.size !== newCompleted.size || 
-				    ![...currentCompleted].every(p => newCompleted.has(p))) {
-					setCompletedParts(newCompleted)
+				if (currentCompleted.size !== newCompleted.size ||
+				    ![...currentCompleted].every(s => newCompleted.has(s))) {
+					setCompletedSections(newCompleted)
 				}
 			}
 		}
 	}, 1000) // Update every second
-	
+
 	return () => clearInterval(interval)
-}, [currentPartId, completedParts])
+}, [currentSectionId, completedSections])
 
 	// Handle language selection change
 	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -970,7 +970,7 @@ const handleClearForm = () => {
 					onClick={() => setShowSectionDropdown(!showSectionDropdown)}
 				>
 					<span className="vff-section-label">
-						Part {getCurrentPartOrder()}: {getCurrentPartLabel()}
+						{getCurrentSectionLabel()}
 					</span>
 					<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
 				</div>
@@ -979,32 +979,32 @@ const handleClearForm = () => {
 				</div>
 				{showSectionDropdown && (
 					<div className="vff-section-dropdown">
-						{schema.parts?.map((part) => (
+						{schema.sections?.map((section) => (
 							<div
-								key={part.id}
-								className={`vff-section-item ${currentPartId === part.id ? 'active' : ''}`}
+								key={section.id}
+								className={`vff-section-item ${currentSectionId === section.id ? 'active' : ''}`}
 								onClick={async () => {
 									if (!connectionManager) return
 									
 									setShowSectionDropdown(false)
 									
-									// Don't switch if already on this part
-									if (part.id === currentPartId) {
+									// Don't switch if already on this section
+									if (section.id === currentSectionId) {
 										return
 									}
-									
+
 									try {
 										setError(null)
-										
+
 										// Update UI immediately for responsiveness
-										setCurrentPartId(part.id)
-										setStatus('Reconnecting to part ' + part.order)
-										
-										// Update field count for new part (from state, before reconnect)
+										setCurrentSectionId(section.id)
+										setStatus('Reconnecting to section ' + section.order)
+
+										// Update field count for new section (from state, before reconnect)
 										const state = SchemaFormStateManager.load()
 										if (state) {
-											// Switch part in state first
-											const updatedState = SchemaFormStateManager.switchToPart(state, part.id)
+											// Switch section in state first
+											const updatedState = SchemaFormStateManager.switchToSection(state, section.id)
 											const totalFields = schema.fields.length
 											const filledFields = Object.keys(updatedState.fieldValues).filter(fieldId => {
 												const fieldValue = updatedState.fieldValues[fieldId]
@@ -1015,19 +1015,19 @@ const handleClearForm = () => {
 										}
 
 										// Now do the actual connection switch (async, may take time)
-										await connectionManager.switchToPart(part.id)
+										await connectionManager.switchToSection(section.id)
 									} catch (err) {
-										console.error('[VoiceOverlay] Part switch error:', err)
-										setError(err instanceof Error ? err.message : 'Part switch failed')
+										console.error('[VoiceOverlay] Section switch error:', err)
+										setError(err instanceof Error ? err.message : 'Section switch failed')
 									}
 								}}
 							>
 								<span className="vff-section-status">
-									{completedParts.has(part.id) ? '✓' : 
-									 currentPartId === part.id ? '→' : '○'}
+									{completedSections.has(section.id) ? '✓' :
+									 currentSectionId === section.id ? '→' : '○'}
 								</span>
 								<span className="vff-section-text">
-									{part.order}. {part.label}
+									{section.label}
 								</span>
 							</div>
 						))}

@@ -1,6 +1,6 @@
 # Polyglot PDF Form System - Project Context & Guidelines
 
-**Last Updated**: November 8, 2025
+**Last Updated**: November 18, 2025
 **Purpose**: AI onboarding guide for understanding the project and development practices
 
 ---
@@ -156,17 +156,28 @@ The project is transitioning from a demo-based architecture to a schema-driven a
 
 ## Known Issues & Active Work
 
-### Critical Bugs (Blocking)
-1. **Bug 2: Radio Buttons Reset Form** ⚠️
+### Critical Bugs (All Resolved)
+1. **Bug 2: Radio Buttons Reset Form** ✅ (Resolved earlier)
    - Impact: Data loss on radio button interaction
-   - Status: Fix planned, 1-2 hours estimated
+   - Status: Fixed
 
-2. **Bug 3: Section Navigation Broken** 🔴
-   - Impact: Can only access 1/8 of form
-   - Status: Fix planned, 2-3 hours estimated
+2. **Bug 3: Section Navigation Skipping Subsections** ✅ (Resolved Nov 18, 2025)
+   - Impact: Navigation jumped from 1.1 to 2, skipping subsections
+   - Root cause: Aggressive deduplication pattern matching
+   - Fix: Conservative exact-ID matching
+   - Status: Fixed and verified
 
-### Recently Completed (November 11, 2025)
-1. **Token Reduction - Phase 4.1** ✅
+### Recently Completed (November 18, 2025)
+1. **Section-Based Navigation Refactor** ✅
+   - Converted entire system from parts-based to sections-based navigation
+   - Fixed navigation skipping: Now properly goes 1.1→1.2→1.3→2 (not 1.1→2)
+   - Fixed deduplication to use exact ID matching (removed aggressive pattern merging)
+   - Updated both desktop and mobile voice overlays with section dropdowns
+   - Progress bar now counts sections (16 for I-90) instead of parts
+   - Gemini sessions reset per section (not per part)
+   - Added auto-scroll feature when Gemini fills fields (smooth scroll + highlight animation)
+
+2. **Token Reduction - Phase 4.1** ✅ (November 11, 2025)
    - Goal: Reduce from 7,400 to <500 initial tokens
    - Achievement: **458 tokens (94% reduction)**
    - Strategy: JIT (just-in-time) field loading with lightweight manifests
@@ -174,12 +185,7 @@ The project is transitioning from a demo-based architecture to a schema-driven a
    - Next: Live Gemini API testing (Phase 4.2)
 
 ### In Progress
-1. **Voice Overlay Integration** (Phase 4A)
-   - Migrating from WebFormStateManager to SchemaFormStateManager
-   - 61 code changes identified across 3 files
-   - Status: Audit complete, implementation partially done
-
-2. **Hallucination Reduction**
+1. **Hallucination Reduction**
    - Multiple strategies: audio filters, PTT default, single-field updates
    - Branch created, partial implementation (noise gate done)
    - Status: Some features complete, others pending
@@ -342,4 +348,4 @@ We're building a tool that empowers people to complete forms accurately in their
 
 ---
 
-**Current Focus** (November 11, 2025): Token reduction Phase 4.1 complete with 94% reduction achieved. Next: Live Gemini API testing (Phase 4.2), then fix critical bugs (radio buttons, section navigation). Voice overlay integration and hallucination reduction features to follow.
+**Current Focus** (November 18, 2025): Section-based navigation refactor complete with all navigation bugs fixed. Token reduction Phase 4.1 verified at 94% reduction. Next: Live Gemini API testing (Phase 4.2), then hallucination reduction features. All critical bugs resolved.

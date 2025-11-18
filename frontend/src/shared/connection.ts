@@ -43,18 +43,12 @@ export interface ConnectionManager {
 	isPaused: () => boolean
 	changeFillLanguage: (language: string) => Promise<void>
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
-	// Part management (Phase 4A: parts replace sections)
-	startPart: (partId: string) => Promise<void>
-	switchToPart: (partId: string) => Promise<void>
-	completePart: () => Promise<void>
-	getCurrentPartId: () => string | undefined
-	getCompletedPartIds: () => Set<string>
-	// DEPRECATED: Section management (kept for backward compatibility during migration)
-	startSection: (sectionNumber: number) => Promise<void>
-	switchSection: (target: number | string) => Promise<void>
+	// Section management (schema-based navigation)
+	startSection: (sectionId: string) => Promise<void>
+	switchToSection: (sectionId: string) => Promise<void>
 	completeSection: () => Promise<void>
-	getCurrentSection: () => number | undefined
-	getCompletedSections: () => Set<number>
+	getCurrentSectionId: () => string | undefined
+	getCompletedSectionIds: () => Set<string>
 	// VAD-based barge-in callbacks
 	onVADSpeechStart: () => void
 	onVADSpeechEnd: () => void
@@ -594,19 +588,19 @@ export function createConnectionManager(
 			}
 		},
 
-		// Phase 3: Section management methods
-		async startSection(sectionNumber: number) {
+		// Section management methods (schema-based navigation)
+		async startSection(sectionId: string) {
 			if (!connection) {
 				throw new Error('Connection not initialized')
 			}
-			
+
 			// Stop recording if active
 			if (audioManager?.isRecording()) {
 				audioManager.stopRecording()
 			}
-			
-			await connection.startSection(sectionNumber, wsUrl)
-			
+
+			await connection.startSection(sectionId, wsUrl)
+
 			// Restart recording if we were recording before
 			if (!paused && audioManager) {
 				await audioManager.startRecording((data) => {
@@ -616,19 +610,19 @@ export function createConnectionManager(
 				})
 			}
 		},
-		
-		async switchSection(target: number | string) {
+
+		async switchToSection(sectionId: string) {
 			if (!connection) {
 				throw new Error('Connection not initialized')
 			}
-			
+
 			// Stop recording if active (buffer draining handled by WebFormConnection)
 			if (audioManager?.isRecording()) {
 				audioManager.stopRecording()
 			}
-			
-			await connection.switchSection(target, connectedUrl)
-			
+
+			await connection.switchToSection(sectionId, connectedUrl)
+
 			// Restart recording if we were recording before
 			if (!paused && audioManager) {
 				await audioManager.startRecording((data) => {
@@ -638,71 +632,26 @@ export function createConnectionManager(
 				})
 			}
 		},
-		
+
 		async completeSection() {
 			if (!connection) {
 				throw new Error('Connection not initialized')
 			}
-			
+
 		await connection.completeSection(wsUrl)
 	},
-	
-	getCurrentSection() {
-		return connection?.getCurrentSection()
-	},
-	
-	getCompletedSections() {
-		return connection?.getCompletedSections() || new Set()
-	},
-	
-	// Phase 4A: Part management methods (parts replace sections)
-	async startPart(partId: string) {
+
+	getCurrentSectionId(): string | undefined {
 		const state = SchemaFormStateManager.load()
-		if (!state) {
-			throw new Error('No form state found')
-		}
-		
-		// Find the part to get its order number
-		const part = state.schema.parts?.find(p => p.id === partId)
-		if (!part) {
-			throw new Error(`Part not found: ${partId}`)
-		}
-		
-		// Delegate to section-based method (uses order number)
-		await this.startSection(part.order)
+		return state?.currentSectionId
 	},
-	
-	async switchToPart(partId: string) {
+
+	getCompletedSectionIds(): Set<string> {
 		const state = SchemaFormStateManager.load()
-		if (!state) {
-			throw new Error('No form state found')
-		}
-		
-		// Find the part to get its order number
-		const part = state.schema.parts?.find(p => p.id === partId)
-		if (!part) {
-			throw new Error(`Part not found: ${partId}`)
-		}
-		
-		// Delegate to section-based method (uses order number)
-		await this.switchSection(part.order)
+		return state?.completedSections || new Set()
 	},
-	
-	async completePart() {
-		// Delegate to section-based method
-		await this.completeSection()
-	},
-	
-	getCurrentPartId(): string | undefined {
-		const state = SchemaFormStateManager.load()
-		return state?.currentPartId
-	},
-	
-	getCompletedPartIds(): Set<string> {
-		const state = SchemaFormStateManager.load()
-		return state?.completedParts || new Set()
-	},
-	
+
+
 	// VAD-based barge-in: Called when VAD detects speech start
 	// Sends activity_start signal before audio chunks begin streaming
 	onVADSpeechStart() {

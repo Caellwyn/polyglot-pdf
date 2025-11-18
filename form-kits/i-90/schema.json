@@ -67,7 +67,11 @@
       "id": "part_7",
       "label": "Part 7. Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
       "order": 7,
-      "section_ids": []
+      "section_ids": [
+        "part_7_1_preparer_s_name_and_business",
+        "part_7_2_preparer_s_address",
+        "part_7_3_preparer_s_signature_and_language"
+      ]
     },
     {
       "id": "part_8",
