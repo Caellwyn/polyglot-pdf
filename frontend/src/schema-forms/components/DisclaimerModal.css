@@ -1,0 +1,183 @@
+/**
+ * DisclaimerModal styles
+ *
+ * Non-dismissible modal for mandatory disclaimer acceptance
+ * Optimized for tablet use with large touch targets
+ */
+
+.disclaimer-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000; /* Ensure modal is on top of everything */
+  padding: 20px;
+}
+
+.disclaimer-modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: disclaimer-modal-slide-in 0.3s ease-out;
+}
+
+@keyframes disclaimer-modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.disclaimer-modal-title {
+  margin: 0 0 24px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+.disclaimer-modal-text {
+  margin-bottom: 32px;
+  line-height: 1.8;
+}
+
+.disclaimer-modal-text p {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.disclaimer-modal-text p:last-child {
+  margin-bottom: 0;
+}
+
+.disclaimer-modal-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.disclaimer-modal-button {
+  flex: 1;
+  min-width: 140px;
+  padding: 16px 24px;
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.disclaimer-modal-button:active {
+  transform: scale(0.98);
+}
+
+.disclaimer-modal-button--secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.disclaimer-modal-button--secondary:hover {
+  background-color: #4b5563;
+}
+
+.disclaimer-modal-button--secondary:focus {
+  outline: 3px solid #9ca3af;
+  outline-offset: 2px;
+}
+
+.disclaimer-modal-button--primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.disclaimer-modal-button--primary:hover {
+  background-color: #1d4ed8;
+}
+
+.disclaimer-modal-button--primary:focus {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .disclaimer-modal-content {
+    padding: 24px;
+    max-width: 100%;
+  }
+
+  .disclaimer-modal-title {
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+
+  .disclaimer-modal-text p {
+    font-size: 16px;
+  }
+
+  .disclaimer-modal-buttons {
+    flex-direction: column;
+  }
+
+  .disclaimer-modal-button {
+    width: 100%;
+    min-width: unset;
+  }
+}
+
+/* Tablet optimization */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .disclaimer-modal-content {
+    max-width: 500px;
+  }
+
+  .disclaimer-modal-button {
+    padding: 18px 28px;
+    font-size: 20px;
+  }
+}
+
+/* High contrast mode for accessibility */
+@media (prefers-contrast: high) {
+  .disclaimer-modal-overlay {
+    background-color: rgba(0, 0, 0, 0.9);
+  }
+
+  .disclaimer-modal-content {
+    border: 2px solid #000;
+  }
+
+  .disclaimer-modal-button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .disclaimer-modal-content {
+    animation: none;
+  }
+
+  .disclaimer-modal-button {
+    transition: none;
+  }
+
+  .disclaimer-modal-button:active {
+    transform: none;
+  }
+}

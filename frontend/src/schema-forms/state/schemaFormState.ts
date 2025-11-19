@@ -28,6 +28,11 @@ export interface SchemaFormState {
   // Phase 3: JIT (Just-In-Time) Schema Loading - Token Reduction
   loadedFieldIds: Set<string>; // Field IDs where Gemini has received full schema
   jitModeEnabled: boolean; // Whether JIT mode is active (from backend feature flag)
+
+  // Disclaimer acceptance tracking
+  disclaimerAccepted: boolean; // Whether user has accepted disclaimer
+  disclaimerAcceptedAt?: number; // Timestamp of disclaimer acceptance
+  selectedLanguage?: string; // User's selected spoken language
 }
 
 export class SchemaFormStateManager {
@@ -81,6 +86,10 @@ export class SchemaFormStateManager {
       // JIT schema loading (Phase 3: Token Reduction)
       loadedFieldIds: new Set(),
       jitModeEnabled: false, // Will be set during handshake based on backend flag
+      // Disclaimer acceptance
+      disclaimerAccepted: false,
+      disclaimerAcceptedAt: undefined,
+      selectedLanguage: undefined,
     };
 
     this.save(newState);
@@ -127,6 +136,17 @@ export class SchemaFormStateManager {
       // Initialize jitModeEnabled if missing (old state)
       if (parsed.jitModeEnabled === undefined) {
         parsed.jitModeEnabled = false;
+      }
+
+      // Initialize disclaimer fields if missing (migration for existing sessions)
+      if (parsed.disclaimerAccepted === undefined) {
+        parsed.disclaimerAccepted = false;
+      }
+      if (parsed.disclaimerAcceptedAt === undefined) {
+        parsed.disclaimerAcceptedAt = undefined;
+      }
+      if (parsed.selectedLanguage === undefined) {
+        parsed.selectedLanguage = undefined;
       }
 
       return parsed as SchemaFormState;

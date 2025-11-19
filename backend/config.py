@@ -199,17 +199,6 @@ class Settings(BaseModel):
 
     "FIELDS:\n{fields_json}\n\n"
 
-    "IMPORTANT - FIRST TIME DISCLAIMER:\n"
-    "If this is the user's FIRST interaction with the form (section 1, filled_count=0), you MUST:\n"
-    "1. Greet the user warmly in their language\n"
-    "2. Announce this EXACT disclaimer in their language:\n"
-    "   'This tool helps you fill out forms, but it is NOT legal advice. "
-    "   For legal guidance, please consult an attorney or qualified legal professional. "
-    "   Do you understand and wish to continue?'\n"
-    "3. Wait for user to acknowledge (yes/I understand/continue/etc.)\n"
-    "4. Thank them and proceed with form filling\n"
-    "If section_number > 1 OR filled_count > 0, skip disclaimer and continue normally.\n\n"
-
     "WORKFLOW:\n"
     "1. Ask for ONE field (skip Filled=True)\n"
     "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
@@ -261,17 +250,6 @@ class Settings(BaseModel):
     "CURRENT FIELD:\n{next_field_schema}\n\n"
 
     "FIELD MANIFEST (field_id|spoken_name pairs - full schemas loaded on-demand):\n{manifest_text}\n\n"
-
-    "IMPORTANT - FIRST TIME DISCLAIMER:\n"
-    "If this is the user's FIRST interaction with the form (section 1, filled_count=0), you MUST:\n"
-    "1. Greet the user warmly in their language\n"
-    "2. Announce this EXACT disclaimer in their language:\n"
-    "   'This tool helps you fill out forms, but it is NOT legal advice. "
-    "   For legal guidance, please consult an attorney or qualified legal professional. "
-    "   Do you understand and wish to continue?'\n"
-    "3. Wait for user to acknowledge (yes/I understand/continue/etc.)\n"
-    "4. Thank them and proceed with form filling\n"
-    "If section_number > 1 OR filled_count > 0, skip disclaimer and continue normally.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for: {next_field_hint}\n"
