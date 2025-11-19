@@ -49,7 +49,14 @@
   - [x] 6.3 One JSONL file per form_session_id for easy correlation
   - [x] 6.4 Implemented log_form_session_start() and log_form_session_end() functions
   - [x] 6.5 Unit tests passing in test_confirm_field_tool.py
-- [ ] **Add native language disclaimer** - Voice announcement at session start about tool vs legal advice (Est: 30 min)
+- [x] **Add native language disclaimer** - Voice announcement at session start about tool vs legal advice ✅ COMPLETE (Nov 18, 2025)
+  - Implemented in SYSTEM_INSTRUCTION and JIT_SYSTEM_INSTRUCTION templates
+  - Gemini announces disclaimer on first interaction (section 1, filled_count=0)
+  - Disclaimer text: "This tool helps you fill out forms, but it is NOT legal advice. For legal guidance, please consult an attorney or qualified legal professional. Do you understand and wish to continue?"
+  - Automatically translated to user's detected language
+  - Waits for user acknowledgment before proceeding
+  - Skipped on subsequent sections (section > 1 OR filled_count > 0)
+  - Backend tests passing (5/5)
 - [ ] **Implement print functionality** - Must work from tablet (Est: 2-4 hours)
 - [ ] **Thorough end-to-end testing** - Full form completion multiple times (Est: 4-6 hours)
 
