@@ -10,6 +10,7 @@ from .config import Settings, get_settings
 from .routes import websocket_routes
 from .routes.vad_config_routes import vad_config_websocket
 from .routes import pdf_fill_routes
+from .routes import disclaimer_routes
 from .utils.logging import configure_logging
 
 
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(websocket_routes.router)
 app.include_router(pdf_fill_routes.router)
+app.include_router(disclaimer_routes.router)
 
 
 @app.websocket("/ws/vad-config")
