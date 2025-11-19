@@ -348,15 +348,31 @@ async def _handle_fill_session(
 						await service.send_manual_field_update(field_id, field_name, value, next_field_hint)
 						# No acknowledgment needed - fire-and-forget notification
 					continue
+				elif mtype == "read_disclaimer":
+					# Frontend sends this when user first selects language
+					# Backend sends disclaimer message to Gemini using the proven initiating message pattern
+					spoken_language = obj.get("spoken_language")
+					if not spoken_language or not isinstance(spoken_language, str):
+						await websocket.send_json({"type": "error", "code": "invalid_language", "reason": "spoken_language_required"})
+					else:
+						try:
+							await service.send_disclaimer_message(spoken_language)
+							await websocket.send_json({"type": "disclaimer_read_initiated", "language": spoken_language})
+							_log.info("disclaimer_read_initiated", session_id=session_id, language=spoken_language)
+						except Exception as e:
+							_log.error("read_disclaimer_failed", session_id=session_id, error=str(e))
+							await websocket.send_json({"type": "error", "code": "disclaimer_read_failed", "message": str(e)})
+					continue
 				elif mtype == "completion_message":
-					# Frontend sends completion message when form is complete
-					# Backend forwards this to Gemini for graceful goodbye
+					# Frontend sends completion message for prompts that should trigger Gemini response
+					# (e.g., form completion goodbyes)
 					completion_text = obj.get("message")
 					if not completion_text or not isinstance(completion_text, str):
 						await websocket.send_json({"type": "error", "code": "invalid_completion", "reason": "message_required"})
 					else:
-						# Forward completion message to Gemini
-						await service.send_context_hint(completion_text)
+						# Use send_prompt which calls send_client_content() to trigger Gemini response
+						# This is different from send_context_hint which just adds context without expecting response
+						await service.send_prompt(completion_text)
 						await websocket.send_json({"type": "completion_ack"})
 					continue
 				elif mtype == "recovery_prompt":

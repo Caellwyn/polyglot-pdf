@@ -573,22 +573,22 @@ export class SchemaFormStateManager {
       return this.getJITHandshakePayload(state, fillLanguage);
     }
 
-    // Legacy mode: send full schema
-    const currentPart = state.schema.parts?.find(p => p.id === state.currentPartId);
+    // Legacy mode: send full schema for current section
+    const currentSection = state.schema.sections.find(s => s.id === state.currentSectionId);
 
-    // Extract schema for current part only
-    const partSchema = this.extractPartFields(state.schema, state.currentPartId);
+    // Extract schema for current section only
+    const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
 
-    // Get previous spoken names from completed parts
+    // Get previous spoken names from completed sections
     const previousSpokenNames = this.getPreviousSpokenNames(state);
 
     return {
       form_session_id: state.formSessionId, // Persistent ID for logging/metrics
-      schema: partSchema,
+      schema: sectionSchema,
       current_values: state.fieldValues, // Already in FieldValue format
-      section_number: currentPart?.order ?? 1, // Use order as section_number
-      section_label: currentPart?.label ?? '',
-      total_sections: state.schema.parts?.length ?? 1,
+      section_number: currentSection?.order ?? 1, // Use order as section_number
+      section_label: currentSection?.label ?? '',
+      total_sections: state.schema.sections.length,
       previous_spoken_names: previousSpokenNames,
       fill_language: fillLanguage
     };
@@ -599,16 +599,16 @@ export class SchemaFormStateManager {
    * Only sends field_id|spoken_name pairs, not full schemas
    */
   static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
-    const currentPart = state.schema.parts?.find(p => p.id === state.currentPartId);
+    const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
 
-    // Build manifest with current + previous parts
-    const manifest = buildHandshakeManifest(state.currentPartId, state.schema, state);
+    // Build manifest with current + previous sections
+    const manifest = buildHandshakeManifest(state.currentSectionId, state.schema, state);
 
-    // Get first field schema for current part
+    // Get first field schema for current section
     let firstFieldSchema = null;
-    const partSchema = this.extractPartFields(state.schema, state.currentPartId);
-    if (partSchema.fields.length > 0) {
-      const firstFieldId = partSchema.fields[0].id;
+    const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
+    if (sectionSchema.fields.length > 0) {
+      const firstFieldId = sectionSchema.fields[0].id;
       firstFieldSchema = getFieldSchema(firstFieldId, state.schema);
     }
 
@@ -619,9 +619,9 @@ export class SchemaFormStateManager {
       first_field_schema: firstFieldSchema,
       loaded_field_ids: Array.from(state.loadedFieldIds),
       current_values: state.fieldValues,
-      section_number: currentPart?.order ?? 1,
-      section_label: currentPart?.label ?? '',
-      total_sections: state.schema.parts?.length ?? 1,
+      section_number: currentSection?.order ?? 1,
+      section_label: currentSection?.label ?? '',
+      total_sections: state.schema.sections?.length ?? 1,
       fill_language: fillLanguage
     };
   }

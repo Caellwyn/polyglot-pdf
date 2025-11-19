@@ -2,8 +2,8 @@
 
 # Voice Form Filler - Technical Architecture Guide
 
-**Version**: 3.1
-**Last Updated**: November 18, 2025
+**Version**: 3.2
+**Last Updated**: November 19, 2025
 **Status**: Production-Ready Core with Active Development
 
 ---
@@ -12,13 +12,15 @@
 
 The Voice Form Filler is a specialized application designed to help non-English speakers complete complex USCIS immigration forms through voice interaction with Gemini AI. The system prioritizes accuracy over speed, processing one field at a time with mandatory confirmation workflows. It addresses unique challenges including broken conditional logic in USCIS PDFs and deployment in noisy nonprofit office environments.
 
-**Major Features (as of Nov 18, 2025)**:
+**Major Features (as of Nov 19, 2025)**:
 - ✅ Schema-driven forms with section-based navigation (16 sections for I-90)
 - ✅ Hallucination reduction features (PTT mode, audio filters, single-field constraint)
 - ✅ Token reduction backend (94% reduction: 7,400→458 tokens, feature flag ready)
 - ✅ Shared audio stream architecture (eliminates race conditions)
 - ✅ Auto-scroll to fields when Gemini fills them (smooth scroll + highlight)
 - ✅ **Confirmation system with legal audit trail** (completed Nov 18, 2025)
+- ✅ **Gated onboarding flow with language selection and disclaimer** (completed Nov 19, 2025)
+- ✅ **Reconnect button for idle timeouts** (completed Nov 19, 2025)
 - ⚠️ Legacy demo system deprecated but not removed (cleanup pending)
 
 ---
@@ -194,7 +196,8 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 - Section dropdown for navigation (shows all 16 sections for I-90)
 - Visual indicators: ✓ (completed), → (current), ○ (pending)
 - Field count display
-- Connection status indicator
+- Connection status indicator with idle timeout detection
+- Reconnect button for idle timeouts (no page refresh needed)
 - Default: PTT mode enabled
 
 **Mobile Overlay** (`frontend/src/demo/VoiceOverlayMobile.tsx`)
@@ -202,7 +205,24 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 - Section dropdown matching desktop functionality
 - Optimized for 8-inch tablets
 - Touch-friendly controls
+- Reconnect button for idle timeouts
 - Default: PTT mode enabled
+
+**Onboarding Flow** (Nov 19, 2025)
+- **Language Selection Modal**: Icon-based modal appears on first visit
+  - Uses native language names (e.g., "Español" not "Spanish")
+  - Minimal text - relies on 🌍 🗣️💬 icons for universal understanding
+  - Target audience: non-English speakers
+  - Component: `LanguageSelectionModal.tsx`
+- **Disclaimer Modal**: Appears after language selection
+  - Gemini reads disclaimer aloud in selected language
+  - "Listen Again" and "I Agree" buttons translated to user's language
+  - Non-dismissible until accepted
+  - Backend logging of acceptance with timestamp and language
+  - Component: `DisclaimerModal.tsx`
+- **Returning Users**: Skip both modals if disclaimer already accepted
+  - State persisted in sessionStorage
+  - Includes language preference and acceptance timestamp
 
 **Connection Manager** (`frontend/src/shared/connection.ts`)
 - WebSocket connection handling
@@ -247,6 +267,10 @@ SchemaFormState
 - Section switching: Closes and restarts Gemini session with new section context
 - Current: Sends full section schema (~7,400 tokens)
 - Ready: Send field manifest + current field (~500 tokens with USE_JIT_SCHEMA=true)
+- **Disclaimer Reading** (Nov 19, 2025):
+  - `send_disclaimer_message()` method triggers Gemini to read disclaimer aloud
+  - Uses command-style initiating message pattern (overrides "wait for user" behavior)
+  - Supports all 18 spoken languages
 
 **ValidationHandler** (`backend/services/validation_handler.py`)
 - Field-level validation
@@ -359,6 +383,27 @@ SchemaFormState
 Client → {"type": "tool_call", "tool": "update_form_fields", "args": {...}}
 Server → Validation → Gemini → Response
 Client ← {"type": "tool_response", "success": true, "message": "Updated"}
+```
+
+**Disclaimer Flow** (Nov 19, 2025):
+```
+Client → {"type": "read_disclaimer", "spoken_language": "Spanish"}
+Server → FormFillingService.send_disclaimer_message()
+Server → Gemini reads disclaimer aloud in Spanish
+Client ← {"type": "disclaimer_read_initiated", "language": "Spanish"}
+```
+
+**Disclaimer Acceptance Logging**:
+```
+Client → POST /api/disclaimer-acceptance
+  {
+    "form_session_id": "...",
+    "language": "Spanish",
+    "timestamp": 1700000000000,
+    "user_agent": "..."
+  }
+Server → Logs to backend/logs/disclaimer_acceptance.log
+Server ← {"status": "logged", "timestamp": "2025-11-19T..."}
 ```
 
 ---

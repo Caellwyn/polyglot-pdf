@@ -205,6 +205,36 @@ class FormFillingService:
         if self._audio_handler:
             await self._audio_handler.send_activity_end()
 
+    async def send_disclaimer_message(self, spoken_language: str):
+        """
+        Send disclaimer initiating message to Gemini.
+
+        This is triggered when user first selects a language. Gemini will read
+        the disclaimer aloud in the selected language.
+
+        Args:
+            spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
+        """
+        if self._live_ai is None:
+            # No-op when live AI is not configured (used in unit tests)
+            return
+
+        # Store spoken language for later use
+        self._spoken_language = spoken_language
+
+        # Format disclaimer message template
+        message = self._settings.DISCLAIMER_INITIATING_MESSAGE.format(
+            spoken_language=spoken_language
+        )
+
+        _log.info("send_disclaimer_message",
+                 session_id=self._session_id,
+                 spoken_language=spoken_language,
+                 message=message)
+
+        # Send to Gemini via session.send_client_content()
+        await self._live_ai.send_client_content(message)
+
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
         """
         Send initiating message to Gemini to prompt conversation in specific language.
@@ -270,6 +300,31 @@ class FormFillingService:
 
         # Send as context hint (same mechanism as completion_message)
         await self.send_context_hint(prompt)
+
+    async def send_prompt(self, prompt: str):
+        """
+        Send a prompt to Gemini that should trigger an audio response.
+
+        Uses send_client_content() to initiate Gemini's response, unlike
+        send_context_hint() which only adds context without expecting a response.
+
+        The prompt is reformatted as an imperative command to override the
+        "wait for user to speak first" behavior in the system instruction.
+
+        Used for disclaimer reading, manual prompts, etc.
+
+        Args:
+            prompt: Text prompt to send to Gemini (should contain the text to read and language)
+        """
+        if self._live_ai is None:
+            return
+
+        # Reformat as imperative command to trigger immediate response
+        # The system instruction says "detect language from first utterance"
+        # so we need to override that with a direct command
+        formatted_prompt = f"SYSTEM OVERRIDE: {prompt} Respond immediately in audio without waiting for user input."
+
+        await self._live_ai.send_client_content(formatted_prompt)
 
     async def finalize_gemini_session(self):
         """

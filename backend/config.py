@@ -296,6 +296,13 @@ class Settings(BaseModel):
 		"Speak {spoken_language}. Greet user warmly in this language, state active section, ask for {next_field_hint}"
 	)
 
+	# === DISCLAIMER INITIATING MESSAGE ===
+	# Used when user first selects language - reads disclaimer before starting form
+	# Placeholders: {spoken_language}
+	DISCLAIMER_INITIATING_MESSAGE: str = (
+		"Speak {spoken_language}. Read this disclaimer aloud: 'This tool helps you fill out your form, but it does not provide legal advice. Please review all information carefully before submitting. For complex cases, consult an immigration attorney.' After reading, tell user to click 'I Agree' button to continue."
+	)
+
 def get_settings() -> Settings:
 	"""Load and return validated settings.
 
