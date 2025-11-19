@@ -43,6 +43,7 @@ export interface ConnectionManager {
 	isPaused: () => boolean
 	changeFillLanguage: (language: string) => Promise<void>
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
+	readDisclaimer: (language: string) => void  // Read disclaimer in specified language
 	// Section management (schema-based navigation)
 	startSection: (sectionId: string) => Promise<void>
 	switchToSection: (sectionId: string) => Promise<void>
@@ -585,6 +586,19 @@ export function createConnectionManager(
 				console.log('[VFF Connection] ✓ Sent spoken language change to backend:', language)
 			} else {
 				console.warn('[VFF Connection] Cannot change spoken language - not connected')
+			}
+		},
+
+		readDisclaimer(language: string) {
+			// Send read_disclaimer message to backend
+			if (connection && connection.getStatus() === 'connected') {
+				connection.send({
+					type: 'read_disclaimer',
+					spoken_language: language
+				})
+				console.log('[VFF Connection] ✓ Sent read_disclaimer to backend:', language)
+			} else {
+				console.warn('[VFF Connection] Cannot read disclaimer - not connected')
 			}
 		},
 

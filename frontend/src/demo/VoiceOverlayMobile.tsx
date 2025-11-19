@@ -15,6 +15,7 @@ import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal } from '../schema-forms/components/DisclaimerModal'
+import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 
 interface VoiceOverlayMobileProps {
@@ -41,7 +42,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
+	const [showLanguageModal, setShowLanguageModal] = useState(true)  // Start with language selection modal
 	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
+	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
@@ -270,6 +273,31 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}, [sharedStatus])
 
+	// Check for returning users (on mount)
+	useEffect(() => {
+		const state = SchemaFormStateManager.load()
+		if (state?.disclaimerAccepted && state?.selectedLanguage) {
+			console.log('[VoiceOverlayMobile] Returning user - skipping language/disclaimer modals')
+			setShowLanguageModal(false)
+			setShowDisclaimerModal(false)
+			setSelectedLanguage(state.selectedLanguage)
+		}
+	}, [])
+
+	// Send disclaimer read request when connection is ready and disclaimer read is pending
+	useEffect(() => {
+		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+
+		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
+			console.log('[VoiceOverlayMobile] ✅ Connection ready - requesting disclaimer read')
+
+			// Clear the flag IMMEDIATELY to prevent double-firing
+			setPendingDisclaimerRead(false)
+
+			// Send read_disclaimer message to backend using the proven language change pattern
+			connectionManager.readDisclaimer(selectedLanguage)
+		}
+	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
 	// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
 	// This replaces 3 separate code paths with one consolidated control flow
@@ -302,6 +330,31 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 
+	// Handle initial language selection from modal (first-time users)
+	const handleInitialLanguageSelect = async (language: string) => {
+		console.log('[VoiceOverlayMobile] Initial language selected from modal:', language)
+		setSelectedLanguage(language)
+		setShowLanguageModal(false)
+
+		// Set pending flag so disclaimer will be read when connection is ready
+		setPendingDisclaimerRead(true)
+
+		// Start connection
+		try {
+			await handleConnect()
+
+			// Show disclaimer modal after connection starts
+			console.log('[VoiceOverlayMobile] Connection initiated - showing disclaimer modal')
+			setShowDisclaimerModal(true)
+
+			// The useEffect watching status will send the disclaimer prompt when ready
+		} catch (err) {
+			console.error('[VoiceOverlayMobile] Failed to connect after language selection:', err)
+			setError(err instanceof Error ? err.message : 'Connection failed')
+			setPendingDisclaimerRead(false) // Clear flag on error
+		}
+	}
+
 	// Handle language selection change
 	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
 		const newLanguage = event.target.value
@@ -332,18 +385,33 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			return
 		}
 
-		// First time - show disclaimer modal
-		console.log('[VoiceOverlayMobile] First language selection - showing disclaimer modal')
-		setShowDisclaimerModal(true)
+		// First time - connect to Gemini, THEN show disclaimer modal
+		console.log('[VoiceOverlayMobile] First language selection - connecting to Gemini...')
+		try {
+			// Set pending flag so disclaimer will be read when connection is ready
+			setPendingDisclaimerRead(true)
+
+			// Start connection
+			await handleConnect()
+
+			// Show disclaimer modal
+			console.log('[VoiceOverlayMobile] Connection initiated - showing disclaimer modal')
+			setShowDisclaimerModal(true)
+
+			// The useEffect watching status will send the disclaimer prompt when ready
+		} catch (err) {
+			console.error('[VoiceOverlayMobile] Failed to connect after language selection:', err)
+			setError(err instanceof Error ? err.message : 'Connection failed')
+			setPendingDisclaimerRead(false) // Clear flag on error
+		}
 	}
 
 	const handleDisclaimerListenAgain = () => {
 		console.log('[VoiceOverlayMobile] User requested to listen again')
 
 		if (connectionManager && selectedLanguage) {
-			const disclaimerText = "This tool helps you fill out your form, but it does not provide legal advice. Please review all information carefully before submitting. For complex cases, consult an immigration attorney."
-			const prompt = `Please read this disclaimer aloud in ${selectedLanguage}: "${disclaimerText}"`
-			connectionManager.sendPrompt(prompt)
+			// Send read_disclaimer message using the same proven pattern
+			connectionManager.readDisclaimer(selectedLanguage)
 		}
 	}
 
@@ -388,22 +456,19 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Don't block user - logging failure is non-fatal
 		}
 
-		// Start connection to backend + Gemini
-		try {
-			await handleConnect()
+		// Connection already established in handleLanguageChange
+		// Now prompt Gemini to start asking for fields
+		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - prompting Gemini to start form filling')
 
-			// Once connected, have Gemini read the disclaimer
-			if (connectionManager && selectedLanguage) {
-				const disclaimerText = "This tool helps you fill out your form, but it does not provide legal advice. Please review all information carefully before submitting. For complex cases, consult an immigration attorney."
-				const prompt = `Please read this disclaimer aloud in ${selectedLanguage}: "${disclaimerText}". After reading, ask the user if they understand and are ready to begin filling out the form.`
+		if (connectionManager && selectedLanguage) {
+			// Get the first field to ask for
+			const nextField = computeNextField(state || SchemaFormStateManager.load())
+			const nextFieldHint = nextField
+				? formatNextFieldHint(nextField)
+				: 'all fields are complete'
 
-				setTimeout(() => {
-					connectionManager.sendPrompt(prompt)
-				}, 1000)
-			}
-		} catch (err) {
-			console.error('[VoiceOverlayMobile] Failed to connect after disclaimer acceptance:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			// Send initiating message to Gemini (same as language change)
+			connectionManager.changeSpokenLanguage(selectedLanguage, nextFieldHint)
 		}
 	}
 
@@ -695,9 +760,15 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 	return (
 		<>
-			
+			{/* Language Selection Modal - First-time users must select language */}
+			{showLanguageModal && (
+				<LanguageSelectionModal
+					onLanguageSelect={handleInitialLanguageSelect}
+				/>
+			)}
+
 			{/* Disclaimer Modal - Show on first language selection */}
-			<DisclaimerModal 
+			<DisclaimerModal
 				isOpen={showDisclaimerModal}
 				selectedLanguage={selectedLanguage}
 				onListenAgain={handleDisclaimerListenAgain}
@@ -736,28 +807,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 							</span>
 						</div>
 
-						{/* Language Selection - Always visible for accessibility */}
-						{status !== 'disconnected' && (
-							<div className="vff-language-selector-mobile">
-								<label htmlFor="vff-language-select-mobile" className="vff-language-label-mobile">
-									🗣️💬 Language / Idioma / Langue
-								</label>
-								<select
-									id="vff-language-select-mobile"
-									className="vff-language-select-mobile"
-									value={selectedLanguage}
-									onChange={handleLanguageChange}
-									disabled={false}
-								>
-									<option value="">Select language...</option>
-									{SPOKEN_LANGUAGES.map((lang) => (
-										<option key={lang.name} value={lang.name}>
-											{lang.nativeName}
-										</option>
-									))}
-								</select>
-							</div>
-						)}
 
 					{/* Push-to-Talk Toggle */}
 					<div className="vff-ptt-toggle-container-mobile">
@@ -789,20 +838,20 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</div>
 					)}
 
-					{/* Action Buttons */}
-					{!isConnected && !isPausedState ? (
-						<button className="vff-action-btn vff-connect-btn" onClick={handleConnect}>
-							{status === 'idle_timeout' ? '🗣️ Reconnect' : '🗣️ Connect'}
+					{/* Action Buttons - Resume/Pause/Reconnect */}
+					{status === 'idle_timeout' ? (
+						<button className="vff-action-btn vff-reconnect-btn" onClick={handleConnect}>
+							🔄 Reconnect
 						</button>
 					) : isPausedState ? (
 						<button className="vff-action-btn vff-resume-btn" onClick={handleConnect}>
 							▶️ Resume
 						</button>
-					) : (
+					) : isConnected ? (
 						<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
 							⏸️ Pause
 						</button>
-					)}
+					) : null}
 
 					{/* Clear Form Button */}
 					<button className="vff-action-btn vff-clear-btn" onClick={handleClearForm}>
@@ -1130,10 +1179,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					-webkit-touch-callout: none;
 				}
 
-				/* Connect/Pause/Resume button - row 2, columns 4-6 (50% width), 50% taller */
+				/* Connect/Pause/Resume/Reconnect button - row 2, columns 4-6 (50% width), 50% taller */
 				.vff-connect-btn,
 				.vff-pause-btn,
-				.vff-resume-btn {
+				.vff-resume-btn,
+				.vff-reconnect-btn {
 					grid-column: 4 / 7;
 					grid-row: 2;
 					padding: 15px;
@@ -1180,6 +1230,15 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				}
 
 				.vff-resume-btn:active {
+					transform: scale(0.98);
+				}
+
+				.vff-reconnect-btn {
+					background: #3b82f6;
+					color: white;
+				}
+
+				.vff-reconnect-btn:active {
 					transform: scale(0.98);
 				}
 

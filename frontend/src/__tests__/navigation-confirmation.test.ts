@@ -12,12 +12,17 @@ import { computeNextField } from '../navigation';
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from '../schema-forms/types/schema';
 
+// Counter for unique form numbers in tests
+let testFormCounter = 0;
+
 // Helper to create minimal schema
 function createTestSchema(fields: Partial<FormField>[]): FormSchema {
+  testFormCounter++;
   return {
     source: 'web',
     form_metadata: {
       title: 'Test Form',
+      form_number: `TEST-${testFormCounter}`, // Unique form number for each test
       version: '1.0.0',
       language: 'en',
     },

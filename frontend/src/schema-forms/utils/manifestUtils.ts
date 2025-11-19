@@ -38,47 +38,37 @@ export interface HandshakeManifest {
 }
 
 /**
- * Generate manifest for a single part
+ * Generate manifest for a single section
  *
- * Extracts all fields from sections within the part and creates
+ * Extracts all fields from a section and creates
  * a lightweight manifest with only field_id and spoken_name.
  *
- * @param part - The part to generate manifest for
+ * @param section - The section to generate manifest for
  * @param schema - Full form schema
  * @returns Part manifest with minimal field info
  */
 export function generatePartManifest(
-  part: FormPart,
+  section: FormSection,
   schema: FormSchema
 ): PartManifest {
   const fields: FieldManifestEntry[] = [];
 
-  // Get all sections for this part
-  const partSections = schema.sections.filter(section =>
-    part.section_ids.includes(section.id)
-  );
+  // Extract fields from the section
+  for (const fieldId of section.fields) {
+    // Find the field definition in schema
+    const field = schema.fields.find(f => f.id === fieldId);
 
-  // Sort sections by order to maintain field sequence
-  const sortedSections = [...partSections].sort((a, b) => a.order - b.order);
-
-  // Extract fields from each section in order
-  for (const section of sortedSections) {
-    for (const fieldId of section.fields) {
-      // Find the field definition in schema
-      const field = schema.fields.find(f => f.id === fieldId);
-
-      if (field) {
-        fields.push({
-          field_id: field.id,
-          spoken_name: field.spoken_name || field.name || field.id
-        });
-      }
+    if (field) {
+      fields.push({
+        field_id: field.id,
+        spoken_name: field.spoken_name || field.name || field.id
+      });
     }
   }
 
   return {
-    part_id: part.id,
-    part_label: part.label,
+    part_id: section.id,
+    part_label: section.label,
     fields
   };
 }
@@ -103,46 +93,46 @@ export function shouldIncludeSchema(
 /**
  * Build complete manifest for handshake
  *
- * Creates a manifest for the current part plus manifests for all
- * previously completed parts (for cross-part field lookups).
+ * Creates a manifest for the current section plus manifests for all
+ * previously completed sections (for cross-section field lookups).
  *
- * @param currentPartId - ID of the current part
+ * @param currentSectionId - ID of the current section
  * @param schema - Full form schema
  * @param state - Current form state
  * @returns Complete handshake manifest
  */
 export function buildHandshakeManifest(
-  currentPartId: string,
+  currentSectionId: string,
   schema: FormSchema,
   state: SchemaFormState
 ): HandshakeManifest {
-  // Find current part
-  const currentPart = schema.parts.find(p => p.id === currentPartId);
-  if (!currentPart) {
-    throw new Error(`Part ${currentPartId} not found in schema`);
+  // Find current section
+  const currentSection = schema.sections.find(s => s.id === currentSectionId);
+  if (!currentSection) {
+    throw new Error(`Part ${currentSectionId} not found in schema`);
   }
 
-  // Generate manifest for current part
-  const current_part = generatePartManifest(currentPart, schema);
+  // Generate manifest for current section
+  const current_part = generatePartManifest(currentSection, schema);
 
-  // Generate manifests for all completed parts (for cross-part queries)
+  // Generate manifests for all completed sections (for cross-section queries)
   const previous_parts: PartManifest[] = [];
 
-  for (const partId of state.completedParts) {
-    const part = schema.parts.find(p => p.id === partId);
-    if (part) {
-      previous_parts.push(generatePartManifest(part, schema));
+  for (const sectionId of state.completedSections) {
+    const section = schema.sections.find(s => s.id === sectionId);
+    if (section) {
+      previous_parts.push(generatePartManifest(section, schema));
     }
   }
 
   return {
     current_part,
     previous_parts,
-    // Include parts metadata for section navigation
-    parts: schema.parts.map(p => ({
-      id: p.id,
-      order: p.order,
-      label: p.label
+    // Include sections metadata for section navigation
+    parts: schema.sections.map(s => ({
+      id: s.id,
+      order: s.order,
+      label: s.label
     }))
   };
 }

@@ -24,6 +24,7 @@ import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { DisclaimerModal } from '../schema-forms/components/DisclaimerModal'
+import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
@@ -51,7 +52,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
 	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
+	const [showLanguageModal, setShowLanguageModal] = useState(true)  // Show language selection modal on mount
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)  // Track if disclaimer modal is showing
+	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
 	const offsetRef = useRef({ x: 0, y: 0 })
@@ -305,6 +308,32 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			setStatus(sharedStatus)
 		}
 	}, [sharedStatus])
+
+	// Check if user has already accepted disclaimer (returning user)
+	useEffect(() => {
+		const state = SchemaFormStateManager.load()
+		if (state?.disclaimerAccepted && state?.selectedLanguage) {
+			console.log('[VoiceOverlay] Returning user - skipping language/disclaimer modals')
+			setShowLanguageModal(false)
+			setShowDisclaimerModal(false)
+			setSelectedLanguage(state.selectedLanguage)
+		}
+	}, [])
+
+	// Send disclaimer read request when connection is ready and disclaimer read is pending
+	useEffect(() => {
+		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+
+		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
+			console.log('[VoiceOverlay] ✅ Connection ready - requesting disclaimer read')
+
+			// Clear the flag IMMEDIATELY to prevent double-firing
+			setPendingDisclaimerRead(false)
+
+			// Send read_disclaimer message to backend using the proven language change pattern
+			connectionManager.readDisclaimer(selectedLanguage)
+		}
+	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
 	// FIX #2: SINGLE SOURCE OF TRUTH for VAD state management
 	// This replaces 3 separate code paths with one consolidated control flow
@@ -723,7 +752,34 @@ useEffect(() => {
 	return () => clearInterval(interval)
 }, [currentSectionId, completedSections])
 
-	// Handle language selection change
+	// Handle initial language selection from modal
+	const handleInitialLanguageSelect = async (language: string) => {
+		console.log('[VoiceOverlay] Initial language selected from modal:', language)
+		setSelectedLanguage(language)
+		setShowLanguageModal(false)
+
+		// First time - connect to Gemini, THEN show disclaimer modal
+		console.log('[VoiceOverlay] First language selection - connecting to Gemini...')
+		try {
+			// Set pending flag so disclaimer will be read when connection is ready
+			setPendingDisclaimerRead(true)
+
+			// Start connection
+			await handleConnect()
+
+			// Show disclaimer modal
+			console.log('[VoiceOverlay] Connection initiated - showing disclaimer modal')
+			setShowDisclaimerModal(true)
+
+			// The useEffect watching status will send the disclaimer prompt when ready
+		} catch (err) {
+			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
+			setError(err instanceof Error ? err.message : 'Connection failed')
+			setPendingDisclaimerRead(false) // Clear flag on error
+		}
+	}
+
+	// Handle language selection change (from dropdown - for changing language later)
 	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
 		const newLanguage = event.target.value
 
@@ -756,9 +812,25 @@ useEffect(() => {
 			return
 		}
 
-		// First time - show disclaimer modal
-		console.log('[VoiceOverlay] First language selection - showing disclaimer modal')
-		setShowDisclaimerModal(true)
+		// First time - connect to Gemini, THEN show disclaimer modal
+		console.log('[VoiceOverlay] First language selection - connecting to Gemini...')
+		try {
+			// Set pending flag so disclaimer will be read when connection is ready
+			setPendingDisclaimerRead(true)
+
+			// Start connection
+			await handleConnect()
+
+			// Show disclaimer modal
+			console.log('[VoiceOverlay] Connection initiated - showing disclaimer modal')
+			setShowDisclaimerModal(true)
+
+			// The useEffect watching status will send the disclaimer prompt when ready
+		} catch (err) {
+			console.error('[VoiceOverlay] Failed to connect after language selection:', err)
+			setError(err instanceof Error ? err.message : 'Connection failed')
+			setPendingDisclaimerRead(false) // Clear flag on error
+		}
 	}
 
 	// Handle "Listen Again" button in disclaimer modal
@@ -767,11 +839,8 @@ useEffect(() => {
 
 		console.log('[VoiceOverlay] User requested disclaimer re-read')
 
-		// Send prompt to Gemini to read disclaimer in selected language
-		const disclaimerText = "This tool helps you fill out your form, but it does not provide legal advice. Please review all information carefully before submitting. For complex cases, consult an immigration attorney."
-		const prompt = `Please read this disclaimer aloud in ${selectedLanguage}: "${disclaimerText}". After reading, say "Please click the 'I Agree' button to continue."`
-
-		connectionManager.sendPrompt(prompt)
+		// Send read_disclaimer message using the same proven pattern
+		connectionManager.readDisclaimer(selectedLanguage)
 	}
 
 	// Handle "I Agree" button in disclaimer modal
@@ -817,23 +886,19 @@ useEffect(() => {
 			// Don't block user - logging failure is non-fatal
 		}
 
-		// Start connection to backend + Gemini
-		try {
-			await handleConnect()
+		// Connection already established in handleLanguageChange
+		// Now prompt Gemini to start asking for fields
+		console.log('[VoiceOverlay] ✅ Disclaimer accepted - prompting Gemini to start form filling')
 
-			// Once connected, have Gemini read the disclaimer
-			if (connectionManager && selectedLanguage) {
-				const disclaimerText = "This tool helps you fill out your form, but it does not provide legal advice. Please review all information carefully before submitting. For complex cases, consult an immigration attorney."
-				const prompt = `Please read this disclaimer aloud in ${selectedLanguage}: "${disclaimerText}". After reading, ask the user if they understand and are ready to begin filling out the form.`
+		if (connectionManager && selectedLanguage) {
+			// Get the first field to ask for
+			const nextField = computeNextField(state || SchemaFormStateManager.load())
+			const nextFieldHint = nextField
+				? formatNextFieldHint(nextField)
+				: 'all fields are complete'
 
-				// Wait a bit for connection to stabilize
-				setTimeout(() => {
-					connectionManager.sendPrompt(prompt)
-				}, 1000)
-			}
-		} catch (err) {
-			console.error('[VoiceOverlay] Failed to connect after disclaimer acceptance:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
+			// Send initiating message to Gemini (same as language change)
+			connectionManager.changeSpokenLanguage(selectedLanguage, nextFieldHint)
 		}
 	}
 
@@ -968,28 +1033,6 @@ const handleClearForm = () => {
 					)}
 				</div>
 
-				{/* Language Selection - Available immediately (triggers connection + disclaimer) */}
-				{status !== 'disconnected' && (
-					<div className="vff-language-selector">
-						<label htmlFor="vff-language-select" className="vff-language-label">
-							🗣️💬 Language / Idioma / Langue
-						</label>
-						<select
-							id="vff-language-select"
-							className="vff-language-select"
-							value={selectedLanguage}
-							onChange={handleLanguageChange}
-							disabled={false}
-						>
-							<option value="">Select language...</option>
-							{SPOKEN_LANGUAGES.map((lang) => (
-								<option key={lang.name} value={lang.name}>
-									{lang.nativeName}
-								</option>
-							))}
-						</select>
-					</div>
-				)}
 
 				{/* Section Navigation */}
 			<div className="vff-section-nav">
@@ -1101,12 +1144,13 @@ const handleClearForm = () => {
 
 				{/* Controls */}
 				<div className="vff-controls">
-					{!isConnected && !isPausedState ? (
+					{/* Connection is automatic after language selection - no connect button needed */}
+					{status === 'idle_timeout' ? (
 						<button
-							className="vff-button vff-connect"
+							className="vff-button vff-reconnect"
 							onClick={handleConnect}
 						>
-							{status === 'idle_timeout' ? '🗣️ Reconnect' : '🗣️ Connect'}
+							🔄 Reconnect
 						</button>
 					) : isPausedState ? (
 						<button
@@ -1115,14 +1159,14 @@ const handleClearForm = () => {
 						>
 							▶️ Resume
 						</button>
-					) : (
+					) : isConnected ? (
 						<button
 							className="vff-button vff-pause"
 							onClick={handleDisconnect}
 						>
 							⏸️ Pause
 						</button>
-					)}
+					) : null}
 					<button className="vff-button vff-clear-form" onClick={handleClearForm}>
 						🗑️ Clear Form
 					</button>
@@ -1704,7 +1748,14 @@ const handleClearForm = () => {
 			`}</style>
 		</div>
 
-		{/* Disclaimer Modal - shown when user first selects language */}
+		{/* Language Selection Modal - shown first to force language selection */}
+		{showLanguageModal && (
+			<LanguageSelectionModal
+				onLanguageSelect={handleInitialLanguageSelect}
+			/>
+		)}
+
+		{/* Disclaimer Modal - shown after language selection */}
 		<DisclaimerModal
 			isOpen={showDisclaimerModal}
 			selectedLanguage={selectedLanguage}
