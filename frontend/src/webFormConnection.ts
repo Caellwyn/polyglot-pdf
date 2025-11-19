@@ -316,7 +316,8 @@ export class WebFormConnection {
       );
       
       if (field) {
-        this.updateField(field.id, value as any, { confirmed: true, emit: false });
+        // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
+        this.updateField(field.id, value as any, { confirmed: false, emit: false });
         updatedFields.push({ fieldId: field.id, value });
       } else {
         // Field not found in schema - ignore
@@ -370,7 +371,8 @@ export class WebFormConnection {
         continue;
       }
 
-      this.updateField(field.id, value as any, { confirmed: isApplied, emit: false });
+      // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
+      this.updateField(field.id, value as any, { confirmed: false, emit: false });
       updatedFields.push({ fieldId: field.id, value });
     }
 
@@ -397,7 +399,7 @@ export class WebFormConnection {
           continue;
         }
 
-        // Validate field before updating (only for AI-confirmed updates)
+        // Validate field before updating (only for AI-applied updates)
         if (isApplied) {
           const validationError = validateField(field, value);
           if (validationError) {
@@ -414,7 +416,8 @@ export class WebFormConnection {
           }
         }
 
-        this.updateField(field.id, value as any, { confirmed: isApplied, emit: false });
+        // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
+        this.updateField(field.id, value as any, { confirmed: false, emit: false });
         updatedFields.push({ fieldId: field.id, value });
       }
     }
@@ -877,12 +880,7 @@ export class WebFormConnection {
       confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
     );
 
-    // Acknowledge confirmation to backend (optional, for logging/debugging)
-    this.send({
-      type: "field_confirmed",
-      field_id: field_id,
-      success: true
-    });
+    // Note: No acknowledgment needed - backend handles confirmation logging internally
   }
 
   /**
