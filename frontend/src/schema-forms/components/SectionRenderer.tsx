@@ -34,6 +34,8 @@ export function SectionRenderer({
       <div className="section__fields">
         {fields.map((field) => {
           const fieldValue = fieldValues[field.id];
+          // Extract confirmation status from FieldValue object
+          const confirmed = fieldValue?.confirmed === true;
           return (
             <FieldRenderer
               key={field.id}
@@ -44,6 +46,7 @@ export function SectionRenderer({
               error={validationErrors[field.id] || null}
               disabled={disabled}
               allFieldValues={fieldValues}
+              confirmed={confirmed}
             />
           );
         })}

@@ -336,10 +336,12 @@ export interface FormSession {
 
 /**
  * Field value wrapper for WebSocket compatibility
- * Used to track AI-filled vs user-filled fields
+ * Used to track AI-filled vs user-filled fields and confirmation status
  */
 export interface FieldValue {
   value: string | boolean | null;
-  confirmed?: boolean;  // Set to true when AI fills the field
+  confirmed?: boolean;  // User has confirmed this field value (explicit or implicit)
+  confirmedAt?: string;  // ISO timestamp when field was confirmed
+  confirmationMethod?: 'ai_voice' | 'manual_edit';  // How the field was confirmed
   lastModified?: number;  // Timestamp for conflict resolution
 }

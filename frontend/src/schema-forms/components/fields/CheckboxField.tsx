@@ -12,6 +12,7 @@ export interface CheckboxFieldProps {
   onBlur?: () => void;
   error?: string | null;
   disabled?: boolean;
+  confirmed?: boolean; // AI voice confirmation status
 }
 
 export function CheckboxField({
@@ -21,6 +22,7 @@ export function CheckboxField({
   onBlur,
   error,
   disabled = false,
+  confirmed = false,
 }: CheckboxFieldProps) {
   // Single checkbox (no options)
   if (!field.options) {
@@ -34,7 +36,7 @@ export function CheckboxField({
     };
 
     return (
-      <div className="form-field">
+      <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
         <label className="form-field__checkbox-label">
           <input
             type="checkbox"
@@ -48,6 +50,11 @@ export function CheckboxField({
           <span className="form-field__checkbox-text">
             {field.name}
             {field.validation?.required && <span className="form-field__required">*</span>}
+            {confirmed && (
+              <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+                ✓
+              </span>
+            )}
           </span>
         </label>
 
@@ -80,11 +87,16 @@ export function CheckboxField({
   };
 
   return (
-    <div className="form-field">
+    <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
       <fieldset className="form-field__fieldset">
         <legend className="form-field__label">
           {field.name}
           {field.validation?.required && <span className="form-field__required">*</span>}
+          {confirmed && (
+            <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+              ✓
+            </span>
+          )}
         </legend>
 
         {field.help?.inline && (

@@ -3,15 +3,52 @@
 ## Critical Path Items (Must Complete Before Pilot)
 
 ### App Functionality
-- [ ] **Fix field validation** - A-number and other fields accepting invalid inputs (Est: 2-3 hours)
-- [ ] **Confirmation logging with timestamps** - Track user confirmations for liability protection (Est: 2-4 hours)
-  - Log format: "Field X confirmed by user at timestamp Y" (anonymized, no PII)
-  - Store process logs, not actual data
-  - Logs demonstrate proper confirmation workflow for liability defense
-- [ ] **Update "next field" logic** - Base on unconfirmed fields, not unfilled fields (Est: 1-2 hours)
-  - System should prompt for next unconfirmed field
-  - Skip fields that are filled but not yet confirmed
-  - Ensure user explicitly confirms each field before moving on
+- [x] **Fix field validation** - A-number and other fields accepting invalid inputs ✅ COMPLETE
+  - Backend validation now blocks invalid values from reaching frontend
+  - Gemini receives informative error messages with pattern constraints
+  - 7/7 unit tests passing
+
+- [x] **Confirmation System Implementation** - Track user confirmations for liability protection ✅ COMPLETE (Nov 18, 2025)
+
+  **Phase 1: State & Data Model** ✅ COMPLETE
+  - [x] 1.1 Add `confirmed` boolean to FieldValue type (frontend)
+  - [x] 1.2 Update SchemaFormState to track confirmation status per field
+  - [x] 1.3 Add confirmation status to backend field state responses
+
+  **Phase 2: Gemini Tools** ✅ COMPLETE
+  - [x] 2.1 Create `confirm_field` tool declaration
+    - Parameters: field_id, confirmation_method (verbal/manual)
+    - Returns: success status, next unconfirmed field hint
+  - [x] 2.2 Implement confirm_field tool handler in backend
+  - [x] 2.3 Update `get_form_status` tool to return confirmation status (with token optimization)
+    - Response: {field_id: {value: "...", confirmed: true/false}}
+  - [x] 2.4 Update system instruction to explain confirmation workflow
+    - "After filling a field, ask user to confirm before moving on"
+    - "Manual edits are automatically confirmed"
+
+  **Phase 3: Next Field Logic** ✅ COMPLETE
+  - [x] 3.1 Update computeNextField() to prioritize unconfirmed fields
+  - [x] 3.2 Change next_field_hint to focus on first unconfirmed field
+  - [x] 3.3 Tests: 7/7 navigation confirmation tests passing
+
+  **Phase 4: UI Indicators** ✅ COMPLETE
+  - [x] 4.1 Add visual confirmation indicator (green checkmark badge) to all field types
+  - [x] 4.2 Add CSS styles for confirmed vs unconfirmed states
+  - [x] 4.3 Update all 6 field components (TextField, TextAreaField, RadioField, CheckboxField, DateField, SelectField)
+  - [x] 4.4 Add `form-field--confirmed` CSS class and badge styling
+
+  **Phase 5: Auto-Confirmation Rules** ✅ COMPLETE
+  - [x] 5.1 Mark manual edits as automatically confirmed
+  - [x] 5.2 Ensure manual field updates set confirmed=true with confirmation_method='manual_edit'
+  - [x] 5.3 Implemented in SchemaForm.tsx handleFieldChange()
+
+  **Phase 6: Confirmation Logging** ✅ COMPLETE
+  - [x] 6.1 Log confirmation events with timestamps (anonymized, no PII)
+    - Format: {timestamp, form_id, form_session_id, field_id, field_name, confirmation_method}
+  - [x] 6.2 Create logs/confirmations/ directory structure
+  - [x] 6.3 One JSONL file per form_session_id for easy correlation
+  - [x] 6.4 Implemented log_form_session_start() and log_form_session_end() functions
+  - [x] 6.5 Unit tests passing in test_confirm_field_tool.py
 - [ ] **Add native language disclaimer** - Voice announcement at session start about tool vs legal advice (Est: 30 min)
 - [ ] **Implement print functionality** - Must work from tablet (Est: 2-4 hours)
 - [ ] **Thorough end-to-end testing** - Full form completion multiple times (Est: 4-6 hours)

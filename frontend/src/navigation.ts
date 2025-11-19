@@ -112,36 +112,64 @@ export function computeNextField(
     return null;
   }
 
-  // Iterate through fields in schema order
+  // When skipConfirmed=false, just return first field (no prioritization)
+  if (!skipConfirmed) {
+    for (const field of state.schema.fields) {
+      // Apply required filter if requested
+      if (requiredOnly && !field.validation?.required) {
+        continue;
+      }
+      return field;
+    }
+    return null;
+  }
+
+  // PRIORITY 1: Find first filled but UNCONFIRMED field
+  // This ensures Gemini must confirm fields before moving on
   for (const field of state.schema.fields) {
     // Apply required filter if requested
     if (requiredOnly && !field.validation?.required) {
       continue;
     }
 
-    // Check if field is confirmed
     const currentValue = state.fieldValues[field.id];
     const isConfirmed = currentValue?.confirmed === true;
-    
-    // Skip confirmed fields if requested (default behavior)
-    if (skipConfirmed && isConfirmed) {
-      continue;
-    }
-    
-    // Check if field has a value (null, undefined, or empty string means not filled)
-    const hasValue = currentValue?.value !== null 
-      && currentValue?.value !== undefined 
+    const hasValue = currentValue?.value !== null
+      && currentValue?.value !== undefined
       && currentValue?.value !== '';
-    
-    // Skip fields that already have values (even if not confirmed)
-    if (hasValue) {
+
+    // Return first field with value but NOT confirmed
+    if (hasValue && !isConfirmed) {
+      return field;
+    }
+  }
+
+  // PRIORITY 2: Find first EMPTY field (skipping confirmed fields)
+  for (const field of state.schema.fields) {
+    // Apply required filter if requested
+    if (requiredOnly && !field.validation?.required) {
       continue;
     }
-    
-    // Return first field that doesn't have a value
-    return field;
+
+    const currentValue = state.fieldValues[field.id];
+    const isConfirmed = currentValue?.confirmed === true;
+
+    // Skip confirmed fields (skipConfirmed=true at this point)
+    if (isConfirmed) {
+      continue;
+    }
+
+    // Check if field has a value (null, undefined, or empty string means not filled)
+    const hasValue = currentValue?.value !== null
+      && currentValue?.value !== undefined
+      && currentValue?.value !== '';
+
+    // Return first empty field
+    if (!hasValue) {
+      return field;
+    }
   }
-  
+
   // All applicable fields are confirmed/filled
   return null;
 }

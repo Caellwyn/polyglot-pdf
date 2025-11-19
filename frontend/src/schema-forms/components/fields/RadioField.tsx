@@ -12,6 +12,7 @@ export interface RadioFieldProps {
   onBlur?: () => void;
   error?: string | null;
   disabled?: boolean;
+  confirmed?: boolean; // AI voice confirmation status
 }
 
 export function RadioField({
@@ -21,6 +22,7 @@ export function RadioField({
   onBlur,
   error,
   disabled = false,
+  confirmed = false,
 }: RadioFieldProps) {
   if (!field.options) {
     console.error(`[RadioField] Field ${field.id} has no options`);
@@ -36,11 +38,16 @@ export function RadioField({
   };
 
   return (
-    <div className="form-field">
+    <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
       <fieldset className="form-field__fieldset">
         <legend className="form-field__label">
           {field.name}
           {field.validation?.required && <span className="form-field__required">*</span>}
+          {confirmed && (
+            <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+              ✓
+            </span>
+          )}
         </legend>
 
         {field.help?.inline && (

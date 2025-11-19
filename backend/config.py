@@ -138,6 +138,30 @@ class Settings(BaseModel):
 				"properties": {},
 				"required": []
 			}
+		},
+		{
+			"name": "confirm_field",
+			"description": (
+				"Confirm that a field value is correct after user verification. "
+				"MUST be called before moving to next field. After filling a field with update_form_fields, "
+				"ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). "
+				"If confirmed, call this tool. If user says no/incorrect, ask for correct value."
+			),
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"field_id": {
+						"type": "string",
+						"description": "ID of the field being confirmed"
+					},
+					"confirmation_method": {
+						"type": "string",
+						"enum": ["verbal", "manual"],
+						"description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)"
+					}
+				},
+				"required": ["field_id", "confirmation_method"]
+			}
 		}
 	]
 
@@ -179,14 +203,19 @@ class Settings(BaseModel):
     "1. Ask for ONE field (skip Filled=True)\n"
     "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
     "3. Read back value → Ask 'Is that correct?'\n"
-    "4. If yes: next field. If no: ask again, repeat step 2\n"
-    "Never skip read-back/confirmation. Never move forward without user confirmation. "
-    "Never guess values. Never update multiple fields in one call.\n\n"
-    
+    "4. Wait for verbal confirmation (yes/correct/that's right)\n"
+    "5. Call confirm_field tool with confirmation_method='verbal'\n"
+    "6. Move to next field (hint provided in confirm_field response)\n"
+    "If user says no/incorrect: ask for correct value and repeat from step 2\n"
+    "Never skip confirmation. Never move to next field without calling confirm_field. "
+    "Manual edits by user are auto-confirmed - you can reference them immediately.\n\n"
+
     "TOOLS:\n"
-    "• update_form_fields: Use exact field_id from schema (with brackets if present). One field only.\n"
-    "• get_field_value: Use EXACT field name from context (no abbreviation)\n"
-    "• switch_section: Use ORDER number from AVAILABLE SECTIONS list (e.g., '2' for second section)\n"
+    "• update_form_fields: Fill ONE field. Returns success or validation error.\n"
+    "• confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint.\n"
+    "• get_form_status: Returns 'field_id:value:confirmed|field_id:value:unconfirmed'. Only filled fields included. Omitted = empty. Use when user asks 'what have I filled?'\n"
+    "• get_field_value: Retrieve value from previous section by EXACT spoken name\n"
+    "• switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
     "• Current section only - for previous sections tell user to switch first\n\n"
     
     "MATCHING:\n"
@@ -226,14 +255,19 @@ class Settings(BaseModel):
     "1. Ask for: {next_field_hint}\n"
     "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
     "3. Read back value → Ask 'Is that correct?'\n"
-    "4. If yes: next field loaded automatically. If no: ask again, repeat step 2\n"
-    "Never skip read-back/confirmation. Never move forward without user confirmation. "
-    "Never guess values. Never update multiple fields in one call.\n\n"
+    "4. Wait for verbal confirmation (yes/correct/that's right)\n"
+    "5. Call confirm_field tool with confirmation_method='verbal'\n"
+    "6. Next field schema loaded automatically (use next_field_hint from confirm_field response)\n"
+    "If user says no/incorrect: ask for correct value and repeat from step 2\n"
+    "Never skip confirmation. Never move to next field without calling confirm_field. "
+    "Manual edits by user are auto-confirmed - you can reference them immediately.\n\n"
 
     "TOOLS:\n"
-    "• update_form_fields: Use exact field_id from schema (with brackets if present). One field only.\n"
-    "• get_field_value: Use EXACT field name from context (no abbreviation)\n"
-    "• switch_section: Use ORDER number from AVAILABLE SECTIONS list (e.g., '2' for second section)\n"
+    "• update_form_fields: Fill ONE field. Returns success or validation error.\n"
+    "• confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint and loads next field schema.\n"
+    "• get_form_status: Returns compact format 'field_id:value:status|...' where status: ✓=confirmed, ✗=unconfirmed, −=empty. Use when user asks 'what have I filled?'\n"
+    "• get_field_value: Retrieve value from previous section by EXACT spoken name\n"
+    "• switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
     "• Current section only - for previous sections tell user to switch first\n\n"
 
     "MATCHING:\n"

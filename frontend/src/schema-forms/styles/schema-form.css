@@ -218,6 +218,26 @@
   min-height: 100px;
 }
 
+/* Confirmation indicator (AI voice confirmed fields) */
+.form-field--confirmed .form-field__input,
+.form-field--confirmed .form-field__textarea,
+.form-field--confirmed .form-field__select {
+  border-color: #4CAF50;
+  background-color: #f1f8f4;
+}
+
+.form-field__confirmed-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 /* ============================================================================
    Radio Buttons
    ============================================================================ */

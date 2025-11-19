@@ -12,6 +12,7 @@ export interface TextAreaFieldProps {
   onBlur?: () => void;
   error?: string | null;
   disabled?: boolean;
+  confirmed?: boolean; // AI voice confirmation status
 }
 
 export function TextAreaField({
@@ -21,6 +22,7 @@ export function TextAreaField({
   onBlur,
   error,
   disabled = false,
+  confirmed = false,
 }: TextAreaFieldProps) {
   // Determine rows based on textarea size
   const getRows = (): number => {
@@ -44,10 +46,15 @@ export function TextAreaField({
   const displayValue = unwrapToString(value);
 
   return (
-    <div className="form-field">
+    <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
       <label htmlFor={field.id} className="form-field__label">
         {field.name}
         {field.validation?.required && <span className="form-field__required">*</span>}
+        {confirmed && (
+          <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+            ✓
+          </span>
+        )}
       </label>
 
       {field.help?.inline && (

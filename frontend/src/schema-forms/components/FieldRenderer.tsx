@@ -21,6 +21,7 @@ export interface FieldRendererProps {
   error?: string | null;
   disabled?: boolean;
   allFieldValues?: Record<string, any>; // For conditional logic
+  confirmed?: boolean; // Field confirmation status from AI voice
 }
 
 export function FieldRenderer({
@@ -31,6 +32,7 @@ export function FieldRenderer({
   error,
   disabled = false,
   allFieldValues = {},
+  confirmed = false,
 }: FieldRendererProps) {
   // Check if field should be shown based on conditional logic
   const isShown = shouldShowField(field, allFieldValues);
@@ -81,6 +83,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -93,6 +96,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -105,6 +109,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -117,6 +122,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -129,6 +135,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -141,6 +148,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
@@ -154,6 +162,7 @@ export function FieldRenderer({
           onBlur={handleBlur}
           error={error}
           disabled={isDisabled}
+          confirmed={confirmed}
         />
       );
 
