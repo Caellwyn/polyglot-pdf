@@ -207,8 +207,9 @@ class Settings(BaseModel):
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
     "6. Move to next field (hint provided in confirm_field response)\n"
     "If user says no/incorrect: ask for correct value and repeat from step 2\n"
+    "CRITICAL: Fields filled by you (AI) are NOT confirmed until user explicitly says yes. "
     "Never skip confirmation. Never move to next field without calling confirm_field. "
-    "Manual edits by user are auto-confirmed - you can reference them immediately.\n\n"
+    "Only manual edits by user are auto-confirmed.\n\n"
 
     "TOOLS:\n"
     "• update_form_fields: Fill ONE field. Returns success or validation error.\n"
@@ -259,8 +260,9 @@ class Settings(BaseModel):
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
     "6. Next field schema loaded automatically (use next_field_hint from confirm_field response)\n"
     "If user says no/incorrect: ask for correct value and repeat from step 2\n"
+    "CRITICAL: Fields filled by you (AI) are NOT confirmed until user explicitly says yes. "
     "Never skip confirmation. Never move to next field without calling confirm_field. "
-    "Manual edits by user are auto-confirmed - you can reference them immediately.\n\n"
+    "Only manual edits by user are auto-confirmed.\n\n"
 
     "TOOLS:\n"
     "• update_form_fields: Fill ONE field. Returns success or validation error.\n"

@@ -152,44 +152,53 @@ class ValidationHandler:
     def _convert_fields_to_dicts(self, fields: List[FormField]) -> List[Dict[str, Any]]:
         """
         Convert FormField objects to dicts for field_validator.
-        
-        Extracts constraint fields (min, max, pattern, etc.) if present.
-        
+
+        Extracts constraint fields (min, max, pattern, etc.) from validation object.
+
         Args:
             fields: List of FormField objects
-            
+
         Returns:
             List of field dicts with id, name, type, and constraints
         """
         field_dicts = []
-        
+
         for field_obj in fields:
             field_dict = {
                 "id": field_obj.id,
                 "name": field_obj.name,
                 "type": field_obj.type,
             }
-            
-            # Add constraint fields if present
-            constraint_attrs = [
-                'min', 'max', 'format', 'pattern',
-                'minLength', 'maxLength', 'options'
-            ]
-            
-            for attr in constraint_attrs:
-                if hasattr(field_obj, attr):
-                    value = getattr(field_obj, attr)
-                    # Only add non-None/non-empty values
-                    if value is not None and (not isinstance(value, (list, str)) or value):
-                        # Special handling for options: convert Pydantic models to dicts
-                        if attr == 'options' and isinstance(value, list):
-                            field_dict[attr] = [
-                                opt.dict() if hasattr(opt, 'dict') else opt
-                                for opt in value
-                            ]
-                        else:
-                            field_dict[attr] = value
-            
+
+            # Extract validation constraints from nested validation object
+            if field_obj.validation:
+                validation = field_obj.validation
+
+                # Map validation fields (snake_case) to expected format (camelCase)
+                # Note: field_validator.py expects camelCase (minLength, maxLength)
+                if validation.min_length is not None:
+                    field_dict['minLength'] = validation.min_length
+                if validation.max_length is not None:
+                    field_dict['maxLength'] = validation.max_length
+                if validation.min is not None:
+                    field_dict['min'] = validation.min
+                if validation.max is not None:
+                    field_dict['max'] = validation.max
+                if validation.pattern is not None:
+                    field_dict['pattern'] = validation.pattern
+                if validation.digits_only is not None:
+                    field_dict['digits_only'] = validation.digits_only
+                if validation.date_constraint is not None:
+                    field_dict['date_constraint'] = validation.date_constraint
+
+            # Add options if field has them (for select/radio/checkbox)
+            if hasattr(field_obj, 'options') and field_obj.options:
+                # Convert Pydantic models to dicts
+                field_dict['options'] = [
+                    opt.dict() if hasattr(opt, 'dict') else opt
+                    for opt in field_obj.options
+                ]
+
             field_dicts.append(field_dict)
-        
+
         return field_dicts

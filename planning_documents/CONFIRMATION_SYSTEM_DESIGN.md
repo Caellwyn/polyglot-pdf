@@ -422,3 +422,106 @@ logs/confirmations/
 
 **Risk**: Performance impact from logging
 **Mitigation**: Async logging + batch writes + JSONL format (append-only)
+
+---
+
+## Implementation Status (November 19, 2025)
+
+### ✅ COMPLETED - All Phases Implemented
+
+The confirmation system has been fully implemented and is in production. Below are the key implementation details and bug fixes:
+
+### Implementation Summary
+
+**Phases Completed**:
+1. ✅ Phase 1-6: Full confirmation system with state tracking, tools, UI, and logging
+2. ✅ Backend tools (`confirm_field`, `get_form_status` with confirmation status)
+3. ✅ Frontend UI indicators (green checkmarks)
+4. ✅ Audit logging (anonymized, no PII in `logs/confirmations/*.jsonl`)
+5. ✅ Auto-confirmation for manual edits
+6. ✅ System instructions enforce workflow
+
+### Critical Bugs Fixed (November 19, 2025)
+
+#### Bug #1: Auto-Confirmation on AI Fills
+
+**Problem**: Fields were being automatically confirmed when Gemini filled them, skipping the required user confirmation step.
+
+**Root Cause**: `webFormConnection.ts` was setting `confirmed: true` when receiving field updates from Gemini (lines 320, 375, 420).
+
+**Fix**: Changed all AI field updates to set `confirmed: false`. Only manual user edits are auto-confirmed.
+
+**Files Modified**:
+- `frontend/src/webFormConnection.ts` (3 locations)
+
+**Correct Flow Now**:
+```
+1. Gemini requests field value
+2. User provides value
+3. Gemini calls update_form_fields → field saved with confirmed: false
+4. Gemini reads back value and asks "Is that correct?"
+5. User confirms "yes"
+6. Gemini calls confirm_field tool → field updated to confirmed: true
+7. Gemini moves to next field
+```
+
+#### Bug #2: Unknown Control Error After Confirmation
+
+**Problem**: After confirming the first field, frontend received `unknown_control` error and lost PTT button.
+
+**Root Cause**: Frontend was sending unnecessary `field_confirmed` acknowledgment back to backend, which had no handler for this message type.
+
+**Fix**: Removed the acknowledgment message from `webFormConnection.ts:883-888`. Backend already logs confirmations internally when handling the `confirm_field` tool call.
+
+**Files Modified**:
+- `frontend/src/webFormConnection.ts`
+
+### System Instructions
+
+Enhanced system instructions to explicitly enforce confirmation workflow:
+
+```
+CRITICAL: Fields filled by you (AI) are NOT confirmed until user explicitly says yes.
+Never skip confirmation. Never move to next field without calling confirm_field.
+Only manual edits by user are auto-confirmed.
+```
+
+**Files Modified**:
+- `backend/config.py` (both `SYSTEM_INSTRUCTION` and `JIT_SYSTEM_INSTRUCTION`)
+
+### Confirmation Logging
+
+All confirmations are logged to `backend/logs/confirmations/{form_session_id}.jsonl`:
+
+```json
+{
+  "timestamp": "2025-11-19T22:30:45.123Z",
+  "event": "field_confirmed",
+  "form_id": "I-90",
+  "form_session_id": "fss_abc123_xyz789",
+  "field_id": "p1_line1_firstname",
+  "field_name": "First Name",
+  "confirmation_method": "ai_voice"
+}
+```
+
+**No PII**: Logs contain field IDs and metadata only, never actual field values.
+
+### Testing
+
+**E2E Testing**: Confirmation workflow has been tested end-to-end:
+- ✅ Gemini fills field → field shows as unconfirmed (no checkmark)
+- ✅ Gemini asks "Is that correct?"
+- ✅ User confirms "yes"
+- ✅ Gemini calls `confirm_field` tool
+- ✅ Green checkmark appears
+- ✅ Gemini moves to next field
+- ✅ Multiple fields confirmed successfully
+- ✅ No errors or PTT button loss
+
+### Next Steps
+
+The confirmation system is fully functional. Future enhancements could include:
+- Bulk confirmation UI for reviewing all fields before submission
+- Confirmation history view in UI
+- Export confirmation logs for legal/audit purposes

@@ -358,6 +358,89 @@ SchemaFormState
 - Mandatory confirmation after each update
 - Validation before acceptance
 
+### Field Validation System
+
+**ValidationHandler** (`backend/services/validation_handler.py`)
+- Orchestrates field matching and validation against schema constraints
+- Extracts validation rules from `FormField.validation` object
+- Delegates to `field_validator.py` for constraint checking
+- Returns comprehensive validation results
+
+**Field Validator** (`backend/utils/field_validator.py`)
+- Core validation logic for all field types
+- **Multi-Error Collection** (Nov 19, 2025): Returns ALL validation errors per field, not just first error
+- Supports comprehensive validation rules from schema
+
+**Supported Validation Rules**:
+
+1. **Text Fields** (`text`, `email`, `textarea`):
+   - `min_length` / `max_length` - String length constraints
+   - `pattern` - Regex pattern matching (e.g., `^\\d{7,9}$` for A-number)
+   - `digits_only` - Only numeric digits allowed (boolean)
+
+2. **Number Fields** (`number`, `tel`):
+   - `min` / `max` - Numeric range constraints
+   - Type validation (must be valid number)
+
+3. **Date Fields** (`date`):
+   - Format validation (YYYY-MM-DD)
+   - `min` / `max` - Date range constraints
+   - `date_constraint` - Special date rules:
+     - `past_only` - Date must be in the past (e.g., birth dates)
+     - `future_only` - Date must be in the future
+     - `within_5_years` - Date must be within 5 years of today
+
+4. **Select/Radio/Checkbox**:
+   - `options` - Valid option list enforcement
+   - Exact match validation (case-sensitive)
+
+**Multi-Error Validation** (Nov 19, 2025):
+
+When a field value violates multiple rules, ALL errors are returned to Gemini:
+
+Example: User enters `b234` for Alien Registration Number (requires 7-9 digits, digits only):
+```json
+{
+  "validation_errors": [
+    {
+      "field_id": "p1_line1_alien_number",
+      "constraint": "digits_only",
+      "message": "Must contain only digits (0-9)"
+    },
+    {
+      "field_id": "p1_line1_alien_number",
+      "constraint": "minLength",
+      "message": "Too short (minimum 7 characters)",
+      "constraint_value": 7
+    }
+  ]
+}
+```
+
+Gemini receives both errors and informs user: "The A-number must contain only digits AND be 7-9 digits long."
+
+This eliminates frustrating back-and-forth where users fix one error only to discover another.
+
+**Validation Flow**:
+```
+Gemini calls update_form_fields
+  ↓
+ValidationHandler.validate_field_updates()
+  ↓
+Extract validation rules from FormField.validation
+  ↓
+field_validator.validate_field_value() - Returns List[ValidationError]
+  ↓
+All errors collected and returned to Gemini
+  ↓
+Gemini informs user of ALL issues at once
+```
+
+**Error Messages**: Designed to be clear and actionable for voice feedback:
+- "Too short (minimum 12 characters)" instead of "Too short"
+- "Must contain only digits (0-9)" instead of "Invalid format"
+- "Date must be in the past" for birth dates
+
 ### WebSocket Protocol
 
 **Handshake Message** (Parts-based, Phase 4A):
