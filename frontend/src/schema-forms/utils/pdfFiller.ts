@@ -15,7 +15,7 @@ import type { FormSchema } from '../types/schema';
  * Development: http://localhost:8000
  * Production: https://voice-form-filler-773443099751.us-central1.run.app
  */
-function getBackendHttpUrl(): string {
+export function getBackendHttpUrl(): string {
   // Check for custom URL override (for local dev)
   const customUrl = (window as any).__VFF_BACKEND_URL;
   if (customUrl) {
