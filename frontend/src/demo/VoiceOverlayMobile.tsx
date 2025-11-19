@@ -17,6 +17,7 @@ import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal } from '../schema-forms/components/DisclaimerModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
+import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 
 interface VoiceOverlayMobileProps {
 	schema: FormSchema
@@ -432,7 +433,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// Log disclaimer acceptance to backend
 		try {
 			const timestamp = Date.now()
-			const response = await fetch('/api/disclaimer-acceptance', {
+			const backendUrl = getBackendHttpUrl()
+			const response = await fetch(`${backendUrl}/api/disclaimer-acceptance`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
