@@ -361,8 +361,32 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		setShowDisclaimerModal(false)
 
-		// TODO: Log disclaimer acceptance to backend
-		console.log('[VoiceOverlayMobile] Disclaimer accepted at:', new Date().toISOString(), '| Language:', selectedLanguage, '| Session:', state?.formSessionId)
+		// Log disclaimer acceptance to backend
+		try {
+			const timestamp = Date.now()
+			const response = await fetch('/api/disclaimer-acceptance', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					form_session_id: state?.formSessionId || 'unknown',
+					language: selectedLanguage,
+					timestamp: timestamp,
+					user_agent: navigator.userAgent,
+				}),
+			})
+
+			if (response.ok) {
+				const result = await response.json()
+				console.log('[VoiceOverlayMobile] ✅ Disclaimer acceptance logged to backend:', result)
+			} else {
+				console.warn('[VoiceOverlayMobile] ⚠️ Backend logging returned non-OK status:', response.status)
+			}
+		} catch (err) {
+			console.error('[VoiceOverlayMobile] ❌ Failed to log disclaimer acceptance to backend:', err)
+			// Don't block user - logging failure is non-fatal
+		}
 
 		// Start connection to backend + Gemini
 		try {

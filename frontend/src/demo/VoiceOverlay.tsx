@@ -790,16 +790,30 @@ useEffect(() => {
 		// Hide modal
 		setShowDisclaimerModal(false)
 
-		// TODO: Log disclaimer acceptance to backend
+		// Log disclaimer acceptance to backend
 		try {
-			// Backend logging will be implemented separately
-			console.log('[VoiceOverlay] TODO: Log disclaimer acceptance to backend', {
-				language: selectedLanguage,
-				timestamp: Date.now(),
-				formSessionId: state?.formSessionId
+			const timestamp = Date.now()
+			const response = await fetch('/api/disclaimer-acceptance', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					form_session_id: state?.formSessionId || 'unknown',
+					language: selectedLanguage,
+					timestamp: timestamp,
+					user_agent: navigator.userAgent,
+				}),
 			})
+
+			if (response.ok) {
+				const result = await response.json()
+				console.log('[VoiceOverlay] ✅ Disclaimer acceptance logged to backend:', result)
+			} else {
+				console.warn('[VoiceOverlay] ⚠️ Backend logging returned non-OK status:', response.status)
+			}
 		} catch (err) {
-			console.error('[VoiceOverlay] Failed to log disclaimer acceptance:', err)
+			console.error('[VoiceOverlay] ❌ Failed to log disclaimer acceptance to backend:', err)
 			// Don't block user - logging failure is non-fatal
 		}
 

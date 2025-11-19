@@ -77,20 +77,44 @@ Implemented a mandatory, non-dismissible disclaimer modal that gates access to t
 
 ### Logging
 
-**Current Implementation:**
-- Frontend logs disclaimer acceptance to console (timestamp, language, form sessionID)
-- TODO: Backend endpoint to persist logs (line 840 in VoiceOverlay.tsx, line 416 in VoiceOverlayMobile.tsx)
+**✅ IMPLEMENTED:**
+- Frontend sends disclaimer acceptance to backend via HTTP POST
+- Backend logs to structured logger with full audit trail
+- Logs include: timestamp, language, form sessionID, user agent, client IP
 
-**Planned Backend Endpoint:**
+**Backend Endpoint:**
 ```python
 POST /api/disclaimer-acceptance
 Body: {
   "form_session_id": "fss_xyz123",
   "language": "Spanish",
   "timestamp": 1234567890,
-  "user_agent": "..."
+  "user_agent": "Mozilla/5.0..."
+}
+
+Response: {
+  "status": "logged",
+  "timestamp": "2025-11-18T12:34:56.789",
+  "session_id": "fss_xyz123"
 }
 ```
+
+**Files:**
+- Backend route: `backend/routes/disclaimer_routes.py` (NEW)
+- Frontend logging: `frontend/src/demo/VoiceOverlay.tsx` (lines ~793-819)
+- Mobile logging: `frontend/src/demo/VoiceOverlayMobile.tsx` (lines ~364-390)
+
+**Logged Fields:**
+- `form_session_id` - Frontend session identifier
+- `language` - User's selected language (e.g., "Spanish", "English")
+- `timestamp` - Unix timestamp in milliseconds
+- `user_agent` - Browser user agent string
+- `client_ip` - Client IP address (captured by backend)
+
+**Error Handling:**
+- Frontend catches fetch errors and logs to console
+- Logging failure is non-fatal (doesn't block user from proceeding)
+- Backend uses structured logging for audit trail visibility
 
 ## Testing Checklist
 
@@ -147,7 +171,10 @@ frontend/src/
     └── VoiceOverlayMobile.tsx           # MODIFIED - Integrated modal
 
 backend/
-└── config.py                            # MODIFIED - Removed old disclaimer
+├── config.py                            # MODIFIED - Removed old disclaimer
+├── main.py                              # MODIFIED - Added disclaimer router
+└── routes/
+    └── disclaimer_routes.py             # NEW - Logging endpoint
 
 planning_documents/
 ├── CRITICAL_PATH_TODO.MD                # UPDATED - Marked complete
@@ -172,7 +199,7 @@ DisclaimerModal buttons are translated for 18 languages:
 
 1. ✅ Frontend implementation complete
 2. ✅ Backend system instruction cleanup complete
-3. ⏳ Add backend logging endpoint (TODO markers in code)
+3. ✅ Backend logging endpoint implemented
 4. ⏳ Manual testing with real users at ESC
 5. ⏳ Monitor for issues in production
 6. ⏳ Ensure paper consent forms are also signed
