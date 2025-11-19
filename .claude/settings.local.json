@@ -5,7 +5,9 @@
       "Bash(python -m pytest:*)",
       "Bash(python:*)",
       "Bash(npm test:*)",
-      "Bash(timeout 5 node:*)"
+      "Bash(timeout 5 node:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

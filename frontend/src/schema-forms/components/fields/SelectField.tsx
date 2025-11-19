@@ -12,6 +12,7 @@ export interface SelectFieldProps {
   onBlur?: () => void;
   error?: string | null;
   disabled?: boolean;
+  confirmed?: boolean; // AI voice confirmation status
 }
 
 export function SelectField({
@@ -21,6 +22,7 @@ export function SelectField({
   onBlur,
   error,
   disabled = false,
+  confirmed = false,
 }: SelectFieldProps) {
   // Fallback: if select field has no options, render as text field
   if (!field.options || field.options.length === 0) {
@@ -30,10 +32,15 @@ export function SelectField({
     const displayValue = unwrapToString(value);
 
     return (
-      <div className="form-field">
+      <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
         <label htmlFor={field.id} className="form-field__label">
           {field.name}
           {field.validation?.required && <span className="form-field__required">*</span>}
+          {confirmed && (
+            <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+              ✓
+            </span>
+          )}
         </label>
         <input
           type="text"
@@ -66,10 +73,15 @@ export function SelectField({
   };
 
   return (
-    <div className="form-field">
+    <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
       <label htmlFor={field.id} className="form-field__label">
         {field.name}
         {field.validation?.required && <span className="form-field__required">*</span>}
+        {confirmed && (
+          <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
+            ✓
+          </span>
+        )}
       </label>
 
       {field.help?.inline && (

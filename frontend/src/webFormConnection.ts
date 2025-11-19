@@ -223,7 +223,11 @@ export class WebFormConnection {
         case "complete_section":
           this.handleCompleteSectionRequest(message);
           break;
-          
+
+        case "confirm_field":
+          this.handleConfirmFieldRequest(message);
+          break;
+
         case "error":
           this.handleServerError(message);
           break;
@@ -392,7 +396,24 @@ export class WebFormConnection {
         if (!shouldUpdate) {
           continue;
         }
-        
+
+        // Validate field before updating (only for AI-confirmed updates)
+        if (isApplied) {
+          const validationError = validateField(field, value);
+          if (validationError) {
+            console.warn(`[WebFormConnection] Validation failed for ${field.id}:`, validationError);
+            // Send validation error back to Gemini
+            this.send({
+              type: "validation_error",
+              field_id: field.id,
+              field_name: field.name || field.id,
+              value: value,
+              error: validationError
+            });
+            continue; // Skip this field update
+          }
+        }
+
         this.updateField(field.id, value as any, { confirmed: isApplied, emit: false });
         updatedFields.push({ fieldId: field.id, value });
       }
@@ -842,6 +863,29 @@ export class WebFormConnection {
   }
 
   /**
+   * Handle confirm_field request from backend (Gemini called confirm_field tool)
+   */
+  private async handleConfirmFieldRequest(message: any): Promise<void> {
+    const { field_id, confirmation_method } = message;
+
+    console.log('[WebFormConnection] Confirming field:', field_id, 'method:', confirmation_method);
+
+    // Update field confirmation status in state
+    this.state = SchemaFormStateManager.confirmField(
+      this.state,
+      field_id,
+      confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
+    );
+
+    // Acknowledge confirmation to backend (optional, for logging/debugging)
+    this.send({
+      type: "field_confirmed",
+      field_id: field_id,
+      success: true
+    });
+  }
+
+  /**
    * Send completion message to AI when form is complete
    * Part of Phase 1: Graceful completion handling
    */
@@ -1195,7 +1239,17 @@ export class WebFormConnection {
     const confirmed = options?.confirmed;
     const emit = options?.emit ?? false;
 
-    this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, { confirmed });
+    // Determine confirmation status and method
+    // If confirmed is explicitly set (from AI), use 'ai_voice'
+    // If not confirmed but emit is true (manual edit), auto-confirm with 'manual_edit'
+    const isManualEdit = !confirmed && emit;
+    const finalConfirmed = confirmed || isManualEdit;
+    const confirmationMethod = confirmed ? 'ai_voice' : (isManualEdit ? 'manual_edit' : undefined);
+
+    this.state = SchemaFormStateManager.updateField(this.state, fieldId, value, {
+      confirmed: finalConfirmed,
+      confirmationMethod: confirmationMethod
+    });
 
     // Auto-scroll to field when Gemini fills it (confirmed = true means AI filled)
     if (confirmed && typeof document !== 'undefined') {

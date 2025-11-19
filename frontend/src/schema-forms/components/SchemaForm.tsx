@@ -180,14 +180,21 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
   const handleFieldChange = (fieldId: string, value: any) => {
     // Use functional update to avoid stale closure issues
     setState(prevState => {
-      let newState = SchemaFormStateManager.updateField(prevState, fieldId, value);
+      // Manual edits from React UI are auto-confirmed (user explicitly typed/selected value)
+      let newState = SchemaFormStateManager.updateField(prevState, fieldId, value, {
+        confirmed: true,
+        confirmationMethod: 'manual_edit'
+      });
 
       // Handle copy_to logic: auto-copy value to target fields
       const field = prevState.schema.fields.find(f => f.id === fieldId);
       if (field?.copy_to && field.copy_to.length > 0) {
-        // Copy value to all target fields
+        // Copy value to all target fields (also auto-confirmed)
         field.copy_to.forEach(targetFieldId => {
-          newState = SchemaFormStateManager.updateField(newState, targetFieldId, value);
+          newState = SchemaFormStateManager.updateField(newState, targetFieldId, value, {
+            confirmed: true,
+            confirmationMethod: 'manual_edit'
+          });
         });
       }
 

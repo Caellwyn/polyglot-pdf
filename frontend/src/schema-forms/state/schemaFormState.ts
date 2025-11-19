@@ -172,7 +172,10 @@ export class SchemaFormStateManager {
     state: SchemaFormState,
     fieldId: string,
     value: any | FieldValue,
-    options?: { confirmed?: boolean }
+    options?: {
+      confirmed?: boolean;
+      confirmationMethod?: 'ai_voice' | 'manual_edit';
+    }
   ): SchemaFormState {
     console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
     console.log(`[SchemaFormStateManager] Current state.fieldValues:`, state.fieldValues);
@@ -188,6 +191,8 @@ export class SchemaFormStateManager {
       fieldValue = {
         value: value,
         confirmed: options?.confirmed,
+        confirmedAt: options?.confirmed ? new Date().toISOString() : undefined,
+        confirmationMethod: options?.confirmationMethod,
         lastModified: Date.now()
       };
     }
@@ -738,5 +743,80 @@ export class SchemaFormStateManager {
     };
     this.save(newState);
     return newState;
+  }
+
+  // ============================================================================
+  // Confirmation Status Management
+  // ============================================================================
+
+  /**
+   * Check if a field is confirmed
+   */
+  static isFieldConfirmed(state: SchemaFormState, fieldId: string): boolean {
+    const fieldValue = state.fieldValues[fieldId];
+    return fieldValue?.confirmed === true;
+  }
+
+  /**
+   * Confirm a field with timestamp and method
+   */
+  static confirmField(
+    state: SchemaFormState,
+    fieldId: string,
+    method: 'ai_voice' | 'manual_edit'
+  ): SchemaFormState {
+    const fieldValue = state.fieldValues[fieldId];
+    if (!fieldValue) {
+      return state; // Field doesn't exist
+    }
+
+    const newState = {
+      ...state,
+      fieldValues: {
+        ...state.fieldValues,
+        [fieldId]: {
+          ...fieldValue,
+          confirmed: true,
+          confirmedAt: new Date().toISOString(),
+          confirmationMethod: method
+        }
+      },
+      lastUpdated: Date.now()
+    };
+
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Get list of field IDs that are filled but not confirmed
+   * These are the priority for next field hint
+   */
+  static getUnconfirmedFields(state: SchemaFormState): string[] {
+    const unconfirmed: string[] = [];
+
+    for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
+      if (fieldValue.value != null && fieldValue.value !== '' && !fieldValue.confirmed) {
+        unconfirmed.push(fieldId);
+      }
+    }
+
+    return unconfirmed;
+  }
+
+  /**
+   * Get count of confirmed fields (for progress tracking)
+   */
+  static getConfirmedFieldCount(state: SchemaFormState): number {
+    return Object.values(state.fieldValues).filter(fv => fv.confirmed === true).length;
+  }
+
+  /**
+   * Get count of filled but unconfirmed fields (needs attention)
+   */
+  static getUnconfirmedFieldCount(state: SchemaFormState): number {
+    return Object.values(state.fieldValues).filter(
+      fv => fv.value != null && fv.value !== '' && !fv.confirmed
+    ).length;
   }
 }

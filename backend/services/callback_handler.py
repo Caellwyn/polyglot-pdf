@@ -11,6 +11,7 @@ import structlog
 
 from .request_coordinator import RequestCoordinator
 from backend.utils.dev_file_logger import get_dev_logger
+from backend.utils.confirmation_logger import log_field_confirmation
 
 _log = structlog.get_logger().bind(module="callback_handler")
 _dev_log = get_dev_logger()
@@ -25,21 +26,27 @@ class CallbackHandler:
         session_id: str,
         request_coordinator: RequestCoordinator,
         send_transcript: bool = False,
+        form_id: Optional[str] = None,
+        form_session_id: Optional[str] = None,
     ):
         """
         Initialize callback handler.
-        
+
         Args:
             websocket: WebSocket connection to frontend
             session_id: Session ID for logging
             request_coordinator: Coordinator for async requests to frontend
             send_transcript: Whether to send transcript events to frontend
+            form_id: Form type identifier (e.g., "I-90") for confirmation logging
+            form_session_id: Persistent form session ID for confirmation logging
         """
         self._websocket = websocket
         self._session_id = session_id
         self._request_coordinator = request_coordinator
         self._send_transcript = send_transcript
         self._ws_audio_chunk_count = 0
+        self._form_id = form_id  # For confirmation logging
+        self._form_session_id = form_session_id  # For confirmation logging
         
         # Service methods will be injected
         self._handle_update_fields = None
@@ -225,7 +232,10 @@ class CallbackHandler:
         
         if normalized == "complete_section":
             return await self._handle_complete_section_tool()
-        
+
+        if normalized == "confirm_field":
+            return await self._handle_confirm_field_tool(arguments)
+
         # Unknown tool: acknowledge with empty payload so the model can continue
         return {}
     
@@ -301,7 +311,8 @@ class CallbackHandler:
                      next_hint_length=len(next_field_hint) if next_field_hint else 0,
                      has_next_schema=next_field_schema is not None)
         else:
-            await self.send_form_update(result.get("form_state"), applied_fields)
+            # Validation failed - send empty form_state so frontend doesn't apply invalid values
+            await self.send_form_update({}, [])
 
         # Build and return tool response
         tool_response = self._build_update_fields_response(
@@ -322,15 +333,39 @@ class CallbackHandler:
         self,
         arguments: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Handle get_form_status tool call."""
+        """Handle get_form_status tool call with minimal token response."""
         field_ids = arguments.get("field_ids", []) if isinstance(arguments, dict) else []
         form_values = await self._request_form_state_from_client(field_ids)
+
+        # Convert to ultra-compact format: field_id:value:status|field_id:value:status
+        # Only include fields with values. Empty fields are omitted.
+        # Status: "confirmed" or "unconfirmed"
+        # Example: "firstName:John:confirmed|lastName:Doe:unconfirmed"
+        compact_lines = []
+        for field_id, field_data in form_values.items():
+            if isinstance(field_data, dict):
+                value = field_data.get("value")
+
+                # Skip empty fields (not in response = empty)
+                if not value:
+                    continue
+
+                confirmed = field_data.get("confirmed", False)
+                status = "confirmed" if confirmed else "unconfirmed"
+
+                compact_lines.append(f"{field_id}:{value}:{status}")
+            else:
+                # Legacy format (shouldn't happen but handle it)
+                if field_data:  # Only include if has value
+                    compact_lines.append(f"{field_id}:{field_data}:unconfirmed")
+
+        compact_state = "|".join(compact_lines) if compact_lines else "No fields filled"
+
         response = {
-            "field_values": form_values,
-            "message": f"Retrieved {len(form_values)} field value(s) from client.",
+            "state": compact_state,
         }
         _log.info("-" * 80)
-        _log.info("GEMINI TOOL RESPONSE", tool="get_form_status", field_count=len(form_values))
+        _log.info("GEMINI TOOL RESPONSE", tool="get_form_status", field_count=len(compact_lines))
         _log.info("-" * 80)
         return response
     
@@ -367,7 +402,53 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE", tool="complete_section", success=response.get("success"))
         _log.info("-" * 80)
         return response
-    
+
+    async def _handle_confirm_field_tool(
+        self,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle confirm_field tool call from Gemini."""
+        field_id = arguments.get("field_id", "") if isinstance(arguments, dict) else ""
+        confirmation_method = arguments.get("confirmation_method", "verbal") if isinstance(arguments, dict) else "verbal"
+
+        # Request confirmation from frontend
+        await self._websocket.send_json({
+            "type": "confirm_field",
+            "field_id": field_id,
+            "confirmation_method": confirmation_method
+        })
+
+        # Log confirmation (anonymized - no PII)
+        if self._form_id and self._form_session_id:
+            # Get field name from schema for logging (we need to request this from frontend)
+            # For now, just log the field_id
+            log_field_confirmation(
+                form_id=self._form_id,
+                form_session_id=self._form_session_id,
+                field_id=field_id,
+                field_name=None,  # Will be enriched by frontend if needed
+                confirmation_method=confirmation_method
+            )
+
+        # Get next unconfirmed field hint
+        next_hint = await self._request_coordinator.request_next_field_hint()
+
+        response = {
+            "success": True,
+            "field_confirmed": field_id,
+            "next_field_hint": next_hint,
+            "message": f"Field '{field_id}' confirmed. {next_hint or 'All fields confirmed.'}"
+        }
+
+        _log.info("-" * 80)
+        _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmation_method=confirmation_method)
+        _log.info("-" * 80)
+
+        # Dev logging: Log full response (dev only!)
+        _dev_log.log_tool_response("confirm_field", response, session_id=self._session_id)
+
+        return response
+
     # Helper methods
     
     def _parse_update_arguments(self, arguments: Any) -> Dict[str, Any]:

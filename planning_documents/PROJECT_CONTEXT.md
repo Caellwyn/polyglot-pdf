@@ -5,6 +5,27 @@
 
 ---
 
+### Never Do
+- ❌ Store user data (PII/PHI) in backend - only store schemas and session metadata
+- ❌ Log field values (log IDs, types, counts only - NO PII/PHI)
+- ❌ Use `.innerHTML` with user/AI content (XSS risk)
+- ❌ Create new "summary" or "status" documents - update existing docs in place
+- ❌ Skip test coverage for new features
+- ❌ Mix planning and implementation in same document
+- ❌ CRITICAL never change form schemas
+
+### Always Do
+- ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
+- ✅ Write tests alongside implementation (not after)
+- ✅ Maintain stateless backend (client holds form state, server holds schemas)
+- ✅ Prioritize accuracy over speed (especially for non-English speakers)
+- ✅ Use structured logging with metadata only (never PII/PHI in backend logs)
+- ✅ Apply FieldValue unwrapping in all form components
+- ✅ Document technology decisions in implementation plan
+
+---
+---
+
 ## What It Is
 
 Voice-driven form-filling application specifically designed for USCIS immigration forms, enabling users to interact with Gemini AI through voice commands to complete complex government forms. Primary focus on serving non-English speakers in immigrant support environments like nonprofit offices.

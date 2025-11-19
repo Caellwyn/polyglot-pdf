@@ -2,8 +2,8 @@
 
 # Voice Form Filler - Technical Architecture Guide
 
-**Version**: 3.0
-**Last Updated**: November 12, 2025
+**Version**: 3.1
+**Last Updated**: November 18, 2025
 **Status**: Production-Ready Core with Active Development
 
 ---
@@ -18,6 +18,7 @@ The Voice Form Filler is a specialized application designed to help non-English 
 - ✅ Token reduction backend (94% reduction: 7,400→458 tokens, feature flag ready)
 - ✅ Shared audio stream architecture (eliminates race conditions)
 - ✅ Auto-scroll to fields when Gemini fills them (smooth scroll + highlight)
+- ✅ **Confirmation system with legal audit trail** (completed Nov 18, 2025)
 - ⚠️ Legacy demo system deprecated but not removed (cleanup pending)
 
 ---
@@ -89,12 +90,58 @@ isFieldValue(value) - Type guard for detection
 unwrapFieldValue(value) - Extract primitive value
 unwrapToString(value) - Convert to string for text inputs
 unwrapToBoolean(value) - Convert to boolean for checkboxes
+
+// FieldValue structure
+interface FieldValue {
+  value: string | boolean | string[];
+  confirmed: boolean;
+  confirmedAt?: string; // ISO timestamp
+  confirmationMethod?: 'ai_voice' | 'manual_edit' | 'manual_button';
+  updatedAt?: string;
+}
 ```
 
 **Implementation Status**: ✅ Complete (Nov 8, 2025)
 - All field components updated
 - Unit tests: 26/26 passing
 - Browser testing confirmed
+
+#### Confirmation System
+
+**Purpose**: Legal liability protection - prove users confirmed each field entry.
+
+**Architecture** (Completed Nov 18, 2025):
+
+1. **State Model**
+   - FieldValue objects track `confirmed` boolean and confirmation metadata
+   - SchemaFormState persists confirmation status in sessionStorage
+   - Auto-confirmation: Manual edits automatically marked as confirmed
+
+2. **Backend Tools**
+   - `confirm_field(field_id, confirmation_method)` - Marks field as confirmed
+   - `get_form_status()` - Returns field values with confirmation status
+   - Token-optimized responses (only returns unconfirmed fields)
+
+3. **UI Indicators**
+   - Green checkmark badge (✓) next to confirmed field labels
+   - `form-field--confirmed` CSS class highlights confirmed fields
+   - All 6 field types support confirmation UI
+
+4. **Navigation Logic**
+   - `computeNextField()` prioritizes unconfirmed fields over empty fields
+   - Guides user through confirmation workflow systematically
+   - 7/7 unit tests passing (navigation-confirmation.test.ts)
+
+5. **Audit Logging** (`backend/utils/confirmation_logger.py`)
+   - Logs: `{timestamp, form_id, form_session_id, field_id, confirmation_method}`
+   - **NO PII logged** (field values never written to logs)
+   - One JSONL file per form session: `logs/confirmations/{form_session_id}.jsonl`
+   - Legal audit trail for liability protection
+
+**Workflow**:
+- User fills field via voice → Gemini asks "Is that correct?" → User confirms → Logged
+- User types manually → Auto-confirmed immediately → Logged
+- Next field hint prioritizes unconfirmed fields
 
 ### Voice Interaction Layer
 
