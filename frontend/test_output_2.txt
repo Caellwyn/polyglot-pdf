@@ -1,0 +1,2192 @@
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/Users/caell/OneDrive/AILearning/polyglot-pdf/frontend[39m
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mrenders English text by default[22m[39m
+DisclaimerModal rendering with language: English
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mrenders Spanish text when selectedLanguage is Spanish[22m[39m
+DisclaimerModal rendering with language: Spanish
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mrenders Chinese text when selectedLanguage is Chinese[22m[39m
+DisclaimerModal rendering with language: Chinese
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mfalls back to English for unknown languages[22m[39m
+DisclaimerModal rendering with language: Klingon
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mcalls onAgree when agree button is clicked[22m[39m
+DisclaimerModal rendering with language: English
+
+[90mstdout[2m | src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22m[2mDisclaimerModal[2m > [22m[2mcalls onListenAgain when listen again button is clicked[22m[39m
+DisclaimerModal rendering with language: English
+
+ [33m❯[39m src/schema-forms/components/DisclaimerModal.test.tsx [2m ([22m[2m7 tests[22m [2m|[22m [31m4 failed[39m[2m)[22m[90m 79[2mms[22m[39m
+[31m   [33m❯[31m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mfalls back to English for unknown languages[39m
+[31m     → Found multiple elements with the text: Important Notice
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<h2[31m
+  [33mclass[31m=[32m"disclaimer-modal-title"[31m
+  [33mid[31m=[32m"disclaimer-title"[31m
+[36m>[31m
+  [0mImportant Notice[0m
+[36m</h2>[31m
+
+Ignored nodes: comments, script, style
+[36m<h2[31m
+  [33mclass[31m=[32m"disclaimer-modal-title"[31m
+  [33mid[31m=[32m"disclaimer-title"[31m
+[36m>[31m
+  [0mImportant Notice[0m
+[36m</h2>[31m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mstyle[31m=[32m"overflow: hidden;"[31m
+[36m>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mAviso Importante[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0m重要通知[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m再听一次[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m我同意[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+[36m</body>[31m[39m
+[31m   [33m❯[31m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mdoes not render when isOpen is false[39m
+[31m     → Found multiple elements with the text: Important Notice
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<h2[31m
+  [33mclass[31m=[32m"disclaimer-modal-title"[31m
+  [33mid[31m=[32m"disclaimer-title"[31m
+[36m>[31m
+  [0mImportant Notice[0m
+[36m</h2>[31m
+
+Ignored nodes: comments, script, style
+[36m<h2[31m
+  [33mclass[31m=[32m"disclaimer-modal-title"[31m
+  [33mid[31m=[32m"disclaimer-title"[31m
+[36m>[31m
+  [0mImportant Notice[0m
+[36m</h2>[31m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mstyle[31m=[32m""[31m
+[36m>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mAviso Importante[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0m重要通知[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m再听一次[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m我同意[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div />[31m
+[36m</body>[31m[39m
+[31m   [33m❯[31m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mcalls onAgree when agree button is clicked[39m
+[31m     → Found multiple elements with the text: I Agree
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mI Agree[0m
+[36m</button>[31m
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mI Agree[0m
+[36m</button>[31m
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mI Agree[0m
+[36m</button>[31m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mstyle[31m=[32m"overflow: hidden;"[31m
+[36m>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mAviso Importante[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0m重要通知[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m再听一次[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m我同意[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div />[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+[36m</body>[31m[39m
+[31m   [33m❯[31m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mcalls onListenAgain when listen again button is clicked[39m
+[31m     → Found multiple elements with the text: Listen Again
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mListen Again[0m
+[36m</button>[31m
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mListen Again[0m
+[36m</button>[31m
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mListen Again[0m
+[36m</button>[31m
+
+Ignored nodes: comments, script, style
+[36m<button[31m
+  [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+  [33mtype[31m=[32m"button"[31m
+[36m>[31m
+  [0mListen Again[0m
+[36m</button>[31m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mstyle[31m=[32m"overflow: hidden;"[31m
+[36m>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mAviso Importante[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0m重要通知[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m再听一次[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0m我同意[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div />[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"disclaimer-modal-overlay"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33maria-labelledby[31m=[32m"disclaimer-title"[31m
+        [33maria-modal[31m=[32m"true"[31m
+        [33mclass[31m=[32m"disclaimer-modal-content"[31m
+        [33mrole[31m=[32m"dialog"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"disclaimer-modal-title"[31m
+          [33mid[31m=[32m"disclaimer-title"[31m
+        [36m>[31m
+          [0mImportant Notice[0m
+        [36m</h2>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-text"[31m
+        [36m>[31m
+          [36m<p>[31m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[31m
+          [36m<p>[31m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"disclaimer-modal-buttons"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mListen Again[0m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[31m
+            [33mtype[31m=[32m"button"[31m
+          [36m>[31m
+            [0mI Agree[0m
+          [36m</button>[31m
+        [36m</div>[31m
+      [36m</div>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+[36m</body>[31m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 4 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mfalls back to English for unknown languages
+[31m[1mTestingLibraryElementError[22m[39m: Found multiple elements with the text: Important Notice
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<h2[39m
+  [33mclass[39m=[32m"disclaimer-modal-title"[39m
+  [33mid[39m=[32m"disclaimer-title"[39m
+[36m>[39m
+  [0mImportant Notice[0m
+[36m</h2>[39m
+
+Ignored nodes: comments, script, style
+[36m<h2[39m
+  [33mclass[39m=[32m"disclaimer-modal-title"[39m
+  [33mid[39m=[32m"disclaimer-title"[39m
+[36m>[39m
+  [0mImportant Notice[0m
+[36m</h2>[39m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[39m
+  [33mstyle[39m=[32m"overflow: hidden;"[39m
+[36m>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mAviso Importante[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0m重要通知[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m再听一次[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m我同意[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m20:35[22m[39m
+[90m [2m❯[22m getMultipleElementsFoundError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m23:10[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m55:13[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/schema-forms/components/DisclaimerModal.test.tsx:[2m37:23[22m[39m
+    [90m 35| [39m    [34mit[39m([32m'falls back to English for unknown languages'[39m[33m,[39m () [33m=>[39m {
+    [90m 36| [39m        [34mrender[39m([33m<[39m[33mDisclaimerModal[39m [33m{[39m[33m...[39mdefaultProps[33m}[39m [33mselectedLanguage[39m[33m=[39m[32m"Kl[39m…
+    [90m 37| [39m        [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m'Important Notice'[39m))[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m   | [39m                      [31m^[39m
+    [90m 38| [39m        [34mexpect[39m(screen[33m.[39m[34mgetByText[39m([32m'I Agree'[39m))[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m 39| [39m    })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mdoes not render when isOpen is false
+[31m[1mTestingLibraryElementError[22m[39m: Found multiple elements with the text: Important Notice
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<h2[39m
+  [33mclass[39m=[32m"disclaimer-modal-title"[39m
+  [33mid[39m=[32m"disclaimer-title"[39m
+[36m>[39m
+  [0mImportant Notice[0m
+[36m</h2>[39m
+
+Ignored nodes: comments, script, style
+[36m<h2[39m
+  [33mclass[39m=[32m"disclaimer-modal-title"[39m
+  [33mid[39m=[32m"disclaimer-title"[39m
+[36m>[39m
+  [0mImportant Notice[0m
+[36m</h2>[39m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[39m
+  [33mstyle[39m=[32m""[39m
+[36m>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mAviso Importante[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0m重要通知[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m再听一次[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m我同意[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div />[39m
+[36m</body>[39m
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m20:35[22m[39m
+[90m [2m❯[22m getMultipleElementsFoundError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m23:10[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m55:13[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/schema-forms/components/DisclaimerModal.test.tsx:[2m43:23[22m[39m
+    [90m 41| [39m    [34mit[39m([32m'does not render when isOpen is false'[39m[33m,[39m () [33m=>[39m {
+    [90m 42| [39m        [34mrender[39m([33m<[39m[33mDisclaimerModal[39m [33m{[39m[33m...[39mdefaultProps[33m}[39m [33misOpen[39m[33m=[39m[33m{[39m[35mfalse[39m[33m}[39m [33m/[39m[33m>[39m)[33m;[39m
+    [90m 43| [39m        [34mexpect[39m(screen[33m.[39m[34mqueryByText[39m([32m'Important Notice'[39m))[33m.[39m[34mtoBeNull[39m()[33m;[39m
+    [90m   | [39m                      [31m^[39m
+    [90m 44| [39m    })[33m;[39m
+    [90m 45| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mcalls onAgree when agree button is clicked
+[31m[1mTestingLibraryElementError[22m[39m: Found multiple elements with the text: I Agree
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mI Agree[0m
+[36m</button>[39m
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mI Agree[0m
+[36m</button>[39m
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mI Agree[0m
+[36m</button>[39m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[39m
+  [33mstyle[39m=[32m"overflow: hidden;"[39m
+[36m>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mAviso Importante[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0m重要通知[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m再听一次[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m我同意[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div />[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m20:35[22m[39m
+[90m [2m❯[22m getMultipleElementsFoundError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m23:10[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m55:13[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/schema-forms/components/DisclaimerModal.test.tsx:[2m48:32[22m[39m
+    [90m 46| [39m    [34mit[39m([32m'calls onAgree when agree button is clicked'[39m[33m,[39m () [33m=>[39m {
+    [90m 47| [39m        [34mrender[39m([33m<[39m[33mDisclaimerModal[39m [33m{[39m[33m...[39mdefaultProps[33m}[39m [33m/[39m[33m>[39m)[33m;[39m
+    [90m 48| [39m        fireEvent[33m.[39m[34mclick[39m(screen[33m.[39m[34mgetByText[39m([32m'I Agree'[39m))[33m;[39m
+    [90m   | [39m                               [31m^[39m
+    [90m 49| [39m        [34mexpect[39m(defaultProps[33m.[39monAgree)[33m.[39m[34mtoHaveBeenCalled[39m()[33m;[39m
+    [90m 50| [39m    })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/schema-forms/components/DisclaimerModal.test.tsx[2m > [22mDisclaimerModal[2m > [22mcalls onListenAgain when listen again button is clicked
+[31m[1mTestingLibraryElementError[22m[39m: Found multiple elements with the text: Listen Again
+
+Here are the matching elements:
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mListen Again[0m
+[36m</button>[39m
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mListen Again[0m
+[36m</button>[39m
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mListen Again[0m
+[36m</button>[39m
+
+Ignored nodes: comments, script, style
+[36m<button[39m
+  [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+  [33mtype[39m=[32m"button"[39m
+[36m>[39m
+  [0mListen Again[0m
+[36m</button>[39m
+
+(If this is intentional, then use the `*AllBy*` variant of the query (like `queryAllByText`, `getAllByText`, or `findAllByText`)).
+
+Ignored nodes: comments, script, style
+[36m<body[39m
+  [33mstyle[39m=[32m"overflow: hidden;"[39m
+[36m>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mAviso Importante[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mEsta herramienta le ayuda a completar su formulario, pero no ofrece asesoramiento legal.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPor favor, revise toda la información cuidadosamente antes de enviar.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPara casos complejos, consulte a un abogado de inmigración.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEscuchar de Nuevo[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mEstoy de Acuerdo[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0m重要通知[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0m此工具帮助您填写表格，但不提供法律建议。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m提交前请仔细审查所有信息。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m对于复杂案件，请咨询移民律师。[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m再听一次[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m我同意[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div />[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"disclaimer-modal-overlay"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-labelledby[39m=[32m"disclaimer-title"[39m
+        [33maria-modal[39m=[32m"true"[39m
+        [33mclass[39m=[32m"disclaimer-modal-content"[39m
+        [33mrole[39m=[32m"dialog"[39m
+      [36m>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"disclaimer-modal-title"[39m
+          [33mid[39m=[32m"disclaimer-title"[39m
+        [36m>[39m
+          [0mImportant Notice[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-text"[39m
+        [36m>[39m
+          [36m<p>[39m
+            [0mThis tool helps you fill out your form, but it does not provide legal advice.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mPlease review all information carefully before submitting.[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0mFor complex cases, consult an immigration attorney.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"disclaimer-modal-buttons"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--secondary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mListen Again[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"disclaimer-modal-button disclaimer-modal-button--primary"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mI Agree[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m getElementError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m20:35[22m[39m
+[90m [2m❯[22m getMultipleElementsFoundError node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m23:10[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m55:13[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/schema-forms/components/DisclaimerModal.test.tsx:[2m54:32[22m[39m
+    [90m 52| [39m    [34mit[39m([32m'calls onListenAgain when listen again button is clicked'[39m[33m,[39m () [33m=[39m…
+    [90m 53| [39m        [34mrender[39m([33m<[39m[33mDisclaimerModal[39m [33m{[39m[33m...[39mdefaultProps[33m}[39m [33m/[39m[33m>[39m)[33m;[39m
+    [90m 54| [39m        fireEvent[33m.[39m[34mclick[39m(screen[33m.[39m[34mgetByText[39m([32m'Listen Again'[39m))[33m;[39m
+    [90m   | [39m                               [31m^[39m
+    [90m 55| [39m        [34mexpect[39m(defaultProps[33m.[39monListenAgain)[33m.[39m[34mtoHaveBeenCalled[39m()[33m;[39m
+    [90m 56| [39m    })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 20:19:12
+[2m   Duration [22m 1.80s[2m (transform 78ms, setup 0ms, collect 326ms, tests 79ms, environment 761ms, prepare 240ms)[22m
+
