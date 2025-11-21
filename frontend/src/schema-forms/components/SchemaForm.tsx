@@ -52,9 +52,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamReady, setStreamReady] = useState(false);
 
-  // WebSocket URL - using environment variable or default
-  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/form-filler';
-
   // Detect mobile on mount and on resize
   useEffect(() => {
     const checkMobile = () => {
@@ -112,6 +109,21 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
     };
   }, []);
 
+  const handleNextField = (fieldId: string | null) => {
+    if (!fieldId) return;
+
+    const element = document.getElementById(fieldId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('field-highlight');
+
+      // Remove highlight after a delay
+      setTimeout(() => {
+        element.classList.remove('field-highlight');
+      }, 2000);
+    }
+  };
+
   // Create connection manager once (only when stream becomes ready)
   useEffect(() => {
     if (connectionManagerRef.current) return;
@@ -121,7 +133,8 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
       schema, // Use prop schema, not state.schema
       (newStatus: string) => setStatus(newStatus),
       'English',
-      sharedStream || undefined
+      sharedStream || undefined,
+      handleNextField
     );
     connectionManagerRef.current = manager;
     setConnectionManager(manager);
@@ -138,17 +151,27 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
   state.schema.sections.forEach((section) => {
     sectionIndex[section.id] = section.order;
   });
-
-  // NOTE: Removed useEffect that was wiping state on schema changes
-  // Schema should not change during form filling, and if it does,
-  // we don't want to lose user's data
-
   // Notify parent of section changes
   useEffect(() => {
     if (onSectionChange) {
       onSectionChange(state.currentSectionId);
     }
   }, [state.currentSectionId, onSectionChange]);
+
+  // Set up section change callback for Gemini-triggered section switches
+  useEffect(() => {
+    window.vffOnSectionChanged = () => {
+      console.log('[SchemaForm] Section change triggered by Gemini');
+      const newState = SchemaFormStateManager.load();
+      if (newState) {
+        setState(newState);
+      }
+    };
+
+    return () => {
+      window.vffOnSectionChanged = undefined;
+    };
+  }, []);
 
   // Listen for state changes from VoiceOverlay (which updates sessionStorage)
   useEffect(() => {
@@ -175,7 +198,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('schemaFormStateChange', handleStorageChange);
     };
-  }, [state.currentPartId, state.lastUpdated]);
+  }, [state.currentSectionId, state.lastUpdated]);
 
   const handleFieldChange = (fieldId: string, value: any) => {
     // Use functional update to avoid stale closure issues
@@ -350,118 +373,118 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
         {/* Form Header */}
         <div className="schema-form__header">
           <h1 className="schema-form__title">{state.schema.form_metadata.title}</h1>
-        {state.schema.form_metadata.description && (
-          <p className="schema-form__description">{state.schema.form_metadata.description}</p>
-        )}
+          {state.schema.form_metadata.description && (
+            <p className="schema-form__description">{state.schema.form_metadata.description}</p>
+          )}
 
-        {/* Progress Bar */}
-        <div className="schema-form__progress">
-          <div className="schema-form__progress-bar">
-            <div
-              className="schema-form__progress-fill"
-              style={{ width: `${progress}%` }}
-              role="progressbar"
-              aria-valuenow={progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            />
-          </div>
-          <p className="schema-form__progress-text">
-            Section {currentSectionIndex + 1} of {sortedSections.length} • {Math.round(progress)}%
-            complete
-          </p>
-        </div>
-      </div>
-
-      {/* Current Section */}
-      {currentSection && (
-        <SectionRenderer
-          section={currentSection}
-          fields={currentFields}
-          fieldValues={state.fieldValues}
-          validationErrors={state.validationErrors}
-          onFieldChange={handleFieldChange}
-          onFieldBlur={handleFieldBlur}
-        />
-      )}
-
-      {/* Navigation */}
-      <div className="schema-form__navigation">
-        {prevSection && (
-          <button
-            type="button"
-            onClick={handlePreviousSection}
-            className="schema-form__nav-button schema-form__nav-button--prev"
-          >
-            ← Previous
-          </button>
-        )}
-
-        {nextSection ? (
-          <button
-            type="button"
-            onClick={handleNextSection}
-            className="schema-form__nav-button schema-form__nav-button--next"
-          >
-            Next →
-          </button>
-        ) : (
-          <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
-            Submit Form
-          </button>
-        )}
-      </div>
-
-      {/* PDF Download Section */}
-      {pdfUrl && (
-        <div className="schema-form__pdf-download">
-          <button
-            type="button"
-            onClick={handleDownloadPDF}
-            disabled={isDownloadingPDF}
-            className="schema-form__download-button"
-          >
-            {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
-          </button>
-          <p className="schema-form__download-help">
-            Download a PDF with all your current answers filled in. You can continue editing the form after downloading.
-          </p>
-        </div>
-      )}
-
-      {/* Legal Warnings */}
-      {state.schema.legal_warnings && state.schema.legal_warnings.length > 0 && (
-        <div className="schema-form__legal">
-          {state.schema.legal_warnings.map((warning, index) => (
-            <p key={index} className="schema-form__legal-warning">
-              {warning}
+          {/* Progress Bar */}
+          <div className="schema-form__progress">
+            <div className="schema-form__progress-bar">
+              <div
+                className="schema-form__progress-fill"
+                style={{ width: `${progress}%` }}
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              />
+            </div>
+            <p className="schema-form__progress-text">
+              Section {currentSectionIndex + 1} of {sortedSections.length} • {Math.round(progress)}%
+              complete
             </p>
-          ))}
+          </div>
         </div>
-      )}
-    </form>
 
-    {/* Voice Overlay - Render mobile or desktop based on screen size */}
-    {/* Only render when stream is ready to prevent race conditions */}
-    {connectionManager && streamReady && (
-      isMobile ? (
-        <VoiceOverlayMobile
-          schema={state.schema}
-          connectionManager={connectionManager}
-          sharedStream={sharedStream}
-          streamError={streamError}
-          status={status}
-        />
-      ) : (
-        <VoiceOverlay
-          schema={state.schema}
-          connectionManager={connectionManager}
-          status={status}
-          sharedStream={sharedStream}
-          streamError={streamError}
-        />
-      )
-    )}
+        {/* Current Section */}
+        {currentSection && (
+          <SectionRenderer
+            section={currentSection}
+            fields={currentFields}
+            fieldValues={state.fieldValues}
+            validationErrors={state.validationErrors}
+            onFieldChange={handleFieldChange}
+            onFieldBlur={handleFieldBlur}
+          />
+        )}
+
+        {/* Navigation */}
+        <div className="schema-form__navigation">
+          {prevSection && (
+            <button
+              type="button"
+              onClick={handlePreviousSection}
+              className="schema-form__nav-button schema-form__nav-button--prev"
+            >
+              ← Previous
+            </button>
+          )}
+
+          {nextSection ? (
+            <button
+              type="button"
+              onClick={handleNextSection}
+              className="schema-form__nav-button schema-form__nav-button--next"
+            >
+              Next →
+            </button>
+          ) : (
+            <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
+              Submit Form
+            </button>
+          )}
+        </div>
+
+        {/* PDF Download Section */}
+        {pdfUrl && (
+          <div className="schema-form__pdf-download">
+            <button
+              type="button"
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPDF}
+              className="schema-form__download-button"
+            >
+              {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
+            </button>
+            <p className="schema-form__download-help">
+              Download a PDF with all your current answers filled in. You can continue editing the form after downloading.
+            </p>
+          </div>
+        )}
+
+        {/* Legal Warnings */}
+        {state.schema.legal_warnings && state.schema.legal_warnings.length > 0 && (
+          <div className="schema-form__legal">
+            {state.schema.legal_warnings.map((warning, index) => (
+              <p key={index} className="schema-form__legal-warning">
+                {warning}
+              </p>
+            ))}
+          </div>
+        )}
+      </form>
+
+      {/* Voice Overlay - Render mobile or desktop based on screen size */}
+      {/* Only render when stream is ready to prevent race conditions */}
+      {connectionManager && streamReady && (
+        isMobile ? (
+          <VoiceOverlayMobile
+            schema={state.schema}
+            connectionManager={connectionManager}
+            sharedStream={sharedStream}
+            streamError={streamError}
+            status={status}
+          />
+        ) : (
+          <VoiceOverlay
+            schema={state.schema}
+            connectionManager={connectionManager}
+            status={status}
+            sharedStream={sharedStream}
+            streamError={streamError}
+          />
+        )
+      )}
     </>
   );
 }

@@ -620,6 +620,103 @@ The backend service `backend/services/form_kits.py` centralizes this logic so
 both PDF generation routes and `/api/fill-pdf` read from the same resolved kit
 location, keeping dev/prd behavior identical.
 
+### PDF Filling & Printing (Completed Nov 20, 2025)
+
+**Purpose**: Generate filled PDFs from form session data for printing or download.
+
+**Architecture**:
+
+The system uses PyMuPDF (fitz) on the backend to fill PDF forms with field values from the frontend session. The implementation is fully dynamic and works with any form-kit schema pair without hardcoding.
+
+**Backend Implementation** (`backend/routes/pdf_fill_routes.py`):
+
+1. **Endpoint**: `POST /api/fill-pdf`
+   - Accepts: `kit_id`, `pdf_filename`, `field_values`, `form_schema`
+   - Returns: Filled PDF as binary response with `application/pdf` content type
+
+2. **Field Type Support**:
+   - **Text fields**: Direct value assignment via widget.field_value
+   - **Radio buttons**: Sets selected option via xref manipulation (V and AS keys)
+   - **Checkboxes (single)**: Boolean true/false sets Yes/Off state
+   - **Checkboxes (groups)**: Array of values maps to multiple PDF widgets
+   - **Date fields**: Formatted as string
+   - **Textareas**: Multi-line text support
+
+3. **Dynamic Field Flag Manipulation**:
+   - **Problem**: Some USCIS PDF fields are read-only by default and need to be unlocked based on conditional logic
+   - **Solution**: `apply_field_flag_changes()` function reads `conditional_behavior.pdf_field_flag_change` from schema
+   - **Bit Flipping**: Modifies widget.field_flags to clear read-only bit (bit 0) when specified
+   - **Example**: Field becomes writable when checkbox "Reason for application: Other" is checked
+
+   ```python
+   # Schema specifies:
+   "conditional_behavior": {
+     "unlock_method": "flip_readonly_bit",
+     "pdf_field_flag_change": {
+       "bit": 0,           # Read-only flag
+       "current_value": 1, # Currently set (read-only)
+       "required_value": 0 # Should be cleared (writable)
+     }
+   }
+
+   # Backend applies:
+   new_flags = current_flags & ~(1 << 0)  # Clear bit 0
+   widget.field_flags = new_flags
+   ```
+
+4. **Field Mapping**:
+   - Schema provides `pdf_field_name` for each field (e.g., `"P1_line1a_AlienNumber"`)
+   - Radio/checkbox options have per-option `pdf_field_name` mappings
+   - Backend finds widgets by name across all PDF pages
+   - No hardcoded field names - fully schema-driven
+
+5. **PDF Generation**:
+   - Sets `need_appearances(True)` for viewer compatibility
+   - Saves with garbage collection, cleaning, and deflation
+   - Returns compressed PDF bytes
+
+**Frontend Implementation** (`frontend/src/schema-forms/`):
+
+1. **UI Component** (`SchemaForm.tsx`):
+   - "Download Filled PDF" button appears when `pdfUrl` prop is provided
+   - Loading state: "⏳ Generating PDF..."
+   - Help text: "Download a PDF with all your current answers filled in. You can continue editing the form after downloading."
+
+2. **PDF Filler Utility** (`utils/pdfFiller.ts`):
+   ```typescript
+   fillPDF(kitId, pdfUrl, fieldValues, schema) → Promise<Uint8Array>
+   downloadPDF(pdfBytes, filename) → void
+   ```
+   - Calls backend `/api/fill-pdf` endpoint
+   - Handles environment-specific URLs (dev: localhost:8000, prod: Cloud Run)
+   - Downloads via browser's native download API (works on tablets)
+
+3. **Form Kit Integration**:
+   - Frontend loads kit manifest from `/form-kits/index.json`
+   - User selects form → frontend gets `kitId`, `pdfUrl`, `schema`
+   - PDF filling uses same kit resolution as backend
+   - Future forms automatically supported (no code changes needed)
+
+**Tablet Support**:
+- Uses browser's native download (no printer driver required)
+- User can AirDrop PDF to printer or save to Files app
+- Works on iOS Safari, Android Chrome, desktop browsers
+- File downloads to device's standard Downloads folder
+
+**Testing Workflow**:
+1. Fill out form fields via voice or manual entry
+2. Click "Download Filled PDF" button at bottom of form
+3. Backend applies field flag changes (unlocks conditional fields)
+4. Backend fills PDF using PyMuPDF
+5. Browser downloads filled PDF (e.g., `I-90-filled-2025-11-20.pdf`)
+6. User can print from any device with PDF viewer
+
+**Future Forms**:
+- Add new kit to `form-kits/<kit-id>/` with `schema.json` and `form.pdf`
+- Run `npm run form-kits:prepare` to sync to frontend
+- Printing automatically works for new form (schema-driven)
+- No backend or frontend code changes required
+
 ---
 
 ## Audio Processing Architecture

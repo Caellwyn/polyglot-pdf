@@ -17,7 +17,7 @@ import {
   isFormComplete
 } from "./navigation";
 
-export type ConnectionStatus = 
+export type ConnectionStatus =
   | "disconnected"
   | "connecting"
   | "connected"
@@ -30,9 +30,11 @@ export interface ConnectionCallbacks {
   onStatusChange?: (status: ConnectionStatus) => void;
   onSessionReady?: (sessionId: string) => void;
   onSessionRestarted?: () => void;
+  onSectionChanged?: () => void;
   onFieldUpdate?: (updates: { fieldId: string; value: any }[]) => void;
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
+  onNextField?: (fieldId: string | null) => void;
 }
 
 export class WebFormConnection {
@@ -51,16 +53,16 @@ export class WebFormConnection {
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
-  
+
   // Fill language for form fields
   private fillLanguage: string = "English";
-  
+
   constructor(schema: FormSchema, callbacks: ConnectionCallbacks = {}, fillLanguage: string = "English") {
     this.state = SchemaFormStateManager.init(schema);
     this.callbacks = callbacks;
     this.fillLanguage = fillLanguage;
   }
-  
+
   /**
    * Connect to WebSocket endpoint and send full form schema
    */
@@ -68,22 +70,22 @@ export class WebFormConnection {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
     }
-    
+
     // Clear idle timeout flag on reconnect (user manually clicked reconnect)
     if (this.idleTimedOut) {
       console.log('[WebFormConnection] 🔄 Clearing idle timeout flag for manual reconnect');
       this.idleTimedOut = false;
     }
-    
+
     // Store the URL we're connecting to
     this.connectedUrl = wsUrl;
-    
+
     // Don't change status to "connecting" during section switches
     // (keeps current status visible until reconnected)
     if (!this.isSectionSwitching) {
       this.setStatus("connecting");
     }
-    
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (this.ws) {
@@ -92,24 +94,24 @@ export class WebFormConnection {
         }
         reject(new Error(`Connection timeout after ${timeoutMs}ms`));
       }, timeoutMs);
-      
+
       try {
         this.ws = new WebSocket(wsUrl);
-        
+
         this.ws.onopen = () => {
           clearTimeout(timeout);
           this.handleOpen();
           resolve();
         };
-        
+
         this.ws.onmessage = (event) => this.handleMessage(event);
-        
+
         this.ws.onerror = (error) => {
           clearTimeout(timeout);
           this.handleError(error);
           reject(error);
         };
-        
+
         this.ws.onclose = () => {
           clearTimeout(timeout);
           this.handleClose();
@@ -121,7 +123,7 @@ export class WebFormConnection {
       }
     });
   }
-  
+
   /**
    * Disconnect from WebSocket
    */
@@ -130,18 +132,18 @@ export class WebFormConnection {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
-    
+
     // Don't change status during section switches (will be updated after reconnect)
     if (!this.isSectionSwitching) {
       this.setStatus("disconnected");
     }
   }
-  
+
   /**
    * Send handshake to establish ephemeral session
    */
@@ -161,7 +163,7 @@ export class WebFormConnection {
     const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
     this.send(handshake);
   }
-  
+
   /**
    * Handle incoming messages
    */
@@ -171,55 +173,51 @@ export class WebFormConnection {
       await this.handleAudioFrame(event.data);
       return;
     }
-    
+
     // Handle JSON control messages
     try {
       const message = JSON.parse(event.data);
-      
+
       switch (message.type) {
         case "session_ready":
           this.handleSessionReady(message);
           break;
-          
+
         case "field_update":
           this.handleFieldUpdate(message);
           break;
-          
+
         case "form_updated":
           this.handleFormUpdated(message);
           break;
-          
+
         case "form_state_ack":
           break;
-          
+
         case "hint_ack":
           // Backend acknowledges next field hint - silent
           break;
-          
+
         case "get_form_state":
           this.handleGetFormStateRequest(message);
           break;
-          
+
         case "get_next_field_hint":
           this.handleGetNextFieldHintRequest(message);
           break;
-          
+
         case "prepare_section_switch":
           this.handlePrepareSectionSwitchRequest(message);
           break;
-          
+
         case "section_switched":
           this.handleSectionSwitched(message);
           break;
-          
-        case "switch_section":
-          this.handleSwitchSectionRequest(message);
-          break;
-          
+
         case "get_field_value":
           this.handleGetFieldValueRequest(message);
           break;
-          
+
         case "complete_section":
           this.handleCompleteSectionRequest(message);
           break;
@@ -231,18 +229,18 @@ export class WebFormConnection {
         case "error":
           this.handleServerError(message);
           break;
-          
+
         case "ai_response":
           // AI is speaking - no action needed
           break;
-          
+
         case "turn_complete":
           // Gemini finished speaking (transcript received) - signal to activity watchdog
           if (window.vffOnTurnComplete) {
             window.vffOnTurnComplete();
           }
           break;
-        
+
         case "gemini_session_restarted":
           // Backend confirms Gemini session has been restarted successfully
           console.log('[WebFormConnection] ✅ Gemini session restarted successfully');
@@ -251,7 +249,7 @@ export class WebFormConnection {
             this.callbacks.onSessionRestarted();
           }
           break;
-        
+
         case "idle_timeout":
           // Backend is closing connection due to inactivity
           // Set flag to prevent auto-reconnect, require manual reconnect
@@ -260,7 +258,7 @@ export class WebFormConnection {
           this.setStatus("idle_timeout");
           // WebSocket will close shortly, handleClose() will see idleTimedOut flag
           break;
-          
+
         default:
           // Unknown message type - ignore
           break;
@@ -269,7 +267,7 @@ export class WebFormConnection {
       // Failed to parse message - ignore
     }
   }
-  
+
   /**
    * Handle session_ready message from backend
    */
@@ -295,26 +293,26 @@ export class WebFormConnection {
 
     // No need to send initial hint - backend will request it as part of initial message
   }
-  
+
   /**
    * Handle field_update from AI
    */
   private handleFieldUpdate(message: any): void {
     const { updates } = message;
-    
+
     if (!updates || typeof updates !== "object") {
       return;
     }
-    
+
     // Apply updates to state
     const updatedFields: Array<{ fieldId: string; value: any }> = [];
-    
+
     for (const [displayName, value] of Object.entries(updates)) {
       // Find field by display name
       const field = this.state.schema.fields.find(
         (f) => f.name === displayName || f.id === displayName
       );
-      
+
       if (field) {
         // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
         this.updateField(field.id, value as any, { confirmed: false, emit: false });
@@ -323,7 +321,7 @@ export class WebFormConnection {
         // Field not found in schema - ignore
       }
     }
-    
+
     // Notify callback
     if (this.callbacks.onFieldUpdate && updatedFields.length > 0) {
       this.callbacks.onFieldUpdate(updatedFields);
@@ -400,21 +398,14 @@ export class WebFormConnection {
         }
 
         // Validate field before updating (only for AI-applied updates)
-        if (isApplied) {
-          const validationError = validateField(field, value);
-          if (validationError) {
-            console.warn(`[WebFormConnection] Validation failed for ${field.id}:`, validationError);
-            // Send validation error back to Gemini
-            this.send({
-              type: "validation_error",
-              field_id: field.id,
-              field_name: field.name || field.id,
-              value: value,
-              error: validationError
-            });
-            continue; // Skip this field update
-          }
-        }
+        // Note: Frontend validation temporarily disabled - backend handles validation
+        // if (isApplied) {
+        //   const validationError = validateField(field, value);
+        //   if (validationError) {
+        //     console.warn(`[WebFormConnection] Validation failed for ${field.id}:`, validationError);
+        //     continue; // Skip this field update
+        //   }
+        // }
 
         // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
         this.updateField(field.id, value as any, { confirmed: false, emit: false });
@@ -431,12 +422,12 @@ export class WebFormConnection {
     // If backend requested next field hint, send it now
     if (requestNextFieldHint && requestId) {
       const hint = this.computeNextFieldHintString();
-      
+
       // Store last field hint for recovery prompts
       if (hint) {
         sessionStorage.setItem('vff_last_field_hint', hint);
       }
-      
+
       this.send({
         type: "next_field_hint_response",
         request_id: requestId,
@@ -452,10 +443,10 @@ export class WebFormConnection {
   private handleGetFormStateRequest(message: any): void {
     const requestId = message.request_id;
     const requestedFieldIds: string[] = message.field_ids || [];
-    
+
     // Build field values response
     const fieldValues: Record<string, any> = {};
-    
+
     if (requestedFieldIds.length === 0) {
       // No specific fields requested - return all
       for (const [fieldId, fieldValue] of Object.entries(this.state.fieldValues)) {
@@ -478,7 +469,7 @@ export class WebFormConnection {
         if (!fieldValue && fieldId.endsWith('[]')) {
           fieldValue = this.state.fieldValues[fieldId.slice(0, -2)];
         }
-        
+
         if (fieldValue) {
           fieldValues[fieldId] = {
             value: fieldValue.value,
@@ -493,7 +484,7 @@ export class WebFormConnection {
         }
       }
     }
-    
+
     // Send response back to backend
     this.send({
       type: "form_state_response",
@@ -508,15 +499,15 @@ export class WebFormConnection {
    */
   private handleGetNextFieldHintRequest(message: any): void {
     const requestId = message.request_id;
-    
+
     // Compute next field hint
     const hint = this.computeNextFieldHintString();
-    
+
     // Store last field hint for recovery prompts
     if (hint) {
       sessionStorage.setItem('vff_last_field_hint', hint);
     }
-    
+
     // Send response back to backend
     this.send({
       type: "next_field_hint_response",
@@ -532,22 +523,33 @@ export class WebFormConnection {
   private computeNextFieldHintString(): string | null {
     // Check if form is complete
     if (isFormComplete(this.state)) {
+      if (this.callbacks.onNextField) {
+        this.callbacks.onNextField(null);
+      }
       return null;
     }
-    
+
     // Compute next field to fill
     const nextField = computeNextField(this.state, { skipConfirmed: true });
-    
+
     if (!nextField) {
+      if (this.callbacks.onNextField) {
+        this.callbacks.onNextField(null);
+      }
       return null;
     }
-    
+
+    // Notify UI about the next field (for highlighting/scrolling)
+    if (this.callbacks.onNextField) {
+      this.callbacks.onNextField(nextField.id);
+    }
+
     // Get field order for hint
     const fieldOrder = getFieldOrder(this.state, nextField.id);
-    
+
     // Format hint for Gemini
     const hint = formatNextFieldHint(nextField, fieldOrder || undefined);
-    
+
     return hint;
   }
 
@@ -562,43 +564,6 @@ export class WebFormConnection {
   /**
    * Phase 3: Handle switch_section request from backend (AI tool call)
    */
-  private async handleSwitchSectionRequest(message: any): Promise<void> {
-    const identifier = message.identifier;
-
-    try {
-      // Parse identifier - try as number first, then label
-      let targetPartId: string | undefined;
-
-      if (typeof identifier === 'number') {
-        const part = this.state.schema.parts?.find(p => p.order === identifier);
-        targetPartId = part?.id;
-      } else if (typeof identifier === 'string') {
-        const parsed = parseInt(identifier, 10);
-        if (!isNaN(parsed)) {
-          const part = this.state.schema.parts?.find(p => p.order === parsed);
-          targetPartId = part?.id;
-        } else {
-          targetPartId = SchemaFormStateManager.findPartByLabel(this.state, identifier);
-        }
-      }
-
-      if (!targetPartId) {
-        console.warn('[WebFormConnection] Invalid section identifier:', identifier);
-        return;
-      }
-
-      // Call existing switchSection method using the stored connected URL
-      // switchSection expects order number
-      const part = this.state.schema.parts?.find(p => p.id === targetPartId);
-      if (part) {
-        await this.switchSection(part.order, this.connectedUrl);
-      }
-
-    } catch (error) {
-      console.error('[WebFormConnection] Error switching section:', error);
-    }
-  }
-
   /**
    * Handle prepare_section_switch request from backend (new backend-side reconnect pattern)
    */
@@ -624,43 +589,44 @@ export class WebFormConnection {
       }
 
       // Parse identifier - try multiple strategies
-      let targetPartId: string | null | undefined;
+      // CRITICAL: identifier is a SECTION order (1-16 for I-90), not a PART order (1-8)
+      let targetSectionId: string | null | undefined;
 
       if (typeof identifier === 'number') {
-        // Find part by order number
-        const part = currentState.schema.parts.find(p => p.order === identifier);
-        targetPartId = part?.id;
+        // Find section by order number
+        const section = currentState.schema.sections.find(s => s.order === identifier);
+        targetSectionId = section?.id;
       } else if (typeof identifier === 'string') {
         const parsed = parseInt(identifier, 10);
         if (!isNaN(parsed)) {
-          // Numeric string - find by order
-          const part = currentState.schema.parts.find(p => p.order === parsed);
-          targetPartId = part?.id;
+          // Numeric string - find section by order
+          const section = currentState.schema.sections.find(s => s.order === parsed);
+          targetSectionId = section?.id;
         } else {
           // Try exact label match first
-          targetPartId = SchemaFormStateManager.findPartByLabel(currentState, identifier);
+          targetSectionId = SchemaFormStateManager.findSectionByLabel(currentState, identifier);
 
-          // If not found, try fuzzy matching (e.g., "Section 2" -> part with order 2)
-          if (!targetPartId) {
+          // If not found, try fuzzy matching (e.g., "Section 2" -> section with order 2)
+          if (!targetSectionId) {
             const sectionMatch = identifier.match(/section\s+(\d+)/i);
             if (sectionMatch) {
               const sectionNum = parseInt(sectionMatch[1], 10);
-              const part = currentState.schema.parts.find(p => p.order === sectionNum);
-              targetPartId = part?.id;
-              console.log('[WebFormConnection] Fuzzy matched "' + identifier + '" to part order', sectionNum);
+              const section = currentState.schema.sections.find(s => s.order === sectionNum);
+              targetSectionId = section?.id;
+              console.log('[WebFormConnection] Fuzzy matched "' + identifier + '" to section order', sectionNum);
             }
           }
         }
       }
 
-      console.log('[WebFormConnection] Parsed target part ID:', targetPartId);
+      console.log('[WebFormConnection] Parsed target section ID:', targetSectionId);
 
-      if (!targetPartId) {
+      if (!targetSectionId) {
         console.log('[WebFormConnection] Invalid target identifier, sending error with available sections');
 
         // Build list of available sections for error message
-        const availableSections = currentState.schema.parts?.map(p =>
-          `${p.order}: ${p.label}`
+        const availableSections = currentState.schema.sections?.map(s =>
+          `${s.order}: ${s.label}`
         ).join(', ') || 'none';
 
         this.send({
@@ -672,24 +638,24 @@ export class WebFormConnection {
         return;
       }
 
-      // Switch to target part in local state (no disconnect!)
-      console.log('[WebFormConnection] Switching to part', targetPartId);
-      const updatedState = SchemaFormStateManager.switchToPart(currentState, targetPartId);
+      // Switch to target section in local state (no disconnect!)
+      console.log('[WebFormConnection] Switching to section', targetSectionId);
+      const updatedState = SchemaFormStateManager.switchToSection(currentState, targetSectionId);
       this.state = updatedState;
 
-      // Get part schema and values
-      console.log('[WebFormConnection] Building part schema and values');
-      const partSchema = SchemaFormStateManager.extractPartFields(updatedState.schema, targetPartId);
-      const partFieldIds = new Set(partSchema.fields.map((f: any) => f.id));
-      const partValues: Record<string, any> = {};
+      // Get section schema and values
+      console.log('[WebFormConnection] Building section schema and values');
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, targetSectionId);
+      const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
+      const sectionValues: Record<string, any> = {};
 
       for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
-        if (partFieldIds.has(fieldId)) {
-          partValues[fieldId] = fieldValue;
+        if (sectionFieldIds.has(fieldId)) {
+          sectionValues[fieldId] = fieldValue;
         }
       }
 
-      // Build previous spoken names from completed parts
+      // Build previous spoken names from completed sections
       console.log('[WebFormConnection] Building previous spoken names');
       const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
 
@@ -702,27 +668,27 @@ export class WebFormConnection {
         sessionStorage.setItem('vff_last_field_hint', initialFieldHint);
       }
 
-      // Get part metadata
-      const currentPart = updatedState.schema.parts!.find(p => p.id === targetPartId);
+      // Get section metadata
+      const currentSection = updatedState.schema.sections.find(s => s.id === targetSectionId);
 
       console.log('[WebFormConnection] Sending section_info_response', {
         requestId,
-        sectionNumber: currentPart?.order,
-        fieldCount: partSchema.fields.length,
-        valueCount: Object.keys(partValues).length
+        sectionNumber: currentSection?.order,
+        fieldCount: sectionSchema.fields.length,
+        valueCount: Object.keys(sectionValues).length
       });
 
-      // Send section info back to backend (using section_number for compatibility)
+      // Send section info back to backend
       this.send({
         type: "section_info_response",
         request_id: requestId,
         section_info: {
-          schema: partSchema,
-          current_values: partValues,
+          schema: sectionSchema,
+          current_values: sectionValues,
           metadata: {
-            section_number: currentPart?.order ?? 1, // Backend expects section_number
-            total_sections: updatedState.schema.parts!.length,
-            section_label: currentPart?.label || '',
+            section_number: currentSection?.order ?? 1,
+            total_sections: updatedState.schema.sections.length,
+            section_label: currentSection?.label || '',
             previous_spoken_names: previousSpokenNames,
           },
           initial_field_hint: initialFieldHint,
@@ -747,12 +713,18 @@ export class WebFormConnection {
   private handleSectionSwitched(message: any): void {
     const sectionNumber = message.section_number;
     console.log(`[WebFormConnection] Section switched confirmed: ${sectionNumber}`);
-    
+
     // Update status
     this.setStatus('connected');
-    
+
     // State was already updated in handlePrepareSectionSwitchRequest
-    // Just confirm the switch is complete
+    // Now trigger UI update to show the new section
+    if (this.callbacks.onSectionChanged) {
+      this.callbacks.onSectionChanged();
+    }
+
+    // Also save the updated state
+    SchemaFormStateManager.save(this.state);
   }
 
   /**
@@ -812,45 +784,52 @@ export class WebFormConnection {
    */
   private async handleCompleteSectionRequest(message: any): Promise<void> {
     try {
-      // Mark current part as complete in state
+      // Mark current section as complete in state
       const currentState = SchemaFormStateManager.load();
-      if (!currentState || !currentState.currentPartId) {
-        throw new Error('Part state not initialized');
+      if (!currentState || !currentState.currentSectionId) {
+        throw new Error('Section state not initialized');
       }
 
-      const currentPart = SchemaFormStateManager.getCurrentPart(currentState);
-      if (!currentPart) {
-        throw new Error('Current part not found');
+      const currentSection = SchemaFormStateManager.getCurrentSection(currentState);
+      if (!currentSection) {
+        throw new Error('Current section not found');
       }
 
-      // Mark part as completed
-      const updatedState = SchemaFormStateManager.markPartComplete(currentState, currentState.currentPartId);
+      // Mark section as completed
+      const updatedState = SchemaFormStateManager.markSectionComplete(currentState, currentState.currentSectionId);
       this.state = updatedState;
 
-      const totalParts = currentState.schema.parts?.length ?? 0;
+      const totalSections = currentState.schema.sections?.length ?? 0;
 
-      // Check if this was the last part
-      if (currentPart.order >= totalParts) {
-        // Form is complete - stay connected but don't start new part
+      // Check if this was the last section
+      if (currentSection.order >= totalSections) {
+        // Form is complete - stay connected but don't start new section
         this.send({
           type: "section_completed",
-          next_section: currentPart.order, // Same section (we're done)
+          next_section: currentSection.order, // Same section (we're done)
           form_complete: true,
         });
         return;
       }
 
-      // Move to next part using backend-side reconnect (switchSection pattern)
-      const nextPartOrder = currentPart.order + 1;
+      // Move to next section automatically
+      const nextSection = SchemaFormStateManager.getNextSection(updatedState);
+      if (nextSection) {
+        // Switch to next section locally
+        const newState = SchemaFormStateManager.switchToSection(updatedState, nextSection.id);
+        this.state = newState;
+        SchemaFormStateManager.save(newState);
 
-      // Use the switchSection method which uses manual_section_switch message
-      // This keeps WebSocket alive and lets backend restart Gemini session
-      await this.switchSection(nextPartOrder, this.connectedUrl);
+        // Notify UI
+        if (this.callbacks.onSectionChanged) {
+          this.callbacks.onSectionChanged();
+        }
+      }
 
       // Send response to backend confirming section completed
       this.send({
         type: "section_completed",
-        next_section: nextPartOrder,
+        next_section: nextSection?.order ?? currentSection.order,
         form_complete: false,
       });
 
@@ -889,7 +868,7 @@ export class WebFormConnection {
    */
   private sendCompletionMessage(): void {
     const completionMessage = "Say the following: 'The form is complete. if all fields are correct, please press submit.'";
-    
+
     this.send({
       type: "completion_message",
       message: completionMessage,
@@ -901,46 +880,46 @@ export class WebFormConnection {
    */
   private async handleAudioFrame(data: ArrayBuffer | Blob): Promise<void> {
     const arrayBuffer = data instanceof Blob ? await data.arrayBuffer() : data;
-    
+
     // Track audio chunks received
     if (!this.audioChunkCount) {
       this.audioChunkCount = 0;
     }
     this.audioChunkCount++;
-    
+
     if (this.audioChunkCount === 1) {
       console.log(`[WebFormConnection] 📥 First audio chunk received from server (${arrayBuffer.byteLength} bytes)`);
     } else if (this.audioChunkCount % 10 === 0) {
       console.log(`[WebFormConnection] 📥 Audio chunk #${this.audioChunkCount} (${arrayBuffer.byteLength} bytes)`);
     }
-    
+
     // Queue audio for processing
     this.audioQueue.push(arrayBuffer);
-    
+
     if (!this.isProcessingAudio) {
       this.processAudioQueue();
     }
   }
-  
+
   /**
    * Process queued audio frames
    */
   private async processAudioQueue(): Promise<void> {
     this.isProcessingAudio = true;
-    
+
     while (this.audioQueue.length > 0) {
       const audioData = this.audioQueue.shift()!;
-      
+
       // Silent audio processing - no logging
-      
+
       if (this.callbacks.onAudioData) {
         this.callbacks.onAudioData(audioData);
       }
     }
-    
+
     this.isProcessingAudio = false;
   }
-  
+
   /**
    * Handle server error messages
    */
@@ -954,12 +933,12 @@ export class WebFormConnection {
     // Build error message from available fields
     const errorText = message.message || message.reason || message.code || "Server error";
     const error = new Error(errorText);
-    
+
     if (this.callbacks.onError) {
       this.callbacks.onError(error);
     }
   }
-  
+
   /**
    * Handle WebSocket errors
    */
@@ -968,12 +947,12 @@ export class WebFormConnection {
     if (!this.isSectionSwitching) {
       this.setStatus("error");
     }
-    
+
     if (this.callbacks.onError && error instanceof Error) {
       this.callbacks.onError(error);
     }
   }
-  
+
   /**
    * Handle WebSocket close
    */
@@ -984,12 +963,12 @@ export class WebFormConnection {
       this.setStatus("disconnected");
       return;
     }
-    
+
     // Don't auto-reconnect during intentional section switches
     if (this.isSectionSwitching) {
       return; // Keep current status, will be updated after reconnect
     }
-    
+
     // Don't auto-reconnect if connection was closed due to idle timeout
     // User must manually click "Reconnect" button to resume
     if (this.idleTimedOut) {
@@ -997,7 +976,7 @@ export class WebFormConnection {
       this.setStatus("idle_timeout");
       return;
     }
-    
+
     // Attempt reconnect if not intentionally disconnected
     if (this.status !== "disconnected" && this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect();
@@ -1005,30 +984,30 @@ export class WebFormConnection {
       this.setStatus("disconnected");
     }
   }
-  
+
   /**
    * Attempt to reconnect with exponential backoff
    */
   private attemptReconnect(): void {
     this.reconnectAttempts++;
     this.setStatus("reconnecting");
-    
+
     const delay = Math.min(
       this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
       30000 // Max 30 seconds
     );
-    
+
     this.reconnectTimer = window.setTimeout(() => {
       this.connect();
     }, delay);
   }
-  
+
   /**
    * Wait for WebSocket send buffer to drain
    */
   private async waitForBufferDrain(maxWaitMs: number = 1000): Promise<void> {
     if (!this.ws) return;
-    
+
     const startTime = Date.now();
     while (this.ws.bufferedAmount > 0) {
       if (Date.now() - startTime > maxWaitMs) {
@@ -1041,7 +1020,7 @@ export class WebFormConnection {
       // Wait 10ms before checking again
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    
+
     if (this.ws.bufferedAmount === 0) {
       console.log('[WebFormConnection] Buffer drained successfully', {
         waitedMs: Date.now() - startTime
@@ -1061,7 +1040,7 @@ export class WebFormConnection {
       });
       return;
     }
-    
+
     if (message instanceof ArrayBuffer) {
       this.ws.send(message);
     } else {
@@ -1075,14 +1054,14 @@ export class WebFormConnection {
       this.ws.send(jsonStr);
     }
   }
-  
+
   /**
    * Send audio data to AI
    */
   sendAudio(audioData: ArrayBuffer): void {
     this.send(audioData);
   }
-  
+
   /**
    * Send manual field update notification to Gemini
    * Notifies AI when user manually edits a field
@@ -1103,15 +1082,15 @@ export class WebFormConnection {
       next_field_hint: nextFieldHint,  // Include next field guidance
     });
   }
-  
-  
+
+
   /**
    * Send activity_start signal to Gemini (user started speaking).
    * Signals the beginning of user speech before sending audio chunks.
    */
   sendActivityStart(): void {
     console.log(`[WebFormConnection] 📤 sendActivityStart() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
-    
+
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error(`[WebFormConnection] ❌ Cannot send activity_start - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
@@ -1130,7 +1109,7 @@ export class WebFormConnection {
    */
   async sendActivityEnd(): Promise<void> {
     console.log(`[WebFormConnection] 📤 sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
-    
+
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error(`[WebFormConnection] ❌ Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
@@ -1150,7 +1129,7 @@ export class WebFormConnection {
       timestamp: Date.now(),
     });
   }
-  
+
   /**
    * Send text prompt to Gemini (for recovery, nudges, inactivity handling)
    * Uses completion_message type to send direct text instructions
@@ -1160,14 +1139,14 @@ export class WebFormConnection {
       console.warn('[WebFormConnection] Cannot send prompt - not connected');
       return;
     }
-    
+
     console.log('[WebFormConnection] Sending prompt to Gemini:', prompt);
     this.send({
       type: 'completion_message',
       message: prompt,
     });
   }
-  
+
   /**
    * Send recovery prompt to Gemini (activity watchdog escalation)
    * Backend translates level into configured prompt from config.py
@@ -1180,7 +1159,7 @@ export class WebFormConnection {
       console.warn('[WebFormConnection] Cannot send recovery prompt - not connected');
       return;
     }
-    
+
     console.log(`[WebFormConnection] Sending recovery prompt level ${level}`, nextFieldHint ? `with hint: ${nextFieldHint}` : '');
     this.send({
       type: 'recovery_prompt',
@@ -1188,7 +1167,7 @@ export class WebFormConnection {
       next_field_hint: nextFieldHint,
     });
   }
-  
+
   /**
    * End Gemini session only (keep WebSocket alive)
    * Called after Level 3 farewell completes
@@ -1198,13 +1177,13 @@ export class WebFormConnection {
       console.warn('[WebFormConnection] Cannot end Gemini session - not connected');
       return;
     }
-    
+
     console.log('[WebFormConnection] 🚪 Ending Gemini session (keeping WebSocket alive)');
     this.send({
       type: 'end_gemini_session',
     });
   }
-  
+
   /**
    * Change the language used for filling form field values
    * Sends a message to backend which forwards it to Gemini
@@ -1213,19 +1192,19 @@ export class WebFormConnection {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
-    
+
     // Update internal state
     this.fillLanguage = language;
-    
+
     this.send({
       type: 'change_fill_language',
       language: language,
     });
-    
+
     // Wait for acknowledgment (optional - fire and forget is also fine)
     // The backend will send back a language_changed message
   }
-  
+
   /**
    * Update field value (user edit or AI fill)
    */
@@ -1299,34 +1278,34 @@ export class WebFormConnection {
     // No need to send hint for manual edits - user is in control
     // Next hint will be requested when AI next calls update_form_fields
   }
-  
+
   /**
    * Set connection status and notify
    */
   private setStatus(status: ConnectionStatus): void {
     if (this.status === status) return;
-    
+
     this.status = status;
-    
+
     if (this.callbacks.onStatusChange) {
       this.callbacks.onStatusChange(status);
     }
   }
-  
+
   /**
    * Get current status
    */
   getStatus(): ConnectionStatus {
     return this.status;
   }
-  
+
   /**
    * Get current state
    */
   getState(): SchemaFormState {
     return this.state;
   }
-  
+
   /**
    * Get completion percentage
    */
@@ -1341,7 +1320,7 @@ export class WebFormConnection {
     this.disconnect();
     SchemaFormStateManager.clear();
   }
-  
+
   /**
    * Start a specific section (closes current session, starts new one)
    * @param sectionId - Section ID (e.g., "part_1_2_addresses")
@@ -1419,7 +1398,7 @@ export class WebFormConnection {
       throw error;
     }
   }
-  
+
   /**
    * Switch to a different section (backend-side reconnect pattern)
    *
@@ -1500,7 +1479,7 @@ export class WebFormConnection {
       },
     });
   }
-  
+
   /**
    * Complete current section and move to next
    *

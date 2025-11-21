@@ -57,7 +57,14 @@
   - Waits for user acknowledgment before proceeding
   - Skipped on subsequent sections (section > 1 OR filled_count > 0)
   - Backend tests passing (5/5)
-- [ ] **Implement print functionality** - Must work from tablet (Est: 2-4 hours)
+- [x] **Implement print functionality** - Must work from tablet ✅ COMPLETE (Nov 20, 2025)
+  - Backend PDF filling fully implemented in `backend/routes/pdf_fill_routes.py`
+  - Dynamic field flag manipulation for read-only fields (unlocks conditional fields)
+  - Support for all field types: text, textarea, date, radio, checkbox (single & group)
+  - Frontend "Download Filled PDF" button in `SchemaForm.tsx`
+  - Uses form-kit system: `kitId` + `pdfUrl` → filled PDF bytes
+  - Works with any form + schema pair (I-90 tested, future forms supported)
+  - Tablet-friendly: download triggers browser's native download (works on mobile)
 - [ ] **Thorough end-to-end testing** - Full form completion multiple times (Est: 4-6 hours)
 
 ### Legal/Compliance
