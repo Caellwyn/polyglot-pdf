@@ -46,6 +46,11 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		field_count=len(request.field_values),
 	)
 
+	# DEBUG: Log first 5 field values to verify data is coming through
+	if request.field_values:
+		sample_values = dict(list(request.field_values.items())[:5])
+		_log.info("pdf_fill_sample_values", kit=request.kit_id, sample=sample_values)
+
 	try:
 		pdf_bytes = await store.load_pdf_bytes(request.kit_id, request.pdf_filename)
 	except FormKitNotFound as exc:
@@ -90,7 +95,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			return "Yes"
 
 		def fill_widget(widget, value, field_type: Optional[str] = None) -> None:
-			"""Apply a value to a widget, handling button vs. text fields."""
+			"""Apply a value to a widget, handling button vs. text fields and XFA forms.
+
+			For XFA forms, we need to use the page-based approach to avoid "Annot is not bound" errors.
+			"""
 			if widget.field_type == 2 or widget.field_type_string in {"CheckBox", "RadioButton"}:
 				if value in {True, "true", "True", "1", 1}:
 					target_value = get_button_on_state(widget)
@@ -104,18 +112,67 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					doc.xref_set_key(widget.xref, "AS", f"/{target_value}")
 				except Exception:
 					widget.field_value = target_value
-					widget.update()
+					try:
+						widget.update()
+					except Exception:
+						pass
 			else:
-				widget.field_value = str(value)
-				widget.update()
+				# For text fields in XFA forms, we need to find the widget's page and update it there
+				# This avoids the "Annot is not bound to a page" error
+				widget_page = None
+				widget_on_page = None
+
+				# Find which page this widget belongs to
+				for page_num in range(doc.page_count):
+					page = doc[page_num]
+					for w in page.widgets() or []:
+						if w.xref == widget.xref:
+							widget_page = page
+							widget_on_page = w
+							break
+					if widget_on_page:
+						break
+
+				if widget_on_page:
+					# Update using the widget from the page
+					widget_on_page.field_value = str(value)
+					try:
+						widget_on_page.update()
+					except Exception:
+						# update() may fail for XFA, but field_value assignment should work
+						pass
+				else:
+					# Fallback: try direct xref manipulation
+					try:
+						doc.xref_set_key(widget.xref, "V", f"({str(value)})")
+					except Exception:
+						# Last resort: just set field_value and hope for the best
+						widget.field_value = str(value)
 
 		def find_widget(field_name: str):
+			"""Find a widget by field name, supporting both exact and partial matches.
+
+			XFA PDFs use full paths like 'form1[0].#subform[0].P1_Line1_AlienNumber[0]'
+			while our schema might only have 'P1_Line1_AlienNumber[0]'.
+			This function tries exact match first, then partial match (endswith).
+			"""
 			for page_index in range(doc.page_count):
 				page = doc[page_index]
 				widgets = page.widgets() or []
 				for widget in widgets:
+					# Try exact match first
 					if widget.field_name == field_name:
 						return widget
+
+			# Try partial match (for XFA forms with full paths)
+			for page_index in range(doc.page_count):
+				page = doc[page_index]
+				widgets = page.widgets() or []
+				for widget in widgets:
+					# Match if the widget's full path ends with our field name
+					if widget.field_name and widget.field_name.endswith(field_name):
+						return widget
+
 			return None
 
 		def apply_field_flag_changes(widget, conditional_behavior: Optional[Dict[str, Any]]) -> None:
@@ -169,8 +226,12 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		skipped_count = 0
 		error_count = 0
 
+		# DEBUG: Track which fields are being processed
+		_log.info("pdf_fill_start", kit=request.kit_id, total_values=len(request.field_values))
+
 		for field_id, value in request.field_values.items():
 			if value is None or value == "":
+				_log.debug("field_empty_skipped", kit=request.kit_id, field_id=field_id)
 				skipped_count += 1
 				continue
 
@@ -181,6 +242,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				continue
 
 			field_type = field_obj.get("type", "text")
+			_log.debug("processing_field", kit=request.kit_id, field_id=field_id, field_type=field_type, has_value=bool(value))
 
 			if field_type == "radio":
 				options = field_obj.get("options", []) or []
@@ -330,7 +392,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 				widget = find_widget(pdf_field_name)
 				if not widget:
-					_log.warning("text_widget_not_found", kit=request.kit_id, field_id=field_id)
+					_log.warning("text_widget_not_found", kit=request.kit_id, field_id=field_id, pdf_field_name=pdf_field_name)
 					skipped_count += 1
 					continue
 
@@ -341,6 +403,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					fill_widget(widget, value, field_type=field_type)
 					filled_count += 1
+					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, value_length=len(str(value)))
 				except Exception as exc:
 					_log.error(
 						"field_fill_error",

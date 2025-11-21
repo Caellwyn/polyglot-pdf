@@ -17,7 +17,8 @@ import {
 } from "../state/schemaFormState";
 import { SectionRenderer } from "./SectionRenderer";
 import { validateField } from "../utils/validation";
-import { fillPDF, downloadPDF } from "../utils/pdfFiller";
+import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
+import { unwrapFieldValue } from "../utils/fieldValue";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
@@ -38,8 +39,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
   // Prevent rapid navigation/submission (debounce)
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // PDF download state
+  // PDF download/print state
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const [isPrintingPDF, setIsPrintingPDF] = useState(false);
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -341,7 +343,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
     setIsDownloadingPDF(true);
 
     try {
-      const filledPDFBytes = await fillPDF(kitId, pdfUrl, state.fieldValues, state.schema);
+      // Unwrap FieldValue objects to get raw values for PDF filling
+      const unwrappedFieldValues: Record<string, any> = {};
+      for (const [fieldId, value] of Object.entries(state.fieldValues)) {
+        unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
+      }
+
+      console.log('[SchemaForm] Unwrapped field values for PDF filling:', {
+        original_count: Object.keys(state.fieldValues).length,
+        unwrapped_count: Object.keys(unwrappedFieldValues).length,
+        sample: Object.entries(unwrappedFieldValues).slice(0, 3),
+      });
+
+      const filledPDFBytes = await fillPDF(kitId, pdfUrl, unwrappedFieldValues, state.schema);
 
       // Generate filename from form metadata
       const formNumber = state.schema.form_metadata.form_number || 'form';
@@ -354,6 +368,35 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
       alert('Failed to download PDF. Check console for details.');
     } finally {
       setIsDownloadingPDF(false);
+    }
+  };
+
+  const handlePrintPDF = async () => {
+    if (!pdfUrl) {
+      alert("PDF URL not configured. Cannot print filled PDF.");
+      return;
+    }
+
+    setIsPrintingPDF(true);
+
+    try {
+      // Unwrap FieldValue objects to get raw values for PDF filling
+      const unwrappedFieldValues: Record<string, any> = {};
+      for (const [fieldId, value] of Object.entries(state.fieldValues)) {
+        unwrappedFieldValues[fieldId] = unwrapFieldValue(value);
+      }
+
+      console.log('[SchemaForm] Preparing PDF for printing with unwrapped values');
+
+      const filledPDFBytes = await fillPDF(kitId, pdfUrl, unwrappedFieldValues, state.schema);
+
+      // Open print dialog
+      printPDF(filledPDFBytes);
+    } catch (error) {
+      console.error('[SchemaForm] PDF print failed:', error);
+      alert('Failed to print PDF. Check console for details.');
+    } finally {
+      setIsPrintingPDF(false);
     }
   };
 
@@ -435,23 +478,6 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
           )}
         </div>
 
-        {/* PDF Download Section */}
-        {pdfUrl && (
-          <div className="schema-form__pdf-download">
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              disabled={isDownloadingPDF}
-              className="schema-form__download-button"
-            >
-              {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
-            </button>
-            <p className="schema-form__download-help">
-              Download a PDF with all your current answers filled in. You can continue editing the form after downloading.
-            </p>
-          </div>
-        )}
-
         {/* Legal Warnings */}
         {state.schema.legal_warnings && state.schema.legal_warnings.length > 0 && (
           <div className="schema-form__legal">
@@ -463,6 +489,34 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
           </div>
         )}
       </form>
+
+      {/* PDF Download/Print Section - Outside form to avoid submission conflicts */}
+      {pdfUrl && (
+        <div className="schema-form__pdf-download">
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handlePrintPDF}
+              disabled={isPrintingPDF || isDownloadingPDF}
+              className="schema-form__download-button"
+              style={{ backgroundColor: '#28a745' }}
+            >
+              {isPrintingPDF ? '⏳ Preparing to Print...' : '🖨️ Print Filled PDF'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadPDF}
+              disabled={isDownloadingPDF || isPrintingPDF}
+              className="schema-form__download-button"
+            >
+              {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
+            </button>
+          </div>
+          <p className="schema-form__download-help">
+            Print or download a PDF with all your current answers filled in. You can continue editing the form after printing/downloading.
+          </p>
+        </div>
+      )}
 
       {/* Voice Overlay - Render mobile or desktop based on screen size */}
       {/* Only render when stream is ready to prevent race conditions */}

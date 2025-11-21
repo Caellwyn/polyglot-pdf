@@ -149,3 +149,39 @@ export function downloadPDF(pdfBytes: Uint8Array, filename: string): void {
   URL.revokeObjectURL(url);
   console.log(`[pdfFiller] Downloaded PDF: ${filename}`);
 }
+
+/**
+ * Print a filled PDF using the browser's print dialog
+ *
+ * Opens the PDF in a new window and triggers the print dialog.
+ * Works on tablets and desktops.
+ *
+ * @param pdfBytes - Filled PDF as Uint8Array
+ */
+export function printPDF(pdfBytes: Uint8Array): void {
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+
+  // Open PDF in new window
+  const printWindow = window.open(url, '_blank');
+
+  if (printWindow) {
+    // Wait for PDF to load, then trigger print dialog
+    printWindow.onload = () => {
+      printWindow.print();
+      // Clean up blob URL after a delay (to allow printing)
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+    };
+    console.log('[pdfFiller] Print dialog opened for PDF');
+  } else {
+    // Popup blocked - fall back to download
+    console.warn('[pdfFiller] Print window blocked, falling back to download');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'form-filled.pdf';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+}
