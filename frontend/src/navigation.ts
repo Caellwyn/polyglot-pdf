@@ -321,11 +321,12 @@ export function formatNextFieldHint(
 ): string {
   const orderPrefix = order ? `#${order}` : '';
   const requiredSuffix = field.required ? ', required' : '';
-  const optionsSuffix = field.options && field.options.length > 0 
-    ? `, options: [${field.options.join(', ')}]` 
+  const optionsSuffix = field.options && field.options.length > 0
+    ? `, options: [${field.options.join(', ')}]`
     : '';
-  
-  return `Next field to fill is ${orderPrefix}: '${field.name}' (type: ${field.type}${requiredSuffix}${optionsSuffix})`;
+
+  // CRITICAL: Include field_id so Gemini knows exactly which field to update
+  return `Next field to fill is ${orderPrefix}: '${field.name}' (field_id: '${field.id}', type: ${field.type}${requiredSuffix}${optionsSuffix})`;
 }
 
 /**

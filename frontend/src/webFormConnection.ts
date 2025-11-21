@@ -287,6 +287,20 @@ export class WebFormConnection {
 
     this.setStatus("connected");
 
+    // Check if this is a reconnect (disclaimer already accepted)
+    if (this.state.disclaimerAccepted && this.state.selectedLanguage) {
+      // Auto-send language message to trigger initiating prompt (skip disclaimer)
+      const nextFieldHint = this.computeNextFieldHintString();
+      if (nextFieldHint) {
+        this.send({
+          type: 'change_spoken_language',
+          spoken_language: this.state.selectedLanguage,
+          next_field_hint: nextFieldHint
+        });
+        console.log('[WebFormConnection] ✅ Auto-sent language message for reconnect:', this.state.selectedLanguage);
+      }
+    }
+
     if (this.callbacks.onSessionReady) {
       this.callbacks.onSessionReady(session_id);
     }
