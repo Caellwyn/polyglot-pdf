@@ -641,38 +641,33 @@ export class SchemaFormStateManager {
 
   /**
    * Get field ID by spoken name (for WebSocket field lookups)
-   * Searches current part + completed parts for field with matching spoken_name or alias
+   * Searches current section + completed sections for field with matching spoken_name or alias
    */
   static getFieldBySpokenName(state: SchemaFormState, spokenName: string): string | null {
     const lowerSpokenName = spokenName.toLowerCase();
 
-    // Get all parts to search (current + completed)
-    const partsToSearch = new Set([state.currentPartId, ...state.completedParts]);
+    // Get all sections to search (current + completed)
+    const sectionsToSearch = new Set([state.currentSectionId, ...state.completedSections]);
 
-    for (const partId of partsToSearch) {
-      const part = state.schema.parts?.find(p => p.id === partId);
-      if (!part) continue;
+    for (const sectionId of sectionsToSearch) {
+      const section = state.schema.sections.find(s => s.id === sectionId);
+      if (!section) continue;
 
-      // Get sections in this part
-      const partSections = state.schema.sections.filter(s => part.section_ids.includes(s.id));
+      // Search fields in this section
+      for (const fieldId of section.fields) {
+        const field = state.schema.fields.find(f => f.id === fieldId);
+        if (!field) continue;
 
-      // Search fields in these sections
-      for (const section of partSections) {
-        for (const fieldId of section.fields) {
-          const field = state.schema.fields.find(f => f.id === fieldId);
-          if (!field) continue;
+        // Check spoken_name
+        if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
+          return field.id;
+        }
 
-          // Check spoken_name
-          if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
-            return field.id;
-          }
-
-          // Check spoken_aliases
-          if (field.spoken_aliases) {
-            for (const alias of field.spoken_aliases) {
-              if (alias.toLowerCase() === lowerSpokenName) {
-                return field.id;
-              }
+        // Check spoken_aliases
+        if (field.spoken_aliases) {
+          for (const alias of field.spoken_aliases) {
+            if (alias.toLowerCase() === lowerSpokenName) {
+              return field.id;
             }
           }
         }

@@ -211,8 +211,17 @@ def build_form_context(
     # Format: "1. Personal Information, 2. Employment History, 3. References"
     # This helps Gemini understand section names, order, and handle requests like "go to last section"
     section_list_text = ""
-    if schema.get("parts"):
-        # Multi-part form - list all parts
+    if schema.get("sections"):
+        # Multi-section form - list all sections (NOT parts)
+        # This is critical: Gemini must see section order (1-16 for I-90), not part order (1-8)
+        section_items = []
+        for section in schema.get("sections", []):
+            order = section.get("order", "?")
+            label = section.get("label", f"Section {order}")
+            section_items.append(f"{order}. {label}")
+        section_list_text = ", ".join(section_items)
+    elif schema.get("parts"):
+        # Fallback: If no sections array, use parts
         section_items = []
         for part in schema.get("parts", []):
             order = part.get("order", "?")

@@ -10,6 +10,7 @@ declare global {
 	interface Window {
 		vffOnAudioPlaybackEnd?: () => void
 		vffOnAudioPlaybackStart?: () => void  // Called when Gemini starts speaking (pause timer)
+		vffOnSectionChanged?: () => void  // Called when Gemini switches sections
 		// vffOnTurnComplete removed - now using audio silence detection (100ms threshold)
 	}
 }
@@ -65,10 +66,10 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 	for (const [fieldId, fieldValue] of Object.entries(state.fieldValues)) {
 		const value = fieldValue.value
 		if (value === null || value === undefined || value === '') continue
-		
+
 		// Find the field element
 		let element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
-		
+
 		// Try by name attribute
 		if (!element) {
 			const inputs = document.querySelectorAll(`input[name="${fieldId}"], textarea[name="${fieldId}"], select[name="${fieldId}"]`)
@@ -76,9 +77,9 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 				element = inputs[0] as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 			}
 		}
-		
+
 		if (!element) continue
-		
+
 		// Restore value to DOM
 		if (element.tagName === 'SELECT') {
 			(element as HTMLSelectElement).value = String(value)
@@ -92,7 +93,7 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 		} else if (element.tagName === 'TEXTAREA') {
 			(element as HTMLTextAreaElement).value = String(value)
 		}
-		
+
 		restoredCount++
 	}
 
@@ -107,13 +108,13 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
  */
 function capturePreFilledValues(connection: WebFormConnection, schema: FormSchema): void {
 	let capturedCount = 0
-	
+
 	for (const field of schema.fields) {
 		const fieldId = field.id
-		
+
 		// Try to find element by ID
 		let element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
-		
+
 		// Try by name attribute (for table fields, radio groups, checkbox groups)
 		if (!element) {
 			const inputs = document.querySelectorAll(`input[name="${fieldId}"], textarea[name="${fieldId}"], select[name="${fieldId}"]`)
@@ -121,12 +122,12 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 				element = inputs[0] as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 			}
 		}
-		
+
 		if (!element) continue
-		
+
 		// Get current value from DOM
 		let value: string | boolean | null = null
-		
+
 		if (element.tagName === 'SELECT') {
 			const selectEl = element as HTMLSelectElement
 			value = selectEl.value || null
@@ -145,7 +146,7 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 		} else if (element.tagName === 'TEXTAREA') {
 			value = (element as HTMLTextAreaElement).value || null
 		}
-		
+
 		// If field has a value, update sessionStorage
 		if (value !== null && value !== '' && value !== false) {
 			connection.updateField(fieldId, value, { confirmed: true, emit: false })
@@ -167,11 +168,12 @@ export function createConnectionManager(
 	schema: FormSchema,
 	onStatusChange: (status: string) => void,
 	initialFillLanguage: string = 'English',
-	sharedStream?: MediaStream
+	sharedStream?: MediaStream,
+	onNextField?: (fieldId: string | null) => void
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
-	
+
 	let connection: WebFormConnection | null = null
 	let fieldManager: FieldManager | null = null
 	let audioManager: AudioManager | null = null
@@ -179,21 +181,16 @@ export function createConnectionManager(
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
-	
-	// Load existing state from sessionStorage (don't call init() - SchemaForm already did)
-	// If no state exists, create a minimal one (shouldn't happen in normal flow)
-	let state = SchemaFormStateManager.load()
-	if (!state) {
-		state = SchemaFormStateManager.init(schema)
-	}
+
+	// Initialize state
+	let state: SchemaFormState = SchemaFormStateManager.load() || SchemaFormStateManager.init(schema)
 
 	// Restore DOM fields from sessionStorage (if any values exist from previous session)
 	restoreDOMFromSessionStorage(state, schema)
-	
-	// Create audio manager immediately (doesn't need WebSocket to be ready)
+
 	// Pass shared stream if provided (for VAD coordination)
 	audioManager = createAudioManager(sharedStream)
-	
+
 	// Create field manager immediately to listen for manual edits from the start
 	// This captures any fields the user fills BEFORE clicking Connect
 	fieldManager = createFieldManager({
@@ -234,16 +231,28 @@ export function createConnectionManager(
 		},
 		onSessionReady: (sessionId) => {
 			onStatusChange('connected')
-			
+
 			// Initialize metrics for this session
 			metrics.startSession(sessionId)
-			
+
 			// Field manager already created at initialization
 			// Now it will start syncing manual edits to Gemini
 		},
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
 			onStatusChange('connected')
+		},
+		onSectionChanged: () => {
+			// Gemini triggered a section switch - trigger UI refresh
+			console.log('[VFF Connection] Section changed, triggering UI refresh')
+			// Trigger a re-render by updating the state reference
+			if (connection) {
+				state = connection.getState()
+			}
+			// Notify listeners that section changed (SchemaForm will re-render)
+			if (window.vffOnSectionChanged) {
+				window.vffOnSectionChanged()
+			}
 		},
 		onFieldUpdate: (updates) => {
 			console.log('[VFF Connection] 🔧 Tool call: update_form_fields (' + updates.length + ' field(s))')
@@ -302,6 +311,7 @@ export function createConnectionManager(
 			paused = false
 			onStatusChange('error')
 		},
+		onNextField: onNextField
 	}
 
 	return {
@@ -310,7 +320,7 @@ export function createConnectionManager(
 			// This fixes the issue where after idle timeout, isPaused() returns true
 			// and handleConnect tries to resume() instead of connect()
 			paused = false
-			
+
 			// Check if WebSocket is connected but Gemini is closed (post-Level 3 scenario)
 			const isWebSocketConnected = connection && connection.getStatus() === 'connected'
 
@@ -338,7 +348,7 @@ export function createConnectionManager(
 			try {
 				console.log('[VFF Connection] Attempting to connect to:', wsUrl)
 				onStatusChange('connecting')
-				
+
 				// Reinitialize audio manager if destroyed (reconnect scenario)
 				if (!audioManager) {
 					audioManager = createAudioManager(sharedStream)
@@ -367,15 +377,18 @@ export function createConnectionManager(
 						}
 					})
 				}
-				
+
 				// Create connection if not exists
 				if (!connection) {
-					connection = new WebFormConnection(schema, callbacks, fillLanguage)
+					connection = new WebFormConnection(schema, {
+						...callbacks,
+						onNextField
+					}, fillLanguage)
 				}
-				
+
 				// Capture any pre-filled values from DOM before connecting
 				capturePreFilledValues(connection, schema)
-				
+
 				// Try to connect to localhost first
 				try {
 					await connection.connect(wsUrl)
@@ -386,17 +399,20 @@ export function createConnectionManager(
 					const cloudUrl = getCloudBackendUrl()
 					console.log('[VFF Connection] Localhost failed, trying cloud:', cloudUrl)
 					console.log('[VFF Connection] Local error was:', localError)
-					
+
 					// Create new connection for cloud attempt
 					connection.disconnect()
-					connection = new WebFormConnection(schema, callbacks, fillLanguage)
+					connection = new WebFormConnection(schema, {
+						...callbacks,
+						onNextField
+					}, fillLanguage)
 					capturePreFilledValues(connection, schema)
-					
+
 					await connection.connect(cloudUrl)
 					connectedUrl = cloudUrl  // Track successful connection
 					console.log('[VFF Connection] ✅ Connected to cloud')
 				}
-				
+
 			} catch (error) {
 				console.error('[VFF Connection] Connection failed:', error)
 				console.error('[VFF Connection] Error details:', {
@@ -412,23 +428,23 @@ export function createConnectionManager(
 		pause() {
 			console.log('[VFF Connection] Pausing (keeping connection warm)...')
 			paused = true
-			
+
 			// Stop recording
 			if (audioManager?.isRecording()) {
 				audioManager.stopRecording()
 			}
-			
+
 			// Flush any queued audio
 			if (audioManager) {
 				audioManager.flushAudioQueue()
 			}
-			
+
 			onStatusChange('paused')
 		},
 
 		async resume() {
 			console.log('[VFF Connection] Resuming...')
-			
+
 			if (!connection || connection.getStatus() !== 'connected') {
 				const currentStatus = connection?.getStatus() ?? 'no connection'
 				console.error('[VFF Connection] Cannot resume - not connected (status:', currentStatus, ')')
@@ -441,12 +457,12 @@ export function createConnectionManager(
 
 			paused = false
 			onStatusChange('connected')
-			
+
 			// Restart recording
 			if (audioManager && !audioManager.isRecording()) {
 				await this.startRecording()
 			}
-			
+
 			// Audio will automatically resume when user starts speaking again
 			// The connection stayed warm, so Gemini is still ready
 			console.log('[VFF Connection] Resumed successfully')
@@ -455,10 +471,10 @@ export function createConnectionManager(
 		disconnect() {
 			// End metrics session and print summary
 			metrics.endSession()
-			
+
 			// BUG FIX (Nov 10, 2025): Reset paused flag on disconnect
 			paused = false
-			
+
 			if (connection) {
 				connection.disconnect()
 				connection = null
@@ -533,14 +549,14 @@ export function createConnectionManager(
 
 		async startRecording() {
 			console.log('[VFF Connection] startRecording called')
-			
+
 			if (!audioManager) {
 				console.error('[VFF Connection] Audio manager not initialized')
 				return
 			}
-			
+
 			console.log('[VFF Connection] Requesting microphone access...')
-			
+
 			await audioManager.startRecording((audioData) => {
 				// Send audio to backend
 				if (connection && connection.getStatus() === 'connected') {
@@ -652,24 +668,24 @@ export function createConnectionManager(
 				throw new Error('Connection not initialized')
 			}
 
-		await connection.completeSection(wsUrl)
-	},
+			await connection.completeSection(wsUrl)
+		},
 
-	getCurrentSectionId(): string | undefined {
-		const state = SchemaFormStateManager.load()
-		return state?.currentSectionId
-	},
+		getCurrentSectionId(): string | undefined {
+			const state = SchemaFormStateManager.load()
+			return state?.currentSectionId
+		},
 
-	getCompletedSectionIds(): Set<string> {
-		const state = SchemaFormStateManager.load()
-		return state?.completedSections || new Set()
-	},
+		getCompletedSectionIds(): Set<string> {
+			const state = SchemaFormStateManager.load()
+			return state?.completedSections || new Set()
+		},
 
 
-	// VAD-based barge-in: Called when VAD detects speech start
-	// Sends activity_start signal before audio chunks begin streaming
-	onVADSpeechStart() {
-		if (!audioManager) return			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
+		// VAD-based barge-in: Called when VAD detects speech start
+		// Sends activity_start signal before audio chunks begin streaming
+		onVADSpeechStart() {
+			if (!audioManager) return			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
 
 			// Send activity_start signal to Gemini (user started speaking)
@@ -692,7 +708,7 @@ export function createConnectionManager(
 				metrics.recordCancelSent()
 			}
 		},
-		
+
 		// VAD-based speech end: Called when VAD detects speech end
 		// Sends activity_end signal to flush Gemini's audio buffer
 		onVADSpeechEnd() {

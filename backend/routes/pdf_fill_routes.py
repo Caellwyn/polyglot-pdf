@@ -118,6 +118,53 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						return widget
 			return None
 
+		def apply_field_flag_changes(widget, conditional_behavior: Optional[Dict[str, Any]]) -> None:
+			"""Apply PDF field flag changes if specified in conditional_behavior.
+
+			This handles read-only fields that need to be unlocked for filling.
+			The schema specifies which bit to flip in the field flags.
+			"""
+			if not conditional_behavior:
+				return
+
+			# Check if there are PDF field flag changes to apply
+			pdf_field_flag_change = conditional_behavior.get("pdf_field_flag_change")
+			if not pdf_field_flag_change:
+				return
+
+			try:
+				# Get current field flags
+				current_flags = widget.field_flags
+				bit = pdf_field_flag_change.get("bit", 0)
+				current_value = pdf_field_flag_change.get("current_value", 1)
+				required_value = pdf_field_flag_change.get("required_value", 0)
+
+				# Only flip if current state matches expected
+				if (current_flags >> bit) & 1 == current_value:
+					# Flip the bit
+					if required_value == 0:
+						# Clear the bit (make writable)
+						new_flags = current_flags & ~(1 << bit)
+					else:
+						# Set the bit
+						new_flags = current_flags | (1 << bit)
+
+					widget.field_flags = new_flags
+					widget.update()
+					_log.debug(
+						"field_flag_changed",
+						field_name=widget.field_name,
+						bit=bit,
+						old_flags=current_flags,
+						new_flags=new_flags,
+					)
+			except Exception as exc:
+				_log.warning(
+					"field_flag_change_failed",
+					field_name=widget.field_name,
+					error=str(exc),
+				)
+
 		filled_count = 0
 		skipped_count = 0
 		error_count = 0
@@ -155,6 +202,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					is_selected = option.get("value") == value
 					try:
+						# Apply field flag changes if needed (e.g., unlock read-only fields)
+						conditional_behavior = field_obj.get("conditional_behavior")
+						apply_field_flag_changes(widget, conditional_behavior)
+
 						fill_widget(widget, is_selected, field_type="radio")
 						if is_selected:
 							field_filled = True
@@ -195,6 +246,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						continue
 
 					try:
+						# Apply field flag changes if needed (e.g., unlock read-only fields)
+						conditional_behavior = field_obj.get("conditional_behavior")
+						apply_field_flag_changes(widget, conditional_behavior)
+
 						fill_widget(widget, value, field_type="checkbox")
 						filled_count += 1
 					except Exception as exc:
@@ -240,6 +295,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 							continue
 
 						try:
+							# Apply field flag changes if needed (e.g., unlock read-only fields)
+							conditional_behavior = field_obj.get("conditional_behavior")
+							apply_field_flag_changes(widget, conditional_behavior)
+
 							fill_widget(widget, True, field_type="checkbox")
 							filled_count += 1
 							_log.debug(
@@ -276,6 +335,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					continue
 
 				try:
+					# Apply field flag changes if needed (e.g., unlock read-only fields)
+					conditional_behavior = field_obj.get("conditional_behavior")
+					apply_field_flag_changes(widget, conditional_behavior)
+
 					fill_widget(widget, value, field_type=field_type)
 					filled_count += 1
 				except Exception as exc:
