@@ -592,6 +592,18 @@ export function createConnectionManager(
 		},
 
 		changeSpokenLanguage(language: string, nextFieldHint: string) {
+			// Save language to state
+			const currentState = SchemaFormStateManager.load();
+			if (currentState) {
+				// If disclaimer not yet accepted, this is the initial language selection
+				if (!currentState.disclaimerAccepted) {
+					SchemaFormStateManager.acceptDisclaimer(currentState, language);
+				} else {
+					// Language change after disclaimer acceptance
+					SchemaFormStateManager.setSelectedLanguage(currentState, language);
+				}
+			}
+
 			// Send spoken language change message to backend
 			if (connection && connection.getStatus() === 'connected') {
 				connection.send({
@@ -606,6 +618,12 @@ export function createConnectionManager(
 		},
 
 		readDisclaimer(language: string) {
+			// Save language to state (disclaimer being read = about to accept)
+			const currentState = SchemaFormStateManager.load();
+			if (currentState) {
+				SchemaFormStateManager.setSelectedLanguage(currentState, language);
+			}
+
 			// Send read_disclaimer message to backend
 			if (connection && connection.getStatus() === 'connected') {
 				connection.send({

@@ -834,4 +834,40 @@ export class SchemaFormStateManager {
       fv => fv.value != null && fv.value !== '' && !fv.confirmed
     ).length;
   }
+
+  /**
+   * Accept disclaimer and set selected language
+   */
+  static acceptDisclaimer(
+    state: SchemaFormState,
+    language: string
+  ): SchemaFormState {
+    const newState = {
+      ...state,
+      disclaimerAccepted: true,
+      disclaimerAcceptedAt: Date.now(),
+      selectedLanguage: language,
+      lastUpdated: Date.now()
+    };
+
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Update selected language (for language change after disclaimer)
+   */
+  static setSelectedLanguage(
+    state: SchemaFormState,
+    language: string
+  ): SchemaFormState {
+    const newState = {
+      ...state,
+      selectedLanguage: language,
+      lastUpdated: Date.now()
+    };
+
+    this.save(newState);
+    return newState;
+  }
 }

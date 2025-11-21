@@ -291,36 +291,26 @@ class CallbackHandler:
                     "message": "Rejected - only one field per call allowed"
                 })
         
-        # Request next hint only if ALL fields were valid
-        next_field_hint = None
-        next_field_schema = None
+        # Send form update to frontend (no next field info - save tokens)
+        # Next field info will be sent after confirm_field to reduce round trips
         if not validation_errors and not unknown_fields and applied_fields:
-            # Get next field's schema for JIT loading (Phase 2.5: Token Reduction)
-            if self._get_next_field_schema_for_jit and applied_fields:
-                # Get the first (and only) applied field ID
-                updated_field_id = applied_fields[0]
-                next_field_schema = self._get_next_field_schema_for_jit(updated_field_id)
-
-            # Send form update to frontend (includes next_field_schema if available)
-            next_field_hint = await self.send_form_update(
+            await self.send_form_update(
                 result.get("form_state"),
                 applied_fields,
-                next_field_schema
+                None  # No next_field_schema - send after confirmation
             )
-            _log.info("field_update_success", applied=len(applied_fields),
-                     next_hint_length=len(next_field_hint) if next_field_hint else 0,
-                     has_next_schema=next_field_schema is not None)
+            _log.info("field_update_success", applied=len(applied_fields))
         else:
             # Validation failed - send empty form_state so frontend doesn't apply invalid values
             await self.send_form_update({}, [])
 
-        # Build and return tool response
+        # Build and return tool response (no next field info - reduces tokens)
         tool_response = self._build_update_fields_response(
             validation_errors,
             unknown_fields,
             applied_fields,
-            next_field_hint,
-            next_field_schema,
+            None,  # No next_field_hint - send after confirmation
+            None,  # No next_field_schema - send after confirmation
             rejected_count=len(rejected_fields)
         )
 
@@ -433,12 +423,22 @@ class CallbackHandler:
         # Get next unconfirmed field hint
         next_hint = await self._request_coordinator.request_next_field_hint()
 
+        # Get next field schema for JIT mode (consolidated here to save tokens)
+        next_field_schema = None
+        if self._get_next_field_schema_for_jit and next_hint:
+            next_field_schema = self._get_next_field_schema_for_jit(field_id)
+
         response = {
             "success": True,
             "field_confirmed": field_id,
             "next_field_hint": next_hint,
-            "message": f"Field '{field_id}' confirmed. {next_hint or 'All fields confirmed.'}"
+            # Don't duplicate hint in message - Gemini sees next_field_hint separately
+            "message": f"Field '{field_id}' confirmed." + (" All fields confirmed." if not next_hint else "")
         }
+
+        # Add next field schema if available (JIT mode)
+        if next_field_schema:
+            response["next_field_schema"] = next_field_schema
 
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmation_method=confirmation_method)
@@ -590,14 +590,16 @@ class CallbackHandler:
                 "message": "\n".join(message_parts)
             }
         else:
-            # All fields valid - include next_field_hint and schema (if JIT enabled)
+            # All fields valid - include next_field_schema (if JIT enabled)
+            # Don't put hint in message - it confuses Gemini since next_field_schema has different field
             tool_response = {
                 "success": True,
                 "applied_fields": applied_fields,
-                "message": next_field_hint or "Fields updated successfully.",
+                "message": "Fields updated successfully.",
             }
 
             # Include next field schema if available (Phase 2.5: JIT schema loading)
+            # This contains id, name, spoken_name, type - everything Gemini needs
             if next_field_schema:
                 tool_response["next_field_schema"] = next_field_schema
         
