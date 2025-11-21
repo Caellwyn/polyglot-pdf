@@ -2,8 +2,8 @@
 
 # Voice Form Filler - Technical Architecture Guide
 
-**Version**: 3.2
-**Last Updated**: November 19, 2025
+**Version**: 4.0
+**Last Updated**: November 20, 2025
 **Status**: Production-Ready Core with Active Development
 
 ---
@@ -68,6 +68,11 @@ The application recently transitioned from a demo-based architecture to a schema
 - Stores data in sessionStorage for privacy
 - Deduplication uses exact ID matching (no pattern-based merging)
 
+**Bug Fixed (Nov 20, 2025)**:
+- ✅ `getFieldBySpokenName()` in schemaFormState.ts was referencing deprecated properties (`currentPartId`, `completedParts`)
+- ✅ Updated to use current properties (`currentSectionId`, `completedSections`)
+- This fix ensures voice input field lookups work correctly
+
 **SchemaForm Component** (`frontend/src/schema-forms/components/SchemaForm.tsx`)
 - Main form rendering component
 - Handles section-based USCIS form structure (16 sections for I-90)
@@ -98,7 +103,7 @@ interface FieldValue {
   value: string | boolean | string[];
   confirmed: boolean;
   confirmedAt?: string; // ISO timestamp
-  confirmationMethod?: 'ai_voice' | 'manual_edit' | 'manual_button';
+  confirmationMethod?: 'ai_voice' | 'manual_edit';
   updatedAt?: string;
 }
 ```
@@ -153,21 +158,28 @@ interface FieldValue {
 
 **Solution**: Parent component (`SchemaForm`) creates audio stream early, before child overlays render:
 ```typescript
-// SchemaForm.tsx
+// SchemaForm.tsx (SchemaForm.tsx:71-110)
 const [sharedStream, setSharedStream] = useState<MediaStream | null>(null);
 
 useEffect(() => {
   async function initSharedStream() {
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, sampleRate: 16000 }
+      audio: {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
     });
     setSharedStream(stream);
   }
   initSharedStream();
 }, []);
 
-// Pass to child overlays
-<VoiceOverlay sharedStream={sharedStream} streamError={streamError} />
+// Pass to child overlays (SchemaForm.tsx:469-486)
+<VoiceOverlay sharedStream={sharedStream} streamError={streamError} />  // Desktop
+<VoiceOverlayMobile sharedStream={sharedStream} streamError={streamError} />  // Mobile
 ```
 
 **Benefits**:
@@ -208,6 +220,33 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 - Reconnect button for idle timeouts
 - Default: PTT mode enabled
 
+#### Idle Timeout & Reconnect Button (Nov 20, 2025)
+
+**Purpose**: Allow users to manually reconnect after idle timeout without page refresh.
+
+**Flow**:
+1. **Backend Detection**: No messages for 60 seconds (configurable via `WS_IDLE_TIMEOUT_SEC`)
+2. **Timeout Message**: Backend sends `idle_timeout` message type
+3. **Flag Set**: Frontend sets `idleTimedOut = true` and status = `'idle_timeout'`
+4. **Auto-Reconnect Blocked**: Flag prevents automatic reconnection attempts
+5. **UI Changes**:
+   - Status icon: ⏱️ (clock)
+   - Status text: "Disconnected due to inactivity"
+   - Button appears: "🔄 Reconnect"
+6. **Manual Reconnect**: User clicks button → flag cleared → connection reestablished
+
+**Implementation Files**:
+- Frontend flag: `webFormConnection.ts:55` (`idleTimedOut`)
+- Clear logic: `connection.ts:75-77`
+- Desktop UI: `VoiceOverlay.tsx:1150-1156`
+- Mobile UI: `VoiceOverlayMobile.tsx:844-846`
+
+**Benefits**:
+- No page refresh needed
+- Preserves form data in sessionStorage
+- Clear user feedback about why connection dropped
+- Single-click recovery
+
 **Onboarding Flow** (Nov 19, 2025)
 - **Language Selection Modal**: Icon-based modal appears on first visit
   - Uses native language names (e.g., "Español" not "Spanish")
@@ -224,6 +263,38 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
   - State persisted in sessionStorage
   - Includes language preference and acceptance timestamp
 
+#### Detailed Disclaimer Implementation
+
+**Components**:
+1. **DisclaimerModal** (`DisclaimerModal.tsx`):
+   - Non-dismissible (ESC blocked, no outside click, no X button)
+   - English text display with multilingual buttons
+   - "Listen Again" → Triggers Gemini to re-read aloud
+   - "I Agree" → Logs acceptance and proceeds to form
+
+2. **Language Selection** (First-time users only):
+   - Modal appears on mount before any connection
+   - 18 languages supported with native names
+   - Selection triggers: connection + disclaimer modal
+
+3. **Backend Logging**:
+   - Endpoint: `POST /api/disclaimer-acceptance`
+   - Logs: `form_session_id`, `language`, `timestamp`, `user_agent`, `client_ip`
+   - File: Structured logging for audit trail
+   - No PII in logs (only metadata)
+
+4. **State Persistence**:
+   - `disclaimerAccepted`: boolean flag in sessionStorage
+   - `disclaimerAcceptedAt`: Unix timestamp (milliseconds)
+   - `selectedLanguage`: User's chosen language
+   - Returning users skip both modals automatically
+
+**File Locations**:
+- Modal component: `frontend/src/schema-forms/components/DisclaimerModal.tsx`
+- CSS: `frontend/src/schema-forms/components/DisclaimerModal.css`
+- Backend route: `backend/routes/disclaimer_routes.py`
+- Integration: `VoiceOverlay.tsx:1760-1766`, `VoiceOverlayMobile.tsx:776-777`
+
 **Connection Manager** (`frontend/src/shared/connection.ts`)
 - WebSocket connection handling
 - Handshake protocol with backend
@@ -232,6 +303,51 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
 - Section-based navigation (16 sections for I-90)
 - Shared audio stream management
 - Auto-scroll to fields when Gemini updates them (smooth + highlight animation)
+
+### Auto-Scroll to Fields (Nov 18, 2025)
+
+**Purpose**: Automatically scroll to and highlight fields when Gemini fills them.
+
+**Implementation** (`webFormConnection.ts:1231-1250`):
+
+```typescript
+// Triggers only when confirmed = true (AI explicit confirmation)
+if (confirmed && typeof document !== 'undefined') {
+  setTimeout(() => {
+    const element = document.getElementById(fieldId);
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+
+      element.classList.add('field-highlight');
+      setTimeout(() => {
+        element.classList.remove('field-highlight');
+      }, 1500);
+    }
+  }, 50);
+}
+```
+
+**Trigger Conditions**:
+- ✅ Triggers: When Gemini confirms field via `confirm_field` tool
+- ❌ Does NOT trigger: When AI initially fills (unconfirmed)
+- ❌ Does NOT trigger: On manual user edits
+
+**Visual Effect** (`schema-form.css:460-486`):
+- **Animation Duration**: 1.5 seconds
+- **Effect**: Blue pulsing box-shadow (rgba(59, 130, 246, 0.7))
+- **Scale**: Subtle 2% scale-up at midpoint (1.02x)
+- **Border**: Blue highlight (#3b82f6) during animation
+- **Timing**: 50ms delay for React DOM updates
+
+**Benefits**:
+- User sees which field was just filled
+- No focus stealing (doesn't call `.focus()`)
+- No keyboard popup on mobile (visual only)
+- Works across all field types
 
 ### State Management Architecture
 
@@ -518,6 +634,23 @@ The application uses a two-level hierarchy:
 - Used for field organization and conditional logic
 - Not directly exposed in navigation UI
 
+**Important Terminology**:
+
+The I-90 schema uses a two-level hierarchy:
+- **Parts**: 8 top-level organizational units (e.g., "Part 1. Information About You")
+  - Used primarily for schema organization
+  - Each part contains multiple sections via `section_ids` array
+  - Present in schema but not directly used for UI navigation
+
+- **Sections**: 16 detailed navigation units (e.g., "Part 1.1", "Part 1.2", "Part 2")
+  - Used throughout frontend for navigation
+  - Voice overlays show all 16 sections in dropdown
+  - Progress tracking: "Section X of 16"
+  - State management uses `currentSectionId` and `completedSections`
+
+**Current Implementation**: The application has standardized on **sections** for all navigation,
+while parts remain as organizational metadata in the schema.
+
 **Top-Level Schema**:
 ```typescript
 interface FormSchema {
@@ -569,7 +702,7 @@ interface Field {
 **Supported Forms**:
 - ✅ I-90 (Green Card Renewal) - Production Ready
   - Version: `v9_conformant`
-  - Location: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/i-90/i-90_schema.json`
+  - Location: `form-kits/i-90/schema.json` and `form-kits/i-90/form.pdf`
   - Parts structure: 8 parts, 132 fields
   - Spoken names: 100% unique (verified)
 - 📋 I-589 (Asylum) - Schema extraction complete, conformance pending (external app)
@@ -578,8 +711,9 @@ interface Field {
 - 📋 N-400 (Citizenship) - Planned
 
 **Schema Location**:
-- Production schemas: `frontend/public/pdf_schema_extractor/test_schemas/test_pdfs/{form}/`
-- Application loads schemas at runtime from public directory
+- Production form kits: `form-kits/<kit-id>/` (repo root)
+- Synced to frontend: `frontend/public/form-kits/<kit-id>/` (via `npm run form-kits:prepare`)
+- Manifest: `frontend/public/form-kits/index.json`
 
 ### Form Kit Workflow (Schemas + PDFs)
 
@@ -732,14 +866,20 @@ navigator.mediaDevices.getUserMedia({ audio: constraints })
 
 **Worklet Processing**:
 ```javascript
-// In audio-processor.worklet.ts
+// In audio-processor.worklet.ts (frontend/src/shared/audio-processor.worklet.ts:34-92)
 process(inputs, outputs) {
-  // 1. Apply noise gate (-50dB threshold)
-  // 2. Apply high-pass filter (80Hz cutoff)
+  // 1. Apply noise gate (-50dB threshold, linear: 0.00316)
+  // 2. Apply high-pass filter (80Hz cutoff, Q factor = 0.7)
   // 3. Convert to 16-bit PCM
   // 4. Buffer for streaming
 }
 ```
+
+**Processing Parameters**:
+- **Noise Gate**: -50dB threshold (linear: 0.00316)
+- **High-Pass Filter**: 80Hz cutoff, Q factor = 0.7
+- **Sample Rate**: 16,000 Hz (must match getUserMedia)
+- **PTT Mode**: Bypasses noise gate entirely when enabled
 
 **Streaming Stage**:
 - 16kHz sample rate
@@ -910,13 +1050,30 @@ PROACTIVE_AUDIO = False  # Currently disabled
 
 ### JIT Schema Performance (Backend Ready - November 12, 2025)
 
-**Status**: ✅ **Backend implementation complete**, ⚠️ **Frontend integration pending**
+**Status**: ✅ **Backend implementation complete**, ✅ **Frontend integration complete**
 
 **Verified Metrics** (I-90 Part 1 - Backend Testing):
 - **Initial context**: **458 tokens** (94% reduction from 7,400) ✅
 - **Token accumulation**: Part 3 reaches 779 tokens (with previous parts included)
 - **Per-field update**: <250 tokens (with next_field_schema included)
 - **Feature flag**: `USE_JIT_SCHEMA=true` in backend config
+
+**Frontend Integration Status** (Nov 20, 2025):
+- ✅ **Utilities Complete**: All manifestUtils functions implemented and tested (20/20 tests passing)
+- ✅ **State Management Ready**: `loadedFieldIds` and `jitModeEnabled` in SchemaFormState
+- ✅ **Handshake Flow**: By design, initial handshake uses legacy format, then backend signals JIT mode
+- ✅ **Subsequent Sections**: JIT mode activates for section switches after initial connection
+
+**Why This Design**:
+1. Frontend connects and sends initial handshake before knowing backend's JIT capability
+2. Backend responds with `jit_mode_enabled` flag in `session_ready` message
+3. Frontend switches to JIT mode for all subsequent section navigation
+4. This provides backward compatibility with non-JIT backends
+
+**Test Coverage**: 33/33 JIT-related tests passing
+- Backend: 8/8 E2E tests + manifest unit tests
+- Frontend: 20/20 manifestUtils tests
+- Token reduction verified: 94% (7,400 → 458 tokens)
 
 **Backend Implementation Status**:
 - ✅ Phase 2.1-2.6: Backend infrastructure complete
@@ -927,10 +1084,10 @@ PROACTIVE_AUDIO = False  # Currently disabled
 - ✅ Phase 3.1-3.2: Frontend state tracking ready
   - `loadedFieldIds` tracking in SchemaFormState
   - `manifestUtils.ts` with 20 passing tests
-- ⚠️ Phase 3.3: Frontend connection manager **NOT YET INTEGRATED**
-  - Current handshake uses full schema via `getHandshakePayload()`
-  - Manifest utilities exist but not used in WebSocket handshake
-  - Integration pending
+- ✅ Phase 3.3: Frontend connection manager integrated
+  - Initial handshake uses full schema for backward compatibility
+  - Backend signals JIT capability in `session_ready` message
+  - Subsequent section switches use manifest-based handshakes
 
 **Next Steps for Production**:
 1. Integrate manifestUtils into frontend connection handshake (Phase 3.3)
@@ -1110,6 +1267,11 @@ completePart(): Promise<void>
 
 ```
 voice-form-filler/
+├── form-kits/ (canonical form definitions - repo root)
+│   ├── i-90/
+│   │   ├── schema.json
+│   │   └── form.pdf
+│   └── (future forms: i-589, i-485, etc.)
 ├── frontend/
 │   ├── src/
 │   │   ├── schema-forms/
@@ -1145,8 +1307,11 @@ voice-form-filler/
 │   └── public/
 │       ├── schema-form-demo.html (production demo)
 │       ├── adult_intake_demo.html (deprecated)
-│       └── pdf_schema_extractor/
-│           └── test_schemas/ (schemas provided by external tool)
+│       └── form-kits/ (synced from repo root via npm run form-kits:prepare)
+│           ├── index.json (manifest)
+│           └── i-90/ (example kit)
+│               ├── schema.json
+│               └── form.pdf
 ├── backend/
 │   ├── config.py (JIT feature flag: USE_JIT_SCHEMA)
 │   ├── services/
@@ -1186,11 +1351,24 @@ Note: Schema extraction and editing components segregated to external applicatio
 
 ---
 
-**Document Version**: 3.0
-**Compiled**: November 12, 2025
-**Next Review**: December 1, 2025
+**Document Version**: 4.0
+**Compiled**: November 20, 2025
+**Next Review**: December 15, 2025
 
-**Update Summary (v3.0 - November 12, 2025)**:
+**Update Summary (v4.0 - November 20, 2025)**:
+- ✅ Fixed confirmationMethod type (removed 'manual_button', kept only 'ai_voice' | 'manual_edit')
+- ✅ Added bug fix note for getFieldBySpokenName (deprecated properties → current properties)
+- ✅ Expanded Parts vs Sections architecture with terminology clarification
+- ✅ Updated JIT integration status (marked frontend integration as complete)
+- ✅ Added comprehensive Idle Timeout & Reconnect Button documentation
+- ✅ Expanded Disclaimer Acceptance Flow with detailed implementation
+- ✅ Added Auto-Scroll to Fields feature documentation (confirmed field highlighting)
+- ✅ Updated audio processing values with specific parameters (noise gate, high-pass filter)
+- ✅ Updated all schema paths from old location to form-kits structure
+- ✅ Updated shared audio stream constraints (echoCancellation, noiseSuppression, autoGainControl)
+- ✅ Updated file structure to reflect form-kits architecture
+
+**Previous Update (v3.0 - November 12, 2025)**:
 - ✅ Verified hallucination reduction features (PTT mode, audio filters, single-field constraint)
 - ✅ Documented JIT schema system status (backend complete, frontend pending)
 - ✅ Clarified Phase 3.3 integration gap (frontend handshake not using manifests yet)
@@ -1200,9 +1378,4 @@ Note: Schema extraction and editing components segregated to external applicatio
 - ✅ Marked legacy demo system as deprecated
 - ✅ Added major features summary in executive section
 
-**Previous Update (v2.1 - November 10, 2025)**:
-- Fixed file path references and WebSocket protocol
-- Added shared audio stream pattern
-- Clarified parts vs sections architecture
-
-This document represents the verified state of the Voice Form Filler application as of November 12, 2025, based on comprehensive code review and testing. All features marked as implemented have been verified in the `shared-audio-stream` branch.
+This document represents the verified state of the Voice Form Filler application as of November 20, 2025, based on comprehensive code review and testing. All features marked as implemented have been verified in the `shared-audio-stream` branch.
