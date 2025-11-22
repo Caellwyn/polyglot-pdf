@@ -38,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(websocket_routes.router)
+app.include_router(websocket_routes.router, prefix="/api")  # Handle Firebase rewrites
 app.include_router(pdf_fill_routes.router)
 app.include_router(disclaimer_routes.router)
 

@@ -128,17 +128,8 @@ class Settings(BaseModel):
 				"required": ["spoken_name"]
 			}
 		},
-		{
-			"name": "complete_section",
-			"description": (
-				"Mark section complete after user confirmations all fields. "
-			),
-			"parameters": {
-				"type": "object",
-				"properties": {},
-				"required": []
-			}
-		},
+		# REMOVED: complete_section tool (optimization - frontend auto-detects completion)
+		# Section completion is now triggered automatically when all fields are confirmed
 		{
 			"name": "confirm_field",
 			"description": (
@@ -295,7 +286,7 @@ class Settings(BaseModel):
 	# Triggered by: language selection change, section switching
 	# Placeholders: {spoken_language}, {next_field_hint}
 	INITIATING_MESSAGE: str = (
-		"Speak {spoken_language}. Greet user warmly in this language, state active section, ask for {next_field_hint}"
+		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field."
 	)
 
 	# === DISCLAIMER INITIATING MESSAGE ===

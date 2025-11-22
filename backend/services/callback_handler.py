@@ -52,7 +52,8 @@ class CallbackHandler:
         self._handle_update_fields = None
         self._handle_switch_section = None
         self._handle_get_field_value = None
-        self._handle_complete_section = None
+        # REMOVED: complete_section handler (no longer needed)
+        # self._handle_complete_section = None
         self._request_form_state_from_client = None
         self._get_next_field_schema_for_jit = None
 
@@ -61,7 +62,7 @@ class CallbackHandler:
         handle_update_fields,
         handle_switch_section,
         handle_get_field_value,
-        handle_complete_section,
+        handle_complete_section,  # Keep for backward compatibility, but unused
         request_form_state_from_client,
         get_next_field_schema_for_jit,
     ):
@@ -69,7 +70,8 @@ class CallbackHandler:
         self._handle_update_fields = handle_update_fields
         self._handle_switch_section = handle_switch_section
         self._handle_get_field_value = handle_get_field_value
-        self._handle_complete_section = handle_complete_section
+        # REMOVED: complete_section handler (no longer needed)
+        # self._handle_complete_section = handle_complete_section
         self._request_form_state_from_client = request_form_state_from_client
         self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
     
@@ -229,9 +231,11 @@ class CallbackHandler:
         
         if normalized == "get_field_value":
             return await self._handle_get_field_value_tool(arguments)
-        
-        if normalized == "complete_section":
-            return await self._handle_complete_section_tool()
+
+        # REMOVED: complete_section tool (optimization)
+        # Section completion now auto-detected by frontend when all fields confirmed
+        # if normalized == "complete_section":
+        #     return await self._handle_complete_section_tool()
 
         if normalized == "confirm_field":
             return await self._handle_confirm_field_tool(arguments)
@@ -384,14 +388,16 @@ class CallbackHandler:
                  spoken_name=spoken_name, found=response.get("found"))
         _log.info("-" * 80)
         return response
-    
-    async def _handle_complete_section_tool(self) -> Dict[str, Any]:
-        """Handle complete_section tool call."""
-        response = await self._handle_complete_section()
-        _log.info("-" * 80)
-        _log.info("GEMINI TOOL RESPONSE", tool="complete_section", success=response.get("success"))
-        _log.info("-" * 80)
-        return response
+
+    # REMOVED: complete_section tool handler (optimization)
+    # Section completion now auto-detected by frontend when all fields confirmed
+    # async def _handle_complete_section_tool(self) -> Dict[str, Any]:
+    #     """Handle complete_section tool call."""
+    #     response = await self._handle_complete_section()
+    #     _log.info("-" * 80)
+    #     _log.info("GEMINI TOOL RESPONSE", tool="complete_section", success=response.get("success"))
+    #     _log.info("-" * 80)
+    #     return response
 
     async def _handle_confirm_field_tool(
         self,
