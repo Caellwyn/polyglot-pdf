@@ -19,6 +19,8 @@ The Voice Form Filler is a specialized application designed to help non-English 
 - ✅ Shared audio stream architecture (eliminates race conditions)
 - ✅ Auto-scroll to fields when Gemini fills them (smooth scroll + highlight)
 - ✅ **Automatic section switching** (completed Nov 22, 2025) - eliminates Gemini tool overhead
+- ✅ **Conditional field filtering** (completed Nov 22, 2025) - prevents asking for hidden fields
+- ✅ **Clean session transitions** (completed Nov 22, 2025) - no audio overlap between sections
 - ✅ **Confirmation system with legal audit trail** (completed Nov 18, 2025)
 - ✅ **Gated onboarding flow with language selection and disclaimer** (completed Nov 19, 2025)
 - ✅ **Reconnect button for idle timeouts** (completed Nov 19, 2025)
@@ -1144,7 +1146,18 @@ PROACTIVE_AUDIO = False  # Currently disabled
 
 ### Resolved Issues
 
-**Nov 22, 2025**:
+**Nov 22, 2025 (Evening Session - Bug Fixes)**:
+- ✅ **Conditional field exposure** - Gemini asking for fields hidden by `show_if` conditions (e.g., "previous name" when user selected "name has not changed")
+  - Fixed: `extractSectionFields()` now filters fields based on current form values and `shouldShowField()` evaluation
+  - Impact: Only accessible fields sent to Gemini - no more asking for conditionally hidden fields
+- ✅ **Redundant verification loops** - Gemini making 3+ verification exchanges after section completion
+  - Fixed: Updated `INITIATING_MESSAGE` to explicitly instruct "DO NOT verify previous fields"
+  - Impact: Gemini moves directly to next field without calling `get_form_status` after section switch
+- ✅ **Overlapping session audio** - Old Gemini session audio overlapping with new session after section switch
+  - Fixed: Clear audio queue, stop processing, and stop capture immediately when section completes
+  - Impact: Clean cutoff between sessions - no confusion from overlapping audio
+
+**Nov 22, 2025 (Optimization)**:
 - ✅ **Section switching hallucinations** - Gemini session now properly restarts between sections
 - ✅ **Section completion overhead** - Eliminated complete_section tool, frontend auto-detects completion
 
@@ -1393,6 +1406,20 @@ Note: Schema extraction and editing components segregated to external applicatio
 **Next Review**: December 15, 2025
 
 **Update Summary (v4.1 - November 22, 2025)**:
+
+**Evening Session - Critical Bug Fixes**:
+- 🔧 **Conditional field filtering** - Fixed Gemini asking for fields hidden by `show_if` conditions
+  - Modified `extractSectionFields()` to evaluate conditional visibility using `shouldShowField()`
+  - Updated 5 call sites to pass current field values for filtering
+  - Files: `frontend/src/schema-forms/state/schemaFormState.ts`, `frontend/src/webFormConnection.ts`
+- 🔧 **Redundant verification loops** - Fixed 3+ redundant exchanges after section completion
+  - Updated `INITIATING_MESSAGE` to explicitly prevent verification: "DO NOT verify previous fields"
+  - File: `backend/config.py:288-290`
+- 🔧 **Overlapping session audio** - Fixed old/new Gemini session audio overlap during section switch
+  - Clear audio queue, stop processing, stop capture before section switch
+  - File: `frontend/src/webFormConnection.ts:840-848`
+
+**Optimization Session**:
 - ✅ **Major Optimization**: Automatic section switching implementation
   - Removed `complete_section` tool from Gemini (saves 2-3 turns per section, ~16,000 tokens)
   - Frontend auto-detects section completion via `computeNextField()` returning null
