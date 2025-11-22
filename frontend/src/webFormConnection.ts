@@ -219,7 +219,10 @@ export class WebFormConnection {
           break;
 
         case "complete_section":
-          this.handleCompleteSectionRequest(message);
+          // DEPRECATED: Section completion now auto-detected after field confirmation
+          // Gemini no longer calls complete_section tool - frontend detects when
+          // all fields are confirmed and auto-switches to next section
+          console.warn('[WebFormConnection] Received deprecated complete_section message');
           break;
 
         case "confirm_field":
@@ -657,9 +660,13 @@ export class WebFormConnection {
       const updatedState = SchemaFormStateManager.switchToSection(currentState, targetSectionId);
       this.state = updatedState;
 
-      // Get section schema and values
+      // Get section schema and values (filter by conditional dependencies)
       console.log('[WebFormConnection] Building section schema and values');
-      const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, targetSectionId);
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(
+        updatedState.schema,
+        targetSectionId,
+        updatedState.fieldValues // Pass field values for conditional filtering
+      );
       const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
       const sectionValues: Record<string, any> = {};
 
@@ -794,69 +801,14 @@ export class WebFormConnection {
   }
 
   /**
-   * Phase 3: Handle complete_section request from backend (AI tool call)
+   * DEPRECATED: Phase 3 complete_section handling (no longer used)
+   *
+   * Section completion is now auto-detected in handleConfirmFieldRequest()
+   * when computeNextField() returns null (all fields confirmed).
+   *
+   * Kept for reference but no longer called.
    */
-  private async handleCompleteSectionRequest(message: any): Promise<void> {
-    try {
-      // Mark current section as complete in state
-      const currentState = SchemaFormStateManager.load();
-      if (!currentState || !currentState.currentSectionId) {
-        throw new Error('Section state not initialized');
-      }
-
-      const currentSection = SchemaFormStateManager.getCurrentSection(currentState);
-      if (!currentSection) {
-        throw new Error('Current section not found');
-      }
-
-      // Mark section as completed
-      const updatedState = SchemaFormStateManager.markSectionComplete(currentState, currentState.currentSectionId);
-      this.state = updatedState;
-
-      const totalSections = currentState.schema.sections?.length ?? 0;
-
-      // Check if this was the last section
-      if (currentSection.order >= totalSections) {
-        // Form is complete - stay connected but don't start new section
-        this.send({
-          type: "section_completed",
-          next_section: currentSection.order, // Same section (we're done)
-          form_complete: true,
-        });
-        return;
-      }
-
-      // Move to next section automatically
-      const nextSection = SchemaFormStateManager.getNextSection(updatedState);
-      if (nextSection) {
-        // Switch to next section locally
-        const newState = SchemaFormStateManager.switchToSection(updatedState, nextSection.id);
-        this.state = newState;
-        SchemaFormStateManager.save(newState);
-
-        // Notify UI
-        if (this.callbacks.onSectionChanged) {
-          this.callbacks.onSectionChanged();
-        }
-      }
-
-      // Send response to backend confirming section completed
-      this.send({
-        type: "section_completed",
-        next_section: nextSection?.order ?? currentSection.order,
-        form_complete: false,
-      });
-
-    } catch (error) {
-      console.error('[WebFormConnection] Error completing section:', error);
-      // Send error response to backend
-      this.send({
-        type: "section_completed",
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  // private async handleCompleteSectionRequest(message: any): Promise<void> { ... }
 
   /**
    * Handle confirm_field request from backend (Gemini called confirm_field tool)
@@ -872,6 +824,40 @@ export class WebFormConnection {
       field_id,
       confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
     );
+    SchemaFormStateManager.save(this.state);
+
+    // 🆕 AUTO-DETECT SECTION COMPLETION
+    // Check if all fields in current section are now confirmed
+    const nextField = computeNextField(this.state, { skipConfirmed: true });
+
+    if (!nextField) {
+      // All fields in current section are confirmed!
+      const nextSection = SchemaFormStateManager.getNextSection(this.state);
+
+      if (nextSection) {
+        console.log('[WebFormConnection] ✅ Section complete! Auto-switching to:', nextSection.id);
+
+        // CRITICAL: Stop all audio processing immediately to prevent overlap with new session
+        console.log('[WebFormConnection] 🛑 Stopping audio queue before section switch');
+        this.audioQueue = []; // Clear any queued audio from old session
+        this.isProcessingAudio = false; // Stop processing loop
+
+        // Stop capturing user audio (will restart after section switch)
+        if (this.callbacks.onStopCapture) {
+          this.callbacks.onStopCapture();
+        }
+
+        // Trigger automatic section switch (uses backend-side reconnect)
+        // Note: wsUrl parameter not used (kept for API compatibility)
+        await this.switchToSection(nextSection.id, '');
+      } else {
+        console.log('[WebFormConnection] 🎉 Form complete!');
+        // Notify UI that entire form is complete
+        if (this.callbacks.onFormComplete) {
+          this.callbacks.onFormComplete();
+        }
+      }
+    }
 
     // Note: No acknowledgment needed - backend handles confirmation logging internally
   }
@@ -1368,8 +1354,12 @@ export class WebFormConnection {
       currentState = SchemaFormStateManager.switchToSection(currentState, targetSection.id);
       this.state = currentState;
 
-      // Get section schema and current values for this section
-      const sectionSchema = SchemaFormStateManager.extractSectionFields(currentState.schema, targetSection.id);
+      // Get section schema and current values for this section (filter by conditional dependencies)
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(
+        currentState.schema,
+        targetSection.id,
+        currentState.fieldValues // Pass field values for conditional filtering
+      );
       const sectionValues: Record<string, any> = {};
 
       // Filter fieldValues to only include fields in this section
@@ -1451,8 +1441,12 @@ export class WebFormConnection {
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
     this.state = updatedState;
 
-    // Build section info to send to backend (avoid round-trip delay)
-    const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
+    // Build section info to send to backend (avoid round-trip delay, filter by conditional dependencies)
+    const sectionSchema = SchemaFormStateManager.extractSectionFields(
+      updatedState.schema,
+      sectionId,
+      updatedState.fieldValues // Pass field values for conditional filtering
+    );
     const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
     const sectionValues: Record<string, any> = {};
 

@@ -1,0 +1,23 @@
+{
+    "hosting": {
+        "public": "frontend/dist/schema-forms",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ],
+        "rewrites": [
+            {
+                "source": "/api/**",
+                "run": {
+                    "serviceId": "polyglot-backend",
+                    "region": "us-central1"
+                }
+            },
+            {
+                "source": "**",
+                "destination": "/schema-form-demo.html"
+            }
+        ]
+    }
+}

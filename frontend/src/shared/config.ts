@@ -19,7 +19,7 @@ export function getDevConfig(): DevConfig {
 	const localDev = (window as any).__VFF_LOCAL_DEV
 	const customBackendUrl = (window as any).__VFF_BACKEND_URL
 	const debugMetrics = (window as any).__VFF_DEBUG_METRICS
-	
+
 	return {
 		enabled: Boolean(localDev),
 		backendUrl: customBackendUrl || 'ws://localhost:8000/ws/fill',
@@ -47,27 +47,29 @@ export function getDevConfig(): DevConfig {
  */
 export function getBackendUrl(): string {
 	const config = getDevConfig()
-	
+
 	if (config.enabled) {
 		console.log('[VFF Config] 🔧 LOCAL DEV MODE ENABLED')
 		console.log('[VFF Config] Backend URL:', config.backendUrl)
 		console.log('[VFF Config] Debug Metrics:', config.debugMetrics)
 		return config.backendUrl
 	}
-	
+
 	// Use environment variable if set (production builds)
 	if (import.meta.env.VITE_WS_URL) {
 		return import.meta.env.VITE_WS_URL
 	}
-	
+
 	// Development mode: use localhost
 	if (import.meta.env.DEV) {
 		return 'ws://localhost:8000/ws/fill'
 	}
-	
-	// Production fallback (should not reach here if build is correct)
-	console.warn('[VFF Config] ⚠️ VITE_WS_URL not set during build - using production URL')
-	return getCloudBackendUrl()
+
+	// Production: Construct WebSocket URL from current origin
+	// This works with Firebase Hosting rewrites (http -> ws, https -> wss)
+	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+	const host = window.location.host
+	return `${protocol}//${host}/api/ws/fill`
 }
 
 /**
@@ -75,8 +77,10 @@ export function getBackendUrl(): string {
  * This should match the production backend URL
  */
 export function getCloudBackendUrl(): string {
-	// Use the same URL as production (matches deploy-demo.sh)
-	return 'wss://voice-form-filler-773443099751.us-central1.run.app/ws/fill'
+	// Fallback to dynamic origin
+	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+	const host = window.location.host
+	return `${protocol}//${host}/api/ws/fill`
 }
 
 /**

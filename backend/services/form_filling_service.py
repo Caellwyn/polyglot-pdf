@@ -950,34 +950,26 @@ class FormFillingService:
         """
         return find_similar_field_names(query, available_names, max_suggestions)
 
+    # REMOVED: complete_section handler (optimization)
+    # Section completion now auto-detected by frontend when all fields confirmed.
+    # Frontend triggers section switch automatically via manual_section_switch message.
     async def handle_complete_section(self) -> Dict[str, Any]:
         """
-        Handle complete_section tool call from AI.
-        
-        Sends message to frontend to mark current section complete and advance.
-        Frontend will update state and switch to next section.
-        
+        DEPRECATED: Handle complete_section tool call from AI.
+
+        This method is kept for backward compatibility but should no longer be called.
+        Section completion is now auto-detected by frontend in handleConfirmFieldRequest().
+
         Returns:
-            Success response for AI
+            Deprecation message
         """
-        if not self._websocket:
-            _log.warning("complete_section_no_websocket", session_id=self._session_id)
-            return {"success": False, "message": "No connection to frontend."}
-        
-        try:
-            await self._websocket.send_json({
-                "type": "complete_section",
-            })
-            _log.info("complete_section_request_sent", session_id=self._session_id)
-            return {
-                "success": True,
-                "message": "Section marked complete. Moving to next section.",
-            }
-        except Exception as exc:
-            _log.error("failed_to_send_complete_section", 
-                      session_id=self._session_id,
-                      error=str(exc))
-            return {"success": False, "message": "Failed to complete section."}
+        _log.warning("complete_section_deprecated",
+                    session_id=self._session_id,
+                    message="complete_section tool removed - frontend auto-detects completion")
+        return {
+            "success": False,
+            "message": "This tool has been removed. Section completion is automatic.",
+        }
 
 
 # Note: factory for FormFillingService lives in backend.dependencies to avoid

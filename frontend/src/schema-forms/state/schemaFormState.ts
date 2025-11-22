@@ -514,7 +514,19 @@ export class SchemaFormStateManager {
    * Extract fields for a specific section (for WebSocket handshake)
    * Returns schema with only fields from the specified section
    */
-  static extractSectionFields(schema: FormSchema, sectionId: string): FormSchema {
+  /**
+   * Extract fields for a section, filtering out fields that don't meet conditional dependencies
+   *
+   * @param schema - Full form schema
+   * @param sectionId - Section ID to extract
+   * @param fieldValues - Current field values (optional, for conditional filtering)
+   * @returns Schema containing only accessible fields for the section
+   */
+  static extractSectionFields(
+    schema: FormSchema,
+    sectionId: string,
+    fieldValues?: Record<string, any>
+  ): FormSchema {
     const section = schema.sections.find(s => s.id === sectionId);
     if (!section) {
       console.warn(`[SchemaFormStateManager] Section ${sectionId} not found in schema`);
@@ -526,7 +538,25 @@ export class SchemaFormStateManager {
     }
 
     // Extract fields for this section
-    const sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
+    let sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
+
+    // Filter out fields that don't meet conditional dependencies
+    if (fieldValues) {
+      const { shouldShowField } = require('../utils/validation');
+      sectionFields = sectionFields.filter(field => {
+        // If field has no show_if condition, include it
+        if (!field.show_if) {
+          return !field.hidden; // Respect default hidden state
+        }
+
+        // Check if conditional requirements are met
+        const isVisible = shouldShowField(field, fieldValues);
+        if (!isVisible) {
+          console.log(`[extractSectionFields] Filtering out field ${field.id} - conditional not met`);
+        }
+        return isVisible;
+      });
+    }
 
     return {
       ...schema,
@@ -576,8 +606,12 @@ export class SchemaFormStateManager {
     // Legacy mode: send full schema for current section
     const currentSection = state.schema.sections.find(s => s.id === state.currentSectionId);
 
-    // Extract schema for current section only
-    const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
+    // Extract schema for current section only (filter by conditional dependencies)
+    const sectionSchema = this.extractSectionFields(
+      state.schema,
+      state.currentSectionId,
+      state.fieldValues // Pass field values for conditional filtering
+    );
 
     // Get previous spoken names from completed sections
     const previousSpokenNames = this.getPreviousSpokenNames(state);
@@ -604,9 +638,13 @@ export class SchemaFormStateManager {
     // Build manifest with current + previous sections
     const manifest = buildHandshakeManifest(state.currentSectionId, state.schema, state);
 
-    // Get first field schema for current section
+    // Get first field schema for current section (filter by conditional dependencies)
     let firstFieldSchema = null;
-    const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
+    const sectionSchema = this.extractSectionFields(
+      state.schema,
+      state.currentSectionId,
+      state.fieldValues // Pass field values for conditional filtering
+    );
     if (sectionSchema.fields.length > 0) {
       const firstFieldId = sectionSchema.fields[0].id;
       firstFieldSchema = getFieldSchema(firstFieldId, state.schema);
