@@ -14,6 +14,7 @@
 
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
+import { shouldShowField } from "../utils/validation";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -541,21 +542,29 @@ export class SchemaFormStateManager {
     let sectionFields = schema.fields.filter(f => section.fields.includes(f.id));
 
     // Filter out fields that don't meet conditional dependencies
-    if (fieldValues) {
-      const { shouldShowField } = require('../utils/validation');
+    // Only filter if we have actual field values to check against
+    if (fieldValues && Object.keys(fieldValues).length > 0) {
+      console.log(`[extractSectionFields] Filtering ${sectionFields.length} fields for section ${sectionId}`);
       sectionFields = sectionFields.filter(field => {
-        // If field has no show_if condition, include it
+        // If field has no show_if condition, include it (unless explicitly hidden)
         if (!field.show_if) {
-          return !field.hidden; // Respect default hidden state
+          const shouldInclude = !field.hidden;
+          if (!shouldInclude) {
+            console.log(`[extractSectionFields] Filtering out ${field.id} - explicitly hidden`);
+          }
+          return shouldInclude;
         }
 
         // Check if conditional requirements are met
         const isVisible = shouldShowField(field, fieldValues);
         if (!isVisible) {
-          console.log(`[extractSectionFields] Filtering out field ${field.id} - conditional not met`);
+          console.log(`[extractSectionFields] Filtering out ${field.id} - conditional not met`);
         }
         return isVisible;
       });
+      console.log(`[extractSectionFields] After filtering: ${sectionFields.length} fields remaining`);
+    } else {
+      console.log(`[extractSectionFields] Skipping conditional filtering - no field values yet (${Object.keys(fieldValues || {}).length} values)`);
     }
 
     return {
