@@ -19,7 +19,7 @@ The Voice Form Filler is a specialized application designed to help non-English 
 - ✅ Shared audio stream architecture (eliminates race conditions)
 - ✅ Auto-scroll to fields when Gemini fills them (smooth scroll + highlight)
 - ✅ **Automatic section switching** (completed Nov 22, 2025) - eliminates Gemini tool overhead
-- ✅ **Conditional field filtering** (completed Nov 22, 2025) - prevents asking for hidden fields
+- ✅ **Conditional field dependency handling** (completed Nov 22, 2025) - prevents asking for/updating locked fields
 - ✅ **Clean session transitions** (completed Nov 22, 2025) - no audio overlap between sections
 - ✅ **Confirmation system with legal audit trail** (completed Nov 18, 2025)
 - ✅ **Gated onboarding flow with language selection and disclaimer** (completed Nov 19, 2025)
@@ -1146,10 +1146,13 @@ PROACTIVE_AUDIO = False  # Currently disabled
 
 ### Resolved Issues
 
-**Nov 22, 2025 (Evening Session - Bug Fixes)**:
+**Nov 22, 2025 (Evening Session - Dependency Handling)**:
 - ✅ **Conditional field exposure** - Gemini asking for fields hidden by `show_if` conditions (e.g., "previous name" when user selected "name has not changed")
-  - Fixed: `extractSectionFields()` now filters fields based on current form values and `shouldShowField()` evaluation
-  - Impact: Only accessible fields sent to Gemini - no more asking for conditionally hidden fields
+  - Architecture: Frontend-only solution - backend remains stateless (no caching of field values)
+  - Fixed: `computeNextField()` in navigation.ts now skips locked/hidden fields using existing `shouldShowField()` logic
+  - Fixed: `handleFieldUpdate()` in webFormConnection.ts checks field availability before applying updates from Gemini
+  - Fixed: When Gemini tries to update locked field, frontend sends `dependency_error` message with human-readable explanation
+  - Impact: Gemini only sees available fields in next_field_hint and gets immediate feedback if it tries to update a locked field
 - ✅ **Redundant verification loops** - Gemini making 3+ verification exchanges after section completion
   - Fixed: Updated `INITIATING_MESSAGE` to explicitly instruct "DO NOT verify previous fields"
   - Impact: Gemini moves directly to next field without calling `get_form_status` after section switch
@@ -1175,11 +1178,9 @@ PROACTIVE_AUDIO = False  # Currently disabled
 - Manual context reset not possible with Gemini Live
 - Some USCIS PDF conditional logic requires workarounds
 - Background noise handling relies on PTT mode
-- Conditional field access checking needs frontend integration
 
 ### In Development
 - Live Gemini API testing with JIT mode (Phase 4.3)
-- Conditional field dependency checking (Phase 2.4 backend integration)
 - Error recovery and edge case testing (Phase 4.3)
 - Multi-form conformance pipeline (I-589 pending)
 - User acceptance testing (Phase 4.5)
@@ -1407,11 +1408,14 @@ Note: Schema extraction and editing components segregated to external applicatio
 
 **Update Summary (v4.1 - November 22, 2025)**:
 
-**Evening Session - Critical Bug Fixes**:
-- 🔧 **Conditional field filtering** - Fixed Gemini asking for fields hidden by `show_if` conditions
-  - Modified `extractSectionFields()` to evaluate conditional visibility using `shouldShowField()`
-  - Updated 5 call sites to pass current field values for filtering
-  - Files: `frontend/src/schema-forms/state/schemaFormState.ts`, `frontend/src/webFormConnection.ts`
+**Evening Session - Dependency Handling Implementation**:
+- 🔧 **Conditional field dependency handling** - Fixed Gemini asking for/updating fields locked by `show_if` conditions
+  - Architecture: Frontend-only solution - backend remains stateless (no caching of field values)
+  - Modified `computeNextField()` in navigation.ts to skip locked/hidden fields using `shouldShowField()`
+  - Modified `handleFieldUpdate()` in webFormConnection.ts to check field availability before applying Gemini updates
+  - When locked field update attempted, frontend sends `dependency_error` message with human-readable explanation
+  - Added `evaluateFieldAvailability()` utility to compute availability state and generate user-friendly lock reasons
+  - Files: `frontend/src/navigation.ts`, `frontend/src/webFormConnection.ts`, `frontend/src/schema-forms/utils/conditionalFieldCheck.ts`
 - 🔧 **Redundant verification loops** - Fixed 3+ redundant exchanges after section completion
   - Updated `INITIATING_MESSAGE` to explicitly prevent verification: "DO NOT verify previous fields"
   - File: `backend/config.py:288-290`

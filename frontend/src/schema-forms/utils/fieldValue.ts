@@ -24,15 +24,16 @@ export function isFieldValue(value: any): value is FieldValue {
  * Unwrap a FieldValue object to get the primitive value
  *
  * @param value - Primitive value or FieldValue wrapper
- * @returns Primitive value (string, boolean, null)
+ * @returns Primitive value (string, boolean, string[], null)
  *
  * @example
  * unwrapFieldValue('hello') // => 'hello'
  * unwrapFieldValue({ value: 'hello', confirmed: true }) // => 'hello'
+ * unwrapFieldValue({ value: ['Male'], confirmed: true }) // => ['Male'] (checkbox group)
  * unwrapFieldValue({ value: null }) // => null
  * unwrapFieldValue(null) // => null
  */
-export function unwrapFieldValue(value: any): string | boolean | null {
+export function unwrapFieldValue(value: any): string | boolean | string[] | null {
   if (isFieldValue(value)) {
     return value.value;
   }

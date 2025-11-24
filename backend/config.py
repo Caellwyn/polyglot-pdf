@@ -193,7 +193,7 @@ class Settings(BaseModel):
     "WORKFLOW:\n"
     "1. Ask for ONE field (skip Filled=True)\n"
     "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
-    "3. Read back value → Ask 'Is that correct?'\n"
+    "3. Always read back user provided value and ask 'Is that correct?'\n"
     "4. Wait for verbal confirmation (yes/correct/that's right)\n"
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
     "6. Move to next field (hint provided in confirm_field response)\n"

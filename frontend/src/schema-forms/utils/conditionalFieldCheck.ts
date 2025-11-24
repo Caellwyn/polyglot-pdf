@@ -1,11 +1,11 @@
 /**
- * Conditional field checking for JIT schema loading
+ * Conditional field checking and field availability evaluation
  *
- * Determines if a field is locked/hidden and provides dependency information
- * to guide Gemini to required fields.
+ * Determines if a field is available, locked, or hidden based on conditional dependencies.
+ * Provides human-readable dependency information for Gemini error responses.
  */
 
-import type { FormField, FormSchema } from "../types/schema";
+import type { FormField, FormSchema, FieldValue, FieldAvailability } from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
 import { shouldShowField } from "./validation";
 
@@ -144,4 +144,77 @@ export function getDependencyChain(
   }
 
   return dependencies;
+}
+
+/**
+ * Evaluate field availability state
+ *
+ * Determines if a field is available, locked, or hidden based on current form values.
+ * Returns availability state and human-readable reason if locked.
+ *
+ * @param field - The field to evaluate
+ * @param fieldValues - Current form field values
+ * @param schema - Full form schema (for dependency lookup)
+ * @returns Object with availability state and optional locked reason
+ */
+export function evaluateFieldAvailability(
+  field: FormField,
+  fieldValues: Record<string, FieldValue>,
+  schema: FormSchema
+): { availability: FieldAvailability; lockedReason?: string } {
+  // Field explicitly hidden in schema
+  if (field.hidden) {
+    return { availability: 'hidden' };
+  }
+
+  // Field is read-only (treat as locked since user can't modify it)
+  if (field.read_only) {
+    return {
+      availability: 'locked',
+      lockedReason: `The field '${field.spoken_name || field.name}' is read-only and cannot be modified.`
+    };
+  }
+
+  // Check conditional visibility (show_if logic)
+  if (field.show_if) {
+    const isVisible = shouldShowField(field, fieldValues);
+
+    if (!isVisible) {
+      // Field is conditionally hidden - find the blocking field
+      const triggerFieldId = field.show_if.field;
+      const triggerField = schema.fields.find(f => f.id === triggerFieldId);
+
+      if (triggerField) {
+        const currentValue = unwrapFieldValue(fieldValues[triggerFieldId]?.value);
+        const requiredValue = field.show_if.value;
+        const operator = field.show_if.operator || 'equals';
+
+        // Build human-readable reason
+        let reason: string;
+        if (operator === 'equals') {
+          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first and select '${requiredValue}'.`;
+        } else if (operator === 'not_equals') {
+          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first. It must NOT be '${requiredValue}'.`;
+        } else if (operator === 'is_checked') {
+          reason = `Check the '${triggerField.spoken_name || triggerField.name}' checkbox first.`;
+        } else {
+          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first.`;
+        }
+
+        return {
+          availability: 'locked',
+          lockedReason: reason
+        };
+      }
+
+      // Couldn't find trigger field (schema error)
+      return {
+        availability: 'locked',
+        lockedReason: `This field depends on other fields being filled first.`
+      };
+    }
+  }
+
+  // Field is available
+  return { availability: 'available' };
 }

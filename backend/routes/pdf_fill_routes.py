@@ -84,77 +84,75 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			"""Derive the 'on' appearance state for a checkbox/radio widget."""
 			try:
 				states = widget.button_states()
+				_log.debug("button_states_check", widget_name=widget.field_name, states=states)
 				if states and "normal" in states:
 					normal_states = states["normal"]
 					if isinstance(normal_states, list):
 						for state in normal_states:
 							if state and state.lower() not in {"off", ""}:
+								_log.debug("button_on_state_found", widget_name=widget.field_name, on_state=state)
 								return state
-			except Exception:
+			except Exception as e:
+				_log.warning("button_states_error", widget_name=widget.field_name, error=str(e))
 				pass
+			_log.debug("button_on_state_default", widget_name=widget.field_name, default="Yes")
 			return "Yes"
 
-		def fill_widget(widget, value, field_type: Optional[str] = None) -> None:
-			"""Apply a value to a widget, handling button vs. text fields and XFA forms.
+		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
+			"""Apply a value to a widget using its page reference to avoid weak reference issues.
 
-			For XFA forms, we need to use the page-based approach to avoid "Annot is not bound" errors.
+			CRITICAL: Must pass the page that contains this widget to avoid "weakly-referenced object no longer exists" errors.
 			"""
-			if widget.field_type == 2 or widget.field_type_string in {"CheckBox", "RadioButton"}:
+			# Get fresh widget reference from the page (avoids weak reference issues)
+			fresh_widget = None
+			for w in page.widgets() or []:
+				if w.field_name == widget.field_name:
+					fresh_widget = w
+					break
+
+			if not fresh_widget:
+				_log.warning("fresh_widget_not_found", widget_name=widget.field_name)
+				return
+
+			if fresh_widget.field_type == 2 or fresh_widget.field_type_string in {"CheckBox", "RadioButton"}:
 				if value in {True, "true", "True", "1", 1}:
-					target_value = get_button_on_state(widget)
+					target_value = get_button_on_state(fresh_widget)
+					_log.debug("checkbox_value_true", widget_name=fresh_widget.field_name, target_value=target_value)
 				elif value in {False, "false", "False", "0", 0}:
 					target_value = "Off"
+					_log.debug("checkbox_value_false", widget_name=fresh_widget.field_name, target_value=target_value)
 				else:
 					target_value = str(value)
+					_log.debug("checkbox_value_other", widget_name=fresh_widget.field_name, target_value=target_value, original_value=value)
 
 				try:
-					doc.xref_set_key(widget.xref, "V", f"/{target_value}")
-					doc.xref_set_key(widget.xref, "AS", f"/{target_value}")
-				except Exception:
-					widget.field_value = target_value
-					try:
-						widget.update()
-					except Exception:
-						pass
+					# For XFA checkboxes: Set value and AS, but DON'T call update()
+					# Let the PDF viewer generate the appearance when opening
+					fresh_widget.field_value = target_value
+					doc.xref_set_key(fresh_widget.xref, "AS", f"/{target_value}")
+
+					_log.debug("checkbox_filled_success", widget_name=fresh_widget.field_name, value=target_value, xref=fresh_widget.xref)
+				except Exception as e:
+					_log.error("checkbox_fill_failed", widget_name=fresh_widget.field_name, error=str(e), traceback=True)
+					raise
 			else:
-				# For text fields in XFA forms, we need to find the widget's page and update it there
-				# This avoids the "Annot is not bound to a page" error
-				widget_page = None
-				widget_on_page = None
-
-				# Find which page this widget belongs to
-				for page_num in range(doc.page_count):
-					page = doc[page_num]
-					for w in page.widgets() or []:
-						if w.xref == widget.xref:
-							widget_page = page
-							widget_on_page = w
-							break
-					if widget_on_page:
-						break
-
-				if widget_on_page:
-					# Update using the widget from the page
-					widget_on_page.field_value = str(value)
-					try:
-						widget_on_page.update()
-					except Exception:
-						# update() may fail for XFA, but field_value assignment should work
-						pass
-				else:
-					# Fallback: try direct xref manipulation
-					try:
-						doc.xref_set_key(widget.xref, "V", f"({str(value)})")
-					except Exception:
-						# Last resort: just set field_value and hope for the best
-						widget.field_value = str(value)
+				# Text field
+				try:
+					fresh_widget.field_value = str(value)
+					fresh_widget.update()
+					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(str(value)))
+				except Exception as e:
+					_log.error("text_field_fill_failed", widget_name=fresh_widget.field_name, error=str(e))
+					raise
 
 		def find_widget(field_name: str):
-			"""Find a widget by field name, supporting both exact and partial matches.
+			"""Find a widget by field name and return both the widget and its page.
 
 			XFA PDFs use full paths like 'form1[0].#subform[0].P1_Line1_AlienNumber[0]'
 			while our schema might only have 'P1_Line1_AlienNumber[0]'.
 			This function tries exact match first, then partial match (endswith).
+
+			Returns: tuple of (widget, page) or (None, None)
 			"""
 			for page_index in range(doc.page_count):
 				page = doc[page_index]
@@ -162,7 +160,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				for widget in widgets:
 					# Try exact match first
 					if widget.field_name == field_name:
-						return widget
+						return (widget, page)
 
 			# Try partial match (for XFA forms with full paths)
 			for page_index in range(doc.page_count):
@@ -171,9 +169,9 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				for widget in widgets:
 					# Match if the widget's full path ends with our field name
 					if widget.field_name and widget.field_name.endswith(field_name):
-						return widget
+						return (widget, page)
 
-			return None
+			return (None, None)
 
 		def apply_field_flag_changes(widget, conditional_behavior: Optional[Dict[str, Any]]) -> None:
 			"""Apply PDF field flag changes if specified in conditional_behavior.
@@ -258,8 +256,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					if not option_pdf_field:
 						continue
 
-					widget = find_widget(option_pdf_field)
-					if not widget:
+					widget, page = find_widget(option_pdf_field)
+					if not widget or not page:
 						continue
 
 					is_selected = option.get("value") == value
@@ -268,7 +266,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						conditional_behavior = field_obj.get("conditional_behavior")
 						apply_field_flag_changes(widget, conditional_behavior)
 
-						fill_widget(widget, is_selected, field_type="radio")
+						fill_widget(widget, page, is_selected, field_type="radio")
 						if is_selected:
 							field_filled = True
 							filled_count += 1
@@ -294,6 +292,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					skipped_count += 1
 
 			elif field_type == "checkbox":
+				_log.debug("checkbox_processing", kit=request.kit_id, field_id=field_id, value=value, value_type=type(value).__name__)
 				if isinstance(value, bool):
 					pdf_field_name = field_obj.get("pdf_field_name")
 					if not pdf_field_name:
@@ -301,8 +300,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						skipped_count += 1
 						continue
 
-					widget = find_widget(pdf_field_name)
-					if not widget:
+					widget, page = find_widget(pdf_field_name)
+					if not widget or not page:
 						_log.warning("checkbox_widget_missing", kit=request.kit_id, field_id=field_id)
 						skipped_count += 1
 						continue
@@ -312,7 +311,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						conditional_behavior = field_obj.get("conditional_behavior")
 						apply_field_flag_changes(widget, conditional_behavior)
 
-						fill_widget(widget, value, field_type="checkbox")
+						fill_widget(widget, page, value, field_type="checkbox")
 						filled_count += 1
 					except Exception as exc:
 						_log.error(
@@ -324,6 +323,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						error_count += 1
 
 				elif isinstance(value, list):
+					_log.info("checkbox_group_processing", kit=request.kit_id, field_id=field_id, selected_values=value)
 					options = field_obj.get("options", []) or []
 					for selected_value in value:
 						selected_option = next((opt for opt in options if opt.get("value") == selected_value), None)
@@ -333,10 +333,12 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 								kit=request.kit_id,
 								field_id=field_id,
 								value=selected_value,
+								available_options=[opt.get("value") for opt in options]
 							)
 							continue
 
 						option_pdf_field = selected_option.get("pdf_field_name")
+						_log.info("checkbox_option_matched", kit=request.kit_id, field_id=field_id, selected_value=selected_value, pdf_field_name=option_pdf_field)
 						if not option_pdf_field:
 							_log.warning(
 								"checkbox_option_no_pdf_mapping",
@@ -346,8 +348,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 							)
 							continue
 
-						widget = find_widget(option_pdf_field)
-						if not widget:
+						widget, page = find_widget(option_pdf_field)
+						if not widget or not page:
 							_log.warning(
 								"checkbox_widget_not_found",
 								kit=request.kit_id,
@@ -356,12 +358,14 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 							)
 							continue
 
+						_log.info("checkbox_widget_found", kit=request.kit_id, field_id=field_id, widget_name=widget.field_name, widget_type=widget.field_type_string)
+
 						try:
 							# Apply field flag changes if needed (e.g., unlock read-only fields)
 							conditional_behavior = field_obj.get("conditional_behavior")
 							apply_field_flag_changes(widget, conditional_behavior)
 
-							fill_widget(widget, True, field_type="checkbox")
+							fill_widget(widget, page, True, field_type="checkbox")
 							filled_count += 1
 							_log.debug(
 								"checkbox_group_filled",
@@ -390,8 +394,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					skipped_count += 1
 					continue
 
-				widget = find_widget(pdf_field_name)
-				if not widget:
+				widget, page = find_widget(pdf_field_name)
+				if not widget or not page:
 					_log.warning("text_widget_not_found", kit=request.kit_id, field_id=field_id, pdf_field_name=pdf_field_name)
 					skipped_count += 1
 					continue
@@ -401,7 +405,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					conditional_behavior = field_obj.get("conditional_behavior")
 					apply_field_flag_changes(widget, conditional_behavior)
 
-					fill_widget(widget, value, field_type=field_type)
+					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
 					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, value_length=len(str(value)))
 				except Exception as exc:
@@ -421,23 +425,23 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			errors=error_count,
 		)
 
-		try:
-			doc.need_appearances(True)
-			_log.info("need_appearances_set", kit=request.kit_id, value=True)
-		except Exception as exc:
-			_log.warning("need_appearances_failed", kit=request.kit_id, error=str(exc))
+		# DON'T set need_appearances for XFA forms - let viewer generate them
+		# try:
+		# 	doc.need_appearances(True)
+		# 	_log.info("need_appearances_set", kit=request.kit_id, value=True)
+		# except Exception as exc:
+		# 	_log.warning("need_appearances_failed", kit=request.kit_id, error=str(exc))
+		_log.info("need_appearances_skipped", kit=request.kit_id, reason="XFA form - viewer will generate")
 
 		with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
 			temp_path = tmp_file.name
 
 		try:
+			# Save with minimal processing to preserve XFA checkbox appearances
 			doc.save(
 				temp_path,
-				garbage=4,
-				clean=True,
+				garbage=3,
 				deflate=True,
-				incremental=False,
-				expand=255,
 			)
 			doc.close()
 			doc = None

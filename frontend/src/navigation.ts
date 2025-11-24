@@ -1,29 +1,28 @@
 /**
  * Navigation - Client-side form field navigation logic
  *
- * Phase 1 Implementation: Linear navigation for MVP
- *
  * Purpose: Determine which field to fill next, calculate progress,
  * and detect form completion. All logic is client-side for stateless
  * backend architecture.
  *
- * MVP Scope:
+ * Implemented Features:
  * - ✅ Linear iteration (field order from schema)
  * - ✅ Skip confirmed fields
  * - ✅ Required field prioritization
  * - ✅ Progress calculation
  * - ✅ Completion detection
+ * - ✅ Section-based navigation (Nov 23, 2025)
+ * - ✅ Conditional field visibility (Nov 22, 2025)
+ * - ✅ Field dependencies (Nov 22, 2025)
  *
- * Out of Scope (Post-MVP):
+ * Out of Scope:
  * - ❌ Hidden fields (display:none)
  * - ❌ Disabled fields
- * - ❌ Conditional field visibility
- * - ❌ Field dependencies
- * - ❌ Section-based navigation
  */
 
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema } from './schema-forms/types/schema';
+import { shouldShowField } from './schema-forms/utils/validation';
 
 /**
  * Options for customizing navigation behavior
@@ -112,9 +111,25 @@ export function computeNextField(
     return null;
   }
 
+  // Get current section to limit field search
+  const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
+
+  // Filter to only fields in current section
+  const currentSectionFieldIds = new Set(currentSection?.fields || []);
+  const fieldsToCheck = currentSectionFieldIds.size > 0
+    ? state.schema.fields.filter(f => currentSectionFieldIds.has(f.id))
+    : state.schema.fields; // Fallback to all fields if no section structure
+
+  console.log('[computeNextField] 🔍 Current section:', {
+    sectionId: state.currentSectionId,
+    sectionLabel: currentSection?.label,
+    totalFieldsInSection: fieldsToCheck.length,
+    sectionFieldIds: Array.from(currentSectionFieldIds).slice(0, 5) // Show first 5 for brevity
+  });
+
   // When skipConfirmed=false, just return first field (no prioritization)
   if (!skipConfirmed) {
-    for (const field of state.schema.fields) {
+    for (const field of fieldsToCheck) {
       // Apply required filter if requested
       if (requiredOnly && !field.validation?.required) {
         continue;
@@ -126,7 +141,12 @@ export function computeNextField(
 
   // PRIORITY 1: Find first filled but UNCONFIRMED field
   // This ensures Gemini must confirm fields before moving on
-  for (const field of state.schema.fields) {
+  for (const field of fieldsToCheck) {
+    // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
+    if (field.hidden || !shouldShowField(field, state.fieldValues)) {
+      continue;
+    }
+
     // Apply required filter if requested
     if (requiredOnly && !field.validation?.required) {
       continue;
@@ -145,7 +165,12 @@ export function computeNextField(
   }
 
   // PRIORITY 2: Find first EMPTY field (skipping confirmed fields)
-  for (const field of state.schema.fields) {
+  for (const field of fieldsToCheck) {
+    // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
+    if (field.hidden || !shouldShowField(field, state.fieldValues)) {
+      continue;
+    }
+
     // Apply required filter if requested
     if (requiredOnly && !field.validation?.required) {
       continue;
@@ -170,7 +195,7 @@ export function computeNextField(
     }
   }
 
-  // All applicable fields are confirmed/filled
+  // All applicable fields in current section are confirmed/filled
   return null;
 }
 

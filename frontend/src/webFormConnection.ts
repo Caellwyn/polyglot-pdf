@@ -16,6 +16,8 @@ import {
   getFieldOrder,
   isFormComplete
 } from "./navigation";
+import { shouldShowField } from "./schema-forms/utils/validation";
+import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 
 export type ConnectionStatus =
   | "disconnected"
@@ -323,6 +325,7 @@ export class WebFormConnection {
 
     // Apply updates to state
     const updatedFields: Array<{ fieldId: string; value: any }> = [];
+    const lockedFields: Array<{ fieldId: string; field: any; reason: string }> = [];
 
     for (const [displayName, value] of Object.entries(updates)) {
       // Find field by display name
@@ -331,12 +334,53 @@ export class WebFormConnection {
       );
 
       if (field) {
+        // Check if field is locked/hidden due to dependencies (Nov 22, 2025)
+        const isAvailable = !field.hidden && shouldShowField(field, this.state.fieldValues);
+
+        if (!isAvailable) {
+          // Field is locked - collect dependency info for error message
+          const { availability, lockedReason } = evaluateFieldAvailability(
+            field,
+            this.state.fieldValues,
+            this.state.schema
+          );
+
+          lockedFields.push({
+            fieldId: field.id,
+            field,
+            reason: lockedReason || `The field '${field.spoken_name || field.name}' is not available yet.`
+          });
+
+          console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
+          continue; // Skip applying this update
+        }
+
         // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
         this.updateField(field.id, value as any, { confirmed: false, emit: false });
         updatedFields.push({ fieldId: field.id, value });
       } else {
         // Field not found in schema - ignore
       }
+    }
+
+    // If any fields were locked, send error message back to backend/Gemini
+    if (lockedFields.length > 0) {
+      const errorMessages = lockedFields.map(lf =>
+        `Cannot update '${lf.field.spoken_name || lf.field.name}': ${lf.reason}`
+      );
+
+      console.error('[WebFormConnection] Dependency errors:', errorMessages);
+
+      // Send dependency error back to backend so it can inform Gemini
+      this.send({
+        type: 'dependency_error',
+        locked_fields: lockedFields.map(lf => ({
+          field_id: lf.fieldId,
+          spoken_name: lf.field.spoken_name || lf.field.name,
+          reason: lf.reason
+        })),
+        message: errorMessages.join('; ')
+      });
     }
 
     // Notify callback
@@ -660,13 +704,9 @@ export class WebFormConnection {
       const updatedState = SchemaFormStateManager.switchToSection(currentState, targetSectionId);
       this.state = updatedState;
 
-      // Get section schema and values (filter by conditional dependencies)
+      // Get section schema and values
       console.log('[WebFormConnection] Building section schema and values');
-      const sectionSchema = SchemaFormStateManager.extractSectionFields(
-        updatedState.schema,
-        targetSectionId,
-        updatedState.fieldValues // Pass field values for conditional filtering
-      );
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, targetSectionId);
       const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
       const sectionValues: Record<string, any> = {};
 
@@ -830,9 +870,21 @@ export class WebFormConnection {
     // Check if all fields in current section are now confirmed
     const nextField = computeNextField(this.state, { skipConfirmed: true });
 
+    console.log('[WebFormConnection] 🔍 Section completion check:', {
+      currentSectionId: this.state.currentSectionId,
+      nextFieldInCurrentSection: nextField?.id || 'NONE',
+      allFieldsConfirmed: nextField === null
+    });
+
     if (!nextField) {
       // All fields in current section are confirmed!
       const nextSection = SchemaFormStateManager.getNextSection(this.state);
+
+      console.log('[WebFormConnection] 🔍 Next section lookup:', {
+        currentSectionId: this.state.currentSectionId,
+        nextSectionId: nextSection?.id || 'NONE',
+        nextSectionLabel: nextSection?.label || 'N/A'
+      });
 
       if (nextSection) {
         console.log('[WebFormConnection] ✅ Section complete! Auto-switching to:', nextSection.id);
@@ -1354,12 +1406,8 @@ export class WebFormConnection {
       currentState = SchemaFormStateManager.switchToSection(currentState, targetSection.id);
       this.state = currentState;
 
-      // Get section schema and current values for this section (filter by conditional dependencies)
-      const sectionSchema = SchemaFormStateManager.extractSectionFields(
-        currentState.schema,
-        targetSection.id,
-        currentState.fieldValues // Pass field values for conditional filtering
-      );
+      // Get section schema and current values for this section
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(currentState.schema, targetSection.id);
       const sectionValues: Record<string, any> = {};
 
       // Filter fieldValues to only include fields in this section
@@ -1441,12 +1489,8 @@ export class WebFormConnection {
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
     this.state = updatedState;
 
-    // Build section info to send to backend (avoid round-trip delay, filter by conditional dependencies)
-    const sectionSchema = SchemaFormStateManager.extractSectionFields(
-      updatedState.schema,
-      sectionId,
-      updatedState.fieldValues // Pass field values for conditional filtering
-    );
+    // Build section info to send to backend (avoid round-trip delay)
+    const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
     const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
     const sectionValues: Record<string, any> = {};
 
