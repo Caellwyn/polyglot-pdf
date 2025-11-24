@@ -338,10 +338,22 @@ export interface FormSession {
  * Field value wrapper for WebSocket compatibility
  * Used to track AI-filled vs user-filled fields and confirmation status
  */
+/**
+ * Field availability state
+ * - available: Field can be filled (no dependencies blocking it)
+ * - locked: Dependencies not met (e.g., parent field needs to be filled first)
+ * - hidden: Conditional logic says field should be hidden
+ */
+export type FieldAvailability = 'available' | 'locked' | 'hidden';
+
 export interface FieldValue {
   value: string | boolean | null;
   confirmed?: boolean;  // User has confirmed this field value (explicit or implicit)
   confirmedAt?: string;  // ISO timestamp when field was confirmed
   confirmationMethod?: 'ai_voice' | 'manual_edit';  // How the field was confirmed
   lastModified?: number;  // Timestamp for conflict resolution
+
+  // Field state (Nov 22, 2025 - Dependency tracking)
+  availability?: FieldAvailability;  // Whether field is available, locked, or hidden
+  lockedReason?: string;  // Human-readable reason if locked (e.g., "Complete 'name changed' field first")
 }
