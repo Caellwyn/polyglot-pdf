@@ -67,11 +67,7 @@
       "id": "part_7",
       "label": "Part 7. Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
       "order": 7,
-      "section_ids": [
-        "part_7_1_preparer_s_name_and_business",
-        "part_7_2_preparer_s_address",
-        "part_7_3_preparer_s_signature_and_language"
-      ]
+      "section_ids": []
     },
     {
       "id": "part_8",
@@ -2540,11 +2536,13 @@
       "options": [
         {
           "value": "hispanic_latino",
-          "label": "Hispanic or Latino"
+          "label": "Hispanic or Latino",
+          "pdf_field_name": "P3_checkbox6[0]"
         },
         {
           "value": "not_hispanic_latino",
-          "label": "Not Hispanic or Latino"
+          "label": "Not Hispanic or Latino",
+          "pdf_field_name": "P3_checkbox6[1]"
         }
       ],
       "help": {
@@ -2560,23 +2558,28 @@
       "options": [
         {
           "value": "white",
-          "label": "White"
+          "label": "White",
+          "pdf_field_name": "P3_checkbox7_White"
         },
         {
           "value": "asian",
-          "label": "Asian"
+          "label": "Asian",
+          "pdf_field_name": "P3_checkbox7_Asian"
         },
         {
           "value": "black",
-          "label": "Black or African American"
+          "label": "Black or African American",
+          "pdf_field_name": "P3_checkbox7_Black"
         },
         {
           "value": "native_american",
-          "label": "American Indian or Alaska Native"
+          "label": "American Indian or Alaska Native",
+          "pdf_field_name": "P3_checkbox7_Indian"
         },
         {
           "value": "pacific_islander",
-          "label": "Native Hawaiian or Other Pacific Islander"
+          "label": "Native Hawaiian or Other Pacific Islander",
+          "pdf_field_name": "P3_checkbox7_Hawaiian"
         }
       ],
       "help": {
@@ -2735,39 +2738,48 @@
       "options": [
         {
           "value": "black",
-          "label": "Black"
+          "label": "Black",
+          "pdf_field_name": "P3_checkbox10[6]"
         },
         {
           "value": "blue",
-          "label": "Blue"
+          "label": "Blue",
+          "pdf_field_name": "P3_checkbox10[0]"
         },
         {
           "value": "brown",
-          "label": "Brown"
+          "label": "Brown",
+          "pdf_field_name": "P3_checkbox10[5]"
         },
         {
           "value": "gray",
-          "label": "Gray"
+          "label": "Gray",
+          "pdf_field_name": "P3_checkbox10[8]"
         },
         {
           "value": "green",
-          "label": "Green"
+          "label": "Green",
+          "pdf_field_name": "P3_checkbox10[1]"
         },
         {
           "value": "hazel",
-          "label": "Hazel"
+          "label": "Hazel",
+          "pdf_field_name": "P3_checkbox10[2]"
         },
         {
           "value": "maroon",
-          "label": "Maroon"
+          "label": "Maroon",
+          "pdf_field_name": "P3_checkbox10[4]"
         },
         {
           "value": "pink",
-          "label": "Pink"
+          "label": "Pink",
+          "pdf_field_name": "P3_checkbox10[3]"
         },
         {
           "value": "unknown",
-          "label": "Unknown/Other"
+          "label": "Unknown/Other",
+          "pdf_field_name": "P3_checkbox10[7]"
         }
       ],
       "help": {
@@ -2784,39 +2796,48 @@
       "options": [
         {
           "value": "bald",
-          "label": "Bald"
+          "label": "Bald",
+          "pdf_field_name": "P3_checkbox11[0]"
         },
         {
           "value": "black",
-          "label": "Black"
+          "label": "Black",
+          "pdf_field_name": "P3_checkbox11[8]"
         },
         {
           "value": "blond",
-          "label": "Blond"
+          "label": "Blond",
+          "pdf_field_name": "P3_checkbox11[1]"
         },
         {
           "value": "brown",
-          "label": "Brown"
+          "label": "Brown",
+          "pdf_field_name": "P3_checkbox11[7]"
         },
         {
           "value": "gray",
-          "label": "Gray"
+          "label": "Gray",
+          "pdf_field_name": "P3_checkbox11[2]"
         },
         {
           "value": "red",
-          "label": "Red"
+          "label": "Red",
+          "pdf_field_name": "P3_checkbox11[6]"
         },
         {
           "value": "sandy",
-          "label": "Sandy"
+          "label": "Sandy",
+          "pdf_field_name": "P3_checkbox11[3]"
         },
         {
           "value": "white",
-          "label": "White"
+          "label": "White",
+          "pdf_field_name": "P3_checkbox11[5]"
         },
         {
           "value": "unknown",
-          "label": "Unknown/Other"
+          "label": "Unknown/Other",
+          "pdf_field_name": "P3_checkbox11[4]"
         }
       ],
       "help": {
@@ -5044,11 +5065,13 @@
       "options": [
         {
           "value": "P7_checkbox7Extend[0]",
-          "label": "Yes"
+          "label": "Yes",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[0]"
         },
         {
           "value": "P7_checkbox7Extend[1]",
-          "label": "No"
+          "label": "No",
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[1]"
         }
       ],
       "read_only": true,
