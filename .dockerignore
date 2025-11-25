@@ -4,6 +4,7 @@
 .env.local
 backend/.env
 backend/.env.*
+backend/.venv
 
 # Development logs (contain PHI/PII)
 backend/logs/

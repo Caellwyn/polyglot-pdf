@@ -59,35 +59,21 @@ import { useRef, useEffect } from 'react'
 import * as VAD from "@ricky0123/vad-react"
 
 /**
- * Get VAD asset base URL (self-hosted for reliability)
- * Development: Uses CDN (Vite blocks dynamic imports from /public)
- * Production: Uses GCS bucket (faster, no CDN dependency)
+ * Get VAD asset base URL (uses CDN for reliability)
+ * CDN works for both dev and production (no CORS issues)
  */
 function getVADAssetBase(): string {
-	// Development: use CDN (can't use /public due to Vite restrictions on dynamic imports)
-	if (import.meta.env.DEV) {
-		return 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/'
-	}
-
-	// Production: use GCS bucket
-	const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
-	return `https://storage.googleapis.com/${bucket}/vad-assets/vad-web/`
+	// Use CDN for both dev and production (reliable, no CORS issues)
+	return 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.28/dist/'
 }
 
 /**
- * Get ONNX Runtime WASM base URL (self-hosted for reliability)
- * Development: Uses CDN (Vite blocks dynamic imports from /public)
- * Production: Uses GCS bucket (faster, no CDN dependency)
+ * Get ONNX Runtime WASM base URL (uses CDN for reliability)
+ * CDN works for both dev and production (no CORS issues)
  */
 function getORTAssetBase(): string {
-	// Development: use CDN (can't use /public due to Vite restrictions on dynamic imports)
-	if (import.meta.env.DEV) {
-		return 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
-	}
-
-	// Production: use GCS bucket
-	const bucket = import.meta.env.VITE_GCS_BUCKET || 'voice-form-filler-demo'
-	return `https://storage.googleapis.com/${bucket}/vad-assets/onnxruntime/`
+	// Use CDN for both dev and production (reliable, no CORS issues)
+	return 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
 }
 
 const VAD_ASSET_BASE = getVADAssetBase()
@@ -153,17 +139,17 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 	const callbacks = options?.callbacks
 	const sharedStream = options?.sharedStream
 	const sensitivity = options?.sensitivity || {}
-	
+
 	// CRITICAL: Store stream in a ref so getStream can access the LATEST value
 	// even after the component updates with a new stream
 	const streamRef = useRef<MediaStream | null | undefined>(sharedStream)
-	
+
 	// Update ref whenever sharedStream changes
 	useEffect(() => {
 		streamRef.current = sharedStream
 		console.log('[useDemoVAD] Stream updated:', !!sharedStream)
 	}, [sharedStream])
-	
+
 	const vad = VAD.useMicVAD({
 		// Don't start automatically - wait for user to click "Connect"
 		startOnLoad: false,
@@ -171,7 +157,7 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 		// Serve model + worklet assets from self-hosted location (faster, more reliable)
 		baseAssetPath: VAD_ASSET_BASE,
 		onnxWASMBasePath: ORT_ASSET_BASE,
-		
+
 		// Browser-level audio processing (matches recording stream settings)
 		// These constraints ensure consistency with the recording system
 		// and prevent Gemini's voice from triggering false VAD events
@@ -195,40 +181,40 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 				},
 			})
 		},
-		
+
 		// VAD sensitivity tuning (Phase 1 optimization)
 		// Higher threshold = less sensitive (fewer false positives from echo)
 		// Lower threshold = more sensitive (catches quiet speech)
-	// Allow overrides from options.sensitivity for live tuning during tests.
-	// Use safer, more permissive defaults here to make it easier to get started
-	// during manual testing. Users can tighten these later via the dashboard.
-	// FIX #1 (Oct 22, 2025): Lowered from 0.98/0.85 to 0.90/0.70
-	// Previous values were too aggressive, causing speech clipping and missed words
-	// 0.85 = 85% confidence (standard threshold, balances accuracy vs false positives)
-	// 0.65 = 65% to end (better hysteresis, prevents choppy cutoffs)
-	positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? DEFAULT_VAD_CONFIG.positiveSpeechThreshold,
-	negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? DEFAULT_VAD_CONFIG.negativeSpeechThreshold,
+		// Allow overrides from options.sensitivity for live tuning during tests.
+		// Use safer, more permissive defaults here to make it easier to get started
+		// during manual testing. Users can tighten these later via the dashboard.
+		// FIX #1 (Oct 22, 2025): Lowered from 0.98/0.85 to 0.90/0.70
+		// Previous values were too aggressive, causing speech clipping and missed words
+		// 0.85 = 85% confidence (standard threshold, balances accuracy vs false positives)
+		// 0.65 = 65% to end (better hysteresis, prevents choppy cutoffs)
+		positiveSpeechThreshold: sensitivity.positiveSpeechThreshold ?? DEFAULT_VAD_CONFIG.positiveSpeechThreshold,
+		negativeSpeechThreshold: sensitivity.negativeSpeechThreshold ?? DEFAULT_VAD_CONFIG.negativeSpeechThreshold,
 
-	// Timing parameters
-	minSpeechMs: sensitivity.minSpeechMs ?? DEFAULT_VAD_CONFIG.minSpeechMs,
-	redemptionMs: sensitivity.redemptionMs ?? DEFAULT_VAD_CONFIG.redemptionMs,
-		
+		// Timing parameters
+		minSpeechMs: sensitivity.minSpeechMs ?? DEFAULT_VAD_CONFIG.minSpeechMs,
+		redemptionMs: sensitivity.redemptionMs ?? DEFAULT_VAD_CONFIG.redemptionMs,
+
 		// Model files - use default CDN (library will handle this automatically)
 		// The library uses jsdelivr CDN by default for model files
-		
+
 		// Callbacks
 		onSpeechStart: () => {
 			callbacks?.onSpeechStart?.()
 		},
-		
+
 		onSpeechEnd: (audio) => {
 			callbacks?.onSpeechEnd?.(audio)
 		},
-		
+
 		onVADMisfire: () => {
 			callbacks?.onVADMisfire?.()
 		},
-		
+
 		onFrameProcessed: (probabilities, frame) => {
 			// probabilities is an object with { isSpeech: number } where isSpeech is 0.0-1.0
 			const probability = probabilities.isSpeech

@@ -60,27 +60,30 @@ export function getBackendUrl(): string {
 		return import.meta.env.VITE_WS_URL
 	}
 
-	// Development mode: use localhost
-	if (import.meta.env.DEV) {
-		return 'ws://localhost:8000/ws/fill'
-	}
-
 	// Production: Construct WebSocket URL from current origin
 	// This works with Firebase Hosting rewrites (http -> ws, https -> wss)
-	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-	const host = window.location.host
-	return `${protocol}//${host}/api/ws/fill`
+	// Check if NOT in dev mode to ensure this runs in production
+	if (!import.meta.env.DEV || import.meta.env.PROD) {
+		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+		const host = window.location.host
+		return `${protocol}//${host}/api/ws/fill`
+	}
+
+	// Development mode fallback: use localhost
+	return 'ws://localhost:8000/ws/fill'
 }
 
 /**
  * Get fallback cloud URL if localhost fails
- * This should match the production backend URL
+ * Returns the direct Cloud Run URL (Firebase Hosting doesn't support WebSocket rewrites)
  */
 export function getCloudBackendUrl(): string {
-	// Fallback to dynamic origin
-	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-	const host = window.location.host
-	return `${protocol}//${host}/api/ws/fill`
+	// Use environment variable if set, otherwise use hardcoded Cloud Run URL
+	if (import.meta.env.VITE_WS_URL) {
+		return import.meta.env.VITE_WS_URL
+	}
+	// Direct Cloud Run URL - Firebase Hosting rewrites don't work for WebSockets
+	return 'wss://polyglot-backend-d3mhrrkwfq-uc.a.run.app/ws/fill'
 }
 
 /**

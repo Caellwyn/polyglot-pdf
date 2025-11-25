@@ -13,7 +13,7 @@ import type { FormSchema } from '../types/schema';
  * Get backend HTTP URL based on environment
  *
  * Development: http://localhost:8000
- * Production: https://voice-form-filler-773443099751.us-central1.run.app
+ * Production: Uses current domain (Firebase Hosting with rewrites to Cloud Run)
  */
 export function getBackendHttpUrl(): string {
   // Check for custom URL override (for local dev)
@@ -28,13 +28,16 @@ export function getBackendHttpUrl(): string {
     return import.meta.env.VITE_BACKEND_HTTP_URL;
   }
 
-  // Development mode: use localhost
-  if (import.meta.env.DEV) {
-    return 'http://localhost:8000';
+  // Production: Use current domain (Firebase Hosting rewrites to Cloud Run)
+  // Check if NOT in dev mode to ensure this runs in production
+  if (!import.meta.env.DEV || import.meta.env.PROD) {
+    const protocol = window.location.protocol; // http: or https:
+    const host = window.location.host;
+    return `${protocol}//${host}`;
   }
 
-  // Production fallback
-  return 'https://voice-form-filler-773443099751.us-central1.run.app';
+  // Development mode fallback: use localhost
+  return 'http://localhost:8000';
 }
 
 /**
