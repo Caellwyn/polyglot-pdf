@@ -1,0 +1,216 @@
+#!/bin/bash
+# deploy-form-kit.sh - Upload form kit(s) to GCS and regenerate manifest
+#
+# Usage:
+#   ./scripts/deploy-form-kit.sh <kit-id>       # Deploy single kit
+#   ./scripts/deploy-form-kit.sh --all          # Deploy all kits
+#   ./scripts/deploy-form-kit.sh --manifest     # Regenerate manifest only
+#
+# Prerequisites:
+#   - gcloud CLI installed and authenticated
+#   - GCP project set (gcloud config set project <project-id>)
+#
+# Environment variables (optional):
+#   FORM_KITS_BUCKET - GCS bucket name (default: polyglot-pdf-form-kits)
+#   FORM_KITS_PREFIX - Path prefix in bucket (default: form-kits)
+
+set -e
+
+# Configuration
+BUCKET_NAME="${FORM_KITS_BUCKET:-polyglot-pdf-form-kits}"
+PREFIX="${FORM_KITS_PREFIX:-form-kits}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+FORM_KITS_DIR="$REPO_ROOT/form-kits"
+MANIFEST_FILE="index.json"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Check prerequisites
+check_prereqs() {
+    if ! command -v gcloud &> /dev/null; then
+        log_error "gcloud CLI not found. Install from: https://cloud.google.com/sdk/docs/install"
+        exit 1
+    fi
+
+    # Check if authenticated
+    if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | head -1 | grep -q "@"; then
+        log_error "Not authenticated with gcloud. Run: gcloud auth login"
+        exit 1
+    fi
+
+    # Check project is set
+    PROJECT=$(gcloud config get-value project 2>/dev/null)
+    if [ -z "$PROJECT" ] || [ "$PROJECT" == "(unset)" ]; then
+        log_error "No GCP project set. Run: gcloud config set project <project-id>"
+        exit 1
+    fi
+
+    log_info "Using GCP project: $PROJECT"
+    log_info "Using GCS bucket: gs://$BUCKET_NAME"
+}
+
+# Create bucket if it doesn't exist
+ensure_bucket() {
+    if ! gcloud storage buckets describe "gs://$BUCKET_NAME" &>/dev/null; then
+        log_info "Creating bucket gs://$BUCKET_NAME..."
+        gcloud storage buckets create "gs://$BUCKET_NAME" \
+            --location=us-central1 \
+            --uniform-bucket-level-access
+        log_info "Bucket created successfully"
+    else
+        log_info "Bucket gs://$BUCKET_NAME already exists"
+    fi
+}
+
+# Upload a single form kit
+upload_kit() {
+    local kit_id="$1"
+    local kit_dir="$FORM_KITS_DIR/$kit_id"
+
+    if [ ! -d "$kit_dir" ]; then
+        log_error "Form kit directory not found: $kit_dir"
+        return 1
+    fi
+
+    if [ ! -f "$kit_dir/schema.json" ]; then
+        log_error "schema.json not found in $kit_dir"
+        return 1
+    fi
+
+    log_info "Uploading form kit: $kit_id"
+
+    # Upload all files in the kit directory
+    gcloud storage cp -r "$kit_dir/*" "gs://$BUCKET_NAME/$PREFIX/$kit_id/"
+
+    log_info "Uploaded $kit_id successfully"
+}
+
+# Generate and upload manifest
+generate_manifest() {
+    log_info "Generating manifest..."
+
+    local manifest_content='{"generatedAt":"'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'","forms":['
+    local first=true
+
+    for kit_dir in "$FORM_KITS_DIR"/*/; do
+        [ -d "$kit_dir" ] || continue
+
+        local kit_id=$(basename "$kit_dir")
+
+        # Skip if no schema.json
+        if [ ! -f "$kit_dir/schema.json" ]; then
+            log_warn "Skipping $kit_id - no schema.json found"
+            continue
+        fi
+
+        # Extract label from schema.json (title field)
+        local label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        if [ -z "$label" ]; then
+            label="$kit_id"
+        fi
+
+        # Find PDF file (prefer form.pdf, then any .pdf)
+        local pdf_file="form.pdf"
+        if [ ! -f "$kit_dir/form.pdf" ]; then
+            pdf_file=$(ls "$kit_dir"/*.pdf 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+        fi
+
+        if [ -z "$pdf_file" ]; then
+            log_warn "No PDF found for $kit_id"
+            pdf_file="form.pdf"
+        fi
+
+        if [ "$first" = true ]; then
+            first=false
+        else
+            manifest_content+=','
+        fi
+
+        manifest_content+='{"id":"'$kit_id'",'
+        manifest_content+='"label":"'$label'",'
+        manifest_content+='"schemaFile":"schema.json",'
+        manifest_content+='"schemaPath":"/'$PREFIX'/'$kit_id'/schema.json",'
+        manifest_content+='"pdfFile":"'$pdf_file'",'
+        manifest_content+='"pdfPath":"/'$PREFIX'/'$kit_id'/'$pdf_file'"}'
+    done
+
+    manifest_content+=']}'
+
+    # Write manifest locally first
+    local temp_manifest=$(mktemp)
+    echo "$manifest_content" | python3 -m json.tool > "$temp_manifest" 2>/dev/null || echo "$manifest_content" > "$temp_manifest"
+
+    # Upload manifest
+    gcloud storage cp "$temp_manifest" "gs://$BUCKET_NAME/$PREFIX/$MANIFEST_FILE"
+    rm "$temp_manifest"
+
+    log_info "Manifest uploaded to gs://$BUCKET_NAME/$PREFIX/$MANIFEST_FILE"
+}
+
+# Print usage
+usage() {
+    echo "Usage: $0 <kit-id> | --all | --manifest"
+    echo ""
+    echo "Commands:"
+    echo "  <kit-id>    Deploy a specific form kit (e.g., i-90)"
+    echo "  --all       Deploy all form kits in form-kits/"
+    echo "  --manifest  Regenerate and upload manifest only"
+    echo ""
+    echo "Environment variables:"
+    echo "  FORM_KITS_BUCKET  GCS bucket name (default: polyglot-pdf-form-kits)"
+    echo "  FORM_KITS_PREFIX  Path prefix in bucket (default: form-kits)"
+    exit 1
+}
+
+# Main
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+    fi
+
+    check_prereqs
+    ensure_bucket
+
+    case "$1" in
+        --all)
+            log_info "Deploying all form kits..."
+            for kit_dir in "$FORM_KITS_DIR"/*/; do
+                [ -d "$kit_dir" ] || continue
+                kit_id=$(basename "$kit_dir")
+                upload_kit "$kit_id" || log_warn "Failed to upload $kit_id, continuing..."
+            done
+            generate_manifest
+            ;;
+        --manifest)
+            generate_manifest
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            upload_kit "$1"
+            generate_manifest
+            ;;
+    esac
+
+    log_info "Done!"
+    echo ""
+    echo "Next steps:"
+    echo "1. Update Cloud Run env vars:"
+    echo "   gcloud run services update polyglot-backend \\"
+    echo "     --set-env-vars FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$BUCKET_NAME,FORM_KITS_REMOTE_PREFIX=$PREFIX"
+    echo ""
+    echo "2. Test the manifest endpoint:"
+    echo "   curl https://your-backend-url/api/form-kits"
+}
+
+main "$@"

@@ -23,7 +23,7 @@
 		"prepreview": "npm run form-kits:prepare",
 		"preview:demo": "vite preview --config vite.config.demo.ts --port 5174 --outDir dist/demo",
 		"preview:vad": "vite preview --config vite.config.vad.ts --port 5175 --outDir dist/vad-tuning",
-		"preview:schema": "vite preview --config vite.config.schema.ts --port 5176 --outDir dist/schema-forms",
+		"preview:schema": "vite preview --config vite.config.schema.ts --port 5176",
 		"prepreview:schema": "npm run form-kits:prepare",
 		"test": "vitest --environment jsdom",
 		"pretest": "npm run form-kits:prepare",
