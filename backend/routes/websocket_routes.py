@@ -352,11 +352,17 @@ async def _handle_fill_session(
 					# Frontend sends this when user first selects language
 					# Backend sends disclaimer message to Gemini using the proven initiating message pattern
 					spoken_language = obj.get("spoken_language")
+					disclaimer_text = obj.get("disclaimer_text", "")
+
 					if not spoken_language or not isinstance(spoken_language, str):
 						await websocket.send_json({"type": "error", "code": "invalid_language", "reason": "spoken_language_required"})
 					else:
 						try:
-							await service.send_disclaimer_message(spoken_language)
+							if not disclaimer_text:
+								_log.warning("missing_disclaimer_text", session_id=session_id)
+								disclaimer_text = "Please read the disclaimer."
+
+							await service.send_disclaimer_message(spoken_language, disclaimer_text)
 							await websocket.send_json({"type": "disclaimer_read_initiated", "language": spoken_language})
 							_log.info("disclaimer_read_initiated", session_id=session_id, language=spoken_language)
 						except Exception as e:

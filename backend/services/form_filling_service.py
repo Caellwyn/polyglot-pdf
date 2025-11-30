@@ -205,7 +205,7 @@ class FormFillingService:
         if self._audio_handler:
             await self._audio_handler.send_activity_end()
 
-    async def send_disclaimer_message(self, spoken_language: str):
+    async def send_disclaimer_message(self, spoken_language: str, disclaimer_text: str):
         """
         Send disclaimer initiating message to Gemini.
 
@@ -214,25 +214,18 @@ class FormFillingService:
 
         Args:
             spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
+            disclaimer_text: The full translated disclaimer text to read verbatim
         """
-        if self._live_ai is None:
-            # No-op when live AI is not configured (used in unit tests)
+        if not self._live_ai:
+            _log.warning("send_disclaimer_message_no_ai", session_id=self._session_id)
             return
 
-        # Store spoken language for later use
-        self._spoken_language = spoken_language
-
-        # Format disclaimer message template
         message = self._settings.DISCLAIMER_INITIATING_MESSAGE.format(
-            spoken_language=spoken_language
+            spoken_language=spoken_language,
+            disclaimer_text=disclaimer_text
         )
 
-        _log.info("send_disclaimer_message",
-                 session_id=self._session_id,
-                 spoken_language=spoken_language,
-                 message=message)
-
-        # Send to Gemini via session.send_client_content()
+        _log.info("sending_disclaimer_message", session_id=self._session_id, language=spoken_language)
         await self._live_ai.send_client_content(message)
 
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):

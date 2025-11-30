@@ -1,31 +1,74 @@
 /**
- * SchemaFormDemo - Demo page for testing schema-driven form rendering
+ * SchemaFormDemo - Production form filling page
  *
- * Loads I-90 schema and renders it using SchemaForm component
+ * Onboarding flow:
+ * 1. User selects form + language in initial modal (shown at this level)
+ * 2. Schema loads for selected form
+ * 3. Disclaimer modal appears (handled by VoiceOverlay, read in selected language)
+ * 4. Form filling begins
+ *
+ * Form selection is locked after onboarding to prevent mid-session switches.
  */
 
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect } from "react";
 import { SchemaForm } from "./components/SchemaForm";
 import type { FormSchema } from "./types/schema";
 import type { FormKitDescriptor, FormKitManifest } from "./types/formKit";
+import { getBackendHttpUrl } from "./utils/pdfFiller";
+import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
 
-const SELECTED_FORM_STORAGE_KEY = "schema_form_selected_form_id";
+// Session storage keys for onboarding state
+const ONBOARDING_FORM_KEY = "vff_selected_form_id";
+const ONBOARDING_LANGUAGE_KEY = "vff_selected_language";
 
-function persistSelectedForm(formId: string | null) {
+interface OnboardingState {
+  formId: string | null;
+  language: string | null;
+}
+
+function loadOnboardingState(): OnboardingState {
   if (typeof window === "undefined") {
-    return;
+    return { formId: null, language: null };
   }
+  return {
+    formId: sessionStorage.getItem(ONBOARDING_FORM_KEY),
+    language: sessionStorage.getItem(ONBOARDING_LANGUAGE_KEY),
+  };
+}
 
-  if (formId) {
-    window.localStorage.setItem(SELECTED_FORM_STORAGE_KEY, formId);
-  } else {
-    window.localStorage.removeItem(SELECTED_FORM_STORAGE_KEY);
+function saveOnboardingState(state: Partial<OnboardingState>) {
+  if (typeof window === "undefined") return;
+
+  if (state.formId !== undefined) {
+    if (state.formId) {
+      sessionStorage.setItem(ONBOARDING_FORM_KEY, state.formId);
+    } else {
+      sessionStorage.removeItem(ONBOARDING_FORM_KEY);
+    }
+  }
+  if (state.language !== undefined) {
+    if (state.language) {
+      sessionStorage.setItem(ONBOARDING_LANGUAGE_KEY, state.language);
+    } else {
+      sessionStorage.removeItem(ONBOARDING_LANGUAGE_KEY);
+    }
   }
 }
 
+function clearOnboardingState() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(ONBOARDING_FORM_KEY);
+  sessionStorage.removeItem(ONBOARDING_LANGUAGE_KEY);
+}
+
 export function SchemaFormDemo() {
-  const [forms, setForms] = useState<FormKitDescriptor[]>([]);
+  // Onboarding state - form + language must be selected before proceeding
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(true);
+
+  // Form manifest & schema
+  const [forms, setForms] = useState<FormKitDescriptor[]>([]);
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [manifestLoading, setManifestLoading] = useState(true);
   const [schemaLoading, setSchemaLoading] = useState(false);
@@ -34,41 +77,61 @@ export function SchemaFormDemo() {
 
   const selectedForm = forms.find((form) => form.id === selectedFormId) ?? null;
 
+  // Load onboarding state from session on mount
+  useEffect(() => {
+    const saved = loadOnboardingState();
+    if (saved.formId && saved.language) {
+      // Returning user - restore selections and skip modal
+      setSelectedFormId(saved.formId);
+      setSelectedLanguage(saved.language);
+      setShowOnboardingModal(false);
+    }
+  }, []);
+
+  // Load manifest from backend (for schema paths)
   useEffect(() => {
     async function loadManifest() {
       try {
         setManifestLoading(true);
         setManifestError(null);
-        const response = await fetch("/form-kits/index.json");
 
-        if (!response.ok) {
-          throw new Error(`Failed to load manifest: ${response.statusText}`);
+        // Try backend API first, fall back to static file for local dev
+        let manifest: FormKitManifest;
+        try {
+          const backendUrl = getBackendHttpUrl();
+          const response = await fetch(`${backendUrl}/api/form-kits`);
+          if (response.ok) {
+            const data = await response.json();
+            // Backend returns { forms: [...] }, convert to manifest format
+            manifest = {
+              generatedAt: new Date().toISOString(),
+              forms: data.forms.map((f: any) => ({
+                id: f.id,
+                label: f.label,
+                description: f.description,
+                schemaFile: "schema.json",
+                schemaPath: `/form-kits/${f.id}/schema.json`,
+                pdfFile: "form.pdf",
+                pdfPath: `/form-kits/${f.id}/form.pdf`,
+              })),
+            };
+          } else {
+            throw new Error("Backend unavailable");
+          }
+        } catch {
+          // Fall back to static manifest for local development
+          console.log("[SchemaFormDemo] Backend unavailable, using static manifest");
+          const response = await fetch("/form-kits/index.json");
+          if (!response.ok) {
+            throw new Error(`Failed to load manifest: ${response.statusText}`);
+          }
+          manifest = await response.json();
         }
 
-        const manifest = (await response.json()) as FormKitManifest;
         setForms(manifest.forms);
-
-        if (manifest.forms.length > 0) {
-          const storedSelection =
-            typeof window !== "undefined"
-              ? window.localStorage.getItem(SELECTED_FORM_STORAGE_KEY)
-              : null;
-
-          const defaultSelection = storedSelection && manifest.forms.some((form) => form.id === storedSelection)
-            ? storedSelection
-            : manifest.forms[0].id;
-
-          setSelectedFormId(defaultSelection);
-          persistSelectedForm(defaultSelection);
-        } else {
-          setSelectedFormId(null);
-          persistSelectedForm(null);
-        }
       } catch (err) {
         console.error("[SchemaFormDemo] Failed to load form manifest:", err);
         setForms([]);
-        setSelectedFormId(null);
-        persistSelectedForm(null);
         setManifestError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setManifestLoading(false);
@@ -134,114 +197,114 @@ export function SchemaFormDemo() {
 
   const handleClearSession = () => {
     if (confirm("Clear all form data and start fresh?")) {
+      // Clear form data
       sessionStorage.removeItem("schema_form_state");
+      // Clear onboarding state (forces form/language re-selection)
+      clearOnboardingState();
       window.location.reload();
     }
   };
 
+  // Handler for form+language selection from modal
+  const handleOnboardingSelection = (formId: string, language: string) => {
+    console.log("[SchemaFormDemo] Onboarding selection:", formId, language);
+    saveOnboardingState({ formId, language });
+    setSelectedFormId(formId);
+    setSelectedLanguage(language);
+    setShowOnboardingModal(false);
+  };
+
+  // Show loading while manifest loads
   if (manifestLoading) {
     return (
       <div className="schema-form-demo">
         <div className="schema-form-demo__loading">
-          <p>Loading available forms...</p>
+          <p>Loading...</p>
         </div>
       </div>
     );
   }
 
+  // Show error if manifest failed
   if (manifestError) {
     return (
       <div className="schema-form-demo">
         <div className="schema-form-demo__error">
-          <h2>Unable to load form list</h2>
+          <h2>Unable to load forms</h2>
           <p>{manifestError}</p>
-          <p>
-            Ensure <code>public/form-kits/index.json</code> exists. Run <code>npm run form-kits:prepare</code>
-            from the frontend folder to regenerate it.
-          </p>
         </div>
       </div>
     );
   }
 
+  // Show error if no forms available
   if (!forms.length) {
     return (
       <div className="schema-form-demo">
         <div className="schema-form-demo__error">
           <h2>No forms available</h2>
-          <p>Add a folder under <code>public/form-kits</code> with schema and PDF assets.</p>
+          <p>Please contact support.</p>
         </div>
       </div>
     );
   }
 
-  const handleFormChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextId = event.target.value || null;
-    setSelectedFormId(nextId);
-    persistSelectedForm(nextId);
-  };
-
   return (
     <div className="schema-form-demo">
-      <div
-        style={{
-          padding: "10px",
-          background: "#f0f0f0",
-          marginBottom: "20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-        }}
-      >
-        <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          <span style={{ fontWeight: 600 }}>Select a form kit</span>
-          <select
-            value={selectedFormId ?? ""}
-            onChange={handleFormChange}
-            style={{ padding: "8px", fontSize: "1rem" }}
-          >
-            {forms.map((form) => (
-              <option key={form.id} value={form.id}>
-                {form.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selectedForm?.description ? (
-          <p style={{ margin: 0 }}>{selectedForm.description}</p>
-        ) : null}
-        <button onClick={handleClearSession} style={{ padding: "8px 16px", cursor: "pointer", alignSelf: "flex-start" }}>
-          🗑️ Clear Form & Start Fresh
-        </button>
-      </div>
+      {/* Onboarding modal - form + language selection */}
+      {showOnboardingModal && (
+        <LanguageSelectionModal
+          onSelection={handleOnboardingSelection}
+        />
+      )}
 
-      {schemaLoading && (
+      {/* Minimal header - only shows clear button, no form selector (form is locked after onboarding) */}
+      {!showOnboardingModal && schema && (
+        <div
+          style={{
+            padding: "10px",
+            background: "#f0f0f0",
+            marginBottom: "20px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>
+            {selectedForm?.label ?? "Form"}
+          </span>
+          <button
+            onClick={handleClearSession}
+            style={{ padding: "8px 16px", cursor: "pointer" }}
+          >
+            🗑️ Start Fresh
+          </button>
+        </div>
+      )}
+
+      {schemaLoading && !showOnboardingModal && (
         <div className="schema-form-demo__loading">
           <p>
-            Loading schema for <strong>{selectedForm?.label ?? "form"}</strong>...
+            Loading <strong>{selectedForm?.label ?? "form"}</strong>...
           </p>
         </div>
       )}
 
-      {schemaError && !schemaLoading && (
+      {schemaError && !schemaLoading && !showOnboardingModal && (
         <div className="schema-form-demo__error">
-          <h2>Error loading schema</h2>
+          <h2>Error loading form</h2>
           <p>{schemaError}</p>
-          {selectedForm ? (
-            <p>
-              Verify schema + PDF exists in <code>public/form-kits/{selectedForm.id}</code>.
-            </p>
-          ) : null}
         </div>
       )}
 
-      {schema && selectedForm && !schemaLoading ? (
+      {schema && selectedForm && !schemaLoading && !showOnboardingModal ? (
         <SchemaForm
           schema={schema}
           kitId={selectedForm.id}
           pdfUrl={selectedForm.pdfPath}
           onSubmit={handleSubmit}
           onSectionChange={handleSectionChange}
+          initialLanguage={selectedLanguage ?? undefined}
         />
       ) : null}
     </div>

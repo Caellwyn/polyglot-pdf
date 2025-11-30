@@ -28,9 +28,11 @@ interface VoiceOverlayMobileProps {
 	sharedStream?: MediaStream | null
 	// FIX #4: Stream error from parent (for error visibility)
 	streamError?: string | null
+	/** Pre-selected language from onboarding (skips language selection modal) */
+	initialLanguage?: string
 }
 
-export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayMobileProps) {
+export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError, initialLanguage }: VoiceOverlayMobileProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -43,8 +45,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
-	const [showLanguageModal, setShowLanguageModal] = useState(true)  // Start with language selection modal
-	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
+	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
+	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
+	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
@@ -89,6 +92,27 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		sharedStreamRef.current = sharedStream || null
 		console.log('[VoiceOverlayMobile] 🔗 Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
+
+	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
+	useEffect(() => {
+		if (initialLanguage && !showLanguageModal) {
+			console.log('[VoiceOverlayMobile] Language pre-selected from onboarding:', initialLanguage)
+			// Trigger the same flow as handleInitialLanguageSelect
+			const triggerDisclaimerFlow = async () => {
+				try {
+					setPendingDisclaimerRead(true)
+					await handleConnect()
+					setShowDisclaimerModal(true)
+				} catch (err) {
+					console.error('[VoiceOverlayMobile] Failed to connect after pre-selected language:', err)
+					setError(err instanceof Error ? err.message : 'Connection failed')
+					setPendingDisclaimerRead(false)
+				}
+			}
+			triggerDisclaimerFlow()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // Only run on mount
 
 	// Keep pushToTalkMode ref updated
 	useEffect(() => {
@@ -331,8 +355,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 
-	// Handle initial language selection from modal (first-time users)
-	const handleInitialLanguageSelect = async (language: string) => {
+	// Handle initial language selection from modal (fallback when initialLanguage not provided)
+	const handleInitialLanguageSelect = async (_formId: string, language: string) => {
 		console.log('[VoiceOverlayMobile] Initial language selected from modal:', language)
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
@@ -430,6 +454,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		setShowDisclaimerModal(false)
 
+		// Step 1: Send activity_start FIRST to stop backend from sending more audio
+		console.log('[VoiceOverlayMobile] 🎤 Sending activity_start to interrupt Gemini')
+		connectionManager?.sendActivityStart()
+
+		// Step 2: THEN flush the local audio queue
+		const audioManager = connectionManager?.getAudioManager()
+		if (audioManager) {
+			console.log('[VoiceOverlayMobile] 🔇 Clearing audio queue on disclaimer agreement')
+			audioManager.flushAudioQueue()
+		}
+
 		// Log disclaimer acceptance to backend
 		try {
 			const timestamp = Date.now()
@@ -458,19 +493,47 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Don't block user - logging failure is non-fatal
 		}
 
-		// Connection already established in handleLanguageChange
-		// Now prompt Gemini to start asking for fields
-		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - prompting Gemini to start form filling')
+		// Check if connection is still active - the long disclaimer read may have caused
+		// the connection to go stale (idle timeout or disconnected)
+		const currentStatus = connectionManager?.getStatus()
+		const isConnectionActive = currentStatus === 'connected' || currentStatus === 'switching_section'
+
+		if (!isConnectionActive) {
+			console.log('[VoiceOverlayMobile] 🔄 Connection stale after disclaimer - reconnecting...')
+			console.log('[VoiceOverlayMobile] Current status:', currentStatus)
+
+			try {
+				// Reconnect to backend
+				await handleConnect()
+				console.log('[VoiceOverlayMobile] ✅ Reconnected after disclaimer acceptance')
+			} catch (err) {
+				console.error('[VoiceOverlayMobile] ❌ Reconnection failed:', err)
+				setError('Connection lost - please click Reconnect')
+				return
+			}
+		}
+
+		// Now switch to section 1 to restart Gemini with form-filling context (clean session, no disclaimer leakage)
+		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - switching to first section (restarts Gemini session)')
 
 		if (connectionManager && selectedLanguage) {
-			// Get the first field to ask for
-			const nextField = computeNextField(state || SchemaFormStateManager.load())
-			const nextFieldHint = nextField
-				? formatNextFieldHint(nextField)
-				: 'all fields are complete'
+			// Step 3: Resume audio playback FIRST so we don't miss any response chunks
+			const am = connectionManager.getAudioManager()
+			if (am) {
+				console.log('[VoiceOverlayMobile] 🔊 Resuming audio playback for Gemini response')
+				am.resumePlayback()
+			}
 
-			// Send initiating message to Gemini (same as language change)
-			connectionManager.changeSpokenLanguage(selectedLanguage, nextFieldHint)
+			// Step 4: Send activity_end to close the "user turn" so Gemini can respond
+			console.log('[VoiceOverlayMobile] 🎤 Sending activity_end to signal user turn complete')
+			await connectionManager.sendActivityEnd()
+
+			// Step 5: Switch to first section - this restarts Gemini with form-filling context
+			// The section switch mechanism:
+			// 1. Closes the current Gemini session (flushes disclaimer context)
+			// 2. Starts a fresh Gemini session with form-filling system instruction
+			// 3. Sends the initiating message for the first field
+			await connectionManager.switchToFirstSection(selectedLanguage)
 		}
 	}
 
@@ -762,10 +825,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 	return (
 		<>
-			{/* Language Selection Modal - First-time users must select language */}
+			{/* Language Selection Modal - fallback if initialLanguage not provided */}
 			{showLanguageModal && (
 				<LanguageSelectionModal
-					onLanguageSelect={handleInitialLanguageSelect}
+					onSelection={handleInitialLanguageSelect}
+					preselectedFormId={schema.id || 'default'}
 				/>
 			)}
 

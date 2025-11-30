@@ -2,8 +2,8 @@
 
 # Voice Form Filler - Technical Architecture Guide
 
-**Version**: 4.1
-**Last Updated**: November 22, 2025
+**Version**: 4.2
+**Last Updated**: November 29, 2025
 **Status**: Production-Ready Core with Active Development
 
 ---
@@ -12,7 +12,7 @@
 
 The Voice Form Filler is a specialized application designed to help non-English speakers complete complex USCIS immigration forms through voice interaction with Gemini AI. The system prioritizes accuracy over speed, processing one field at a time with mandatory confirmation workflows. It addresses unique challenges including broken conditional logic in USCIS PDFs and deployment in noisy nonprofit office environments.
 
-**Major Features (as of Nov 22, 2025)**:
+**Major Features (as of Nov 29, 2025)**:
 - ✅ Schema-driven forms with section-based navigation (16 sections for I-90)
 - ✅ Hallucination reduction features (PTT mode, audio filters, single-field constraint)
 - ✅ Token reduction backend (94% reduction: 7,400→458 tokens, feature flag ready)
@@ -24,6 +24,7 @@ The Voice Form Filler is a specialized application designed to help non-English 
 - ✅ **Confirmation system with legal audit trail** (completed Nov 18, 2025)
 - ✅ **Gated onboarding flow with language selection and disclaimer** (completed Nov 19, 2025)
 - ✅ **Reconnect button for idle timeouts** (completed Nov 19, 2025)
+- ✅ **Disclaimer/form-filling session separation** (completed Nov 29, 2025) - clean context after "I Agree"
 - ⚠️ Legacy demo system deprecated but not removed (cleanup pending)
 
 ---
@@ -291,6 +292,20 @@ Microphone → Noise Gate (-50dB) → High-Pass Filter (80Hz) → VAD → WebSoc
    - `disclaimerAcceptedAt`: Unix timestamp (milliseconds)
    - `selectedLanguage`: User's chosen language
    - Returning users skip both modals automatically
+
+5. **Session Separation** (Nov 29, 2025):
+   - **Problem**: After clicking "I Agree", Gemini continued talking about disclaimer instead of form-filling
+   - **Root Cause**: Disclaimer and form-filling shared same Gemini session, so context contained disclaimer text
+   - **Solution**: `switchToFirstSection()` method reuses section-switch mechanism after disclaimer acceptance
+   - **Flow**:
+     1. User clicks "I Agree"
+     2. Frontend sends `activity_start` to interrupt any ongoing Gemini speech
+     3. Frontend flushes audio queue and sends `activity_end`
+     4. Frontend calls `connectionManager.switchToFirstSection(selectedLanguage)`
+     5. Backend closes disclaimer Gemini session (flushes context)
+     6. Backend starts fresh Gemini session with form-filling system instruction
+     7. New Gemini session greets user and asks for first field (clean context, no disclaimer leakage)
+   - **Files**: `connection.ts:643-666` (switchToFirstSection), `VoiceOverlay.tsx:949-970`, `VoiceOverlayMobile.tsx:516-537`
 
 **File Locations**:
 - Modal component: `frontend/src/schema-forms/components/DisclaimerModal.tsx`
@@ -1402,9 +1417,25 @@ Note: Schema extraction and editing components segregated to external applicatio
 
 ---
 
-**Document Version**: 4.1
-**Compiled**: November 22, 2025
+**Document Version**: 4.2
+**Compiled**: November 29, 2025
 **Next Review**: December 15, 2025
+
+**Update Summary (v4.2 - November 29, 2025)**:
+
+**Session Separation Fix**:
+- 🔧 **Disclaimer/Form-Filling Session Separation** - Fixed Gemini continuing to talk about disclaimer after "I Agree" clicked
+  - **Problem**: Same Gemini session was used for disclaimer reading and form-filling, causing context leakage
+  - **Solution**: Added `switchToFirstSection(language)` method to connection manager
+  - **Mechanism**: Reuses existing section-switch infrastructure which:
+    1. Closes current Gemini session (flushes disclaimer context)
+    2. Starts fresh Gemini session with form-filling system instruction
+    3. Sends initiating message for first field
+  - **Files Modified**:
+    - `frontend/src/shared/connection.ts` - Added `switchToFirstSection()` method
+    - `frontend/src/demo/VoiceOverlay.tsx` - Updated `handleDisclaimerAgree()` to call `switchToFirstSection`
+    - `frontend/src/demo/VoiceOverlayMobile.tsx` - Same change as desktop overlay
+  - **Result**: Clean session transition with no disclaimer leakage into form-filling conversation
 
 **Update Summary (v4.1 - November 22, 2025)**:
 

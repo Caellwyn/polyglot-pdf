@@ -1,6 +1,6 @@
 {
     "hosting": {
-        "public": "frontend/dist/schema-forms",
+        "public": "frontend/dist",
         "ignore": [
             "firebase.json",
             "**/.*",
@@ -16,7 +16,7 @@
             },
             {
                 "source": "**",
-                "destination": "/schema-form-demo.html"
+                "destination": "/index.html"
             }
         ]
     }

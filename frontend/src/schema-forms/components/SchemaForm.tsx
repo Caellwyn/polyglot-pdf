@@ -29,9 +29,11 @@ export interface SchemaFormProps {
   pdfUrl?: string; // URL to original PDF for filling (optional)
   onSubmit?: (fieldValues: Record<string, any>) => void;
   onSectionChange?: (sectionId: string) => void;
+  /** Pre-selected language from onboarding (skips language selection modal in VoiceOverlay) */
+  initialLanguage?: string;
 }
 
-export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }: SchemaFormProps) {
+export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
   const [state, setState] = useState<SchemaFormState>(() => {
     return SchemaFormStateManager.init(schema);
   });
@@ -528,6 +530,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
             sharedStream={sharedStream}
             streamError={streamError}
             status={status}
+            initialLanguage={initialLanguage}
           />
         ) : (
           <VoiceOverlay
@@ -536,6 +539,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange }:
             status={status}
             sharedStream={sharedStream}
             streamError={streamError}
+            initialLanguage={initialLanguage}
           />
         )
       )}

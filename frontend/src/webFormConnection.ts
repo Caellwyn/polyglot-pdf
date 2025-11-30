@@ -114,9 +114,9 @@ export class WebFormConnection {
           reject(error);
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
           clearTimeout(timeout);
-          this.handleClose();
+          this.handleClose(event);
         };
       } catch (error) {
         clearTimeout(timeout);
@@ -939,10 +939,11 @@ export class WebFormConnection {
     }
     this.audioChunkCount++;
 
+    // Log first chunk and then every 100th chunk to reduce log spam
     if (this.audioChunkCount === 1) {
       console.log(`[WebFormConnection] 📥 First audio chunk received from server (${arrayBuffer.byteLength} bytes)`);
-    } else if (this.audioChunkCount % 10 === 0) {
-      console.log(`[WebFormConnection] 📥 Audio chunk #${this.audioChunkCount} (${arrayBuffer.byteLength} bytes)`);
+    } else if (this.audioChunkCount % 100 === 0) {
+      console.log(`[WebFormConnection] 📥 Audio chunk #${this.audioChunkCount}`);
     }
 
     // Queue audio for processing
@@ -1008,7 +1009,19 @@ export class WebFormConnection {
   /**
    * Handle WebSocket close
    */
-  private handleClose(): void {
+  private handleClose(event?: CloseEvent): void {
+    // Log close details for debugging
+    console.log('[WebFormConnection] 🔌 WebSocket closed', {
+      code: event?.code,
+      reason: event?.reason,
+      wasClean: event?.wasClean,
+      status: this.status,
+      reconnectAttempts: this.reconnectAttempts,
+      enableAutoReconnect: this.enableAutoReconnect,
+      isSectionSwitching: this.isSectionSwitching,
+      idleTimedOut: this.idleTimedOut
+    });
+
     // Don't auto-reconnect if this is the initial connection attempt
     // (allows fallback logic in connection.ts to try cloud URL)
     if (!this.enableAutoReconnect) {
@@ -1050,7 +1063,13 @@ export class WebFormConnection {
     );
 
     this.reconnectTimer = window.setTimeout(() => {
-      this.connect();
+      // Use the URL we successfully connected to (not the default localhost)
+      if (this.connectedUrl) {
+        this.connect(this.connectedUrl);
+      } else {
+        console.error('[WebFormConnection] Cannot reconnect - no connectedUrl stored');
+        this.setStatus("disconnected");
+      }
     }, delay);
   }
 
@@ -1097,12 +1116,23 @@ export class WebFormConnection {
       this.ws.send(message);
     } else {
       const jsonStr = JSON.stringify(message);
-      console.log('[WebFormConnection] Sending JSON message', {
-        type: message.type,
-        size: jsonStr.length,
-        readyState: this.ws.readyState,
-        bufferedAmount: this.ws.bufferedAmount
-      });
+
+      // DEBUG: Log full details if type is undefined (suspicious message)
+      if (message.type === undefined) {
+        console.error('[WebFormConnection] ⚠️ SUSPICIOUS: Sending message without type!', {
+          size: jsonStr.length,
+          keys: Object.keys(message),
+          preview: jsonStr.substring(0, 200),
+          stack: new Error().stack
+        });
+      } else {
+        console.log('[WebFormConnection] Sending JSON message', {
+          type: message.type,
+          size: jsonStr.length,
+          readyState: this.ws.readyState,
+          bufferedAmount: this.ws.bufferedAmount
+        });
+      }
       this.ws.send(jsonStr);
     }
   }

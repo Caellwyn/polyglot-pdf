@@ -1,0 +1,31 @@
+# Ignore virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore test files
+tests/
+*_test.py
+test_*.py
+
+# Ignore IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore docs
+*.md
+docs/
+
+# Ignore local config
+.env
+.env.local
+*.local

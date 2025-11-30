@@ -316,30 +316,22 @@ export class SchemaFormStateManager {
   static getNextSection(state: SchemaFormState): FormSection | null {
     const currentSection = this.getCurrentSection(state);
     if (!currentSection) {
-      console.log('[getNextSection] currentSection is NULL');
       return null;
     }
 
     const sortedSections = [...state.schema.sections].sort((a, b) => a.order - b.order);
-    console.log('[getNextSection] All sections after sort:', sortedSections.map(s => `${s.id} (order: ${s.order})`));
-    console.log('[getNextSection] Looking for currentSection.id:', currentSection.id);
-
     const currentIndex = sortedSections.findIndex((s) => s.id === currentSection.id);
-    console.log('[getNextSection] currentIndex:', currentIndex, 'out of', sortedSections.length, 'sections');
 
     if (currentIndex === -1) {
-      console.error('[getNextSection] Current section ID not found in sorted sections! This means state.currentSectionId does not match any section ID.');
+      console.error('[getNextSection] Current section ID not found in sorted sections!');
       return null;
     }
 
     if (currentIndex === sortedSections.length - 1) {
-      console.log('[getNextSection] Already at last section');
       return null; // No next section
     }
 
-    const nextSection = sortedSections[currentIndex + 1];
-    console.log('[getNextSection] Returning next section:', nextSection.id);
-    return nextSection;
+    return sortedSections[currentIndex + 1];
   }
 
   /**

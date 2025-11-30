@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schema Form Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background-color: #f5f5f5;
+        min-height: 100vh;
+      }
+
+      .schema-form-demo__loading,
+      .schema-form-demo__error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+        padding: 2rem;
+        text-align: center;
+      }
+
+      .schema-form-demo__error h2 {
+        color: #d32f2f;
+        margin-bottom: 1rem;
+      }
+
+      .schema-form-demo__error code {
+        background-color: #f5f5f5;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/schema-forms/main.tsx"></script>
+  </body>
+</html>
