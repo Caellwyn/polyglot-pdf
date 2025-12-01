@@ -15,7 +15,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000; /* Ensure modal is on top of everything */
+  z-index: 10000;
+  /* Ensure modal is on top of everything */
   padding: 20px;
 }
 
@@ -34,6 +35,7 @@
     opacity: 0;
     transform: translateY(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -51,6 +53,18 @@
 .disclaimer-modal-text {
   margin-bottom: 32px;
   line-height: 1.8;
+  max-height: 40vh;
+  /* Limit height to 40% of viewport height */
+  overflow-y: auto;
+  /* Enable vertical scrolling */
+  padding-right: 12px;
+  /* Add space for scrollbar */
+  border: 1px solid #e5e7eb;
+  /* Subtle border to indicate container */
+  border-radius: 8px;
+  padding: 16px;
+  background-color: #f9fafb;
+  /* Light background to distinguish from modal */
 }
 
 .disclaimer-modal-text p {
@@ -114,6 +128,99 @@
   outline-offset: 2px;
 }
 
+/* Wizard Styles */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+  /* Space for focus outline */
+}
+
+.selection-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
+.selection-card:hover {
+  border-color: #2563eb;
+  background-color: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.selection-card:focus {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+  border-color: #2563eb;
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.card-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.card-sublabel {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.language-grid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.language-card {
+  padding: 20px;
+}
+
+.card-native-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.card-english-name {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  margin-right: 16px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-button:hover {
+  background-color: #f3f4f6;
+}
+
 /* Mobile responsive */
 @media (max-width: 640px) {
   .disclaimer-modal-content {
@@ -138,12 +245,20 @@
     width: 100%;
     min-width: unset;
   }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .language-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* Tablet optimization */
 @media (min-width: 641px) and (max-width: 1024px) {
   .disclaimer-modal-content {
-    max-width: 500px;
+    max-width: 600px;
   }
 
   .disclaimer-modal-button {
@@ -165,6 +280,10 @@
   .disclaimer-modal-button {
     border: 2px solid currentColor;
   }
+
+  .selection-card {
+    border: 2px solid currentColor;
+  }
 }
 
 /* Reduced motion for accessibility */
@@ -178,6 +297,14 @@
   }
 
   .disclaimer-modal-button:active {
+    transform: none;
+  }
+
+  .selection-card {
+    transition: none;
+  }
+
+  .selection-card:hover {
     transform: none;
   }
 }
