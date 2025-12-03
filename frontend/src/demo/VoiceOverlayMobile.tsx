@@ -649,6 +649,19 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}
 
 	// Handle push-to-talk button press (touch)
+	// TABLET FIX: Wrapper for touch events that prevents context menu
+	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
+		// CRITICAL: Prevent browser context menu on long-press (tablet issue)
+		e.preventDefault()
+		handlePushToTalkPress()
+	}
+
+	// TABLET FIX: Touch end handler with preventDefault
+	const handlePushToTalkTouchEnd = (e: React.TouchEvent) => {
+		e.preventDefault()
+		handlePushToTalkRelease()
+	}
+
 	const handlePushToTalkPress = async () => {
 		if (!pushToTalkMode) return
 		
@@ -896,8 +909,12 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						<div className="vff-ptt-bar-container">
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
-								onTouchStart={handlePushToTalkPress}
 								onMouseDown={handlePushToTalkPress}
+								onMouseUp={handlePushToTalkRelease}
+								onTouchStart={handlePushToTalkTouchStart}
+								onTouchEnd={handlePushToTalkTouchEnd}
+								onTouchCancel={handlePushToTalkTouchEnd}
+								onContextMenu={(e) => e.preventDefault()}
 							>
 								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
 							</button>

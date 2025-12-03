@@ -500,6 +500,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}
 
 	// Handle push-to-talk button press (mouse/touch)
+	// TABLET FIX: Wrapper for touch events that prevents context menu
+	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
+		// CRITICAL: Prevent browser context menu on long-press (tablet issue)
+		e.preventDefault()
+		handlePushToTalkPress()
+	}
+
+	// TABLET FIX: Touch end handler with preventDefault
+	const handlePushToTalkTouchEnd = (e: React.TouchEvent) => {
+		e.preventDefault()
+		handlePushToTalkRelease()
+	}
+
 	const handlePushToTalkPress = async () => {
 		// Use statusRef for current status (avoids closure capture issues)
 		const currentStatus = statusRef.current
@@ -1203,7 +1216,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 							<button
 								className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
 								onMouseDown={handlePushToTalkPress}
-								onTouchStart={handlePushToTalkPress}
+								onMouseUp={handlePushToTalkRelease}
+								onTouchStart={handlePushToTalkTouchStart}
+								onTouchEnd={handlePushToTalkTouchEnd}
+								onTouchCancel={handlePushToTalkTouchEnd}
+								onContextMenu={(e) => e.preventDefault()}
 							>
 								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
 							</button>
