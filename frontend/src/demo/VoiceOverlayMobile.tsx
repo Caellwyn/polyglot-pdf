@@ -139,6 +139,113 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}, [])
 
+	// SAFETY NET: Force-release PTT if stuck on for any reason
+	// This handles: tab switch, incoming calls, screen rotation, browser throttling, etc.
+	const MAX_PTT_DURATION_MS = 30000 // 30 second max - prevents wasted Gemini API costs
+	const pttSafetyTimeoutRef = useRef<number | null>(null)
+
+	// Force release function that can be called from any safety mechanism
+	const forceReleasePTT = () => {
+		if (!isHoldingPushToTalkRef.current) return
+
+		console.log('[PTT Safety Mobile] ⚠️ Force-releasing PTT due to safety trigger')
+		setIsHoldingPushToTalk(false)
+
+		// Clear any pending timeouts
+		if (pttReleaseTimeoutRef.current !== null) {
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+		if (pttSafetyTimeoutRef.current !== null) {
+			clearTimeout(pttSafetyTimeoutRef.current)
+			pttSafetyTimeoutRef.current = null
+		}
+
+		// Send activity end and mute
+		connectionManager?.sendActivityEnd()
+		const audioManager = connectionManager?.getAudioManager()
+		audioManager?.muteInput()
+		audioManager?.resumePlayback()
+	}
+
+	// Safety mechanism 1: Max duration timeout (prevents infinite recording)
+	useEffect(() => {
+		if (isHoldingPushToTalk) {
+			console.log('[PTT Safety Mobile] Starting safety timeout (max 60s)')
+			pttSafetyTimeoutRef.current = window.setTimeout(() => {
+				console.log('[PTT Safety Mobile] ⚠️ Max duration reached - force releasing')
+				forceReleasePTT()
+			}, MAX_PTT_DURATION_MS)
+		} else {
+			// Clear safety timeout when released normally
+			if (pttSafetyTimeoutRef.current !== null) {
+				clearTimeout(pttSafetyTimeoutRef.current)
+				pttSafetyTimeoutRef.current = null
+			}
+		}
+
+		return () => {
+			if (pttSafetyTimeoutRef.current !== null) {
+				clearTimeout(pttSafetyTimeoutRef.current)
+				pttSafetyTimeoutRef.current = null
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isHoldingPushToTalk])
+
+	// Safety mechanism 2: Visibility change (tab switch, app switch, screen lock)
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.hidden && isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Tab hidden while recording - force releasing')
+				forceReleasePTT()
+			}
+		}
+
+		document.addEventListener('visibilitychange', handleVisibilityChange)
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Safety mechanism 3: Window blur (user clicked outside browser, system dialogs)
+	useEffect(() => {
+		const handleWindowBlur = () => {
+			if (isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Window lost focus while recording - force releasing')
+				forceReleasePTT()
+			}
+		}
+
+		window.addEventListener('blur', handleWindowBlur)
+		return () => window.removeEventListener('blur', handleWindowBlur)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Safety mechanism 4: Connection status change (disconnect while recording)
+	useEffect(() => {
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
+			status.toLowerCase().startsWith('connected ')
+
+		if (!isCurrentlyConnected && isHoldingPushToTalkRef.current) {
+			console.log('[PTT Safety Mobile] ⚠️ Connection lost while recording - force releasing')
+			forceReleasePTT()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [status])
+
+	// Safety mechanism 5: Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			if (isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Component unmounting while recording - force releasing')
+				// Direct cleanup since we're unmounting
+				connectionManager?.sendActivityEnd()
+				connectionManager?.getAudioManager()?.muteInput()
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
 		onSpeechStart: () => {
@@ -649,6 +756,19 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}
 
 	// Handle push-to-talk button press (touch)
+	// TABLET FIX: Wrapper for touch events that prevents context menu
+	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
+		// CRITICAL: Prevent browser context menu on long-press (tablet issue)
+		e.preventDefault()
+		handlePushToTalkPress()
+	}
+
+	// TABLET FIX: Touch end handler with preventDefault
+	const handlePushToTalkTouchEnd = (e: React.TouchEvent) => {
+		e.preventDefault()
+		handlePushToTalkRelease()
+	}
+
 	const handlePushToTalkPress = async () => {
 		if (!pushToTalkMode) return
 		
@@ -896,8 +1016,12 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						<div className="vff-ptt-bar-container">
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
-								onTouchStart={handlePushToTalkPress}
 								onMouseDown={handlePushToTalkPress}
+								onMouseUp={handlePushToTalkRelease}
+								onTouchStart={handlePushToTalkTouchStart}
+								onTouchEnd={handlePushToTalkTouchEnd}
+								onTouchCancel={handlePushToTalkTouchEnd}
+								onContextMenu={(e) => e.preventDefault()}
 							>
 								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
 							</button>
