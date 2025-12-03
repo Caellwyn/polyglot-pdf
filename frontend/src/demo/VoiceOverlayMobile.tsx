@@ -141,7 +141,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// SAFETY NET: Force-release PTT if stuck on for any reason
 	// This handles: tab switch, incoming calls, screen rotation, browser throttling, etc.
-	const MAX_PTT_DURATION_MS = 60000 // 60 second max recording
+	const MAX_PTT_DURATION_MS = 30000 // 30 second max - prevents wasted Gemini API costs
 	const pttSafetyTimeoutRef = useRef<number | null>(null)
 
 	// Force release function that can be called from any safety mechanism
