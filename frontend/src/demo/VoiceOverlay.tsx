@@ -23,7 +23,7 @@ import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
-import { DisclaimerModal } from '../schema-forms/components/DisclaimerModal'
+import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 
@@ -37,9 +37,11 @@ interface VoiceOverlayProps {
 	sharedStream?: MediaStream | null
 	// FIX #4: Stream error from parent (for error visibility)
 	streamError?: string | null
+	/** Pre-selected language from onboarding (skips language selection modal) */
+	initialLanguage?: string
 }
 
-export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayProps) {
+export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError, initialLanguage }: VoiceOverlayProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -52,8 +54,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
-	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
-	const [showLanguageModal, setShowLanguageModal] = useState(true)  // Show language selection modal on mount
+	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
+	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')
+	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)  // Track if disclaimer modal is showing
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
@@ -78,7 +81,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const section = schema.sections.find(s => s.order === order)
 		return section?.id
 	}
-	
+
 	// FIX #1: Use shared stream from parent (created before React rendering)
 	// No need to create our own stream - parent already did this to prevent race conditions
 	const sharedStreamRef = useRef<MediaStream | null>(sharedStream || null)
@@ -105,6 +108,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		sharedStreamRef.current = sharedStream || null
 		console.log('[VoiceOverlay] 🔗 Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
+
+	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
+	useEffect(() => {
+		if (initialLanguage && !showLanguageModal) {
+			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)
+			// Trigger the same flow as handleInitialLanguageSelect
+			const triggerDisclaimerFlow = async () => {
+				try {
+					setPendingDisclaimerRead(true)
+					await handleConnect()
+					setShowDisclaimerModal(true)
+				} catch (err) {
+					console.error('[VoiceOverlay] Failed to connect after pre-selected language:', err)
+					setError(err instanceof Error ? err.message : 'Connection failed')
+					setPendingDisclaimerRead(false)
+				}
+			}
+			triggerDisclaimerFlow()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // Only run on mount
 
 	// Keep pushToTalkMode ref updated
 	useEffect(() => {
@@ -158,55 +182,55 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
 
 			// Record speech start time
-		const speechDetectedTime = performance.now()
-		speechStartTimeRef.current = Date.now()
-		bargeInTriggeredRef.current = false  // Reset flag
-		console.log(`[VFF VAD] 🎤 Speech detected at t=${speechDetectedTime.toFixed(2)}ms`)
+			const speechDetectedTime = performance.now()
+			speechStartTimeRef.current = Date.now()
+			bargeInTriggeredRef.current = false  // Reset flag
+			console.log(`[VFF VAD] 🎤 Speech detected at t=${speechDetectedTime.toFixed(2)}ms`)
 
-		// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
-		// This gives instant barge-in feel while we wait to confirm speech duration
-		const audioManager = connectionManager?.getAudioManager()
-		if (audioManager && audioManager.isSpeaking()) {
-			audioManager.pauseAudioContext()
-			console.log(`[VFF VAD] 🔇 Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
-		}		// Schedule delayed turn start - only send activity_start + audio if speech lasts ≥450ms
-		// This prevents false positives (throat clears, grunts) from creating incomplete turns
-		setTimeout(() => {
-			const speechDuration = speechStartTimeRef.current
-				? Date.now() - speechStartTimeRef.current
-				: 0
+			// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
+			// This gives instant barge-in feel while we wait to confirm speech duration
+			const audioManager = connectionManager?.getAudioManager()
+			if (audioManager && audioManager.isSpeaking()) {
+				audioManager.pauseAudioContext()
+				console.log(`[VFF VAD] 🔇 Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
+			}		// Schedule delayed turn start - only send activity_start + audio if speech lasts ≥450ms
+			// This prevents false positives (throat clears, grunts) from creating incomplete turns
+			setTimeout(() => {
+				const speechDuration = speechStartTimeRef.current
+					? Date.now() - speechStartTimeRef.current
+					: 0
 
-			// Only start turn if speech is still active AND duration met
-			if (speechStartTimeRef.current !== null && speechDuration >= MIN_TURN_DURATION_MS) {
-				console.log(`[VFF VAD] ✅ Valid speech detected (${speechDuration}ms) - starting turn`)
-				bargeInTriggeredRef.current = true
+				// Only start turn if speech is still active AND duration met
+				if (speechStartTimeRef.current !== null && speechDuration >= MIN_TURN_DURATION_MS) {
+					console.log(`[VFF VAD] ✅ Valid speech detected (${speechDuration}ms) - starting turn`)
+					bargeInTriggeredRef.current = true
 
-				// CRITICAL: Send activity_start BEFORE opening audio gate
-				// This ensures Gemini receives the turn signal before any audio chunks
-				// Pattern: activity_start → audio chunks → activity_end (Gemini Live API docs lines 419-435)
-				if (connectionManager) {
-					const startTime = performance.now()
-					connectionManager.sendActivityStart()
-					console.log(`[VFF VAD] 📤 Sent activity_start signal at t=${startTime.toFixed(2)}ms (user turn begins)`)
+					// CRITICAL: Send activity_start BEFORE opening audio gate
+					// This ensures Gemini receives the turn signal before any audio chunks
+					// Pattern: activity_start → audio chunks → activity_end (Gemini Live API docs lines 419-435)
+					if (connectionManager) {
+						const startTime = performance.now()
+						connectionManager.sendActivityStart()
+						console.log(`[VFF VAD] 📤 Sent activity_start signal at t=${startTime.toFixed(2)}ms (user turn begins)`)
+					}
+
+					// Privacy Gate: Open audio flow (sends pre-buffer + live audio)
+					// Must happen AFTER activity_start to ensure proper turn framing
+					if (audioManager) {
+						const gateOpenTime = performance.now()
+						console.log(`[VFF VAD] 🚪 Opening audio gate at t=${gateOpenTime.toFixed(2)}ms`)
+						audioManager.setVADActive(true) // Opens gate, flushes 600ms pre-buffer to backend
+						console.log(`[VFF VAD] 🚪 Audio gate opened, pre-buffer flushed, live audio now flowing`)
+					}
+
+					// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
+					const geminiSpeaking = audioManager?.isSpeaking()
+					if (geminiSpeaking && audioManager) {
+						console.log('[VFF VAD] 🔇 Flushing Gemini audio queue (full barge-in)')
+						audioManager.flushAudioQueue()
+					}
 				}
-
-				// Privacy Gate: Open audio flow (sends pre-buffer + live audio)
-				// Must happen AFTER activity_start to ensure proper turn framing
-				if (audioManager) {
-					const gateOpenTime = performance.now()
-					console.log(`[VFF VAD] 🚪 Opening audio gate at t=${gateOpenTime.toFixed(2)}ms`)
-					audioManager.setVADActive(true) // Opens gate, flushes 600ms pre-buffer to backend
-					console.log(`[VFF VAD] 🚪 Audio gate opened, pre-buffer flushed, live audio now flowing`)
-				}
-
-				// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
-				const geminiSpeaking = audioManager?.isSpeaking()
-				if (geminiSpeaking && audioManager) {
-					console.log('[VFF VAD] 🔇 Flushing Gemini audio queue (full barge-in)')
-					audioManager.flushAudioQueue()
-				}
-			}
-		}, MIN_TURN_DURATION_MS)
+			}, MIN_TURN_DURATION_MS)
 		},
 		onSpeechEnd: (audio: Float32Array) => {
 			// In push-to-talk mode, ignore VAD
@@ -218,30 +242,30 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				? Date.now() - speechStartTimeRef.current
 				: 0
 
-		// Privacy Gate: Always close audio flow (only if it was opened)
-		const audioManager = connectionManager?.getAudioManager()
-		
-		// Only close gate and send activity_end if we actually started a turn (≥450ms)
-		if (bargeInTriggeredRef.current) {
-			console.log(`[VFF VAD] ✅ Valid turn completed (${speechDuration}ms) - closing turn`)
+			// Privacy Gate: Always close audio flow (only if it was opened)
+			const audioManager = connectionManager?.getAudioManager()
 
-			// Close audio gate
-			if (audioManager) {
-				audioManager.setVADActive(false) // Closes gate, stops audio flow
-			}
+			// Only close gate and send activity_end if we actually started a turn (≥450ms)
+			if (bargeInTriggeredRef.current) {
+				console.log(`[VFF VAD] ✅ Valid turn completed (${speechDuration}ms) - closing turn`)
 
-			// Send activity_end to signal user is done speaking
-			connectionManager?.onVADSpeechEnd()
-		} else {
-			console.log(`[VFF VAD] ⚠️ Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
+				// Close audio gate
+				if (audioManager) {
+					audioManager.setVADActive(false) // Closes gate, stops audio flow
+				}
 
-			// FALSE POSITIVE: Resume audio playback (speech was too short to start a turn)
-			// Gate was never opened, so nothing to close
-			if (audioManager) {
-				audioManager.resumeAudioContext()
-				console.log('[VFF VAD] 🔊 Resuming audio - false positive')
-			}
-		}			// Clear state
+				// Send activity_end to signal user is done speaking
+				connectionManager?.onVADSpeechEnd()
+			} else {
+				console.log(`[VFF VAD] ⚠️ Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
+
+				// FALSE POSITIVE: Resume audio playback (speech was too short to start a turn)
+				// Gate was never opened, so nothing to close
+				if (audioManager) {
+					audioManager.resumeAudioContext()
+					console.log('[VFF VAD] 🔊 Resuming audio - false positive')
+				}
+			}			// Clear state
 			speechStartTimeRef.current = null
 			bargeInTriggeredRef.current = false
 		},
@@ -271,39 +295,39 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			return
 		}
 
-	// Otherwise create our own (standalone mode)
-	if (connectionManagerRef.current) {
-		return
-	}
-
-	// Initialize with schema-based state
-	const state = SchemaFormStateManager.init(schema)
-
-	// FIX #1: Connection manager receives stream from parent (already created)
-	const manager = createConnectionManager(
-		state.schema,
-		(newStatus) => {
-			setStatus(newStatus)
-			setError(null)
-		},
-		'English', // Default to English
-		sharedStream || undefined // Pass shared stream from parent
-	)
-	
-	connectionManagerRef.current = manager
-	setConnectionManager(manager)
-
-	return () => {
-		// Only cleanup if we created the manager (not shared)
-		if (!sharedConnectionManager) {
-			if (connectionManagerRef.current) {
-				connectionManagerRef.current.disconnect()
-				connectionManagerRef.current = null
-			}
-			setConnectionManager(null)
+		// Otherwise create our own (standalone mode)
+		if (connectionManagerRef.current) {
+			return
 		}
-	}
-}, [schema, sharedConnectionManager]) // Recreate when schema changes	// Sync status from shared prop
+
+		// Initialize with schema-based state
+		const state = SchemaFormStateManager.init(schema)
+
+		// FIX #1: Connection manager receives stream from parent (already created)
+		const manager = createConnectionManager(
+			state.schema,
+			(newStatus) => {
+				setStatus(newStatus)
+				setError(null)
+			},
+			'English', // Default to English
+			sharedStream || undefined // Pass shared stream from parent
+		)
+
+		connectionManagerRef.current = manager
+		setConnectionManager(manager)
+
+		return () => {
+			// Only cleanup if we created the manager (not shared)
+			if (!sharedConnectionManager) {
+				if (connectionManagerRef.current) {
+					connectionManagerRef.current.disconnect()
+					connectionManagerRef.current = null
+				}
+				setConnectionManager(null)
+			}
+		}
+	}, [schema, sharedConnectionManager]) // Recreate when schema changes	// Sync status from shared prop
 	useEffect(() => {
 		if (sharedStatus !== undefined) {
 			setStatus(sharedStatus)
@@ -332,7 +356,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			setPendingDisclaimerRead(false)
 
 			// Send read_disclaimer message to backend using the proven language change pattern
-			connectionManager.readDisclaimer(selectedLanguage)
+			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
 	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
@@ -340,7 +365,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// This replaces 3 separate code paths with one consolidated control flow
 	useEffect(() => {
 		const isConnected = status.toLowerCase() === 'connected' ||
-		                    status.toLowerCase().startsWith('connected ')
+			status.toLowerCase().startsWith('connected ')
 
 		// VAD should run when:
 		// 1. Connected to backend
@@ -372,14 +397,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		try {
 			setError(null)
-			
+
 			// If paused, just resume (which will restart recording)
 			if (connectionManager.isPaused()) {
 				await connectionManager.resume()
 				// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 				return
 			}
-			
+
 			// Phase 3: Use regular connect() for initial connection
 			// The WebFormConnection will use the section-based schema from state
 			await connectionManager.connect()
@@ -431,7 +456,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Pause instead of disconnect (keeps connection warm)
 		connectionManager.pause()
-		
+
 		// Pause VAD
 		vad.pause()
 	}
@@ -442,15 +467,15 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const handlePushToTalkToggle = async () => {
 		const newMode = !pushToTalkMode
 		setPushToTalkMode(newMode)
-		
+
 		// Update connection manager PTT mode (disables energy-based barge-in)
 		connectionManager?.setPushToTalkMode(newMode)
-		
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' || 
-		                            status.toLowerCase().startsWith('connected ') || 
-		                            status.toLowerCase() === 'switching_section' || 
-		                            status.toLowerCase().startsWith('reconnecting')
-		
+
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
+			status.toLowerCase().startsWith('connected ') ||
+			status.toLowerCase() === 'switching_section' ||
+			status.toLowerCase().startsWith('reconnecting')
+
 		if (newMode) {
 			// Switching to push-to-talk: pause VAD (but keep mic recording for heartbeat)
 			vad.pause()
@@ -464,7 +489,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const audioManager = connectionManager?.getAudioManager()
 			audioManager?.unmuteInput()
 		}
-		
+
 		// Blur the checkbox so spacebar doesn't toggle it again
 		setTimeout(() => {
 			const checkbox = document.activeElement as HTMLElement
@@ -493,9 +518,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 
 		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
-		                            currentStatus.toLowerCase().startsWith('connected ') ||
-		                            currentStatus.toLowerCase() === 'switching_section' ||
-		                            currentStatus.toLowerCase().startsWith('reconnecting')
+			currentStatus.toLowerCase().startsWith('connected ') ||
+			currentStatus.toLowerCase() === 'switching_section' ||
+			currentStatus.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) {
 			console.log('[PTT] Ignoring press - not connected, status:', currentStatus)
 			return
@@ -542,16 +567,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		}
 
 		const isCurrentlyConnected = currentStatus.toLowerCase() === 'connected' ||
-		                            currentStatus.toLowerCase().startsWith('connected ') ||
-		                            currentStatus.toLowerCase() === 'switching_section' ||
-		                            currentStatus.toLowerCase().startsWith('reconnecting')
+			currentStatus.toLowerCase().startsWith('connected ') ||
+			currentStatus.toLowerCase() === 'switching_section' ||
+			currentStatus.toLowerCase().startsWith('reconnecting')
 		if (!isCurrentlyConnected) {
 			console.log('[PTT] Ignoring release - not connected, status:', currentStatus)
 			return
 		}
 
 		console.log('[PTT] Processing release - will delay 500ms before ending activity')
-		
+
 		// Clear any existing timeout (in case of rapid press/release)
 		if (pttReleaseTimeoutRef.current !== null) {
 			clearTimeout(pttReleaseTimeoutRef.current)
@@ -566,7 +591,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// without being cut off by immediate muting
 		pttReleaseTimeoutRef.current = window.setTimeout(async () => {
 			console.log('[PTT] 500ms delay complete - sending activity_end and muting')
-			
+
 			// Send audio_stream_end to flush Gemini's audio buffer
 			// CRITICAL: Wait for all buffered audio to be sent before signaling end
 			// (sendActivityEnd now waits for WebSocket buffer drain)
@@ -580,7 +605,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// Allow Gemini's response to play now that the user released the mic
 			audioManager?.resumePlayback()
 			audioManager?.resumeAudioContext?.()
-			
+
 			pttReleaseTimeoutRef.current = null
 		}, 500) // 500ms delay to capture final audio
 	}
@@ -601,9 +626,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				// Check connection status from ref (always current, doesn't cause re-renders)
 				const currentStatus = statusRef.current
 				const isConnected = currentStatus.toLowerCase() === 'connected' ||
-				                   currentStatus.toLowerCase().startsWith('connected ') ||
-				                   currentStatus.toLowerCase() === 'switching_section' ||
-				                   currentStatus.toLowerCase().startsWith('reconnecting')
+					currentStatus.toLowerCase().startsWith('connected ') ||
+					currentStatus.toLowerCase() === 'switching_section' ||
+					currentStatus.toLowerCase().startsWith('reconnecting')
 
 				console.log('[PTT Keyboard] Space down, repeat:', e.repeat, 'isConnected:', isConnected, 'status:', currentStatus)
 
@@ -632,9 +657,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				// Check connection status from ref (always current, doesn't cause re-renders)
 				const currentStatus = statusRef.current
 				const isConnected = currentStatus.toLowerCase() === 'connected' ||
-				                   currentStatus.toLowerCase().startsWith('connected ') ||
-				                   currentStatus.toLowerCase() === 'switching_section' ||
-				                   currentStatus.toLowerCase().startsWith('reconnecting')
+					currentStatus.toLowerCase().startsWith('connected ') ||
+					currentStatus.toLowerCase() === 'switching_section' ||
+					currentStatus.toLowerCase().startsWith('reconnecting')
 
 				console.log('[PTT Keyboard] Space up, isConnected:', isConnected, 'status:', currentStatus)
 
@@ -678,9 +703,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			if (isHoldingPushToTalkRef.current) {
 				const currentStatus = statusRef.current
 				const isConnected = currentStatus.toLowerCase() === 'connected' ||
-				                   currentStatus.toLowerCase().startsWith('connected ') ||
-				                   currentStatus.toLowerCase() === 'switching_section' ||
-				                   currentStatus.toLowerCase().startsWith('reconnecting')
+					currentStatus.toLowerCase().startsWith('connected ') ||
+					currentStatus.toLowerCase() === 'switching_section' ||
+					currentStatus.toLowerCase().startsWith('reconnecting')
 
 				if (isConnected) {
 					console.log('[PTT Global] Mouse/touch released - calling handlePushToTalkRelease()')
@@ -701,60 +726,60 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [pushToTalkMode])
 
-// Initialize schema-based state and update section UI (only once on mount)
-useEffect(() => {
-	const state = SchemaFormStateManager.init(schema)
-	setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
-	setCompletedSections(state.completedSections || new Set())
+	// Initialize schema-based state and update section UI (only once on mount)
+	useEffect(() => {
+		const state = SchemaFormStateManager.init(schema)
+		setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
+		setCompletedSections(state.completedSections || new Set())
 
-	// Update field counter
-	const totalFields = schema.fields.length
-	const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-		const fieldValue = state.fieldValues[fieldId]
-		const actualValue = fieldValue?.value
-		return actualValue !== null && actualValue !== undefined && actualValue !== ""
-	}).length
-	setSectionFieldCount({ filled: filledFields, total: totalFields })
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-}, []) // Only run once on mount, not when schema changes
+		// Update field counter
+		const totalFields = schema.fields.length
+		const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+			const fieldValue = state.fieldValues[fieldId]
+			const actualValue = fieldValue?.value
+			return actualValue !== null && actualValue !== undefined && actualValue !== ""
+		}).length
+		setSectionFieldCount({ filled: filledFields, total: totalFields })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // Only run once on mount, not when schema changes
 
-// Poll field count AND section state (updates as AI switches sections)
-useEffect(() => {
-	const interval = setInterval(() => {
-		const state = SchemaFormStateManager.load()
-		if (state) {
-			const totalFields = schema.fields.length
-			const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-				const fieldValue = state.fieldValues[fieldId]
-				const actualValue = fieldValue?.value
-				return actualValue !== null && actualValue !== undefined && actualValue !== ""
-			}).length
-			setSectionFieldCount({ filled: filledFields, total: totalFields })
+	// Poll field count AND section state (updates as AI switches sections)
+	useEffect(() => {
+		const interval = setInterval(() => {
+			const state = SchemaFormStateManager.load()
+			if (state) {
+				const totalFields = schema.fields.length
+				const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
+					const fieldValue = state.fieldValues[fieldId]
+					const actualValue = fieldValue?.value
+					return actualValue !== null && actualValue !== undefined && actualValue !== ""
+				}).length
+				setSectionFieldCount({ filled: filledFields, total: totalFields })
 
-			// Update section if changed (AI completed section and moved forward)
-			if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
-				setCurrentSectionId(state.currentSectionId)
-			}
+				// Update section if changed (AI completed section and moved forward)
+				if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
+					setCurrentSectionId(state.currentSectionId)
+				}
 
-			// Update completed sections if changed
-			if (state.completedSections) {
-				const currentCompleted = new Set(Array.from(completedSections))
-				const newCompleted = new Set(Array.from(state.completedSections))
-				
-				// Check if sets are different
-				if (currentCompleted.size !== newCompleted.size ||
-				    ![...currentCompleted].every(s => newCompleted.has(s))) {
-					setCompletedSections(newCompleted)
+				// Update completed sections if changed
+				if (state.completedSections) {
+					const currentCompleted = new Set(Array.from(completedSections))
+					const newCompleted = new Set(Array.from(state.completedSections))
+
+					// Check if sets are different
+					if (currentCompleted.size !== newCompleted.size ||
+						![...currentCompleted].every(s => newCompleted.has(s))) {
+						setCompletedSections(newCompleted)
+					}
 				}
 			}
-		}
-	}, 1000) // Update every second
+		}, 1000) // Update every second
 
-	return () => clearInterval(interval)
-}, [currentSectionId, completedSections])
+		return () => clearInterval(interval)
+	}, [currentSectionId, completedSections])
 
-	// Handle initial language selection from modal
-	const handleInitialLanguageSelect = async (language: string) => {
+	// Handle initial language selection from modal (fallback when initialLanguage not provided)
+	const handleInitialLanguageSelect = async (_formId: string, language: string) => {
 		console.log('[VoiceOverlay] Initial language selected from modal:', language)
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
@@ -841,7 +866,9 @@ useEffect(() => {
 		console.log('[VoiceOverlay] User requested disclaimer re-read')
 
 		// Send read_disclaimer message using the same proven pattern
-		connectionManager.readDisclaimer(selectedLanguage)
+		// Send read_disclaimer message using the same proven pattern
+		const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+		connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 	}
 
 	// Handle "I Agree" button in disclaimer modal
@@ -859,6 +886,13 @@ useEffect(() => {
 
 		// Hide modal
 		setShowDisclaimerModal(false)
+
+		// CLEAR AUDIO QUEUE: Stop reading disclaimer immediately
+		const audioManager = connectionManager?.getAudioManager()
+		if (audioManager) {
+			console.log('[VoiceOverlay] 🔇 Clearing audio queue on disclaimer agreement')
+			audioManager.flushAudioQueue()
+		}
 
 		// Log disclaimer acceptance to backend
 		try {
@@ -904,20 +938,20 @@ useEffect(() => {
 		}
 	}
 
-// Handle clear form button
-const handleClearForm = () => {
-	if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
-		return
-	}
+	// Handle clear form button
+	const handleClearForm = () => {
+		if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
+			return
+		}
 
-	// Clear sessionStorage
-	SchemaFormStateManager.clear()		// Clear all DOM fields
+		// Clear sessionStorage
+		SchemaFormStateManager.clear()		// Clear all DOM fields
 		const inputs = document.querySelectorAll('input, textarea, select')
 		let clearedCount = 0
-		
+
 		inputs.forEach((element) => {
 			const el = element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-			
+
 			if (el.tagName === 'INPUT') {
 				const inputEl = el as HTMLInputElement
 				if (inputEl.type === 'checkbox' || inputEl.type === 'radio') {
@@ -933,16 +967,16 @@ const handleClearForm = () => {
 				(el as HTMLSelectElement).selectedIndex = 0
 				clearedCount++
 			}
-			
+
 			// Remove AI confirmation markers
 			el.removeAttribute('data-vff-confirmed')
 			el.style.outline = ''
 			el.style.outlineOffset = ''
 		})
-		
+
 		// Remove checkmark badges
 		document.querySelectorAll('.vff-field-badge').forEach(badge => badge.remove())
-		
+
 		// Reload page to reset all state
 		window.location.reload()
 	}
@@ -1003,191 +1037,191 @@ const handleClearForm = () => {
 	return (
 		<>
 			<div ref={panelRef} className={`vff-panel ${isCollapsed ? 'collapsed' : ''}`}>
-			<div className="vff-panel-header">
-				<span className="vff-title">🎤 Voice Form Filler</span>
-				<div style={{ display: 'flex', gap: '8px' }}>
-					<button className="vff-collapse" onClick={() => setIsCollapsed(!isCollapsed)} aria-label={isCollapsed ? "Expand" : "Collapse"}>
-						{isCollapsed ? '▼' : '▲'}
-					</button>
-					{onClose && (
-						<button className="vff-close" onClick={onClose} aria-label="Close">
-							×
+				<div className="vff-panel-header">
+					<span className="vff-title">🎤 Voice Form Filler</span>
+					<div style={{ display: 'flex', gap: '8px' }}>
+						<button className="vff-collapse" onClick={() => setIsCollapsed(!isCollapsed)} aria-label={isCollapsed ? "Expand" : "Collapse"}>
+							{isCollapsed ? '▼' : '▲'}
 						</button>
-					)}
+						{onClose && (
+							<button className="vff-close" onClick={onClose} aria-label="Close">
+								×
+							</button>
+						)}
+					</div>
 				</div>
-			</div>
 
-			<div className="vff-panel-body">
-				{/* Status */}
-				<div className="vff-status">
-					<span className="vff-status-icon">
-						{isConnected ? '🟢' : status === 'idle_timeout' ? '⏱️' : '⚪'}
-					</span>
-					<span className="vff-status-text">
-						{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
-					</span>
-					{/* VAD speech detection indicator */}
-					{vad.userSpeaking && !pushToTalkMode && (
-						<span className="vff-vad-indicator" title="Voice detected">
-							<span className="vff-vad-light"></span>
-							<span className="vff-vad-label">Listening</span>
+				<div className="vff-panel-body">
+					{/* Status */}
+					<div className="vff-status">
+						<span className="vff-status-icon">
+							{isConnected ? '🟢' : status === 'idle_timeout' ? '⏱️' : '⚪'}
 						</span>
-					)}
-				</div>
+						<span className="vff-status-text">
+							{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
+						</span>
+						{/* VAD speech detection indicator */}
+						{vad.userSpeaking && !pushToTalkMode && (
+							<span className="vff-vad-indicator" title="Voice detected">
+								<span className="vff-vad-light"></span>
+								<span className="vff-vad-label">Listening</span>
+							</span>
+						)}
+					</div>
 
 
-				{/* Section Navigation */}
-			<div className="vff-section-nav">
-				<div 
-					className="vff-section-display"
-					onClick={() => setShowSectionDropdown(!showSectionDropdown)}
-				>
-					<span className="vff-section-label">
-						{getCurrentSectionLabel()}
-					</span>
-					<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
-				</div>
-				<div className="vff-field-counter">
-					📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
-				</div>
-				{showSectionDropdown && (
-					<div className="vff-section-dropdown">
-						{schema.sections?.map((section) => (
-							<div
-								key={section.id}
-								className={`vff-section-item ${currentSectionId === section.id ? 'active' : ''}`}
-								onClick={async () => {
-									if (!connectionManager) return
-									
-									setShowSectionDropdown(false)
-									
-									// Don't switch if already on this section
-									if (section.id === currentSectionId) {
-										return
-									}
+					{/* Section Navigation */}
+					<div className="vff-section-nav">
+						<div
+							className="vff-section-display"
+							onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+						>
+							<span className="vff-section-label">
+								{getCurrentSectionLabel()}
+							</span>
+							<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
+						</div>
+						<div className="vff-field-counter">
+							📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
+						</div>
+						{showSectionDropdown && (
+							<div className="vff-section-dropdown">
+								{schema.sections?.map((section) => (
+									<div
+										key={section.id}
+										className={`vff-section-item ${currentSectionId === section.id ? 'active' : ''}`}
+										onClick={async () => {
+											if (!connectionManager) return
 
-									try {
-										setError(null)
+											setShowSectionDropdown(false)
 
-										// Update UI immediately for responsiveness
-										setCurrentSectionId(section.id)
-										setStatus('Reconnecting to section ' + section.order)
+											// Don't switch if already on this section
+											if (section.id === currentSectionId) {
+												return
+											}
 
-										// Update field count for new section (from state, before reconnect)
-										const state = SchemaFormStateManager.load()
-										if (state) {
-											// Switch section in state first
-											const updatedState = SchemaFormStateManager.switchToSection(state, section.id)
-											const totalFields = schema.fields.length
-											const filledFields = Object.keys(updatedState.fieldValues).filter(fieldId => {
-												const fieldValue = updatedState.fieldValues[fieldId]
-												const actualValue = fieldValue?.value
-												return actualValue !== null && actualValue !== undefined && actualValue !== ""
-											}).length
-											setSectionFieldCount({ filled: filledFields, total: totalFields })
+											try {
+												setError(null)
+
+												// Update UI immediately for responsiveness
+												setCurrentSectionId(section.id)
+												setStatus('Reconnecting to section ' + section.order)
+
+												// Update field count for new section (from state, before reconnect)
+												const state = SchemaFormStateManager.load()
+												if (state) {
+													// Switch section in state first
+													const updatedState = SchemaFormStateManager.switchToSection(state, section.id)
+													const totalFields = schema.fields.length
+													const filledFields = Object.keys(updatedState.fieldValues).filter(fieldId => {
+														const fieldValue = updatedState.fieldValues[fieldId]
+														const actualValue = fieldValue?.value
+														return actualValue !== null && actualValue !== undefined && actualValue !== ""
+													}).length
+													setSectionFieldCount({ filled: filledFields, total: totalFields })
+												}
+
+												// Now do the actual connection switch (async, may take time)
+												await connectionManager.switchToSection(section.id)
+											} catch (err) {
+												console.error('[VoiceOverlay] Section switch error:', err)
+												setError(err instanceof Error ? err.message : 'Section switch failed')
+											}
+										}}
+									>
+										<span className="vff-section-status">
+											{completedSections.has(section.id) ? '✓' :
+												currentSectionId === section.id ? '→' : '○'}
+										</span>
+										<span className="vff-section-text">
+											{section.label}
+										</span>
+									</div>
+								))}
+							</div>
+						)}
+					</div>				{/* Push-to-Talk Toggle */}
+					<div className="vff-ptt-toggle-container">
+						<label className="vff-ptt-toggle-label">
+							<span className="vff-ptt-label-text">Input Mode:</span>
+							<div className="vff-ptt-toggle-switch">
+								<input
+									type="checkbox"
+									checked={pushToTalkMode}
+									onChange={handlePushToTalkToggle}
+									className="vff-ptt-toggle-input"
+									onKeyDown={(e) => {
+										if (e.code === 'Space') {
+											e.preventDefault() // Prevent spacebar from toggling checkbox when focused
 										}
-
-										// Now do the actual connection switch (async, may take time)
-										await connectionManager.switchToSection(section.id)
-									} catch (err) {
-										console.error('[VoiceOverlay] Section switch error:', err)
-										setError(err instanceof Error ? err.message : 'Section switch failed')
-									}
-								}}
-							>
-								<span className="vff-section-status">
-									{completedSections.has(section.id) ? '✓' :
-									 currentSectionId === section.id ? '→' : '○'}
-								</span>
-								<span className="vff-section-text">
-									{section.label}
+									}}
+								/>
+								<span className="vff-ptt-toggle-slider">
+									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-auto">🎤</span>
+									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
 								</span>
 							</div>
-						))}
+							<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+						</label>
 					</div>
-				)}
-			</div>				{/* Push-to-Talk Toggle */}
-				<div className="vff-ptt-toggle-container">
-					<label className="vff-ptt-toggle-label">
-						<span className="vff-ptt-label-text">Input Mode:</span>
-						<div className="vff-ptt-toggle-switch">
-							<input
-								type="checkbox"
-								checked={pushToTalkMode}
-								onChange={handlePushToTalkToggle}
-								className="vff-ptt-toggle-input"
-								onKeyDown={(e) => {
-									if (e.code === 'Space') {
-										e.preventDefault() // Prevent spacebar from toggling checkbox when focused
-									}
-								}}
-							/>
-							<span className="vff-ptt-toggle-slider">
-								<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-auto">🎤</span>
-								<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
-							</span>
+
+					{/* Push-to-Talk Button (only visible in PTT mode) */}
+					{pushToTalkMode && isConnected && (
+						<div className="vff-ptt-button-container">
+							<button
+								className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
+								onMouseDown={handlePushToTalkPress}
+								onTouchStart={handlePushToTalkPress}
+							>
+								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
+							</button>
 						</div>
-						<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
-					</label>
-				</div>
+					)}
 
-				{/* Push-to-Talk Button (only visible in PTT mode) */}
-				{pushToTalkMode && isConnected && (
-					<div className="vff-ptt-button-container">
-						<button
-							className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}
-							onMouseDown={handlePushToTalkPress}
-							onTouchStart={handlePushToTalkPress}
-						>
-							{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
+					{/* Controls */}
+					<div className="vff-controls">
+						{/* Connection is automatic after language selection - no connect button needed */}
+						{status === 'idle_timeout' ? (
+							<button
+								className="vff-button vff-reconnect"
+								onClick={handleConnect}
+							>
+								🔄 Reconnect
+							</button>
+						) : isPausedState ? (
+							<button
+								className="vff-button vff-resume"
+								onClick={handleConnect}
+							>
+								▶️ Resume
+							</button>
+						) : isConnected ? (
+							<button
+								className="vff-button vff-pause"
+								onClick={handleDisconnect}
+							>
+								⏸️ Pause
+							</button>
+						) : null}
+						<button className="vff-button vff-clear-form" onClick={handleClearForm}>
+							🗑️ Clear Form
 						</button>
 					</div>
-				)}
 
-				{/* Controls */}
-				<div className="vff-controls">
-					{/* Connection is automatic after language selection - no connect button needed */}
-					{status === 'idle_timeout' ? (
-						<button
-							className="vff-button vff-reconnect"
-							onClick={handleConnect}
-						>
-							🔄 Reconnect
-						</button>
-					) : isPausedState ? (
-						<button
-							className="vff-button vff-resume"
-							onClick={handleConnect}
-						>
-							▶️ Resume
-						</button>
-					) : isConnected ? (
-						<button
-							className="vff-button vff-pause"
-							onClick={handleDisconnect}
-						>
-							⏸️ Pause
-						</button>
-					) : null}
-					<button className="vff-button vff-clear-form" onClick={handleClearForm}>
-						🗑️ Clear Form
-					</button>
+					{/* Error Display */}
+					{/* FIX #4: Show both connection errors and stream errors */}
+					{(error || streamError) && (
+						<div className="vff-error">
+							{streamError && (
+								<div><strong>🎤 Microphone Error:</strong> {streamError}</div>
+							)}
+							{error && <div>{error}</div>}
+						</div>
+					)}
 				</div>
 
-				{/* Error Display */}
-				{/* FIX #4: Show both connection errors and stream errors */}
-				{(error || streamError) && (
-					<div className="vff-error">
-						{streamError && (
-							<div><strong>🎤 Microphone Error:</strong> {streamError}</div>
-						)}
-						{error && <div>{error}</div>}
-					</div>
-				)}
-			</div>
-
-			{/* Styles */}
-			<style>{`
+				{/* Styles */}
+				<style>{`
 				.vff-panel {
 					position: fixed;
 					top: 20px;
@@ -1748,22 +1782,23 @@ const handleClearForm = () => {
 					}
 				}
 			`}</style>
-		</div>
+			</div>
 
-		{/* Language Selection Modal - shown first to force language selection */}
-		{showLanguageModal && (
-			<LanguageSelectionModal
-				onLanguageSelect={handleInitialLanguageSelect}
+			{/* Language Selection Modal - fallback if initialLanguage not provided */}
+			{showLanguageModal && (
+				<LanguageSelectionModal
+					onSelection={handleInitialLanguageSelect}
+					preselectedFormId={schema.id || 'default'}
+				/>
+			)}
+
+			{/* Disclaimer Modal - shown after language selection */}
+			<DisclaimerModal
+				isOpen={showDisclaimerModal}
+				selectedLanguage={selectedLanguage}
+				onListenAgain={handleDisclaimerListenAgain}
+				onAgree={handleDisclaimerAgree}
 			/>
-		)}
-
-		{/* Disclaimer Modal - shown after language selection */}
-		<DisclaimerModal
-			isOpen={showDisclaimerModal}
-			selectedLanguage={selectedLanguage}
-			onListenAgain={handleDisclaimerListenAgain}
-			onAgree={handleDisclaimerAgree}
-		/>
 		</>
 	)
 }

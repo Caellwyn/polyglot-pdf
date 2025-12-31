@@ -44,7 +44,7 @@ export interface ConnectionManager {
 	isPaused: () => boolean
 	changeFillLanguage: (language: string) => Promise<void>
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
-	readDisclaimer: (language: string) => void  // Read disclaimer in specified language
+	readDisclaimer: (language: string, disclaimerText: string) => void  // Read disclaimer in specified language
 	// Section management (schema-based navigation)
 	startSection: (sectionId: string) => Promise<void>
 	switchToSection: (sectionId: string) => Promise<void>
@@ -617,7 +617,7 @@ export function createConnectionManager(
 			}
 		},
 
-		readDisclaimer(language: string) {
+		readDisclaimer(language: string, disclaimerText: string) {
 			// Save language to state (disclaimer being read = about to accept)
 			const currentState = SchemaFormStateManager.load();
 			if (currentState) {
@@ -628,7 +628,8 @@ export function createConnectionManager(
 			if (connection && connection.getStatus() === 'connected') {
 				connection.send({
 					type: 'read_disclaimer',
-					spoken_language: language
+					spoken_language: language,
+					disclaimer_text: disclaimerText
 				})
 				console.log('[VFF Connection] ✓ Sent read_disclaimer to backend:', language)
 			} else {

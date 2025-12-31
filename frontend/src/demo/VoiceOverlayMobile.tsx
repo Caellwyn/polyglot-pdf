@@ -28,9 +28,11 @@ interface VoiceOverlayMobileProps {
 	sharedStream?: MediaStream | null
 	// FIX #4: Stream error from parent (for error visibility)
 	streamError?: string | null
+	/** Pre-selected language from onboarding (skips language selection modal) */
+	initialLanguage?: string
 }
 
-export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError }: VoiceOverlayMobileProps) {
+export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError, initialLanguage }: VoiceOverlayMobileProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -43,8 +45,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
-	const [showLanguageModal, setShowLanguageModal] = useState(true)  // Start with language selection modal
-	const [selectedLanguage, setSelectedLanguage] = useState('')  // Track selected spoken language (empty = not selected)
+	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
+	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
+	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
@@ -89,6 +92,27 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		sharedStreamRef.current = sharedStream || null
 		console.log('[VoiceOverlayMobile] 🔗 Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
+
+	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
+	useEffect(() => {
+		if (initialLanguage && !showLanguageModal) {
+			console.log('[VoiceOverlayMobile] Language pre-selected from onboarding:', initialLanguage)
+			// Trigger the same flow as handleInitialLanguageSelect
+			const triggerDisclaimerFlow = async () => {
+				try {
+					setPendingDisclaimerRead(true)
+					await handleConnect()
+					setShowDisclaimerModal(true)
+				} catch (err) {
+					console.error('[VoiceOverlayMobile] Failed to connect after pre-selected language:', err)
+					setError(err instanceof Error ? err.message : 'Connection failed')
+					setPendingDisclaimerRead(false)
+				}
+			}
+			triggerDisclaimerFlow()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // Only run on mount
 
 	// Keep pushToTalkMode ref updated
 	useEffect(() => {
@@ -331,8 +355,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
 
 
-	// Handle initial language selection from modal (first-time users)
-	const handleInitialLanguageSelect = async (language: string) => {
+	// Handle initial language selection from modal (fallback when initialLanguage not provided)
+	const handleInitialLanguageSelect = async (_formId: string, language: string) => {
 		console.log('[VoiceOverlayMobile] Initial language selected from modal:', language)
 		setSelectedLanguage(language)
 		setShowLanguageModal(false)
@@ -762,10 +786,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 	return (
 		<>
-			{/* Language Selection Modal - First-time users must select language */}
+			{/* Language Selection Modal - fallback if initialLanguage not provided */}
 			{showLanguageModal && (
 				<LanguageSelectionModal
-					onLanguageSelect={handleInitialLanguageSelect}
+					onSelection={handleInitialLanguageSelect}
+					preselectedFormId={schema.id || 'default'}
 				/>
 			)}
 

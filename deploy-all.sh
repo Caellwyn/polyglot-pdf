@@ -1,12 +1,12 @@
 #!/bin/bash
-# Deploy both backend and frontend (demo) to Google Cloud
-# Requirements: gcloud CLI configured, VOICE_PROJECT_NAME and VOICE_GCS_BUCKET set
+# deploy-all.sh - Unified deployment script for Polyglot PDF Form Filler
 #
 # Usage:
-#   ./deploy-all.sh             # Deploy both backend and frontend
-#   ./deploy-all.sh backend     # Deploy backend only
-#   ./deploy-all.sh frontend    # Deploy frontend only
-#   ./deploy-all.sh demo        # Deploy frontend only (alias)
+#   ./deploy-all.sh              # Deploy everything (backend, frontend, form-kits)
+#   ./deploy-all.sh --backend    # Deploy backend only
+#   ./deploy-all.sh --frontend   # Deploy frontend only
+#   ./deploy-all.sh --form-kits  # Deploy form-kits only
+#   ./deploy-all.sh --all        # Deploy everything (explicit)
 
 set -e
 
@@ -17,69 +17,90 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Print colored message
-print_info() { echo -e "${BLUE}$1${NC}"; }
-print_success() { echo -e "${GREEN}$1${NC}"; }
-print_warning() { echo -e "${YELLOW}$1${NC}"; }
-print_error() { echo -e "${RED}$1${NC}"; }
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$SCRIPT_DIR/backend"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
+FORM_KITS_DIR="$SCRIPT_DIR/form-kits"
+
+BACKEND_SERVICE_NAME="polyglot-backend"
+REGION="us-central1"
+FORM_KITS_BUCKET="${FORM_KITS_BUCKET:-polyglot-pdf-form-kits}"
+FORM_KITS_PREFIX="${FORM_KITS_PREFIX:-form-kits}"
 
 # Print header
 echo ""
-print_info "╔════════════════════════════════════════════════════════════╗"
-print_info "║     Voice Form Filler - Combined Deployment Script        ║"
-print_info "╚════════════════════════════════════════════════════════════╝"
+log_info "═══════════════════════════════════════════════════════════"
+log_info "  Polyglot PDF Form Filler - Unified Deployment Script   "
+log_info "═══════════════════════════════════════════════════════════"
 echo ""
 
 # Parse arguments
-DEPLOY_BACKEND=true
-DEPLOY_FRONTEND=true
+DEPLOY_BACKEND=false
+DEPLOY_FRONTEND=false
+DEPLOY_FORM_KITS=false
 
-if [ "$1" = "backend" ]; then
-    DEPLOY_FRONTEND=false
-elif [ "$1" = "frontend" ] || [ "$1" = "demo" ]; then
-    DEPLOY_BACKEND=false
+if [ $# -eq 0 ] || [ "$1" = "--all" ]; then
+    # No args or --all: deploy everything
+    DEPLOY_BACKEND=true
+    DEPLOY_FRONTEND=true
+    DEPLOY_FORM_KITS=true
+else
+    for arg in "$@"; do
+        case "$arg" in
+            --backend)
+                DEPLOY_BACKEND=true
+                ;;
+            --frontend)
+                DEPLOY_FRONTEND=true
+                ;;
+            --form-kits)
+                DEPLOY_FORM_KITS=true
+                ;;
+            *)
+                log_error "Unknown argument: $arg"
+                echo "Usage: $0 [--backend] [--frontend] [--form-kits] [--all]"
+                exit 1
+                ;;
+        esac
+    done
 fi
 
-# Verify environment variables
-ENV_ERROR=false
-
-if [ -z "$VOICE_PROJECT_NAME" ]; then
-    print_error "❌ Error: VOICE_PROJECT_NAME not set"
-    echo "   export VOICE_PROJECT_NAME=your-project-id"
-    ENV_ERROR=true
-fi
-
-if [ "$DEPLOY_FRONTEND" = true ] && [ -z "$VOICE_GCS_BUCKET" ]; then
-    print_error "❌ Error: VOICE_GCS_BUCKET not set (required for frontend deployment)"
-    echo "   export VOICE_GCS_BUCKET=your-bucket-name"
-    ENV_ERROR=true
-fi
-
-if [ "$ENV_ERROR" = true ]; then
-    exit 1
-fi
+# Check prerequisites
+check_project() {
+    if [ -z "$POLYGLOT_PROJECT_NAME" ]; then
+        log_warn "POLYGLOT_PROJECT_NAME not set, trying to detect from gcloud..."
+        POLYGLOT_PROJECT_NAME=$(gcloud config get-value project 2>/dev/null)
+        if [ -z "$POLYGLOT_PROJECT_NAME" ] || [ "$POLYGLOT_PROJECT_NAME" = "(unset)" ]; then
+            log_error "Could not determine project ID. Please set POLYGLOT_PROJECT_NAME or run: gcloud config set project <project-id>"
+            exit 1
+        fi
+        log_info "Using detected project: $POLYGLOT_PROJECT_NAME"
+    else
+        log_info "Using project: $POLYGLOT_PROJECT_NAME"
+    fi
+}
 
 # Display deployment plan
 echo ""
-print_info "📋 Deployment Plan:"
-if [ "$DEPLOY_BACKEND" = true ]; then
-    echo "   ✓ Backend (Cloud Run)"
-fi
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    echo "   ✓ Frontend Demo (GCS)"
-fi
+log_info "📋 Deployment Plan:"
+[ "$DEPLOY_BACKEND" = true ] && echo "   ✓ Backend (Cloud Run)"
+[ "$DEPLOY_FRONTEND" = true ] && echo "   ✓ Frontend (Firebase Hosting)"
+[ "$DEPLOY_FORM_KITS" = true ] && echo "   ✓ Form Kits (GCS)"
 echo ""
-echo "   Project: $VOICE_PROJECT_NAME"
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    echo "   Bucket: $VOICE_GCS_BUCKET"
-fi
-echo ""
+
+check_project
 
 # Confirmation prompt
 read -p "Continue with deployment? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_warning "Deployment cancelled."
+    log_warn "Deployment cancelled."
     exit 0
 fi
 
@@ -89,191 +110,182 @@ echo ""
 # BACKEND DEPLOYMENT
 # ============================================================================
 if [ "$DEPLOY_BACKEND" = true ]; then
-    print_info "════════════════════════════════════════════════════════════"
-    print_info "  DEPLOYING BACKEND TO CLOUD RUN"
-    print_info "════════════════════════════════════════════════════════════"
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "  DEPLOYING BACKEND TO CLOUD RUN"
+    log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    cd backend
+    cd "$BACKEND_DIR"
+    
+    # Enable necessary APIs
+    log_info "🛠️  Ensuring Cloud Run and Build APIs are enabled..."
+    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project "$POLYGLOT_PROJECT_NAME"
     
     # Build and push container
-    print_info "📦 Building container image..."
-    gcloud builds submit --tag gcr.io/$VOICE_PROJECT_NAME/voice-form-filler .
+    log_info "📦 Building container image..."
+    IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
+    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME" .
     
     # Deploy to Cloud Run
-    print_info "🌐 Deploying to Cloud Run..."
-    gcloud run deploy voice-form-filler \
-        --image gcr.io/$VOICE_PROJECT_NAME/voice-form-filler \
-        --region us-central1 \
+    log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
+    gcloud run deploy "$BACKEND_SERVICE_NAME" \
+        --image "$IMAGE_URL" \
+        --region "$REGION" \
         --platform managed \
         --allow-unauthenticated \
-        --timeout=300 \
-        --cpu-boost
+        --project "$POLYGLOT_PROJECT_NAME" \
+        --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
     
-    BACKEND_URL="https://voice-form-filler-773443099751.us-central1.run.app"
-    print_success "✅ Backend deployed successfully!"
+    BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
+    log_success "✅ Backend deployed successfully!"
     echo "   URL: $BACKEND_URL"
     echo ""
     
-    cd ..
+    cd "$SCRIPT_DIR"
+fi
+
+# ============================================================================
+# FORM KITS DEPLOYMENT
+# ============================================================================
+if [ "$DEPLOY_FORM_KITS" = true ]; then
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "  DEPLOYING FORM KITS TO GCS"
+    log_info "═══════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Create bucket if it doesn't exist
+    if ! gcloud storage buckets describe "gs://$FORM_KITS_BUCKET" &>/dev/null; then
+        log_info "Creating bucket gs://$FORM_KITS_BUCKET..."
+        gcloud storage buckets create "gs://$FORM_KITS_BUCKET" \
+            --location=us-central1 \
+            --uniform-bucket-level-access \
+            --project "$POLYGLOT_PROJECT_NAME"
+        log_success "Bucket created successfully"
+    fi
+    
+    # Upload all form kits
+    log_info "📦 Uploading form kits..."
+    for kit_dir in "$FORM_KITS_DIR"/*/; do
+        [ -d "$kit_dir" ] || continue
+        kit_id=$(basename "$kit_dir")
+        
+        if [ ! -f "$kit_dir/schema.json" ]; then
+            log_warn "Skipping $kit_id - no schema.json found"
+            continue
+        fi
+        
+        log_info "  Uploading $kit_id..."
+        gcloud storage cp -r "$kit_dir"/* "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/$kit_id/" --project "$POLYGLOT_PROJECT_NAME"
+    done
+    
+    # Generate and upload manifest
+    log_info "📝 Generating manifest..."
+    
+    manifest_content='{"generatedAt":"'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'","forms":['
+    first=true
+    
+    for kit_dir in "$FORM_KITS_DIR"/*/; do
+        [ -d "$kit_dir" ] || continue
+        kit_id=$(basename "$kit_dir")
+        
+        if [ ! -f "$kit_dir/schema.json" ]; then
+            continue
+        fi
+        
+        # Extract title from schema.json
+        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        [ -z "$label" ] && label="$kit_id"
+        
+        # Find PDF file
+        pdf_file="form.pdf"
+        if [ ! -f "$kit_dir/form.pdf" ]; then
+            pdf_file=$(ls "$kit_dir"/*.pdf 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "form.pdf")
+        fi
+        
+        if [ "$first" = true ]; then
+            first=false
+        else
+            manifest_content+=','
+        fi
+        
+        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"schema.json","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/schema.json","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
+    done
+    
+    manifest_content+=']}'
+    
+    # Upload manifest
+    temp_manifest=$(mktemp)
+    echo "$manifest_content" | python3 -m json.tool > "$temp_manifest" 2>/dev/null || echo "$manifest_content" > "$temp_manifest"
+    gcloud storage cp "$temp_manifest" "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/index.json" --project "$POLYGLOT_PROJECT_NAME"
+    rm "$temp_manifest"
+    
+    log_success "✅ Form kits deployed successfully!"
+    echo "   Bucket: gs://$FORM_KITS_BUCKET"
+    echo "   Manifest: gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/index.json"
+    echo ""
 fi
 
 # ============================================================================
 # FRONTEND DEPLOYMENT
 # ============================================================================
 if [ "$DEPLOY_FRONTEND" = true ]; then
-    print_info "════════════════════════════════════════════════════════════"
-    print_info "  DEPLOYING FRONTEND DEMO TO GOOGLE CLOUD STORAGE"
-    print_info "════════════════════════════════════════════════════════════"
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "  DEPLOYING FRONTEND TO FIREBASE HOSTING"
+    log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    cd frontend
+    cd "$FRONTEND_DIR"
     
-    # Set production WebSocket URL
-    PROD_WS_URL="wss://voice-form-filler-773443099751.us-central1.run.app/ws/fill"
-    print_info "🔧 Building with WebSocket URL: $PROD_WS_URL"
-    echo ""
-    
-    # Check if VAD assets exist, download if not
-    if [ ! -d "public/vad-assets" ]; then
-        print_warning "📦 VAD assets not found, downloading..."
-        if [ -f "./download-vad-assets.sh" ]; then
-            ./download-vad-assets.sh
-        else
-            print_warning "⚠️  download-vad-assets.sh not found - skipping VAD assets"
-        fi
-    else
-        print_success "✓ VAD assets found"
-    fi
-    
-    # Build production demo with environment variables
-    print_info "📦 Building production demo..."
-    # Note: Vite automatically uses .env.production in build mode
-    # We still pass VITE_WS_URL to override if needed
-    VITE_WS_URL="$PROD_WS_URL" VITE_GCS_BUCKET="$VOICE_GCS_BUCKET" npm run build:demo
-    
-    # Verify build output exists
-    if [ ! -f "dist/demo/demo.html" ]; then
-        print_error "❌ Error: Build output not found"
+    # Check if Firebase CLI is installed
+    if ! command -v firebase &> /dev/null; then
+        log_error "Firebase CLI not found. Install with: npm install -g firebase-tools"
         exit 1
     fi
     
-    # Get bundle sizes
-    print_info "📊 Bundle sizes:"
-    du -h dist/demo/demo.html | awk '{print "   demo.html: " $1}'
-    du -h dist/demo/assets/*.js 2>/dev/null | awk '{print "   " $2 ": " $1}' || true
+    # Build frontend
+    log_info "📦 Building frontend..."
+    npm run build
+    
+    # Deploy to Firebase Hosting
+    log_info "🌐 Deploying to Firebase Hosting..."
+    firebase deploy --only hosting --project "$POLYGLOT_PROJECT_NAME"
+    
+    log_success "✅ Frontend deployed successfully!"
+    echo "   URL: https://$POLYGLOT_PROJECT_NAME.web.app"
     echo ""
     
-    # Upload to GCS (demo/ subfolder, won't touch bookmarklet/)
-    print_info "☁️  Uploading to gs://$VOICE_GCS_BUCKET/demo/..."
-    
-    # Upload HTML files with short cache (content changes)
-    gcloud storage cp dist/demo/demo.html \
-        gs://$VOICE_GCS_BUCKET/demo/demo.html \
-        --cache-control="public, max-age=300"
-    
-    gcloud storage cp dist/demo/adult_intake_demo.html \
-        gs://$VOICE_GCS_BUCKET/demo/adult_intake_demo.html \
-        --cache-control="public, max-age=300"
-    
-    gcloud storage cp dist/demo/adult_intake_demo_schema.json \
-        gs://$VOICE_GCS_BUCKET/demo/adult_intake_demo_schema.json \
-        --cache-control="public, max-age=300"
-    
-    gcloud storage cp dist/demo/adult_intake_sections_index.json \
-        gs://$VOICE_GCS_BUCKET/demo/adult_intake_sections_index.json \
-        --cache-control="public, max-age=300"
-    
-    # Upload thank-you page and logo
-    gcloud storage cp dist/demo/thank-you.html \
-        gs://$VOICE_GCS_BUCKET/demo/thank-you.html \
-        --cache-control="public, max-age=300"
-    
-    gcloud storage cp dist/demo/logo_with_text.png \
-        gs://$VOICE_GCS_BUCKET/demo/logo_with_text.png \
-        --cache-control="public, max-age=31536000"
-    
-    # Upload JS assets with long cache (content-hashed filenames)
-    gcloud storage cp -r dist/demo/assets \
-        gs://$VOICE_GCS_BUCKET/demo/ \
-        --cache-control="public, max-age=31536000"
-    
-    # Upload shared audio worklet (needed for microphone recording)
-    gcloud storage cp -r dist/shared \
-        gs://$VOICE_GCS_BUCKET/ \
-        --cache-control="public, max-age=31536000"
-    
-    # Upload bookmarklet bundle (needed by demo)
-    gcloud storage cp -r dist/demo/bookmarklet \
-        gs://$VOICE_GCS_BUCKET/demo/ \
-        --cache-control="public, max-age=31536000"
-    
-    # Upload VAD assets (ONNX models + WASM runtime) - self-hosted for reliability
-    print_info "📦 Uploading VAD assets (~5 MB)..."
-    if [ -d "public/vad-assets" ]; then
-        gcloud storage cp -r public/vad-assets \
-            gs://$VOICE_GCS_BUCKET/ \
-            --cache-control="public, max-age=31536000"
-        print_success "✓ VAD assets uploaded (self-hosted, no CDN dependency)"
-    else
-        print_warning "⚠️  Warning: VAD assets not found at public/vad-assets/"
-        echo "   Run ./download-vad-assets.sh to download them"
-    fi
-    
-    # Make bucket contents publicly readable (if not already set)
-    print_info "🌐 Setting public access on bucket..."
-    gcloud storage buckets add-iam-policy-binding gs://$VOICE_GCS_BUCKET \
-        --member=allUsers \
-        --role=roles/storage.objectViewer \
-        2>/dev/null || print_success "✓ Public access already configured"
-    
-    DEMO_URL="https://storage.googleapis.com/$VOICE_GCS_BUCKET/demo/demo.html"
-    print_success "✅ Demo deployed successfully!"
-    echo "   URL: $DEMO_URL"
-    echo ""
-    
-    cd ..
+    cd "$SCRIPT_DIR"
 fi
 
 # ============================================================================
 # DEPLOYMENT SUMMARY
 # ============================================================================
 echo ""
-print_success "╔════════════════════════════════════════════════════════════╗"
-print_success "║              DEPLOYMENT COMPLETED SUCCESSFULLY             ║"
-print_success "╚════════════════════════════════════════════════════════════╝"
+log_success "╔═══════════════════════════════════════════════════════════╗"
+log_success "║         DEPLOYMENT COMPLETED SUCCESSFULLY                 ║"
+log_success "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
 if [ "$DEPLOY_BACKEND" = true ]; then
-    print_info "🔧 Backend API:"
-    echo "   https://voice-form-filler-773443099751.us-central1.run.app"
+    log_info "🔧 Backend API:"
+    echo "   $BACKEND_URL"
     echo ""
 fi
 
 if [ "$DEPLOY_FRONTEND" = true ]; then
-    print_info "🌐 Demo URL:"
-    echo "   https://storage.googleapis.com/$VOICE_GCS_BUCKET/demo/demo.html"
-    echo ""
-    print_info "🔗 Share this URL to demo on mobile devices!"
+    log_info "🌐 Frontend URL:"
+    echo "   https://$POLYGLOT_PROJECT_NAME.web.app"
     echo ""
 fi
 
-print_info "💡 Next steps:"
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    echo "   1. Open the demo URL on your mobile device"
-    echo "   2. Test form loading and overlay appearance"
-    echo "   3. Click 'Connect to Voice' and test voice input"
-    echo "   4. Verify all 174 fields are detected"
-fi
-if [ "$DEPLOY_BACKEND" = true ] && [ "$DEPLOY_FRONTEND" = false ]; then
-    echo "   1. Test backend health: curl https://voice-form-filler-773443099751.us-central1.run.app/health"
-    echo "   2. Check WebSocket endpoint is available"
-    echo "   3. Deploy frontend to complete the update"
-fi
-echo ""
-
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    print_info "📝 Note: Bookmarklet remains untouched at gs://$VOICE_GCS_BUCKET/bookmarklet/"
+if [ "$DEPLOY_FORM_KITS" = true ]; then
+    log_info "📦 Form Kits Bucket:"
+    echo "   gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX"
+    echo ""
 fi
 
+log_info "💡 Next steps:"
+echo "   1. Test the application at the frontend URL"
+echo "   2. Verify API routes work through Firebase hosting"
+echo "   3. Check form-kits load via /api/form-kits endpoint"
 echo ""

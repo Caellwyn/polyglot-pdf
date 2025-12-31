@@ -12,7 +12,9 @@
       "Bash(.gitignore)",
       "Bash(find:*)",
       "Bash(cat:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(where:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "polyglot-forms-919f2"
+    "default": "polyglot-forms-919f2",
+    "prod": "polyglot-forms-919f2",
+    "demo": "polyglot-demo-aa709"
   }
 }
