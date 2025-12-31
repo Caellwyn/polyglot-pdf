@@ -88,30 +88,13 @@ check_project() {
 
 # Display deployment plan
 echo ""
-log_info "📋 Deployment Plan:"
-[ "$DEPLOY_BACKEND" = true ] && echo "   ✓ Backend (Cloud Run)"
-[ "$DEPLOY_FRONTEND" = true ] && echo "   ✓ Frontend (Firebase Hosting)"
-[ "$DEPLOY_FORM_KITS" = true ] && echo "   ✓ Form Kits (GCS)"
-log_info "📋 Deployment Plan:"
-[ "$DEPLOY_BACKEND" = true ] && echo "   ✓ Backend (Cloud Run)"
-[ "$DEPLOY_FRONTEND" = true ] && echo "   ✓ Frontend (Firebase Hosting)"
-[ "$DEPLOY_FORM_KITS" = true ] && echo "   ✓ Form Kits (GCS)"
+log_info "Deployment Plan:"
+log_info "  Backend:   $DEPLOY_BACKEND"
+log_info "  Frontend:  $DEPLOY_FRONTEND"
+log_info "  Form Kits: $DEPLOY_FORM_KITS"
 echo ""
 
 check_project
-
-check_project
-
-# Confirmation prompt
-read -p "Continue with deployment? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    log_warn "Deployment cancelled."
-    log_warn "Deployment cancelled."
-    exit 0
-fi
-
-echo ""
 
 # ============================================================================
 # BACKEND DEPLOYMENT
@@ -120,35 +103,25 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     log_info "═══════════════════════════════════════════════════════════"
     log_info "  DEPLOYING BACKEND TO CLOUD RUN"
     log_info "═══════════════════════════════════════════════════════════"
-    log_info "═══════════════════════════════════════════════════════════"
-    log_info "  DEPLOYING BACKEND TO CLOUD RUN"
-    log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
     cd "$BACKEND_DIR"
     
     # Enable necessary APIs
-    log_info "🛠️  Ensuring Cloud Run and Build APIs are enabled..."
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project "$POLYGLOT_PROJECT_NAME"
-    cd "$BACKEND_DIR"
+    log_info "Ensuring necessary Google Cloud APIs are enabled..."
+    gcloud services enable run.googleapis.com \
+        cloudbuild.googleapis.com \
+        artifactregistry.googleapis.com \
+        aiplatform.googleapis.com \
+        storage.googleapis.com \
+        --project "$POLYGLOT_PROJECT_NAME"
     
-    # Enable necessary APIs
-    log_info "🛠️  Ensuring Cloud Run and Build APIs are enabled..."
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project "$POLYGLOT_PROJECT_NAME"
-    
-    # Build and push container
-    log_info "📦 Building container image..."
+    # Build the image using Cloud Build
     IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
-    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME" .
-    log_info "📦 Building container image..."
-    IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
-    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME" .
+    log_info "Building container image: $IMAGE_URL..."
+    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME"
     
     # Deploy to Cloud Run
-    log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
-    gcloud run deploy "$BACKEND_SERVICE_NAME" \
-        --image "$IMAGE_URL" \
-        --region "$REGION" \
     log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
@@ -157,42 +130,24 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --allow-unauthenticated \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
-        --project "$POLYGLOT_PROJECT_NAME" \
-        --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
     
-    BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
-    log_success "✅ Backend deployed successfully!"
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
     log_success "✅ Backend deployed successfully!"
     echo "   URL: $BACKEND_URL"
     echo ""
     
     cd "$SCRIPT_DIR"
-    cd "$SCRIPT_DIR"
 fi
 
 # ============================================================================
 # FORM KITS DEPLOYMENT
-# FORM KITS DEPLOYMENT
 # ============================================================================
-if [ "$DEPLOY_FORM_KITS" = true ]; then
-    log_info "═══════════════════════════════════════════════════════════"
-    log_info "  DEPLOYING FORM KITS TO GCS"
-    log_info "═══════════════════════════════════════════════════════════"
 if [ "$DEPLOY_FORM_KITS" = true ]; then
     log_info "═══════════════════════════════════════════════════════════"
     log_info "  DEPLOYING FORM KITS TO GCS"
     log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    # Create bucket if it doesn't exist
-    if ! gcloud storage buckets describe "gs://$FORM_KITS_BUCKET" &>/dev/null; then
-        log_info "Creating bucket gs://$FORM_KITS_BUCKET..."
-        gcloud storage buckets create "gs://$FORM_KITS_BUCKET" \
-            --location=us-central1 \
-            --uniform-bucket-level-access \
-            --project "$POLYGLOT_PROJECT_NAME"
-        log_success "Bucket created successfully"
     # Create bucket if it doesn't exist
     if ! gcloud storage buckets describe "gs://$FORM_KITS_BUCKET" &>/dev/null; then
         log_info "Creating bucket gs://$FORM_KITS_BUCKET..."
@@ -203,83 +158,6 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
         log_success "Bucket created successfully"
     fi
     
-    # Upload all form kits
-    log_info "📦 Uploading form kits..."
-    for kit_dir in "$FORM_KITS_DIR"/*/; do
-        [ -d "$kit_dir" ] || continue
-        kit_id=$(basename "$kit_dir")
-        
-        if [ ! -f "$kit_dir/schema.json" ]; then
-            log_warn "Skipping $kit_id - no schema.json found"
-            continue
-        fi
-        
-        log_info "  Uploading $kit_id..."
-        gcloud storage cp -r "$kit_dir"/* "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/$kit_id/" --project "$POLYGLOT_PROJECT_NAME"
-    done
-    
-    # Generate and upload manifest
-    log_info "📝 Generating manifest..."
-    
-    manifest_content='{"generatedAt":"'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'","forms":['
-    first=true
-    
-    for kit_dir in "$FORM_KITS_DIR"/*/; do
-        [ -d "$kit_dir" ] || continue
-        kit_id=$(basename "$kit_dir")
-        
-        if [ ! -f "$kit_dir/schema.json" ]; then
-            continue
-        fi
-        
-        # Extract title from schema.json
-        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
-        [ -z "$label" ] && label="$kit_id"
-        
-        # Find PDF file
-        pdf_file="form.pdf"
-        if [ ! -f "$kit_dir/form.pdf" ]; then
-            pdf_file=$(ls "$kit_dir"/*.pdf 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "form.pdf")
-        fi
-        
-        if [ "$first" = true ]; then
-            first=false
-        else
-            manifest_content+=','
-        fi
-        
-        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"schema.json","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/schema.json","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
-    done
-    
-    manifest_content+=']}'
-    
-    # Upload manifest
-    temp_manifest=$(mktemp)
-    echo "$manifest_content" | python3 -m json.tool > "$temp_manifest" 2>/dev/null || echo "$manifest_content" > "$temp_manifest"
-    gcloud storage cp "$temp_manifest" "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/index.json" --project "$POLYGLOT_PROJECT_NAME"
-    rm "$temp_manifest"
-    
-    log_success "✅ Form kits deployed successfully!"
-    echo "   Bucket: gs://$FORM_KITS_BUCKET"
-    echo "   Manifest: gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/index.json"
-    echo ""
-fi
-
-# ============================================================================
-# FRONTEND DEPLOYMENT
-# ============================================================================
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    log_info "═══════════════════════════════════════════════════════════"
-    log_info "  DEPLOYING FRONTEND TO FIREBASE HOSTING"
-    log_info "═══════════════════════════════════════════════════════════"
-    echo ""
-    
-    cd "$FRONTEND_DIR"
-    
-    # Check if Firebase CLI is installed
-    if ! command -v firebase &> /dev/null; then
-        log_error "Firebase CLI not found. Install with: npm install -g firebase-tools"
-        exit 1
     # Upload all form kits
     log_info "📦 Uploading form kits..."
     for kit_dir in "$FORM_KITS_DIR"/*/; do
@@ -372,7 +250,6 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     echo ""
     
     cd "$SCRIPT_DIR"
-    cd "$SCRIPT_DIR"
 fi
 
 # ============================================================================
@@ -382,14 +259,9 @@ echo ""
 log_success "╔═══════════════════════════════════════════════════════════╗"
 log_success "║         DEPLOYMENT COMPLETED SUCCESSFULLY                 ║"
 log_success "╚═══════════════════════════════════════════════════════════╝"
-log_success "╔═══════════════════════════════════════════════════════════╗"
-log_success "║         DEPLOYMENT COMPLETED SUCCESSFULLY                 ║"
-log_success "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
 if [ "$DEPLOY_BACKEND" = true ]; then
-    log_info "🔧 Backend API:"
-    echo "   $BACKEND_URL"
     log_info "🔧 Backend API:"
     echo "   $BACKEND_URL"
     echo ""
