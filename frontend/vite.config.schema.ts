@@ -11,14 +11,14 @@ export default defineConfig({
 
 	// Build configuration
 	build: {
-		outDir: 'dist/schema-forms',
+		outDir: 'dist',
 		emptyOutDir: true,
 		sourcemap: false,
 		target: 'es2020',
 
 		rollupOptions: {
 			input: {
-				main: resolve(__dirname, 'schema-form-demo.html'),
+				main: resolve(__dirname, 'index.html'),
 			},
 			output: {
 				manualChunks: {

@@ -137,6 +137,13 @@
 
 ## Known Issues
 
+### Fixed (December 2025)
+- [x] **Tablet push-to-talk stuck recording** - Fixed December 3, 2025
+  - Long-press context menu was interrupting touch events
+  - Added `preventDefault()` on touchstart/touchend
+  - Added 5 safety mechanisms: max duration (30s), visibility change, window blur, connection loss, unmount cleanup
+  - Location: `VoiceOverlay.tsx`, `VoiceOverlayMobile.tsx`
+
 ### Low Priority
 - [ ] **Highlight timing inconsistency** - Two different durations (1500ms vs 2000ms)
   - `webFormConnection.ts`: 1500ms for field confirmation

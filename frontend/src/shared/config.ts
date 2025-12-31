@@ -39,15 +39,22 @@ export function getDevConfig(): DevConfig {
  * ```
  */
 /**
+ * Cloud Run production WebSocket URL
+ * Hardcoded because Firebase Hosting rewrites DO NOT work for WebSockets
+ */
+const PRODUCTION_WS_URL = 'wss://polyglot-backend-d3mhrrkwfq-uc.a.run.app/ws/fill'
+
+/**
  * Get backend WebSocket URL
  * Uses environment variable set during build (VITE_WS_URL)
- * 
+ *
  * Development (npm run dev): Defaults to localhost
- * Production (npm run build:demo): MUST set VITE_WS_URL during build
+ * Production: Uses Cloud Run URL directly (Firebase Hosting doesn't support WebSocket rewrites)
  */
 export function getBackendUrl(): string {
 	const config = getDevConfig()
 
+	// 1. Check for explicit local dev override (window.__VFF_LOCAL_DEV = true)
 	if (config.enabled) {
 		console.log('[VFF Config] 🔧 LOCAL DEV MODE ENABLED')
 		console.log('[VFF Config] Backend URL:', config.backendUrl)
@@ -55,21 +62,25 @@ export function getBackendUrl(): string {
 		return config.backendUrl
 	}
 
-	// Use environment variable if set (production builds)
+	// 2. Use environment variable if set (production builds)
 	if (import.meta.env.VITE_WS_URL) {
+		console.log('[VFF Config] Using VITE_WS_URL:', import.meta.env.VITE_WS_URL)
 		return import.meta.env.VITE_WS_URL
 	}
 
-	// Production: Construct WebSocket URL from current origin
-	// This works with Firebase Hosting rewrites (http -> ws, https -> wss)
-	// Check if NOT in dev mode to ensure this runs in production
-	if (!import.meta.env.DEV || import.meta.env.PROD) {
-		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-		const host = window.location.host
-		return `${protocol}//${host}/api/ws/fill`
+	// 3. Detect production environment: NOT localhost and NOT dev server
+	const isProduction = typeof window !== 'undefined' &&
+		!window.location.hostname.includes('localhost') &&
+		!window.location.hostname.includes('127.0.0.1') &&
+		window.location.protocol === 'https:'
+
+	if (isProduction) {
+		console.log('[VFF Config] Production detected, using Cloud Run URL:', PRODUCTION_WS_URL)
+		return PRODUCTION_WS_URL
 	}
 
-	// Development mode fallback: use localhost
+	// 4. Development mode fallback: use localhost
+	console.log('[VFF Config] Development mode, using localhost')
 	return 'ws://localhost:8000/ws/fill'
 }
 
@@ -82,8 +93,7 @@ export function getCloudBackendUrl(): string {
 	if (import.meta.env.VITE_WS_URL) {
 		return import.meta.env.VITE_WS_URL
 	}
-	// Direct Cloud Run URL - Firebase Hosting rewrites don't work for WebSockets
-	return 'wss://polyglot-backend-d3mhrrkwfq-uc.a.run.app/ws/fill'
+	return PRODUCTION_WS_URL
 }
 
 /**

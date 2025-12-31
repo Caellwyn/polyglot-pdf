@@ -177,28 +177,14 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			if (pttModeEnabled) {
 				// PTT mode: Only send audio when button is held (inputMuted=false)
 				if (inputMuted) {
-					// DEBUG (Nov 10, 2025): Log blocked audio (sample 0.1% to avoid spam)
-					if (Math.random() < 0.001) {
-						console.log('[AudioManager] 🚫 PTT mode: Audio blocked (button not pressed)')
-					}
 					return // PTT button not pressed, don't send audio
 				}
 			} else {
 				// VAD mode: Require EITHER privacy gate to be closed
-				// BUG FIX (Nov 10, 2025): Changed AND to OR - audio should be blocked if EITHER:
-				// - inputMuted=true (manual mute, shouldn't happen in VAD mode but defensive check)
-				// - vadActive=false (VAD hasn't detected speech - this is the primary gate)
+				// - inputMuted=true (manual mute)
+				// - vadActive=false (VAD hasn't detected speech)
 				if (inputMuted || !vadActive) {
-					// DEBUG (Nov 10, 2025): Log blocked audio (sample 0.1% to avoid spam)
-					if (Math.random() < 0.001) {
-						console.log('[AudioManager] 🚫 VAD mode: Audio blocked', {
-							inputMuted,
-							vadActive,
-							reason: inputMuted ? 'manual mute' : 'VAD inactive'
-						})
-					}
-					// Manual mute OR VAD not detecting speech = don't send audio
-					return
+					return // Manual mute OR VAD not detecting speech = don't send audio
 				}
 			}				const pcmChunk = new Int16Array(pcmData)
 
@@ -312,8 +298,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			
 			// CRITICAL: Block new audio playback during barge-in
 			if (playbackBlocked) {
-				// Silently discard chunks during barge-in
-				console.log(`[AudioManager] 🚫 Discarding chunk #${playbackChunkCount} (barge-in active)`)
+				// Silently discard chunks during barge-in (no logging to reduce spam)
 				return
 			}
 

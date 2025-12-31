@@ -4,7 +4,9 @@
  * Appears when user first opens the app. Forces both selections before proceeding.
  * After selections are made, the disclaimer modal will appear.
  *
- * Design: Minimal English text - uses icons and native language names for accessibility
+ * Design: Wizard-style flow with large, clickable cards for accessibility.
+ * Step 1: Language Selection (large native names)
+ * Step 2: Form Selection (if multiple forms available)
  */
 
 import React, { useEffect, useState } from 'react'
@@ -24,25 +26,20 @@ interface LanguageSelectionModalProps {
 	preselectedFormId?: string
 }
 
+type WizardStep = 'loading' | 'form-selection' | 'language-selection' | 'error'
+
 export function LanguageSelectionModal({ onSelection, preselectedFormId }: LanguageSelectionModalProps) {
 	const [forms, setForms] = useState<FormKitInfo[]>([])
 	const [selectedFormId, setSelectedFormId] = useState(preselectedFormId || '')
 	const [selectedLanguage, setSelectedLanguage] = useState('')
-	const [loading, setLoading] = useState(true)
+	const [step, setStep] = useState<WizardStep>('loading')
 	const [error, setError] = useState<string | null>(null)
 
 	// Load available forms from backend
 	useEffect(() => {
 		async function loadForms() {
-			// Skip loading if form is preselected
-			if (preselectedFormId) {
-				setSelectedFormId(preselectedFormId)
-				setLoading(false)
-				return
-			}
-
 			try {
-				setLoading(true)
+				setStep('loading')
 				setError(null)
 				const backendUrl = getBackendHttpUrl()
 				const response = await fetch(`${backendUrl}/api/form-kits`)
@@ -52,22 +49,52 @@ export function LanguageSelectionModal({ onSelection, preselectedFormId }: Langu
 				}
 
 				const data = await response.json()
-				setForms(data.forms || [])
+				const loadedForms = data.forms || []
+				setForms(loadedForms)
+
+				// Initial step is ALWAYS language selection
+				setStep('language-selection')
+
+				// If preselected form, set it
+				if (preselectedFormId) {
+					setSelectedFormId(preselectedFormId)
+				}
 
 			} catch (err) {
 				console.error('[LanguageSelectionModal] Failed to load forms:', err)
 				setError('Unable to load available forms')
-			} finally {
-				setLoading(false)
+				setStep('error')
 			}
 		}
 
 		loadForms()
 	}, [preselectedFormId])
 
-	const handleSubmit = () => {
-		if (selectedFormId && selectedLanguage) {
-			onSelection(selectedFormId, selectedLanguage)
+	const handleLanguageSelect = (language: string) => {
+		setSelectedLanguage(language)
+
+		// If form is already selected (preselected or single option), we are done
+		if (selectedFormId) {
+			onSelection(selectedFormId, language)
+		} else {
+			// Otherwise, move to form selection
+			setStep('form-selection')
+		}
+	}
+
+	const handleFormSelect = (formId: string) => {
+		setSelectedFormId(formId)
+		// We have language (from step 1) and form (now), so we are done
+		if (selectedLanguage) {
+			onSelection(formId, selectedLanguage)
+		}
+	}
+
+	const handleBack = () => {
+		// Back from form selection goes to language selection
+		if (step === 'form-selection') {
+			setStep('language-selection')
+			// setSelectedLanguage('') // Optional: clear language if going back? Or keep it? keeping for now.
 		}
 	}
 
@@ -83,107 +110,78 @@ export function LanguageSelectionModal({ onSelection, preselectedFormId }: Langu
 				className="disclaimer-modal-content"
 				role="dialog"
 				aria-modal="true"
-				aria-labelledby="language-selection-title"
+				aria-labelledby="wizard-title"
+				style={{ maxWidth: '800px' }} // Wider for card grid
 			>
-				{/* Large icon - universally understood */}
-				<div style={{ fontSize: '64px', textAlign: 'center', marginBottom: '24px' }}>🌍</div>
-
-				{/* Minimal title - icon makes it clear */}
-				<h2 id="language-selection-title" className="disclaimer-modal-title" style={{ marginBottom: '32px' }}>
-					📋 🗣️💬
-				</h2>
-
-				{loading ? (
-					<div style={{ textAlign: 'center', padding: '20px' }}>
-						<span style={{ fontSize: '32px' }}>⏳</span>
+				{step === 'loading' && (
+					<div style={{ textAlign: 'center', padding: '40px' }}>
+						<div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
+						<h2 style={{ fontSize: '24px', color: '#666' }}>Loading...</h2>
 					</div>
-				) : error ? (
-					<div style={{ textAlign: 'center', padding: '20px', color: '#dc2626' }}>
-						<span style={{ fontSize: '32px' }}>⚠️</span>
-						<p style={{ marginTop: '8px', fontSize: '14px' }}>{error}</p>
-					</div>
-				) : (
-					<>
-						{/* Form selector - only show if multiple forms available */}
-						{showFormSelector && (
-							<div style={{ marginBottom: '24px' }}>
-								<div style={{ fontSize: '24px', textAlign: 'center', marginBottom: '8px' }}>📋</div>
-								<select
-									id="form-select"
-									value={selectedFormId}
-									onChange={(e) => setSelectedFormId(e.target.value)}
-									style={{
-										width: '100%',
-										padding: '16px 20px',
-										fontSize: '18px',
-										border: '3px solid #2563eb',
-										borderRadius: '12px',
-										backgroundColor: 'white',
-										cursor: 'pointer',
-										transition: 'all 0.2s',
-										textAlign: 'center',
-										fontWeight: 600
-									}}
-								>
-									<option value="">📋 ⬇️</option>
-									{forms.map(form => (
-										<option key={form.id} value={form.id}>
-											{form.label}
-										</option>
-									))}
-								</select>
-							</div>
-						)}
-
-						{/* Language selector - uses native names */}
-						<div style={{ marginBottom: '32px' }}>
-							<div style={{ fontSize: '24px', textAlign: 'center', marginBottom: '8px' }}>🗣️</div>
-							<select
-								id="language-select"
-								value={selectedLanguage}
-								onChange={(e) => setSelectedLanguage(e.target.value)}
-								autoFocus={!showFormSelector}
-								style={{
-									width: '100%',
-									padding: '16px 20px',
-									fontSize: '20px',
-									border: '3px solid #2563eb',
-									borderRadius: '12px',
-									backgroundColor: 'white',
-									cursor: 'pointer',
-									transition: 'all 0.2s',
-									textAlign: 'center',
-									fontWeight: 600
-								}}
-							>
-								<option value="">🌍 ⬇️</option>
-								{SPOKEN_LANGUAGES.map(lang => (
-									<option key={lang.name} value={lang.name}>
-										{lang.nativeName}
-									</option>
-								))}
-							</select>
-						</div>
-					</>
 				)}
 
-				{/* Continue button - arrow is universal */}
-				<div className="disclaimer-modal-buttons">
-					<button
-						className="disclaimer-modal-button disclaimer-modal-button--primary"
-						onClick={handleSubmit}
-						disabled={!canSubmit || loading}
-						type="button"
-						style={{
-							opacity: canSubmit && !loading ? 1 : 0.5,
-							cursor: canSubmit && !loading ? 'pointer' : 'not-allowed',
-							fontSize: '24px',
-							padding: '20px'
-						}}
-					>
-						✓ ➜
-					</button>
-				</div>
+				{step === 'error' && (
+					<div style={{ textAlign: 'center', padding: '20px', color: '#dc2626' }}>
+						<div style={{ fontSize: '48px', marginBottom: '20px' }}>⚠️</div>
+						<h2 style={{ fontSize: '24px', marginBottom: '10px' }}>Error</h2>
+						<p>{error}</p>
+					</div>
+				)}
+
+				{step === 'language-selection' && (
+					<div className="wizard-step">
+						<h2 id="wizard-title" className="disclaimer-modal-title">
+							🗣️ Select Language / Seleccione Idioma
+						</h2>
+
+						<div className="card-grid language-grid">
+							{SPOKEN_LANGUAGES.map(lang => (
+								<button
+									key={lang.name}
+									className="selection-card language-card"
+									onClick={() => handleLanguageSelect(lang.name)}
+									type="button"
+								>
+									<div className="card-native-name">{lang.nativeName}</div>
+									<div className="card-english-name">{lang.name}</div>
+								</button>
+							))}
+						</div>
+					</div>
+				)}
+
+				{step === 'form-selection' && (
+					<div className="wizard-step">
+						<div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
+							<button
+								onClick={handleBack}
+								className="back-button"
+								title="Back"
+							>
+								⬅️
+							</button>
+							<h2 id="wizard-title" className="disclaimer-modal-title" style={{ margin: 0, flex: 1 }}>
+								📋 Select Form / Seleccione Formulario
+							</h2>
+						</div>
+						<div className="card-grid">
+							{forms.map(form => (
+								<button
+									key={form.id}
+									className="selection-card"
+									onClick={() => handleFormSelect(form.id)}
+									type="button"
+								>
+									<div className="card-icon">📄</div>
+									<div className="card-label">{form.label}</div>
+									{form.description && (
+										<div className="card-sublabel">{form.description}</div>
+									)}
+								</button>
+							))}
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	)

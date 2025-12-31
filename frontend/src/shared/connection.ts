@@ -46,6 +46,7 @@ export interface ConnectionManager {
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
 	readDisclaimer: (language: string, disclaimerText: string) => void  // Read disclaimer in specified language
 	// Section management (schema-based navigation)
+	switchToFirstSection: (language: string) => Promise<void>  // Switch to first section (used after disclaimer acceptance)
 	startSection: (sectionId: string) => Promise<void>
 	switchToSection: (sectionId: string) => Promise<void>
 	completeSection: () => Promise<void>
@@ -638,6 +639,32 @@ export function createConnectionManager(
 		},
 
 		// Section management methods (schema-based navigation)
+
+		async switchToFirstSection(language: string) {
+			// Get first section from schema (sorted by order)
+			const currentState = SchemaFormStateManager.load()
+			if (!currentState) {
+				console.error('[VFF Connection] Cannot switch to first section - no state loaded')
+				return
+			}
+
+			const sortedSections = [...currentState.schema.sections].sort((a, b) => a.order - b.order)
+			const firstSection = sortedSections[0]
+
+			if (!firstSection) {
+				console.error('[VFF Connection] Cannot switch to first section - no sections in schema')
+				return
+			}
+
+			console.log('[VFF Connection] Switching to first section after disclaimer:', firstSection.id)
+
+			// Update fill language before switching
+			fillLanguage = language
+
+			// Use startSection which restarts Gemini with form-filling context
+			await this.startSection(firstSection.id)
+		},
+
 		async startSection(sectionId: string) {
 			if (!connection) {
 				throw new Error('Connection not initialized')
@@ -648,7 +675,7 @@ export function createConnectionManager(
 				audioManager.stopRecording()
 			}
 
-			await connection.startSection(sectionId, wsUrl)
+			await connection.startSection(sectionId, connectedUrl)
 
 			// Restart recording if we were recording before
 			if (!paused && audioManager) {
@@ -687,7 +714,7 @@ export function createConnectionManager(
 				throw new Error('Connection not initialized')
 			}
 
-			await connection.completeSection(wsUrl)
+			await connection.completeSection(connectedUrl)
 		},
 
 		getCurrentSectionId(): string | undefined {

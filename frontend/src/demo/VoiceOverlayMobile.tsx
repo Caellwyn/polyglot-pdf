@@ -139,6 +139,113 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}, [])
 
+	// SAFETY NET: Force-release PTT if stuck on for any reason
+	// This handles: tab switch, incoming calls, screen rotation, browser throttling, etc.
+	const MAX_PTT_DURATION_MS = 30000 // 30 second max - prevents wasted Gemini API costs
+	const pttSafetyTimeoutRef = useRef<number | null>(null)
+
+	// Force release function that can be called from any safety mechanism
+	const forceReleasePTT = () => {
+		if (!isHoldingPushToTalkRef.current) return
+
+		console.log('[PTT Safety Mobile] ⚠️ Force-releasing PTT due to safety trigger')
+		setIsHoldingPushToTalk(false)
+
+		// Clear any pending timeouts
+		if (pttReleaseTimeoutRef.current !== null) {
+			clearTimeout(pttReleaseTimeoutRef.current)
+			pttReleaseTimeoutRef.current = null
+		}
+		if (pttSafetyTimeoutRef.current !== null) {
+			clearTimeout(pttSafetyTimeoutRef.current)
+			pttSafetyTimeoutRef.current = null
+		}
+
+		// Send activity end and mute
+		connectionManager?.sendActivityEnd()
+		const audioManager = connectionManager?.getAudioManager()
+		audioManager?.muteInput()
+		audioManager?.resumePlayback()
+	}
+
+	// Safety mechanism 1: Max duration timeout (prevents infinite recording)
+	useEffect(() => {
+		if (isHoldingPushToTalk) {
+			console.log('[PTT Safety Mobile] Starting safety timeout (max 60s)')
+			pttSafetyTimeoutRef.current = window.setTimeout(() => {
+				console.log('[PTT Safety Mobile] ⚠️ Max duration reached - force releasing')
+				forceReleasePTT()
+			}, MAX_PTT_DURATION_MS)
+		} else {
+			// Clear safety timeout when released normally
+			if (pttSafetyTimeoutRef.current !== null) {
+				clearTimeout(pttSafetyTimeoutRef.current)
+				pttSafetyTimeoutRef.current = null
+			}
+		}
+
+		return () => {
+			if (pttSafetyTimeoutRef.current !== null) {
+				clearTimeout(pttSafetyTimeoutRef.current)
+				pttSafetyTimeoutRef.current = null
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isHoldingPushToTalk])
+
+	// Safety mechanism 2: Visibility change (tab switch, app switch, screen lock)
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.hidden && isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Tab hidden while recording - force releasing')
+				forceReleasePTT()
+			}
+		}
+
+		document.addEventListener('visibilitychange', handleVisibilityChange)
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Safety mechanism 3: Window blur (user clicked outside browser, system dialogs)
+	useEffect(() => {
+		const handleWindowBlur = () => {
+			if (isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Window lost focus while recording - force releasing')
+				forceReleasePTT()
+			}
+		}
+
+		window.addEventListener('blur', handleWindowBlur)
+		return () => window.removeEventListener('blur', handleWindowBlur)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Safety mechanism 4: Connection status change (disconnect while recording)
+	useEffect(() => {
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
+			status.toLowerCase().startsWith('connected ')
+
+		if (!isCurrentlyConnected && isHoldingPushToTalkRef.current) {
+			console.log('[PTT Safety Mobile] ⚠️ Connection lost while recording - force releasing')
+			forceReleasePTT()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [status])
+
+	// Safety mechanism 5: Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			if (isHoldingPushToTalkRef.current) {
+				console.log('[PTT Safety Mobile] ⚠️ Component unmounting while recording - force releasing')
+				// Direct cleanup since we're unmounting
+				connectionManager?.sendActivityEnd()
+				connectionManager?.getAudioManager()?.muteInput()
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
 	// Memoize VAD callbacks to prevent re-initialization on every render
 	const vadCallbacks = useMemo(() => ({
 		onSpeechStart: () => {
@@ -454,6 +561,17 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		setShowDisclaimerModal(false)
 
+		// Step 1: Send activity_start FIRST to stop backend from sending more audio
+		console.log('[VoiceOverlayMobile] 🎤 Sending activity_start to interrupt Gemini')
+		connectionManager?.sendActivityStart()
+
+		// Step 2: THEN flush the local audio queue
+		const audioManager = connectionManager?.getAudioManager()
+		if (audioManager) {
+			console.log('[VoiceOverlayMobile] 🔇 Clearing audio queue on disclaimer agreement')
+			audioManager.flushAudioQueue()
+		}
+
 		// Log disclaimer acceptance to backend
 		try {
 			const timestamp = Date.now()
@@ -482,19 +600,47 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Don't block user - logging failure is non-fatal
 		}
 
-		// Connection already established in handleLanguageChange
-		// Now prompt Gemini to start asking for fields
-		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - prompting Gemini to start form filling')
+		// Check if connection is still active - the long disclaimer read may have caused
+		// the connection to go stale (idle timeout or disconnected)
+		const currentStatus = connectionManager?.getStatus()
+		const isConnectionActive = currentStatus === 'connected' || currentStatus === 'switching_section'
+
+		if (!isConnectionActive) {
+			console.log('[VoiceOverlayMobile] 🔄 Connection stale after disclaimer - reconnecting...')
+			console.log('[VoiceOverlayMobile] Current status:', currentStatus)
+
+			try {
+				// Reconnect to backend
+				await handleConnect()
+				console.log('[VoiceOverlayMobile] ✅ Reconnected after disclaimer acceptance')
+			} catch (err) {
+				console.error('[VoiceOverlayMobile] ❌ Reconnection failed:', err)
+				setError('Connection lost - please click Reconnect')
+				return
+			}
+		}
+
+		// Now switch to section 1 to restart Gemini with form-filling context (clean session, no disclaimer leakage)
+		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - switching to first section (restarts Gemini session)')
 
 		if (connectionManager && selectedLanguage) {
-			// Get the first field to ask for
-			const nextField = computeNextField(state || SchemaFormStateManager.load())
-			const nextFieldHint = nextField
-				? formatNextFieldHint(nextField)
-				: 'all fields are complete'
+			// Step 3: Resume audio playback FIRST so we don't miss any response chunks
+			const am = connectionManager.getAudioManager()
+			if (am) {
+				console.log('[VoiceOverlayMobile] 🔊 Resuming audio playback for Gemini response')
+				am.resumePlayback()
+			}
 
-			// Send initiating message to Gemini (same as language change)
-			connectionManager.changeSpokenLanguage(selectedLanguage, nextFieldHint)
+			// Step 4: Send activity_end to close the "user turn" so Gemini can respond
+			console.log('[VoiceOverlayMobile] 🎤 Sending activity_end to signal user turn complete')
+			await connectionManager.sendActivityEnd()
+
+			// Step 5: Switch to first section - this restarts Gemini with form-filling context
+			// The section switch mechanism:
+			// 1. Closes the current Gemini session (flushes disclaimer context)
+			// 2. Starts a fresh Gemini session with form-filling system instruction
+			// 3. Sends the initiating message for the first field
+			await connectionManager.switchToFirstSection(selectedLanguage)
 		}
 	}
 
@@ -610,6 +756,19 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}
 
 	// Handle push-to-talk button press (touch)
+	// TABLET FIX: Wrapper for touch events that prevents context menu
+	const handlePushToTalkTouchStart = (e: React.TouchEvent) => {
+		// CRITICAL: Prevent browser context menu on long-press (tablet issue)
+		e.preventDefault()
+		handlePushToTalkPress()
+	}
+
+	// TABLET FIX: Touch end handler with preventDefault
+	const handlePushToTalkTouchEnd = (e: React.TouchEvent) => {
+		e.preventDefault()
+		handlePushToTalkRelease()
+	}
+
 	const handlePushToTalkPress = async () => {
 		if (!pushToTalkMode) return
 		
@@ -857,8 +1016,12 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						<div className="vff-ptt-bar-container">
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
-								onTouchStart={handlePushToTalkPress}
 								onMouseDown={handlePushToTalkPress}
+								onMouseUp={handlePushToTalkRelease}
+								onTouchStart={handlePushToTalkTouchStart}
+								onTouchEnd={handlePushToTalkTouchEnd}
+								onTouchCancel={handlePushToTalkTouchEnd}
+								onContextMenu={(e) => e.preventDefault()}
 							>
 								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
 							</button>

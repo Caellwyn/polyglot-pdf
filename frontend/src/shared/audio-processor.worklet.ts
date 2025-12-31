@@ -165,32 +165,8 @@ class VoiceFormFillerAudioProcessor extends AudioWorkletProcessor {
 				(1 - this.RMS_SMOOTHING_BETA) * this.smoothedRMS
 		}
 
-		// FIX #3 (Oct 22, 2025): Audio quality diagnostics
-		// Sample 0.1% of frames to detect audio corruption without spamming logs
-		// FIX (Nov 10, 2025): Reduced sampling rate from 0.1% to 0.01% (10x less frequent)
-		// These logs are for diagnosing audio quality issues, not for monitoring audio flow
-		if (Math.random() < 0.0001) {
-			const clippedCount = processedData.filter(s => Math.abs(s) > 0.99).length
-			// Check if this frame would trigger noise gate (only relevant in VAD mode)
-			let sumSquaresFiltered = 0
-			for (let i = 0; i < filteredData.length; i++) {
-				sumSquaresFiltered += filteredData[i] * filteredData[i]
-			}
-			const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length)
-			
-			console.log('[AudioWorklet] Quality check (post-filter):', {
-				samples: processedData.length,
-				rms: instantRMS.toFixed(4),
-				energy: instantEnergy.toFixed(2),
-				firstSample: processedData[0].toFixed(4),
-				lastSample: processedData[processedData.length - 1].toFixed(4),
-				clippedSamples: clippedCount,
-				clippingRate: (clippedCount / processedData.length * 100).toFixed(2) + '%',
-				pttMode: this.pttMode,
-				noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD,
-				note: 'Worklet processes all audio - filtering happens in audioManager.ts'
-			})
-		}
+		// Audio quality diagnostics removed - enable for debugging only
+		// To debug audio issues, uncomment and set sampling rate appropriately
 
 		// Convert Float32Array to Int16Array (PCM 16-bit)
 		// Use PROCESSED data (after high-pass filter + noise gate)

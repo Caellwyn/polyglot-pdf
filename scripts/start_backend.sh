@@ -36,13 +36,13 @@ fi
 echo ""
 
 # Activate virtual environment
-if [ -f ".venv/Scripts/activate" ]; then
-    source .venv/Scripts/activate
-elif [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
+if [ -f "backend/.venv/Scripts/activate" ]; then
+    source backend/.venv/Scripts/activate
+elif [ -f "backend/.venv/bin/activate" ]; then
+    source backend/.venv/bin/activate
 else
-    echo "ERROR: Virtual environment not found!"
-    echo "Please create one first: python -m venv .venv"
+    echo "ERROR: Virtual environment not found in backend/.venv!"
+    echo "Please create one first: cd backend && python -m venv .venv"
     exit 1
 fi
 

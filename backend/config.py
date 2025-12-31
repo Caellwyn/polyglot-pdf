@@ -7,14 +7,14 @@ from pathlib import Path
 
 
 class Settings(BaseModel):
-	MODEL_LIVE: str = "gemini-live-2.5-flash"
+	# MODEL_LIVE: str = "gemini-live-2.5-flash" Deprecated
 	MODEL_NATIVE: str = "gemini-live-2.5-flash-preview-native-audio-09-2025"
-	MODEL_LABELING: str | None = None
+	# MODEL_LABELING: str | None = None Deprecated
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio
+	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio DEPRECATED: gemini doesn't use tools when this is True.
 	
 	# Audio settings
 	AUDIO_IN_RATE: int = 16000
@@ -22,16 +22,16 @@ class Settings(BaseModel):
 	MAX_UPLOAD_MB: int = 5
 	WS_CHUNK_MS: int = 20
 	WS_PING_INTERVAL_SEC: int = 15
-	WS_IDLE_TIMEOUT_SEC: int = 60  # Close WebSocket after 60s of no activity (saves resources)
+	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 60s of no activity (saves resources)
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 	
-	# LLM normalizer settings
-	ENABLE_LLM_FIELD_NORMALIZATION: bool = True
-	LLM_NORMALIZER_MODEL: str = "gemini-2.5-pro"
-	LLM_NORMALIZER_MAX_FIELDS: int = 120
-	LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
-	LLM_NORMALIZER_TEMPERATURE: float = 0.2
+	# LLM normalizer settings: Deprecated
+	# ENABLE_LLM_FIELD_NORMALIZATION: bool = True
+	# LLM_NORMALIZER_MODEL: str = "gemini-2.5-pro"
+	# LLM_NORMALIZER_MAX_FIELDS: int = 120
+	# LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
+	# LLM_NORMALIZER_TEMPERATURE: float = 0.2
 
 	# === JIT (Just-In-Time) Schema Loading Settings ===
 	# Token Reduction: Send manifests instead of full schemas
