@@ -45,12 +45,13 @@ def handshake_message():
 
 
 @pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
 @patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
-async def test_handshake_sends_session_ready(mock_fill_session, mock_websocket, mock_service, handshake_message):
+async def test_handshake_sends_session_ready(mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message):
     """Happy-path handshake should acknowledge and invoke the fill session helper."""
     mock_websocket.receive_text.return_value = json.dumps(handshake_message)
 
-    await fill_form_from_schema(mock_websocket, service=mock_service)
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="test-token")
 
     # Validate session_ready payload
     mock_websocket.send_json.assert_awaited()
@@ -70,8 +71,9 @@ async def test_handshake_sends_session_ready(mock_fill_session, mock_websocket, 
 
 
 @pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
 @patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
-async def test_handshake_passes_reconnect_values(mock_fill_session, mock_websocket, mock_service, handshake_message):
+async def test_handshake_passes_reconnect_values(mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message):
     reconnect = handshake_message | {
         "current_values": {
             "email": {"value": "reconnect@example.com", "confirmed": True}
@@ -79,7 +81,7 @@ async def test_handshake_passes_reconnect_values(mock_fill_session, mock_websock
     }
     mock_websocket.receive_text.return_value = json.dumps(reconnect)
 
-    await fill_form_from_schema(mock_websocket, service=mock_service)
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="test-token")
 
     mock_fill_session.assert_awaited_once()
     _, helper_kwargs = mock_fill_session.await_args
@@ -88,11 +90,12 @@ async def test_handshake_passes_reconnect_values(mock_fill_session, mock_websock
 
 
 @pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
 @patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
-async def test_missing_schema_returns_error(mock_fill_session, mock_websocket, mock_service):
+async def test_missing_schema_returns_error(mock_fill_session, mock_verify_token, mock_websocket, mock_service):
     mock_websocket.receive_text.return_value = json.dumps({"type": "handshake"})
 
-    await fill_form_from_schema(mock_websocket, service=mock_service)
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="test-token")
 
     mock_fill_session.assert_not_called()
     mock_websocket.send_json.assert_awaited()
@@ -103,13 +106,14 @@ async def test_missing_schema_returns_error(mock_fill_session, mock_websocket, m
 
 
 @pytest.mark.asyncio
+@patch("backend.routes.websocket_routes.verify_token")
 @patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
-async def test_missing_current_values_defaults_to_empty(mock_fill_session, mock_websocket, mock_service, handshake_message):
+async def test_missing_current_values_defaults_to_empty(mock_fill_session, mock_verify_token, mock_websocket, mock_service, handshake_message):
     handshake = dict(handshake_message)
     handshake.pop("current_values", None)
     mock_websocket.receive_text.return_value = json.dumps(handshake)
 
-    await fill_form_from_schema(mock_websocket, service=mock_service)
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="test-token")
 
     _, helper_kwargs = mock_fill_session.await_args
     assert helper_kwargs["current_values"] == {}

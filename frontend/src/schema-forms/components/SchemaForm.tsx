@@ -8,6 +8,7 @@
  * - Responsive design
  * - Progress tracking
  */
+import { useAuth } from "../../contexts/AuthContext";
 
 import React, { useState, useEffect, useRef } from "react";
 import type { FormSchema, FormSection } from "../types/schema";
@@ -34,6 +35,7 @@ export interface SchemaFormProps {
 }
 
 export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, initialLanguage }: SchemaFormProps) {
+  const { user } = useAuth();
   const [state, setState] = useState<SchemaFormState>(() => {
     return SchemaFormStateManager.init(schema);
   });
@@ -133,19 +135,28 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     if (connectionManagerRef.current) return;
     if (!streamReady) return; // Wait for stream to be ready
 
-    const manager = createConnectionManager(
-      schema, // Use prop schema, not state.schema
-      (newStatus: string) => setStatus(newStatus),
-      'English',
-      sharedStream || undefined,
-      handleNextField
-    );
-    connectionManagerRef.current = manager;
-    setConnectionManager(manager);
+    const initManager = async () => {
+      const token = user ? await user.getIdToken() : undefined;
+
+      const manager = createConnectionManager(
+        schema, // Use prop schema, not state.schema
+        (newStatus: string) => setStatus(newStatus),
+        'English',
+        sharedStream || undefined,
+        handleNextField,
+        token
+      );
+      connectionManagerRef.current = manager;
+      setConnectionManager(manager);
+    };
+
+    initManager();
 
     return () => {
-      manager.disconnect();
-      connectionManagerRef.current = null;
+      if (connectionManagerRef.current) {
+        connectionManagerRef.current.disconnect();
+        connectionManagerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamReady]); // Only create when stream is ready, ignore schema/sharedStream changes

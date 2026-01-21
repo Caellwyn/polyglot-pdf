@@ -170,7 +170,8 @@ export function createConnectionManager(
 	onStatusChange: (status: string) => void,
 	initialFillLanguage: string = 'English',
 	sharedStream?: MediaStream,
-	onNextField?: (fieldId: string | null) => void
+	onNextField?: (fieldId: string | null) => void,
+	token?: string
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
@@ -392,7 +393,7 @@ export function createConnectionManager(
 
 				// Try to connect to localhost first
 				try {
-					await connection.connect(wsUrl)
+					await connection.connect(wsUrl, 10000, token)
 					connectedUrl = wsUrl  // Track successful connection
 					console.log('[VFF Connection] ✅ Connected:', wsUrl)
 				} catch (localError) {
@@ -409,7 +410,7 @@ export function createConnectionManager(
 					}, fillLanguage)
 					capturePreFilledValues(connection, schema)
 
-					await connection.connect(cloudUrl)
+					await connection.connect(cloudUrl, 10000, token)
 					connectedUrl = cloudUrl  // Track successful connection
 					console.log('[VFF Connection] ✅ Connected to cloud')
 				}

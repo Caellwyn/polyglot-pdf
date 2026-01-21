@@ -550,27 +550,30 @@ async def _handle_fill_session(
 		await service.end_session()
 
 
+from ..services.auth import verify_token
+
 @router.websocket("/fill")
 async def fill_form_from_schema(
 	websocket: WebSocket,
+	token: str = Query(...),
 	send_transcript: bool = Query(default=False),
 	service = Depends(get_form_filling_service),
 ):
 	"""
 	Stateless web form filling endpoint.
-	
-	Client sends handshake message:
-	   {"type": "handshake", "schema": {...}, "current_values": {...}, "fill_language": "English"}
-	
-	Backend responds:
-	   {"type": "session_ready", "session_id": "web_xxx", "ephemeral": true}
-	
-	Backend creates ephemeral session (connection-scoped only).
-	No persistent storage - state lives entirely on client.
+    ...
 	"""
 	log = _log.bind(endpoint="fill_from_schema")
 	
 	try:
+		# Verify Auth Token
+		try:
+			verify_token(token)
+		except Exception as e:
+			log.warning("websocket_auth_failed", error=str(e))
+			await websocket.close(code=1008, reason="Authentication failed")
+			return
+
 		await websocket.accept()
 	except RuntimeError as e:
 		# WebSocket already in wrong state (likely already accepted/closed)

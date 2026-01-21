@@ -68,9 +68,16 @@ export class WebFormConnection {
   /**
    * Connect to WebSocket endpoint and send full form schema
    */
-  async connect(wsUrl: string = "ws://localhost:8000/ws/fill", timeoutMs: number = 10000): Promise<void> {
+  async connect(wsUrl: string = "ws://localhost:8000/ws/fill", timeoutMs: number = 10000, token?: string): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
+    }
+
+    // Append token to URL if provided
+    let finalUrl = wsUrl;
+    if (token) {
+      const separator = wsUrl.includes('?') ? '&' : '?';
+      finalUrl = `${wsUrl}${separator}token=${token}`;
     }
 
     // Clear idle timeout flag on reconnect (user manually clicked reconnect)
@@ -80,7 +87,7 @@ export class WebFormConnection {
     }
 
     // Store the URL we're connecting to
-    this.connectedUrl = wsUrl;
+    this.connectedUrl = finalUrl;
 
     // Don't change status to "connecting" during section switches
     // (keeps current status visible until reconnected)
@@ -98,7 +105,7 @@ export class WebFormConnection {
       }, timeoutMs);
 
       try {
-        this.ws = new WebSocket(wsUrl);
+        this.ws = new WebSocket(finalUrl);
 
         this.ws.onopen = () => {
           clearTimeout(timeout);
