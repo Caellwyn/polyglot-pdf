@@ -7,9 +7,7 @@ from pathlib import Path
 
 
 class Settings(BaseModel):
-	# MODEL_LIVE: str = "gemini-live-2.5-flash" Deprecated
-	MODEL_NATIVE: str = "gemini-live-2.5-flash-preview-native-audio-09-2025"
-	# MODEL_LABELING: str | None = None Deprecated
+	MODEL_NATIVE: str = "gemini-live-2.5-flash-native-audio"
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals

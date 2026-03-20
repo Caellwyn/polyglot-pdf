@@ -19,6 +19,8 @@
 		"predev:schema": "npm run form-kits:prepare",
 		"build:schema": "vite build --config vite.config.schema.ts",
 		"prebuild:schema": "npm run form-kits:prepare",
+		"build:schema:demo": "vite build --config vite.config.schema.ts --mode demo",
+		"prebuild:schema:demo": "npm run form-kits:prepare",
 		"preview": "vite preview --port 5173",
 		"prepreview": "npm run form-kits:prepare",
 		"preview:demo": "vite preview --config vite.config.demo.ts --port 5174 --outDir dist/demo",
@@ -30,7 +32,8 @@
 		"parse": "tsx scripts/parse-form.ts",
 		"gen:form-manifest": "tsx scripts/generate-form-manifest.ts",
 		"postinstall": "npm run form-kits:prepare",
-		"deploy": "npm run build:schema && firebase deploy"
+		"deploy": "npm run build:schema && firebase deploy --project polyglot-forms-919f2",
+		"deploy:demo": "npm run build:schema:demo && firebase deploy --only hosting --project polyglot-demo-aa709"
 	},
 	"dependencies": {
 		"@ricky0123/vad-react": "^0.0.34",
