@@ -9,7 +9,8 @@ import {
     browserLocalPersistence,
     setPersistence
 } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { auth, db } from '../firebase/config';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AuthContextType {
     user: User | null;
@@ -28,11 +29,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         // Enable local persistence
         setPersistence(auth, browserLocalPersistence).catch(console.error);
-
-        import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-        import { db } from '../firebase/config';
-
-        // ... (previous imports)
 
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setUser(currentUser);
