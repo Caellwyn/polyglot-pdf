@@ -48,27 +48,26 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 
 ## 📊 Current Status
 
-**Status**: Planning Phase - Major Refactor
-**Last Updated**: October 25, 2025
+**Status**: Live Demo Available
+**Last Updated**: March 2026
 
-### Existing System (Voice Form Filler)
-- ✅ Gemini Live API voice integration working
+### Live Demo
+
+- **Demo site**: [polyglot-demo-aa709.web.app](https://polyglot-demo-aa709.web.app)
+- **Production site**: [polyglot-forms-919f2.web.app](https://polyglot-forms-919f2.web.app)
+
+### Working Features
+- ✅ Firebase Authentication (Google sign-in + email/password)
+- ✅ Authorized-email gating for sign-up (Firestore `authorized_emails` collection)
+- ✅ Gemini Live API voice integration (`gemini-live-2.5-flash-native-audio`)
+- ✅ Schema-driven form filling with section navigation
 - ✅ 18+ spoken languages with real-time switching
-- ✅ 174-field adult intake form tested and working
 - ✅ Stateless backend architecture (HIPAA compliant)
-- ✅ WebSocket real-time communication with <50ms barge-in
+- ✅ WebSocket real-time communication
 - ✅ Hybrid voice/keyboard workflow
-- ✅ Comprehensive test coverage
-
-### Planned Enhancements (In Progress)
-- 🔄 Admin UI for schema creation and management
-- 🔄 PDF generation with embedded metadata
-- 🔄 PDF upload and data extraction for session resumption
-- 🔄 Numbered paragraph fields for voice navigation
-- 🔄 Enhanced section-based navigation
-- 🔄 Session management and validation system
-
-See `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for detailed roadmap.
+- ✅ GCS-backed form kit storage for deployed environments
+- ✅ PDF generation from filled forms
+- ✅ Dual deployment paths (demo vs production)
 
 ## 🚀 Quick Start
 
@@ -362,48 +361,61 @@ sessionStorage.clear()
 - ✅ Update `TECHNICAL_GUIDE.md` after code changes
 - ✅ Use `textContent` or `escapeHtml()` for display
 
-## 🚢 Production Deployment
+## 🚢 Deployment
 
-**Note:** Deployment procedures are being updated for the new PDF-based architecture. Current instructions are for the existing voice form filler system.
+Two independent deployment paths exist — demo and production — targeting separate Firebase/GCP projects.
+
+### Frontend
+
+```bash
+cd frontend
+
+# Deploy to demo (polyglot-demo-aa709)
+npm run deploy:demo
+
+# Deploy to production (polyglot-forms-919f2)
+npm run deploy
+```
+
+Each command runs `form-kits:prepare` → Vite build → `firebase deploy --only hosting`. The demo build loads `frontend/.env.demo`; production loads `frontend/.env.production`.
 
 ### Backend (Google Cloud Run)
 
 ```bash
-# Set your GCP project
-export VOICE_PROJECT_NAME=your-project-id
-
-# Deploy backend
 cd backend
-./deploy-backend.sh
+
+# Deploy to demo project
+POLYGLOT_PROJECT_NAME=polyglot-demo-aa709 ./deploy-new.sh polyglot-backend polyglot-demo-aa709
+
+# Deploy to production project
+POLYGLOT_PROJECT_NAME=polyglot-forms-919f2 ./deploy-new.sh polyglot-backend polyglot-forms-919f2
 ```
 
-**Environment Variables (Cloud Run):**
-- `GOOGLE_API_KEY` - Gemini API key (required)
-- Set via: `gcloud run services update voice-form-filler --set-env-vars GOOGLE_API_KEY=xxx`
+**Required Cloud Run environment variables** (set via `gcloud run services update --update-env-vars`):
 
-### Production Checklist
+- `GOOGLE_API_KEY` — Gemini API key
+- `FORM_KITS_MODE=gcs`
+- `FORM_KITS_GCS_BUCKET=<project-id>-form-kits`
 
-**Backend:**
-- [ ] `GOOGLE_API_KEY` set in Cloud Run
-- [ ] CORS configured in `backend/cors.json` for production domains
-- [ ] Health check endpoint responding
-- [ ] Structured logging configured
-- [ ] Session storage configured (file-based for MVP, DB for production)
-- [ ] PDF generation tested on production OS
+### Auth Setup (Firebase Console)
 
-**Frontend:**
-- [ ] Production backend URL configured (no localhost references)
-- [ ] Environment-specific configs set
-- [ ] Bundle optimized and tested (<500KB gzipped target)
-- [ ] VAD parameters tuned (MIN_SPEECH_DURATION_MS=45ms for fast barge-in)
+For each project:
 
-**Testing:**
-- [ ] Test form creation via admin UI
-- [ ] Test PDF generation with various schemas
-- [ ] Test PDF upload/extraction round-trip
-- [ ] Verify voice commands work on production
-- [ ] Check microphone permissions flow
-- [ ] Validate WebSocket connection stability
+1. **Authentication → Sign-in method**: Enable *Google* and *Email/Password*
+2. **Firestore → authorized\_emails collection**: Add documents with field `email` (string) for each user allowed to self-register with email/password. Google sign-in is unrestricted.
+
+### Firestore Security Rules
+
+See `firestore.rules` — users can only read/write their own profile document. The `authorized_emails` collection is readable by unauthenticated users (required for pre-signup check) but not writable from the client.
+
+### Deployment Checklist
+
+- [ ] `GOOGLE_API_KEY` set in Cloud Run for target project
+- [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
+- [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
+- [ ] `authorized_emails` collection populated for email sign-up users
+- [ ] `.env.demo` / `.env.production` contain correct `VITE_WS_URL` and Firebase config
+- [ ] Verify WebSocket connects after deploy (check Cloud Run logs for `ws_connect`)
 
 ## 📝 License
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Login } from '../auth/Login';
+import '../auth/Login.css';
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
@@ -11,8 +12,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
     if (loading) {
         return (
-            <div className="flex min-h-screen items-center justify-center">
-                <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-indigo-600"></div>
+            <div className="auth-loading">
+                <div className="auth-spinner"></div>
             </div>
         );
     }

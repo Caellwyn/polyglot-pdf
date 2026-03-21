@@ -15,7 +15,8 @@
 - ❌ CRITICAL never change form schemas
 
 ### Always Do
-- ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
+
+- ✅ Use latest Gemini model: `gemini-live-2.5-flash-native-audio`
 - ✅ Write tests alongside implementation (not after)
 - ✅ Maintain stateless backend (client holds form state, server holds schemas)
 - ✅ Prioritize accuracy over speed (especially for non-English speakers)
@@ -139,7 +140,8 @@ The project is transitioning from a demo-based architecture to a schema-driven a
 - ❌ Mix planning and implementation in same document
 
 ### Always Do
-- ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
+
+- ✅ Use latest Gemini model: `gemini-live-2.5-flash-native-audio`
 - ✅ Write tests alongside implementation (not after)
 - ✅ Maintain stateless backend (client holds form state, server holds schemas)
 - ✅ Prioritize accuracy over speed (especially for non-English speakers)
@@ -161,10 +163,11 @@ The project is transitioning from a demo-based architecture to a schema-driven a
 
 ### Frontend
 - **Framework**: React 18.3 + TypeScript
+- **Auth**: Firebase Authentication (Google + email/password) with Firestore user profiles
 - **State Management**: SchemaFormStateManager (sessionStorage-backed)
 - **Audio**: 16kHz/24kHz PCM16 with WebRTC VAD
-- **Styling**: Tailwind CSS
-- **Build**: Vite
+- **Styling**: Plain CSS (component-scoped)
+- **Build**: Vite (dual-mode: `--mode demo` / production)
 - **Testing**: Vitest with 66+ tests passing
 
 ### Infrastructure
