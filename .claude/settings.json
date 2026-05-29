@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:polyglot-demo-aa709.firebaseapp.com)",
+      "Bash(grep -o 'Login.\\\\{0,2000\\\\}' /tmp/jan_bundle.js)",
+      "Bash(grep -oP 'function [A-Z][a-z]*\\\\\\(\\\\\\).{0,3000}Sign in with Google.{0,1000}' /tmp/jan_bundle.js)",
+      "Bash(python3.exe -c \":*)",
+      "Bash(node -e \":*)",
+      "Bash(python scripts/bd_safe.py:*)",
+      "Bash(python scripts/closeout_housekeeping.py:*)",
+      "Bash(python scripts/journal_scaffold.py:*)",
+      "Bash(python scripts/copilot_watch.py:*)",
+      "Bash(python scripts/check_doc_freshness.py:*)",
+      "Bash(venv/Scripts/python.exe scripts/bd_safe.py:*)",
+      "Bash(venv/Scripts/python.exe scripts/closeout_housekeeping.py:*)",
+      "Bash(venv/Scripts/python.exe scripts/journal_scaffold.py:*)",
+      "Bash(venv/Scripts/python.exe scripts/copilot_watch.py:*)",
+      "Bash(venv/Scripts/python.exe scripts/check_doc_freshness.py:*)",
+      "Bash(bd ready)",
+      "Bash(bd show:*)",
+      "Bash(bd orphans)",
+      "Bash(bd stale:*)",
+      "Bash(bd dolt pull)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ]
+  }
+}

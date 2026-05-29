@@ -1,0 +1,479 @@
+"""Watch a GitHub PR for GitHub Copilot review COMPLETION, then exit.
+
+Background
+----------
+The development cycle waits on Copilot's auto-review after every PR open
+(and after every "@copilot please review" re-trigger). Historically the
+orchestrating agent polled `gh api .../comments` every few minutes -- each
+poll a full, expensive model turn that did nothing but run one shell
+command and check whether a counter moved. This script moves that wait OUT
+of the model: run it via the agent harness's `run_in_background`, and the
+agent is woken exactly once, when the review reaches a terminal state, with
+the verdict already classified. Zero polling turns.
+
+Why "review completion", not "a new comment"
+---------------------------------------------
+The COMMON case is Copilot finishing a review with NO inline comments (just
+a completed review whose state is the verdict). "No comment yet" and "done,
+nothing to say" look identical if you only watch the inline-comment stream,
+so a naive new-comment watcher would hang forever on a clean review. This
+script instead watches for the review to COMPLETE and then classifies the
+terminal state.
+
+Timeline-driven lifecycle
+-------------------------
+The authoritative "where is the review" signal is the issue TIMELINE
+(`/issues/{n}/timeline`), NOT the reviews/comments endpoints -- those only
+populate after a verdict submits, so they can't tell "not started" from "in
+progress" from "finished with nothing," and they hide two terminal states
+(Copilot error; finished-with-no-review). The watcher reads the timeline:
+
+  copilot_work_started   -> in flight; keep waiting (no premature TIMEOUT)
+  reviewed               -> a verdict submitted; classify it (below)
+  copilot_work_finished  -> Copilot done, produced no review -> CLEAN
+
+Once a `reviewed` event lands, the findings come from three surfaces (a
+verdict can land on any; watching one misses the others):
+
+  1. Inline review comments  -> GET /repos/{o}/{r}/pulls/{n}/comments
+  2. Top-level reviews        -> GET /repos/{o}/{r}/pulls/{n}/reviews
+  3. PR issue comments        -> GET /repos/{o}/{r}/issues/{n}/comments
+
+A `reviewed` event whose body is "Copilot encountered an error..." is an
+ERROR, not a finding.
+
+Terminal states (printed as the final line: "RESULT: <STATE>")
+--------------------------------------------------------------
+  COMMENTS -- review complete, Copilot left findings. The findings are
+              printed so the agent sees them without another API call.
+  CLEAN    -- review complete, no findings (the common case).
+  ERROR    -- the review failed or Copilot hit a quota/availability error.
+              Surfaced to the user; NO auto-retry (a quota error will not
+              clear for hours, so backoff just burns wall-clock). The user
+              decides whether to wait out the reset or proceed without
+              Copilot.
+  TIMEOUT  -- no completed review appeared within --timeout-min. Distinct
+              from ERROR (exit code 2 vs 1) so a caller can retry-later on a
+              timeout but investigate on a genuine failure.
+
+Any unexpected crash is caught and reported as RESULT: ERROR with the
+exception text, so the agent is woken with a real signal rather than the
+script dying silently (which would look like "still waiting" forever).
+
+Usage
+-----
+    python scripts/copilot_watch.py <pr-number> [--repo OWNER/REPO]
+        [--timeout-min N] [--poll-sec N] [--since ISO8601]
+
+`--since` lets the caller scope detection to reviews/comments created after
+a known timestamp (e.g. the moment of a "@copilot please review"
+re-trigger), so a re-review loop does not re-detect the previous round's
+verdict.
+
+Exit codes: 0 for COMMENTS/CLEAN, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
+ERROR are distinct so a shell caller can retry-later on a timeout but
+investigate on a genuine error. The RESULT line is the contract; the exit
+code mirrors it for shell callers.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+
+# Make this script's dir importable so `import swarm_config` works under both
+# direct execution and importlib-based test loading (see bd_safe.py note).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import swarm_config  # noqa: E402
+
+# Login substrings that identify the Copilot reviewer. Must match Copilot
+# specifically and NOT the generic "github-actions[bot]" actor, which is
+# shared by every Actions workflow (CI status, labelers, release bots) --
+# matching it would misclassify an unrelated bot's review as a Copilot
+# verdict and exit early with a bogus result. Copilot's review actor has
+# consistently carried "copilot" in its login (e.g. "copilot-pull-request-
+# reviewer[bot]"); match that case-insensitive substring only.
+COPILOT_LOGIN_MARKERS = ("copilot",)
+
+# Review states that represent a CURRENT verdict. APPROVED /
+# CHANGES_REQUESTED / COMMENTED are "the review finished with a verdict";
+# PENDING is still in progress. DISMISSED is deliberately EXCLUDED: a
+# dismissed review is not a current verdict (it was cleared, usually during
+# a re-review), so treating it as terminal would make the watcher exit early
+# on a stale review while the real new verdict is still pending.
+TERMINAL_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
+
+# Non-APPROVED terminal states are a verdict EVEN WITH AN EMPTY BODY -- the
+# state itself is the signal, so they must classify as COMMENTS, never CLEAN.
+NON_CLEAN_STATES = {"CHANGES_REQUESTED"}
+
+# Copilot's lifecycle on the issue TIMELINE (/issues/{n}/timeline). These are
+# the authoritative "where is the review" signals -- the reviews/comments
+# endpoints only populate after a verdict submits, so they can't distinguish
+# "not started" from "in progress" from "finished with nothing." Event names
+# confirmed against live PRs 2026-05-29.
+COPILOT_WORK_STARTED = "copilot_work_started"    # in flight -- keep waiting
+COPILOT_WORK_FINISHED = "copilot_work_finished"  # terminal: done (may be CLEAN)
+COPILOT_REVIEWED = "reviewed"                     # terminal: a verdict submitted
+
+# When Copilot fails (e.g. quota), it posts a `reviewed` event whose BODY is
+# this sentence -- NOT a real verdict. Detect it so it classifies as ERROR
+# instead of being mistaken for a COMMENTS finding.
+COPILOT_ERROR_BODY_PREFIX = "Copilot encountered an error"
+
+
+def _run_gh_api(path: str) -> object:
+    """Call `gh api --paginate <path>` and return parsed JSON.
+
+    `--paginate` follows GitHub's Link headers so a PR with more than one
+    page of comments/reviews (>30 by default) is returned in full rather
+    than silently truncated. For list endpoints, gh concatenates the pages
+    into a single JSON array.
+
+    Raises RuntimeError on non-zero exit or unparseable output so the caller
+    can classify it as ERROR rather than crashing.
+    """
+    # encoding="utf-8" is REQUIRED: GitHub's API returns UTF-8, but
+    # text=True alone decodes with the platform default (cp1252 on Windows),
+    # which crashes the subprocess reader thread on any non-cp1252 byte --
+    # e.g. a curly quote in a Copilot review body. errors="replace" keeps a
+    # stray undecodable byte from being fatal.
+    # TimeoutExpired (a hung gh call) and OSError (gh missing / not on PATH)
+    # are converted to RuntimeError so the caller's transient-retry path
+    # handles them, rather than escaping as an "Unexpected crash".
+    try:
+        proc = subprocess.run(
+            ["gh", "api", "--paginate", path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("gh api {} timed out after 60s".format(path))
+    except OSError as exc:
+        raise RuntimeError("gh api {} could not run: {}".format(path, exc))
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "gh api {} failed (exit {}): {}".format(
+                path, proc.returncode, proc.stderr.strip() or "no stderr"
+            )
+        )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("gh api {} returned non-JSON: {}".format(path, exc))
+
+
+def _is_copilot(login: str) -> bool:
+    lo = (login or "").lower()
+    return any(marker in lo for marker in COPILOT_LOGIN_MARKERS)
+
+
+def _parse_iso(ts: str) -> datetime:
+    """Parse a GitHub ISO8601 timestamp (e.g. 2026-05-28T12:00:00Z)."""
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def _after(ts: str, since: datetime | None) -> bool:
+    """True if the timestamp is at/after `since` (or if no `since` filter)."""
+    if since is None:
+        return True
+    try:
+        return _parse_iso(ts) >= since
+    except (ValueError, AttributeError):
+        # Unparseable timestamp -- include it rather than silently drop a
+        # possibly-real verdict.
+        return True
+
+
+def _pr_is_closed(repo: str, pr: int) -> bool:
+    data = _run_gh_api("repos/{}/pulls/{}".format(repo, pr))
+    return isinstance(data, dict) and data.get("state") == "closed"
+
+
+def _latest_copilot_review(repo: str, pr: int, since: datetime | None):
+    """Return the most recent COMPLETED Copilot review at/after `since`, or None.
+
+    Surface 2 (top-level reviews). A completed review IS the verdict even
+    when it carries no inline comments -- this is how CLEAN is detected. We
+    return only the LATEST one so that findings can be scoped to this round
+    (see _collect_findings); a stale prior-round review must not set the
+    floor for the current round's findings.
+    """
+    latest = None
+    latest_ts = None
+    for rv in _run_gh_api("repos/{}/pulls/{}/reviews".format(repo, pr)) or []:
+        login = (rv.get("user") or {}).get("login", "")
+        state = rv.get("state", "")
+        submitted = rv.get("submitted_at") or rv.get("created_at") or ""
+        if not _is_copilot(login):
+            continue
+        if state not in TERMINAL_REVIEW_STATES:
+            continue  # PENDING -- still reviewing
+        if not _after(submitted, since):
+            continue
+        try:
+            ts = _parse_iso(submitted)
+        except (ValueError, AttributeError):
+            ts = None
+        # Prefer the review with the latest parseable timestamp; an
+        # unparseable timestamp loses to any parseable one but still beats
+        # nothing.
+        if latest is None or (ts is not None and (latest_ts is None or ts > latest_ts)):
+            latest, latest_ts = rv, ts
+    return latest
+
+
+def _timeline_state(repo: str, pr: int, since: datetime | None):
+    """Read Copilot's lifecycle from the issue timeline.
+
+    Returns one of:
+      "reviewed"  -- a `reviewed` event landed (verdict; classify via reviews
+                     endpoint -- could be COMMENTS / CLEAN / ERROR-body).
+      "finished"  -- `copilot_work_finished` with no later `reviewed`: Copilot
+                     is done and produced no review -> treat as CLEAN.
+      "working"   -- `copilot_work_started` seen, no terminal event yet: keep
+                     waiting (do NOT TIMEOUT prematurely; a verdict is coming).
+      None        -- no Copilot activity at/after `since`: not started yet.
+
+    Only events at/after `since` count, so a re-review round is not confused
+    with the previous round's terminal events.
+    """
+    started = finished = reviewed = False
+    for ev in _run_gh_api("repos/{}/issues/{}/timeline".format(repo, pr)) or []:
+        name = ev.get("event", "")
+        actor = (ev.get("actor") or ev.get("user") or {}).get("login", "")
+        when = ev.get("created_at") or ev.get("submitted_at") or ""
+        # review_requested carries the requester as actor (a human), so don't
+        # gate the copilot_* / reviewed events on actor being Copilot for the
+        # request event; but the work/review events themselves are Copilot's.
+        if name == COPILOT_REVIEWED and _is_copilot(actor) and _after(when, since):
+            reviewed = True
+        elif name == COPILOT_WORK_FINISHED and _after(when, since):
+            finished = True
+        elif name == COPILOT_WORK_STARTED and _after(when, since):
+            started = True
+    if reviewed:
+        return "reviewed"
+    if finished:
+        return "finished"
+    if started:
+        return "working"
+    return None
+
+
+def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
+    """Collect Copilot findings tied to the current review round.
+
+    Inline comments are matched EXACTLY to this round by
+    `pull_request_review_id == review['id']` -- not by timestamp. Copilot
+    posts its inline comments slightly BEFORE it submits the review, so
+    flooring inline comments at the review's `submitted_at` would drop
+    same-round findings and misclassify as CLEAN. The review_id link is the
+    authoritative round boundary for inline comments.
+
+    Issue comments have no review_id, so they fall back to the `floor`
+    timestamp (the round boundary derived from the review / caller --since),
+    which keeps prior-round issue comments from leaking in. The review's own
+    body is always included -- it belongs to this round by construction.
+    """
+    findings = []
+    review_id = review.get("id")
+
+    body = (review.get("body") or "").strip()
+    if body:
+        findings.append("[review:{}] {}".format(review.get("state", "?"), body))
+
+    # Surface 1: inline review comments, matched to THIS review by id.
+    for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
+        login = (c.get("user") or {}).get("login", "")
+        if _is_copilot(login) and c.get("pull_request_review_id") == review_id:
+            loc = c.get("path", "?")
+            line = c.get("line") or c.get("original_line") or "?"
+            findings.append(
+                "[inline {}:{}] {}".format(loc, line, (c.get("body") or "").strip())
+            )
+
+    # Surface 3: PR issue comments, scoped to this round by timestamp
+    # (no review_id linkage exists for issue comments).
+    for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
+        login = (c.get("user") or {}).get("login", "")
+        created = c.get("created_at", "")
+        if _is_copilot(login) and _after(created, floor):
+            findings.append("[issue-comment] {}".format((c.get("body") or "").strip()))
+
+    return findings
+
+
+# Exit codes by terminal state. COMMENTS/CLEAN are "the review happened"
+# (success); TIMEOUT and ERROR are distinct so a shell caller can branch
+# (retry-later on TIMEOUT vs investigate on ERROR) without parsing text.
+_EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "TIMEOUT": 2, "ERROR": 1}
+
+# Consecutive transient-error tolerance before giving up. A 1-second network
+# blip or token refresh should not be terminal; a real quota exhaustion will
+# fail every poll and trip this after a few rounds without long backoff.
+MAX_CONSECUTIVE_API_ERRORS = 3
+
+
+def _emit(state: str, detail: str = "") -> int:
+    """Print the contract result block and return the matching exit code."""
+    if detail:
+        print(detail)
+    print("RESULT: {}".format(state))
+    return _EXIT_CODES.get(state, 1)
+
+
+def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
+    """A `reviewed` event landed; fetch the review and emit the verdict.
+
+    Handles three sub-cases:
+      - ERROR-body ("Copilot encountered an error...") -> ERROR, not a finding.
+      - findings present OR a non-clean state (CHANGES_REQUESTED) -> COMMENTS.
+      - otherwise -> CLEAN.
+    If the findings fetch fails after we know a verdict exists, we still emit
+    the verdict from the review body / state rather than discarding it.
+    """
+    review = _latest_copilot_review(repo, pr, since)
+    if review is None:
+        # Timeline said "reviewed" but the reviews endpoint hasn't caught up
+        # (eventual consistency). Signal the caller to keep polling.
+        return None
+
+    body = (review.get("body") or "").strip()
+    state = review.get("state", "")
+
+    if body.startswith(COPILOT_ERROR_BODY_PREFIX):
+        return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
+
+    floor = since
+    submitted = review.get("submitted_at") or review.get("created_at") or ""
+    try:
+        review_ts = _parse_iso(submitted)
+        if floor is None or review_ts > floor:
+            floor = review_ts
+    except (ValueError, AttributeError):
+        pass
+
+    try:
+        findings = _collect_findings(repo, pr, floor, review)
+    except RuntimeError as exc:
+        # Verdict already known -- do not throw it away on a secondary fetch
+        # failure. A non-clean state or a non-empty body is still COMMENTS.
+        if state in NON_CLEAN_STATES or body:
+            return _emit(
+                "COMMENTS",
+                "Copilot review complete (state={}, could not fetch inline "
+                "comments: {}). Body:\n\n{}".format(state, exc, body or "(none)"),
+            )
+        return _emit(
+            "CLEAN",
+            "Copilot review complete, no review-body findings "
+            "(could not fetch inline comments: {}).".format(exc),
+        )
+
+    # A CHANGES_REQUESTED state is a verdict even with no findings text.
+    if findings or state in NON_CLEAN_STATES:
+        detail = "Copilot left {} finding(s):\n\n{}".format(
+            len(findings), "\n\n".join(findings)
+        ) if findings else "Copilot review state={} with no inline findings.".format(state)
+        return _emit("COMMENTS", detail)
+    return _emit("CLEAN", "Copilot review complete with no findings.")
+
+
+def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime | None) -> int:
+    """Poll the timeline until Copilot reaches a terminal state, then classify.
+
+    Timeline-driven: `copilot_work_started` means "keep waiting" (a verdict is
+    coming, so we never TIMEOUT while Copilot is provably mid-review);
+    `reviewed` means classify the verdict; `copilot_work_finished` with no
+    review means Copilot finished and produced nothing (CLEAN).
+    """
+    deadline = time.monotonic() + timeout_min * 60
+    consecutive_errors = 0
+    while True:
+        try:
+            state = _timeline_state(repo, pr, since)
+            if state == "reviewed":
+                rc = _classify_reviewed(repo, pr, since)
+                if rc is not None:
+                    return rc
+                # reviews endpoint not yet consistent -- fall through to wait.
+            elif state == "finished":
+                return _emit(
+                    "CLEAN", "Copilot finished work and produced no review."
+                )
+            # state == "working" or None -> keep polling (below).
+            closed = state is None and _pr_is_closed(repo, pr)
+        except RuntimeError as exc:
+            # Transient (network blip, token refresh, 5xx, gh hang/missing).
+            # Retry within the poll loop; give up only after several in a row.
+            consecutive_errors += 1
+            if consecutive_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                return _emit(
+                    "ERROR",
+                    "Copilot watch failed {} times in a row; giving up. "
+                    "Last error: {}".format(consecutive_errors, exc),
+                )
+            time.sleep(poll_sec)
+            continue
+        consecutive_errors = 0
+
+        # Only treat a closed PR as terminal when Copilot never started -- if
+        # it is "working", let the review land even as the PR closes.
+        if closed:
+            return _emit("CLEAN", "PR is closed; no Copilot review pending.")
+
+        if time.monotonic() >= deadline:
+            # "working" past the deadline is still a TIMEOUT, but the message
+            # distinguishes "never started" from "started but slow".
+            note = "started but not finished" if state == "working" else "never started"
+            return _emit(
+                "TIMEOUT",
+                "Timed out after {} min; Copilot review {}.".format(timeout_min, note),
+            )
+        time.sleep(poll_sec)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Watch a PR for Copilot review completion.")
+    parser.add_argument("pr", type=int, help="PR number")
+    parser.add_argument(
+        "--repo", default=swarm_config.repo(), help="OWNER/REPO"
+    )
+    parser.add_argument("--timeout-min", type=int, default=20)
+    parser.add_argument("--poll-sec", type=int, default=20)
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="ISO8601; only count reviews/comments at or after this time "
+        "(use the moment of a re-trigger to avoid re-detecting the prior round)",
+    )
+    args = parser.parse_args(argv)
+
+    since = None
+    if args.since:
+        try:
+            since = _parse_iso(args.since)
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=timezone.utc)
+        except ValueError as exc:
+            return _emit("ERROR", "Bad --since value: {}".format(exc))
+
+    try:
+        return watch(args.repo, args.pr, args.timeout_min, args.poll_sec, since)
+    except KeyboardInterrupt:
+        return _emit("ERROR", "Interrupted.")
+    except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently
+        return _emit("ERROR", "Unexpected crash: {!r}".format(exc))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

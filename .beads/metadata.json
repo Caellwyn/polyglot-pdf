@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "polyglot_pdf",
+  "project_id": "6ce11688-83eb-4e4c-938a-4de2425aa1e9"
+}
