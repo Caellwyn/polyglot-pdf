@@ -15,19 +15,21 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 > venv, which lives ONLY in the main repo at `backend/.venv` -- worktrees do NOT
 > have their own venv. Resolve it from anywhere (main checkout or a worktree)
 > via the git common dir, and run pytest against `backend/tests/` with
-> `PYTHONPATH` set to the repo root. Run this ONCE at the start, then use `$PY`
-> and `$REPO` for every Python/pytest command below:
+> `PYTHONPATH` set to the repo root. The resolution is these two lines:
 >
 > ```bash
 > REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 > PY="$REPO/backend/.venv/Scripts/python.exe"   # Windows; on macOS/Linux: $REPO/backend/.venv/bin/python
 > ```
 >
-> So for steps YOU run by hand, set `$REPO`/`$PY` once (above) then use
-> `"$PY" "$REPO/scripts/X.py"`; the test step is
-> `PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q` (NOT `pytest tests/`).
-> The two `!`...`` lines that auto-run at skill-load (Step 1, Step 2) can't see
-> `$REPO` yet, so they derive it inline in one shot -- already wired below.
+> **Shell state does NOT persist between tool calls** (the cwd and any vars
+> reset each call -- see CLAUDE.md scar tissue #3), so you CANNOT set these once
+> and reuse them in a later call. **Prepend both lines to every command** that
+> needs them, in the SAME Bash call. So a hand-run script step is
+> `REPO=...; PY=...; "$PY" "$REPO/scripts/X.py"` and the test step is
+> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`
+> (NOT `pytest tests/`). The `!`...`` lines that auto-run at skill-load (Step 1,
+> Step 2) already inline the resolution this way.
 
 ## Hard rules (read before doing anything)
 
@@ -92,7 +94,11 @@ Scaffold the entry for this bead. Use the bead id resolved in Step 0 (NOT a
 literal `$1` -- if the skill was invoked without an argument, `$1` is empty
 and you must pass the id you inferred from the branch or were given):
 
-`"$PY" "$REPO/scripts/journal_scaffold.py" <bead-id> [--sprint N] [--pr STR]`  (set `$PY`/`$REPO` per the layout note)
+`REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/journal_scaffold.py" <bead-id> [--sprint N] [--pr STR]`
+
+NOTE: this script writes into `$REPO` (the MAIN repo), not the worktree. If
+you're in a worktree, MOVE the generated `docs/journal/entries/...md` into the
+worktree so it ships on THIS branch, and delete the stray main-repo copy.
 
 (Pass `--sprint`/`--pr` only if this is a numbered sprint / multi-PR sprint; omit for hotfixes.) The script writes `docs/journal/entries/YYYY-MM-DD-bd-<suffix>-<slug>.md` with the frontmatter and the 5 empty sections.
 
@@ -105,7 +111,7 @@ Then YOU fill it in (this is judgment, not mechanics):
 
 Run the full suite (if slow, run it in the background and wait for the notification rather than polling):
 
-`PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`  (tests live under `backend/tests/` and need `PYTHONPATH` = repo root)
+`REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q`  -- where `$WT` is the worktree root (the dir you're working in). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection.
 
 If anything FAILS, stop and fix it before continuing -- a red suite is not eligible for a PR. If the project defines extra verification harnesses for the area you touched, run those too.
 
@@ -121,7 +127,7 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
    `gh pr create --base dev --title "<scope>(<context>): <summary> (bd <full-id>)" --body "<summary + a 'Fresh-eyes review' section you'll fill after triage>"`
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe AND avoids the draft->ready flip that would cost a second redundant Copilot review.
 2. **Start Copilot-watch** (round 1) via `run_in_background` so you're woken once with the verdict, no polling turns:
-   `"$PY" "$REPO/scripts/copilot_watch.py" <pr#>`  (set `$PY`/`$REPO` per the layout note; same invocation for the re-watch loop in Step 7)
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/copilot_watch.py" <pr#>`  (same invocation for the re-watch loop in Step 7)
 3. **Spawn the fresh-eyes reviewer** concurrently. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type); otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "sonnet", ... })`. Substitute the branch name. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
 
 Both run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum.

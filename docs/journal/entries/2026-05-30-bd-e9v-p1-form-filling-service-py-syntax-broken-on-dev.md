@@ -28,16 +28,19 @@ added to this file.
 **Blast radius (why it was latent, not loud):** `dependencies.py` imports
 `FormFillingService` lazily inside the `get_form_filling_service` factory, so
 `import backend.main` succeeds and the app boots. The factory only runs on the
-first `/ws/fill` connection — so a real connection would have crashed on
-disclaimer send. The un-importable module also broke pytest **collection** for
-every test importing it, silently disabling ~29 tests.
+first `/ws/fill` connection — so that connection would have crashed at import
+time (before any session method runs). The un-importable module also broke
+pytest **collection** for every test importing it, silently disabling ~29 tests.
 
 **No production impact (confirmed):** the demo Cloud Run image is built from
 the local working tree (`deploy-all.sh` → `gcloud builds submit`, not a git
 checkout of a branch), and the live demo works — so the running artifact has a
 valid file. The break is latent on the branches; the next deploy from
-dev/main, or the first `/ws/fill` disclaimer-send against that code, would
-crash. Severity stays P1 (branch correctness) with no live outage.
+dev/main would ship it, and the crash lands at the **first `/ws/fill`
+connection** — the lazy `get_form_filling_service` factory triggers the import
+there, so the `SyntaxError` fires before `send_disclaimer_message` is ever
+reached (the broken method never actually runs). Severity stays P1 (branch
+correctness) with no live outage.
 
 **Verification (against the worktree copy):** `py_compile` OK, `import` OK,
 collection 120 → **149** with **0 collection errors** (the 5 previously
@@ -55,18 +58,26 @@ release doc's example diff, no source. The damage was confined to this one file.
 - **3 → `od1`** (already tracked; e9v blocks it): `WS_IDLE_TIMEOUT_SEC == 60`
   asserts vs actual `120`. These are the asserts `od1` describes; they were
   silently not running because this file broke collection.
-- **5 → [`0rx`](#)** (filed, discovered-from e9v): rotted unit tests that went
+- **5 → `0rx`** (filed, discovered-from e9v): rotted unit tests that went
   dead in Dec and drifted against later code — `test_callback_handler` (×3, the
   `_handle_complete_section` → `_handle_switch_section` sections-canon rename),
   `test_jit_schema_loading::test_update_includes_next_field_schema`,
   `test_websocket_fill_web::test_websocket_schema_initializes_session`. `0rx`
   also covers a hygiene fix: the tracked, test-mutated
   `logs/confirmations/fss_test_12345.jsonl`.
-- **1 → [`4cm`](#)** (filed, discovered-from e9v, parented to AI-model epic
+- **1 → `4cm`** (filed, discovered-from e9v, parented to AI-model epic
   `9nl`): `test_live_ai_gemini_real_connection` — the API key works (socket
   connects) but the server returns `1008` rejecting cascade model
   `gemini-live-2.5-flash-preview` (the `MODEL_LIVE` default). Dormant because
   `USE_NATIVE_AUDIO=True`, but the cascade fallback name is stale.
+
+**Fresh-eyes review (PR #19) surfaced one more latent bug → `8x5`** (filed,
+discovered-from e9v, P2): `restart_gemini_session` (line ~385) passes four
+callbacks — `self.handle_form_update / handle_transcript / handle_audio /
+handle_tool_call` — that don't exist on the class, so a client
+`restart_gemini_session` WS message hits an `AttributeError` (caught + logged
+as `restart_gemini_session_failed`, so the restart silently fails). Pre-existing
+on dev, never ran because the module didn't import. Out of scope for e9v.
 
 **Tooling fix shipped in the same PR:** the `/closeout` skill assumed a
 repo-root `venv/` and `pytest tests/`; this repo's interpreter is
