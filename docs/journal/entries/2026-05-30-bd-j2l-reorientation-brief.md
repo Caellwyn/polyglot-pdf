@@ -51,7 +51,9 @@ purely from the handshake.
 `_handle_fill_session()` multiplexes the socket: PCM16/16 kHz audio frames →
 `stream_audio()`, and JSON control messages (`activity_start`/`activity_end` VAD
 signals, `change_spoken_language`, `next_field_hint`, `ping`/`stats`). An idle
-watchdog closes the socket after `WS_IDLE_TIMEOUT_SEC` (default 120 s).
+watchdog closes the socket after `WS_IDLE_TIMEOUT_SEC` (see `backend/config.py`;
+its value, inline comment, and tests are currently inconsistent — tracked for
+fix, so this brief cites the setting rather than a number).
 
 **Gemini Live** — wrapped by `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`)
 around `google.genai …aio.live.connect()`. The model exposes tools declared in
