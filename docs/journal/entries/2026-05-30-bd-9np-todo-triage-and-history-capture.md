@@ -28,7 +28,7 @@ its business/pilot context in place.
 | TODO item | Verdict | Evidence (verified 2026-05-30) |
 |---|---|---|
 | Field validation, confirmation system, native-language disclaimer, print/PDF fill | DONE | All four marked complete Nov 18-20 2025; confirmed live. |
-| `getFieldBySpokenName()` part->section fix | DONE | `schemaFormState.ts:654` uses `currentSectionId`/`completedSections`; no `currentPartId`/`completedParts`. |
+| `getFieldBySpokenName()` part->section fix | DONE | `schemaFormState.ts:658` (in the `getFieldBySpokenName` fn declared at 654) uses `currentSectionId`/`completedSections`; no `currentPartId`/`completedParts`. |
 | TECHNICAL_GUIDE.md v4.0 update | DONE | Marked complete. |
 | Logging Phase 1 (token tracking) | DONE | `structured_logger.py`, `dev_file_logger.py`, `log_schemas.py` present; usage_metadata extraction at `live_ai_gemini.py:1137-1150`. |
 | PII clears on close / clear-form | DONE | `schemaFormState.ts:403` `clear()` removes the storage key; `handleClearForm()` in `VoiceOverlayMobile.tsx`. Backend stateless. |
@@ -40,7 +40,7 @@ its business/pilot context in place.
 | console.log cleanup | LIVE | -> `polyglot-pdf-tp3`. Actual count **429** (`335 log / 64 error / 30 warn`), not the ~268 claimed. |
 | Highlight timing 1500 vs 2000ms | LIVE | -> `polyglot-pdf-nxb`. `webFormConnection.ts:1336` = 1500ms, `SchemaForm.tsx:129` = 2000ms. |
 | Future forms I-589 / I-485 / I-765 / N-400 | LIVE | -> `zmg` / `8t6` / `p7y` / `dqg`. Only `form-kits/i-90/` ships today. |
-| Logging roadmap Phases 2-6 | LIVE (partial/none) | -> `g0e` / `3ae` / `ytf` / `0bs` / `yqg`. Phase 2 partial (`form_session_id` tracked, no session events); Phase 4 partial (`log_field_voice_attempt()` exists, frontend/section-nav missing); Phases 3/5/6 absent. Home doc is `docs/standards/logging-and-cost.md` (`m8s`); this bead files the *work*, per m8s's own note. |
+| Logging roadmap Phases 2-6 | LIVE (partial/none) | -> `g0e` / `3ae` / `ytf` / `0bs` / `yqg`. Phase 2 partial (`form_session_id` tracked, no session events); Phase 4 partial (`log_field_voice_attempt()` exists, frontend/section-nav missing); Phases 3/5/6 absent. Home doc will be `docs/standards/logging-and-cost.md` (planned under `m8s`, not yet in-tree); this bead (9np) files the *work*, per the m8s bead's scope. |
 | Perf monitoring dashboard | LIVE | -> `polyglot-pdf-nt0` (depends on logging Phase 5). |
 | Digital save / cloud-resume | LIVE (future) | -> `polyglot-pdf-57d`; must reconcile with the stateless-backend + PII invariants. |
 | Pilot logistics: paper waivers, earbuds/mics, tablet hardware testing | NON-CODE | Operational, not engineering. Captured below; no bead. |
@@ -74,12 +74,17 @@ file drops to historical:
 - Cost per form ~$5 (Gemini API); target price **$20-50/form**. Gemini token
   cost per session dominates hosting cost (hosting is not the cost lever — see
   the keep-classic architecture decision).
-- Measured cost ~$0.20 for a 9-12 field session.
+- Measured cost ~$0.20 for a 9-12 field session. (Note: TODO.md carried both a
+  "~$5/form" figure and a "~$0.20 for 9-12 fields" figure in different sections;
+  reproduced here as-is. The discrepancy was never reconciled in the source —
+  likely an early estimate vs. a later measurement — so neither is authoritative
+  without re-measuring.)
 
 **Logging roadmap design** (the full Phase 2-6 plan, key metrics, and the
-NEVER-LOG / ALWAYS-LOG compliance split) now lives in
-`docs/standards/logging-and-cost.md` (`m8s`); the per-phase *work* is the
-`g0e..yqg` bead chain.
+NEVER-LOG / ALWAYS-LOG compliance split) is slated to live in
+`docs/standards/logging-and-cost.md` (planned under `m8s`, not yet written);
+until that doc lands, this journal entry + the original TODO.md preserve the
+design. The per-phase *work* is the `g0e..yqg` bead chain.
 
 **Already-completed-work rationale** (Nov 2025): field-validation hardening,
 the confirmation/liability system, the gated native-language disclaimer (18
@@ -99,13 +104,16 @@ the parts/section claim that's only *partly* done on the backend).
 
 - Superseded file: `planning_documents/TODO.md` (header now points here + at the
   beads).
-- Logging roadmap home: `docs/standards/logging-and-cost.md` (`m8s`).
+- Logging roadmap home (planned, not yet in-tree): `docs/standards/logging-and-cost.md` (`m8s`).
 - Terminology canon / rename: `m3f` / `gfb.4`. Doc archival: `4p0`.
 
 ## Doc freshness + tests
 
-`check_doc_freshness.py`: no docs to check (`docs/components/` + `docs/standards/`
-still empty under the gfb epic). This entry is tier-3 (not freshness-tracked).
+`check_doc_freshness.py` ran clean (no STALE docs whose `Tracks:` globs cover a
+file this branch changed). This entry is tier-3, which is not part of freshness
+tracking. (`docs/standards/` already has `stateless-architecture.md` and
+`terminology.md` in-tree; the rest of the components/standards set is still
+being populated under the gfb epic.)
 
 Test suite (`backend/tests/`): **148 passed, 2 skipped, 4 failed**. This branch
 touches only `planning_documents/TODO.md` and this journal `.md` — **zero Python**
