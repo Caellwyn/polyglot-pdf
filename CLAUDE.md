@@ -72,10 +72,15 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    `sessionStorage` -- the backend rebuilds context from the WS handshake on
    every (re)connect. Never add server-side per-session field persistence, and
    never log field values/PII/PHI server-side. See the re-orientation brief.
-5. **"Sections" is the canonical term; "parts" is legacy drift.** The schema and
-   JIT manifest speak *sections*; older code still carries `current_part_id` /
-   `part_id` (e.g. `backend/adapters/live_ai_gemini.py`). Don't propagate
-   "parts" in new code. Canon + cleanup tracked in `polyglot-pdf-m3f`.
+5. **"Section" is the navigation unit; "part" is a real but distinct level.**
+   The hierarchy is Form > Parts > Sections > Fields -- *part* is an optional
+   grouping of sections, **not** a synonym for section. The drift to avoid:
+   section-state vars mis-named `current_part_id` / `part_id` (e.g.
+   `backend/adapters/live_ai_gemini.py`). Don't add new ones. Full canon
+   (incl. field-id brackets, form-session vs session) in
+   [`docs/standards/terminology.md`](docs/standards/terminology.md)
+   (`polyglot-pdf-m3f`); the behavior-preserving rename of the holdouts is
+   tracked under `polyglot-pdf-gfb.4`.
 
 ---
 
