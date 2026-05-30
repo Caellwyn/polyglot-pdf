@@ -78,8 +78,9 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    section-state vars mis-named `current_part_id` / `part_id` (e.g.
    `backend/adapters/live_ai_gemini.py`). Don't add new ones. Full canon
    (incl. field-id brackets, form-session vs session) in
-   [`docs/standards/terminology.md`](docs/standards/terminology.md); cleanup
-   tracked under `polyglot-pdf-m3f`.
+   [`docs/standards/terminology.md`](docs/standards/terminology.md)
+   (`polyglot-pdf-m3f`); the behavior-preserving rename of the holdouts is
+   tracked under `polyglot-pdf-gfb.4`.
 
 ---
 

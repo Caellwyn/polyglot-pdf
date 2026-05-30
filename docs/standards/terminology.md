@@ -86,6 +86,6 @@ reconnected (same form-session)"**. State persistence is a property of the
 ## Stateless / state ownership
 
 The client is the source of truth; the backend is stateless re: field values.
-Documented in [`stateless-architecture.md`](stateless-architecture.md) (planned,
-`polyglot-pdf-pki`) -- cross-referenced here because "session state" above means
-*client-owned* state.
+Documented in `stateless-architecture.md` (`polyglot-pdf-pki`) -- cross-referenced
+here because "session state" above means *client-owned* state. (Plain reference,
+not a link, until that doc lands on `dev`.)
