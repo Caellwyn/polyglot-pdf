@@ -348,7 +348,7 @@ class LiveAIGemini(ILiveAI):
         # Check if session is ready - if not, queue the message
         if not self._session_ready:
             self._log.info("📋 CLIENT_CONTENT_QUEUED (session not ready yet)",
-                          message=text[:100],
+                          message_length=len(text),  # never log message text (may carry field content) -- bd hjo
                           queue_size=len(self._pending_client_content) + 1)
             self._pending_client_content.append(text)
             return
@@ -358,7 +358,7 @@ class LiveAIGemini(ILiveAI):
             return
 
         try:
-            self._log.info("SEND_CLIENT_CONTENT", message=text[:100])
+            self._log.info("SEND_CLIENT_CONTENT", message_length=len(text))  # never log message text -- bd hjo
 
             # DEBUG: Append client content to debug file for token analysis
             try:
@@ -380,7 +380,7 @@ class LiveAIGemini(ILiveAI):
                 turn_complete=True
             )
         except Exception as exc:
-            self._log.error("send_client_content_failed", error=str(exc), message=text[:100])
+            self._log.error("send_client_content_failed", error=str(exc), message_length=len(text))  # never log message text -- bd hjo
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).
@@ -759,9 +759,8 @@ class LiveAIGemini(ILiveAI):
                             # await session.send_realtime_input(activity_end=types.ActivityEnd())
                             
                             # Log successful text send for debugging
-                            self._log.debug("💬 TEXT_MESSAGE_SENT", 
-                                          text_preview=text[:50],
-                                          text_length=len(text))
+                            self._log.debug("💬 TEXT_MESSAGE_SENT",
+                                          text_length=len(text))  # never log message text (user-turn content) -- bd hjo
                         except Exception as e:
                             self._log.error("❌ TEXT_SEND_FAILED", error=str(e))
                             # swallow for robustness
@@ -787,7 +786,7 @@ class LiveAIGemini(ILiveAI):
                                   queued_count=len(self._pending_client_content))
                     for queued_msg in self._pending_client_content:
                         try:
-                            self._log.info("SEND_CLIENT_CONTENT (from queue)", message=queued_msg[:100])
+                            self._log.info("SEND_CLIENT_CONTENT (from queue)", message_length=len(queued_msg))  # never log message text -- bd hjo
                             await session.send_client_content(
                                 turns={"parts": [{"text": queued_msg}],},
                                 turn_complete=True
@@ -795,7 +794,7 @@ class LiveAIGemini(ILiveAI):
                         except Exception as exc:
                             self._log.error("queued_client_content_send_failed",
                                           error=str(exc),
-                                          message=queued_msg[:100])
+                                          message_length=len(queued_msg))  # never log message text -- bd hjo
                     # Clear the queue after sending
                     self._pending_client_content.clear()
                     self._log.info("✅ QUEUED_CLIENT_CONTENT_SENT")
@@ -897,9 +896,9 @@ class LiveAIGemini(ILiveAI):
                                             if hasattr(self, '_first_audio_time') and self._first_audio_time:
                                                 elapsed_since_first_audio = int((now - self._first_audio_time) * 1000)
                                             
-                                            self._log.info("📝 GEMINI_TRANSCRIPT_RECEIVED", 
+                                            self._log.info("📝 GEMINI_TRANSCRIPT_RECEIVED",
                                                          text_length=len(transcription.text),
-                                                         text_preview=transcription.text[:50],
+                                                         # never log transcript text -- it's user speech / field content (PHI). bd hjo
                                                          audio_chunks_received=getattr(self, '_audio_chunk_count', 0),
                                                          elapsed_since_first_audio_ms=elapsed_since_first_audio,
                                                          timestamp_ms=int(now * 1000))

@@ -46,10 +46,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		field_count=len(request.field_values),
 	)
 
-	# DEBUG: Log first 5 field values to verify data is coming through
+	# Log the field IDs present (never the values -- they are PII/PHI). bd hjo
 	if request.field_values:
-		sample_values = dict(list(request.field_values.items())[:5])
-		_log.info("pdf_fill_sample_values", kit=request.kit_id, sample=sample_values)
+		sample_field_ids = list(request.field_values.keys())[:5]
+		_log.info("pdf_fill_sample_field_ids", kit=request.kit_id, sample_field_ids=sample_field_ids)
 
 	try:
 		pdf_bytes = await store.load_pdf_bytes(request.kit_id, request.pdf_filename)
@@ -117,13 +117,13 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			if fresh_widget.field_type == 2 or fresh_widget.field_type_string in {"CheckBox", "RadioButton"}:
 				if value in {True, "true", "True", "1", 1}:
 					target_value = get_button_on_state(fresh_widget)
-					_log.debug("checkbox_value_true", widget_name=fresh_widget.field_name, target_value=target_value)
+					_log.debug("checkbox_value_true", widget_name=fresh_widget.field_name)  # never log value -- bd hjo
 				elif value in {False, "false", "False", "0", 0}:
 					target_value = "Off"
-					_log.debug("checkbox_value_false", widget_name=fresh_widget.field_name, target_value=target_value)
+					_log.debug("checkbox_value_false", widget_name=fresh_widget.field_name)  # never log value -- bd hjo
 				else:
 					target_value = str(value)
-					_log.debug("checkbox_value_other", widget_name=fresh_widget.field_name, target_value=target_value, original_value=value)
+					_log.debug("checkbox_value_other", widget_name=fresh_widget.field_name)  # never log value/original_value -- bd hjo
 
 				try:
 					# For XFA checkboxes: Set value and AS, but DON'T call update()
@@ -131,7 +131,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					fresh_widget.field_value = target_value
 					doc.xref_set_key(fresh_widget.xref, "AS", f"/{target_value}")
 
-					_log.debug("checkbox_filled_success", widget_name=fresh_widget.field_name, value=target_value, xref=fresh_widget.xref)
+					_log.debug("checkbox_filled_success", widget_name=fresh_widget.field_name, xref=fresh_widget.xref)  # never log value -- bd hjo
 				except Exception as e:
 					_log.error("checkbox_fill_failed", widget_name=fresh_widget.field_name, error=str(e), traceback=True)
 					raise
@@ -246,7 +246,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				options = field_obj.get("options", []) or []
 				selected_option = next((opt for opt in options if opt.get("value") == value), None)
 				if not selected_option:
-					_log.warning("radio_option_not_found", kit=request.kit_id, field_id=field_id, value=value)
+					_log.warning("radio_option_not_found", kit=request.kit_id, field_id=field_id)  # never log value -- bd hjo
 					skipped_count += 1
 					continue
 
@@ -275,7 +275,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 								kit=request.kit_id,
 								field_id=field_id,
 								pdf_field=option_pdf_field,
-								value=value,
+								# never log value -- PII/PHI. bd hjo
 							)
 					except Exception as exc:
 						_log.error(
@@ -292,7 +292,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					skipped_count += 1
 
 			elif field_type == "checkbox":
-				_log.debug("checkbox_processing", kit=request.kit_id, field_id=field_id, value=value, value_type=type(value).__name__)
+				_log.debug("checkbox_processing", kit=request.kit_id, field_id=field_id, value_type=type(value).__name__)  # never log value -- bd hjo
 				if isinstance(value, bool):
 					pdf_field_name = field_obj.get("pdf_field_name")
 					if not pdf_field_name:
@@ -323,7 +323,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						error_count += 1
 
 				elif isinstance(value, list):
-					_log.info("checkbox_group_processing", kit=request.kit_id, field_id=field_id, selected_values=value)
+					_log.info("checkbox_group_processing", kit=request.kit_id, field_id=field_id, selected_count=len(value))  # never log selected values -- bd hjo
 					options = field_obj.get("options", []) or []
 					for selected_value in value:
 						selected_option = next((opt for opt in options if opt.get("value") == selected_value), None)
@@ -332,13 +332,12 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 								"checkbox_option_not_found",
 								kit=request.kit_id,
 								field_id=field_id,
-								value=selected_value,
-								available_options=[opt.get("value") for opt in options]
+								option_count=len(options),  # never log the selected value or the option set -- bd hjo
 							)
 							continue
 
 						option_pdf_field = selected_option.get("pdf_field_name")
-						_log.info("checkbox_option_matched", kit=request.kit_id, field_id=field_id, selected_value=selected_value, pdf_field_name=option_pdf_field)
+						_log.info("checkbox_option_matched", kit=request.kit_id, field_id=field_id, pdf_field_name=option_pdf_field)  # never log selected_value -- bd hjo
 						if not option_pdf_field:
 							_log.warning(
 								"checkbox_option_no_pdf_mapping",
@@ -384,7 +383,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 							)
 							error_count += 1
 				else:
-					_log.warning("checkbox_unsupported_value", kit=request.kit_id, field_id=field_id, value=value)
+					_log.warning("checkbox_unsupported_value", kit=request.kit_id, field_id=field_id, value_type=type(value).__name__)  # never log value -- bd hjo
 					skipped_count += 1
 
 			else:
