@@ -7,7 +7,7 @@ description: Run the project's sprint-closeout checklist autonomously -- beads h
 
 You are running the closeout for this repo. This skill encodes the closeout checklist so the **deterministic** prep runs without you re-deriving it, and you spend model tokens only on the **judgment** parts (journal prose, fresh-eyes triage).
 
-**The bead for this closeout** (if the user passed one): `$1`. If `$1` is empty, infer it from the branch name (`<type>/<id-suffix>-<slug>`) or ask.
+**The bead(s) for this closeout** (if the user passed one): `$1`. If `$1` is empty, infer the primary bead from the branch name (`<type>/<id-suffix>-<slug>`) or ask. A PR may resolve **more than one** bead (small beads are often bundled to avoid a full PR cycle each) -- if so, note every bead this PR closes; you'll close them **all** in Step 8. A PR must close **at least one** bead, and no bead may span multiple PRs (split it first if it would).
 
 > **Portability note.** This skill assumes the claude-swarm-kit stack: beads (`bd`) for issues, GitHub PRs with Copilot code review, and git worktrees. The integration config (repo slug, bead prefix) lives in `swarm.config.json` -- the scripts read it automatically.
 
@@ -156,7 +156,7 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
 1. **Update the PR body** so the "Fresh-eyes review" section records the final adopt/reject/defer breakdown (and the Copilot rounds, if notable).
-2. **Close the bead** at PR handoff via `scripts/bd_safe.py close <full-id> --reason "..."`.
-3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id, housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
+2. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
+3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
 
 The PR is already a normal, mergeable PR -- there is no flip step. The merge is the maintainer's: **never run `gh pr merge` yourself.** Pinging the maintainer is the autonomous endpoint.

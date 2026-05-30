@@ -43,9 +43,13 @@ All four read project config (repo slug, bead prefix) from `swarm.config.json`.
 
 ## Bead lifecycle
 
-- **One bead = one PR.** If mid-flight you discover a second PR worth of work,
-  split the bead before opening PR #2.
-- **Close the bead at PR handoff**, not at sprint-end.
+- **A bead never spans PRs; a PR closes at least one bead.** One bead = exactly
+  one PR. If mid-flight you discover a second PR worth of work, split the bead
+  before opening PR #2. A PR **may** bundle several whole beads when each is too
+  small to warrant its own PR cycle (a separate cycle per tiny bead wastes review
+  resources) -- closeout then closes all of them. Every PR closes at least one
+  bead (never zero).
+- **Close the bead(s) at PR handoff**, not at sprint-end.
 - **Any in-progress bead you stop without a PR in sight needs an explicit state
   transition** before you walk away (close / defer / drop the claim).
 - **Branch + PR carry the bead ID:** branch `<type>/<id-suffix>-<slug>`, PR title
