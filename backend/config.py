@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 import os
+import re
 from pathlib import Path
 
 
@@ -312,18 +313,72 @@ def get_settings() -> Settings:
 # (LLM normalizer settings live on Settings; no module-level duplicates.)
 
 # ============================================================================
-# Gemini Pricing for Token Tracking
+# Gemini Pricing for Token Tracking (per-token rates, keyed by model family)
 # ============================================================================
-# Pricing for Gemini 2.0 Flash (per token, converted from per-million rates)
-# Source: https://ai.google.dev/pricing
-# Updated: October 2025
-GEMINI_PRICING = {
-	# Input pricing (per token)
-	"text_input": 0.50 / 1_000_000,      # $0.50 per million = $0.0000005 per token
-	"audio_input": 3.00 / 1_000_000,     # $3.00 per million = $0.000003 per token
+# Rates are per-1M list prices from https://ai.google.dev/gemini-api/docs/pricing,
+# divided to per-token here. Output rates include thinking tokens. Keyed by model
+# FAMILY so the active model (MODEL_NATIVE / MODEL_LIVE) selects the right row —
+# this is what makes a 2.5 -> 3.1 A/B comparable on cost.
+# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-05-30 for
+# gemini-2.5-flash-native-audio-preview-12-2025 and gemini-3.1-flash-live-preview.
+# Updated: 2026-05-30.
+#
+# Columns: text_input / audio_input / text_output / audio_output (USD per 1M).
+#   2.5 (native-audio):  0.50 / 3.00 / 2.00 / 12.00
+#   3.1 (live preview):  0.75 / 3.00 / 4.50 / 12.00
+# Note: a bare "gemini-3-flash-*" (no ".1") is NOT a Live/native-audio model per
+# Google's docs, so it won't reach this adapter; model_family() bills it at the
+# 2.5 default if it ever does. Add a "3" row here if that changes.
+_PER_1M = 1_000_000
 
-	# Output pricing (per token, includes thinking tokens)
-	"text_output": 2.00 / 1_000_000,     # $2.00 per million = $0.000002 per token
-	"audio_output": 12.00 / 1_000_000,   # $12.00 per million = $0.000012 per token
+GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
+	"2.5": {
+		"text_input": 0.50 / _PER_1M,
+		"audio_input": 3.00 / _PER_1M,
+		"text_output": 2.00 / _PER_1M,
+		"audio_output": 12.00 / _PER_1M,
+	},
+	"3.1": {
+		"text_input": 0.75 / _PER_1M,
+		"audio_input": 3.00 / _PER_1M,
+		"text_output": 4.50 / _PER_1M,
+		"audio_output": 12.00 / _PER_1M,
+	},
 }
+
+# Family used when a model name doesn't match any known family. 2.5 is the
+# current default (MODEL_NATIVE), so unknown/unspecified models bill at 2.5.
+DEFAULT_PRICING_FAMILY = "2.5"
+
+
+def model_family(model_name: str | None) -> str:
+	"""Map a Gemini model name to a pricing family key in GEMINI_PRICING_BY_FAMILY.
+
+	Matches the version number as a whole token, NOT a bare substring, so
+	'gemini-3.10-flash' does not match family '3.1' and 'gemini-12.5-...' does
+	not match '2.5'. The version must be bounded by a non-version character (or
+	the start/end of the string) on each side — i.e. not preceded by a digit/dot
+	and not followed by a digit/dot. Falls back to DEFAULT_PRICING_FAMILY for
+	empty/unrecognized names so cost tracking never crashes on a new preview
+	model — it just bills at the default until a row is added here.
+	"""
+	name = (model_name or "").lower()
+	for family in GEMINI_PRICING_BY_FAMILY:
+		# (?<![\d.]) / (?![\d.]) reject a digit or dot abutting the version,
+		# so '3.1' matches in 'gemini-3.1-flash' but not in 'gemini-3.10-flash'.
+		if re.search(r"(?<![\d.])" + re.escape(family) + r"(?![\d.])", name):
+			return family
+	return DEFAULT_PRICING_FAMILY
+
+
+def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
+	"""Return the per-token rate row for the given model's family."""
+	return GEMINI_PRICING_BY_FAMILY[model_family(model_name)]
+
+
+# Backward-compatible alias: the old flat dict was the 2.5 rates. Anything still
+# importing GEMINI_PRICING keeps working (it gets the default family's rates).
+# A COPY, not the live inner dict — a stray mutation of GEMINI_PRICING must not
+# corrupt GEMINI_PRICING_BY_FAMILY for everyone else in the process.
+GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 

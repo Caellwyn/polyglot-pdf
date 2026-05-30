@@ -21,7 +21,7 @@ from backend.utils.json_recovery import extract_json_from_part
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.structured_logger import get_logger as get_structured_logger
 from backend.utils.token_file_logger import get_token_logger
-from backend.config import GEMINI_PRICING
+from backend.config import get_pricing_for_model
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
@@ -1184,11 +1184,14 @@ class LiveAIGemini(ILiveAI):
                                                         elif modality == types.Modality.AUDIO:
                                                             audio_output_tokens += safe_count
 
-                                            # Calculate costs by modality
-                                            text_input_cost = text_input_tokens * GEMINI_PRICING["text_input"]
-                                            audio_input_cost = audio_input_tokens * GEMINI_PRICING["audio_input"]
-                                            text_output_cost = text_output_tokens * GEMINI_PRICING["text_output"]
-                                            audio_output_cost = audio_output_tokens * GEMINI_PRICING["audio_output"]
+                                            # Calculate costs by modality, using the
+                                            # rate row for the ACTIVE model's family so
+                                            # a 2.5 vs 3.1 A/B is costed correctly.
+                                            pricing = get_pricing_for_model(self._model_name)
+                                            text_input_cost = text_input_tokens * pricing["text_input"]
+                                            audio_input_cost = audio_input_tokens * pricing["audio_input"]
+                                            text_output_cost = text_output_tokens * pricing["text_output"]
+                                            audio_output_cost = audio_output_tokens * pricing["audio_output"]
                                             total_cost = text_input_cost + audio_input_cost + text_output_cost + audio_output_cost
 
                                             # Update cumulative counters
