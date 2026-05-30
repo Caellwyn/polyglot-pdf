@@ -1,7 +1,27 @@
 # Polyglot PDF - Consolidated TODO List
 
+> ## ⚠️ SUPERSEDED — historical record only (as of 2026-05-30)
+> This checklist (last edited Nov 20, 2025) predates the beads tracker and is no
+> longer the source of truth for "what to do next." It was triaged item-by-item
+> against current code under bead **`polyglot-pdf-9np`**; do **not** add new
+> items here or treat unchecked boxes as live work.
+>
+> - **What to do next** lives in beads: run `bd ready` / `bd show <id>`. The live
+>   workstreams extracted from this file are `277` (E2E), `7ds` (JIT validation),
+>   `tp3` (console.\* cleanup), `nxb` (highlight timing), `zmg`/`8t6`/`p7y`/`dqg`
+>   (future forms I-589/485/765/400), and the logging-roadmap chain
+>   `g0e`→`3ae`→`ytf`→`0bs`→`yqg` plus `nt0` (dashboard) and `57d` (cloud save).
+> - **Already owned elsewhere:** parts/sections terminology (`m3f` + `gfb.4`),
+>   planning-doc archival (`4p0`), logging-roadmap *doc* (`m8s`).
+> - **The audit + the pilot/business history** that lived only in this file are
+>   captured in the journal:
+>   [`docs/journal/entries/2026-05-30-bd-9np-todo-triage-and-history-capture.md`](../docs/journal/entries/2026-05-30-bd-9np-todo-triage-and-history-capture.md).
+>
+> The pilot/business context below (ESC pilot, hardware, cost model, completed-work
+> rationale) is retained for historical reference.
+
 **Last Updated**: November 20, 2025
-**Status**: Pre-ESC Pilot
+**Status**: Pre-ESC Pilot — **SUPERSEDED, see header above**
 
 ---
 
