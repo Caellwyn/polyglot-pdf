@@ -365,10 +365,11 @@ We're building a tool that empowers people to complete forms accurately in their
 - **Plans**: Various `*_PLAN.md` files (future work)
 
 ### Branches
-- **Main**: `origin/shared-audio-stream`
-- **Fixes**: `fix/critical-bugs-and-token-reduction`
-- **Features**: `feature/hallucination-reduction`
-- **Migration**: `claude/align-websockets-011CUpAutS2MaBKLNxYFQRQM`
+- **Production**: `origin/main` (default; protected by the "Defend Production" ruleset — no force-push/deletion, requires a successful deploy to the `staging` environment)
+- **Integration**: `origin/dev` (PRs target this; protected by the "To Dev" ruleset — PR required + Copilot code review)
+- **Feature work**: `<type>/<slug>` → PR into `dev`
+
+> Renamed from the legacy `shared-audio-stream` default branch on 2026-05-29 (bd polyglot-pdf-xmf).
 
 ---
 
