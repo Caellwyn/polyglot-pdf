@@ -1,6 +1,6 @@
 # Documentation architecture: progressive discovery
 
-*Last updated: <DATE>. This file documents the doc SYSTEM (current state); it is itself a tier-1 doc.*
+*Last updated: 2026-05-30. This file documents the doc SYSTEM (current state); it is itself a tier-1 doc.*
 
 This project organizes its docs for **progressive discovery**: a small always-loaded core points at on-demand docs, so an agent (or human) loads only what the task needs and context stays lean. This file explains the system and the discipline that keeps it from rotting. It is the most transferable artifact in the claude-swarm-kit -- the structure below works for any codebase.
 

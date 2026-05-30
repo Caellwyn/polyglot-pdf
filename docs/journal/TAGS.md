@@ -1,6 +1,6 @@
 # Journal entry tags -- canonical vocabulary
 
-*Last updated: <DATE>.*
+*Last updated: 2026-05-30.*
 
 Tags used in the YAML frontmatter of [`entries/*.md`](entries/). **Adding a tag
 is a deliberate edit to THIS file** -- never invent a tag ad-hoc in an entry.
@@ -13,8 +13,6 @@ Renaming a tag means editing every entry that uses it (avoid).
 3. Adding a tag is its own atomic commit editing only this file.
 
 ## All tags (flat -- the source of truth)
-
-_(Seed this with your project's surfaces + cross-cutting concerns. Starter set:)_
 
 - conventions
 - performance
