@@ -33,6 +33,28 @@ A wrapper around `bd prime` plus a project-specific close-protocol override:
 - **`.claude/settings.json`** — repointed both the `SessionStart` and
   `PreCompact` hooks from `bd prime` to `python scripts/bd_prime.py`.
 
+**Round-1 review triage (Copilot + fresh-eyes).** Adopted: (a) the wrapper now
+degrades gracefully — `try/except FileNotFoundError` + `TimeoutExpired` (30s),
+`errors="replace"` on both the subprocess read and the stdout/stderr
+reconfigure, and the reconfigure call itself guarded against `ValueError`/
+`OSError` on detached streams (a SessionStart hook must never hard-fail); both
+reviewers converged on this. (b) Fresh-eyes caught a real doc bug — the override
+checklist closed the bead in step 1, *before* the PR existed, contradicting the
+closeout SKILL.md (close at PR handoff, after Copilot clean); reordered so the
+checklist just commits and hands to `/closeout`, which owns bead-close + the
+final `bd dolt push`. Rejected: adding the hook command to `permissions.allow`
+(hook commands bypass the allow-list; the entry would be cosmetic noise).
+Acknowledged, no change: the relative hook path resolves against the main
+checkout's `scripts/` during worktree development and only becomes live on merge
+to `dev` — inherent to worktrees, not a defect.
+
+Ironic note: the round-1 Copilot watcher *itself* crashed on a `UnicodeEncodeError`
+(the `→` arrow this PR's own body used, quoted back in Copilot's comment) because
+`copilot_watch.py` sets `errors="replace"` on its subprocess read but not on its
+own `print()`. The verdict (COMMENTS) was recovered via a one-time API read. That
+watcher gap is the same bug class this PR guards against; filed as
+`polyglot-pdf-amy`.
+
 **Why not the obvious knob:** `bd`'s only override mechanism, `.beads/PRIME.md`,
 replaces the *entire* prime output — verified that this silently drops the
 `bd remember` persistent-memories block (8 memories) that prime injects at

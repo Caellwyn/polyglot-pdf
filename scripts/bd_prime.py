@@ -30,26 +30,56 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OVERRIDE = REPO_ROOT / ".claude" / "prime-closeout-override.md"
 
+# bd is given this long to emit prime context before we treat it as hung. Prime
+# is a fast local read, so a generous ceiling still bounds a wedged session.
+BD_TIMEOUT_SEC = 30
+
 # The prime output and the override both contain non-ASCII (e.g. the 🚨 emoji
 # in the close-protocol heading). On Windows the default stdout codec is cp1252,
-# which raises UnicodeEncodeError on those characters, so force UTF-8.
+# which raises UnicodeEncodeError on those characters. Force UTF-8 with
+# errors="replace" so a rare un-encodable byte degrades to a placeholder instead
+# of crashing the hook. reconfigure() exists on 3.7+ TextIO streams but can be
+# absent (older/3rd-party streams) or raise on a detached/redirected stream, so
+# guard both -- this is a SessionStart/PreCompact hook and must never hard-fail.
 for _stream in (sys.stdout, sys.stderr):
-    reconfigure = getattr(_stream, "reconfigure", None)
-    if reconfigure is not None:
-        reconfigure(encoding="utf-8")
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        try:
+            _reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
 
 
 def main() -> int:
     # Pass through any flags the hook might supply (e.g. --memories-only on
     # PreCompact in MCP mode). Run from the repo root so bd resolves the
-    # workspace consistently regardless of the session's cwd.
-    result = subprocess.run(
-        ["bd", "prime", *sys.argv[1:]],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    # workspace consistently regardless of the session's cwd. Degrade gracefully
+    # on any failure: a hook that crashes with a traceback is worse than one that
+    # emits a one-line note and lets the session start. errors="replace" guards
+    # against non-UTF8 bytes in bd's output.
+    try:
+        result = subprocess.run(
+            ["bd", "prime", *sys.argv[1:]],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=BD_TIMEOUT_SEC,
+        )
+    except FileNotFoundError:
+        sys.stderr.write(
+            "bd_prime.py: 'bd' not found on PATH -- install beads or activate "
+            "the right environment; skipping prime context.\n"
+        )
+        return 1
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(
+            f"bd_prime.py: 'bd prime' did not finish within {BD_TIMEOUT_SEC}s; "
+            "skipping prime context.\n"
+        )
+        return 1
+
     sys.stdout.write(result.stdout)
     if result.stderr:
         sys.stderr.write(result.stderr)

@@ -22,15 +22,19 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 **Before saying "done":**
 
 ```
-[ ] 1. bd dolt pull && bd close <id...>        close the bead(s) this PR resolves
-[ ] 2. git status                              confirm a clean tree
-[ ] 3. git add <files> && git commit -m "..."  commit code (worktree: git -C <path>)
-[ ] 4. /closeout                               opens the PR into dev + dual review
-[ ] 5. bd dolt push                            push the beads store
+[ ] 1. git status                              confirm what changed
+[ ] 2. git add <files> && git commit -m "..."  commit code (worktree: git -C <path>)
+[ ] 3. /closeout                               opens the PR into dev, runs dual review,
+                                               loops to clean, THEN closes the bead(s)
+                                               and pushes the beads store
 ```
 
-`/closeout` owns PR creation and the review loop; it pings the maintainer to
-merge and never merges itself. Work is **not** done at `git push` — it is done
-when closeout has run the PR to clean and the bead(s) are closed. See
-`docs/doctrine/promotion-tiers.md`, `docs/doctrine/review-flow.md`, and the
-`closeout` skill (`.claude/skills/closeout/SKILL.md`).
+`/closeout` owns PR creation and the review loop, and it is the step that closes
+the bead(s) — **at PR handoff, after Copilot is clean**, never before the PR
+exists (a bead closed against work that hasn't landed corrupts the tracker).
+Closeout also runs the final `bd dolt push`; do not pre-close or pre-push the
+bead yourself. It pings the maintainer to merge and never merges itself. Work is
+**not** done at `git push` — it is done when closeout has run the PR to clean and
+closed the bead(s). See `docs/doctrine/promotion-tiers.md`,
+`docs/doctrine/review-flow.md`, and the `closeout` skill
+(`.claude/skills/closeout/SKILL.md`).
