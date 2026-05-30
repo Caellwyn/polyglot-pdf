@@ -33,9 +33,6 @@ class Settings(BaseModel):
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
-	# (Removed: deprecated LLM field-normalizer settings, which named the
-	# soon-deprecated gemini-2.5-pro. The normalizer has no adapter and is gone.)
-
 	# === JIT (Just-In-Time) Schema Loading Settings ===
 	# Token Reduction: Send manifests instead of full schemas
 	# Full schema loaded on-demand per field as needed
