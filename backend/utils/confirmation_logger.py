@@ -6,6 +6,7 @@ Demonstrates proper confirmation workflow for legal defense.
 
 CRITICAL: Only log metadata, NEVER log actual field values or user data.
 """
+import os
 import structlog
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,11 +14,22 @@ from typing import Optional, Literal
 
 _log = structlog.get_logger().bind(module="confirmation_logger")
 
-# Confirmation log directory (separate from application logs)
-CONFIRMATION_LOG_DIR = Path("logs/confirmations")
-CONFIRMATION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Confirmation log directory (separate from application logs). Overridable via
+# the CONFIRMATION_LOG_DIR env var so tests can redirect writes to a tmp dir
+# instead of the repo tree. Resolved per-call (not cached at import) so the env
+# var / a test fixture can set it after this module is imported.
+_DEFAULT_CONFIRMATION_LOG_DIR = "logs/confirmations"
 
-ConfirmationMethod = Literal["ai_voice", "manual_edit", "manual_button"]
+
+def _confirmation_log_dir() -> Path:
+    """Return the confirmation-log directory, creating it if needed."""
+    log_dir = Path(os.getenv("CONFIRMATION_LOG_DIR", _DEFAULT_CONFIRMATION_LOG_DIR))
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+# Matches the confirm_field tool's confirmation_method enum (backend/config.py)
+# and the values actually written by callback_handler._handle_confirm_field_tool.
+ConfirmationMethod = Literal["verbal", "manual"]
 
 
 def log_field_confirmation(
@@ -47,7 +59,7 @@ def log_field_confirmation(
             "form_session_id": "fss_abc123_xyz789",
             "field_id": "p1_line1_aliennumber",
             "field_name": "Alien Registration Number",
-            "confirmation_method": "ai_voice"
+            "confirmation_method": "verbal"
         }
     """
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -83,7 +95,7 @@ def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:
     File format: logs/confirmations/{form_session_id}.jsonl
     """
     try:
-        log_file = CONFIRMATION_LOG_DIR / f"{form_session_id}.jsonl"
+        log_file = _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
         # Append to JSONL file (one JSON object per line)
         import json
@@ -157,7 +169,7 @@ def get_confirmation_log_path(form_session_id: str) -> Path:
 
     Useful for retrieving logs for review or legal purposes.
     """
-    return CONFIRMATION_LOG_DIR / f"{form_session_id}.jsonl"
+    return _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
 
 def read_confirmation_log(form_session_id: str) -> list[dict]:

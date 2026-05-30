@@ -20,13 +20,17 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
     Returns:
         Confirmation policy text for system instruction
     """
+    # NOTE: there is no complete_section tool — section completion is auto-
+    # detected by the frontend once all fields in a section are confirmed. The
+    # model's job is to confirm each field (confirm_field); it must NOT be told
+    # to call complete_section.
     if section_number <= 2:
         # First two sections: Full graduated confirmation
         return (
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "
             "Then ask 'Is everything correct?' "
-            "Only call complete_section after user confirms."
+            "Confirm each field with the user before moving on."
         )
     elif section_number >= total_sections:
         # Last section: Extra careful final confirmation
@@ -34,13 +38,13 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "
             "Then ask 'This is the last section - is everything correct?' "
-            "Only call complete_section after user confirms."
+            "Confirm each field with the user before moving on."
         )
     else:
         # Middle sections: Simple confirmation
         return (
             "Say 'Section done. Ready for the next section?' "
-            "Only call complete_section after user confirms."
+            "Confirm each field with the user before moving on."
         )
 
 
