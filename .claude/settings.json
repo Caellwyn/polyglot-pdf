@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bd prime"
+            "command": "python scripts/bd_prime.py"
           }
         ]
       }
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bd prime"
+            "command": "python scripts/bd_prime.py"
           }
         ]
       }
