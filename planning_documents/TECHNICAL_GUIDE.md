@@ -1489,6 +1489,6 @@ Note: Schema extraction and editing components segregated to external applicatio
 - ✅ Marked legacy demo system as deprecated
 - ✅ Added major features summary in executive section
 
-This document represents the verified state of the Voice Form Filler application as of November 22, 2025, based on comprehensive code review and testing. All features marked as implemented have been verified in the `shared-audio-stream` branch (renamed to `main` on 2026-05-29).
+This document represents the verified state of the Voice Form Filler application as of November 22, 2025, based on comprehensive code review and testing. All features marked as implemented have been verified in the `main` branch (which was named `shared-audio-stream` at the time of this November 22, 2025 verification; renamed to `main` on 2026-05-29).
 
 **Note on v4.1 Update**: The automatic section switching optimization (Nov 22, 2025) has been implemented in code but requires end-to-end testing to verify the complete flow works as designed.

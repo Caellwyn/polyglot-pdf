@@ -26,12 +26,18 @@ This is the case you have historically skipped. **Do not skip it.** A satisfied
 review still REQUIRES a top-level comment:
 
 1. Submit an **Approve** review if the platform allows it.
-2. **ALWAYS** post a top-level comment whose **first line** is exactly one of
+2. **ALWAYS** emit a top-level signal whose **first line** is exactly one of
    these literal phrases (nothing else on that line), so the author's polling
    agent has a deterministic, greppable signal:
    - `LGTM`
    - `No further suggestions`
    - `Approved`
+
+   The signal lives in the **Approve review's summary body** — that body counts
+   as the top-level comment. You do NOT need a second, separate issue comment in
+   addition to the review; one top-level summary carrying the phrase is enough.
+   What you must never do is finish with an Approve that has an *empty* body and
+   no comment — that's the silent finish the polling agent can't see.
 3. Do NOT assign the PR — there's nothing for the follow-up agent to respond to.
 
 "The work is satisfactory" is **not** a reason to stay silent — it is precisely
@@ -47,10 +53,13 @@ author exactly like "I never re-reviewed" — so it blocks the merge just the sa
 
 ### Always
 
-- Do NOT commit, push, rebase, or merge anything yourself. Comment-only. The
-  author's code agent reviews your suggestions and applies the changes. (See
-  [`codex-instructions.md`](codex-instructions.md) for the full rationale; it
-  applies to you too.)
+- Do NOT commit, push, rebase, or merge anything yourself — not even an
+  "obvious" one-line fix. Comment-only. The author's code agent reviews your
+  suggestions and applies the changes. Committing directly breaks the author's
+  ability to rebase/amend cleanly, can conflict with their in-progress local
+  work, muddies the review history, and turns a reviewable finding into a silent
+  fix nobody checks. (The companion `codex-instructions.md` has the same rule
+  with more detail.)
 - Do NOT skip the top-level summary comment. The author depends on it as the
   review-finished signal — on every round, findings or not.
 

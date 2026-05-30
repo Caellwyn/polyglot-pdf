@@ -33,12 +33,16 @@ follows the default branch automatically.
 |------|--------|
 | `deletion` | `dev` cannot be deleted |
 | `non_fast_forward` | no force-push to `dev` |
-| `pull_request` | merging to `dev` requires a PR. `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: true`, all merge methods allowed |
+| `pull_request` | merging to `dev` requires a PR. `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: true`, `required_review_thread_resolution: false`, all merge methods allowed |
 | `copilot_code_review` | Copilot reviews automatically — `review_on_push: true`, `review_draft_pull_requests: true` |
 
-Human approval is **not** required (count 0); Copilot's review is the automated
-gate, and the maintainer drives the merge. This matches
-[review-flow.md](review-flow.md).
+Human approval is **not** required (count 0). Note what these rules do and do
+**not** enforce: a PR is mandatory and Copilot *reviews* every push, but with
+`required_review_thread_resolution: false` and 0 required approvals, **nothing
+mechanically blocks a merge with open Copilot threads** — Copilot reviews but
+does not *gate*. The gate is procedural (the [review-flow](review-flow.md):
+loop Copilot to clean, then the maintainer drives the merge), not a hard
+ruleset check. This matches [review-flow.md](review-flow.md).
 
 ## Recreate / inspect
 

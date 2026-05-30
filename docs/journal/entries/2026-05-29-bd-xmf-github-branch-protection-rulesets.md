@@ -84,8 +84,11 @@ Nothing deferred.
 
 - **Going-forward workflow change:** the repo moves from local-merge-to-default
   to **real PRs into `dev`**. The closeout skill's `origin/dev` assumptions now
-  hold. CLAUDE.md's session-close protocol note ("merged to main locally, not
-  pushed") is now stale for new work — flagged to update.
+  hold. The stale "merged to main locally, not pushed" guidance lives in the
+  **bd-prime hook output** (the SESSION CLOSE PROTOCOL block), not in any
+  tracked repo file — CLAUDE.md itself already describes the correct
+  feature → dev → main flow. Updating the hook text is a beads/hook-config task,
+  filed separately (it can't be fixed from the repo tree).
 - The `required_deployments` rule on `main` is a **hard merge block** until a
   deploy to `staging` actually succeeds. Intentional (owner is wiring deploys),
   but worth knowing before anyone tries to promote `dev → main`.
