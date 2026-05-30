@@ -364,7 +364,11 @@ class FormFillingService:
         if self._schema is None:
             _log.error("restart_gemini_session_no_schema", session_id=self._session_id)
             raise RuntimeError("No schema available - cannot restart")
-        
+
+        if self._callback_handler is None:
+            _log.error("restart_gemini_session_no_callbacks", session_id=self._session_id)
+            raise RuntimeError("No callback handler available - cannot restart")
+
         _log.info("🔄 restart_gemini_session_start", 
                  session_id=self._session_id,
                  has_next_field_hint=bool(next_field_hint))
@@ -381,16 +385,20 @@ class FormFillingService:
         # Use deepcopy to avoid mutating the original declarations
         tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
 
-        await self._live_ai.set_callbacks(
-            on_form_update=self.handle_form_update,
-            on_transcript=self.handle_transcript if self._send_transcript else None,
-            on_audio=self.handle_audio,
-            on_tool_call=self.handle_tool_call,
+        # Re-register the same callbacks used at session creation
+        # (form_filling_service.py:155). set_callbacks is synchronous — do not
+        # await it. on_transcript is always passed; whether transcripts are
+        # actually emitted is gated by enable_transcripts.
+        self._live_ai.set_callbacks(
+            on_form_update=self._callback_handler.on_form_update,
+            on_transcript=self._callback_handler.on_transcript,
+            on_audio=self._callback_handler.on_audio,
+            on_tool_call=self._callback_handler.on_tool_call,
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
-            enable_transcripts=self._send_transcript,
+            enable_transcripts=bool(self._send_transcript),
         )
-        
+
         # Verify session is now active
         is_active_after = self._live_ai.is_session_active()
         _log.info("✅ gemini_session_restarted", 
