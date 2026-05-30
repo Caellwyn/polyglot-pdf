@@ -39,13 +39,27 @@ context:
   Copilot to CLEAN**; closeout then closes the bead(s) and pings the maintainer
   (never merges).
 
-The `/closeout` SKILL stays the source of truth for the checklist; this section
-just makes running it **non-optional, once per PR**. Touched only the closeout
-section -- left scar-tissue #5 and everything else untouched to avoid conflicting
-with the unmerged `m3f` PR (#18).
+**Bead/PR contract (clarified after Copilot review).** Copilot's round-1 review
+caught that "a PR may resolve several beads" contradicted the repo's existing
+"one bead = one PR" doctrine (`workflow.md`, `promotion-tiers.md`, and the skill
+closing a single `$1` bead). The maintainer resolved it: **a bead never spans
+PRs (one bead = one PR), but a PR may bundle several whole beads when each is too
+small to warrant its own cycle, and every PR closes at least one bead.** Aligned
+all four surfaces in this PR so they agree: CLAUDE.md, `docs/doctrine/workflow.md`,
+`docs/doctrine/promotion-tiers.md`, and the `/closeout` SKILL (resolve/close
+**all** the PR's beads, not just `$1`). Also corrected scar-tissue #2 (it implied
+fresh-eyes runs *before* the PR opens; closeout opens the PR first, then reviews
+in parallel) and tightened the `copilot_watch` verdict wording (CLEAN/COMMENTS
+both exit 0; ERROR=1; TIMEOUT=2 -- not four distinct codes).
 
-**Dogfood:** this very change was shipped *through* `/closeout` (not hand-rolled),
-exercising the protocol end-to-end as the acceptance check.
+The `/closeout` SKILL stays the source of truth for the checklist; the CLAUDE.md
+section just makes running it **non-optional, once per PR**. Left scar-tissue #5
+untouched to avoid conflicting with the unmerged `m3f` PR (#18).
+
+**Dogfood:** this very change was shipped *through* `/closeout` (not hand-rolled).
+The run proved the value immediately -- the background `copilot_watch.py` woke the
+session once with `RESULT: COMMENTS` (the bead/PR contradiction above), exactly
+the feedback the old hand-polling had been missing.
 
 Nothing deferred.
 
@@ -64,11 +78,14 @@ Nothing deferred.
 
 ## Doc freshness
 
-`check_doc_freshness.py`: "No docs to check" (`docs/components/` + `docs/standards/`
-empty on this branch -- the populated standards docs are on unmerged branches
-#18/#20). The only doc changed is `CLAUDE.md` (tier-1); no `**Tracks:**`-bearing
-doc was touched, and the convention checks (no `Previously:`/history) pass. No
-stamp bump needed (CLAUDE.md carries no `*Last updated:*` stamp by design).
+`check_doc_freshness.py`: `docs/standards/stateless-architecture.md: OK -- all
+tier-2 docs up to date` (that doc is present on this branch, having merged to
+`dev` via #20 before this branch was cut). This change touches no
+`**Tracks:**`-bearing doc -- only `CLAUDE.md` (tier-1) -- so nothing went stale;
+the convention checks (no `Previously:`/history) pass. No stamp bump needed
+(CLAUDE.md carries no `*Last updated:*` stamp by design). (The skill-load Step-2
+auto-run printed "No docs to check" because it ran *before* the Step-6 rebase
+pulled #20 into the branch; the post-rebase result above is the accurate one.)
 
 ## Files touched
 

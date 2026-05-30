@@ -16,8 +16,9 @@ dev                             integration branch; auto-deploys to STAGING
 main                            production; auto-deploys to PROD
 ```
 
-- **Feature branches** always branch off freshly-pulled `dev`. One bead = one
-  branch = one PR.
+- **Feature branches** always branch off freshly-pulled `dev`. A bead never spans
+  PRs (one bead = one branch = one PR); a PR may bundle several small whole beads
+  and closes at least one. See [`workflow.md`](workflow.md#bead-lifecycle).
 - **`dev`** is the integration branch and the PR base. Merging to `dev` triggers
   the staging deploy, where changes are verified against a prod-like environment
   before promotion.

@@ -60,8 +60,10 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 1. **Beads is the system of record for "what to do next."** Resume work via
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
-2. **Every PR goes feature-branch -> fresh-eyes review (parallel with Copilot)
-   -> normal PR -> maintainer merges.** No draft PRs. See
+2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
+   PR and runs fresh-eyes **in parallel with** Copilot's auto-review, loops to
+   clean, then the maintainer merges. No draft PRs; never hand-poll Copilot. See
+   the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
@@ -103,8 +105,14 @@ The rules that override default behavior. Product-specific invariants live in
 ## Closeout -- mandatory, once per PR
 
 **Every PR ships through the `/closeout` skill. No PR is "done" until closeout has
-run on it to clean.** The unit is the **PR, not the bead** -- a PR may resolve
-several beads; run `/closeout` once for the PR and close all the beads it resolves.
+run on it to clean.** Run `/closeout` **once per PR**, not once per bead.
+
+**Bead/PR contract:** every PR closes **at least one** bead (never zero). A bead
+must **not** span multiple PRs -- if a bead would need more than one PR, split it
+into multiple beads first. But a PR **may bundle several whole beads** when they're
+individually too small to each warrant a full PR cycle (a separate cycle per tiny
+bead wastes review resources). So: one bead = exactly one PR; one PR = one or more
+whole beads. Closeout closes **all** beads the PR resolves.
 
 Do NOT hand-roll the review cycle. In particular:
 
@@ -114,11 +122,12 @@ Do NOT hand-roll the review cycle. In particular:
   parallel-review setup and tempts hand-polling).
 - **Copilot is watched by a script, never by hand.** `/closeout` launches
   `scripts/copilot_watch.py <pr#>` via `run_in_background`; the harness wakes you
-  once with the classified verdict (CLEAN / COMMENTS / ERROR / TIMEOUT).
+  once with the classified verdict -- one of `CLEAN`/`COMMENTS` (both exit 0),
+  `ERROR` (exit 1), or `TIMEOUT` (exit 2). Never treat `ERROR`/`TIMEOUT` as clean.
   **Never poll `gh api .../comments` yourself** -- that's the expensive manual
-  loop the watcher exists to replace, and hand-polling silently misses comments.
+  loop the watcher exists to replace, and hand-polling silently misses feedback.
 - **Fresh-eyes runs in parallel** with Copilot round 1; you fix the COMBINED
-  findings, push once, and **loop Copilot until it reports CLEAN with no comments.**
+  findings, push once, and **loop Copilot until it reports `CLEAN`.**
 - Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
   to merge** -- it never merges (that's the maintainer's).
 
