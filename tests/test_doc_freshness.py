@@ -194,7 +194,15 @@ class TestFreshnessScanCoversTier1:
             if (freshness.REPO_ROOT / rel).is_file()
         }
         # Every tier-1 doc that exists on disk must be in the scan set.
-        assert tier1_on_disk, "expected at least one tier-1 doc on disk"
+        # (This is an integration assertion against the live checkout: it
+        # presumes at least one TIER1_DOCS path resolves on disk. In a
+        # sparse/partial checkout where none do, the first assert is the
+        # signal — fix the checkout or TIER1_DOCS, not this test.)
+        assert tier1_on_disk, (
+            "no TIER1_DOCS path resolved on disk "
+            f"({freshness.TIER1_DOCS}) under {freshness.REPO_ROOT} — "
+            "sparse checkout or a renamed tier-1 doc?"
+        )
         assert tier1_on_disk.issubset(set(docs))
 
     def test_find_docs_skips_absent_tier1_docs(self, monkeypatch):

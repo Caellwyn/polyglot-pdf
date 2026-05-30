@@ -237,9 +237,10 @@ def find_tier1_docs() -> list[Path]:
     """Return the tier-1 docs (TIER1_DOCS) that actually exist on disk.
 
     These carry a `**Tracks:**` line in the same shape as tier-2 docs (e.g.
-    technical_guide.md tracks backend/main.py et al.), so the freshness scan
-    must include them — find_docs() only globs DOC_DIRS and would miss them.
-    Missing entries (a doc not yet created) are silently skipped.
+    technical_guide.md tracks backend/main.py et al.). find_docs() globs only
+    DOC_DIRS, so it prepends THIS function's result to bring tier-1 into the
+    freshness scan. Missing entries (a doc not yet created) are silently
+    skipped.
     """
     return [p for rel in TIER1_DOCS if (p := REPO_ROOT / rel).is_file()]
 

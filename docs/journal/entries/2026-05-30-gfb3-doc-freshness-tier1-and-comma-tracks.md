@@ -1,9 +1,8 @@
 ---
-title: "check_doc_freshness: scan tier-1 docs + accept comma-separated Tracks lines"
-bead: polyglot-pdf-gfb.3
 date: 2026-05-30
-tags: [docs-reorg, ci, scripts, bugfix, doc-freshness]
-bd: gfb.3
+bead: polyglot-pdf-gfb.3
+title: "check_doc_freshness: scan tier-1 docs + accept comma-separated Tracks lines"
+tags: [testing, conventions]
 ---
 
 # gfb.3 — doc-freshness: scan tier-1 docs + accept comma-separated Tracks lines
