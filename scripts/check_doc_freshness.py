@@ -1,14 +1,16 @@
-"""Scan tier-2 docs for staleness AND enforce the sprint-archive protocol.
+"""Scan tier-1 + tier-2 docs for staleness AND enforce the sprint-archive protocol.
 
 This script does two warn-only checks in one pass:
 
-1. **Tier-2 doc freshness.** Each `docs/components/*.md` and
-   `docs/standards/*.md` declares a `**Tracks:**` line listing
-   space-separated paths or globs of code it owns, plus a
+1. **Doc freshness.** Each tier-1 doc (TIER1_DOCS: CLAUDE.md, docs/INDEX.md,
+   docs/technical_guide.md) and each `docs/components/*.md` /
+   `docs/standards/*.md` may declare a `**Tracks:**` line listing
+   space- or comma-separated paths or globs of code it owns, plus a
    `*Last updated: YYYY-MM-DD*` line near the top. Compares the doc's
    **claimed** "last updated" date (parsed from the `*Last updated:*`
    line) to each tracked file's last commit timestamp; flags docs whose
-   tracked code is newer than the stamp.
+   tracked code is newer than the stamp. Tier-1 docs without a `**Tracks:**`
+   line are simply skipped (same as tier-2).
 
 2. **Sprint-archive protocol.** Sprint plan files at `docs/sprint_*.md`
    should be archived to `docs/archive/` once the sprint ships, with a
@@ -64,6 +66,8 @@ Notes:
 - Glob expansion uses pathlib's `Path.rglob` semantics — `app/routes/*.py`
   matches one level, `app/**/*.py` matches recursively. Both are accepted.
 - A doc with no tracked files (no `**Tracks:**` line) is silently skipped.
+- `**Tracks:**` tokens may be space- OR comma-separated; trailing commas are
+  stripped so `` `a.py`, `b.py` `` parses to two clean tokens.
 - A tracked path that doesn't exist (typo, deleted file) is reported as a
   warning so the doc gets fixed.
 - The stamp is parsed at day-granularity; the script treats the stamp as
@@ -172,9 +176,13 @@ def parse_tracks(doc_path: Path) -> list[str]:
     if not m:
         return []
     line = m.group(1).strip()
-    # Tokens may be wrapped in backticks; strip them.
-    tokens = [t.strip("`").strip() for t in line.split() if t.strip("`").strip()]
-    return tokens
+    # Tokens may be space- OR comma-separated, and wrapped in backticks.
+    # Split on whitespace-or-comma so a comma-separated list
+    # (`` `a.py`, `b.py` ``) doesn't yield trailing-comma tokens like
+    # `a.py,` that match no files. Then strip backticks and any stray
+    # surrounding commas from each token.
+    tokens = [t.strip("`,").strip() for t in re.split(r"[\s,]+", line)]
+    return [t for t in tokens if t]
 
 
 def parse_last_updated_ts(doc_path: Path) -> int | None:
@@ -225,8 +233,27 @@ def expand_token(token: str) -> list[Path]:
     return [m for m in matches if m.is_file()]
 
 
+def find_tier1_docs() -> list[Path]:
+    """Return the tier-1 docs (TIER1_DOCS) that actually exist on disk.
+
+    These carry a `**Tracks:**` line in the same shape as tier-2 docs (e.g.
+    technical_guide.md tracks backend/main.py et al.). find_docs() globs only
+    DOC_DIRS, so it prepends THIS function's result to bring tier-1 into the
+    freshness scan. Missing entries (a doc not yet created) are silently
+    skipped.
+    """
+    return [p for rel in TIER1_DOCS if (p := REPO_ROOT / rel).is_file()]
+
+
 def find_docs() -> list[Path]:
-    docs = []
+    """Return tier-1 + tier-2 docs to scan for freshness, sorted.
+
+    Tier-1: TIER1_DOCS (CLAUDE.md, docs/INDEX.md, docs/technical_guide.md).
+    Tier-2: every `docs/components/*.md` + `docs/standards/*.md` (excluding
+    README.md). Docs without a `**Tracks:**` line are skipped downstream by
+    check_doc(); including them here is harmless.
+    """
+    docs = list(find_tier1_docs())
     for d in DOC_DIRS:
         dir_path = REPO_ROOT / d
         if not dir_path.is_dir():
@@ -235,7 +262,7 @@ def find_docs() -> list[Path]:
             if md.name == "README.md":
                 continue
             docs.append(md)
-    return sorted(docs)
+    return sorted(set(docs))
 
 
 def check_doc(
@@ -411,16 +438,18 @@ def check_doc_conventions(
     explicitly NOT scanned -- chronological history is the whole point there.
     """
     findings: list[tuple[Path, str]] = []
-    targets: list[Path] = []
-    # Always include the explicit tier-1 list.
-    for rel in TIER1_DOCS:
-        p = repo_root / rel
-        if p.is_file():
-            targets.append(p)
-    # Plus every tier-2 doc.
+    # find_docs() already returns tier-1 (TIER1_DOCS) + tier-2 docs, but a
+    # caller may pass an explicit `docs` list (e.g. tests) that omits tier-1.
+    # Union the explicit tier-1 list in either way, then dedupe so a doc
+    # isn't scanned twice.
+    targets: list[Path] = [
+        p for rel in TIER1_DOCS if (p := repo_root / rel).is_file()
+    ]
     if docs is None:
         docs = find_docs()
-    targets.extend(docs)
+    for d in docs:
+        if d not in targets:
+            targets.append(d)
     for doc in targets:
         try:
             text = doc.read_text(encoding="utf-8")
@@ -533,9 +562,14 @@ def main() -> int:
     args = parser.parse_args()
 
     only_staged = staged_files() if args.staged else None
+    # find_docs() returns tier-1 (TIER1_DOCS) + tier-2 (docs/components,
+    # docs/standards) docs. The freshness loop below must cover tier-1 too —
+    # technical_guide.md's **Tracks:** line was previously unenforced because
+    # this loop only iterated the (then DOC_DIRS-only) result.
     docs = find_docs()
     if not docs:
-        print("No docs to check (docs/components/ + docs/standards/ are empty).")
+        print("No docs to check (no tier-1 docs on disk; "
+              "docs/components/ + docs/standards/ are empty).")
         return 0
 
     any_stale = False
@@ -592,7 +626,7 @@ def main() -> int:
                 print(f"  - {rel}: OK")
 
     if not any_stale and not any_warnings:
-        print("\nAll tier-2 docs are up to date.")
+        print("\nAll tier-1 + tier-2 docs are up to date.")
     elif any_stale:
         print("\nStale docs detected. Update the doc and bump its *Last updated:* line, ")
         print("or note the review in the closeout journal entry. Exit 0 (warn only).")
