@@ -17,7 +17,7 @@ The schema is a strict hierarchy -- **Form > Parts > Sections > Fields** (see
 | Term | What it is | In the model |
 |------|-----------|--------------|
 | **Field** | One fillable input (text, checkbox, date, signature, ...). | `FormField`; `id` like `p1_checkbox4[0]`. |
-| **Section** | The **user-facing navigation unit** -- what the user moves between, what "switch section" targets. Always present. | `FormSection { id, label, fields: [field_id] }`; `FormSchema.sections` (required). |
+| **Section** | The **user-facing navigation unit** -- what the user moves between, what "switch section" targets. Always present. | `FormSection { id, label, order, fields: [field_id] }` (`order` is required and drives navigation sequence); `FormSchema.sections` (required). |
 | **Part** | An **optional higher-level grouping of sections** (e.g. "Part A: Information About Applicant" on a USCIS form). Not every form has parts. | `FormPart { id: "part_a", label, ... }`; `FormSchema.parts` (Optional); `get_sections_in_part()`. |
 
 **Canon:**
@@ -35,21 +35,29 @@ meant** -- a naming bug, not a real part reference. Canonical state is
 `currentSectionId` / `completedSections` (frontend) and section-keyed identifiers
 (backend). The known holdouts, all meaning "current section":
 
-- `backend/adapters/live_ai_gemini.py` -- `self._current_part_id`, the
-  `current_part_id` ctor arg, and the `part_id=` log field (~lines 177, 227-238, 1231).
-- `backend/utils/token_file_logger.py` -- `part_id` log arg (~lines 71, 99).
+- `backend/adapters/live_ai_gemini.py` -- `self._current_part_id` (init line 177),
+  the `current_part_id` parameter of **`set_session_context()`** (lines 227, 238 --
+  *not* the constructor; `__init__` only sets it to `None`), and the `part_id=`
+  log field (line 1231).
+- `backend/utils/token_file_logger.py` -- the `part_id` parameter (line 71) and
+  the `"part_id": part_id` log-payload key (**line 111**; line 99 is just its
+  docstring).
 - `backend/services/form_filling_service.py:144` -- `current_part_id=None,
   # Will be updated on section switch` (the comment proves the conflation).
-- `backend/services/manifest_service.py` -- `current_part`/`previous_parts` keys
-  in the JIT manifest (here "part" is ambiguous with the real `FormPart`; treat
-  as drift pending the manifest's own review).
+- `backend/services/manifest_service.py` + `frontend/src/schema-forms/utils/manifestUtils.ts`
+  -- the JIT manifest's `current_part`/`previous_parts` keys hold **section**
+  data, not real `FormPart`s: `buildHandshakeManifest(currentSectionId, ...)`
+  looks the ID up in `schema.sections` and even errors with `Part ${id} not
+  found`. Same naming-bug-on-section-state as the others; renaming these is a
+  log/handshake **wire-format** change, so it's sequenced carefully in the
+  follow-up rather than ambiguous.
 - Frontend test fixture `frontend/src/schema-forms/state/schemaFormState.test.ts.NEEDS_SECTION_REFACTOR`
   (filename already flags it).
 
 Don't add new `part_id`/`currentPartId` names for section state. Renaming the
-holdouts is tracked in `polyglot-pdf-gfb.4` -- a behavior-preserving rename.
-(The `manifest_service.py` keys are ambiguous with the real `FormPart`; that
-bead reviews them rather than blindly renaming.)
+holdouts is tracked in `polyglot-pdf-gfb.4`. Most are behavior-preserving, but
+the manifest and token-log keys are on the **handshake/log wire format**, so that
+bead sequences those renames against their consumers rather than doing them blind.
 
 ## Field IDs and brackets
 
