@@ -41,7 +41,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Voice + VAD (manual activity signals) | `standards/voice-and-vad.md` _(planned -- `polyglot-pdf-4rz`)_ |
 | HIPAA / PII policy | `standards/hipaa-pii-policy.md` _(planned -- `polyglot-pdf-b11`)_ |
 | Confirmation + audit trail | `standards/confirmation-and-audit.md` _(planned -- `polyglot-pdf-gbn`)_ |
-| Stateless architecture | `standards/stateless-architecture.md` _(planned -- `polyglot-pdf-pki`)_ |
+| Stateless architecture (client owns state) | [`standards/stateless-architecture.md`](standards/stateless-architecture.md) |
 | Logging + cost | `standards/logging-and-cost.md` _(planned -- `polyglot-pdf-m8s`)_ |
 | Terminology (sections vs parts) | `standards/terminology.md` _(planned -- `polyglot-pdf-m3f`)_ |
 | Testing | `standards/testing.md` _(planned -- `polyglot-pdf-jh8`)_ |
