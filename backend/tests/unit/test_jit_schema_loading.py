@@ -201,7 +201,6 @@ class TestCallbackHandlerJITIntegration:
             handle_update_fields=mock_update_handler,
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
-            handle_complete_section=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
             get_next_field_schema_for_jit=mock_jit_getter
         )
@@ -209,17 +208,23 @@ class TestCallbackHandlerJITIntegration:
         return handler, mock_jit_getter
 
     @pytest.mark.asyncio
-    async def test_update_includes_next_field_schema(self, callback_handler_with_jit):
-        """Tool response should include next_field_schema when available."""
+    async def test_confirm_field_includes_next_field_schema(self, callback_handler_with_jit):
+        """confirm_field response should include next_field_schema when available.
+
+        JIT schema delivery was moved off update_form_fields onto confirm_field to
+        save tokens (update_form_fields now always passes next_field_schema=None and
+        the hint/schema are sent only after the user confirms the field). This test
+        guards the current behavior: the JIT getter fires during confirm_field.
+        """
         handler, mock_jit_getter = callback_handler_with_jit
 
-        # Call update_form_fields
-        response = await handler.on_tool_call("update_form_fields", {
+        # confirm_field is where JIT schema is now consolidated
+        response = await handler.on_tool_call("confirm_field", {
             "field_id": "firstName",
-            "value": "John"
+            "confirmation_method": "verbal"
         })
 
-        # Should have called JIT getter with updated field ID
+        # Should have called JIT getter with the confirmed field ID
         mock_jit_getter.assert_called_once_with("firstName")
 
         # Response should include next_field_schema
@@ -228,6 +233,25 @@ class TestCallbackHandlerJITIntegration:
         assert "next_field_schema" in response
         assert response["next_field_schema"]["id"] == "lastName"
         assert response["next_field_schema"]["spoken_name"] == "last name"
+
+    @pytest.mark.asyncio
+    async def test_update_does_not_include_next_field_schema(self, callback_handler_with_jit):
+        """update_form_fields must NOT call the JIT getter or attach a schema.
+
+        Schema delivery is deferred to confirm_field (token-saving design), so an
+        update response carries success + applied_fields but never next_field_schema.
+        """
+        handler, mock_jit_getter = callback_handler_with_jit
+
+        response = await handler.on_tool_call("update_form_fields", {
+            "field_id": "firstName",
+            "value": "John"
+        })
+
+        mock_jit_getter.assert_not_called()
+        assert response is not None
+        assert response["success"] is True
+        assert "next_field_schema" not in response
 
     @pytest.mark.asyncio
     async def test_update_without_jit_schema(self, mock_websocket, mock_coordinator):
@@ -252,7 +276,6 @@ class TestCallbackHandlerJITIntegration:
             handle_update_fields=mock_update_handler,
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
-            handle_complete_section=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
             get_next_field_schema_for_jit=mock_jit_getter
         )
@@ -295,7 +318,6 @@ class TestCallbackHandlerJITIntegration:
             handle_update_fields=mock_update_handler,
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
-            handle_complete_section=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
             get_next_field_schema_for_jit=mock_jit_getter
         )
@@ -355,7 +377,6 @@ class TestBackwardCompatibility:
             handle_update_fields=mock_update,
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
-            handle_complete_section=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
             get_next_field_schema_for_jit=None  # Explicitly None
         )

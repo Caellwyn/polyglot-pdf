@@ -3,7 +3,7 @@ Tests for CallbackHandler - Gemini Live AI callback routing.
 
 Tests cover:
 - Callback registration and delegation
-- Tool routing (update_form_fields, get_form_status, switch_section, get_field_value, complete_section)
+- Tool routing (update_form_fields, get_form_status, switch_section, get_field_value, confirm_field)
 - Argument parsing and normalization
 - Error response building
 - Form update coordination
@@ -52,7 +52,6 @@ def mock_handlers():
         }),
         "switch_section": AsyncMock(return_value={"success": True}),
         "get_field_value": AsyncMock(return_value={"found": True, "value": "test"}),
-        "complete_section": AsyncMock(return_value={"success": True}),
         "request_form_state": AsyncMock(return_value={}),
         "get_next_field_schema": MagicMock(return_value={
             "id": "next_field",
@@ -75,7 +74,6 @@ def callback_handler(mock_websocket, mock_coordinator, mock_handlers):
         handle_update_fields=mock_handlers["update_fields"],
         handle_switch_section=mock_handlers["switch_section"],
         handle_get_field_value=mock_handlers["get_field_value"],
-        handle_complete_section=mock_handlers["complete_section"],
         request_form_state_from_client=mock_handlers["request_form_state"],
         get_next_field_schema_for_jit=mock_handlers["get_next_field_schema"],
     )
@@ -103,22 +101,19 @@ class TestCallbackRegistration:
         update_handler = MagicMock()
         switch_handler = AsyncMock()
         get_value_handler = AsyncMock()
-        complete_handler = AsyncMock()
         request_state_handler = AsyncMock()
-        
+
         handler.set_tool_handlers(
             handle_update_fields=update_handler,
             handle_switch_section=switch_handler,
             handle_get_field_value=get_value_handler,
-            handle_complete_section=complete_handler,
             request_form_state_from_client=request_state_handler,
             get_next_field_schema_for_jit=MagicMock(return_value=None),
         )
-        
+
         assert handler._handle_update_fields == update_handler
         assert handler._handle_switch_section == switch_handler
         assert handler._handle_get_field_value == get_value_handler
-        assert handler._handle_complete_section == complete_handler
         assert handler._request_form_state_from_client == request_state_handler
 
     # Note: on_form_update, on_transcript, on_audio, and send_form_update
@@ -149,7 +144,8 @@ class TestToolRouting:
         )
         
         mock_handlers["request_form_state"].assert_called_once()
-        assert "field_values" in result
+        # Response is the ultra-compact format under "state" (was "field_values")
+        assert "state" in result
 
     @pytest.mark.asyncio
     async def test_switch_section_uses_handler(self, callback_handler, mock_handlers):
@@ -173,16 +169,10 @@ class TestToolRouting:
         mock_handlers["get_field_value"].assert_called_once_with("name")
         assert result["found"] is True
 
-    @pytest.mark.asyncio
-    async def test_complete_section_sends_form_update(self, callback_handler, mock_handlers):
-        """Test that complete_section calls completion handler."""
-        result = await callback_handler.on_tool_call(
-            tool_name="complete_section",
-            arguments={}
-        )
-        
-        mock_handlers["complete_section"].assert_called_once()
-        assert result["success"] is True
+    # NOTE: the `complete_section` tool was removed (section completion is now
+    # auto-detected by the frontend when all fields are confirmed). Its routing
+    # and handler are gone, so a `complete_section` call falls through to the
+    # unknown-tool path — covered by test_unknown_tool_returns_empty_dict below.
 
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_empty_dict(self, callback_handler):

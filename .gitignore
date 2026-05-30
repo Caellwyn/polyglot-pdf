@@ -26,6 +26,8 @@ example_webforms/
 *.log
 backend.log
 backend/logs/
+# Confirmation-audit logs (one JSONL per form session; never commit real ones)
+logs/confirmations/
 
 # Build outputs
 .frontend/dist/

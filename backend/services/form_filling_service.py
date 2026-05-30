@@ -122,7 +122,6 @@ class FormFillingService:
             handle_update_fields=self.handle_update_fields_tool_call,
             handle_switch_section=self.handle_switch_section,
             handle_get_field_value=self.handle_get_field_value,
-            handle_complete_section=self.handle_complete_section,
             request_form_state_from_client=self.request_form_state_from_client,
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
         )
@@ -938,26 +937,9 @@ class FormFillingService:
         """
         return find_similar_field_names(query, available_names, max_suggestions)
 
-    # REMOVED: complete_section handler (optimization)
-    # Section completion now auto-detected by frontend when all fields confirmed.
-    # Frontend triggers section switch automatically via manual_section_switch message.
-    async def handle_complete_section(self) -> Dict[str, Any]:
-        """
-        DEPRECATED: Handle complete_section tool call from AI.
-
-        This method is kept for backward compatibility but should no longer be called.
-        Section completion is now auto-detected by frontend in handleConfirmFieldRequest().
-
-        Returns:
-            Deprecation message
-        """
-        _log.warning("complete_section_deprecated",
-                    session_id=self._session_id,
-                    message="complete_section tool removed - frontend auto-detects completion")
-        return {
-            "success": False,
-            "message": "This tool has been removed. Section completion is automatic.",
-        }
+    # NOTE: the complete_section tool/handler was removed. Section completion is
+    # auto-detected by the frontend (handleConfirmFieldRequest) when all fields
+    # are confirmed, which then triggers a section switch via manual_section_switch.
 
 
 # Note: factory for FormFillingService lives in backend.dependencies to avoid

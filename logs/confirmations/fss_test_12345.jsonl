@@ -1,4 +1,0 @@
-{"timestamp": "2025-11-19T00:07:37.581066+00:00", "event": "field_confirmed", "form_id": "I-90", "form_session_id": "fss_test_12345", "field_id": "p1_line1_firstname", "field_name": "p1_line1_firstname", "confirmation_method": "verbal"}
-{"timestamp": "2025-11-19T00:07:37.602115+00:00", "event": "field_confirmed", "form_id": "I-90", "form_session_id": "fss_test_12345", "field_id": "p1_line1_lastname", "field_name": "p1_line1_lastname", "confirmation_method": "manual"}
-{"timestamp": "2025-11-19T00:07:37.641518+00:00", "event": "field_confirmed", "form_id": "I-90", "form_session_id": "fss_test_12345", "field_id": "p1_line1_middlename", "field_name": "p1_line1_middlename", "confirmation_method": "verbal"}
-{"timestamp": "2025-11-19T00:07:37.666055+00:00", "event": "field_confirmed", "form_id": "I-90", "form_session_id": "fss_test_12345", "field_id": "p1_line1_signature", "field_name": "p1_line1_signature", "confirmation_method": "verbal"}
