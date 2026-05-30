@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 import os
+import re
 from pathlib import Path
 
 
@@ -348,15 +349,19 @@ DEFAULT_PRICING_FAMILY = "2.5"
 def model_family(model_name: str | None) -> str:
 	"""Map a Gemini model name to a pricing family key in GEMINI_PRICING_BY_FAMILY.
 
-	Matches on the version token in the name (e.g. 'gemini-live-2.5-flash-...'
-	-> '2.5', 'gemini-3.1-flash-live-preview' -> '3.1'). Falls back to
-	DEFAULT_PRICING_FAMILY for empty/unrecognized names so cost tracking never
-	crashes on a new preview model — it just bills at the default until a row is
-	added here.
+	Matches the version number as a whole token, NOT a bare substring, so
+	'gemini-3.10-flash' does not match family '3.1' and 'gemini-12.5-...' does
+	not match '2.5'. The version must be bounded by a non-version character (or
+	the start/end of the string) on each side — i.e. not preceded by a digit/dot
+	and not followed by a digit/dot. Falls back to DEFAULT_PRICING_FAMILY for
+	empty/unrecognized names so cost tracking never crashes on a new preview
+	model — it just bills at the default until a row is added here.
 	"""
 	name = (model_name or "").lower()
 	for family in GEMINI_PRICING_BY_FAMILY:
-		if family in name:
+		# (?<![\d.]) / (?![\d.]) reject a digit or dot abutting the version,
+		# so '3.1' matches in 'gemini-3.1-flash' but not in 'gemini-3.10-flash'.
+		if re.search(r"(?<![\d.])" + re.escape(family) + r"(?![\d.])", name):
 			return family
 	return DEFAULT_PRICING_FAMILY
 
@@ -368,5 +373,7 @@ def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
 
 # Backward-compatible alias: the old flat dict was the 2.5 rates. Anything still
 # importing GEMINI_PRICING keeps working (it gets the default family's rates).
-GEMINI_PRICING = GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY]
+# A COPY, not the live inner dict — a stray mutation of GEMINI_PRICING must not
+# corrupt GEMINI_PRICING_BY_FAMILY for everyone else in the process.
+GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 
