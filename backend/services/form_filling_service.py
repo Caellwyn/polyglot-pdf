@@ -396,9 +396,9 @@ class FormFillingService:
             on_tool_call=self._callback_handler.on_tool_call,
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
-            enable_transcripts=self._send_transcript,
+            enable_transcripts=bool(self._send_transcript),
         )
-        
+
         # Verify session is now active
         is_active_after = self._live_ai.is_session_active()
         _log.info("✅ gemini_session_restarted", 
