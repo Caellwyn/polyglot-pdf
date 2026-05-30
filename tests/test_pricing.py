@@ -46,6 +46,22 @@ class TestModelFamilyMapping:
     def test_known_models_map_to_family(self, model_name, expected):
         assert model_family(model_name) == expected
 
+    @pytest.mark.parametrize(
+        "model_name,expected",
+        [
+            # Real model IDs verified against ai.google.dev/gemini-api/docs
+            # (and pricing) on 2026-05-30 — pins the mapping to reality, not
+            # just synthetic names. The "-preview-12-2025" suffix must NOT let
+            # the "12-2025" date false-match family "2.5".
+            ("gemini-2.5-flash-native-audio-preview-12-2025", "2.5"),
+            ("gemini-2.5-flash-native-audio-latest", "2.5"),
+            ("gemini-3.1-flash-live-preview", "3.1"),
+            ("gemini-3.1-flash-tts-preview", "3.1"),
+        ],
+    )
+    def test_real_google_model_ids_map_correctly(self, model_name, expected):
+        assert model_family(model_name) == expected
+
     @pytest.mark.parametrize("model_name", ["", None, "gemini-9.9-unknown", "banana"])
     def test_unknown_models_fall_back_to_default(self, model_name):
         assert model_family(model_name) == DEFAULT_PRICING_FAMILY

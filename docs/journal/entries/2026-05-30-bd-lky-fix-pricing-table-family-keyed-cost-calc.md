@@ -47,6 +47,28 @@ case-insensitivity, unknown→default) and the legacy-alias guard.
 
 Nothing deferred.
 
+## Rate + model-name verification (independent research)
+
+Before merge, verified the spec's rates and model names against Google's own
+docs (`ai.google.dev/gemini-api/docs/pricing` and `/models`) on 2026-05-30 —
+not the bead text — because third-party aggregators gave conflicting numbers:
+
+- **Rates: confirmed exact.** 2.5 = 0.50/3.00/2.00/12.00, 3.1 = 0.75/3.00/4.50/12.00
+  (per 1M, text-in/audio-in/text-out/audio-out) match the official pricing page.
+- **Model names: confirmed real.** `gemini-3.1-flash-live-preview` is the current
+  Live API model; `gemini-2.5-flash-native-audio-preview-12-2025` is the current
+  2.5 native-audio preview. Both map correctly via `model_family()` — verified
+  the `-preview-12-2025` date suffix does NOT false-match `2.5` against `12-2025`.
+- **Edge note:** a bare `gemini-3-flash-preview` (no `.1`) is not a Live/native-
+  audio model per Google, so it won't reach this adapter; if it ever did it bills
+  at the 2.5 default. Documented in the config comment.
+- Added the real Google model IDs as explicit test cases (24 pricing tests now).
+
+**Out-of-scope finding filed:** the research surfaced a Google forum report that
+`gemini-2.5-flash-native-audio-preview-12-2025` returns `code=1011` mid-turn at
+~80% since 2026-05-27. Filed as **`polyglot-pdf-daa`** (P1 watch/investigate) —
+our default model is the stable alias, not confirmed affected.
+
 ## Lessons
 
 - Keeping a **backward-compatible alias** (`GEMINI_PRICING` → default family) let

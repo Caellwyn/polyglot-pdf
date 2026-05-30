@@ -315,15 +315,20 @@ def get_settings() -> Settings:
 # ============================================================================
 # Gemini Pricing for Token Tracking (per-token rates, keyed by model family)
 # ============================================================================
-# Rates are per-1M list prices from https://ai.google.dev/pricing, divided to
-# per-token here. Output rates include thinking tokens. Keyed by model FAMILY so
-# the active model (MODEL_NATIVE / MODEL_LIVE) selects the right row — this is
-# what makes a 2.5 -> 3.1 A/B comparable on cost.
+# Rates are per-1M list prices from https://ai.google.dev/gemini-api/docs/pricing,
+# divided to per-token here. Output rates include thinking tokens. Keyed by model
+# FAMILY so the active model (MODEL_NATIVE / MODEL_LIVE) selects the right row —
+# this is what makes a 2.5 -> 3.1 A/B comparable on cost.
+# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-05-30 for
+# gemini-2.5-flash-native-audio-preview-12-2025 and gemini-3.1-flash-live-preview.
 # Updated: 2026-05-30.
 #
 # Columns: text_input / audio_input / text_output / audio_output (USD per 1M).
 #   2.5 (native-audio):  0.50 / 3.00 / 2.00 / 12.00
 #   3.1 (live preview):  0.75 / 3.00 / 4.50 / 12.00
+# Note: a bare "gemini-3-flash-*" (no ".1") is NOT a Live/native-audio model per
+# Google's docs, so it won't reach this adapter; model_family() bills it at the
+# 2.5 default if it ever does. Add a "3" row here if that changes.
 _PER_1M = 1_000_000
 
 GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
