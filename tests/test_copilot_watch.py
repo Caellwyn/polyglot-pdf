@@ -57,6 +57,49 @@ def test_emit_returns_matching_exit_code(state, code, capsys):
     assert "RESULT: {}".format(state) in out
 
 
+class _Cp1252Stdout:
+    """A stdout stand-in that behaves like a Windows cp1252 console: its
+    write() raises UnicodeEncodeError on any non-cp1252 char (e.g. an emoji),
+    exactly as the real crash did. Captures what survives so tests can assert
+    the fallback actually emitted the contract line."""
+
+    encoding = "cp1252"
+
+    def __init__(self):
+        self.captured = ""
+
+    def write(self, s):
+        s.encode("cp1252")  # raises UnicodeEncodeError on un-encodable chars
+        self.captured += s
+        return len(s)
+
+    def flush(self):
+        pass
+
+
+def test_emit_does_not_crash_on_emoji_detail(monkeypatch):
+    # Regression (bead polyglot-pdf-39a): with a real cp1252-style stdout, a
+    # Copilot review body containing an emoji must NOT raise UnicodeEncodeError,
+    # and the RESULT contract line must still be emitted (degraded, not lost).
+    fake = _Cp1252Stdout()
+    monkeypatch.setattr(sys, "stdout", fake)
+    detail = "Copilot says: \U0001f4a1 consider X"
+    assert cw._emit("COMMENTS", detail) == 0  # must not raise
+    # The fallback re-encodes via cp1252/replace, so the emoji becomes '?'
+    # but the contract line is intact.
+    assert "RESULT: COMMENTS" in fake.captured
+
+
+def test_safe_print_emits_via_fallback_when_print_cannot_encode(monkeypatch):
+    # When the primary print() can't encode (cp1252 stdout + emoji), the
+    # fallback must still WRITE a degraded line -- not silently swallow it.
+    fake = _Cp1252Stdout()
+    monkeypatch.setattr(sys, "stdout", fake)
+    cw._safe_print("has emoji \U0001f4a1 and text")  # must not raise
+    assert "has emoji" in fake.captured
+    assert "and text" in fake.captured
+
+
 # --- timestamp floor (findings #2/#8: prior-round items excluded) ---
 
 def test_after_floor():

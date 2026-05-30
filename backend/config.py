@@ -32,13 +32,6 @@ class Settings(BaseModel):
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 60s of no activity (saves resources)
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
-	
-	# LLM normalizer settings: Deprecated
-	# ENABLE_LLM_FIELD_NORMALIZATION: bool = True
-	# LLM_NORMALIZER_MODEL: str = "gemini-2.5-pro"
-	# LLM_NORMALIZER_MAX_FIELDS: int = 120
-	# LLM_NORMALIZER_NEAR_TEXT_RADIUS: int = 36
-	# LLM_NORMALIZER_TEMPERATURE: float = 0.2
 
 	# === JIT (Just-In-Time) Schema Loading Settings ===
 	# Token Reduction: Send manifests instead of full schemas
@@ -309,8 +302,6 @@ def get_settings() -> Settings:
 	"""
 	return Settings()
 
-
-# (LLM normalizer settings live on Settings; no module-level duplicates.)
 
 # ============================================================================
 # Gemini Pricing for Token Tracking (per-token rates, keyed by model family)
