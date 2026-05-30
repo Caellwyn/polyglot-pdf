@@ -7,7 +7,15 @@ from pathlib import Path
 
 
 class Settings(BaseModel):
-	MODEL_NATIVE: str = "gemini-live-2.5-flash-native-audio"
+	# === Model selection (env-swappable for A/B testing without redeploy) ===
+	# MODEL_NATIVE: Gemini Live native-audio model (used when USE_NATIVE_AUDIO=True)
+	# MODEL_LIVE:   Gemini Live cascade model (used when USE_NATIVE_AUDIO=False)
+	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
+	#   deprecated; kept as an env-swappable knob and surfaced on /health).
+	# To A/B a new family, set the env var (e.g. MODEL_NATIVE=gemini-3.1-flash-live-preview).
+	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "gemini-live-2.5-flash-native-audio")
+	MODEL_LIVE: str = os.getenv("MODEL_LIVE", "gemini-live-2.5-flash-preview")
+	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
 	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
