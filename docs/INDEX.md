@@ -43,7 +43,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Confirmation + audit trail | `standards/confirmation-and-audit.md` _(planned -- `polyglot-pdf-gbn`)_ |
 | Stateless architecture | `standards/stateless-architecture.md` _(planned -- `polyglot-pdf-pki`)_ |
 | Logging + cost | `standards/logging-and-cost.md` _(planned -- `polyglot-pdf-m8s`)_ |
-| Terminology (sections vs parts) | `standards/terminology.md` _(planned -- `polyglot-pdf-m3f`)_ |
+| Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | `standards/testing.md` _(planned -- `polyglot-pdf-jh8`)_ |
 
 ## Journal (tier 3 -- historical)
