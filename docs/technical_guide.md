@@ -2,7 +2,7 @@
 
 *Last updated: 2026-05-30. See [journal/entries/](journal/entries/) for chronological history.*
 
-**Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/__init__.py`, `firebase.json`, `deploy-*.sh`
+**Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
 System-wide reference: routes/endpoints, cross-surface gotchas, environment
 differences. CURRENT STATE ONLY -- chronological history goes in the journal
@@ -34,18 +34,25 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 
-Non-env tunables also in `config.py` (code constants, not `getenv`):
-`USE_NATIVE_AUDIO=True`, `DISABLE_GEMINI_VAD=True`, `AUDIO_IN_RATE=16000`,
+Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
+them in source, not via environment): `VERTEXAI=True` (route LLM/embedding calls
+through Vertex AI vs. the Gemini API key path -- a behavioral switch worth
+knowing when deploying), `USE_NATIVE_AUDIO=True`, `DISABLE_GEMINI_VAD=True`,
+`PROACTIVE_AUDIO=False` (deprecated), `AUDIO_IN_RATE=16000`,
 `AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
-`VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`), and `WS_IDLE_TIMEOUT_SEC`
-(value/comment/tests currently inconsistent -- tracked in `polyglot-pdf-od1`,
-blocked on `polyglot-pdf-e9v`; cite the setting, not a number, until it lands).
+`VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
+exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
+`WS_IDLE_TIMEOUT_SEC` -- its value (`120`), inline comment (`60s`), and tests
+(`==60`) currently disagree; tracked in `polyglot-pdf-od1` (blocked on
+`polyglot-pdf-e9v`), so cite the setting, not a number, until it lands.
 
 ## Routes / endpoints
 
 Routers are registered in `backend/main.py`. REST routers carry a `/api` prefix;
-the WebSocket router carries `/ws` and is mounted **twice** -- bare and again
-under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas).
+the `websocket_routes` router carries `/ws` and is mounted **twice** -- bare and
+again under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas).
+Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
+`/version`) are **not** part of that double-mount and have no `/api` mirror.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
@@ -62,9 +69,11 @@ under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas).
 
 - **WebSockets bypass Firebase Hosting rewrites.** `firebase.json` rewrites
   `/api/**` to Cloud Run, but Hosting doesn't proxy WebSocket upgrades, so the
-  frontend connects to the Cloud Run host **directly** (hardcoded in
-  `frontend/src/shared/config.ts`), not via the Hosting domain. The `/api`-prefixed
-  WS mount exists for parity but the live client uses the direct URL.
+  frontend connects to the Cloud Run host **directly**, not via the Hosting
+  domain. The WS URL is resolved in `frontend/src/shared/config.ts`: the build-time
+  `VITE_WS_URL` env var wins if set, else it falls back to `PRODUCTION_WS_URL`
+  (the Cloud Run host) in prod or `ws://localhost:8000/ws/fill` in dev. The
+  `/api`-prefixed WS mount exists for parity but the live client uses the direct URL.
 - **Stateless backend; the client owns all field state.** Field values,
   confirmations, and section state live in the browser's `sessionStorage`; the
   backend rebuilds context from the WS handshake on every (re)connect. Never add
