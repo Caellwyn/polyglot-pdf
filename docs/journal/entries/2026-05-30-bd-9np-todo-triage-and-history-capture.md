@@ -101,3 +101,15 @@ the parts/section claim that's only *partly* done on the backend).
   beads).
 - Logging roadmap home: `docs/standards/logging-and-cost.md` (`m8s`).
 - Terminology canon / rename: `m3f` / `gfb.4`. Doc archival: `4p0`.
+
+## Doc freshness + tests
+
+`check_doc_freshness.py`: no docs to check (`docs/components/` + `docs/standards/`
+still empty under the gfb epic). This entry is tier-3 (not freshness-tracked).
+
+Test suite (`backend/tests/`): **148 passed, 2 skipped, 4 failed**. This branch
+touches only `planning_documents/TODO.md` and this journal `.md` — **zero Python**
+— so the 4 failures are pre-existing, not introduced here: 3 are the
+`WS_IDLE_TIMEOUT_SEC` 120-vs-60 mismatch already tracked by `polyglot-pdf-od1`,
+and 1 is `test_live_ai_gemini_real_connection`, a contract test needing a live
+Gemini API connection.
