@@ -343,7 +343,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 								"checkbox_option_no_pdf_mapping",
 								kit=request.kit_id,
 								field_id=field_id,
-								value=selected_value,
+								# never log selected_value -- PII/PHI. bd hjo
 							)
 							continue
 
@@ -371,7 +371,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 								kit=request.kit_id,
 								field_id=field_id,
 								pdf_field=option_pdf_field,
-								value=selected_value,
+								# never log selected_value -- PII/PHI. bd hjo
 							)
 						except Exception as exc:
 							_log.error(

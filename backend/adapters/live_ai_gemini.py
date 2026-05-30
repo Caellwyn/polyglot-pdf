@@ -18,7 +18,7 @@ from google.genai import types
 import structlog
 
 from backend.utils.json_recovery import extract_json_from_part
-from backend.utils.dev_file_logger import get_dev_logger
+from backend.utils.dev_file_logger import get_dev_logger, DEV_LOGGING_ENABLED
 from backend.utils.structured_logger import get_logger as get_structured_logger
 from backend.utils.token_file_logger import get_token_logger
 from backend.config import get_pricing_for_model
@@ -325,9 +325,10 @@ class LiveAIGemini(ILiveAI):
             # If the queue isn't started, drop message (no-op) for safety
             return
 
-        # Log text message for debugging
+        # Log text message for debugging -- never log the text itself: callers
+        # build it with field values (e.g. audio_handler "...with value: X"). bd hjo
         self._log.debug("TEXT_MESSAGE_QUEUED",
-                      message=text)
+                      message_length=len(text))
 
         await self._text_queue.put(text)
 
@@ -360,20 +361,24 @@ class LiveAIGemini(ILiveAI):
         try:
             self._log.info("SEND_CLIENT_CONTENT", message_length=len(text))  # never log message text -- bd hjo
 
-            # DEBUG: Append client content to debug file for token analysis
-            try:
-                debug_file = Path("backend/logs/gemini_system_instruction.txt")
-                with open(debug_file, "a", encoding="utf-8") as f:
-                    f.write("\n\n" + "=" * 80 + "\n")
-                    f.write("CLIENT CONTENT MESSAGE SENT TO GEMINI\n")
-                    f.write(f"Timestamp: {datetime.now().isoformat()}\n")
-                    f.write(f"Length: {len(text)} chars\n")
-                    f.write(f"Estimated tokens: ~{len(text) // 4}\n")
-                    f.write("=" * 80 + "\n\n")
-                    f.write(text)
-                    f.write("\n\n" + "=" * 80 + "\n")
-            except Exception as e:
-                self._log.warn("failed_to_append_debug_file", error=str(e))
+            # DEBUG: Append client content to debug file for token analysis.
+            # This writes the RAW message text (which can embed field values), so
+            # it is gated behind the same local-dev marker as the PHI logger --
+            # production containers have no .env.DEV, so this never runs in prod. bd hjo
+            if DEV_LOGGING_ENABLED:
+                try:
+                    debug_file = Path("backend/logs/gemini_system_instruction.txt")
+                    with open(debug_file, "a", encoding="utf-8") as f:
+                        f.write("\n\n" + "=" * 80 + "\n")
+                        f.write("CLIENT CONTENT MESSAGE SENT TO GEMINI\n")
+                        f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+                        f.write(f"Length: {len(text)} chars\n")
+                        f.write(f"Estimated tokens: ~{len(text) // 4}\n")
+                        f.write("=" * 80 + "\n\n")
+                        f.write(text)
+                        f.write("\n\n" + "=" * 80 + "\n")
+                except Exception as e:
+                    self._log.warn("failed_to_append_debug_file", error=str(e))
 
             await self._current_session.send_client_content(
                 turns={"parts": [{"text": text}],},
@@ -624,27 +629,31 @@ class LiveAIGemini(ILiveAI):
         
         if self._system_instruction:
             config["system_instruction"] = self._system_instruction
-            # Log initial system instruction for debugging
+            # Log initial system instruction for debugging -- never log its text:
+            # it's built from section field values and can embed PII/PHI. bd hjo
             self._log.debug("INITIAL_SYSTEM_INSTRUCTION",
-                          system_instruction=self._system_instruction)
+                          system_instruction_length=len(self._system_instruction))
 
-            # DEBUG: Write system instruction to file for token analysis
-            try:
-                debug_file = Path("backend/logs/gemini_system_instruction.txt")
-                debug_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(debug_file, "w", encoding="utf-8") as f:
-                    f.write("=" * 80 + "\n")
-                    f.write("SYSTEM INSTRUCTION SENT TO GEMINI\n")
-                    f.write(f"Timestamp: {datetime.now().isoformat()}\n")
-                    f.write(f"Length: {len(self._system_instruction)} chars\n")
-                    f.write(f"Estimated tokens: ~{len(self._system_instruction) // 4}\n")
-                    f.write("=" * 80 + "\n\n")
-                    f.write(self._system_instruction)
-                    f.write("\n\n" + "=" * 80 + "\n")
-                    f.write("END OF SYSTEM INSTRUCTION\n")
-                    f.write("=" * 80 + "\n")
-            except Exception as e:
-                self._log.warn("failed_to_write_debug_file", error=str(e))
+            # DEBUG: Write system instruction to file for token analysis.
+            # The system instruction is built from section field values, so this
+            # raw write is gated behind the local-dev marker (no .env.DEV in prod). bd hjo
+            if DEV_LOGGING_ENABLED:
+                try:
+                    debug_file = Path("backend/logs/gemini_system_instruction.txt")
+                    debug_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(debug_file, "w", encoding="utf-8") as f:
+                        f.write("=" * 80 + "\n")
+                        f.write("SYSTEM INSTRUCTION SENT TO GEMINI\n")
+                        f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+                        f.write(f"Length: {len(self._system_instruction)} chars\n")
+                        f.write(f"Estimated tokens: ~{len(self._system_instruction) // 4}\n")
+                        f.write("=" * 80 + "\n\n")
+                        f.write(self._system_instruction)
+                        f.write("\n\n" + "=" * 80 + "\n")
+                        f.write("END OF SYSTEM INSTRUCTION\n")
+                        f.write("=" * 80 + "\n")
+                except Exception as e:
+                    self._log.warn("failed_to_write_debug_file", error=str(e))
 
         # If client is missing, exit
         if self._client is None:
