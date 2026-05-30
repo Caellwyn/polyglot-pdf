@@ -91,6 +91,22 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: E402
 
+# Copilot review bodies routinely contain emoji (e.g. 💡) and other non-Latin-1
+# characters. On Windows the default console encoding is cp1252, so printing a
+# review detail raises UnicodeEncodeError and crashes the watcher AFTER it has
+# already classified the verdict -- the caller then sees a bogus RESULT: ERROR
+# (see bead polyglot-pdf-39a). Force UTF-8 with errors="replace" so any
+# undisplayable glyph degrades to a placeholder instead of killing the process.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        try:
+            _reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            # Stream already detached/redirected in a way that rejects
+            # reconfigure; the per-print fallback below still protects us.
+            pass
+
 # Login substrings that identify the Copilot reviewer. Must match Copilot
 # specifically and NOT the generic "github-actions[bot]" actor, which is
 # shared by every Actions workflow (CI status, labelers, release bots) --
@@ -323,11 +339,26 @@ _EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "TIMEOUT": 2, "ERROR": 1}
 MAX_CONSECUTIVE_API_ERRORS = 3
 
 
+def _safe_print(text: str) -> None:
+    """print() that never dies on an un-encodable character.
+
+    The startup reconfigure (top of module) normally makes stdout UTF-8, but if
+    that failed (detached/redirected stream) a stray emoji would still crash the
+    print. Fall back to encoding through the stream's own codec with
+    errors="replace" so the RESULT contract line always gets emitted.
+    """
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        sys.stdout.write(text.encode(enc, "replace").decode(enc) + "\n")
+
+
 def _emit(state: str, detail: str = "") -> int:
     """Print the contract result block and return the matching exit code."""
     if detail:
-        print(detail)
-    print("RESULT: {}".format(state))
+        _safe_print(detail)
+    _safe_print("RESULT: {}".format(state))
     return _EXIT_CODES.get(state, 1)
 
 

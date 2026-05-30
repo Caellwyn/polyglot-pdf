@@ -57,6 +57,28 @@ def test_emit_returns_matching_exit_code(state, code, capsys):
     assert "RESULT: {}".format(state) in out
 
 
+def test_emit_does_not_crash_on_emoji_detail(capsys):
+    # Regression (bead polyglot-pdf-39a): a Copilot review body containing an
+    # emoji must not raise UnicodeEncodeError; the RESULT contract line must
+    # still be emitted so the caller gets a real verdict, not a bogus ERROR.
+    detail = "Copilot says: 💡 consider X — and also 你好"
+    assert cw._emit("COMMENTS", detail) == 0
+    out = capsys.readouterr().out
+    assert "RESULT: COMMENTS" in out
+
+
+def test_safe_print_handles_unencodable_via_fallback(monkeypatch):
+    # If stdout could not be reconfigured to UTF-8 (e.g. a cp1252 stream that
+    # rejects reconfigure), _safe_print's encode/replace fallback must still
+    # emit a line rather than propagating UnicodeEncodeError. monkeypatch
+    # restores builtins.print automatically at teardown.
+    def exploding_print(*args, **kwargs):
+        raise UnicodeEncodeError("charmap", "\U0001f4a1", 0, 1, "boom")
+
+    monkeypatch.setattr("builtins.print", exploding_print)
+    cw._safe_print("has emoji \U0001f4a1 and text")  # must not raise
+
+
 # --- timestamp floor (findings #2/#8: prior-round items excluded) ---
 
 def test_after_floor():
