@@ -27,7 +27,9 @@ def _confirmation_log_dir() -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
-ConfirmationMethod = Literal["ai_voice", "manual_edit", "manual_button"]
+# Matches the confirm_field tool's confirmation_method enum (backend/config.py)
+# and the values actually written by callback_handler._handle_confirm_field_tool.
+ConfirmationMethod = Literal["verbal", "manual"]
 
 
 def log_field_confirmation(
@@ -57,7 +59,7 @@ def log_field_confirmation(
             "form_session_id": "fss_abc123_xyz789",
             "field_id": "p1_line1_aliennumber",
             "field_name": "Alien Registration Number",
-            "confirmation_method": "ai_voice"
+            "confirmation_method": "verbal"
         }
     """
     timestamp = datetime.now(timezone.utc).isoformat()

@@ -214,7 +214,10 @@ class TestCallbackHandlerJITIntegration:
         JIT schema delivery was moved off update_form_fields onto confirm_field to
         save tokens (update_form_fields now always passes next_field_schema=None and
         the hint/schema are sent only after the user confirms the field). This test
-        guards the current behavior: the JIT getter fires during confirm_field.
+        guards the current behavior: the JIT getter fires during confirm_field when
+        there is a next field (the fixture's coordinator returns a truthy
+        next_field_hint — see test_confirm_field_last_field_skips_jit for the
+        no-next-field branch).
         """
         handler, mock_jit_getter = callback_handler_with_jit
 
@@ -233,6 +236,39 @@ class TestCallbackHandlerJITIntegration:
         assert "next_field_schema" in response
         assert response["next_field_schema"]["id"] == "lastName"
         assert response["next_field_schema"]["spoken_name"] == "last name"
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_last_field_skips_jit(self, mock_websocket, sample_schema):
+        """On the last field (no next hint), confirm_field must not call the JIT getter.
+
+        Production gates the getter on `next_hint` being truthy; when the
+        coordinator reports no next field, there is no schema to fetch.
+        """
+        coordinator = MagicMock(spec=RequestCoordinator)
+        coordinator.request_next_field_hint = AsyncMock(return_value=None)
+
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            session_id="test-session",
+            request_coordinator=coordinator,
+        )
+        mock_jit_getter = MagicMock(return_value={"id": "unused"})
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            handle_get_field_value=AsyncMock(),
+            request_form_state_from_client=AsyncMock(),
+            get_next_field_schema_for_jit=mock_jit_getter,
+        )
+
+        response = await handler.on_tool_call("confirm_field", {
+            "field_id": "email",
+            "confirmation_method": "verbal"
+        })
+
+        mock_jit_getter.assert_not_called()
+        assert response["success"] is True
+        assert "next_field_schema" not in response
 
     @pytest.mark.asyncio
     async def test_update_does_not_include_next_field_schema(self, callback_handler_with_jit):

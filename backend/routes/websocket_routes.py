@@ -523,8 +523,9 @@ async def _handle_fill_session(
 					# No acknowledgment needed - backend will send section_switched when complete
 					continue
 				elif mtype == "section_completed":
-					# Frontend responds that section has been marked complete and advanced
-					# This is the response to backend's complete_section request
+					# Frontend auto-detected that all fields in the section are
+					# confirmed, marked the section complete, and advanced. (There is
+					# no backend complete_section tool; the frontend drives this.)
 					next_section = obj.get("next_section")
 					_log.info("section_completed_response", 
 					         next_section=next_section,
