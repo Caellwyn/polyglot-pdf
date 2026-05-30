@@ -146,8 +146,11 @@ Both run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not
 Commit the combined fixes, then **push once and loop Copilot to clean:**
 1. Rebase on the FEATURE branch (NOT the integration branch): `git pull --rebase origin <branch>` -- picks up anything pushed to the branch. (Step 6's one-time pre-push rebase was against the integration branch; the loop rebases against the feature branch.)
 2. Push the fix commit. The push auto-re-triggers Copilot (`review_on_push`, ~4 min).
-3. **Also post `@copilot please review`** as a belt-and-suspenders re-trigger -- push-triggering has been reliable, but the mention guarantees it.
-4. Re-run `copilot_watch.py <pr#>` (`run_in_background`) and repeat the COMMENTS -> fix -> push -> re-watch loop **until Copilot reports CLEAN with no comments**.
+3. **Post `@copilot please review` AND capture the comment's server timestamp** -- this timestamp is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Use the API form so you get `created_at` back:
+   `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f body='@copilot please review' --jq .created_at)`
+4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/copilot_watch.py" <pr#> --since "$TS"`
+   Repeat the COMMENTS -> fix -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN**. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is one pass (round 1 only); only Copilot loops.
 

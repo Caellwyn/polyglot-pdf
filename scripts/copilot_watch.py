@@ -42,6 +42,21 @@ verdict can land on any; watching one misses the others):
 A `reviewed` event whose body is "Copilot encountered an error..." is an
 ERROR, not a finding.
 
+Two staleness traps these surfaces hide, both handled:
+
+  - An inline comment whose `position` is null is OUTDATED -- its anchor fell
+    out of the current diff after later commits. GitHub never deletes it, and
+    it re-matches its (frozen) review by id on every poll, so a resolved
+    round-1 comment would loop the closeout forever. Outdated inline comments
+    are dropped (a genuine new finding has a non-null position).
+  - Copilot's RE-review verdict (after "@copilot please review") frequently
+    lands as an ISSUE COMMENT, not a formal review -- it has no state and never
+    appears in /reviews. Reading /reviews alone would re-select the frozen
+    prior review (false COMMENTS) or, with a --since floor, find nothing (false
+    TIMEOUT). So when no in-window review exists, we classify from the latest
+    in-window Copilot issue comment: an explicit approval phrase ("no further
+    changes...") -> CLEAN, otherwise COMMENTS.
+
 Terminal states (printed as the final line: "RESULT: <STATE>")
 --------------------------------------------------------------
   COMMENTS -- review complete, Copilot left findings. The findings are
@@ -321,6 +336,19 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
     for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
         if _is_copilot(login) and c.get("pull_request_review_id") == review_id:
+            # GitHub sets `position` to null once a comment's anchor falls out
+            # of the CURRENT diff -- the canonical "outdated" signal. An
+            # outdated comment is a prior round's finding that later commits
+            # moved past; re-reporting it loops the closeout forever (a
+            # COMMENTED review's stale comment re-matches by id every poll).
+            # Require `position` PRESENT-and-null (real GitHub always includes
+            # the key); a payload missing the key is NOT treated as outdated,
+            # so we never drop a finding on a partial response. A genuine new
+            # finding lands on the current diff with a non-null position, so
+            # this never hides live feedback. State still wins upstream: a
+            # CHANGES_REQUESTED verdict stays COMMENTS even if its comments drop.
+            if "position" in c and c["position"] is None:
+                continue
             loc = c.get("path", "?")
             line = c.get("line") or c.get("original_line") or "?"
             findings.append(
@@ -328,12 +356,17 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
             )
 
     # Surface 3: PR issue comments, scoped to this round by timestamp
-    # (no review_id linkage exists for issue comments).
+    # (no review_id linkage exists for issue comments). An APPROVAL comment
+    # ("no further changes...") is NOT a finding -- when Copilot posts both a
+    # formal review AND a follow-up approval comment in one round, counting the
+    # approval as a finding would wrongly flip a clean round to COMMENTS. Skip
+    # approvals; keep substantive comments.
     for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
         created = c.get("created_at", "")
-        if _is_copilot(login) and _after(created, floor):
-            findings.append("[issue-comment] {}".format((c.get("body") or "").strip()))
+        body = (c.get("body") or "").strip()
+        if _is_copilot(login) and _after(created, floor) and not _is_approval_comment(body):
+            findings.append("[issue-comment] {}".format(body))
 
     return findings
 
@@ -377,6 +410,86 @@ def _emit(state: str, detail: str = "") -> int:
     return _EXIT_CODES.get(state, 1)
 
 
+# A Copilot re-review delivered as an issue comment approves with a phrase like
+# "no further changes were needed". We classify CLEAN only when the comment is
+# UNAMBIGUOUSLY an approval -- an approval phrase AND no change-asking signal in
+# the same comment ("but please...", "however, fix...", a remaining numbered
+# ask). A mixed comment ("no changes needed in section 3, but fix section 4")
+# must stay COMMENTS. Erring toward COMMENTS preserves the core invariant: never
+# read ambiguity as CLEAN.
+_APPROVAL_PATTERNS = (
+    "no further changes",
+    "no changes are needed",
+    "no changes needed",
+    "no additional changes",
+    "no further action",
+)
+# If any of these appear, the comment is asking for something -> NOT a clean
+# approval, even if it also contains an approval phrase.
+_CHANGE_ASK_SIGNALS = (
+    " but ",
+    "however",
+    "please ",
+    "should ",
+    "needs to",
+    "fix ",
+    "missing",
+    "incorrect",
+    "consider ",
+)
+
+
+def _is_approval_comment(body: str) -> bool:
+    lo = (body or "").lower()
+    if not any(p in lo for p in _APPROVAL_PATTERNS):
+        return False
+    # An approval phrase is present; reject if the comment ALSO asks for a change.
+    return not any(sig in lo for sig in _CHANGE_ASK_SIGNALS)
+
+
+def _latest_by_created(comments: list) -> dict | None:
+    """Return the comment with the max `created_at` (ISO8601 sorts lexically).
+
+    Don't rely on API list ordering -- pick the semantically latest explicitly.
+    """
+    if not comments:
+        return None
+    return max(comments, key=lambda c: c.get("created_at", ""))
+
+
+def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
+    """Classify a round whose verdict is a Copilot ISSUE COMMENT (no review).
+
+    Returns an exit code if a Copilot issue comment at/after `since` exists
+    (CLEAN if it's an unambiguous approval, else COMMENTS), or None if no such
+    comment exists yet (so the caller keeps polling -- the reviews endpoint may
+    just be lagging). Scoping to `since` keeps a prior round's comment from
+    resurfacing in a re-watch.
+    """
+    copilot_comments = [
+        c
+        for c in (_run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or [])
+        if _is_copilot((c.get("user") or {}).get("login", ""))
+        and _after(c.get("created_at", ""), since)
+    ]
+    latest = _latest_by_created(copilot_comments)
+    if latest is None:
+        return None
+    body = (latest.get("body") or "").strip()
+    if body.startswith(COPILOT_ERROR_BODY_PREFIX):
+        return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
+    if _is_approval_comment(body):
+        return _emit(
+            "CLEAN",
+            "Copilot re-review approved via issue comment (no further "
+            "changes):\n\n{}".format(body),
+        )
+    return _emit(
+        "COMMENTS",
+        "Copilot left a finding via issue comment:\n\n{}".format(body),
+    )
+
+
 def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
     """A `reviewed` event landed; fetch the review and emit the verdict.
 
@@ -389,8 +502,14 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
     """
     review = _latest_copilot_review(repo, pr, since)
     if review is None:
-        # Timeline said "reviewed" but the reviews endpoint hasn't caught up
-        # (eventual consistency). Signal the caller to keep polling.
+        # No in-window formal REVIEW. Either (1) Copilot delivered this round's
+        # verdict as an ISSUE COMMENT (re-reviews often do -- no state, no
+        # review_id, absent from /reviews), or (2) the reviews endpoint just
+        # hasn't caught up yet. Try the issue-comment surface; if nothing there
+        # either, signal the caller to keep polling.
+        rc = _classify_issue_comment_round(repo, pr, since)
+        if rc is not None:
+            return rc
         return None
 
     body = (review.get("body") or "").strip()
@@ -453,6 +572,13 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
                     return rc
                 # reviews endpoint not yet consistent -- fall through to wait.
             elif state == "finished":
+                # Finished with no in-window formal review -- but Copilot may
+                # have delivered its verdict as an ISSUE COMMENT (the common
+                # shape for a re-review). Classify that before concluding
+                # "nothing to say."
+                rc = _classify_issue_comment_round(repo, pr, since)
+                if rc is not None:
+                    return rc
                 return _emit(
                     "CLEAN", "Copilot finished work and produced no review."
                 )
