@@ -312,18 +312,61 @@ def get_settings() -> Settings:
 # (LLM normalizer settings live on Settings; no module-level duplicates.)
 
 # ============================================================================
-# Gemini Pricing for Token Tracking
+# Gemini Pricing for Token Tracking (per-token rates, keyed by model family)
 # ============================================================================
-# Pricing for Gemini 2.0 Flash (per token, converted from per-million rates)
-# Source: https://ai.google.dev/pricing
-# Updated: October 2025
-GEMINI_PRICING = {
-	# Input pricing (per token)
-	"text_input": 0.50 / 1_000_000,      # $0.50 per million = $0.0000005 per token
-	"audio_input": 3.00 / 1_000_000,     # $3.00 per million = $0.000003 per token
+# Rates are per-1M list prices from https://ai.google.dev/pricing, divided to
+# per-token here. Output rates include thinking tokens. Keyed by model FAMILY so
+# the active model (MODEL_NATIVE / MODEL_LIVE) selects the right row — this is
+# what makes a 2.5 -> 3.1 A/B comparable on cost.
+# Updated: 2026-05-30.
+#
+# Columns: text_input / audio_input / text_output / audio_output (USD per 1M).
+#   2.5 (native-audio):  0.50 / 3.00 / 2.00 / 12.00
+#   3.1 (live preview):  0.75 / 3.00 / 4.50 / 12.00
+_PER_1M = 1_000_000
 
-	# Output pricing (per token, includes thinking tokens)
-	"text_output": 2.00 / 1_000_000,     # $2.00 per million = $0.000002 per token
-	"audio_output": 12.00 / 1_000_000,   # $12.00 per million = $0.000012 per token
+GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
+	"2.5": {
+		"text_input": 0.50 / _PER_1M,
+		"audio_input": 3.00 / _PER_1M,
+		"text_output": 2.00 / _PER_1M,
+		"audio_output": 12.00 / _PER_1M,
+	},
+	"3.1": {
+		"text_input": 0.75 / _PER_1M,
+		"audio_input": 3.00 / _PER_1M,
+		"text_output": 4.50 / _PER_1M,
+		"audio_output": 12.00 / _PER_1M,
+	},
 }
+
+# Family used when a model name doesn't match any known family. 2.5 is the
+# current default (MODEL_NATIVE), so unknown/unspecified models bill at 2.5.
+DEFAULT_PRICING_FAMILY = "2.5"
+
+
+def model_family(model_name: str | None) -> str:
+	"""Map a Gemini model name to a pricing family key in GEMINI_PRICING_BY_FAMILY.
+
+	Matches on the version token in the name (e.g. 'gemini-live-2.5-flash-...'
+	-> '2.5', 'gemini-3.1-flash-live-preview' -> '3.1'). Falls back to
+	DEFAULT_PRICING_FAMILY for empty/unrecognized names so cost tracking never
+	crashes on a new preview model — it just bills at the default until a row is
+	added here.
+	"""
+	name = (model_name or "").lower()
+	for family in GEMINI_PRICING_BY_FAMILY:
+		if family in name:
+			return family
+	return DEFAULT_PRICING_FAMILY
+
+
+def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
+	"""Return the per-token rate row for the given model's family."""
+	return GEMINI_PRICING_BY_FAMILY[model_family(model_name)]
+
+
+# Backward-compatible alias: the old flat dict was the 2.5 rates. Anything still
+# importing GEMINI_PRICING keeps working (it gets the default family's rates).
+GEMINI_PRICING = GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY]
 
