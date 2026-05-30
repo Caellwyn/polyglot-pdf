@@ -41,8 +41,10 @@ PyMuPDF fills the kit's PDF, returns bytes → browser downloads
 configured at `frontend/src/shared/config.ts` (prod points at the Cloud Run
 service; tries `ws://localhost:8000/ws/fill` first in dev). **Stateless from the
 backend's view:** field values, confirmations, and section state live in
-`sessionStorage` via `SchemaFormStateManager` (`frontend/src/shared/connection.ts`);
-on reconnect the backend rebuilds context purely from the handshake.
+`sessionStorage` via `SchemaFormStateManager`
+(`frontend/src/schema-forms/state/schemaFormState.ts`); the WS client lives in
+`frontend/src/shared/connection.ts`. On reconnect the backend rebuilds context
+purely from the handshake.
 
 **Backend** — FastAPI, entry `backend/main.py`. The `/ws/fill` route
 (`backend/routes/websocket_routes.py`) accepts the handshake, then
@@ -120,8 +122,10 @@ The repo runs the swarm-kit's process layer on top of the product:
    entry are A/B candidates and pricing-test inputs, **not** the running defaults.
    What remains: `polyglot-pdf-2hy` (model + pricing docs), now unblocked. *Watch
    item:* `polyglot-pdf-daa` — a Google forum report of `code=1011` mid-turn at
-   ~80% on `gemini-2.5-flash-native-audio-preview-12-2025` since 2026-05-27; our
-   stable-alias default is not confirmed affected.
+   ~80% on `gemini-2.5-flash-native-audio-preview-12-2025` since 2026-05-27. Note
+   this dated preview ID is a *different* model from our running default
+   `gemini-live-2.5-flash-native-audio` (the stable alias), which is not
+   confirmed affected.
 
 3. **Stale TODO.md.** `planning_documents/TODO.md` is stamped **Nov 20, 2025**
    (~6 months stale) and is built around a "Week of Nov 25, 2025 ESC Pilot" that

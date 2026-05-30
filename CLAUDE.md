@@ -81,9 +81,8 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 
 ## Critical rules
 
-<The rules that override default behavior. The kit's doctrine docs supply a
-starter set for beads, review flow, promotion tiers, and doc maintenance --
-copy the load-bearing ones up here and add your product-specific ones.>
+The rules that override default behavior. Product-specific invariants live in
+"Top scar tissue" above; the cross-cutting workflow rules follow.
 
 ### Task tracking
 - Beads (`bd`) is the canonical tracker. Pull-before-read, push-after-write.

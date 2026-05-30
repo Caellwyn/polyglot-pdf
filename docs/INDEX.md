@@ -14,7 +14,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Doc | Covers |
 |-----|--------|
 | [`doc-architecture.md`](doc-architecture.md) | The 3-tier progressive-discovery doc system + the freshness discipline. |
-| [`technical_guide.md`](technical_guide.md) | System-wide routes / endpoints / cross-surface gotchas. |
+| [`technical_guide.md`](technical_guide.md) | System-wide routes / endpoints / cross-surface gotchas. _(skeleton -- being populated under `polyglot-pdf-gfb.2`; until then use the brief + cited code paths.)_ |
 | [`doctrine/workflow.md`](doctrine/workflow.md) | Beads cadence, session start/end, the agent-swarm tooling. |
 | [`doctrine/review-flow.md`](doctrine/review-flow.md) | The parallel Copilot + fresh-eyes review procedure. |
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | feature -> dev (staging) -> main (prod) promotion. |
