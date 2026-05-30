@@ -145,6 +145,102 @@ class TestStaleComparisonUsesParsedStamp:
         assert stale == []
 
 
+class TestParseTracks:
+    """parse_tracks() must accept space- AND comma-separated **Tracks:**
+    lines. The comma case is the gfb.3 bug: a token like `a.py,` (trailing
+    comma not stripped) matched no files, producing a spurious
+    'matched no files' warning. technical_guide.md uses commas."""
+
+    def test_space_separated(self, tmp_path):
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n**Tracks:** `a/b.py` `c/d.py` `e/*.py`\n",
+        )
+        assert freshness.parse_tracks(doc) == ["a/b.py", "c/d.py", "e/*.py"]
+
+    def test_comma_separated_strips_trailing_commas(self, tmp_path):
+        # The exact shape technical_guide.md uses (gfb.2).
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n**Tracks:** `backend/main.py`, `backend/config.py`, "
+            "`backend/routes/*.py`, `firebase.json`, `deploy-*.sh`\n",
+        )
+        assert freshness.parse_tracks(doc) == [
+            "backend/main.py",
+            "backend/config.py",
+            "backend/routes/*.py",
+            "firebase.json",
+            "deploy-*.sh",
+        ]
+        # No token retains a trailing comma (the bug signature).
+        assert not any(t.endswith(",") for t in freshness.parse_tracks(doc))
+
+    def test_no_tracks_line_returns_empty(self, tmp_path):
+        doc = _make_doc(tmp_path, "# Foo\n\nbody, with a comma, but no tracks\n")
+        assert freshness.parse_tracks(doc) == []
+
+
+class TestFreshnessScanCoversTier1:
+    """gfb.3 core bug: the freshness loop iterated find_docs(), which only
+    globbed DOC_DIRS — so tier-1 docs with a **Tracks:** line (e.g.
+    technical_guide.md) were never freshness-checked. find_docs() now
+    includes TIER1_DOCS, and an intentionally-stale tier-1 doc must flag."""
+
+    def test_find_docs_includes_existing_tier1_docs(self):
+        docs = freshness.find_docs()
+        tier1_on_disk = {
+            freshness.REPO_ROOT / rel
+            for rel in freshness.TIER1_DOCS
+            if (freshness.REPO_ROOT / rel).is_file()
+        }
+        # Every tier-1 doc that exists on disk must be in the scan set.
+        assert tier1_on_disk, "expected at least one tier-1 doc on disk"
+        assert tier1_on_disk.issubset(set(docs))
+
+    def test_find_docs_skips_absent_tier1_docs(self, monkeypatch):
+        # A TIER1_DOCS entry that doesn't exist must be silently skipped,
+        # not crash or appear in the result.
+        monkeypatch.setattr(
+            freshness, "TIER1_DOCS",
+            freshness.TIER1_DOCS + ["docs/does_not_exist.md"],
+        )
+        docs = freshness.find_docs()
+        assert all("does_not_exist" not in str(d) for d in docs)
+
+    def test_stale_tier1_doc_with_tracks_is_flagged(self, tmp_path, monkeypatch):
+        # Acceptance test from the bead: an intentionally-stale stamp on a
+        # tier-1 doc that has a Tracks line gets flagged. We point a fake
+        # tier-1 doc at a real repo file and force its commit time past the
+        # stamp.
+        tier1 = _make_doc(
+            tmp_path,
+            "# Tier1\n\n*Last updated: 2025-04-01*\n\n"
+            "**Tracks:** `scripts/swarm_config.py`\n",
+        )
+        tier1 = tier1.rename(tmp_path / "fake_tier1.md")
+        monkeypatch.setattr(freshness, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(freshness, "TIER1_DOCS", ["fake_tier1.md"])
+
+        future_ts = int(datetime.datetime(
+            2026, 4, 28, 12, 0, 0, tzinfo=datetime.timezone.utc,
+        ).timestamp())
+
+        # The tracked token must resolve to a real file under the patched
+        # REPO_ROOT, so create it; force its commit time to after the stamp.
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "swarm_config.py").write_text("x\n", encoding="utf-8")
+
+        def fake_git_ct(path):
+            return future_ts if "swarm_config" in str(path) else None
+
+        monkeypatch.setattr(freshness, "git_commit_time", fake_git_ct)
+        docs = freshness.find_docs()
+        assert tier1 in docs  # tier-1 doc is in the scan set
+        status, stale, _ = freshness.check_doc(tier1)
+        assert status == "stale"
+        assert any("swarm_config" in str(fp) for fp, _, _ in stale)
+
+
 # ---------------------------------------------------------------------------
 # Sprint-archive protocol checks (added to enforce CLAUDE.md closeout step 5)
 #
