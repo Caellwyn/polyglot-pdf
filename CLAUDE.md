@@ -100,9 +100,30 @@ The rules that override default behavior. Product-specific invariants live in
 
 ---
 
-## Sprint closeout
+## Closeout -- mandatory, once per PR
 
-Run the `/closeout` skill at the end of every bead. It encodes the checklist:
-beads housekeeping, doc-freshness, journal entry, tests, then a normal PR with
-parallel Copilot + fresh-eyes review, looped to clean, then ping to merge. See
-[`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md).
+**Every PR ships through the `/closeout` skill. No PR is "done" until closeout has
+run on it to clean.** The unit is the **PR, not the bead** -- a PR may resolve
+several beads; run `/closeout` once for the PR and close all the beads it resolves.
+
+Do NOT hand-roll the review cycle. In particular:
+
+- **`/closeout` OWNS PR creation.** Finish the work, commit until the tree is
+  clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
+  itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
+  parallel-review setup and tempts hand-polling).
+- **Copilot is watched by a script, never by hand.** `/closeout` launches
+  `scripts/copilot_watch.py <pr#>` via `run_in_background`; the harness wakes you
+  once with the classified verdict (CLEAN / COMMENTS / ERROR / TIMEOUT).
+  **Never poll `gh api .../comments` yourself** -- that's the expensive manual
+  loop the watcher exists to replace, and hand-polling silently misses comments.
+- **Fresh-eyes runs in parallel** with Copilot round 1; you fix the COMBINED
+  findings, push once, and **loop Copilot until it reports CLEAN with no comments.**
+- Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
+  to merge** -- it never merges (that's the maintainer's).
+
+The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
+PR + dual review loop) lives in
+[`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md) -- that
+skill is the source of truth; this section just makes running it **non-optional,
+once per PR.**
