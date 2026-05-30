@@ -68,6 +68,30 @@ CLEAN). Fixed one pre-existing test whose fixture omitted `position` (made the
 drop present-and-null so the missing-key case is unaffected). Full suite: 144
 pass.
 
+## Review hardening (fresh-eyes + a live crash)
+
+Fresh-eyes round 1 (and the round-1 Copilot watch itself **crashing** on the 💡
+emoji in this PR's own description) caught a serious regression and several
+correctness gaps:
+
+- **Reverted a named bug.** My `Edit`s landed in the MAIN repo on a stale branch
+  (`pitch/working-draft`, predating bead `polyglot-pdf-39a`'s Windows UTF-8 fix),
+  then a `cp` clobbered the worktree — silently **deleting `_setup_utf8_stdio` /
+  `_safe_print`** and re-introducing the cp1252 `print()` crash. Rebuilt the
+  branch from `origin/dev`'s `copilot_watch.py` and re-applied the three logical
+  changes on top, so the guard is intact. (The deleted emoji/safe-print tests are
+  back too.)
+- **Tightened `_is_approval_comment` (finding #1/#7).** A plain substring match
+  would read "no changes needed in section 3, **but** please fix section 4" as an
+  approval → false CLEAN. Now requires an approval phrase AND **no change-ask
+  signal** (`but`/`however`/`please`/`fix`/…) in the same comment; mixed comments
+  stay COMMENTS. Added the mixed-comment guard test.
+- **`_latest_by_created` (finding #3).** Pick the latest issue comment by max
+  `created_at`, not list `[-1]` — don't trust API ordering.
+- **Approval not counted as a finding (finding #4).** `_collect_findings`
+  Surface-3 now skips approval issue comments, so a clean review + a same-round
+  "no further changes" comment stays CLEAN instead of flipping to COMMENTS.
+
 ## Lessons
 
 - **Verify a workflow/spec's concrete claims against live data before coding to
@@ -75,6 +99,11 @@ pass.
   value was `1`. The spec's *structure* (three bugs, fix-together) held, but the
   primary mechanism for *this* PR was Fix A, not Fix B. Pulling the actual
   `gh api …/comments` payload caught it and reshaped which fix is load-bearing.
+- **Edit IN the worktree; never `cp` from another checkout as a shortcut.** The
+  stale-base clobber that reverted bug `39a` happened because edits went to the
+  main repo and got copied over. Branch from `dev` and edit the worktree files
+  directly. (CLAUDE.md scar tissue #3, again — the cost here was a reverted fix
+  that only the review caught.)
 - **A reviewer's verdict and its resolution can live on different API surfaces.**
   Copilot posts a formal *review* the first time and an *issue comment* on
   re-review. Any "did the reviewer approve?" check must reconcile reviews **and**

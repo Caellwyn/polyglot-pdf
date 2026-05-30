@@ -57,6 +57,49 @@ def test_emit_returns_matching_exit_code(state, code, capsys):
     assert "RESULT: {}".format(state) in out
 
 
+class _Cp1252Stdout:
+    """A stdout stand-in that behaves like a Windows cp1252 console: its
+    write() raises UnicodeEncodeError on any non-cp1252 char (e.g. an emoji),
+    exactly as the real crash did. Captures what survives so tests can assert
+    the fallback actually emitted the contract line."""
+
+    encoding = "cp1252"
+
+    def __init__(self):
+        self.captured = ""
+
+    def write(self, s):
+        s.encode("cp1252")  # raises UnicodeEncodeError on un-encodable chars
+        self.captured += s
+        return len(s)
+
+    def flush(self):
+        pass
+
+
+def test_emit_does_not_crash_on_emoji_detail(monkeypatch):
+    # Regression (bead polyglot-pdf-39a): with a real cp1252-style stdout, a
+    # Copilot review body containing an emoji must NOT raise UnicodeEncodeError,
+    # and the RESULT contract line must still be emitted (degraded, not lost).
+    fake = _Cp1252Stdout()
+    monkeypatch.setattr(sys, "stdout", fake)
+    detail = "Copilot says: \U0001f4a1 consider X"
+    assert cw._emit("COMMENTS", detail) == 0  # must not raise
+    # The fallback re-encodes via cp1252/replace, so the emoji becomes '?'
+    # but the contract line is intact.
+    assert "RESULT: COMMENTS" in fake.captured
+
+
+def test_safe_print_emits_via_fallback_when_print_cannot_encode(monkeypatch):
+    # When the primary print() can't encode (cp1252 stdout + emoji), the
+    # fallback must still WRITE a degraded line -- not silently swallow it.
+    fake = _Cp1252Stdout()
+    monkeypatch.setattr(sys, "stdout", fake)
+    cw._safe_print("has emoji \U0001f4a1 and text")  # must not raise
+    assert "has emoji" in fake.captured
+    assert "and text" in fake.captured
+
+
 # --- timestamp floor (findings #2/#8: prior-round items excluded) ---
 
 def test_after_floor():
@@ -226,132 +269,149 @@ def test_latest_review_wins(monkeypatch):
 
 
 # --- bd polyglot-pdf-6xp: stale-comment loop fixes ---
-# Repro shape from PR #21: a COMMENTED review whose sole inline comment went
-# OUTDATED (position null) after the fix commit, plus Copilot's re-review
-# approval delivered as an ISSUE COMMENT (no formal review). The pre-fix
-# watcher re-emitted the outdated comment as COMMENTS forever.
+# Repro from PR #21: a COMMENTED review whose inline comment went OUTDATED
+# (position null) after the fix commit, plus Copilot's re-review approval
+# delivered as an ISSUE COMMENT (no formal review). The pre-fix watcher
+# re-emitted the stale comment as COMMENTS forever.
 
 def test_outdated_inline_comment_dropped_yields_clean(capsys, monkeypatch):
-    # Fix B1: an inline comment with position == null is outdated; dropping it
-    # leaves no findings, and a COMMENTED state (not CHANGES_REQUESTED) is CLEAN.
+    # position present-and-null -> outdated -> dropped; COMMENTED state with no
+    # remaining findings -> CLEAN.
     review = {"id": 555, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
               "body": "", "user": {"login": "Copilot"}}
-    inline = [{
-        "user": {"login": "Copilot"}, "pull_request_review_id": 555,
-        "created_at": "2026-05-28T12:00:00Z", "path": "CLAUDE.md",
-        "position": None, "line": None, "original_line": 107,
-        "body": "stale round-1 objection",
-    }]
+    inline = [{"user": {"login": "Copilot"}, "pull_request_review_id": 555,
+               "created_at": "2026-05-28T12:00:00Z", "path": "CLAUDE.md",
+               "position": None, "line": None, "original_line": 107,
+               "body": "stale round-1 objection"}]
     rc, result = _run_watch_result(
         capsys, monkeypatch, reviews=[review], inline=inline,
-        timeline=[_reviewed_event()],
-    )
+        timeline=[_reviewed_event()])
     assert (rc, result) == (0, "CLEAN")
 
 
-def test_live_inline_comment_nonnull_position_still_comments(capsys, monkeypatch):
-    # Anti-false-negative: a genuine round-2 finding lands on the current diff
-    # with a non-null position -> still COMMENTS, never dropped.
-    review = {"id": 556, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+def test_missing_position_key_not_treated_as_outdated(capsys, monkeypatch):
+    # A payload missing `position` entirely must NOT be dropped (robust to
+    # partial responses) -- it's still a finding -> COMMENTS.
+    review = {"id": 555, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
               "body": "", "user": {"login": "Copilot"}}
-    inline = [{
-        "user": {"login": "Copilot"}, "pull_request_review_id": 556,
-        "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
-        "position": 12, "line": 42, "body": "real new finding",
-    }]
+    inline = [{"user": {"login": "Copilot"}, "pull_request_review_id": 555,
+               "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
+               "line": 10, "body": "finding, no position key"}]
     rc, result = _run_watch_result(
         capsys, monkeypatch, reviews=[review], inline=inline,
-        timeline=[_reviewed_event()],
-    )
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_live_inline_comment_nonnull_position_still_comments(capsys, monkeypatch):
+    # Anti-false-negative: a genuine round-2 finding has a non-null position.
+    review = {"id": 556, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "", "user": {"login": "Copilot"}}
+    inline = [{"user": {"login": "Copilot"}, "pull_request_review_id": 556,
+               "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
+               "position": 12, "line": 42, "body": "real new finding"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[review], inline=inline,
+        timeline=[_reviewed_event()])
     assert (rc, result) == (0, "COMMENTS")
 
 
 def test_changes_requested_with_only_outdated_comment_still_comments(capsys, monkeypatch):
-    # State must win: a CHANGES_REQUESTED verdict stays COMMENTS even if its
-    # only inline comment is outdated (position null). The outdated-drop must
-    # not launder a change-request to CLEAN.
+    # State wins: CHANGES_REQUESTED stays COMMENTS even if its only comment is
+    # outdated -- the outdated-drop must not launder a change-request to CLEAN.
     review = {"id": 557, "state": "CHANGES_REQUESTED", "submitted_at": "2026-05-28T12:00:00Z",
               "body": "", "user": {"login": "Copilot"}}
-    inline = [{
-        "user": {"login": "Copilot"}, "pull_request_review_id": 557,
-        "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
-        "position": None, "line": None, "body": "outdated but state is CR",
-    }]
+    inline = [{"user": {"login": "Copilot"}, "pull_request_review_id": 557,
+               "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
+               "position": None, "line": None, "body": "outdated but state is CR"}]
     rc, result = _run_watch_result(
         capsys, monkeypatch, reviews=[review], inline=inline,
-        timeline=[_reviewed_event()],
-    )
+        timeline=[_reviewed_event()])
     assert (rc, result) == (0, "COMMENTS")
 
 
 def test_issue_comment_approval_round_is_clean_not_timeout(capsys, monkeypatch):
-    # Fix A: the round's verdict is a Copilot ISSUE COMMENT (no in-window
-    # review). Pre-fix this would TIMEOUT (review None -> keep polling). With
-    # the issue-comment path, an explicit approval phrase -> CLEAN.
-    issue = [{
-        "user": {"login": "Copilot"},
-        "created_at": "2026-05-28T12:00:05Z",
-        "body": "Re-reviewed current HEAD. No further changes are needed on this branch.",
-    }]
+    # Fix A: verdict is a Copilot ISSUE COMMENT (no in-window review). An
+    # explicit approval phrase -> CLEAN (pre-fix this TIMEOUT'd).
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "Re-reviewed current HEAD. No further changes are needed on this branch."}]
     rc, result = _run_watch_result(
-        capsys, monkeypatch, reviews=[], issue=issue, timeline=[_reviewed_event()],
-    )
+        capsys, monkeypatch, reviews=[], issue=issue, timeline=[_reviewed_event()])
     assert (rc, result) == (0, "CLEAN")
 
 
 def test_issue_comment_nonapproval_round_is_comments(capsys, monkeypatch):
-    # Fix A risk-mitigation: an issue comment that is NOT an explicit approval
-    # stays COMMENTS (never read ambiguity as CLEAN).
-    issue = [{
-        "user": {"login": "Copilot"},
-        "created_at": "2026-05-28T12:00:05Z",
-        "body": "One more thing: please also update the changelog.",
-    }]
+    # An issue comment that is not an explicit approval stays COMMENTS.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "One more thing: please also update the changelog."}]
     rc, result = _run_watch_result(
-        capsys, monkeypatch, reviews=[], issue=issue, timeline=[_reviewed_event()],
-    )
+        capsys, monkeypatch, reviews=[], issue=issue, timeline=[_reviewed_event()])
     assert (rc, result) == (0, "COMMENTS")
 
 
-def test_is_approval_comment():
+def test_finished_with_issue_comment_approval_is_clean(capsys, monkeypatch):
+    # Fix A via the "finished" branch: timeline=finished (no new reviewed) and
+    # an approval issue comment -> CLEAN, not "produced no review".
+    timeline = [{"event": "copilot_work_finished", "created_at": "2026-05-28T12:05:00Z"}]
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:05:01Z",
+              "body": "No further changes are needed on this branch."}]
+    rc, result = _run_watch_result(capsys, monkeypatch, timeline=timeline, issue=issue)
+    assert (rc, result) == (0, "CLEAN")
+
+
+def test_is_approval_comment_strict():
+    # Clean approvals.
     assert cw._is_approval_comment("No further changes were needed.")
     assert cw._is_approval_comment("the contract is consistent; no changes needed")
+    # MIXED comment (approval phrase + a change ask) must NOT be CLEAN
+    # (fresh-eyes finding #1 / #7).
+    assert not cw._is_approval_comment(
+        "No changes needed in section 3, but please fix the null check in section 4.")
+    assert not cw._is_approval_comment(
+        "No further changes to the imports; however the main function has a bug.")
+    # Clear non-approvals.
     assert not cw._is_approval_comment("please fix the typo")
     assert not cw._is_approval_comment("")
 
 
-def test_since_scopes_out_prior_round_review(monkeypatch):
-    # Fix C contract: with --since after a round-1 review, that review is
-    # excluded from _latest_copilot_review (so a re-watch won't re-detect it).
-    round1 = {"id": 1, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
-              "body": "round 1", "user": {"login": "Copilot"}}
-    _patch_api(monkeypatch, reviews=[round1])
-    since = cw._parse_iso("2026-05-28T12:30:00Z")  # after round 1
-    assert cw._latest_copilot_review("o/r", 1, since) is None
+def test_latest_by_created_ignores_list_order():
+    # Don't rely on API ordering -- pick max created_at explicitly (finding #3).
+    older = {"created_at": "2026-05-28T10:00:00Z", "body": "older"}
+    newer = {"created_at": "2026-05-28T12:00:00Z", "body": "newer"}
+    assert cw._latest_by_created([newer, older])["body"] == "newer"  # reversed input
+    assert cw._latest_by_created([]) is None
 
 
-def test_finished_with_issue_comment_approval_is_clean(capsys, monkeypatch):
-    # Fix A via the "finished" branch: after a re-trigger, the timeline shows
-    # copilot_work_finished (no new `reviewed`), and the verdict is an approval
-    # ISSUE COMMENT. Must classify CLEAN, not "finished -> produced no review".
-    timeline = [{"event": "copilot_work_finished", "created_at": "2026-05-28T12:05:00Z"}]
-    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:05:01Z",
-              "body": "No further changes are needed on this branch."}]
+def test_approval_issue_comment_not_counted_as_finding_with_review(capsys, monkeypatch):
+    # Fresh-eyes finding #4: a clean review PLUS a same-round approval issue
+    # comment must stay CLEAN -- the approval must not enter findings.
+    review = {"id": 9, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "", "user": {"login": "Copilot"}}
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "No further changes are needed."}]
     rc, result = _run_watch_result(
-        capsys, monkeypatch, timeline=timeline, issue=issue,
-    )
+        capsys, monkeypatch, reviews=[review], issue=issue, timeline=[_reviewed_event()])
     assert (rc, result) == (0, "CLEAN")
 
 
-def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
-    """End-to-end repro of bd polyglot-pdf-6xp on PR #21's actual API shape.
+def test_since_scopes_out_prior_round_review(monkeypatch):
+    # Fix C: with --since after a round-1 review, that review is excluded.
+    round1 = {"id": 1, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "round 1", "user": {"login": "Copilot"}}
+    _patch_api(monkeypatch, reviews=[round1])
+    since = cw._parse_iso("2026-05-28T12:30:00Z")
+    assert cw._latest_copilot_review("o/r", 1, since) is None
 
-    Round 1 left a COMMENTED review whose inline comment is position-non-null
-    (1). After the fix + re-trigger, Copilot's "no further changes" verdict
-    landed as ISSUE COMMENTS and the timeline shows copilot_work_finished (NO
-    new `reviewed` event). With --since at the re-trigger, the watcher must
-    reach CLEAN via the finished+issue-comment path -- not loop on the stale
-    round-1 review (COMMENTS) nor TIMEOUT.
+
+def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
+    """End-to-end repro of bd polyglot-pdf-6xp on PR #21's real API shape.
+
+    Round-1 COMMENTED review; its inline comment is position-NON-null (1) so the
+    outdated-drop does not apply. After the fix + re-trigger, Copilot's "no
+    further changes" verdict landed as ISSUE COMMENTS and the timeline shows
+    copilot_work_finished (NO new `reviewed`). With --since at the re-trigger,
+    the watcher must reach CLEAN via finished+issue-comment -- not loop on the
+    stale review (COMMENTS) nor TIMEOUT.
     """
     review = {"id": 4395801885, "state": "COMMENTED",
               "submitted_at": "2026-05-30T19:00:31Z", "body": "",
@@ -361,8 +421,7 @@ def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
                "created_at": "2026-05-30T19:00:30Z", "path": "CLAUDE.md",
                "position": 1, "line": None, "body": "round-1 objection"}]
     issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-30T19:10:32Z",
-              "body": "Re-reviewed current HEAD. No further changes are needed "
-                      "on this branch."}]
+              "body": "Re-reviewed current HEAD. No further changes are needed on this branch."}]
     timeline = [
         {"event": "reviewed", "actor": {"login": "Copilot"},
          "submitted_at": "2026-05-30T19:00:31Z"},
@@ -371,7 +430,7 @@ def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
     ]
     _patch_api(monkeypatch, reviews=[review], inline=inline, issue=issue,
                timeline=timeline)
-    since = cw._parse_iso("2026-05-30T19:06:16Z")  # the re-trigger moment
+    since = cw._parse_iso("2026-05-30T19:06:16Z")
     rc = cw.watch("o/r", 21, timeout_min=0, poll_sec=0, since=since)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out

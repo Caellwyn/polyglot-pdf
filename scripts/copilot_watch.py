@@ -106,6 +106,32 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: E402
 
+
+def _setup_utf8_stdio() -> None:
+    """Force stdout/stderr to UTF-8 so printing review text can't crash.
+
+    Copilot review bodies routinely contain emoji (e.g. 💡) and other
+    non-Latin-1 characters. On Windows the default console encoding is cp1252,
+    so printing a review detail raises UnicodeEncodeError and crashes the
+    watcher AFTER it has already classified the verdict -- the caller then sees
+    a bogus RESULT: ERROR (see bead polyglot-pdf-39a). errors="replace" lets any
+    undisplayable glyph degrade to a placeholder instead of killing the process.
+
+    Called from main() (NOT at import time) so importing this module for its
+    helpers -- e.g. the test suite -- does not mutate the process's shared
+    sys.stdout encoding as a side effect.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                # Stream already detached/redirected in a way that rejects
+                # reconfigure; the per-print fallback (_safe_print) still
+                # protects us.
+                pass
+
 # Login substrings that identify the Copilot reviewer. Must match Copilot
 # specifically and NOT the generic "github-actions[bot]" actor, which is
 # shared by every Actions workflow (CI status, labelers, release bots) --
@@ -313,17 +339,14 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
             # GitHub sets `position` to null once a comment's anchor falls out
             # of the CURRENT diff -- the canonical "outdated" signal. An
             # outdated comment is a prior round's finding that later commits
-            # have moved past; re-reporting it loops the closeout forever (a
+            # moved past; re-reporting it loops the closeout forever (a
             # COMMENTED review's stale comment re-matches by id every poll).
-            # Skip it. A genuine new finding lands on the current diff with a
-            # non-null position, so this never hides live feedback. NOTE: a
-            # CHANGES_REQUESTED *state* still classifies as COMMENTS upstream
-            # (see NON_CLEAN_STATES), so dropping its comments can't launder a
-            # change-request verdict to CLEAN.
-            # Require `position` to be PRESENT-and-null (real GitHub always
-            # includes the key); a payload missing the key entirely is not
-            # treated as outdated, so we never drop a finding on a malformed/
-            # partial response.
+            # Require `position` PRESENT-and-null (real GitHub always includes
+            # the key); a payload missing the key is NOT treated as outdated,
+            # so we never drop a finding on a partial response. A genuine new
+            # finding lands on the current diff with a non-null position, so
+            # this never hides live feedback. State still wins upstream: a
+            # CHANGES_REQUESTED verdict stays COMMENTS even if its comments drop.
             if "position" in c and c["position"] is None:
                 continue
             loc = c.get("path", "?")
@@ -333,12 +356,17 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
             )
 
     # Surface 3: PR issue comments, scoped to this round by timestamp
-    # (no review_id linkage exists for issue comments).
+    # (no review_id linkage exists for issue comments). An APPROVAL comment
+    # ("no further changes...") is NOT a finding -- when Copilot posts both a
+    # formal review AND a follow-up approval comment in one round, counting the
+    # approval as a finding would wrongly flip a clean round to COMMENTS. Skip
+    # approvals; keep substantive comments.
     for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
         created = c.get("created_at", "")
-        if _is_copilot(login) and _after(created, floor):
-            findings.append("[issue-comment] {}".format((c.get("body") or "").strip()))
+        body = (c.get("body") or "").strip()
+        if _is_copilot(login) and _after(created, floor) and not _is_approval_comment(body):
+            findings.append("[issue-comment] {}".format(body))
 
     return findings
 
@@ -354,56 +382,99 @@ _EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "TIMEOUT": 2, "ERROR": 1}
 MAX_CONSECUTIVE_API_ERRORS = 3
 
 
+def _safe_print(text: str) -> None:
+    """print() that never dies on an un-encodable character.
+
+    main()'s _setup_utf8_stdio() normally makes stdout UTF-8, but if that failed
+    (detached/redirected stream) a stray emoji would still crash the print. Fall
+    back to encoding through the stream's own codec with errors="replace" so the
+    RESULT contract line always gets emitted. A truly unwritable stdout (e.g. a
+    binary stream) is unrecoverable -- swallow that too rather than re-raising,
+    since the whole point is to never die on output.
+    """
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        try:
+            enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+            sys.stdout.write(text.encode(enc, "replace").decode(enc) + "\n")
+        except Exception:  # noqa: BLE001 -- last resort: output must never crash us
+            pass
+
+
 def _emit(state: str, detail: str = "") -> int:
     """Print the contract result block and return the matching exit code."""
     if detail:
-        print(detail)
-    print("RESULT: {}".format(state))
+        _safe_print(detail)
+    _safe_print("RESULT: {}".format(state))
     return _EXIT_CODES.get(state, 1)
 
 
-# Copilot's re-review verdict, when delivered as an issue comment rather than a
-# formal review, says it approved with a phrase like "no further changes were
-# needed" / "no further changes are needed" / "no changes needed". We classify
-# CLEAN only on an explicit approval phrase; anything else (a comment that still
-# asks for something, or is ambiguous) stays COMMENTS. Erring toward COMMENTS
-# preserves the core invariant: never read silence or ambiguity as CLEAN.
+# A Copilot re-review delivered as an issue comment approves with a phrase like
+# "no further changes were needed". We classify CLEAN only when the comment is
+# UNAMBIGUOUSLY an approval -- an approval phrase AND no change-asking signal in
+# the same comment ("but please...", "however, fix...", a remaining numbered
+# ask). A mixed comment ("no changes needed in section 3, but fix section 4")
+# must stay COMMENTS. Erring toward COMMENTS preserves the core invariant: never
+# read ambiguity as CLEAN.
 _APPROVAL_PATTERNS = (
     "no further changes",
     "no changes are needed",
     "no changes needed",
     "no additional changes",
-    "looks good; no",
+    "no further action",
+)
+# If any of these appear, the comment is asking for something -> NOT a clean
+# approval, even if it also contains an approval phrase.
+_CHANGE_ASK_SIGNALS = (
+    " but ",
+    "however",
+    "please ",
+    "should ",
+    "needs to",
+    "fix ",
+    "missing",
+    "incorrect",
+    "consider ",
 )
 
 
 def _is_approval_comment(body: str) -> bool:
     lo = (body or "").lower()
-    return any(p in lo for p in _APPROVAL_PATTERNS)
+    if not any(p in lo for p in _APPROVAL_PATTERNS):
+        return False
+    # An approval phrase is present; reject if the comment ALSO asks for a change.
+    return not any(sig in lo for sig in _CHANGE_ASK_SIGNALS)
+
+
+def _latest_by_created(comments: list) -> dict | None:
+    """Return the comment with the max `created_at` (ISO8601 sorts lexically).
+
+    Don't rely on API list ordering -- pick the semantically latest explicitly.
+    """
+    if not comments:
+        return None
+    return max(comments, key=lambda c: c.get("created_at", ""))
 
 
 def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
     """Classify a round whose verdict is a Copilot ISSUE COMMENT (no review).
 
     Returns an exit code if a Copilot issue comment at/after `since` exists
-    (CLEAN if it's an explicit approval phrase, else COMMENTS), or None if no
-    such comment exists yet (so the caller keeps polling -- the reviews
-    endpoint may just be lagging).
-
-    Scoping to `since` is what makes this safe in a re-watch loop: only the
-    CURRENT round's comment is considered, so a prior round's issue comment
-    cannot resurface.
+    (CLEAN if it's an unambiguous approval, else COMMENTS), or None if no such
+    comment exists yet (so the caller keeps polling -- the reviews endpoint may
+    just be lagging). Scoping to `since` keeps a prior round's comment from
+    resurfacing in a re-watch.
     """
-    copilot_comments = []
-    for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
-        login = (c.get("user") or {}).get("login", "")
-        created = c.get("created_at", "")
-        if _is_copilot(login) and _after(created, since):
-            copilot_comments.append(c)
-    if not copilot_comments:
+    copilot_comments = [
+        c
+        for c in (_run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or [])
+        if _is_copilot((c.get("user") or {}).get("login", ""))
+        and _after(c.get("created_at", ""), since)
+    ]
+    latest = _latest_by_created(copilot_comments)
+    if latest is None:
         return None
-    # The latest in-window Copilot comment is this round's verdict.
-    latest = copilot_comments[-1]
     body = (latest.get("body") or "").strip()
     if body.startswith(COPILOT_ERROR_BODY_PREFIX):
         return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
@@ -431,15 +502,11 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
     """
     review = _latest_copilot_review(repo, pr, since)
     if review is None:
-        # No in-window formal REVIEW. Two cases to tell apart:
-        #  (1) Copilot delivered this round's verdict as an ISSUE COMMENT, not
-        #      a review (its re-reviews after "@copilot please review" often
-        #      land as a comment -- no state, no review_id, absent from
-        #      /reviews). The verdict surface and the resolution surface differ,
-        #      so reading /reviews alone would loop forever (or, with a --since
-        #      floor, TIMEOUT). Classify from the issue comments instead.
-        #  (2) The reviews endpoint simply hasn't caught up yet (eventual
-        #      consistency) and no issue comment exists -> keep polling.
+        # No in-window formal REVIEW. Either (1) Copilot delivered this round's
+        # verdict as an ISSUE COMMENT (re-reviews often do -- no state, no
+        # review_id, absent from /reviews), or (2) the reviews endpoint just
+        # hasn't caught up yet. Try the issue-comment surface; if nothing there
+        # either, signal the caller to keep polling.
         rc = _classify_issue_comment_round(repo, pr, since)
         if rc is not None:
             return rc
@@ -505,10 +572,10 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
                     return rc
                 # reviews endpoint not yet consistent -- fall through to wait.
             elif state == "finished":
-                # Copilot finished but produced no in-window formal review.
-                # It may still have delivered a verdict as an ISSUE COMMENT
-                # (the common shape for a re-review after "@copilot please
-                # review"). Classify that before concluding "nothing to say."
+                # Finished with no in-window formal review -- but Copilot may
+                # have delivered its verdict as an ISSUE COMMENT (the common
+                # shape for a re-review). Classify that before concluding
+                # "nothing to say."
                 rc = _classify_issue_comment_round(repo, pr, since)
                 if rc is not None:
                     return rc
@@ -548,6 +615,7 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
 
 
 def main(argv: list[str] | None = None) -> int:
+    _setup_utf8_stdio()
     parser = argparse.ArgumentParser(description="Watch a PR for Copilot review completion.")
     parser.add_argument("pr", type=int, help="PR number")
     parser.add_argument(
