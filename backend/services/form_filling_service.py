@@ -210,10 +210,7 @@ class FormFillingService:
         Args:
             spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
             disclaimer_text: The full translated disclaimer text to read verbatim
-            disclaimer_text: The full translated disclaimer text to read verbatim
         """
-        if not self._live_ai:
-            _log.warning("send_disclaimer_message_no_ai", session_id=self._session_id)
         if not self._live_ai:
             _log.warning("send_disclaimer_message_no_ai", session_id=self._session_id)
             return
@@ -221,11 +218,8 @@ class FormFillingService:
         message = self._settings.DISCLAIMER_INITIATING_MESSAGE.format(
             spoken_language=spoken_language,
             disclaimer_text=disclaimer_text
-            spoken_language=spoken_language,
-            disclaimer_text=disclaimer_text
         )
 
-        _log.info("sending_disclaimer_message", session_id=self._session_id, language=spoken_language)
         _log.info("sending_disclaimer_message", session_id=self._session_id, language=spoken_language)
         await self._live_ai.send_client_content(message)
 
