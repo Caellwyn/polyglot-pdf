@@ -64,10 +64,13 @@ ordering, and the energy-VAD tuning config are in
 ## Barge-in
 
 In `_run_session_loop`, the adapter checks `server_content.interrupted`. On a true
-interrupt it logs `GEMINI_INTERRUPTED`, sends a `b"__INTERRUPT__"` sentinel through
-the `on_audio` callback (so the frontend flushes its playback queue), resets the
-audio-chunk counter, and continues. The frontend also flushes locally the instant
-its VAD fires, for sub-perceptual latency (see voice-and-vad).
+interrupt it logs `GEMINI_INTERRUPTED` (with the canceled tool-call ids), resets its
+audio-chunk tracking (`_audio_chunk_count = 0`, `_first_audio_time = None`), and
+`continue`s — skipping the rest of that event so no stale audio/tool-calls are
+processed. The backend does **not** push a flush signal to the client; the actual
+playback flush is **frontend-driven** — `connection.ts onVADSpeechStart` calls
+`audioManager.flushAudioQueue()` the instant the local VAD fires, for
+sub-perceptual latency (see [../standards/voice-and-vad.md](../standards/voice-and-vad.md)).
 
 ## Tool calling
 
@@ -86,13 +89,26 @@ Each response's `usage_metadata` is split by modality, priced via
 set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 [../standards/logging-and-cost.md](../standards/logging-and-cost.md).
 
+## Response config
+
+`_run_session_loop` builds the connect config with `response_modalities = ["AUDIO"]`
+(audio-out only; native audio-to-audio). Input/output transcription
+(`input_audio_transcription` / `output_audio_transcription`) is enabled **only** when
+`enable_transcripts` is set. VAD config (`realtime_input_config`) is covered in
+[../standards/voice-and-vad.md](../standards/voice-and-vad.md).
+
 ## Scar tissue
 
 - **`_intentional_shutdown` reset ordering** (above) — the section-switch crash.
 - **Audio queue drops, never blocks** — control-channel liveness beats audio
   fidelity.
-- **One adapter per connection** — sharing causes the
-  `bg_task_already_running` callback-overwrite warning.
+- **One adapter per connection** — `dependencies.get_live_ai` builds a fresh
+  `LiveAIGemini` per WebSocket (a CRITICAL bug-fix comment there) because a shared
+  instance had its callbacks overwritten by the second connection, routing tool
+  calls to the wrong tab. The adapter also warns `bg_task_already_running` if
+  `set_callbacks` is called on a live task.
 - **Never log transcript/hint text** — only lengths (bd `polyglot-pdf-hjo`).
+- **Barge-in flush is frontend-side** — the backend only logs+skips on interrupt
+  (no flush signal); don't expect a server sentinel.
 
 *Last updated: 2026-05-31*
