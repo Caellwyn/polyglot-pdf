@@ -65,7 +65,7 @@ latency metrics are collected in metrics.ts (local-only — see
 > Gemini-VAD settings from `Settings` (the `VAD_*` env fields, next section), **not**
 > from `vad_config.json`, and with `DISABLE_GEMINI_VAD=True` those Gemini-side knobs
 > are inert anyway — so writing `vad_config.json` via that endpoint has no effect on
-> the running session today. Cleanup tracked in bd `polyglot-pdf-7vp`.
+> the running session today. Cleanup tracked in bd `polyglot-pdf-9jv`.
 
 ## Barge-in
 
