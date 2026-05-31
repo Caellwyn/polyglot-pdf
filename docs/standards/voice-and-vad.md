@@ -1,6 +1,6 @@
 # Voice & VAD (manual activity signals)
 
-**Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/demo/useDemoVAD.ts frontend/src/vad-tuning
+**Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/demo/useDemoVAD.ts frontend/src/vad-tuning
 
 *Last updated: 2026-05-31*
 
@@ -22,9 +22,10 @@ if settings.DISABLE_GEMINI_VAD:
 config["realtime_input_config"] = {"automatic_activity_detection": vad_settings}
 ```
 
-The frontend VAD (`useDemoVAD.ts`) decides speech boundaries and emits
-`vad_activity_start` / `vad_activity_end` over the WebSocket; the backend relays
-them as `LiveAIGemini.send_activity_start()` /
+The frontend VAD (`useDemoVAD.ts`) detects speech boundaries and fires
+`connection.ts` `onVADSpeechStart` / `onVADSpeechEnd`, which relay
+`vad_activity_start` / `vad_activity_end` over the WebSocket; the backend in turn
+calls `LiveAIGemini.send_activity_start()` /
 `send_activity_end()` →
 `session.send_realtime_input(activity_start=types.ActivityStart())` (and
 `ActivityEnd()`). **Ordering matters:** `activity_start` is sent *before* the audio
@@ -36,40 +37,54 @@ chunks for that utterance; `activity_end` flushes Gemini's buffer after.
 > `automatic_activity_detection.disabled = True` they're inert in the current
 > default mode. They're kept for the fallback of re-enabling Gemini VAD.
 
-## The energy-VAD tuning config
+## The client VAD thresholds (Silero)
 
-The client VAD's thresholds are NOT hardcoded — they live in
-`backend/vad_config.json` and are served/updated through
-`backend/routes/vad_config_routes.py` (`GET` / `PUT /api/vad-config`). Current
-config:
+The frontend VAD is **Silero** (ONNX), not a hand-rolled energy gate. Its tuned
+defaults are `DEFAULT_VAD_CONFIG` in `frontend/src/demo/useDemoVAD.ts`:
 
 | Param | Value | Meaning |
 |-------|------:|---------|
-| `energyThreshold` | 0.015 | RMS energy above which a frame counts as speech |
-| `speechStartFrames` | 3 | consecutive speech frames to declare speech start |
-| `speechEndFrames` | 10 | consecutive silence frames to declare speech end |
-| `preBufferFrames` | 5 | frames of pre-speech audio to prepend |
-| `gracePeriodFrames` | 8 | post-barge-in window (tool-call rejection guard) |
+| `positiveSpeechThreshold` | 0.85 | model confidence to *start* speech |
+| `negativeSpeechThreshold` | 0.65 | hysteresis threshold to *end* speech |
+| `minSpeechMs` | 250 | minimum speech duration to count |
+| `redemptionMs` | 400 | grace before declaring speech ended |
 
-The `frontend/src/vad-tuning/` dashboard (`VADTuningDashboard.tsx`,
-`VADControlPanel.tsx`, `useVADConfig.ts`) reads/writes this config live for tuning
-on real hardware (e.g. the Fire HD tablet). Barge-in/latency metrics for tuning are
-collected in `frontend/src/shared/metrics.ts` (local-only — see
+These can be overridden per-session via `VADOptions.sensitivity`; the
+`frontend/src/vad-tuning/` dashboard tunes them live and persists overrides in the
+browser (`localStorage`), exporting a snapshot file for sharing. The post-barge-in
+tool-call rejection window is a **separate** hardcoded constant —
+`BARGE_IN_GRACE_PERIOD_MS = 150` in `frontend/src/shared/metrics.ts`. Barge-in /
+latency metrics are collected in metrics.ts (local-only — see
 [hipaa-pii-policy.md](hipaa-pii-policy.md)).
+
+> **Two different "VAD configs" — don't conflate them.** `backend/vad_config.json`
+> (`{startSensitivity, endSensitivity, prefixPadding, silenceDuration}`) holds
+> *Gemini-side* automatic-VAD knobs — a **different** thing from the client Silero
+> thresholds above. It's served by a WebSocket at `/ws/vad-config` (mounted in
+> `main.py`, handler `vad_config_websocket`). **Caveat:** the live adapter reads its
+> Gemini-VAD settings from `Settings` (the `VAD_*` env fields, next section), **not**
+> from `vad_config.json`, and with `DISABLE_GEMINI_VAD=True` those Gemini-side knobs
+> are inert anyway — so writing `vad_config.json` via that endpoint has no effect on
+> the running session today. Cleanup tracked in bd `polyglot-pdf-7vp`.
 
 ## Barge-in
 
 When the user starts talking while Gemini is speaking, the frontend
-(`connection.ts` `onVADSpeechStart`) immediately flushes its local audio queue for
-instant UX, and the backend independently watches for Gemini's own
-`server_content.interrupted` flag — on which it sends a `b"__INTERRUPT__"` sentinel
-through the audio callback so the frontend flushes playback. **Push-to-talk mode**
-(`setPushToTalkMode(true)`) disables the energy-based barge-in path entirely
-(`onVADSpeechStart`/`End` early-return).
+(`connection.ts` `onVADSpeechStart`) immediately flushes its local audio queue
+(`audioManager.flushAudioQueue()`) for instant UX. The backend separately watches
+Gemini's own `server_content.interrupted` flag, but on it the adapter only **logs
+`GEMINI_INTERRUPTED`, resets its audio tracking, and skips the event** — it does
+**not** send any flush signal back to the client (there is no server sentinel; the
+flush is entirely frontend-side). See [voice-ai.md](../components/voice-ai.md#barge-in).
+**Push-to-talk mode** (`setPushToTalkMode(true)`, the default in `VoiceOverlay`)
+disables the energy-based barge-in path entirely (`onVADSpeechStart`/`End`
+early-return).
 
-There's a barge-in **grace period**: tool calls arriving within ~150ms of a
-barge-in are treated as hallucinations from the interrupted generation and rejected
-(`metrics.recordToolCall` → `reject`; see `connection.ts onFieldUpdate`).
+There's a barge-in **grace period**: tool calls arriving within
+`BARGE_IN_GRACE_PERIOD_MS` (150ms, a constant in
+`frontend/src/shared/metrics.ts`) of a barge-in are treated as hallucinations from
+the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; see
+`connection.ts onFieldUpdate`).
 
 ## fill-language vs spoken-language
 

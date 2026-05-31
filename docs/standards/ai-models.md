@@ -38,8 +38,11 @@ constants):
   env knob and surfaced on `/health`).
 
 `backend/dependencies.py` is the **one** place the model reaches the adapter:
-`get_form_filling_service()` constructs `LiveAIGemini(model=settings.MODEL_NATIVE,
-...)`. Routes depend on that factory, so nothing else picks a model.
+`get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
+model=settings.MODEL_NATIVE, vertexai=settings.VERTEXAI)` (a fresh instance per
+connection — a CRITICAL bug-fix comment there), and `get_form_filling_service()`
+depends on that provider. Routes depend on the service factory, so nothing else
+picks a model.
 
 ## A/B-ing 2.5 vs 3.1
 

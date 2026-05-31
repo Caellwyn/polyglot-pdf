@@ -29,9 +29,10 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
     intentionally shut down.
   - It warns `bg_task_already_running_callbacks_overwritten` if called while a task
     is live (a sign two connections are sharing one adapter).
-- **`finalize_gemini_session()`**: closes ONLY the Gemini session (keeps the
-  WebSocket alive) under `_task_lock`, setting `_intentional_shutdown = True` — used
-  for the Level-3 farewell so the client can later `restart_gemini_session`.
+- **`finalize()`** (the adapter method; the service wraps it as
+  `finalize_gemini_session()`): closes ONLY the Gemini session (keeps the WebSocket
+  alive) under `_task_lock`, setting `_intentional_shutdown = True` — used for the
+  Level-3 farewell so the client can later `restart_gemini_session`.
 - **`set_session_context(form_session_id, form_id, current_part_id)`**: injects the
   ids used for token logging (token events only fire when these are set — see
   [../standards/logging-and-cost.md](../standards/logging-and-cost.md)).
