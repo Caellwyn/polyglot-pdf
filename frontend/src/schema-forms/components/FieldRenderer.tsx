@@ -45,8 +45,7 @@ export function FieldRenderer({
   // If the field has conditional_behavior with unlock_method "flip_readonly_bit",
   // it should be editable when the show_if condition is met
   const shouldUnlock =
-    field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
-    field.conditional_logic?.unlock_method === "flip_readonly_bit";
+    field.conditional_behavior?.unlock_method === "flip_readonly_bit";
 
   // Debug conditional unlocking
   if (field.read_only && shouldUnlock) {
@@ -153,7 +152,8 @@ export function FieldRenderer({
       );
 
     case "number":
-      // Number field uses TextField with type="number" (HTML5)
+      // Number fields render as a plain text input. TextField only special-cases
+      // email/tel for its HTML input type; everything else (incl. this) is type="text".
       return (
         <TextField
           field={{ ...field, type: "text" }}
