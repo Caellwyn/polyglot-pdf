@@ -52,7 +52,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
-from backend.utils.token_file_logger import get_token_logger  # noqa: E402
 from backend import config as _config  # noqa: E402
 
 
@@ -277,13 +276,16 @@ async def main_async(args: argparse.Namespace) -> int:
         for p in PROMPTS[: min(args.turns, len(PROMPTS))]:
             _synth_pcm16(p)
     except Exception as e:  # noqa: BLE001
-        print(f"gTTS synthesis failed ({type(e).__name__}: {e}); cannot run audio spike. "
-              f"Check network/gTTS install.")
+        # Covers gTTS (network/synthesis) AND soundfile mp3 decode (libsndfile MP3
+        # support is build-dependent). Aborts cleanly BEFORE burning live-API turns.
+        print(f"Audio synthesis failed ({type(e).__name__}: {e}); cannot run audio "
+              f"spike. Check network + gTTS, and that soundfile/libsndfile decodes MP3.")
         return 1
     print(f"Synthesized {len(_clip_cache)} prompt clips (16k mono PCM16).")
 
-    logger = get_token_logger()
-    logger.clear_log()
+    # Do NOT clear token_usage.jsonl -- it may hold real local session logs. We read
+    # back only OUR lines, filtered by the synthetic form_session_id (spike-<tier>-<n>),
+    # so pre-existing records are harmless and preserved. (fresh-eyes PR #34)
 
     summaries = []
     for tier_label, model in TIERS.items():

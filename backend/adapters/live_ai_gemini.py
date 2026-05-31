@@ -162,6 +162,10 @@ class LiveAIGemini(ILiveAI):
         self._session_audio_input_tokens: int = 0
         self._session_text_output_tokens: int = 0
         self._session_audio_output_tokens: int = 0
+        # Guard so the session-end cost summary is emitted at most once per session
+        # (finalize() can be entered more than once / concurrently). Reset at the
+        # start of each session loop.
+        self._cost_summary_emitted: bool = False
 
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
@@ -432,24 +436,30 @@ class LiveAIGemini(ILiveAI):
         # the session, but the session TOTAL was previously lost on finalize (it
         # only lived in self._session_total_*). This is counts/costs/ids only --
         # never field values/transcripts (bd hjo / no-PII). Guarded so a logging
-        # failure can never block teardown. (bd polyglot-pdf-tak)
-        try:
-            self._log.info(
-                "session_cost_summary",
-                gemini_session_id=self._instance_id,
-                form_session_id=self._form_session_id,
-                form_id=self._form_id,
-                model=self._model_name,
-                total_tokens=self._session_total_tokens,
-                prompt_tokens=self._session_prompt_tokens,
-                total_cost_usd=round(self._session_total_cost, 8),
-                text_input_tokens=self._session_text_input_tokens,
-                audio_input_tokens=self._session_audio_input_tokens,
-                text_output_tokens=self._session_text_output_tokens,
-                audio_output_tokens=self._session_audio_output_tokens,
-            )
-        except Exception as e:  # noqa: BLE001 -- summary must never block teardown
-            self._log.warning("session_cost_summary_failed", error=str(e))
+        # failure can never block teardown. Emit AT MOST ONCE per session and only
+        # if a session actually billed tokens: finalize() can race (a connection
+        # drop finalizing alongside a normal close) and the summary runs before the
+        # _task_lock, so without this guard a downstream cost sink would
+        # double-count. (bd polyglot-pdf-tak)
+        if not self._cost_summary_emitted and self._session_total_tokens > 0:
+            self._cost_summary_emitted = True
+            try:
+                # NOTE: the logger is already bound with instance_id (and model), so
+                # don't re-emit them here. There is no Gemini *server* session id to log.
+                self._log.info(
+                    "session_cost_summary",
+                    form_session_id=self._form_session_id,
+                    form_id=self._form_id,
+                    total_tokens=self._session_total_tokens,
+                    prompt_tokens=self._session_prompt_tokens,
+                    total_cost_usd=round(self._session_total_cost, 8),
+                    text_input_tokens=self._session_text_input_tokens,
+                    audio_input_tokens=self._session_audio_input_tokens,
+                    text_output_tokens=self._session_text_output_tokens,
+                    audio_output_tokens=self._session_audio_output_tokens,
+                )
+            except Exception as e:  # noqa: BLE001 -- summary must never block teardown
+                self._log.warning("session_cost_summary_failed", error=str(e))
 
         # Set flag to prevent auto-retry after intentional shutdown
         self._intentional_shutdown = True
@@ -582,6 +592,7 @@ class LiveAIGemini(ILiveAI):
         self._session_audio_input_tokens = 0
         self._session_text_output_tokens = 0
         self._session_audio_output_tokens = 0
+        self._cost_summary_emitted = False
 
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.

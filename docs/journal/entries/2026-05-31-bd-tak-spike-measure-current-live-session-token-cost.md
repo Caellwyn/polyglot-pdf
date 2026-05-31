@@ -43,7 +43,27 @@ Previously the cumulative session cost was computed but **lost on teardown** —
 per-turn lines were logged. Small, useful beyond the spike (feeds the dashboard /
 future BigQuery phase).
 
-**Review (fresh-eyes):** _(filled at Step 8 after triage)_
+**Review (fresh-eyes + Copilot round 1, parallel — strongly overlapping):**
+- **Adopted (fixed in PR):**
+  1. `finalize()` summary could double-emit on concurrent/repeat finalize (race:
+     drop + close), double-counting session cost downstream. Added a once-per-session
+     guard (`_cost_summary_emitted`, reset at session start) + only emit when
+     `total_tokens > 0`. *[fresh-eyes F1 + Copilot]*
+  2. `gemini_session_id`/`model` in the summary were redundant/misnamed — the logger
+     is already bound with `instance_id` + `model`; dropped them. *[Copilot]*
+  3. Harness `clear_log()` destroyed `token_usage.jsonl` (real local logs / dashboard
+     history). Removed it — we filter by synthetic `form_session_id`, so clearing was
+     never needed. *[fresh-eyes F4 + Copilot]*
+  4. Misleading "gTTS synthesis failed" message (the decode failure can be
+     soundfile/libsndfile MP3, not gTTS). Reworded. *[fresh-eyes F5]*
+- **Noted (not changed):** turn pacing waits on token-billing +1s, not response
+  completion — could undercount in principle, but this run's curve was cleanly
+  monotonic so it didn't bite; recorded as a caveat in the findings artifact.
+  *[fresh-eyes F3]*
+- **Rejected:** monkeypatch-vs-frozen-Settings (hypothetical future; throwaway
+  spike), logger-path divergence (low-confidence; both anchored to `__file__`).
+  *[fresh-eyes F2, F6]*
+- **Copilot:** round 1 = 2 inline comments (both adopted; overlapped fresh-eyes).
 
 **Discovered during the spike, filed separately (NOT fixed here):**
 - **`polyglot-pdf-p1t`** (P2): the default VAD config sends

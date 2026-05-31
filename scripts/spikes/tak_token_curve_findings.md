@@ -40,6 +40,11 @@ production adapter so its existing token logging records the curve).
 
 - Scripted cadence (fixed prompts, paced chunks), so ABSOLUTE per-second accrual is
   approximate; the COMPOUNDING shape (the point) is measured directly and is robust.
+- Turn pacing waits for the turn to bill (token increment) + 1s, not for response
+  audio to finish playing. If a response ran long, the next turn could start mid-
+  playback. In this run the curve was cleanly monotonic (prompt 271→1,799, no
+  plateau/dip), so it didn't distort the result — but a tighter study should gate the
+  next turn on response completion.
 - Single session/run — directional baseline, not a statistical study. Re-run with
   more turns/sessions if a tighter number is needed for the design.
 - Required a local workaround for `polyglot-pdf-p1t` (default VAD config 1007s on
