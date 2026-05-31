@@ -14,7 +14,7 @@ is in [ai-models.md](ai-models.md).
 `DISABLE_GEMINI_VAD = True` in `backend/config.py` — and it's marked CRITICAL.
 The backend turns **off** Gemini's automatic activity detection and instead sends
 **manual** `activity_start` / `activity_end` signals driven by the frontend's own
-energy-based VAD. Concretely, in the adapter's `connect()` config:
+client-side VAD (Silero, see below). Concretely, in the adapter's `connect()` config:
 
 ```python
 if settings.DISABLE_GEMINI_VAD:
