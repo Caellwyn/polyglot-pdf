@@ -45,7 +45,7 @@ class Settings(BaseModel):
 	MAX_UPLOAD_MB: int = 5
 	WS_CHUNK_MS: int = 20
 	WS_PING_INTERVAL_SEC: int = 15
-	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 60s of no activity (saves resources)
+	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
