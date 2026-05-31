@@ -28,8 +28,8 @@ doc, drop the _(planned)_ tag and make the name a link.
 |---------|-----|------|
 | WebSocket session routing / handshake | [`components/websocket-routing.md`](components/websocket-routing.md) | `backend/routes/websocket_routes.py` |
 | Gemini Live voice adapter (session, tools, audio) | [`components/voice-ai.md`](components/voice-ai.md) | `backend/adapters/live_ai_gemini.py` |
-| Schema forms + client state | `components/schema-forms.md` _(planned -- `polyglot-pdf-93c`)_ | `frontend/src/schema-forms/`, `frontend/src/shared/` |
-| PDF filling | `components/pdf-filling.md` _(planned -- `polyglot-pdf-2yu`)_ | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
+| Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
+| PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
 | Auth | `components/auth.md` _(planned -- `polyglot-pdf-y3l`)_ | _(see bead)_ |
 | Config + deployment | `components/config-deployment.md` _(planned -- `polyglot-pdf-22q`)_ | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
 
