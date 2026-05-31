@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-05-30*
+*Last updated: 2026-05-31*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -39,7 +39,7 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 
 - **Cost calc + accumulation** — `backend/adapters/live_ai_gemini.py` reads
   `usage_metadata` off each Gemini response, splits tokens by modality, calls
-  `get_pricing_for_model(self._model)`, multiplies tokens × rate per modality, and
+  `get_pricing_for_model(self._model_name)`, multiplies tokens × rate per modality, and
   accumulates `self._session_total_cost` / `self._session_total_tokens` (+ the
   per-modality running totals) across the Gemini session.
 
@@ -94,4 +94,4 @@ beads; this doc is their canonical home (migrated out of
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
 
-*Last updated: 2026-05-30*
+*Last updated: 2026-05-31*

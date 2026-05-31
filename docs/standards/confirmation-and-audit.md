@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py backend/config.py
 
-*Last updated: 2026-05-30*
+*Last updated: 2026-05-31*
 
 Every field value that lands on the form is confirmed by the user, and every
 confirmation is recorded — by `field_id` and *method*, never by value — for
@@ -31,7 +31,9 @@ and `form_session_id` are present — calls `log_field_confirmation(...)`.
 `backend/utils/confirmation_logger.py` — `log_field_confirmation(form_id,
 form_session_id, field_id, field_name, confirmation_method)` appends a
 `field_confirmed` event to a per-form-session JSONL file and also emits it through
-the structured logger. The event:
+`structlog` (to stdout — this is the third-party `structlog` library, **not** the
+project's `StructuredLogger` / the Cloud Run→BigQuery typed-event path described in
+[logging-and-cost.md](logging-and-cost.md)). The event:
 
 ```json
 {
@@ -92,4 +94,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-05-30*
+*Last updated: 2026-05-31*
