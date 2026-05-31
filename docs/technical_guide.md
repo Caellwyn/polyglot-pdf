@@ -42,9 +42,8 @@ knowing when deploying), `DISABLE_GEMINI_VAD=True`,
 `AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
 `VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
 exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
-`WS_IDLE_TIMEOUT_SEC` -- its value (`120`), inline comment (`60s`), and tests
-(`==60`) currently disagree; tracked in `polyglot-pdf-od1` (blocked on
-`polyglot-pdf-e9v`), so cite the setting, not a number, until it lands.
+`WS_IDLE_TIMEOUT_SEC` (`60`) -- the idle watchdog closes a form-fill socket after
+this many seconds of no activity.
 
 ## Routes / endpoints
 
