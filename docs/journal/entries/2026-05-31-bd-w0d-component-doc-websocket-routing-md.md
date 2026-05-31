@@ -24,12 +24,12 @@ Four new tier-2 docs, each verified line-by-line against the **dev-branch** code
 plus four `docs/INDEX.md` rows flipped from `_(planned)_` to live links:
 
 - **components/websocket-routing.md** (w0d) — `/ws/fill` handshake (legacy +
-  `handshake_jit`), the full control-message table, the **frontend-driven**
-  section switch (`manual_section_switch` → `switch_to_section`, `drop_audio`
-  guard; there is no backend `complete_section` tool), the 5s idle watchdog
-  (`idle_timeout` → close 1000), and warm-vs-cold reconnect including the Nov-10
-  `paused`-flag-reset bug fix. Flags `RECONNECTION_FLOW_SUMMARY.md` as an unshipped
-  proposal, not current behavior.
+  `handshake_jit`, accepted unconditionally), the full control-message table, the
+  **frontend-driven** section switch (`manual_section_switch` → backend restart →
+  `section_switched`; `drop_audio` guard; there is no backend `complete_section`
+  tool), the 5s idle watchdog (`idle_timeout` → close 1000), and warm-vs-cold
+  reconnect including the Nov-10 `paused`-flag-reset bug fix. Flags
+  `RECONNECTION_FLOW_SUMMARY.md` as an unshipped proposal, not current behavior.
 - **components/voice-ai.md** (rvz) — `LiveAIGemini` lifecycle, audio-queue
   drop-not-block, manual activity signals, barge-in (logs+skip on the backend;
   flush is frontend-side), tool routing, `response_modalities=["AUDIO"]`, the
@@ -39,8 +39,9 @@ plus four `docs/INDEX.md` rows flipped from `_(planned)_` to live links:
   resolution + env override, `dependencies.py` injection, the A/B flow, family-keyed
   cost link. Unblocks `polyglot-pdf-2hy`.
 - **standards/voice-and-vad.md** (4rz) — `DISABLE_GEMINI_VAD` + manual
-  `activity_start/end` ordering, the `vad_config.json` tuning params + `/api/vad-config`
-  WS, fill- vs spoken-language, PTT (default on), hallucination mitigations.
+  `activity_start/end` ordering, the client Silero VAD config (`DEFAULT_VAD_CONFIG`
+  in useDemoVAD.ts) vs the Gemini-side `vad_config.json` / `/ws/vad-config` WS,
+  fill- vs spoken-language, PTT (default on), hallucination mitigations.
 
 Plus the **#31 follow-ups** (the merged logging docs): `self._model` →
 `self._model_name` in logging-and-cost; clarified that confirmation logging uses
