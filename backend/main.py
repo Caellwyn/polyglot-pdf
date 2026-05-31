@@ -56,10 +56,10 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]):
     return {
         "status": "ok",
         "models": {
-            "live": settings.MODEL_LIVE,
             "native": settings.MODEL_NATIVE,
             "labeling": settings.MODEL_LABELING,
         },
+        "use_premium_model": settings.USE_PREMIUM_MODEL,
         "audio": {
             "in_rate": settings.AUDIO_IN_RATE,
             "out_rate": settings.AUDIO_OUT_RATE,

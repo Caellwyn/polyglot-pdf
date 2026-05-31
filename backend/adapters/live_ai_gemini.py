@@ -75,7 +75,7 @@ class LiveAIGemini(ILiveAI):
     dependency provider can pass either `api_key`, `vertexai` or `model` as keywords.
     """
 
-    def __init__(self, api_key: str | None = None, model: str = "gemini-live-2.5-flash",
+    def __init__(self, api_key: str | None = None, model: str = "gemini-2.5-flash-native-audio-preview-12-2025",
              vertexai: bool = False,
              project: str | None = None, 
              location: str = "us-central1"):

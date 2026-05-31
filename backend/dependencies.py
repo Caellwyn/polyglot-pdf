@@ -14,7 +14,7 @@ def get_live_ai(settings: Settings = Depends(get_settings)) -> ILiveAI:
     # WebSocket connections to share the same LiveAIGemini instance, leading to
     # callbacks being overwritten when the second connection called set_callbacks().
     # This caused tool calls to be routed to only the most recent connection.
-    model_name = settings.MODEL_NATIVE if settings.USE_NATIVE_AUDIO else settings.MODEL_LIVE
+    model_name = settings.MODEL_NATIVE
     vertexai = settings.VERTEXAI
     # Pass both api_key and model to the adapter; the adapter will construct
     # a `genai.Client(api_key=...)` when possible. This matches

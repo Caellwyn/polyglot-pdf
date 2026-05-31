@@ -1,0 +1,41 @@
+"""Unit tests for native-audio model selection (USE_PREMIUM_MODEL -> MODEL_NATIVE).
+
+Covers the `_resolve_model` validator and its alignment with the family-keyed
+pricing table. We pass values via the Settings constructor rather than env vars:
+the field defaults read os.getenv at class-definition time, so setting os.environ
+after import would NOT affect a later Settings() — constructor args are the
+reliable way to exercise the validator. See bd polyglot-pdf-4cm.
+"""
+
+from backend.config import (
+    MODEL_NATIVE_PREMIUM,
+    MODEL_NATIVE_STANDARD,
+    Settings,
+    model_family,
+)
+
+
+def test_standard_tier_resolves_to_2_5_native():
+    s = Settings(USE_PREMIUM_MODEL=False, MODEL_NATIVE="")
+    assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD
+    assert s.MODEL_NATIVE == "gemini-2.5-flash-native-audio-preview-12-2025"
+
+
+def test_premium_tier_resolves_to_3_1_live():
+    s = Settings(USE_PREMIUM_MODEL=True, MODEL_NATIVE="")
+    assert s.MODEL_NATIVE == MODEL_NATIVE_PREMIUM
+    assert s.MODEL_NATIVE == "gemini-3.1-flash-live-preview"
+
+
+def test_explicit_model_native_overrides_flag():
+    # A non-empty MODEL_NATIVE pin wins regardless of the premium flag.
+    s = Settings(USE_PREMIUM_MODEL=True, MODEL_NATIVE="gemini-custom-pin")
+    assert s.MODEL_NATIVE == "gemini-custom-pin"
+
+
+def test_resolved_models_map_to_expected_pricing_families():
+    # The whole point of the toggle is a comparable 2.5-vs-3.1 cost A/B.
+    standard = Settings(USE_PREMIUM_MODEL=False, MODEL_NATIVE="")
+    premium = Settings(USE_PREMIUM_MODEL=True, MODEL_NATIVE="")
+    assert model_family(standard.MODEL_NATIVE) == "2.5"
+    assert model_family(premium.MODEL_NATIVE) == "3.1"

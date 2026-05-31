@@ -26,8 +26,8 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `MODEL_NATIVE` | `gemini-live-2.5-flash-native-audio` | Gemini Live native-audio model (used when `USE_NATIVE_AUDIO=True`). |
-| `MODEL_LIVE` | `gemini-live-2.5-flash-preview` | Gemini Live cascade model (used when `USE_NATIVE_AUDIO=False`). |
+| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `true` -> `gemini-3.1-flash-live-preview` (premium), `false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard). |
+| `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
 | `USE_JIT_SCHEMA` | `false` | Feature flag: JIT (manifest-only) system instruction vs. full schema. |
@@ -37,7 +37,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment): `VERTEXAI=True` (route LLM/embedding calls
 through Vertex AI vs. the Gemini API key path -- a behavioral switch worth
-knowing when deploying), `USE_NATIVE_AUDIO=True`, `DISABLE_GEMINI_VAD=True`,
+knowing when deploying), `DISABLE_GEMINI_VAD=True`,
 `PROACTIVE_AUDIO=False` (deprecated), `AUDIO_IN_RATE=16000`,
 `AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
 `VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
