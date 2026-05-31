@@ -39,10 +39,10 @@ doc, drop the _(planned)_ tag and make the name a link.
 |---------|-----|
 | AI models + pricing (swappable, A/B) | `standards/ai-models.md` _(planned -- `polyglot-pdf-5df`)_ |
 | Voice + VAD (manual activity signals) | `standards/voice-and-vad.md` _(planned -- `polyglot-pdf-4rz`)_ |
-| HIPAA / PII policy | `standards/hipaa-pii-policy.md` _(planned -- `polyglot-pdf-b11`)_ |
-| Confirmation + audit trail | `standards/confirmation-and-audit.md` _(planned -- `polyglot-pdf-gbn`)_ |
+| HIPAA / PII policy | [`standards/hipaa-pii-policy.md`](standards/hipaa-pii-policy.md) |
+| Confirmation + audit trail | [`standards/confirmation-and-audit.md`](standards/confirmation-and-audit.md) |
 | Stateless architecture (client owns state) | [`standards/stateless-architecture.md`](standards/stateless-architecture.md) |
-| Logging + cost | `standards/logging-and-cost.md` _(planned -- `polyglot-pdf-m8s`)_ |
+| Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | `standards/testing.md` _(planned -- `polyglot-pdf-jh8`)_ |
 
