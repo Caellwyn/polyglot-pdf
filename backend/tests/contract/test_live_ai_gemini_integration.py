@@ -9,26 +9,27 @@ from backend.adapters.live_ai_gemini import LiveAIGemini
 pytestmark = pytest.mark.external
 
 
-async def _wait_for_text(session, timeout: float = 30.0) -> str | None:
-    """Iterate over live responses until we observe textual content."""
+async def _wait_for_audio(session, timeout: float = 30.0) -> bytes | None:
+    """Iterate over live responses until we observe inline audio bytes.
 
-    async def _reader() -> str | None:
+    Native audio-to-audio models reply with AUDIO (inline_data on the model
+    turn), NOT a TEXT modality — requesting TEXT from them is rejected with a
+    1007 close. So the smoke test asserts we get real audio bytes back.
+    """
+
+    async def _reader() -> bytes | None:
         async for chunk in session.receive():
-            # Direct text attribute (common on early chunks)
-            text = getattr(chunk, "text", None)
-            if text:
-                return text
-
-            # server_content.model_turn.parts[0].text/display_text is another shape
             server_content = getattr(chunk, "server_content", None)
-            if server_content is not None:
-                model_turn = getattr(server_content, "model_turn", None)
-                if model_turn is not None:
-                    for part in getattr(model_turn, "parts", []) or []:
-                        text = getattr(part, "text", None) or getattr(part, "display_text", None)
-                        if text:
-                            return text
-
+            if server_content is None:
+                continue
+            model_turn = getattr(server_content, "model_turn", None)
+            if model_turn is None:
+                continue
+            for part in getattr(model_turn, "parts", []) or []:
+                inline = getattr(part, "inline_data", None)
+                data = getattr(inline, "data", None) if inline is not None else None
+                if data:
+                    return data
         return None
 
     try:
@@ -39,14 +40,14 @@ async def _wait_for_text(session, timeout: float = 30.0) -> str | None:
 
 @pytest.mark.asyncio
 async def test_live_ai_gemini_real_connection():
-    """Smoke-test that we can establish a Gemini Live session and receive text."""
+    """Smoke-test that we can establish a Gemini Live session and receive audio."""
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         pytest.skip("GEMINI_API_KEY is not configured")
 
     # Default to the standard native audio-to-audio model we actually run
-    # (the retired half-cascade gemini-live-2.5-flash-preview gets 1008'd).
+    # (the old gemini-live-2.5-flash-preview string 1008'd — see config.py).
     model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
     adapter = LiveAIGemini(api_key=api_key, model=model)
 
@@ -55,9 +56,10 @@ async def test_live_ai_gemini_real_connection():
     if client is None or not hasattr(client, "aio"):
         pytest.skip("google.genai client does not expose async interface; upgrade google-genai")
 
+    # Native-audio models emit AUDIO only; requesting TEXT here gets a 1007 close.
     config: dict[str, Any] = {
-        "response_modalities": ["TEXT"],
-        "system_instruction": "You are a diagnostics bot. Reply with the word ACK when contacted.",
+        "response_modalities": ["AUDIO"],
+        "system_instruction": "You are a diagnostics bot. When contacted, say the word ACK.",
     }
 
     async with adapter.connect(model=model, config=config) as session:
@@ -66,8 +68,7 @@ async def test_live_ai_gemini_real_connection():
         if send_client_content is None:
             pytest.skip("Gemini session missing send_client_content; update google-genai package")
 
-        await send_client_content(turns={"parts": [{"text": "Please reply with ACK."}]})
+        await send_client_content(turns={"parts": [{"text": "Please reply."}]})
 
-        text = await _wait_for_text(session)
-        assert text is not None, "No textual response received from Gemini within timeout"
-        assert "ACK" in text.upper()
+        audio = await _wait_for_audio(session)
+        assert audio, "No audio response received from Gemini within timeout"

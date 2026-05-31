@@ -60,7 +60,25 @@ trigger table (the Gemini-adapter row + a catch-all for any `google-genai` call)
   1007-reject -- it can't pass against any valid native model as written. Noted
   here; left as-is this PR pending the maintainer's call on rewriting it to AUDIO.
 
-**Fresh-eyes review:** _(filled at Step 8 after triage)_
+**Review (fresh-eyes + Copilot round 1, ran in parallel):** both converged on the
+contract-test TEXT-modality bug. Triage:
+- **Adopted (fixed in this PR):**
+  1. Contract test asked `["TEXT"]` → native model 1007s. Rewrote to request
+     `["AUDIO"]` and assert audio bytes (matches the verified live probe). [Copilot + fresh-eyes]
+  2. `config.py` comment wrongly called `gemini-live-2.5-flash-preview` "half-cascade,
+     retired" — it's native audio; the name is just inconsistent and that exact
+     string 1008'd. Reconciled the comment + `genai_docs/README.md` to the observed
+     truth (verify against endpoint, don't trust the name). [fresh-eyes — doc contradiction]
+  3. No tests for `_resolve_model`/`USE_PREMIUM_MODEL`. Added
+     `tests/unit/test_model_selection.py` (4 tests: standard/premium/pin/family-mapping),
+     using constructor args since env defaults bind at import time. [fresh-eyes]
+  4. `/health` mixed a bool into the string-valued `models` dict. Moved it to a
+     top-level `use_premium_model` key. [fresh-eyes — shape]
+- **Deferred:** stale `gemini-live-2.5-flash-native-audio` in README.md +
+  PROJECT_CONTEXT.md (untouched files; PROJECT_CONTEXT archived under gfb) →
+  filed **bd polyglot-pdf-n4k**.
+- **Rejected:** none. (fresh-eyes explicitly cleared the pricing regex + validator
+  ordering as sound.)
 
 ## Lessons
 

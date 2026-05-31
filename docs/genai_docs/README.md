@@ -32,10 +32,14 @@ data or live web docs.
   against a native-audio model fails with **1007** ("response modalities (TEXT)
   not supported"). Text from native models arrives as
   `input_transcription`/`output_transcription` on `server_content`, not a TEXT modality.
-- **Model naming is inconsistent.** The 2.5 native model appears as both
-  `gemini-2.5-flash-native-audio-preview-12-2025` and `gemini-live-2.5-flash-preview`;
-  a genuinely *cascaded* `gemini-live-2.5-flash` also exists (best-practices line 54).
-  Do **not** infer "native vs cascade" from a name alone — verify against the endpoint.
+- **Model naming is inconsistent — verify against the endpoint, don't trust a name.**
+  The 2.5 native model is documented under multiple strings, but they are **not
+  interchangeable in practice**: `gemini-2.5-flash-native-audio-preview-12-2025`
+  is verified to connect and return audio (2026-05-30), whereas the older
+  `gemini-live-2.5-flash-preview` (our retired `MODEL_LIVE` default) **1008'd**
+  ("not found for bidiGenerateContent"). A genuinely *cascaded* `gemini-live-2.5-flash`
+  also exists (best-practices line 54). Pin the explicit `-preview-12-2025` string;
+  do **not** infer "native vs cascade" or "this alias works" from a name alone.
 - **Compounding cost is the dominant lever.** Every turn re-bills the entire
   accumulated context window; native audio accrues ~25 tokens/sec. Context-window
   compression / size limits are the first-class fix (see epic `polyglot-pdf-l3a`).

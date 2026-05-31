@@ -8,10 +8,15 @@ from pathlib import Path
 
 # === Native audio-to-audio model tiers (A/B-able) ===
 # Both are full native audio-to-audio Live API models (bidiGenerateContent).
-# The half-cascade path (gemini-live-2.5-flash-preview) was retired by Google
-# and is gone — do not reintroduce it. USE_PREMIUM_MODEL flips between these:
+# USE_PREMIUM_MODEL flips between these:
 #   premium  -> gemini-3.1-flash-live-preview            (newer, pricier; family 3.1)
 #   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper; family 2.5)
+# NOTE: Gemini model naming is inconsistent across Google's sources — the 2.5
+# native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
+# default), and that exact string 1008'd ("not found for bidiGenerateContent") in
+# the contract test. We pin the explicit `-preview-12-2025` string above, which is
+# verified to connect and return audio. Don't infer native-vs-cascade from a name;
+# verify against the live endpoint. See docs/genai_docs/README.md.
 MODEL_NATIVE_PREMIUM = "gemini-3.1-flash-live-preview"
 MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
 
