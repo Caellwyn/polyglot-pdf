@@ -1,24 +1,35 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 import os
 import re
 from pathlib import Path
 
 
+# === Native audio-to-audio model tiers (A/B-able) ===
+# Both are full native audio-to-audio Live API models (bidiGenerateContent).
+# The half-cascade path (gemini-live-2.5-flash-preview) was retired by Google
+# and is gone — do not reintroduce it. USE_PREMIUM_MODEL flips between these:
+#   premium  -> gemini-3.1-flash-live-preview            (newer, pricier; family 3.1)
+#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper; family 2.5)
+MODEL_NATIVE_PREMIUM = "gemini-3.1-flash-live-preview"
+MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+
 
 class Settings(BaseModel):
 	# === Model selection (env-swappable for A/B testing without redeploy) ===
-	# MODEL_NATIVE: Gemini Live native-audio model (used when USE_NATIVE_AUDIO=True)
-	# MODEL_LIVE:   Gemini Live cascade model (used when USE_NATIVE_AUDIO=False)
+	# We run native audio-to-audio Live models only (no cascade/half-cascade).
+	# USE_PREMIUM_MODEL flips between the two tiers above; MODEL_NATIVE is the
+	# RESOLVED active model (derived below), kept as a field so /health, pricing,
+	# and dependencies can read the single source of truth. Set MODEL_NATIVE
+	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
-	# To A/B a new family, set the env var (e.g. MODEL_NATIVE=gemini-3.1-flash-live-preview).
-	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "gemini-live-2.5-flash-native-audio")
-	MODEL_LIVE: str = os.getenv("MODEL_LIVE", "gemini-live-2.5-flash-preview")
+	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
+	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
-	USE_NATIVE_AUDIO: bool = True  # Use Gemini's native audio generation (vs. cascade)
 	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio DEPRECATED: gemini doesn't use tools when this is True.
@@ -50,7 +61,17 @@ class Settings(BaseModel):
 	VAD_END_SENSITIVITY: str = "LOW"    # Options: "LOW", "HIGH", "UNSPECIFIED"
 	VAD_PREFIX_PADDING_MS: int | None = 500  # Milliseconds of audio before speech start to include
 	VAD_SILENCE_DURATION_MS: int | None = 500  # Milliseconds of silence before ending speech
-	
+
+	@model_validator(mode="after")
+	def _resolve_model(self) -> "Settings":
+		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
+		# explicit MODEL_NATIVE was pinned via env (non-empty wins).
+		if not self.MODEL_NATIVE:
+			self.MODEL_NATIVE = (
+				MODEL_NATIVE_PREMIUM if self.USE_PREMIUM_MODEL else MODEL_NATIVE_STANDARD
+			)
+		return self
+
 	# Tool declarations for web forms (stateless, client-managed)
 	# Note: get_next_field is NOT included - client handles field navigation
 	TOOL_DECLARATIONS: list[dict] = [
@@ -308,8 +329,8 @@ def get_settings() -> Settings:
 # ============================================================================
 # Rates are per-1M list prices from https://ai.google.dev/gemini-api/docs/pricing,
 # divided to per-token here. Output rates include thinking tokens. Keyed by model
-# FAMILY so the active model (MODEL_NATIVE / MODEL_LIVE) selects the right row —
-# this is what makes a 2.5 -> 3.1 A/B comparable on cost.
+# FAMILY so the active model (MODEL_NATIVE, set by USE_PREMIUM_MODEL) selects the
+# right row — this is what makes a 2.5 -> 3.1 A/B comparable on cost.
 # Verified against ai.google.dev/gemini-api/docs/pricing on 2026-05-30 for
 # gemini-2.5-flash-native-audio-preview-12-2025 and gemini-3.1-flash-live-preview.
 # Updated: 2026-05-30.

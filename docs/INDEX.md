@@ -46,6 +46,12 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | `standards/testing.md` _(planned -- `polyglot-pdf-jh8`)_ |
 
+## External references (vendored SDK docs)
+
+| Topic | Doc | Read when |
+|-------|-----|-----------|
+| `google-genai` SDK + Gemini Live API (authoritative; web/Context7 unreliable) | [`genai_docs/README.md`](genai_docs/README.md) | Before writing/changing any code that touches the Gemini SDK -- esp. `backend/adapters/live_ai_gemini.py`. |
+
 ## Journal (tier 3 -- historical)
 
 Per-file entries live in [`journal/entries/`](journal/entries/), tagged per

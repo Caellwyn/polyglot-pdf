@@ -45,7 +45,9 @@ async def test_live_ai_gemini_real_connection():
     if not api_key:
         pytest.skip("GEMINI_API_KEY is not configured")
 
-    model = os.getenv("GEMINI_LIVE_MODEL", "gemini-live-2.5-flash-preview")
+    # Default to the standard native audio-to-audio model we actually run
+    # (the retired half-cascade gemini-live-2.5-flash-preview gets 1008'd).
+    model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
     adapter = LiveAIGemini(api_key=api_key, model=model)
 
     # If the runtime lacks an async client surface, bail early with a helpful skip.
