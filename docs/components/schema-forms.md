@@ -64,6 +64,9 @@ interface FieldValue {
 sending values to the PDF filler** — `SchemaForm.handleDownloadPDF` maps every
 `fieldValues` entry through `unwrapFieldValue` first, because a raw wrapper renders
 as `[object Object]` / breaks fill (the bug `fieldValue.ts` was created to fix).
+Note `unwrapFieldValue` returns `string | boolean | string[] | null` — a non-wrapper
+input passes through unchanged, so a bare `string[]` (a checkbox group) comes back
+as an array even though `FieldValue.value` itself is only `string | boolean | null`.
 
 ## Rendering
 

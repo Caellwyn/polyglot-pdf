@@ -26,8 +26,9 @@ Two new tier-2 component docs, verified line-by-line against dev code, + the two
 - **components/schema-forms.md** (93c) — `SchemaFormStateManager` over the single
   `schema_form_state` sessionStorage key; the `FieldValue` wrapper and the
   unwrap-before-PDF rule; the `schemaFormStateChange` event vs the silent `clear()`;
-  section-based nav + the parts→sections load-time migrations; `FieldRenderer`'s 6
-  implemented field types (+ number) vs the 3 stubs (signature/address_group/table);
+  section-based nav + the parts→sections load-time migrations; `FieldRenderer`'s 8
+  implemented field types (text/email/tel/textarea/radio/checkbox/date/select) +
+  number (via TextField) vs the 3 stubs (signature/address_group/table);
   conditional `show_if` + `flip_readonly_bit` unlock; `copy_to`; manual-edit
   auto-confirm. Flags the **`ai_voice`/`manual_edit` (frontend) vs `verbal`/`manual`
   (backend)** confirmation-method vocabulary split.
@@ -39,7 +40,17 @@ Two new tier-2 component docs, verified line-by-line against dev code, + the two
   (the PDF-side `flip_readonly_bit`). Form-kit store local-vs-GCS via
   `FORM_KITS_MODE`. Absorbs `DEBUG_PDF_FILLING.md` as the debug runbook.
 
-Fresh-eyes triage: _(filled at closeout)_.
+Fresh-eyes triage (round 1): **2 adopted, 0 deferred-as-doc, 1 spun-off-as-code-bead.**
+Zero HIGH findings (reading the whole surface first worked). Adopted: M1 — the
+journal's field-type count said "6 (+number)"; the real count is 8 distinct
+`FieldType` values + number (the doc *body* was already correct, only this entry
+miscounted) — fixed. M2 — noted that `unwrapFieldValue` returns `string | boolean |
+string[] | null` (bare arrays pass through), broader than `FieldValue.value`. The
+reviewer also surfaced a real **code** bug (out of scope for a docs PR): a dead
+`field.conditional_logic?...` branch in `FieldRenderer.tsx` (the prop is
+`conditional_behavior`) and a `number` case whose comment claims `type="number"`
+but passes `type="text"` — spun off as a separate task. Copilot round 1: 4/4 files,
+no comments.
 
 ## Lessons
 
