@@ -6,8 +6,10 @@
 
 This is an immigration-form app: it handles A-numbers, names, addresses, and dates
 of birth. Those are PII/PHI. Anything emitted at INFO/WARNING reaches stdout →
-Cloud Run → BigQuery and is **always** emitted (not gated by debug). This doc is
-the one canonical home for what may and may not be logged.
+Cloud Run logs (and, once the BigQuery sink lands — see
+[logging-and-cost.md](logging-and-cost.md) Phase 5 — that pipeline too) and is
+**always** emitted, not gated by debug. This doc is the one canonical home for
+what may and may not be logged.
 
 ## The rule
 

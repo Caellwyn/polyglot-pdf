@@ -37,7 +37,16 @@ from `_(planned)_` to live links:
   `TokenFileLogger` (caller supplies costs, not-prod); structured event schemas
   defined-but-not-emitting; phased roadmap migrated from `TODO.md` with bead refs.
 
-Fresh-eyes triage: _(filled at closeout Step 7)_.
+Fresh-eyes triage (round 1): **5 adopted, 0 deferred, 1 skipped.** Adopted — H1:
+confirmation JSON example showed an enriched `field_name` the code never emits
+(caller passes `None` → equals `field_id`); fixed example + prose. M1: added
+`structured_logger.py` to logging-and-cost Tracks. M2: softened "→ BigQuery"
+present-tense to note Phase 5. M3: noted `log_form_session_start/end` are
+defined-but-uncalled. L1: cited the ~25 tok/sec source. Skipped — L2 (INDEX short
+label vs doc H1; INDEX uses short labels by convention). The reviewer
+independently re-verified the factual core (no `strip_forbidden`; dead
+`structured_logger` import; enum `verbal/manual`; family-keyed pricing; dev gate)
+all correct.
 
 ## Lessons / surprises
 

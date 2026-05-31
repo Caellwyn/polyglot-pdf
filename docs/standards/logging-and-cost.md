@@ -1,6 +1,6 @@
 # Logging & cost tracking
 
-**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py
+**Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
 *Last updated: 2026-05-30*
 
@@ -54,8 +54,9 @@ offline analysis. Counts and costs only — no field values, no transcript text.
   path — see roadmap Phase 5).
 
 > **Why cost matters here.** The Gemini Live API re-bills the *entire accumulated
-> context* on every turn, and native audio accrues ~25 tokens/sec. Long sessions
-> get expensive fast — the motivation for the context-compression epic
+> context* on every turn, and native audio accrues ~25 tokens/sec (see
+> `docs/genai_docs/` live-api-best-practices + bead `polyglot-pdf-l3a`). Long
+> sessions get expensive fast — the motivation for the context-compression epic
 > (`polyglot-pdf-l3a`). The cumulative cost in `token_usage.jsonl` is the baseline
 > that work measures against.
 

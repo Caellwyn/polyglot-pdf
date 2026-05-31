@@ -40,22 +40,28 @@ the structured logger. The event:
   "form_id": "I-90",
   "form_session_id": "fss_abc123_xyz789",
   "field_id": "p1_line1_aliennumber",
-  "field_name": "Alien Registration Number",
+  "field_name": "p1_line1_aliennumber",
   "confirmation_method": "verbal"
 }
 ```
 
 Note what is **absent**: the field's value. The module docstring is explicit —
-"Only log metadata, NEVER log actual field values or user data." `field_name` is a
-human-readable label from the schema (e.g. "Alien Registration Number"), not user
-input; the call site currently passes `field_name=None` (so it falls back to the
-`field_id`).
+"Only log metadata, NEVER log actual field values or user data." `field_name` is
+*meant* to be a human-readable label from the schema (e.g. "Alien Registration
+Number"), but the only caller (`_handle_confirm_field_tool`) passes
+`field_name=None`, which falls back to the `field_id` — so today the two columns
+are always equal (as shown above). Enriching it is a future improvement, not
+current behavior.
 
 The `ConfirmationMethod` type is `Literal["verbal", "manual"]`, kept deliberately
 in sync with the `confirm_field` tool enum and the values the callback handler
 actually writes.
 
 ### Other events in the same log
+
+These helpers are **defined but not yet wired** — only `log_field_confirmation`
+has a live caller today; the session-lifecycle pair is scaffolding for the
+logging roadmap (see [logging-and-cost.md](logging-and-cost.md), Phase 2):
 
 - `log_form_session_start(form_id, form_session_id, section_id=None)` →
   `form_session_started`.
