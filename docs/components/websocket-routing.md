@@ -31,8 +31,9 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    - `"handshake"` (legacy) — carries the full `schema`.
    - `"handshake_jit"` — carries a `manifest` + `first_field_schema` +
      `loaded_field_ids` for token-lean loading; the backend builds a minimal schema
-     from the manifest. (Gated by `USE_JIT_SCHEMA`; reported back in
-     `session_ready.jit_mode_enabled`.)
+     from the manifest. The mode is selected by the handshake `type` and accepted
+     **unconditionally** — `USE_JIT_SCHEMA` does **not** gate it; that flag is only
+     *reported back* in `session_ready.jit_mode_enabled`.
 4. The handshake also carries `current_values` (pre-filled answers, used on
    reconnect — **not stored**, see stateless-architecture), `fill_language`, the
    persistent `form_session_id`, section metadata (`section_id`/`section_number`/
@@ -65,7 +66,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `change_spoken_language` | send initiating message in new spoken language → `spoken_language_changed` |
 | `end_gemini_session` | close Gemini only, keep WS alive → `gemini_session_ended` |
 | `restart_gemini_session` | restart Gemini with existing schema/values → `gemini_session_restarted` |
-| `manual_section_switch` | user switched section in the UI → `switch_to_section` (see below) |
+| `manual_section_switch` | user switched section in the UI → backend restarts Gemini, then emits `section_switched` (see below) |
 | `section_completed` | frontend auto-detected all fields confirmed & advanced → `section_completed_ack` |
 
 Unknown types → `{"type":"error","code":"unknown_control"}` (logged).
@@ -76,9 +77,14 @@ There is **no backend `complete_section` tool** — the **frontend drives** sect
 progression. When the user switches sections, the frontend sends
 `manual_section_switch` with the section's schema/values/metadata *embedded* (no
 round-trip). The handler sets `drop_audio = True` (discards incoming audio frames
-during the switch to avoid backlog), calls `service.switch_to_section(...)`, then
-resets `drop_audio = False` (also on error). Section completion is the frontend
-sending `section_completed` after it detects every field confirmed.
+during the switch to avoid backlog), calls the service method
+`switch_to_section(...)` — which restarts the Gemini session with the new section's
+system instruction — then resets `drop_audio = False` (also on error). On success
+the backend emits **`{"type": "section_switched", "section_id": ...}`** to the
+client; the client-facing message name is `section_switched`, *not*
+`switch_to_section` (that's the internal service method). There is no synchronous
+ack to the `manual_section_switch` message itself. Section completion is the
+frontend sending `section_completed` after it detects every field confirmed.
 
 ## Idle watchdog
 
