@@ -46,7 +46,7 @@ async def test_idle_timeout_integration():
     from backend.config import get_settings
     settings = get_settings()
     
-    assert settings.WS_IDLE_TIMEOUT_SEC == 60
+    assert settings.WS_IDLE_TIMEOUT_SEC == 120
     assert isinstance(settings.WS_IDLE_TIMEOUT_SEC, int)
     
     # Expected message structure
@@ -77,8 +77,8 @@ def test_idle_timeout_in_config():
     # Must be reasonable value (not too short, not too long)
     assert 30 <= settings.WS_IDLE_TIMEOUT_SEC <= 300
     
-    # Current default should be 60 seconds
-    assert settings.WS_IDLE_TIMEOUT_SEC == 60
+    # Current default should be 120 seconds
+    assert settings.WS_IDLE_TIMEOUT_SEC == 120
 
 
 def test_watchdog_check_interval():

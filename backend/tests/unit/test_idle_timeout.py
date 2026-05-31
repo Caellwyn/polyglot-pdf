@@ -108,7 +108,7 @@ def test_idle_timeout_configuration():
     # Should have idle timeout setting
     assert hasattr(settings, 'WS_IDLE_TIMEOUT_SEC')
     assert isinstance(settings.WS_IDLE_TIMEOUT_SEC, int)
-    assert settings.WS_IDLE_TIMEOUT_SEC == 60  # Default 60 seconds
+    assert settings.WS_IDLE_TIMEOUT_SEC == 120  # Default 120 seconds
 
 
 @pytest.mark.asyncio
