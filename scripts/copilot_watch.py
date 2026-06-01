@@ -61,7 +61,13 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
 --------------------------------------------------------------
   COMMENTS -- review complete, Copilot left findings. The findings are
               printed so the agent sees them without another API call.
-  CLEAN    -- review complete, no findings (the common case).
+  CLEAN    -- review complete, no findings (the common case). Also covers a
+              PR that was closed WITHOUT being merged while nothing was pending.
+  MERGED   -- the PR was merged while watching (the merge event lands in the
+              same timeline this script polls). Lets the caller skip a separate
+              `gh pr view` to learn the outcome: treat it as "done + already
+              merged" -> skip the maintainer-merge ping, go straight to bead
+              close. Exit 0, like CLEAN.
   ERROR    -- the review failed or Copilot hit a quota/availability error.
               Surfaced to the user; NO auto-retry (a quota error will not
               clear for hours, so backoff just burns wall-clock). The user
@@ -85,7 +91,7 @@ a known timestamp (e.g. the moment of a "@copilot please review"
 re-trigger), so a re-review loop does not re-detect the previous round's
 verdict.
 
-Exit codes: 0 for COMMENTS/CLEAN, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
+Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
 ERROR are distinct so a shell caller can retry-later on a timeout but
 investigate on a genuine error. The RESULT line is the contract; the exit
 code mirrors it for shell callers.
@@ -234,9 +240,21 @@ def _after(ts: str, since: datetime | None) -> bool:
         return True
 
 
-def _pr_is_closed(repo: str, pr: int) -> bool:
+def _pr_closed_state(repo: str, pr: int) -> str | None:
+    """Return the PR's terminal disposition, or None if still open.
+
+    - "merged"  -> the PR was merged (`merged_at` set, or `merged` true)
+    - "closed"  -> closed WITHOUT merging
+    - None      -> still open
+    Merge detection reads `merged` / `merged_at` directly from the PR payload
+    (`repos/{owner}/{repo}/pulls/{number}`), avoiding a separate `gh pr view`.
+    """
     data = _run_gh_api("repos/{}/pulls/{}".format(repo, pr))
-    return isinstance(data, dict) and data.get("state") == "closed"
+    if not isinstance(data, dict) or data.get("state") != "closed":
+        return None
+    if data.get("merged") or data.get("merged_at"):
+        return "merged"
+    return "closed"
 
 
 def _latest_copilot_review(repo: str, pr: int, since: datetime | None):
@@ -374,7 +392,7 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
 # Exit codes by terminal state. COMMENTS/CLEAN are "the review happened"
 # (success); TIMEOUT and ERROR are distinct so a shell caller can branch
 # (retry-later on TIMEOUT vs investigate on ERROR) without parsing text.
-_EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "TIMEOUT": 2, "ERROR": 1}
+_EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "MERGED": 0, "TIMEOUT": 2, "ERROR": 1}
 
 # Consecutive transient-error tolerance before giving up. A 1-second network
 # blip or token refresh should not be terminal; a real quota exhaustion will
@@ -417,12 +435,26 @@ def _emit(state: str, detail: str = "") -> int:
 # ask). A mixed comment ("no changes needed in section 3, but fix section 4")
 # must stay COMMENTS. Erring toward COMMENTS preserves the core invariant: never
 # read ambiguity as CLEAN.
+# Phrasings Copilot actually uses to approve a re-review delivered as an issue
+# comment. Kept broad but unambiguous -- each is a "nothing to do" statement; the
+# _CHANGE_ASK_SIGNALS guard below still demotes any comment that ALSO asks for a
+# change. Observed on PRs #41/#42/#43 (bd polyglot-pdf-fau): "no outstanding
+# findings" and "nothing further to address" verbatim; "no new blocking issues"
+# broadens the #42 pattern ("I don't see any new blocking issues", not matched).
 _APPROVAL_PATTERNS = (
     "no further changes",
     "no changes are needed",
     "no changes needed",
     "no additional changes",
     "no further action",
+    "no outstanding findings",
+    "no outstanding issues",
+    "no blocking issues",
+    "no new blocking issues",
+    "nothing further to address",
+    "nothing further to change",
+    "nothing to address",
+    "no remaining issues",
 )
 # If any of these appear, the comment is asking for something -> NOT a clean
 # approval, even if it also contains an approval phrase.
@@ -565,6 +597,15 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
     consecutive_errors = 0
     while True:
         try:
+            # A merge is the most decisive terminal state -- once the PR is
+            # merged the review verdict is moot, and the merge event lands in
+            # the same timeline. Check it FIRST so the caller learns "merged"
+            # without a separate `gh pr view`, regardless of Copilot's status.
+            # (One fetch per poll; reused for the closed-without-merge case below.)
+            closed_state = _pr_closed_state(repo, pr)
+            if closed_state == "merged":
+                return _emit("MERGED", "PR was merged; no Copilot review pending.")
+
             state = _timeline_state(repo, pr, since)
             if state == "reviewed":
                 rc = _classify_reviewed(repo, pr, since)
@@ -582,8 +623,11 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
                 return _emit(
                     "CLEAN", "Copilot finished work and produced no review."
                 )
-            # state == "working" or None -> keep polling (below).
-            closed = state is None and _pr_is_closed(repo, pr)
+            # state == "working" or None -> keep polling (below). closed_state
+            # (fetched above) carries the closed-without-merge case; only act on
+            # it when Copilot never produced a verdict (state is None).
+            if state is not None:
+                closed_state = None
         except RuntimeError as exc:
             # Transient (network blip, token refresh, 5xx, gh hang/missing).
             # Retry within the poll loop; give up only after several in a row.
@@ -598,10 +642,11 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
             continue
         consecutive_errors = 0
 
-        # Only treat a closed PR as terminal when Copilot never started -- if
-        # it is "working", let the review land even as the PR closes.
-        if closed:
-            return _emit("CLEAN", "PR is closed; no Copilot review pending.")
+        # Only treat a closed-without-merge PR as terminal when Copilot never
+        # started -- if it is "working", let the review land even as the PR
+        # closes. (Merged is already handled at the top of the loop.)
+        if closed_state == "closed":
+            return _emit("CLEAN", "PR is closed (not merged); no Copilot review pending.")
 
         if time.monotonic() >= deadline:
             # "working" past the deadline is still a TIMEOUT, but the message
