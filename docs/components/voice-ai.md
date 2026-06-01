@@ -75,10 +75,17 @@ sub-perceptual latency (see [../standards/voice-and-vad.md](../standards/voice-a
 
 ## Tool calling
 
-Tool calls are routed to `CallbackHandler` (`backend/services/callback_handler.py`):
-`update_form_fields` (single field per call — hallucination mitigation) and
-`confirm_field` (enum `verbal`/`manual`; see
-[../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md)).
+Tool calls are routed to `CallbackHandler.on_tool_call`
+(`backend/services/callback_handler.py`), which dispatches the five tools declared
+in `backend/config.py`:
+
+- `update_form_fields` — single field per call (hallucination mitigation).
+- `confirm_field` — enum `verbal`/`manual`; see
+  [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
+- `get_form_status` (alias `get_form_state`) — compact field-state snapshot.
+- `switch_section` — advance by `section_identifier`.
+- `get_field_value` — look up a current value by `spoken_name`.
+
 The `complete_section` tool was **removed** — section completion is frontend-driven
 (see [websocket-routing.md](websocket-routing.md)).
 

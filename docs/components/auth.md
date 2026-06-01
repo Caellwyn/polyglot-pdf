@@ -30,7 +30,9 @@ and the `VFF_DISABLE_AUTH` dev bypass are in
   reset email).
 - **Gating** — `frontend/src/components/layout/ProtectedRoute.tsx` renders a spinner
   while `loading`, then renders `<Login />` when `!user`, else the children. It wraps
-  the form surface (imported in `SchemaForm.tsx`); there is no central router/`App.tsx`
+  the form surface in the schema-forms entry point `frontend/src/schema-forms/main.tsx`
+  (`<AuthProvider><ProtectedRoute><SchemaFormDemo/></ProtectedRoute></AuthProvider>`);
+  there is no central router/`App.tsx`
   route table. Note `AuthProvider` itself gates on the initial auth check with
   `{!loading && children}`, so anything under the provider (not just `ProtectedRoute`)
   renders **nothing** until that first check resolves — a consumer outside

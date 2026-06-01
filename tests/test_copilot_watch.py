@@ -401,6 +401,237 @@ def test_approval_issue_comment_not_counted_as_finding_with_review(capsys, monke
     assert (rc, result) == (0, "CLEAN")
 
 
+# --- findings-based classification + exact-LGTM pin (bd polyglot-pdf-7ti) ---
+# Motivation: Copilot kept inventing novel approval wordings the phrase list
+# couldn't match (e.g. PR #45 round 2: "the two prior reviewer findings are
+# already addressed in bff9399"), causing false COMMENTS / TIMEOUT. The watcher
+# now treats approval as the ABSENCE of an actionable finding, and matches an
+# exact `LGTM` body deterministically.
+
+@pytest.mark.parametrize(
+    "body,expected",
+    [
+        ("LGTM", True),
+        ("lgtm", True),
+        ("**LGTM**", True),       # markdown emphasis
+        ("`LGTM`", True),         # inline code
+        ("> LGTM", True),         # blockquote (Copilot quotes the trigger)
+        ("LGTM.", True),          # trailing punctuation
+        ("LGTM, nice work", False),   # extra prose -> not the exact signal
+        ("looks good to me", False),  # not the literal token
+        ("", False),
+    ],
+)
+def test_is_exact_lgtm(body, expected):
+    assert cw._is_exact_lgtm(body) is expected
+
+
+def test_exact_lgtm_issue_comment_is_clean(capsys, monkeypatch):
+    # The canonical signal: a bare LGTM issue comment -> CLEAN deterministically.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "LGTM"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "CLEAN")
+
+
+def test_novel_approval_wording_with_no_findings_is_clean(capsys, monkeypatch):
+    # THE regression that motivated this change (PR #45 round 2). A wording that
+    # matches NO approval phrase and NO change-ask, with no inline finding this
+    # round, must classify CLEAN -- not COMMENTS, not TIMEOUT.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "I checked the branch state and the two prior reviewer "
+                      "findings are already addressed in bff9399."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "CLEAN")
+
+
+def test_novel_wording_but_new_inline_finding_is_comments(capsys, monkeypatch):
+    # The findings-based backstop must not launder a REAL finding to CLEAN: if a
+    # new actionable inline comment exists this round, it's COMMENTS regardless of
+    # how breezy the summary prose is.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "Took another look at the changes."}]  # no approval, no ask
+    inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:04Z",
+               "path": "app/x.py", "position": 7, "line": 20,
+               "body": "this branch is dead code"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=inline,
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_prose_only_change_ask_with_no_inline_is_comments(capsys, monkeypatch):
+    # A substantive ask delivered as prose ("please ...") with no inline anchor
+    # must still be caught by the change-ask gate -> COMMENTS.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "Overall fine, but please rename the helper for clarity."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_commented_review_overview_body_only_is_clean(capsys, monkeypatch):
+    # A COMMENTED review whose body is just the "## Pull request overview"
+    # summary (no change-ask, no inline findings) is an approval, not COMMENTS.
+    review = {"id": 9, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "## Pull request overview\n\nDocs-only change updating several docs.",
+              "user": {"login": "Copilot"}}
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[review], inline=[], timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "CLEAN")
+
+
+# --- bd polyglot-pdf-ztk: exception-clause / multi-paragraph false-CLEANs ---
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # exception clause carving out a real finding after an approval phrase
+        "No outstanding findings beyond the race condition in X.",
+        "No further changes needed other than addressing the TODO in auth.py.",
+        "No outstanding issues except the hardcoded timeout.",
+        # multi-paragraph: approval phrase, then a finding in a second paragraph
+        "No outstanding findings.\n\nOne minor observation: the timeout is hardcoded.",
+        # numbered/bulleted structure -> not approval-shaped
+        "No further changes needed.\n- but rename the helper",
+    ],
+)
+def test_exception_or_multiblock_phrasing_not_approval(body):
+    # These all OPEN with a kept approval phrase but carry a real finding; the
+    # shape guard + exception-connector signals must keep them out of CLEAN.
+    assert not cw._is_approval_comment(body)
+
+
+def test_exception_clause_issue_comment_is_comments(capsys, monkeypatch):
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "No outstanding findings beyond the race condition in X."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_long_comment_starting_with_approval_phrase_not_approval():
+    # A long body that merely opens with an approval phrase is not approval-shaped.
+    body = "No further changes are needed " + ("x " * 120)  # > 200 chars
+    assert not cw._is_approval_comment(body)
+
+
+# --- round-3 review hardening (fresh-eyes + Copilot on PR #45) ---
+
+def test_exact_lgtm_tolerates_bang():
+    # LGTM! should hit the deterministic fast path (Copilot adds enthusiasm).
+    assert cw._is_exact_lgtm("LGTM!") is True
+    assert cw._is_exact_lgtm("**LGTM!**") is True
+
+
+@pytest.mark.parametrize(
+    "body,shaped",
+    [
+        ("No further changes needed.", True),
+        # decimal in prose is NOT a list marker (requires trailing space)
+        ("No further changes needed. Response time is 3.5s, acceptable.", True),
+        # markdown ordered lists (both . and ) styles) ARE structured -> not shaped
+        ("No further changes needed.\n1. rename the helper", False),
+        ("No further changes needed.\n1) rename the helper", False),
+        ("No further changes needed.\n- rename the helper", False),
+        ("No further changes needed.\n12) the twelfth thing", False),
+    ],
+)
+def test_is_approval_shaped_list_detection(body, shaped):
+    assert cw._is_approval_shaped(body) is shaped
+
+
+def test_paren_list_finding_is_not_approval():
+    # FE #1: a finding using "1)" list syntax with no change-ask verb must not
+    # ride the allowlist to CLEAN.
+    assert not cw._is_approval_comment(
+        "No further changes needed.\n1) the helper name is unclear")
+
+
+def test_commented_review_overview_body_with_inline_finding_is_comments(capsys, monkeypatch):
+    # FE #3 (must-fix companion): the SAME neutral-overview-body scenario, but
+    # WITH a real inline finding this round, must stay COMMENTS -- proves the
+    # body-not-counted change didn't also suppress inline findings.
+    review = {"id": 9, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "## Pull request overview\n\nDocs-only change updating several docs.",
+              "user": {"login": "Copilot"}}
+    inline = [{"user": {"login": "Copilot"}, "pull_request_review_id": 9,
+               "created_at": "2026-05-28T12:00:00Z", "path": "app/x.py",
+               "position": 5, "line": 30, "body": "real new finding"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[review], inline=inline,
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_collect_findings_prose_only_finding_is_not_counted(monkeypatch):
+    # FE #4: documents the ACCEPTED RISK. A review body stating a finding without
+    # any change-ask signal word and no inline comment is NOT counted -> the round
+    # reads CLEAN. This is deliberate (the human merge is the backstop); if a
+    # future change tightens this, update this test consciously.
+    review = {"id": 9, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "The null pointer on line 45 is still present.",
+              "user": {"login": "Copilot"}}
+    monkeypatch.setattr(cw, "_run_gh_api", lambda path: [])  # no inline / issue comments
+    result = cw._collect_findings("o/r", 1, None, review)
+    assert result == []  # accepted-risk: prose-only finding not detected
+
+
+def test_runtime_error_fallback_clean_when_body_is_neutral_overview(capsys, monkeypatch):
+    # Copilot #2 (the real bug): if the inline-comment fetch fails on a COMMENTED
+    # review whose body is just the neutral overview, the fallback must NOT
+    # classify COMMENTS just because the body is non-empty.
+    review = {"id": 9, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "## Pull request overview\n\nLooks like a docs-only change.",
+              "user": {"login": "Copilot"}}
+
+    calls = {"n": 0}
+
+    def fake(path):
+        if path.endswith("/timeline"):
+            return [_reviewed_event()]
+        if path.endswith("/reviews"):
+            return [review]
+        if "/pulls/" in path and path.endswith("/comments"):
+            raise RuntimeError("simulated inline fetch failure")
+        if "/issues/" in path and path.endswith("/comments"):
+            return []
+        return {"state": "open"}
+
+    monkeypatch.setattr(cw, "_run_gh_api", fake)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_runtime_error_fallback_comments_when_state_changes_requested(capsys, monkeypatch):
+    # The complement: a CHANGES_REQUESTED state with a failed inline fetch must
+    # STILL be COMMENTS (state wins, fallback must not launder it to CLEAN).
+    review = {"id": 9, "state": "CHANGES_REQUESTED", "submitted_at": "2026-05-28T12:00:00Z",
+              "body": "", "user": {"login": "Copilot"}}
+
+    def fake(path):
+        if path.endswith("/timeline"):
+            return [_reviewed_event()]
+        if path.endswith("/reviews"):
+            return [review]
+        if "/pulls/" in path and path.endswith("/comments"):
+            raise RuntimeError("simulated inline fetch failure")
+        if "/issues/" in path and path.endswith("/comments"):
+            return []
+        return {"state": "open"}
+
+    monkeypatch.setattr(cw, "_run_gh_api", fake)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: COMMENTS" in out
+
+
 def test_since_scopes_out_prior_round_review(monkeypatch):
     # Fix C: with --since after a round-1 review, that review is excluded.
     round1 = {"id": 1, "state": "COMMENTED", "submitted_at": "2026-05-28T12:00:00Z",

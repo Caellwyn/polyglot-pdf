@@ -20,35 +20,42 @@ do on this repo. When in doubt, post the comment.
 - Do NOT commit changes yourself. Make suggestions in comments — the author's
   code agent will read them and apply fixes.
 
-### When you have zero findings (the code is satisfactory / LGTM)
+### When you have zero findings (the code is satisfactory)
 
-This is the case you have historically skipped. **Do not skip it.** A satisfied
-review still REQUIRES a top-level comment:
+This is the case you have historically skipped or paraphrased. **Do not skip it,
+and do not reword it.** A satisfied review still REQUIRES a top-level comment, and
+that comment's body must be **EXACTLY** this, with nothing before or after it:
 
-1. Submit an **Approve** review if the platform allows it.
-2. **ALWAYS** emit a top-level signal whose **first line** is exactly one of
-   these literal phrases (nothing else on that line), so the author's polling
-   agent has a deterministic, greppable signal:
-   - `LGTM`
-   - `No further suggestions`
-   - `Approved`
+```
+LGTM
+```
 
-   The signal lives in the **Approve review's summary body** — that body counts
-   as the top-level comment. You do NOT need a second, separate issue comment in
-   addition to the review; one top-level summary carrying the phrase is enough.
-   What you must never do is finish with an Approve that has an *empty* body and
-   no comment — that's the silent finish the polling agent can't see.
-3. Do NOT assign the PR — there's nothing for the follow-up agent to respond to.
+That is the entire body: the four characters `LGTM`, on their own, no preamble, no
+summary, no "I checked the branch and…", no restating what changed, no mention of
+commit SHAs. One word. The author's polling agent greps for a body that is exactly
+`LGTM`; any extra prose ("already addressed", "looks good but…", a summary
+paragraph) defeats the deterministic match and stalls the merge.
 
-"The work is satisfactory" is **not** a reason to stay silent — it is precisely
-the case the LGTM signal exists for. If you reviewed and have nothing to add,
-that is a *result* the author needs reported, not an excuse to finish quietly.
+- If the platform lets you submit an **Approve** review, put `LGTM` in that
+  review's summary body. Otherwise post `LGTM` as a top-level issue comment.
+- Do NOT add a second comment in addition to the `LGTM`.
+- Do NOT assign the PR — there's nothing for the follow-up agent to respond to.
+
+Why a single fixed word and not a phrase of your choosing: you have, on prior
+rounds, invented new approval wordings the author's matcher did not recognize
+(e.g. "the prior findings are already addressed in <sha>"). Each novel phrasing
+forced a code change on the author's side. `LGTM` — exact, alone — is the contract
+that ends that. "The work is satisfactory" is **not** a reason to stay silent or
+to editorialize; it is precisely the case this one-word signal exists for.
 
 ### Round 2 and later
 
 Even when the previous round had findings and they have **all** been addressed,
-you must still post the LGTM-style top-level comment (per the zero-findings rule
-above). A silent "I looked again and had nothing to add" finish reads to the
+you must still post the exact `LGTM` body (per the zero-findings rule above) —
+**not** a sentence describing that the findings were addressed. "The prior
+findings are now resolved" is exactly the paraphrase that breaks the matcher; the
+correct response to "all findings addressed, nothing new" is the single word
+`LGTM`. A silent "I looked again and had nothing to add" finish reads to the
 author exactly like "I never re-reviewed" — so it blocks the merge just the same.
 
 ### Always

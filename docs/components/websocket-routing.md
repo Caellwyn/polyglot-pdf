@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -67,7 +67,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `end_gemini_session` | close Gemini only, keep WS alive → `gemini_session_ended` |
 | `restart_gemini_session` | restart Gemini with existing schema/values → `gemini_session_restarted` |
 | `manual_section_switch` | user switched section in the UI → backend restarts Gemini, then emits `section_switched` (see below) |
-| `section_completed` | frontend auto-detected all fields confirmed & advanced → `section_completed_ack` |
+| `section_completed` | **legacy/backend-only** — handler exists (→ `section_completed_ack`) but no client currently sends it; completion is driven via `manual_section_switch` / `onFormComplete` (see below) |
 
 Unknown types → `{"type":"error","code":"unknown_control"}` (logged).
 
@@ -80,11 +80,15 @@ round-trip). The handler sets `drop_audio = True` (discards incoming audio frame
 during the switch to avoid backlog), calls the service method
 `switch_to_section(...)` — which restarts the Gemini session with the new section's
 system instruction — then resets `drop_audio = False` (also on error). On success
-the backend emits **`{"type": "section_switched", "section_id": ...}`** to the
-client; the client-facing message name is `section_switched`, *not*
+the backend emits **`{"type": "section_switched", "section_number": ...,
+"total_sections": ..., "section_label": ...}`** to the client (no `section_id`
+key); the client-facing message name is `section_switched`, *not*
 `switch_to_section` (that's the internal service method). There is no synchronous
-ack to the `manual_section_switch` message itself. Section completion is the
-frontend sending `section_completed` after it detects every field confirmed.
+ack to the `manual_section_switch` message itself. Section completion is
+frontend-driven: when it detects every field in the current section confirmed it
+auto-sends `manual_section_switch` to advance, or fires `onFormComplete` on the
+last section — it does **not** send `section_completed` (that type has a backend
+handler but no current client sender).
 
 ## Idle watchdog
 
@@ -116,4 +120,4 @@ against the code:
 > of shipped behavior — treat it as historical. This doc describes the code as it
 > actually runs.
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*

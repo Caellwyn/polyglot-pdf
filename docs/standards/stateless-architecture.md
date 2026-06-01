@@ -54,8 +54,12 @@ the backend's working context **from the handshake** (`/ws/fill` in
    `first_field_schema` + `loaded_field_ids` instead, for token-lean loading). It
    also carries `current_values` (the pre-filled answers, used on reconnect),
    `fill_language`, the persistent `form_session_id`, and section metadata
-   (`section_id`/`section_number`/`section_label`, `total_sections`,
-   `previous_spoken_names`, `initial_field_hint`).
+   (`section_number`/`section_label`, `total_sections`, `previous_spoken_names`).
+   The warm-reconnect frame (`getHandshakePayload`/`getJITHandshakePayload`, sent on
+   every connect) stops there; `section_id` and `initial_field_hint` ride the
+   section-switch paths instead — the explicit `startSection` handshake (top-level
+   keys) and the auto-advance `manual_section_switch` frame (nested under
+   `section_info`) — and the backend reads them whenever present.
 3. The backend extracts those fields, then `update_schema(schema, current_values,
    fill_language)` stores the **schema** and language on the in-memory service
    (`self._schema = schema`) -- but **explicitly not the values** (*"current_values

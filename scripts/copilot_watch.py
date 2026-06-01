@@ -102,6 +102,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -341,13 +342,22 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
     Issue comments have no review_id, so they fall back to the `floor`
     timestamp (the round boundary derived from the review / caller --since),
     which keeps prior-round issue comments from leaking in. The review's own
-    body is always included -- it belongs to this round by construction.
+    summary body is counted ONLY when it contains an explicit change-ask -- a
+    COMMENTED review always carries a neutral "## Pull request overview" summary,
+    so counting every non-empty body would make a clean review read as COMMENTS.
     """
     findings = []
     review_id = review.get("id")
 
+    # The review's summary BODY is not itself an actionable finding -- a
+    # COMMENTED review always carries an "## Pull request overview" summary even
+    # when Copilot has nothing to change, so counting the body would make every
+    # clean review read as COMMENTS. Count the body only if it explicitly asks
+    # for a change (mirrors the issue-comment rule); otherwise it's context. The
+    # caller still flips to COMMENTS on a CHANGES_REQUESTED state or any inline
+    # finding below, so a genuine verdict is never lost.
     body = (review.get("body") or "").strip()
-    if body:
+    if body and _has_change_ask(body) and not _is_approval_comment(body):
         findings.append("[review:{}] {}".format(review.get("state", "?"), body))
 
     # Surface 1: inline review comments, matched to THIS review by id.
@@ -373,17 +383,22 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
                 "[inline {}:{}] {}".format(loc, line, (c.get("body") or "").strip())
             )
 
-    # Surface 3: PR issue comments, scoped to this round by timestamp
-    # (no review_id linkage exists for issue comments). An APPROVAL comment
-    # ("no further changes...") is NOT a finding -- when Copilot posts both a
-    # formal review AND a follow-up approval comment in one round, counting the
-    # approval as a finding would wrongly flip a clean round to COMMENTS. Skip
-    # approvals; keep substantive comments.
+    # Surface 3: PR issue comments, scoped to this round by timestamp (no
+    # review_id linkage exists for issue comments). A comment counts as a finding
+    # ONLY if it explicitly asks for a change -- an approval ("LGTM") or a neutral
+    # summary/acknowledgement is NOT a finding. This keeps the findings-based
+    # invariant: novel approval/summary prose can't flip a clean round to COMMENTS,
+    # while a prose-only "please fix X" is still caught by the change-ask gate.
     for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
         created = c.get("created_at", "")
         body = (c.get("body") or "").strip()
-        if _is_copilot(login) and _after(created, floor) and not _is_approval_comment(body):
+        if (
+            _is_copilot(login)
+            and _after(created, floor)
+            and not _is_approval_comment(body)
+            and _has_change_ask(body)
+        ):
             findings.append("[issue-comment] {}".format(body))
 
     return findings
@@ -473,15 +488,82 @@ _CHANGE_ASK_SIGNALS = (
     "suggest",
     "though ",
     "worth ",
+    # exception connectors: an approval phrase that carves out a real finding
+    # ("no outstanding findings BEYOND the race condition"; "no further changes
+    # needed OTHER THAN the TODO in auth.py"). (bd ztk)
+    "beyond ",
+    "other than",
+    "except ",
+    "aside from",
+    "apart from",
 )
 
 
+# The canonical approval body the repo instructs Copilot to post when it has no
+# findings (.github/copilot-instructions.md): the single word LGTM, alone. Matched
+# EXACTLY (stripped, case-insensitive, tolerating the markdown/quote wrappers
+# Copilot sometimes adds: **LGTM**, `LGTM`, "> LGTM") so it is a deterministic
+# CLEAN that no _CHANGE_ASK_SIGNALS heuristic can veto. Pinning ONE fixed word is
+# what ends the approval-phrase whack-a-mole: its classification can't drift.
+def _is_exact_lgtm(body: str) -> bool:
+    # Strip the markdown/quote wrappers and trailing sentence punctuation Copilot
+    # sometimes adds (**LGTM**, `LGTM`, "> LGTM", "LGTM!", "LGTM.") so the one-word
+    # signal still matches. The strip set is decoration only -- it can't turn a
+    # non-LGTM body into "lgtm".
+    stripped = (body or "").strip().strip("`*_>#\"' \t\r\n.!").strip()
+    return stripped.lower() == "lgtm"
+
+
+def _has_change_ask(body: str) -> bool:
+    """True if the comment asks for any change (so it must stay COMMENTS)."""
+    return any(sig in (body or "").lower() for sig in _CHANGE_ASK_SIGNALS)
+
+
+# Max length / structure for a body to be approval-SHAPED. A genuine "nothing to
+# do" note is short and flat; a comment that merely OPENS with an approval phrase
+# but then appends a finding via an exception clause or a second paragraph
+# ("No outstanding findings beyond the race condition in X"; "No further changes
+# needed.\n\nOne minor observation: ...") is long/multi-block and must NOT ride the
+# phrase allowlist to CLEAN (bd polyglot-pdf-ztk). The denylist can't enumerate
+# every connector, so we gate on shape instead of chasing words.
+_APPROVAL_SHAPE_MAX_CHARS = 200
+
+
+# A markdown list-item marker at line start: a bullet (-, *, +) or an ordered
+# marker (digits then '.' or ')') FOLLOWED BY whitespace. The trailing-space
+# requirement is what distinguishes a list marker ("1. fix the helper") from a
+# decimal in prose ("response time is 3.5s") -- the latter is not a list and must
+# not trip the shape guard.
+_LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s")
+
+
+def _is_approval_shaped(body: str) -> bool:
+    """True if the body is short + single-paragraph + has no list/numbered items."""
+    b = (body or "").strip()
+    if len(b) > _APPROVAL_SHAPE_MAX_CHARS:
+        return False
+    if "\n\n" in b:  # more than one paragraph
+        return False
+    for line in b.splitlines():
+        if _LIST_MARKER_RE.match(line.lstrip()):
+            return False  # bullet or numbered list -> structured findings
+    return True
+
+
 def _is_approval_comment(body: str) -> bool:
+    # Fast path: the exact canonical signal is always an approval, no heuristics.
+    if _is_exact_lgtm(body):
+        return True
     lo = (body or "").lower()
     if not any(p in lo for p in _APPROVAL_PATTERNS):
         return False
-    # An approval phrase is present; reject if the comment ALSO asks for a change.
-    return not any(sig in lo for sig in _CHANGE_ASK_SIGNALS)
+    # An approval phrase is present, but it only counts if the comment is also
+    # approval-SHAPED (short/flat) AND does not ALSO ask for a change. A long or
+    # multi-paragraph comment that merely starts with an approval phrase stays
+    # COMMENTS -- the findings-based path below is the real backstop. (bd ztk)
+    if not _is_approval_shaped(body):
+        return False
+    return not _has_change_ask(body)
 
 
 def _latest_by_created(comments: list) -> dict | None:
@@ -494,14 +576,55 @@ def _latest_by_created(comments: list) -> dict | None:
     return max(comments, key=lambda c: c.get("created_at", ""))
 
 
-def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
-    """Classify a round whose verdict is a Copilot ISSUE COMMENT (no review).
+def _new_inline_findings(repo: str, pr: int, since: datetime | None) -> list:
+    """Actionable Copilot inline comments for THIS round (the deterministic core).
 
-    Returns an exit code if a Copilot issue comment at/after `since` exists
-    (CLEAN if it's an unambiguous approval, else COMMENTS), or None if no such
-    comment exists yet (so the caller keeps polling -- the reviews endpoint may
-    just be lagging). Scoping to `since` keeps a prior round's comment from
-    resurfacing in a re-watch.
+    An actionable finding is an inline review comment that (a) is Copilot's,
+    (b) lands on the CURRENT diff (non-null `position` -- a null position is an
+    outdated prior-round anchor, never a live ask), and (c) was created at/after
+    `since` (the round floor). This is the fact the whole classifier rests on:
+    a real "please change X" from Copilot is an inline comment on the diff. Its
+    presence/absence does NOT depend on what words Copilot puts in its summary,
+    so it can't be defeated by novel approval phrasing.
+    """
+    findings = []
+    for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
+        login = (c.get("user") or {}).get("login", "")
+        if not _is_copilot(login):
+            continue
+        if "position" in c and c["position"] is None:
+            continue  # outdated anchor -- not a live finding
+        if not _after(c.get("created_at", ""), since):
+            continue  # prior round
+        loc = c.get("path", "?")
+        line = c.get("line") or c.get("original_line") or "?"
+        findings.append("[inline {}:{}] {}".format(loc, line, (c.get("body") or "").strip()))
+    return findings
+
+
+def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
+    """Classify a round whose verdict arrives as a Copilot ISSUE COMMENT (no review).
+
+    FINDINGS-BASED (default-clean-unless-flagged). Approval is the ABSENCE of an
+    actionable finding, not the presence of a recognized approval phrase -- so
+    Copilot inventing a new "looks fine" wording can no longer cause a false
+    COMMENTS or a TIMEOUT. The order of checks, strongest signal first:
+
+      1. ERROR body            -> ERROR (Copilot failed; not a verdict).
+      2. exact `LGTM` / known approval phrase, no change-ask -> CLEAN (fast path).
+      3. comment asks for a change (_CHANGE_ASK_SIGNALS) -> COMMENTS (a prose-only
+         ask: "please fix X" with no inline anchor still gets caught).
+      4. a NEW actionable inline finding exists this round -> COMMENTS (the prose
+         is just a summary; the inline comment governs).
+      5. otherwise -> CLEAN (Copilot commented, asked for nothing, left no inline
+         finding -- that IS an approval, whatever words it chose).
+
+    Returns an exit code, or None if no Copilot issue comment at/after `since`
+    exists yet (caller keeps polling -- the surface may just be lagging).
+    Residual risk accepted: a substantive ask delivered ONLY as summary prose with
+    none of the change-ask signal words AND no inline comment would read CLEAN; in
+    practice Copilot's actionable findings are inline, and the human merge is the
+    final gate.
     """
     copilot_comments = [
         c
@@ -513,17 +636,40 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
     if latest is None:
         return None
     body = (latest.get("body") or "").strip()
+
+    # 1. Copilot-failed sentinel.
     if body.startswith(COPILOT_ERROR_BODY_PREFIX):
         return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
+
+    # 2. Explicit approval (exact LGTM or a known phrase with no change-ask).
     if _is_approval_comment(body):
         return _emit(
             "CLEAN",
-            "Copilot re-review approved via issue comment (no further "
-            "changes):\n\n{}".format(body),
+            "Copilot approved via issue comment (no findings):\n\n{}".format(body),
         )
+
+    # 3. Prose that asks for a change stays COMMENTS even with no inline anchor.
+    if _has_change_ask(body):
+        return _emit(
+            "COMMENTS",
+            "Copilot's comment asks for a change:\n\n{}".format(body),
+        )
+
+    # 4. No change-ask prose -- defer to the deterministic inline-finding check.
+    inline = _new_inline_findings(repo, pr, since)
+    if inline:
+        return _emit(
+            "COMMENTS",
+            "Copilot left {} inline finding(s) this round:\n\n{}".format(
+                len(inline), "\n\n".join(inline)
+            ),
+        )
+
+    # 5. Commented, asked for nothing, no inline finding -> approval by absence.
     return _emit(
-        "COMMENTS",
-        "Copilot left a finding via issue comment:\n\n{}".format(body),
+        "CLEAN",
+        "Copilot commented with no actionable finding (no change-ask, no inline "
+        "comment this round) -> treating as approval:\n\n{}".format(body),
     )
 
 
@@ -568,8 +714,14 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
         findings = _collect_findings(repo, pr, floor, review)
     except RuntimeError as exc:
         # Verdict already known -- do not throw it away on a secondary fetch
-        # failure. A non-clean state or a non-empty body is still COMMENTS.
-        if state in NON_CLEAN_STATES or body:
+        # failure. Mirror the findings-based body rule: a COMMENTED review's
+        # overview summary is NOT a finding, so a non-empty body alone is not
+        # COMMENTS -- only a CHANGES_REQUESTED state or a change-ask body is.
+        # (Using a plain `or body` here would flip every clean review to COMMENTS
+        # whenever the inline fetch hiccups, since the overview body is always
+        # present -- the exact false-COMMENTS this redesign removes.)
+        body_is_finding = bool(body) and _has_change_ask(body) and not _is_approval_comment(body)
+        if state in NON_CLEAN_STATES or body_is_finding:
             return _emit(
                 "COMMENTS",
                 "Copilot review complete (state={}, could not fetch inline "
@@ -577,7 +729,7 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
             )
         return _emit(
             "CLEAN",
-            "Copilot review complete, no review-body findings "
+            "Copilot review complete, no actionable review-body finding "
             "(could not fetch inline comments: {}).".format(exc),
         )
 
