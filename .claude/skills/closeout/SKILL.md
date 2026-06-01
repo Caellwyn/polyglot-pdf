@@ -37,6 +37,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 - **NEVER use a draft PR + ready-flip.** The draft->ready flip is ITSELF a Copilot trigger (GitHub re-reviews when a PR is marked ready -- there is no ruleset toggle for it), so a draft costs TWO Copilot reviews of the same final content. Copilot review tokens are SCARCE; never trigger a redundant review of content Copilot already approved. A normal PR has no flip event, so this waste is structurally impossible.
 - **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
 - **Loop Copilot until it has NO comments.** After a fix-push, Copilot re-reviews (`review_on_push`, ~4 min); ALSO post `@copilot please review` as a backstop. Adopt -> push -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `copilot_watch` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean).
+- **Kill the `copilot_watch.py` background process the moment it is no longer needed** -- i.e. as soon as Copilot reports CLEAN (no comments) OR the branch is merged. A `copilot_watch` left running after the verdict burns tokens for nothing. There is no reason to keep a watcher alive once Copilot is clean (the loop is over) or once the PR is merged (the work is done) -- terminate it immediately in either case.
 - **All beads writes go through `scripts/bd_safe.py`** (or direct `bd` with pull/push bracketing). Beads writes are main-thread only -- that's you, the orchestrator, not a subagent.
 - **Run every git command with `git -C "<worktree-abs-path>"`** if you're in a worktree -- a bare `cd` can land you in the main repo's checkout (the shell cwd resets between tool calls).
 
@@ -152,12 +153,15 @@ Commit the combined fixes, then **push once and loop Copilot to clean:**
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/copilot_watch.py" <pr#> --since "$TS"`
    Repeat the COMMENTS -> fix -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN**. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
+**As soon as Copilot reports CLEAN, kill the `copilot_watch.py` background process** (it has done its job and a lingering watcher wastes tokens). Use `TaskStop` on the background task, or kill the PID. Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
+
 Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is one pass (round 1 only); only Copilot loops.
 
 ## Step 8 -- Close the bead + ping the maintainer to merge
 
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
+0. **Confirm no `copilot_watch.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `copilot_watch` process running past CLEAN or past merge.
 1. **Update the PR body** so the "Fresh-eyes review" section records the final adopt/reject/defer breakdown (and the Copilot rounds, if notable).
 2. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
 3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
