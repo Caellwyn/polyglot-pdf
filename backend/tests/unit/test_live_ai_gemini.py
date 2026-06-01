@@ -394,3 +394,80 @@ async def test_session_cost_summary_not_emitted_for_zero_token_session():
     assert _count_summary_emits(adapter._log) == 0
 
 
+def _vad_settings(
+    *,
+    disabled=True,
+    start="LOW",
+    end="LOW",
+    prefix=500,
+    silence=500,
+):
+    """Build a settings stub for LiveAIGemini._build_vad_settings."""
+    return SimpleNamespace(
+        DISABLE_GEMINI_VAD=disabled,
+        VAD_START_SENSITIVITY=start,
+        VAD_END_SENSITIVITY=end,
+        VAD_PREFIX_PADDING_MS=prefix,
+        VAD_SILENCE_DURATION_MS=silence,
+    )
+
+
+def test_vad_disabled_sends_only_disabled_flag():
+    """bd polyglot-pdf-p1t: when VAD is disabled, send ONLY {disabled: True}.
+
+    The Live API rejects (1007) a config that sets disabled=True alongside any
+    sensitivity/padding field — so even though the VAD_* knobs are populated
+    (the default config), none of them may leak into the payload.
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    # Defaults: disabled=True with all sensitivity/padding knobs set.
+    result = LiveAIGemini._build_vad_settings(_vad_settings())
+
+    assert result == {"disabled": True}
+
+
+def test_vad_enabled_sends_sensitivity_fields_and_no_disabled():
+    """When VAD is enabled, pass the knobs through and never set disabled."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from google.genai import types
+
+    result = LiveAIGemini._build_vad_settings(_vad_settings(disabled=False))
+
+    assert "disabled" not in result
+    assert result["start_of_speech_sensitivity"] == types.StartSensitivity.START_SENSITIVITY_LOW
+    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_LOW
+    assert result["prefix_padding_ms"] == 500
+    assert result["silence_duration_ms"] == 500
+
+
+def test_vad_enabled_maps_mixed_sensitivity_values():
+    """HIGH/LOW map to the right enum members per axis (catches a prefix mixup)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from google.genai import types
+
+    result = LiveAIGemini._build_vad_settings(
+        _vad_settings(disabled=False, start="HIGH", end="LOW")
+    )
+
+    assert result["start_of_speech_sensitivity"] == types.StartSensitivity.START_SENSITIVITY_HIGH
+    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_LOW
+
+
+def test_vad_enabled_omits_unspecified_and_none_knobs():
+    """Enabled VAD with no usable knobs yields {} (Gemini uses its defaults)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    result = LiveAIGemini._build_vad_settings(
+        _vad_settings(
+            disabled=False,
+            start="UNSPECIFIED",
+            end="UNSPECIFIED",
+            prefix=None,
+            silence=None,
+        )
+    )
+
+    assert result == {}
+
+
