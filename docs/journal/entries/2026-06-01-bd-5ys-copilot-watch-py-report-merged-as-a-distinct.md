@@ -37,9 +37,21 @@ Ran the watcher against the two already-merged PRs: **#42 → `RESULT: MERGED`**
 the first attempt (merge-check gated on `state is None`) was masked by Copilot's
 finished-state; moving the check to the top of the loop fixed it.
 
-### Review triage (PR #<TBD>)
+### Review triage (PR #43)
 
-_To be filled after round-1 triage._
+- **Copilot (2 inline) — both adopted:**
+  - Added the missing return annotation to `_pr_closed_state` (`-> str | None`,
+    matching the module's PEP-604 style).
+  - Filled this entry's `PR #<TBD>` placeholder (#43).
+- **Fresh-eyes (2 findings) — both pre-existing, NOT adopted (out of scope):**
+  - `_classify_reviewed` is annotated `-> int` but can return `None` — pre-existing,
+    guarded at the call site; this branch didn't touch that function.
+  - A closed-unmerged PR with a lagging reviews endpoint can TIMEOUT instead of CLEAN —
+    pre-existing edge case (the old `closed = state is None and _pr_is_closed()` had the
+    identical behavior); not a regression.
+  - Fresh-eyes otherwise traced all control-flow paths and confirmed the MERGED logic
+    is sound (no leftover `_pr_is_closed`, open-PR polling intact, no UnboundLocalError,
+    single fetch/poll, consistent exit table).
 
 ## Lessons
 

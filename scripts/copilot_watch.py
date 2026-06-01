@@ -240,7 +240,7 @@ def _after(ts: str, since: datetime | None) -> bool:
         return True
 
 
-def _pr_closed_state(repo: str, pr: int):
+def _pr_closed_state(repo: str, pr: int) -> str | None:
     """Return the PR's terminal disposition, or None if still open.
 
     - "merged"  -> the PR was merged (`merged_at` set, or `merged` true)
