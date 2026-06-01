@@ -37,6 +37,9 @@ REPO_ROOT = _repo_root()
 GUARDED_FILES = [
     "backend/routes/pdf_fill_routes.py",
     "backend/adapters/live_ai_gemini.py",
+    # on_tool_call receives Gemini's tool args, which include field VALUES; it
+    # previously print()'d them whole (bd polyglot-pdf-oeq).
+    "backend/services/callback_handler.py",
 ]
 
 # Kwarg NAMES that must never carry a raw value/text in a log call. We flag the
@@ -113,14 +116,51 @@ def _scan_leaks(text: str):
     return offenders
 
 
+# Sensitive identifiers that must never be interpolated into a positional sink
+# like print(). `_log.*(...)` kwargs are covered by _scan_leaks above; this is
+# the OTHER class of leak (bd polyglot-pdf-oeq): a bare
+# `print(f"Arguments: {arguments}")` dumps the whole tool-call args (= field
+# values) to stdout -> Cloud Run logs. We flag a sensitive var interpolated into
+# an f-string; safe-metadata names (tool_name, *_id, *_count, ...) are fine.
+_SENSITIVE_IDENTS = (
+    "arguments", "args", "value", "values", "selected_value", "selected_values",
+    "target_value", "original_value", "message", "text", "transcript",
+    "field_values", "current_values", "system_instruction", "payload",
+)
+# An f-string interpolation `{<sensitive>}` or `{<sensitive>[...]/.attr/(...)}` --
+# a word boundary before the name avoids matching e.g. `field_values_count`.
+_FSTRING_SENSITIVE = re.compile(
+    r"\{[^{}]*\b(?:" + "|".join(re.escape(i) for i in _SENSITIVE_IDENTS) + r")\b[^{}]*\}"
+)
+_PRINT_CALL = re.compile(r"\bprint\s*\(")
+
+
+def _scan_print_leaks(text: str):
+    """Return [(lineno, line)] for print() calls interpolating a sensitive var.
+
+    Only flags a print whose argument f-string interpolates one of
+    _SENSITIVE_IDENTS. Comments are stripped first so a redaction note can't
+    false-positive. A safe-metadata interpolation (`{tool_name}`, `{arg_count}`)
+    does not match because those names aren't in _SENSITIVE_IDENTS.
+    """
+    offenders = []
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        code = raw.split("#", 1)[0]
+        if _PRINT_CALL.search(code) and _FSTRING_SENSITIVE.search(code):
+            offenders.append((lineno, raw.strip()))
+    return offenders
+
+
 @pytest.mark.parametrize("rel", GUARDED_FILES)
 def test_no_value_or_transcript_in_logs(rel):
     path = REPO_ROOT / rel
     assert path.exists(), f"guarded file missing: {rel}"
-    offenders = _scan_leaks(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    offenders = _scan_leaks(text) + _scan_print_leaks(text)
     assert not offenders, (
-        "PII/PHI logging leak re-introduced (bd hjo). Log field IDs / "
-        "lengths / types / counts, never the value or transcript text:\n  "
+        "PII/PHI logging leak re-introduced (bd hjo / oeq). Log field IDs / "
+        "lengths / types / counts, never the value or transcript text -- and "
+        "never print() raw args/values to stdout:\n  "
         + "\n  ".join(f"{rel}:{ln}: {txt}" for ln, txt in offenders)
     )
 
@@ -142,3 +182,22 @@ def test_guard_catches_known_leaks():
     assert not _scan_leaks('_log.error("X", message="Session closed and cleaned up")')
     # A value assignment OUTSIDE a log call must NOT flag.
     assert not _scan_leaks('value_str = str(value)\nmessage = f"...{value_str}"')
+
+
+def test_guard_catches_print_leaks():
+    """The print()-sink scanner flags raw-arg/value prints (bd oeq) but leaves
+    safe-metadata prints and constant prints alone."""
+    # The exact bd-oeq leak shape and close variants.
+    assert _scan_print_leaks('print(f"Arguments: {arguments}")')
+    assert _scan_print_leaks('print(f"value={value}")')
+    assert _scan_print_leaks("print(f'transcript: {transcript[:50]}')")
+    assert _scan_print_leaks('print(f"{field_values}")')
+    # Safe: interpolating only metadata names must NOT flag.
+    assert not _scan_print_leaks('print(f"Tool: {tool_name}")')
+    assert not _scan_print_leaks('print(f"arg_count={arg_count}")')
+    assert not _scan_print_leaks("print(f\"{'='*80}\")")
+    # A word-boundaried near-miss name must NOT flag (field_values_count is meta).
+    assert not _scan_print_leaks('print(f"{field_values_count}")')
+    # A non-print line interpolating a value must NOT be caught here (that's the
+    # _log scanner's job, or it's a legitimate assignment).
+    assert not _scan_print_leaks('result = f"...{value}"')
