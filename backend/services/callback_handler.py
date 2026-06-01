@@ -197,13 +197,18 @@ class CallbackHandler:
         #   - Used for local debugging only
         # ============================================================================
 
-        # Console logging for token analysis
-        print(f"\n{'='*80}")
-        print(f"🔧 TOOL CALL ← Gemini")
-        print(f"{'='*80}")
-        print(f"Tool: {tool_name}")
-        print(f"Arguments: {arguments}")
-        print(f"{'='*80}\n")
+        # Production log: tool name + argument KEYS + count only -- NEVER the
+        # argument VALUES (they include field values = PII/PHI; stdout -> Cloud
+        # Run logs). The previous `print(f"Arguments: {arguments}")` here leaked
+        # the full args (bd polyglot-pdf-oeq); full-arg capture for debugging is
+        # the job of `_dev_log` below, which is gated behind .env.DEV.
+        _log.info(
+            "tool_call_received",
+            tool_name=tool_name,
+            arg_keys=sorted((arguments or {}).keys()),
+            arg_count=len(arguments or {}),
+            session_id=self._session_id,
+        )
 
         # Dev logging: Log full arguments (includes field values - dev only!)
         _dev_log.log_tool_call(tool_name, arguments, session_id=self._session_id)

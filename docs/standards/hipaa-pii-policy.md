@@ -31,7 +31,7 @@ When you need to prove "data is flowing," log a length or a type — never the v
 | Event schemas | `backend/utils/log_schemas.py` + `structured_logger.py` | **Safe by shape** — `TypedDict`s with no value field (`field_id` carries the comment "NEVER include field values!"). `StructuredLogger` consumes them but emits nothing yet (its one non-test reference is a dead import). See [logging-and-cost.md](logging-and-cost.md). |
 | Frontend metrics | `frontend/src/shared/metrics.ts` | **Safe** — barge-in / VAD timing metrics held in memory and exposed only on `window.__VFF_METRICS__` for the local tuning UI; never transmitted to the backend or any third party. Header: "NO PII - Only timing and operational metrics." |
 | Dev file logger | `backend/utils/dev_file_logger.py` | **Gated.** MAY write field values / Gemini messages / tool args, but is a no-op unless `backend/.env.DEV` exists. `.env*` files are gitignored + dockerignored, so production containers never enable it. Acceptable for local debugging; NEVER ship a container with `.env.DEV`. |
-| Tool-call console | `backend/services/callback_handler.py` | **⚠️ Known leak — `polyglot-pdf-oeq`.** `on_tool_call` *unconditionally* `print()`s the full tool-call `arguments` dict (`update_form_fields`/`confirm_field` args include field **values**) to stdout → Cloud Run logs. This violates the rule and is NOT caught by the guard below (which scans only `_log.*` kwargs in two other files). The adjacent `_dev_log.log_tool_call` is correctly `.env.DEV`-gated; the bare `print` is not. Tracked for removal under `polyglot-pdf-oeq`. |
+| Tool-call console | `backend/services/callback_handler.py` | **Safe.** `on_tool_call` logs the tool name + argument **keys** + count via `_log.info("tool_call_received", …)` — never the argument values. Full-arg capture for debugging is the `.env.DEV`-gated `_dev_log.log_tool_call`. (A prior bare `print(f"Arguments: {arguments}")` leaked the full args to stdout; removed under `polyglot-pdf-oeq`, and the guard below now covers this file + `print()` sinks.) |
 
 ## Enforcement
 
@@ -40,16 +40,20 @@ guard**. By construction: the safe loggers never accept a value parameter, and
 `log_schemas.py` has no value field — there is no runtime forbidden-key scrubber,
 so the discipline is "don't pass values to a logger." Backstopping that
 discipline, `backend/tests/test_no_pii_logging.py` is a source-level AST/grep guard
-that scans `pdf_fill_routes.py` and `live_ai_gemini.py` for sensitive log kwargs
-(`value`, `values`, `selected_value`, `text`, `text_preview`, `transcript`,
-`sample`, `system_instruction`, …) carrying a non-metadata value and fails the
-build on a regression. It is a static check, not a runtime scrubber.
+that scans the `GUARDED_FILES` (`pdf_fill_routes.py`, `live_ai_gemini.py`,
+`callback_handler.py`) for two leak shapes and fails the build on a regression:
+(1) sensitive **log kwargs** (`value`, `values`, `selected_value`, `text`,
+`text_preview`, `transcript`, `sample`, `system_instruction`, …) carrying a
+non-metadata value in a `_log.*(...)` call; and (2) a sensitive variable
+(`arguments`, `value`, `text`, `field_values`, …) interpolated into a **positional
+`print(...)` sink**. It is a static check, not a runtime scrubber.
 
-The guard's coverage is **narrow**: only those two files (`GUARDED_FILES`), and
-only **keyword-argument** log calls (`kwarg=<rhs>`) — it does **not** scan other
-modules or positional sinks like `print(f"... {arguments}")`. So it would not have
-caught the `callback_handler.py` tool-call leak in the table above; don't read a
-green guard as proof the whole codebase is clean.
+The guard's coverage is still **scoped, not exhaustive**: only the `GUARDED_FILES`
+list and only these two shapes (kwargs in `_log.*` calls + `print()` f-strings).
+A leak in an unlisted module, or via a different sink (e.g. `logging.getLogger`,
+`sys.stderr.write`), would not be caught — so widen `GUARDED_FILES` when a new
+value-handling logger appears, and don't read a green guard as proof the whole
+codebase is clean.
 
 The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed in
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
