@@ -435,12 +435,14 @@ def _emit(state: str, detail: str = "") -> int:
 # ask). A mixed comment ("no changes needed in section 3, but fix section 4")
 # must stay COMMENTS. Erring toward COMMENTS preserves the core invariant: never
 # read ambiguity as CLEAN.
-# Phrasings Copilot actually uses to approve a re-review delivered as an issue
-# comment. Kept broad but unambiguous -- each is a "nothing to do" statement; the
-# _CHANGE_ASK_SIGNALS guard below still demotes any comment that ALSO asks for a
-# change. Observed on PRs #41/#42/#43 (bd polyglot-pdf-fau): "no outstanding
-# findings" and "nothing further to address" verbatim; "no new blocking issues"
-# broadens the #42 pattern ("I don't see any new blocking issues", not matched).
+# Phrasings Copilot uses to approve a re-review delivered as an issue comment.
+# Each is an UNAMBIGUOUS "nothing to do" statement -- kept deliberately specific.
+# Broad/bare forms ("no blocking issues", "no remaining issues", "nothing to
+# address") were rejected: they can prefix a soft suggestion ("no blocking
+# issues, I'd recommend...") and risk a FALSE CLEAN (which could merge past a
+# real finding -- the dangerous direction). The "no outstanding findings" /
+# "nothing further to address" forms were observed on PR #43 (bd polyglot-pdf-fau);
+# #42's "I don't see any new blocking issues" is intentionally NOT matched.
 _APPROVAL_PATTERNS = (
     "no further changes",
     "no changes are needed",
@@ -449,12 +451,8 @@ _APPROVAL_PATTERNS = (
     "no further action",
     "no outstanding findings",
     "no outstanding issues",
-    "no blocking issues",
-    "no new blocking issues",
     "nothing further to address",
     "nothing further to change",
-    "nothing to address",
-    "no remaining issues",
 )
 # If any of these appear, the comment is asking for something -> NOT a clean
 # approval, even if it also contains an approval phrase.
@@ -468,6 +466,13 @@ _CHANGE_ASK_SIGNALS = (
     "missing",
     "incorrect",
     "consider ",
+    # soft-recommendation markers: Copilot pairs an "approval" phrase with a
+    # non-blocking suggestion ("no blocking issues, though I'd recommend...").
+    # Treat those as a change-ask so they stay COMMENTS, not CLEAN. (bd fau)
+    "recommend",
+    "suggest",
+    "though ",
+    "worth ",
 )
 
 
