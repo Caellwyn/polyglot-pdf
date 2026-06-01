@@ -43,19 +43,50 @@ pointer updated to the archived path. All pointer + INDEX links verified to reso
   backlog. Live descendants already exist as beads (token reduction `l3a`, cloud resume
   `57d`). **No new work-beads filed from the audit.**
 
+### Also: default native model → 3.1 (folded in)
+
+This PR also flips `USE_PREMIUM_MODEL`'s default from `false` → **`true`** in
+`config.py`, making **`gemini-3.1-flash-live-preview`** the default native-audio model
+(2.5 becomes the cheaper opt-in). Reason: the 2.5 native-audio *preview* is
+intermittently silent on the audio path (no-audio turns; `bd polyglot-pdf-daa`),
+whereas 3.1 is stable there, and 3.1 is only modestly pricier (text-out 4.50 vs
+2.00 /1M; audio in/out identical). Updated to match: `standards/ai-models.md` (tier
+table default + the `USE_PREMIUM_MODEL` default + a why-3.1 note),
+`components/config-deployment.md`, and the config.py tier comments.
+
+**What this investigation surfaced (verified live):** 3.1 and 2.5 are **not
+config-compatible**. 3.1 (`-live-preview`) *rejects* the smoke test's minimal
+`{response_modalities:[AUDIO], system_instruction}` config with `1007 invalid
+argument` (every run; TEXT-only → 1007 "invalid combination of modalities" too). It
+only works through the fuller config the real adapter builds (tools +
+`realtime_input_config` + transcription) — which is how the tak spike billed 3.1
+cleanly. So the default flip is correct for the **app** (real adapter path), but the
+hand-rolled smoke test can't simply switch models.
+
+### The smoke test (deferred — `bd polyglot-pdf-a7k`)
+
+Left as-is on this PR. It still pins 2.5 and is flaky (~2/5 isolation runs return no
+audio → `AssertionError: No audio response received`); it can't be repointed at the
+new 3.1 default without sending the adapter's full config (the 1007 above). Reworking
+it to drive the real adapter config against `get_settings().MODEL_NATIVE` (+ optional
+retry) is filed as `a7k`. It's `external`/flaky and already out of the closeout gate
+(`bnt`), so it doesn't block.
+
 ### Review triage (PR #<TBD>)
 
 _To be filled after round-1 triage._
 
 ### Tests
 
-`-m "not external"`: **165 passed, 2 skipped, 1 deselected** (green). The full run
-shows 1 failure — `contract/test_live_ai_gemini_integration.py::test_live_ai_gemini_real_connection`,
-the `external`-marked test that hits the **real Gemini Live API**. It's an
-**environmental** failure (no live API reachability/creds in this run), not a
-regression: this PR's diff is docs-only and touches zero Python. Earlier closeouts
-ran with live access and it passed; the deterministic suite is unaffected. This is
-exactly the case `testing.md`'s `-m "not external"` guidance covers.
+Deterministic suite (`-m "not external"`): **165 passed, 2 skipped, 1 deselected**
+(green, stable), including the model-selection + health unit tests after the
+config-default flip (they pass `USE_PREMIUM_MODEL` explicitly, so the default change
+doesn't perturb them). The one `external` live-Gemini test is excluded as above.
+
+> **Process note:** the closeout checklist runs the FULL `backend/tests/`, which
+> includes the flaky live-API test — so closeout can intermittently go red on an
+> unrelated API hiccup. The deterministic gate should be `-m "not external"`. Filed as
+> `bd polyglot-pdf-bnt`.
 
 ## Lessons
 
@@ -75,14 +106,22 @@ PR bodies — filed as a note (see Doc freshness / follow-ups).
 
 ## Doc freshness
 
+The `config.py` edit (3.1 default) touched a file tracked by several docs, so beyond
+the archival doc edits I reconciled the model-default claims and bumped stamps:
+
+- `docs/standards/ai-models.md` — **content updated** (tier-table default → 3.1,
+  `USE_PREMIUM_MODEL` default `true`, why-3.1 note) + stamp → 2026-06-01.
+- `docs/technical_guide.md` — **content fix** (line 29 `USE_PREMIUM_MODEL` default was
+  `false`, now `true`) + stamp → 2026-06-01.
+- `docs/components/config-deployment.md` — `USE_PREMIUM_MODEL` default cell → `true`;
+  ENV_VARIABLES pointer repathed to `archive/`. (Stamp already 2026-06-01.)
+- `docs/standards/logging-and-cost.md` — **review-and-bump** (tracks `config.py`; the
+  model-default flip doesn't change logging/cost mechanics) → stamp 2026-06-01.
 - `docs/INDEX.md` — added the Archive section (no Tracks line; not freshness-checked).
-- `docs/components/config-deployment.md` — ENV_VARIABLES pointer repathed; stamp
-  unchanged (its tracked code files didn't change).
 - Archived docs carry pointer headers but are history-only (not freshness-tracked).
-- Pre-existing STALE, left as-is (track code this branch did NOT touch): `schema-forms.md`,
-  `voice-ai.md`, `ai-models.md`, `logging-and-cost.md`, `voice-and-vad.md` (track
-  `live_ai_gemini.py` / schema-forms TS, stale from the merged p1t fix), and
-  `technical_guide.md` (tracks `config.py`/`main.py`). None are this branch's concern.
+- Still STALE, **left as-is** — track files this branch did NOT touch (`live_ai_gemini.py`
+  / schema-forms TS, stale from the merged p1t fix), not this branch's concern:
+  `schema-forms.md`, `voice-ai.md`, `voice-and-vad.md`.
 - The freshness checker now reads correctly from the **main** repo too — the maintainer
   brought that checkout onto current `dev` (it had been 102 commits behind on
   `pitch/working-draft`), which had been causing "docs/ empty" false reads and fed a
@@ -94,5 +133,9 @@ PR bodies — filed as a note (see Doc freshness / follow-ups).
 - `docs/archive/releases/*` (7 files moved) + `docs/archive/releases/README.md` (new).
 - `planning_documents/archived/README.md` — new (supersede note + audit).
 - `docs/INDEX.md` — new Archive section.
-- `docs/components/config-deployment.md` — ENV_VARIABLES pointer repathed.
+- `backend/config.py` — `USE_PREMIUM_MODEL` default `false` → `true` (3.1 default) + tier comments.
+- `docs/standards/ai-models.md` — tier-table default → 3.1, flag default, why-3.1 note + stamp.
+- `docs/technical_guide.md` — `USE_PREMIUM_MODEL` default cell fixed + stamp.
+- `docs/standards/logging-and-cost.md` — stamp bump (review-only).
+- `docs/components/config-deployment.md` — `USE_PREMIUM_MODEL` default cell + ENV_VARIABLES pointer repathed.
 - `docs/journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md` — this entry.
