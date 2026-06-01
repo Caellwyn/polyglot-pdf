@@ -246,8 +246,8 @@ def _pr_closed_state(repo: str, pr: int) -> str | None:
     - "merged"  -> the PR was merged (`merged_at` set, or `merged` true)
     - "closed"  -> closed WITHOUT merging
     - None      -> still open
-    The merge event lands in the same timeline this script polls, so detecting
-    it here lets the caller skip a separate `gh pr view`.
+    Merge detection reads `merged` / `merged_at` directly from the PR payload
+    (`repos/{owner}/{repo}/pulls/{number}`), avoiding a separate `gh pr view`.
     """
     data = _run_gh_api("repos/{}/pulls/{}".format(repo, pr))
     if not isinstance(data, dict) or data.get("state") != "closed":
@@ -438,8 +438,9 @@ def _emit(state: str, detail: str = "") -> int:
 # Phrasings Copilot actually uses to approve a re-review delivered as an issue
 # comment. Kept broad but unambiguous -- each is a "nothing to do" statement; the
 # _CHANGE_ASK_SIGNALS guard below still demotes any comment that ALSO asks for a
-# change. Observed verbatim on PRs #41/#42/#43 (bd polyglot-pdf-fau): "no
-# outstanding findings", "nothing further to address", "no new blocking issues".
+# change. Observed on PRs #41/#42/#43 (bd polyglot-pdf-fau): "no outstanding
+# findings" and "nothing further to address" verbatim; "no new blocking issues"
+# broadens the #42 pattern ("I don't see any new blocking issues", not matched).
 _APPROVAL_PATTERNS = (
     "no further changes",
     "no changes are needed",

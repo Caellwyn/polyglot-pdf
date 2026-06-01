@@ -45,7 +45,12 @@ Erring toward COMMENTS there is the safe direction; the dominant failure mode (t
 
 ### Review triage (PR #43)
 
-_To be filled after round-1 triage._
+Round 3 (this review) raised three findings, all adopted:
+1. `_pr_closed_state` docstring referenced "timeline" — reworded to reflect the PR
+   payload fields (`merged` / `merged_at`) actually used.
+2. Comment overstated "observed verbatim" for `"no new blocking issues"` (the verbatim
+   #42 phrase was *not* matched) — reworded to clarify it broadens the #42 pattern.
+3. This placeholder itself — filled (you're reading it).
 
 ## Lessons
 
