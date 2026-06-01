@@ -1,6 +1,6 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
 *Last updated: 2026-06-01*
 
@@ -49,23 +49,26 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 
 - **`local`** (default, local dev) — reads `<FORM_KITS_LOCAL_ROOT>/<kit_id>/`;
   `FORM_KITS_LOCAL_ROOT` defaults to `<repo>/form-kits`.
-- **`gcs`** (what the deploy scripts set in prod) — reads
-  `gs://<FORM_KITS_GCS_BUCKET>/<FORM_KITS_REMOTE_PREFIX>/<kit_id>/...`. Both deploy
-  scripts pass `FORM_KITS_MODE=gcs` + the bucket via `--set-env-vars`.
+- **`gcs`** (what deploys use) — reads
+  `gs://<FORM_KITS_GCS_BUCKET>/<FORM_KITS_REMOTE_PREFIX>/<kit_id>/...`. The
+  `--set-env-vars` that pins `FORM_KITS_MODE=gcs` + the bucket lives in
+  **`deploy-all.sh`**; the `deploy-demo.sh` / `deploy-production.sh` wrappers only
+  set the shell vars (project, bucket name) and delegate to it.
 
 ## Required & dev-only env vars
 
-- **`GEMINI_API_KEY`** — required (Google AI Studio / Vertex AI key). With
-  `VERTEXAI=True` (the default) the adapter can also resolve credentials via
-  `GOOGLE_CLOUD_PROJECT` + ADC; the deploy scripts set `GOOGLE_CLOUD_PROJECT`.
+- **`GEMINI_API_KEY`** — required (Google AI Studio / Vertex AI key). The `VERTEXAI`
+  field (a **code constant**, default `True`) makes the adapter also resolve
+  credentials via `GOOGLE_CLOUD_PROJECT` + ADC; the deploy scripts set
+  `GOOGLE_CLOUD_PROJECT`. (Changing `VERTEXAI` needs a code edit, not an env var.)
 - **`backend/.env.DEV` marker file** — this **file's existence** (NOT an env var)
-  flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`. Present only in
-  local dev (gitignored + dockerignored), so prod never logs PII/PHI. This is the
-  HIPAA guard — see [hipaa-pii-policy.md](../standards/hipaa-pii-policy.md) and bd
-  `polyglot-pdf-hjo`.
-- **`VFF_DEV_LOGGING=true`** — separately gates the field-value `_dev_log` path in
-  `backend/services/callback_handler.py` (writes `backend/logs/gemini_*.jsonl`).
-  Never set in prod.
+  flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`, which is the
+  **single gate** for *both* dev-logging paths: the `DevFileLogger` itself **and**
+  the field-value `_dev_log` calls in `backend/services/callback_handler.py`
+  (`_dev_log` is just `get_dev_logger()`, whose `enabled` is `DEV_LOGGING_ENABLED`).
+  Present only in local dev (gitignored + dockerignored), so prod never logs
+  PII/PHI. This is the HIPAA guard — see
+  [hipaa-pii-policy.md](../standards/hipaa-pii-policy.md) and bd `polyglot-pdf-hjo`.
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Auth canon lives in the
   planned `auth.md` (bd `polyglot-pdf-y3l`).
@@ -74,8 +77,11 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   endpoint.
 
 > `backend/ENV_VARIABLES.md` is the legacy env doc being superseded here; it
-> predates the `.env.DEV` marker mechanism (it describes `VFF_DEV_LOGGING` as the
-> dev-logging switch, which is now only the callback-handler path).
+> predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
+> dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it (the
+> only remaining reference is a stale comment in `callback_handler.py:194`); the
+> real gate is the `.env.DEV` marker above. The stale comment is tracked for
+> cleanup under bd `polyglot-pdf-jpe`.
 
 ## Deployment (local/manual — no CI)
 

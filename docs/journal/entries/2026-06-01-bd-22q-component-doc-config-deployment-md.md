@@ -44,9 +44,23 @@ to a live link. Key facts, all **verified against code** rather than the bead te
   is left to `bd polyglot-pdf-4p0` (which 22q blocks), so I only added a superseded
   pointer rather than deleting the file.
 
-### Review triage (PR #<TBD>)
+### Review triage (PR #38)
 
-_To be filled after round-1 triage._
+- **Fresh-eyes (4 findings, all adopted):**
+  - F1 (high): `VFF_DEV_LOGGING` is **dead config** — no code reads it (only a stale
+    comment at `callback_handler.py:194` + the legacy `ENV_VARIABLES.md`). The real
+    gate for *both* dev-log paths is the `.env.DEV` marker. My first draft copied
+    the stale comment's error; corrected the doc to state the truth, and filed
+    `bd polyglot-pdf-jpe` for the comment cleanup (a code change, out of scope here).
+  - F2 (high): `VERTEXAI` was worded as if env-settable; it's a code constant —
+    reworded.
+  - F3 (med): added `dev_file_logger.py` + `callback_handler.py` to `Tracks:` so the
+    freshness guard covers the HIPAA dev-logging section.
+  - F5 (low): clarified only `deploy-all.sh` carries the `--set-env-vars`; the
+    wrappers just set shell vars and delegate.
+- **Copilot (round 1):** no inline comments ("LGTM"). Its own PR summary repeated the
+  `VFF_DEV_LOGGING` error that fresh-eyes caught — a good illustration of why the
+  parallel fresh-eyes pass earns its keep on factual-accuracy docs.
 
 ## Lessons
 
