@@ -369,8 +369,10 @@ GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
 	},
 }
 
-# Family used when a model name doesn't match any known family. 2.5 is the
-# current default (MODEL_NATIVE), so unknown/unspecified models bill at 2.5.
+# Family used when a model name doesn't match any known family — a safe
+# fall-back for unrecognized/unspecified model strings (bills at the cheaper
+# 2.5 rate). NOTE: this is the pricing fallback for UNKNOWN names, NOT the
+# runtime default model — the active default is 3.1 (USE_PREMIUM_MODEL=true).
 DEFAULT_PRICING_FAMILY = "2.5"
 
 

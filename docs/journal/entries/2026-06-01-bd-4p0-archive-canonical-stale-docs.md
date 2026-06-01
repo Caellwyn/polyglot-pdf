@@ -72,9 +72,27 @@ it to drive the real adapter config against `get_settings().MODEL_NATIVE` (+ opt
 retry) is filed as `a7k`. It's `external`/flaky and already out of the closeout gate
 (`bnt`), so it doesn't block.
 
-### Review triage (PR #<TBD>)
+### Review triage (PR #41)
 
-_To be filled after round-1 triage._
+- **Copilot (1) — adopted.** No test pinned the *bare default* (only explicit-flag
+  paths), so a future accidental flip back to 2.5 wouldn't be caught. Added
+  `test_default_resolves_to_3_1_premium` (asserts `Settings(MODEL_NATIVE="")` →
+  premium/3.1; skips if the env explicitly sets `USE_PREMIUM_MODEL`, since the field
+  default is import-time-frozen).
+- **Fresh-eyes (4):**
+  - F1 (high) — adopted. `config.py:373` comment still said "2.5 is the current default
+    (MODEL_NATIVE)" — false after the flip. Reworded: 2.5 is the pricing fallback for
+    *unrecognized* names, NOT the runtime default (which is now 3.1).
+  - F2 (med) — adopted. The smoke-test comment "the model we actually run" was now
+    false; updated it to note 2.5 is no longer the default and point at `a7k` (the
+    mechanical rework stays deferred; only the misleading comment was fixed here).
+  - F3, F4 (low) — left as-is. Both confirmed correct/resolving (the INDEX
+    `../planning_documents/archived/` link is intentional — that dir lives outside
+    `docs/`; the two TECHNICAL_GUIDE copies are accurately described). Navigation/clarity
+    observations, not bugs.
+- Fresh-eyes correctly did **not** re-flag the deferred 3.1/2.5 smoke-test
+  incompatibility (`a7k`), and read the worktree (not the stale main checkout) — no
+  repeat of last sprint's false positive.
 
 ### Tests
 
