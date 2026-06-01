@@ -102,6 +102,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -341,7 +342,9 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
     Issue comments have no review_id, so they fall back to the `floor`
     timestamp (the round boundary derived from the review / caller --since),
     which keeps prior-round issue comments from leaking in. The review's own
-    body is always included -- it belongs to this round by construction.
+    summary body is counted ONLY when it contains an explicit change-ask -- a
+    COMMENTED review always carries a neutral "## Pull request overview" summary,
+    so counting every non-empty body would make a clean review read as COMMENTS.
     """
     findings = []
     review_id = review.get("id")
@@ -503,7 +506,11 @@ _CHANGE_ASK_SIGNALS = (
 # CLEAN that no _CHANGE_ASK_SIGNALS heuristic can veto. Pinning ONE fixed word is
 # what ends the approval-phrase whack-a-mole: its classification can't drift.
 def _is_exact_lgtm(body: str) -> bool:
-    stripped = (body or "").strip().strip("`*_>#\"' \t\r\n.").strip()
+    # Strip the markdown/quote wrappers and trailing sentence punctuation Copilot
+    # sometimes adds (**LGTM**, `LGTM`, "> LGTM", "LGTM!", "LGTM.") so the one-word
+    # signal still matches. The strip set is decoration only -- it can't turn a
+    # non-LGTM body into "lgtm".
+    stripped = (body or "").strip().strip("`*_>#\"' \t\r\n.!").strip()
     return stripped.lower() == "lgtm"
 
 
@@ -522,6 +529,14 @@ def _has_change_ask(body: str) -> bool:
 _APPROVAL_SHAPE_MAX_CHARS = 200
 
 
+# A markdown list-item marker at line start: a bullet (-, *, +) or an ordered
+# marker (digits then '.' or ')') FOLLOWED BY whitespace. The trailing-space
+# requirement is what distinguishes a list marker ("1. fix the helper") from a
+# decimal in prose ("response time is 3.5s") -- the latter is not a list and must
+# not trip the shape guard.
+_LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s")
+
+
 def _is_approval_shaped(body: str) -> bool:
     """True if the body is short + single-paragraph + has no list/numbered items."""
     b = (body or "").strip()
@@ -530,11 +545,8 @@ def _is_approval_shaped(body: str) -> bool:
     if "\n\n" in b:  # more than one paragraph
         return False
     for line in b.splitlines():
-        ls = line.lstrip()
-        if ls.startswith(("- ", "* ", "+ ")) or (ls[:2].isdigit() and "." in ls[:4]):
+        if _LIST_MARKER_RE.match(line.lstrip()):
             return False  # bullet or numbered list -> structured findings
-        if ls[:2] in ("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9."):
-            return False
     return True
 
 
@@ -702,8 +714,14 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
         findings = _collect_findings(repo, pr, floor, review)
     except RuntimeError as exc:
         # Verdict already known -- do not throw it away on a secondary fetch
-        # failure. A non-clean state or a non-empty body is still COMMENTS.
-        if state in NON_CLEAN_STATES or body:
+        # failure. Mirror the findings-based body rule: a COMMENTED review's
+        # overview summary is NOT a finding, so a non-empty body alone is not
+        # COMMENTS -- only a CHANGES_REQUESTED state or a change-ask body is.
+        # (Using a plain `or body` here would flip every clean review to COMMENTS
+        # whenever the inline fetch hiccups, since the overview body is always
+        # present -- the exact false-COMMENTS this redesign removes.)
+        body_is_finding = bool(body) and _has_change_ask(body) and not _is_approval_comment(body)
+        if state in NON_CLEAN_STATES or body_is_finding:
             return _emit(
                 "COMMENTS",
                 "Copilot review complete (state={}, could not fetch inline "
@@ -711,7 +729,7 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
             )
         return _emit(
             "CLEAN",
-            "Copilot review complete, no review-body findings "
+            "Copilot review complete, no actionable review-body finding "
             "(could not fetch inline comments: {}).".format(exc),
         )
 
