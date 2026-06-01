@@ -58,9 +58,26 @@ turned out to be **stale-open** (work merged 2026-05-30 under the old
 This removed the recurring "SLIP-FOUND — 4 stale beads" noise that hit every closeout,
 and the docs-reorg epic jumped 14→17/20.
 
-### Review triage (PR #<TBD>)
+### Review triage (PR #40)
 
-_To be filled after round-1 triage._
+- **Fresh-eyes (4 findings):**
+  - F1 (high) — **adopted.** `firestore.rules` has no `authorized_emails` rule, yet
+    `signUpWithEmail` reads that collection unauthenticated and the README claims it's
+    world-readable. My draft parroted the README's claim as fact. Rewrote the callout
+    to state what's actually checked in (only `/users`) and flag the
+    rules-vs-README/signup drift; filed `bd polyglot-pdf-bmz` (a code/ops fix, out of
+    scope here).
+  - F2 (high) — **REJECTED (false positive).** Claimed `technical_guide.md` is still a
+    skeleton, so removing the INDEX annotation (and, by implication, closing `gfb.2`)
+    was wrong. Verified directly: on HEAD / origin/dev / working-tree the file is fully
+    populated (real title `polyglot-pdf`, real stamp + Tracks, **0** `<PROJECT NAME>` /
+    `<DATE>` tokens). The reviewer read the **stale main-repo checkout** (which lags
+    dev). The de-stale edit and the `gfb.2` closure stand.
+  - F3 (med) — **adopted.** Documented that `AuthProvider` itself gates on
+    `{!loading && children}`, so a consumer outside `ProtectedRoute` gets no spinner
+    during the initial auth check.
+  - F4 — non-finding (cross-link confirmed resolving).
+- **Copilot (round 1):** no inline comments ("LGTM").
 
 ## Lessons
 

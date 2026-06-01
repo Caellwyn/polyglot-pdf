@@ -31,7 +31,10 @@ and the `VFF_DISABLE_AUTH` dev bypass are in
 - **Gating** — `frontend/src/components/layout/ProtectedRoute.tsx` renders a spinner
   while `loading`, then renders `<Login />` when `!user`, else the children. It wraps
   the form surface (imported in `SchemaForm.tsx`); there is no central router/`App.tsx`
-  route table.
+  route table. Note `AuthProvider` itself gates on the initial auth check with
+  `{!loading && children}`, so anything under the provider (not just `ProtectedRoute`)
+  renders **nothing** until that first check resolves — a consumer outside
+  `ProtectedRoute` gets no spinner of its own.
 
 ### The `authorized_emails` allowlist (email signup only)
 
@@ -39,8 +42,16 @@ and the `VFF_DISABLE_AUTH` dev bypass are in
 (`where('email','==', email.toLowerCase())`) **before** calling
 `createUserWithEmailAndPassword`, and throws *"This email is not authorized"* if
 there's no match. So email signup is allowlisted; **Google sign-in is not gated by
-this check.** (`authorized_emails` is world-readable so the pre-signup check works
-unauthenticated, but not client-writable — see README.)
+this check.**
+
+> **Rules gap (verify before relying on this).** The pre-signup query reads
+> `authorized_emails` while the user is **unauthenticated**, but the checked-in
+> `firestore.rules` has **no `authorized_emails` rule** — only `/users/{userId}`.
+> Under Firestore default-deny that read would fail, so either the **deployed** rules
+> grant `authorized_emails` read (and the repo file is out of sync — an ops risk) or
+> email signup is currently broken with a permission error instead of the
+> "not authorized" message. The README asserts it's "readable by unauthenticated
+> users", but the repo doesn't encode that. Tracked in bd `polyglot-pdf-bmz`.
 
 ## User profile (Firestore `users/{uid}`)
 
