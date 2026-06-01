@@ -20,7 +20,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | feature -> dev (staging) -> main (prod) promotion. |
 | [`beads-setup.md`](beads-setup.md) | One-time beads install + sync wiring (prerequisite for the swarm tooling). |
 | [`branch-protection-setup.md`](branch-protection-setup.md) | One-time GitHub ruleset setup (agent-executable). |
-| **Active sprint plans** | `sprint_<N>_<slug>_plan.md` (none yet) -- listed here while at repo root; archived to `archive/` at closeout. |
+| **Active sprint plans** | `sprint_<N>_<slug>_plan.md` -- listed here while at repo root; archived to `archive/` at closeout. Active: [`sprint_1_harness-tuning_plan.md`](sprint_1_harness-tuning_plan.md) -- harness tuning: token burn, bounded autonomy (epics `polyglot-pdf-hrn` + `polyglot-pdf-h2r`). |
 
 ## Components (tier 2 -- per surface)
 

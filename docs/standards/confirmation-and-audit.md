@@ -1,8 +1,8 @@
 # Confirmation & audit trail
 
-**Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py backend/config.py
+**Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*
 
 Every field value that lands on the form is confirmed by the user, and every
 confirmation is recorded — by `field_id` and *method*, never by value — for
@@ -15,8 +15,17 @@ the broader logging/cost picture is in [logging-and-cost.md](logging-and-cost.md
 
 A proposed value is not "done" until the user confirms it. Gemini is instructed to
 call the `confirm_field` tool after filling each field (the tool is declared in
-`backend/config.py` with required params `field_id` + `confirmation_method`, the
-latter an enum of exactly two values):
+`backend/config.py`, in the tool-declarations block, with required params `field_id`
++ `confirmation_method`, the latter an enum of exactly two values). `config.py` is
+intentionally **not** in this doc's `**Tracks:**` line — it's a large, frequently
+churned file (model + pricing config live there too), so tracking it whole flagged
+this doc as stale on every unrelated config edit; a real change to the `confirm_field`
+tool usually travels with a `callback_handler.py` change (the handler parses its args),
+which *is* tracked. **Accepted gap:** the `confirmation_method` enum (`verbal` /
+`manual`) is declared *only* in `config.py`'s tool schema, so changing the enum's
+allowed values there *without* touching `callback_handler.py` would not re-stamp this
+doc (the handler reads the arg without validating against the enum). If you edit that
+enum, re-check this section by hand. The two confirmation methods:
 
 - **`verbal`** — the user said "yes" to the proposed value.
 - **`manual`** — the user typed/selected the value directly.
@@ -94,4 +103,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*
