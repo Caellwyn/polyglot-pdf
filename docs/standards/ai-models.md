@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -15,8 +15,13 @@ constants):
 
 | Tier | Model id | Family |
 |------|----------|--------|
-| **standard** (default) | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
-| **premium** | `gemini-3.1-flash-live-preview` | `3.1` |
+| **premium** (default) | `gemini-3.1-flash-live-preview` | `3.1` |
+| **standard** (cheaper opt-in) | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
+
+> **Why 3.1 is the default.** The 2.5 native-audio *preview* is intermittently
+> silent on the audio path (no-audio turns / `1011` — `bd polyglot-pdf-daa`), so 3.1
+> is the reliable default. 2.5 is the cheaper opt-in (`USE_PREMIUM_MODEL=false`); the
+> only price delta is text-out (4.50 vs 2.00 /1M) — audio in/out are identical.
 
 > **Model names are not reliable signals.** Google's naming is inconsistent — the
 > 2.5 native model has *also* appeared as `gemini-live-2.5-flash-preview`, and that
@@ -29,7 +34,8 @@ constants):
 
 `Settings` (config.py) resolves the active model in a `model_validator`:
 
-- `USE_PREMIUM_MODEL` (env, default `false`) flips between the two tiers.
+- `USE_PREMIUM_MODEL` (env, **default `true`** → 3.1) flips between the two tiers;
+  set it `false` to run the cheaper 2.5 tier.
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
@@ -65,4 +71,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*

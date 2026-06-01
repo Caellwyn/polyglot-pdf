@@ -8,9 +8,10 @@ from pathlib import Path
 
 # === Native audio-to-audio model tiers (A/B-able) ===
 # Both are full native audio-to-audio Live API models (bidiGenerateContent).
-# USE_PREMIUM_MODEL flips between these:
-#   premium  -> gemini-3.1-flash-live-preview            (newer, pricier; family 3.1)
-#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper; family 2.5)
+# USE_PREMIUM_MODEL flips between these (defaults TRUE -> premium/3.1):
+#   premium  -> gemini-3.1-flash-live-preview            (DEFAULT; reliable on audio; family 3.1)
+#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper opt-in; family 2.5;
+#               intermittently silent on the audio path -- bd polyglot-pdf-daa)
 # NOTE: Gemini model naming is inconsistent across Google's sources — the 2.5
 # native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
 # default), and that exact string 1008'd ("not found for bidiGenerateContent") in
@@ -31,7 +32,12 @@ class Settings(BaseModel):
 	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
-	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
+	# Default TRUE -> 3.1 (gemini-3.1-flash-live-preview). The 2.5 native-audio
+	# preview is intermittently silent on the AUDIO path (no-audio turns / 1011 —
+	# bd polyglot-pdf-daa), so 3.1 is the reliable default; 2.5 is the cheaper
+	# opt-in via USE_PREMIUM_MODEL=false. (3.1 is only modestly pricier — text-out
+	# 4.50 vs 2.00/1M; audio in/out identical — see GEMINI_PRICING_BY_FAMILY.)
+	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "true").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.

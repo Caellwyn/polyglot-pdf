@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-05-30. See [journal/entries/](journal/entries/) for chronological history.*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -26,7 +26,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `true` -> `gemini-3.1-flash-live-preview` (premium), `false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard). |
+| `USE_PREMIUM_MODEL` | `true` | Picks the native audio-to-audio tier: `true` (default) -> `gemini-3.1-flash-live-preview` (premium, reliable on audio), `false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard, cheaper). |
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
