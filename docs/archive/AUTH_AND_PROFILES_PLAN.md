@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-06-01 (bd polyglot-pdf-4p0).** Superseded by
+> [`../components/auth.md`](../components/auth.md), which documents the auth surface
+> as actually built (this plan was largely aspirational — see the component doc's
+> plan-vs-reality notes). Kept verbatim for history only — do not edit or cite as
+> current.
+
 # Authorization & User Profiles - Project Plan
 
 **Status**: Active / Planning

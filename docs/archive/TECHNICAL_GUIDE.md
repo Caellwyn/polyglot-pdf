@@ -1,5 +1,13 @@
 <!-- markdownlint-disable MD022 MD031 MD032 MD036 MD040 -->
 
+> **ARCHIVED 2026-06-01 (bd polyglot-pdf-4p0).** Superseded by the 3-tier docs:
+> the current system-wide reference is [`../technical_guide.md`](../technical_guide.md)
+> (tier-1) with per-surface detail in [`../components/`](../components/) and
+> cross-cutting rules in [`../standards/`](../standards/); start at
+> [`../../CLAUDE.md`](../../CLAUDE.md) + [`../INDEX.md`](../INDEX.md). This 1494-line
+> doc was decomposed into those; kept verbatim for history only — do not edit or
+> cite as current.
+
 # Voice Form Filler - Technical Architecture Guide
 
 **Version**: 4.2

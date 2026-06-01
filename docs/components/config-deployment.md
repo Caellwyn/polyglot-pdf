@@ -76,8 +76,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.
 
-> `backend/ENV_VARIABLES.md` is the legacy env doc being superseded here; it
-> predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
+> The legacy env doc (`ENV_VARIABLES.md`, now archived at
+> [`../archive/ENV_VARIABLES.md`](../archive/ENV_VARIABLES.md)) is superseded by this
+> doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it (the
 > only remaining reference is a stale comment in `callback_handler.py:194`); the
 > real gate is the `.env.DEV` marker above. The stale comment is tracked for

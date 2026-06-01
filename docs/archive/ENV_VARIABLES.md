@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-06-01 (bd polyglot-pdf-4p0).** Superseded by
+> [`../components/config-deployment.md`](../components/config-deployment.md), which
+> documents the env vars + feature flags against current code (this file predated
+> the `.env.DEV` marker mechanism). Kept verbatim for history only — do not edit or
+> cite as current.
+
 # Environment Variables
 
 ## Setup
