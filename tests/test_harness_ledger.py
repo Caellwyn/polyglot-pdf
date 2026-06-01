@@ -257,6 +257,23 @@ class TestExperimentState:
         state = ledger.bump_experiment_state("B", path)
         assert state["phase"] == "BC-toggle"  # baseline_A > 15
 
+    def test_bump_sets_phase_bc_when_both_arms_done(self, tmp_path):
+        # arm_B and arm_C both already > 10; bumping either keeps them > 10.
+        # bump_experiment_state must label the derived phase "BC" (not just the
+        # phase_directive path, which test_phase_transitions covers separately).
+        path = tmp_path / "experiment_state.json"
+        path.write_text(json.dumps({"baseline_A": 16, "arm_B": 11, "arm_C": 10, "arm_BC": 0, "phase": "BC-toggle"}), encoding="utf-8")
+        state = ledger.bump_experiment_state("C", path)  # arm_C -> 11
+        assert state["arm_C"] == 11
+        assert state["phase"] == "BC"
+
+    def test_bump_sets_phase_report_when_combined_arm_done(self, tmp_path):
+        path = tmp_path / "experiment_state.json"
+        path.write_text(json.dumps({"baseline_A": 16, "arm_B": 11, "arm_C": 11, "arm_BC": 10, "phase": "BC"}), encoding="utf-8")
+        state = ledger.bump_experiment_state("BC", path)  # arm_BC -> 11
+        assert state["arm_BC"] == 11
+        assert state["phase"] == "report"
+
 
 # --------------------------------------------------------------------------- #
 # End-to-end CLI
@@ -303,6 +320,24 @@ class TestMainCLI:
         assert rc == 0
         assert not ledger_path.exists()
         assert not state_path.exists()
+
+    def test_main_warns_when_arm_missing_but_counter_on(self, tmp_path, monkeypatch, capsys):
+        # No --arm + no --no-counter: the row lands with arm=null and the
+        # counter is materialized but no arm is incremented; a warning fires.
+        t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
+        ledger_path = tmp_path / "harness_ledger.jsonl"
+        state_path = tmp_path / "experiment_state.json"
+        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
+        rc = ledger.main(["--transcript", str(t), "--recorded-at", "x"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "no --arm given" in err
+        row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        assert row["arm"] is None
+        # File materialized, but no arm counter moved.
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
     def test_main_print_directive(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")

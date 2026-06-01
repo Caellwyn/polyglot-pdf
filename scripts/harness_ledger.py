@@ -406,8 +406,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--recorded-at",
         default=None,
-        help="ISO-8601 stamp for the row (default: derived). Closeout passes "
-        "date -u +%%FT%%TZ so the row time is UTC and deterministic.",
+        help="ISO-8601 stamp for the row (default: derived UTC now). Closeout "
+        "passes date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ so the row time is UTC and "
+        "deterministic across machines.",
     )
     p.add_argument(
         "--no-counter",
@@ -493,6 +494,18 @@ def main(argv: list[str] | None = None) -> int:
         ledger_display = str(LEDGER_PATH)
 
     if not args.no_counter:
+        # The counter's whole purpose is arm-attributed accumulation, so a
+        # bump without --arm is almost always a closeout that forgot the flag
+        # (the row also lands with arm=null). Warn loudly but don't hard-fail:
+        # an intentional no-arm bump is rare but legitimate, and a telemetry
+        # row must never block the merge. --no-counter is the explicit
+        # "I meant to skip the bump" path and is silent.
+        if not args.arm:
+            sys.stderr.write(
+                "harness_ledger.py: WARNING -- no --arm given; the row records "
+                "arm=null and the experiment counter is NOT bumped. Pass "
+                "--arm A|B|C|BC (or --no-counter if this is deliberate).\n"
+            )
         state = bump_experiment_state(args.arm, EXPERIMENT_STATE_PATH)
         print(f"Ledger row appended to {ledger_display}")
         print(f"Experiment state: {json.dumps(state)}")

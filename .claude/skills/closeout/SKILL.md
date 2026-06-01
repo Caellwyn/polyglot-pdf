@@ -193,7 +193,12 @@ model) and wall-clock; you only pass the handful of numbers a script can't read
 off the transcript. Run the **worktree's copy** so the ledger path resolves into
 THIS checkout (same `$WT` rule as Steps 3/4):
 
-`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%FT%TZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
+
+(The explicit `%Y-%m-%dT%H:%M:%SZ` form is used instead of `%FT%TZ` because `%F`
+/`%T` are GNU `date` extensions -- BSD/macOS `date` would emit the literal format
+string and land junk in `--recorded-at`. The script also has a UTC fallback if
+`--recorded-at` is omitted entirely.)
 
 Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
 PR). Fill the counters from what actually happened this session:
