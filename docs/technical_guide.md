@@ -85,6 +85,7 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
   (See `standards/voice-and-vad.md`.)
 - **Idle watchdog** closes a form-fill socket after `WS_IDLE_TIMEOUT_SEC` of no
   inbound traffic, sending a graceful `{"type":"idle_timeout"}` first.
-- **"Sections" is canon; "parts" is legacy drift** in older backend code
-  (`current_part_id`). Don't propagate "parts" in new code
-  (`standards/terminology.md`, `polyglot-pdf-m3f`).
+- **"Sections" is canon; "parts" is legacy drift.** The internal section-state vars
+  were renamed (`polyglot-pdf-gfb.4`); the only remaining `part` drift is on the
+  wire/log format (token-log + handshake keys), deferred to `polyglot-pdf-zun`. Don't
+  name new section state `part` (`standards/terminology.md`, `polyglot-pdf-m3f`).
