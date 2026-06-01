@@ -356,6 +356,76 @@ def test_issue_comment_nonapproval_round_is_comments(capsys, monkeypatch):
     assert (rc, result) == (0, "COMMENTS")
 
 
+# --- bd polyglot-pdf-x8o: inline-findings-first (acknowledgment prose != COMMENTS) ---
+
+def test_quoted_trigger_please_does_not_trip_changeask(capsys, monkeypatch):
+    # THE bd-x8o root cause (PR #48 r2 verbatim shape): Copilot echoes the trigger
+    # as a blockquote `> @copilot please review`, and that quoted "please" tripped
+    # _has_change_ask -> false COMMENTS. With quote-stripping + no new inline
+    # finding, the acknowledgment is CLEAN.
+    body = (
+        "> @copilot please review\n\n"
+        "The two issues the reviewer raised were already addressed in the second "
+        "commit. All guard tests pass; zero remaining print() PII sinks."
+    )
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z", "body": body}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "CLEAN")
+
+
+def test_strip_quotes_removes_blockquote_lines():
+    assert cw._strip_quotes("> @copilot please review\n\nNo change-ask here.") == (
+        "\nNo change-ask here."
+    )
+    assert cw._strip_quotes("  > indented quote\nkept") == "kept"
+    assert cw._strip_quotes("no quotes at all") == "no quotes at all"
+
+
+def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
+    # If a NEW actionable inline finding exists this round, it's COMMENTS even when
+    # the issue-comment prose reads like an approval -- inline leads.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "Looks good overall, no further changes needed."}]
+    inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:04Z",
+               "path": "app/x.py", "position": 4, "line": 12,
+               "body": "this off-by-one is a real bug"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=inline,
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_genuine_prose_ask_with_stale_inline_is_comments(capsys, monkeypatch):
+    # FALSE-CLEAN guard (fresh-eyes must-fix on PR #49): a GENUINE round-2 prose
+    # ask ("please also fix the off-by-one") with NO new inline finding, on a PR
+    # that already has a PRIOR-round inline comment, must be COMMENTS -- the
+    # change-ask path is ungated, so prior inline history does NOT suppress it.
+    since = cw._parse_iso("2026-05-28T12:00:00Z")
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:05:00Z",
+              "body": "> @copilot please review\n\nPlease also fix the off-by-one "
+                      "at line 42 before merge."}]
+    inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T11:00:00Z",
+               "path": "app/x.py", "position": 2, "line": 5, "body": "prior-round ask"}]
+    _patch_api(monkeypatch, reviews=[], issue=issue, inline=inline,
+               timeline=[_reviewed_event("2026-05-28T12:04:00Z")])
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=since)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: COMMENTS" in out
+
+
+def test_prose_only_changeask_no_inline_anywhere_is_comments(capsys, monkeypatch):
+    # The legitimate fallback: Copilot left NO inline comments at all on the PR and
+    # its prose genuinely asks for a change -> COMMENTS (a prose-only ask is caught).
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "One more thing: please also update the changelog before merge."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
 def test_finished_with_issue_comment_approval_is_clean(capsys, monkeypatch):
     # Fix A via the "finished" branch: timeline=finished (no new reviewed) and
     # an approval issue comment -> CLEAN, not "produced no review".
