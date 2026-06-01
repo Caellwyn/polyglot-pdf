@@ -57,9 +57,12 @@ worktrees lag `dev`, and claims must be verified against the *current* code path
 
 ## Doc freshness
 
-`check_doc_freshness.py`: "No docs to check" -- `docs/components/` and
-`docs/standards/` are still the empty starter skeleton, so nothing to bump.
-The 4 stale `in_progress` beads surfaced by `closeout_housekeeping.py`
+`check_doc_freshness.py`: "No docs to check" -- the docs that exist (e.g.
+`docs/standards/ai-models.md`) declare `**Tracks:**` globs over `backend/`
+code, and this PR touched no backend code, so nothing was in scope to bump.
+(`ai-models.md` is the canonical model-name doc; its `MODEL_NATIVE_STANDARD`
+value already matched the fix, which is what this PR aligned the README +
+PROJECT_CONTEXT to.) The 4 stale `in_progress` beads surfaced by `closeout_housekeeping.py`
 (gfb.2, m3f, pki, hjo) are all other workers' active work, unrelated to this
 PR -- left untouched. No CLAUDE.md change needed.
 
