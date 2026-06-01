@@ -1,6 +1,6 @@
 # Testing
 
-**Tracks:** backend/pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
+**Tracks:** backend/pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json
 
 *Last updated: 2026-06-01*
 
@@ -22,8 +22,7 @@ Config is `backend/pytest.ini` (the only pytest config — no `pyproject.toml` /
 [pytest]
 pythonpath = .
 testpaths = backend/tests
-markers =
-    external: marks tests requiring real Gemini access
+markers = external: marks tests requiring real Gemini access
 ```
 
 Tests are organized **by directory**, not by marker:
@@ -32,8 +31,8 @@ Tests are organized **by directory**, not by marker:
 |-----|------|-------|
 | `backend/tests/unit/` | Fast, isolated unit tests | The bulk of the suite. |
 | `backend/tests/integration/` | Multi-component flows (WS ephemeral session, idle-timeout flow) | |
-| `backend/tests/contract/` | Protocol / tool / live-adapter contracts | Holds the one **`external`** test. |
-| `backend/tests/*.py` (root) | A few cross-cutting tests | e.g. `test_no_pii_logging.py`, `test_audio_handler.py`. |
+| `backend/tests/contract/` | Protocol / tool / live-adapter contracts | Holds the one **`external`** test (`test_live_ai_gemini_integration.py`); `test_tool_contracts.py` and `test_websocket_protocol.py` are **empty stubs** (0 collected tests) awaiting fill — populate these rather than adding a fourth file. |
+| `backend/tests/*.py` (root) | Cross-cutting tests | `test_audio_handler.py`, `test_callback_handler.py`, `test_no_pii_logging.py`, `test_request_coordinator.py`. |
 
 - **Async tests** use `pytest-asyncio` with an **explicit** `@pytest.mark.asyncio`
   on each coroutine test (there is no `asyncio_mode = auto`; the marker is
@@ -56,6 +55,9 @@ venv**. In practice the dependency venv lives **only in the main repo at
 (or anywhere), resolve the main-repo interpreter and point `PYTHONPATH` at the repo
 root you want to test:
 
+**Run from the repo/worktree root** (the recipe uses `$PWD` as the import root, so a
+wrong CWD points `PYTHONPATH` at the wrong tree):
+
 ```bash
 # Windows; on macOS/Linux use backend/.venv/bin/python
 REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
@@ -65,8 +67,10 @@ PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/unit -q      # unit only
 PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/ -m "not external" -q  # skip live-Gemini
 ```
 
-> **Watch the COLLECTED count, not just pass/fail** — a broken import silently drops
-> a file from collection, so a green run can still be hiding lost tests.
+> **Watch the COLLECTED count, not just pass/fail.** pytest does fail the run on a
+> collection-time import error — but a *misresolved* invocation (wrong CWD →
+> `PYTHONPATH` at the wrong tree, or a path typo) can quietly run a **partial or
+> empty** suite and still report green. The collected count is how you catch that.
 
 ## Frontend (vitest)
 
@@ -78,9 +82,16 @@ Stack: `vitest ^1.6.0`, `@testing-library/react`, `@testing-library/user-event`,
 flag.
 
 Test files are colocated next to the code as `*.test.ts(x)` (the `.spec.` suffix is
-not used). They currently cover schema-form utilities (`fieldValue`,
+not used). **Five are active** and run: schema-form utilities (`fieldValue`,
 `conditionalFieldCheck`, `manifestUtils`), the disclaimer modal, and
 navigation-confirmation — i.e. the pure client-state logic, not the voice/WS path.
+
+> **Five more are dormant.** Files renamed with a trailing `.NEEDS_CLEANUP` /
+> `.NEEDS_SECTION_REFACTOR` suffix (the field components `RadioField` / `SelectField`
+> / `TextField`, plus `schemaFormState` and `connection`) no longer match vitest's
+> `*.test.ts(x)` glob, so they are **not collected** — parked, not deleted, pending
+> the section-refactor cleanup. Don't mistake them for passing coverage; re-enabling
+> one means renaming it back and fixing it.
 
 ## E2E + manual testing
 

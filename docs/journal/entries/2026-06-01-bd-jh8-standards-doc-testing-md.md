@@ -43,9 +43,31 @@ Scope boundaries: PII/PHI rules point at `hipaa-pii-policy.md`; the PDF debug
 runbook points at `pdf-filling.md`; the CI/deploy story points at
 `config-deployment.md` + `review-flow.md`.
 
-### Review triage (PR #<TBD>)
+### Review triage (PR #39)
 
-_To be filled after round-1 triage._
+The reviewers caught that the first draft presented an **incomplete** picture of the
+test tree — all factual gaps, all adopted:
+
+- **Fresh-eyes (8 findings):**
+  - F2/F8 (high): **5 dormant frontend test files** with `.NEEDS_CLEANUP` /
+    `.NEEDS_SECTION_REFACTOR` suffixes (field components + `schemaFormState` +
+    `connection`) exist alongside the 5 active ones and aren't collected by vitest.
+    The draft ignored them — added a callout so "5 active" isn't mistaken for total
+    coverage.
+  - F7 (high): the `contract/` dir has **2 empty stub files** (`test_tool_contracts.py`,
+    `test_websocket_protocol.py`, 0 bytes) beside the one external test — documented
+    so a contributor populates the stubs instead of adding a fourth file.
+  - F6 (high): `pytest.ini` `markers` is a **single line**, not the two-line block I
+    quoted — corrected to match the file verbatim.
+  - F1 (med): root test dir has **4** files, not the 2 I exampled — listed all four.
+  - F4 (high): dropped `frontend/vite.config.ts` from `Tracks:` (it has no test
+    config, so tracking it = false-positive staleness; kept the prose reference).
+  - F3 (med): added a "run from the repo/worktree root" caveat to the split-venv
+    recipe (it uses `$PWD` as the import root).
+- **Copilot (1 inline):** my "broken import silently drops a file" warning was wrong
+  — pytest fails the run on a collection-time import error. Reworded the COLLECTED-count
+  warning to the real failure mode (a misresolved/partial invocation running an
+  empty suite and still reporting green).
 
 ## Lessons
 
