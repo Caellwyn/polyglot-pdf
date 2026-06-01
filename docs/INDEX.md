@@ -44,7 +44,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Stateless architecture (client owns state) | [`standards/stateless-architecture.md`](standards/stateless-architecture.md) |
 | Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
-| Testing | `standards/testing.md` _(planned -- `polyglot-pdf-jh8`)_ |
+| Testing | [`standards/testing.md`](standards/testing.md) |
 
 ## External references (vendored SDK docs)
 
