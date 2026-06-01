@@ -255,7 +255,8 @@ def build_row(parsed: dict, args: argparse.Namespace, *, recorded_at: str) -> di
     """Assemble the ledger row from parsed transcript + orchestrator flags.
 
     ``recorded_at`` is passed in (not read from a clock) so callers/tests stay
-    deterministic; closeout passes ``date -u +%Y-%m-%dT%H:%M:%SZ``.
+    deterministic; closeout passes ``date -u +%Y-%m-%dT%H:%M:%SZ`` (the explicit
+    form -- ``%F``/``%T`` are GNU-only).
     """
     phase_tokens = None
     if args.phase_tokens:
