@@ -262,15 +262,26 @@ class TestFreshnessScanCoversTier1:
 def _make_index(tmp_path, active_row_body: str | None = None) -> pathlib.Path:
     """Build a minimal INDEX.md fixture with the right table shape.
 
-    `active_row_body` is the body of the second cell in the Active Sprint
-    Plans row — typically a string with one or more `[`name`](href)` links.
+    `active_row_body` is the body of the cell that carries the active-plan
+    links — typically a string with one or more `[`name`](href)` links.
     Pass None to omit the row entirely (tests the "missing row" warning).
+
+    The row mirrors the REAL docs/INDEX.md layout: a leading
+    `**Active sprint plans**` label cell, then the literal
+    `sprint_<N>_<slug>_plan.md` template token and the active-plan links in
+    the SECOND cell. The original fixture put the literal in the first cell,
+    which the old anchor matched — but the real INDEX never had that shape,
+    so CI stayed green while the checker warned in production
+    (bd polyglot-pdf-rt4). Keeping the fixture faithful is what closes that gap.
     """
     head = "# docs/ — Master Index\n\n## Architecture & process\n\n"
     head += "| File | Purpose |\n|------|---------|\n"
     head += "| [`technical_guide.md`](technical_guide.md) | Stuff |\n"
     if active_row_body is not None:
-        head += f"| `sprint_<N>_<slug>_plan.md` | {active_row_body} |\n"
+        head += (
+            f"| **Active sprint plans** | `sprint_<N>_<slug>_plan.md` -- "
+            f"{active_row_body} |\n"
+        )
     head += "| [`product_vision.md`](product_vision.md) | Stuff |\n"
     p = tmp_path / "INDEX.md"
     p.write_text(head, encoding="utf-8")
@@ -322,6 +333,21 @@ class TestParseActivePlansFromIndex:
         assert active == set()
         assert warnings
         assert "not found" in warnings[0].lower()
+
+    def test_real_index_row_parses_without_warning(self):
+        """Regression for bd polyglot-pdf-rt4: the live docs/INDEX.md row
+        leads with a `**Active sprint plans**` label cell and carries the
+        literal in the second cell. The old anchor (start-of-row + literal)
+        never matched it, so the checker always warned in production while
+        this suite stayed green. Run the parser against the REAL file so a
+        future row-shape change that breaks the anchor fails CI here."""
+        real_index = freshness.REPO_ROOT / "docs" / "INDEX.md"
+        if not real_index.is_file():
+            import pytest
+            pytest.skip("docs/INDEX.md not present in this checkout")
+        active, warnings = freshness.parse_active_plans_from_index(real_index)
+        # The row must be found and parsed -- no "missing row" warning.
+        assert warnings == [], f"unexpected warnings parsing real INDEX.md: {warnings}"
 
 
 class TestCheckSprintArchive:

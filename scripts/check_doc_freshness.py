@@ -126,9 +126,16 @@ TIER1_DOCS = [
 INDEX_MD = REPO_ROOT / "docs" / "INDEX.md"
 DOCS_DIR = REPO_ROOT / "docs"
 # The "Active sprint plans" row in INDEX.md's "Architecture & process" table.
-# Match the whole row by anchoring on the literal `sprint_<N>_<slug>_plan.md` cell.
+# Match the whole row by anchoring on the literal `sprint_<N>_<slug>_plan.md`
+# cell WHEREVER it appears in the row. The real INDEX.md row leads with a
+# `**Active sprint plans**` label cell and carries the literal in the SECOND
+# cell, so the old anchor (start-of-row immediately followed by the literal)
+# never matched and the checker always warned (bd polyglot-pdf-rt4). We now
+# require the literal to follow a cell boundary (`|` + optional whitespace)
+# anywhere in a table row -- that keeps it a real cell (not prose mentioning
+# the template name) while being position-agnostic.
 ACTIVE_PLAN_ROW_RE = re.compile(
-    r"^\|\s*`sprint_<N>_<slug>_plan\.md`\s*\|.*$",
+    r"^\|(?:.*\|)?\s*`sprint_<N>_<slug>_plan\.md`.*$",
     re.MULTILINE,
 )
 # Within that row, pull out plan basenames from `](...)` href targets.
