@@ -358,19 +358,29 @@ def test_issue_comment_nonapproval_round_is_comments(capsys, monkeypatch):
 
 # --- bd polyglot-pdf-x8o: inline-findings-first (acknowledgment prose != COMMENTS) ---
 
-def test_acknowledgment_prose_with_changeask_word_no_inline_is_clean(capsys, monkeypatch):
-    # THE bd-x8o regression (PR #48 r2): a no-findings ACKNOWLEDGMENT whose prose
-    # contains a change-ask word ("the issues the reviewer raised were already
-    # addressed") must be CLEAN when there is no NEW inline finding -- the prose
-    # must not flip a clean round to COMMENTS.
-    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
-              "body": "The two issues the reviewer raised were already addressed "
-                      "in the second commit. The guard now also covers attr access "
-                      "so it would catch a regression. All tests pass."}]
+def test_quoted_trigger_please_does_not_trip_changeask(capsys, monkeypatch):
+    # THE bd-x8o root cause (PR #48 r2 verbatim shape): Copilot echoes the trigger
+    # as a blockquote `> @copilot please review`, and that quoted "please" tripped
+    # _has_change_ask -> false COMMENTS. With quote-stripping + no new inline
+    # finding, the acknowledgment is CLEAN.
+    body = (
+        "> @copilot please review\n\n"
+        "The two issues the reviewer raised were already addressed in the second "
+        "commit. All guard tests pass; zero remaining print() PII sinks."
+    )
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z", "body": body}]
     rc, result = _run_watch_result(
         capsys, monkeypatch, reviews=[], issue=issue, inline=[],
         timeline=[_reviewed_event()])
     assert (rc, result) == (0, "CLEAN")
+
+
+def test_strip_quotes_removes_blockquote_lines():
+    assert cw._strip_quotes("> @copilot please review\n\nNo change-ask here.") == (
+        "\nNo change-ask here."
+    )
+    assert cw._strip_quotes("  > indented quote\nkept") == "kept"
+    assert cw._strip_quotes("no quotes at all") == "no quotes at all"
 
 
 def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
@@ -387,22 +397,22 @@ def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
     assert (rc, result) == (0, "COMMENTS")
 
 
-def test_changeask_prose_with_stale_inline_but_no_new_finding_is_clean(capsys, monkeypatch):
-    # Copilot left an inline comment in a PRIOR round (created before `since`), and
-    # this round only posts acknowledgment prose containing a change-ask word.
-    # No NEW inline finding -> CLEAN. The prose fallback must NOT fire, because
-    # Copilot DOES review via inline comments here (so absence of a new one decides).
+def test_genuine_prose_ask_with_stale_inline_is_comments(capsys, monkeypatch):
+    # FALSE-CLEAN guard (fresh-eyes must-fix on PR #49): a GENUINE round-2 prose
+    # ask ("please also fix the off-by-one") with NO new inline finding, on a PR
+    # that already has a PRIOR-round inline comment, must be COMMENTS -- the
+    # change-ask path is ungated, so prior inline history does NOT suppress it.
     since = cw._parse_iso("2026-05-28T12:00:00Z")
     issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:05:00Z",
-              "body": "The previously raised issue should now be resolved; please "
-                      "confirm. Nothing else."}]
+              "body": "> @copilot please review\n\nPlease also fix the off-by-one "
+                      "at line 42 before merge."}]
     inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T11:00:00Z",
                "path": "app/x.py", "position": 2, "line": 5, "body": "prior-round ask"}]
     _patch_api(monkeypatch, reviews=[], issue=issue, inline=inline,
                timeline=[_reviewed_event("2026-05-28T12:04:00Z")])
     rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=since)
     out = capsys.readouterr().out
-    assert rc == 0 and "RESULT: CLEAN" in out
+    assert rc == 0 and "RESULT: COMMENTS" in out
 
 
 def test_prose_only_changeask_no_inline_anywhere_is_comments(capsys, monkeypatch):

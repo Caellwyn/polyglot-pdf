@@ -9,43 +9,46 @@ tags: [review, conventions]
 
 The maintainer, mid-closeout on PR #48, hit the false-COMMENTS babysitting again
 and asked "how do I prevent this from happening again?" On PR #48 round 2, Copilot
-posted a no-findings **acknowledgment** — *"the two issues the reviewer **raised**
-were already addressed in c0e8b86… all tests pass"* — and `copilot_watch`
-classified it COMMENTS. The verdict was a false positive: zero new inline findings
-existed that round; the watcher only tripped because the acknowledgment prose
-contained a `_CHANGE_ASK_SIGNALS` word (`raised`). This is the same unbounded-NL
-whack-a-mole the earlier `gzy`/`ztk` work moved off the approval *allowlist* — it
-had just relocated to the change-ask *denylist*.
+posted a no-findings acknowledgment and `copilot_watch` classified it COMMENTS — a
+false positive (zero new inline findings that round).
+
+**The root cause, pinned during review** (initial theory was wrong): Copilot's
+re-review issue comment opens by **echoing the trigger as a blockquote** —
+`> @copilot please review` — and the quoted **"please"** tripped
+`_has_change_ask`. It was never Copilot's own prose asking for a change; it was our
+own trigger, quoted back. (The initial fix — gating the change-ask fallback on
+inline-comment history — was a wrong turn that fresh-eyes correctly flagged as a
+false-CLEAN regression; see What shipped.)
 
 ## What shipped
 
-Re-ordered `_classify_issue_comment_round` to be **inline-findings-first**: the
-verdict now rests on the structural fact Copilot can't reword away — *did it leave
-a new actionable inline comment on the current diff this round?* — instead of
-matching prose. New order:
+Two changes to `_classify_issue_comment_round`:
 
-1. ERROR body → ERROR.
-2. **a NEW actionable inline finding this round → COMMENTS** (the only primary
-   COMMENTS trigger).
-3. exact `LGTM` / known approval phrase → CLEAN (fast path).
-4. **fallback, only when Copilot left NO inline comments at all on the PR**:
-   change-ask prose → COMMENTS (a genuine prose-only "please fix X" with no
-   anchor is still caught).
-5. else → CLEAN (approval by absence of any actionable finding).
+1. **Quote-stripping (the actual fix).** New `_strip_quotes()` removes `>`-prefixed
+   blockquote lines before any prose analysis (change-ask *and* approval), so the
+   echoed `> @copilot please review` trigger can't masquerade as Copilot asking for
+   a change. This is what fixes the PR #48 case at its root.
+2. **Inline-findings-first ordering.** A NEW actionable inline finding this round is
+   the primary COMMENTS trigger (checked before the prose heuristics), since a real
+   "please change X" from Copilot is an inline comment on the diff regardless of the
+   summary wording. Final order: ERROR → new inline finding → exact-LGTM/approval →
+   change-ask prose (quote-stripped, **ungated**) → else CLEAN.
 
-The key change vs the prior version: the change-ask-prose check used to run
-*before* the inline check and short-circuited to COMMENTS, so an acknowledgment
-with a stray change-ask word never reached the inline check. Now inline findings
-lead, and prose only decides in the narrow case where Copilot reviews entirely via
-prose (no inline comments anywhere) — gated by a new `_has_any_copilot_inline`
-helper so a *stale prior-round* inline comment doesn't let this round's prose
-re-open a clean round.
+**The review caught a wrong turn.** My first attempt gated the change-ask fallback
+on `_has_any_copilot_inline` (only let prose decide if Copilot had never left an
+inline comment). Fresh-eyes (PR #49) flagged this as a **false-CLEAN**: a genuine
+round-2 prose ask ("please also fix the off-by-one") on a PR with prior-round
+inline comments would be suppressed → read CLEAN. Correct, and dangerous. Removed
+the gate entirely — once quote-stripping fixes the real cause, the change-ask path
+can stay ungated (safe default: a real prose ask is always COMMENTS). This also
+moots Copilot's separate note about the gate's redundant API call.
 
-Verified end-to-end by replaying PR #48's **real** round-2 acknowledgment (with the
-real round-1 inline finding floored out by `--since`): old logic → COMMENTS, new
-logic → **CLEAN**. 4 new tests (the acknowledgment regression, inline-beats-prose,
-stale-inline-doesn't-reopen, and the legitimate prose-only-ask fallback). Full
-`tests/test_copilot_watch.py`: 74 passing.
+Verified both directions on PR #48's **real** round-2 body: the quoted-trigger
+acknowledgment → change-ask false after stripping → **CLEAN**; a genuine
+quote-prefixed prose ask → change-ask true → **COMMENTS**. Tests: the quoted-
+trigger regression, `_strip_quotes` unit cases, inline-beats-prose, the
+false-CLEAN guard (genuine prose ask + stale inline → COMMENTS), and the
+prose-only-ask fallback. Full `tests/test_copilot_watch.py`: 75 passing.
 
 No findings deferred.
 
@@ -69,8 +72,9 @@ unaffected.
 
 ## Files touched
 
-- `scripts/copilot_watch.py` — inline-findings-first `_classify_issue_comment_round`;
-  new `_has_any_copilot_inline` helper gating the prose fallback
-- `tests/test_copilot_watch.py` — 4 new tests for the acknowledgment regression +
-  fallback gating
+- `scripts/copilot_watch.py` — new `_strip_quotes()` (drop echoed-trigger
+  blockquotes before prose analysis); inline-findings-first, ungated change-ask
+  `_classify_issue_comment_round`
+- `tests/test_copilot_watch.py` — tests for the quoted-trigger regression,
+  `_strip_quotes`, inline-beats-prose, the false-CLEAN guard, prose-only fallback
 - `docs/journal/entries/2026-06-01-bd-x8o-copilot-watch-classify-issue-comment-rounds-by.md` — this entry
