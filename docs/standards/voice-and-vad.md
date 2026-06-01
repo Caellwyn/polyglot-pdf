@@ -14,16 +14,20 @@ is in [ai-models.md](ai-models.md).
 `DISABLE_GEMINI_VAD = True` in `backend/config.py` — and it's marked CRITICAL.
 The backend turns **off** Gemini's automatic activity detection and instead sends
 **manual** `activity_start` / `activity_end` signals driven by the frontend's own
-client-side VAD (Silero, see below). Concretely, in the adapter's `connect()` config:
+client-side VAD (Silero, see below). The adapter builds the config in
+`LiveAIGemini._build_vad_settings(settings)` (called from `_run_session_loop`):
 
 ```python
+# LiveAIGemini._build_vad_settings, schematic
 if settings.DISABLE_GEMINI_VAD:
-    vad_settings['disabled'] = True
-else:
-    # sensitivity / padding knobs only when Gemini's auto-VAD is ENABLED
-    ...
-config["realtime_input_config"] = {"automatic_activity_detection": vad_settings}
+    return {'disabled': True}          # default mode: ONLY this key
+# else: Gemini auto-VAD enabled — pass through the sensitivity / padding knobs
+#       (start_of_speech_sensitivity, end_of_speech_sensitivity,
+#        prefix_padding_ms, silence_duration_ms) that are set.
 ```
+
+The return value is placed at
+`config["realtime_input_config"]["automatic_activity_detection"]`.
 
 The frontend VAD (`useDemoVAD.ts`) detects speech boundaries and fires
 `connection.ts` `onVADSpeechStart` / `onVADSpeechEnd`, which relay
@@ -38,7 +42,7 @@ chunks for that utterance; `activity_end` flushes Gemini's buffer after.
 > `VAD_END_SENSITIVITY`, `VAD_PREFIX_PADDING_MS`, `VAD_SILENCE_DURATION_MS` in
 > config.py) are sent **only when `DISABLE_GEMINI_VAD = False`** — i.e. when
 > Gemini's automatic detection is enabled. In the current default mode
-> (`disabled = True`) the connect config sends **only** `{disabled: True}` and
+> (`disabled = True`) the connect config sends **only** `{'disabled': True}` and
 > omits these fields entirely. This is mandatory: the Live API rejects (1007) a
 > config that sets `disabled = True` *and* any sensitivity/padding field
 > together. The knobs are kept for the fallback of re-enabling Gemini VAD (e.g.

@@ -441,6 +441,19 @@ def test_vad_enabled_sends_sensitivity_fields_and_no_disabled():
     assert result["silence_duration_ms"] == 500
 
 
+def test_vad_enabled_maps_mixed_sensitivity_values():
+    """HIGH/LOW map to the right enum members per axis (catches a prefix mixup)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from google.genai import types
+
+    result = LiveAIGemini._build_vad_settings(
+        _vad_settings(disabled=False, start="HIGH", end="LOW")
+    )
+
+    assert result["start_of_speech_sensitivity"] == types.StartSensitivity.START_SENSITIVITY_HIGH
+    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_LOW
+
+
 def test_vad_enabled_omits_unspecified_and_none_knobs():
     """Enabled VAD with no usable knobs yields {} (Gemini uses its defaults)."""
     from backend.adapters.live_ai_gemini import LiveAIGemini

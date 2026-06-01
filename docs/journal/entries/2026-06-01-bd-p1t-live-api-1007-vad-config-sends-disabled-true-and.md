@@ -7,8 +7,9 @@ tags: [hotfix, refactor, testing]
 
 ## Trigger
 
-`bd polyglot-pdf-p1t` (P2 bug). Discovered 2026-05-31 while running the tak
-token-cost spike against the real Live API: the adapter's VAD-config builder set
+`bd polyglot-pdf-p1t` (P2 bug). Discovered 2026-05-31 while running the
+token-cost spike (`bd polyglot-pdf-tak`) against the real Live API: the adapter's
+VAD-config builder set
 `automatic_activity_detection.disabled=True` (when `DISABLE_GEMINI_VAD=True`, the
 default) and then *unconditionally* also appended `start_of_speech_sensitivity`,
 `end_of_speech_sensitivity`, `prefix_padding_ms`, and `silence_duration_ms` from
@@ -26,7 +27,7 @@ changes), so this was scoped as a standalone fix to land before the next deploy.
   assembly (previously inline, buried mid-way through the long async
   `_run_session_loop`) into a pure `@staticmethod _build_vad_settings(settings)`.
   The fix is an either/or gate: when `DISABLE_GEMINI_VAD` is true, return **only**
-  `{disabled: True}`; the sensitivity/padding knobs are emitted **only** when
+  `{'disabled': True}`; the sensitivity/padding knobs are emitted **only** when
   Gemini auto-VAD is enabled. Behavior otherwise preserved (enabled-with-no-knobs
   still yields `{}` so Gemini uses its own defaults).
 - **Scope decision** (maintainer-steered): focused VAD-helper extraction only, not
@@ -38,8 +39,20 @@ changes), so this was scoped as a standalone fix to land before the next deploy.
   the now-fixed "knobs are wired in but inert" behavior, which was the bug. Updated
   the code snippet and the callout to state the 1007 either/or constraint.
 - **3 regression tests** in `backend/tests/unit/test_live_ai_gemini.py` pinning the
-  contract: disabled⇒`{disabled:True}` only; enabled⇒sensitivity fields with no
+  contract: disabled⇒`{'disabled': True}` only; enabled⇒sensitivity fields with no
   `disabled`; enabled-with-UNSPECIFIED/None⇒`{}`.
+
+### Review triage (PR #36)
+
+- **Fresh-eyes:** adopted — strengthened the enabled-VAD test with a HIGH/LOW
+  mixed-sensitivity case; reworked the `voice-and-vad.md` snippet to match the
+  actual `_build_vad_settings` early-return shape. Deferred — the swallowed
+  `KeyError` on an invalid `VAD_*_SENSITIVITY` value (drops the whole
+  `realtime_input_config`) is pre-existing and out of scope, filed as
+  `bd polyglot-pdf-u01`.
+- **Copilot (round 1):** adopted — fixed the non-literal `{disabled: True}` →
+  `{'disabled': True}` in the doc callout and journal. Rejected — "tak" is not a
+  typo; it is the real spike bead (`bd polyglot-pdf-tak`), now spelled out.
 
 ## Lessons
 
