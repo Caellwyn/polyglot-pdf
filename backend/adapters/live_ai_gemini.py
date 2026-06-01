@@ -1167,18 +1167,20 @@ class LiveAIGemini(ILiveAI):
                                                 )
 
                                     if responses:
-                                        # Log tool responses being sent to Gemini (for token analysis)
-                                        print(f"\n{'='*80}")
-                                        print(f"📤 TOOL RESPONSE → Gemini")
-                                        print(f"{'='*80}")
+                                        # Log tool responses being sent to Gemini, for token analysis ONLY.
+                                        # NEVER print resp.response -- a tool response (e.g. get_field_value /
+                                        # get_form_status) can carry field VALUES = PII/PHI, and stdout ->
+                                        # Cloud Run logs (bd polyglot-pdf-oeq). Log the tool name + response
+                                        # SIZE (char/estimated-token count), never the body.
                                         for resp in responses:
-                                            print(f"Tool: {resp.name}")
-                                            print(f"Response: {resp.response}")
-                                            # Estimate token count (rough: 1 token ≈ 4 chars)
                                             response_str = str(resp.response)
-                                            estimated_tokens = len(response_str) // 4
-                                            print(f"Estimated tokens: ~{estimated_tokens} ({len(response_str)} chars)")
-                                        print(f"{'='*80}\n")
+                                            estimated_tokens = len(response_str) // 4  # rough: 1 token ≈ 4 chars
+                                            self._log.info(
+                                                "tool_response_sent",
+                                                tool=resp.name,
+                                                response_chars=len(response_str),
+                                                estimated_tokens=estimated_tokens,
+                                            )
 
                                         await session.send_tool_response(function_responses=responses)
                                         # Don't send additional prompts - just let Gemini process the tool responses

@@ -118,36 +118,64 @@ def _scan_leaks(text: str):
 
 # Sensitive identifiers that must never be interpolated into a positional sink
 # like print(). `_log.*(...)` kwargs are covered by _scan_leaks above; this is
-# the OTHER class of leak (bd polyglot-pdf-oeq): a bare
-# `print(f"Arguments: {arguments}")` dumps the whole tool-call args (= field
-# values) to stdout -> Cloud Run logs. We flag a sensitive var interpolated into
-# an f-string; safe-metadata names (tool_name, *_id, *_count, ...) are fine.
+# the OTHER class of leak (bd polyglot-pdf-oeq): `print(f"Arguments: {arguments}")`
+# dumps the whole tool-call args, and `print(f"Response: {resp.response}")` dumps a
+# tool response (get_field_value / get_form_status can carry field VALUES) -- both
+# to stdout -> Cloud Run logs. We flag a sensitive base name interpolated into an
+# f-string, INCLUDING when it is the base of an attribute/index/call access
+# (`resp.response`, `args["k"]`, `x.value`). Safe-metadata names (tool_name,
+# *_id, *_count, ...) are not in the list, so `{tool_name}`/`{arg_count}` are fine.
+# This list is the print-sink counterpart of _SENSITIVE_KWARGS; keep them roughly
+# aligned, and add the response/payload-style names a print is more apt to dump.
 _SENSITIVE_IDENTS = (
     "arguments", "args", "value", "values", "selected_value", "selected_values",
-    "target_value", "original_value", "message", "text", "transcript",
-    "field_values", "current_values", "system_instruction", "payload",
+    "target_value", "original_value", "message", "text", "text_preview",
+    "transcript", "sample", "available_options", "system_instruction",
+    "field_values", "current_values", "payload", "response", "resp", "state",
 )
-# An f-string interpolation `{<sensitive>}` or `{<sensitive>[...]/.attr/(...)}` --
-# a word boundary before the name avoids matching e.g. `field_values_count`.
+# A `{...}` interpolation whose expression references a sensitive base name --
+# either bare (`{value}`) or as the base of `.attr` / `[idx]` / `(...)`
+# (`{resp.response}`, `{args['k']}`). The base name is bounded by `{` or non-word
+# on the left and by a non-word char (`.`/`[`/`(`/`}`/space) on the right, so
+# `field_values_count` (a metadata name) does NOT match.
 _FSTRING_SENSITIVE = re.compile(
-    r"\{[^{}]*\b(?:" + "|".join(re.escape(i) for i in _SENSITIVE_IDENTS) + r")\b[^{}]*\}"
+    r"\{[^{}]*?(?<![\w.])(?:" + "|".join(re.escape(i) for i in _SENSITIVE_IDENTS) + r")\b[^{}]*\}"
 )
-_PRINT_CALL = re.compile(r"\bprint\s*\(")
+_PRINT_CALL = re.compile(r"(?:^|[^\w.])print\s*\(")
 
 
 def _scan_print_leaks(text: str):
     """Return [(lineno, line)] for print() calls interpolating a sensitive var.
 
-    Only flags a print whose argument f-string interpolates one of
-    _SENSITIVE_IDENTS. Comments are stripped first so a redaction note can't
-    false-positive. A safe-metadata interpolation (`{tool_name}`, `{arg_count}`)
-    does not match because those names aren't in _SENSITIVE_IDENTS.
+    Depth-tracks MULTI-LINE print() calls (like _scan_leaks does for _log.*), so a
+    `print(\\n    f"{arguments}")` split across lines is still caught. Flags a print
+    whose f-string interpolates a sensitive base name (bare or `.attr`/`[idx]`).
+    Comments are stripped first so a redaction note can't false-positive; a
+    safe-metadata interpolation (`{tool_name}`, `{arg_count}`) does not match.
     """
     offenders = []
+    depth = 0           # open-paren depth of the current print() call, 0 = not in one
+    start_lineno = 0    # line where the current print() opened
+    start_raw = ""
+    flagged = False     # whether a sensitive interpolation was seen in this call
     for lineno, raw in enumerate(text.splitlines(), 1):
         code = raw.split("#", 1)[0]
-        if _PRINT_CALL.search(code) and _FSTRING_SENSITIVE.search(code):
-            offenders.append((lineno, raw.strip()))
+        if depth == 0:
+            m = _PRINT_CALL.search(code)
+            if not m:
+                continue
+            depth = 1
+            start_lineno, start_raw, flagged = lineno, raw, False
+            code_after = code[m.end():]
+        else:
+            code_after = code
+        if _FSTRING_SENSITIVE.search(code_after):
+            flagged = True
+        depth += code_after.count("(") - code_after.count(")")
+        if depth <= 0:  # the print() call closed
+            if flagged:
+                offenders.append((start_lineno, start_raw.strip()))
+            depth = 0
     return offenders
 
 
@@ -192,12 +220,24 @@ def test_guard_catches_print_leaks():
     assert _scan_print_leaks('print(f"value={value}")')
     assert _scan_print_leaks("print(f'transcript: {transcript[:50]}')")
     assert _scan_print_leaks('print(f"{field_values}")')
+    # ATTRIBUTE/INDEX access on a sensitive base must flag (the live_ai_gemini.py
+    # `print(f"Response: {resp.response}")` leak Copilot found on PR #48).
+    assert _scan_print_leaks('print(f"Response: {resp.response}")')
+    assert _scan_print_leaks('print(f"{args[\'field_id\']}")')
+    assert _scan_print_leaks('print(f"{value.upper()}")')
+    # MULTI-LINE print() call with the sensitive interpolation on a later line.
+    assert _scan_print_leaks('print(\n    f"Response: {resp.response}"\n)')
     # Safe: interpolating only metadata names must NOT flag.
     assert not _scan_print_leaks('print(f"Tool: {tool_name}")')
     assert not _scan_print_leaks('print(f"arg_count={arg_count}")')
     assert not _scan_print_leaks("print(f\"{'='*80}\")")
-    # A word-boundaried near-miss name must NOT flag (field_values_count is meta).
+    assert not _scan_print_leaks('print(f"chars={response_chars}, ~{estimated_tokens} tokens")')
+    # A word-boundaried near-miss name must NOT flag (field_values_count is meta;
+    # response_chars/response_str share the `response` prefix but are metadata).
     assert not _scan_print_leaks('print(f"{field_values_count}")')
+    assert not _scan_print_leaks('print(f"{response_chars}")')
+    # `pprint(...)` must not be mistaken for `print(...)` (word-boundary on print).
+    assert not _scan_print_leaks('pprint(f"{summary}")')
     # A non-print line interpolating a value must NOT be caught here (that's the
     # _log scanner's job, or it's a legitimate assignment).
     assert not _scan_print_leaks('result = f"...{value}"')
