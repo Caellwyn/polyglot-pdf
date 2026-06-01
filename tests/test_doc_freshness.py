@@ -348,6 +348,20 @@ class TestParseActivePlansFromIndex:
         active, warnings = freshness.parse_active_plans_from_index(real_index)
         # The row must be found and parsed -- no "missing row" warning.
         assert warnings == [], f"unexpected warnings parsing real INDEX.md: {warnings}"
+        # ...and href extraction must actually pull active plans out when the
+        # row links any. Asserting only `warnings == []` would let a broken
+        # PLAN_HREF_RE (or a changed link format) leave `active` empty while
+        # warnings stay clean -- the sprint-archive check would silently become
+        # a no-op (fresh-eyes finding on PR #46). Tie the assertion to reality
+        # (sprint plans actually present at docs/ root) rather than a hardcoded
+        # name, so this stays correct between sprints (when none are active).
+        root_plans = freshness.find_root_sprint_plans(real_index.parent)
+        if root_plans:
+            assert active, (
+                "INDEX row parsed but extracted no active plan basenames while "
+                f"{sorted(root_plans)} exist at docs/ root -- PLAN_HREF_RE or the "
+                "INDEX link format may have changed"
+            )
 
 
 class TestCheckSprintArchive:

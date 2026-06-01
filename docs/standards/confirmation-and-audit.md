@@ -20,8 +20,12 @@ call the `confirm_field` tool after filling each field (the tool is declared in
 intentionally **not** in this doc's `**Tracks:**` line — it's a large, frequently
 churned file (model + pricing config live there too), so tracking it whole flagged
 this doc as stale on every unrelated config edit; a real change to the `confirm_field`
-tool travels with a `callback_handler.py` change (the handler parses its args), which
-*is* tracked. The two confirmation methods:
+tool usually travels with a `callback_handler.py` change (the handler parses its args),
+which *is* tracked. **Accepted gap:** the `confirmation_method` enum (`verbal` /
+`manual`) is declared *only* in `config.py`'s tool schema, so changing the enum's
+allowed values there *without* touching `callback_handler.py` would not re-stamp this
+doc (the handler reads the arg without validating against the enum). If you edit that
+enum, re-check this section by hand. The two confirmation methods:
 
 - **`verbal`** — the user said "yes" to the proposed value.
 - **`manual`** — the user typed/selected the value directly.
