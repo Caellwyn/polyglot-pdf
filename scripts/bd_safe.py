@@ -10,8 +10,11 @@ CLAUDE.md mandates a strict cadence around every beads write:
     claim the same bead because neither saw the other's claim).
   - Before claiming a bead, run TWO collision checks so a bead another
     worker is mid-flight on is not re-claimed:
-      1. gh pr list --search "<full-id>" --state all   (PR titles carry the
-         full bead ID per CLAUDE.md rule R4)
+      1. gh pr list --search "<full-id>" --state OPEN, then confirm the id is
+         in the PR TITLE (PR titles carry the full bead ID per CLAUDE.md rule
+         R4). Open-only + title-match avoids two false positives: a merged PR
+         blocking the bead forever, and a PR whose BODY merely mentions the
+         bead as a deferred/related finding (bd polyglot-pdf-9pe).
       2. git branch -a | grep "<id-suffix>"            (branches carry the
          suffix only, e.g. "ab12")
   - Dependency direction is easy to invert (scar tissue rule 13): the FIRST
@@ -50,6 +53,7 @@ met; 2 a claim was ABORTED by a collision (distinct so a caller can tell
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -151,27 +155,60 @@ def _id_suffix(bead_id: str) -> str:
 
 
 def _pr_collision(bead_id: str, repo: str) -> str | None:
-    """Return non-empty PR-list output if a PR already carries this bead id.
+    """Return a one-line PR description if an OPEN PR's TITLE carries this bead id.
 
-    Searches by the FULL bead id (PR titles carry it, per rule R4). A match
-    means another worker is mid-flight; the caller must NOT re-claim.
+    A collision means another worker is actively mid-flight; the caller must NOT
+    re-claim. Two scoping rules keep this precise (bd polyglot-pdf-9pe):
+
+      - **OPEN PRs only** (`--state open`). A merged/closed PR is finished work,
+        not a live claim -- `--state all` made a long-dead PR block the bead
+        forever.
+      - **Title match, not full-text.** `gh pr list --search` is GitHub
+        full-text and matches the id ANYWHERE, including a PR body that merely
+        *mentions* the bead as a deferred/related finding (which is exactly how
+        9pe got false-blocked by the merged PR that filed it). PR titles carry
+        the id by convention (rule R4: `... (bd <full-id>)`), so we confirm the
+        id is in the TITLE before calling it a collision. The `--search` term is
+        QUOTED so GitHub treats the hyphenated id as one phrase rather than
+        OR-ing its hyphen-split tokens; it only narrows the server-side fetch,
+        so a loose match there is harmless -- the title check below is the
+        authoritative filter.
+
+    The title match requires an id BOUNDARY (the id is not immediately followed
+    by another id char: alnum / `.` / `_` / `-`), so a shorter id is not a false
+    positive for a longer one that has it as a prefix -- e.g. `...-ab1` must not
+    match a title carrying `...-ab12` (fresh-eyes finding on PR #47).
     """
     proc = _run(
-        ["gh", "pr", "list", "--search", bead_id, "--state", "all",
-         "--repo", repo],
+        ["gh", "pr", "list", "--search", '"{}"'.format(bead_id), "--state",
+         "open", "--json", "number,title", "--repo", repo],
         check=False,
     )
-    # `gh pr list` exits 0 with empty stdout when nothing matches. A non-zero
-    # exit here is a real tooling failure (auth, network) -- surface it rather
-    # than treating "the check could not run" as "no collision".
+    # `gh pr list` exits 0 with `[]` when nothing matches. A non-zero exit here
+    # is a real tooling failure (auth, network) -- surface it rather than
+    # treating "the check could not run" as "no collision".
     if proc.returncode != 0:
         raise RuntimeError(
             "gh pr list collision check failed: {}".format(
                 (proc.stderr or "").strip() or "no stderr"
             )
         )
-    out = proc.stdout.strip()
-    return out or None
+    try:
+        prs = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "gh pr list returned unparseable JSON: {}".format(exc)
+        )
+    # Authoritative filter: the bead id must appear in the PR TITLE as a whole
+    # id, not as a prefix of a longer id. `(?!...)` rejects a trailing id char
+    # so `polyglot-pdf-ab1` does not match a title carrying `polyglot-pdf-ab12`.
+    needle = re.compile(re.escape(bead_id) + r"(?![0-9A-Za-z._-])", re.IGNORECASE)
+    hits = [pr for pr in prs if needle.search(pr.get("title") or "")]
+    if not hits:
+        return None
+    return "; ".join(
+        "#{}\t{}".format(pr.get("number"), pr.get("title")) for pr in hits
+    )
 
 
 def _current_branch() -> str | None:
