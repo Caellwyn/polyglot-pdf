@@ -196,6 +196,8 @@ export interface FormField {
   show_if?: ConditionalDisplay;
   controls_fields?: ConditionalControl[];
   conditional_behavior?: ConditionalBehavior;
+  /** Legacy alias for conditional_behavior; still emitted by generated form-kit schemas. */
+  conditional_logic?: ConditionalBehavior;
   conditional_fields?: string[]; // DEPRECATED: Use controls_fields
 
   // Help and guidance
