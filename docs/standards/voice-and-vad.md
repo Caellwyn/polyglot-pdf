@@ -19,6 +19,9 @@ client-side VAD (Silero, see below). Concretely, in the adapter's `connect()` co
 ```python
 if settings.DISABLE_GEMINI_VAD:
     vad_settings['disabled'] = True
+else:
+    # sensitivity / padding knobs only when Gemini's auto-VAD is ENABLED
+    ...
 config["realtime_input_config"] = {"automatic_activity_detection": vad_settings}
 ```
 
@@ -33,9 +36,13 @@ chunks for that utterance; `activity_end` flushes Gemini's buffer after.
 
 > The Gemini-side VAD sensitivity knobs (`VAD_START_SENSITIVITY`,
 > `VAD_END_SENSITIVITY`, `VAD_PREFIX_PADDING_MS`, `VAD_SILENCE_DURATION_MS` in
-> config.py) are still wired into the connect config, but with
-> `automatic_activity_detection.disabled = True` they're inert in the current
-> default mode. They're kept for the fallback of re-enabling Gemini VAD.
+> config.py) are sent **only when `DISABLE_GEMINI_VAD = False`** — i.e. when
+> Gemini's automatic detection is enabled. In the current default mode
+> (`disabled = True`) the connect config sends **only** `{disabled: True}` and
+> omits these fields entirely. This is mandatory: the Live API rejects (1007) a
+> config that sets `disabled = True` *and* any sensitivity/padding field
+> together. The knobs are kept for the fallback of re-enabling Gemini VAD (e.g.
+> the native-VAD smoke test, bd `polyglot-pdf-333`).
 
 ## The client VAD thresholds (Silero)
 

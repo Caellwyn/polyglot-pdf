@@ -570,6 +570,38 @@ class LiveAIGemini(ILiveAI):
             # Clear session reference
             self._current_session = None
 
+    @staticmethod
+    def _build_vad_settings(settings) -> Dict[str, Any]:
+        """Build the ``automatic_activity_detection`` config from settings.
+
+        The Live API REJECTS (close code 1007) a config that sets
+        ``disabled=True`` AND any of the sensitivity/padding fields together.
+        So this is a hard either/or:
+
+        - VAD disabled (``DISABLE_GEMINI_VAD=True``, the default): return ONLY
+          ``{'disabled': True}``. We drive turn-taking with manual
+          ``activity_start`` / ``activity_end`` signals instead — see
+          ``docs/standards/voice-and-vad.md``.
+        - VAD enabled: omit ``disabled`` and pass through whichever
+          sensitivity/padding knobs (``VAD_*``) are configured.
+
+        Returns ``{}`` when VAD is enabled but no knobs are set (Gemini then
+        uses its own defaults). bd polyglot-pdf-p1t
+        """
+        if settings.DISABLE_GEMINI_VAD:
+            return {'disabled': True}
+
+        vad_settings: Dict[str, Any] = {}
+        if settings.VAD_START_SENSITIVITY and settings.VAD_START_SENSITIVITY != 'UNSPECIFIED':
+            vad_settings['start_of_speech_sensitivity'] = types.StartSensitivity[f"START_SENSITIVITY_{settings.VAD_START_SENSITIVITY}"]
+        if settings.VAD_END_SENSITIVITY and settings.VAD_END_SENSITIVITY != 'UNSPECIFIED':
+            vad_settings['end_of_speech_sensitivity'] = types.EndSensitivity[f"END_SENSITIVITY_{settings.VAD_END_SENSITIVITY}"]
+        if settings.VAD_PREFIX_PADDING_MS is not None:
+            vad_settings['prefix_padding_ms'] = settings.VAD_PREFIX_PADDING_MS
+        if settings.VAD_SILENCE_DURATION_MS is not None:
+            vad_settings['silence_duration_ms'] = settings.VAD_SILENCE_DURATION_MS
+        return vad_settings
+
     async def _run_session_loop(self):
         """Background loop that connects to Gemini Live and handles audio and events.
 
@@ -628,30 +660,8 @@ class LiveAIGemini(ILiveAI):
         # Enable automatic voice activity detection for realtime audio input
         # This allows Gemini to detect when user starts/stops speaking
         try:
-            # Build VAD settings from config (settings already loaded at top of function)
-            vad_settings = {}
-            
-            # Build VAD settings from config
-            if settings.DISABLE_GEMINI_VAD:
-                vad_settings['disabled'] = True
-
-            if settings.VAD_START_SENSITIVITY and settings.VAD_START_SENSITIVITY != 'UNSPECIFIED':
-                vad_settings['start_of_speech_sensitivity'] = types.StartSensitivity[f"START_SENSITIVITY_{settings.VAD_START_SENSITIVITY}"]
-            
-            if settings.VAD_END_SENSITIVITY and settings.VAD_END_SENSITIVITY != 'UNSPECIFIED':
-                vad_settings['end_of_speech_sensitivity'] = types.EndSensitivity[f"END_SENSITIVITY_{settings.VAD_END_SENSITIVITY}"]
-            
-            if settings.VAD_PREFIX_PADDING_MS is not None:
-                vad_settings['prefix_padding_ms'] = settings.VAD_PREFIX_PADDING_MS
-            
-            if settings.VAD_SILENCE_DURATION_MS is not None:
-                vad_settings['silence_duration_ms'] = settings.VAD_SILENCE_DURATION_MS
-            
-            # Removed verbose VAD config logging
-            
-            # Apply VAD settings (use defaults if none configured)
             config["realtime_input_config"] = {
-                "automatic_activity_detection": vad_settings if vad_settings else {}
+                "automatic_activity_detection": self._build_vad_settings(settings)
             }
         except Exception as e:
             self._log.warn("failed_to_set_realtime_input_config", error=str(e))
