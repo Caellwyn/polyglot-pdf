@@ -78,7 +78,20 @@ Run the housekeeping audit (pull + orphans + stale + push):
 
 Run the freshness checker (see `docs/doc-architecture.md` for the system it enforces):
 
-!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; "$R/backend/.venv/Scripts/python.exe" "$R/scripts/check_doc_freshness.py"`
+!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; cd "$WT" && "$R/backend/.venv/Scripts/python.exe" "$WT/scripts/check_doc_freshness.py"`
+
+**Why `$WT`, not `$R`, for this script** (`bd polyglot-pdf-9pe`): the freshness
+checker sets `REPO_ROOT` to its own location's parent and reads docs + `git`
+commit times from the cwd, so it audits whichever checkout it RUNS from. `$R`
+(the git common-dir parent) is the MAIN repo, so an `$R/scripts/...` invocation
+audits main's docs -- NOT this branch -- and silently misses stale docs the
+branch introduced (and false-flags ones the branch already fixed). Run the
+**worktree's own copy** (`$WT/scripts/...`) with cwd at `$WT` so the gate checks
+the code under review. `$R` is still correct for the venv interpreter (the venv
+lives only in the main repo) and for repo-content-agnostic scripts
+(`closeout_housekeeping.py` reads only `bd`; `copilot_watch.py` reads only the
+GitHub API). If `$WT` and `$R` are the same path, you're in the main checkout
+and both forms behave identically.
 
 For each STALE doc whose `**Tracks:**` globs cover a file THIS branch changed: update the doc's CURRENT-STATE prose and bump its `*Last updated:*` line to **today's UTC date** (`date -u +%F`), swapping any obsolete journal pointer for this sprint's per-file entry. If a stale doc tracks files your branch did NOT touch, leave it -- it was already stale before you; note that in the journal entry.
 
@@ -95,11 +108,14 @@ Scaffold the entry for this bead. Use the bead id resolved in Step 0 (NOT a
 literal `$1` -- if the skill was invoked without an argument, `$1` is empty
 and you must pass the id you inferred from the branch or were given):
 
-`REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/journal_scaffold.py" <bead-id> [--sprint N] [--pr STR]`
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/journal_scaffold.py" <bead-id> [--sprint N] [--pr STR]`
 
-NOTE: this script writes into `$REPO` (the MAIN repo), not the worktree. If
-you're in a worktree, MOVE the generated `docs/journal/entries/...md` into the
-worktree so it ships on THIS branch, and delete the stray main-repo copy.
+The script derives its write path (`docs/journal/entries/`) from its OWN
+location, so running the **worktree's copy** (`$WT/scripts/...`) writes the entry
+straight into THIS branch -- no manual move (`bd polyglot-pdf-9pe`; the venv
+interpreter still comes from `$R`, the main repo). If you instead run the
+main-repo copy (`$R/scripts/...`) the entry lands in the main checkout and you
+must move it into the worktree by hand -- prefer the `$WT` form above.
 
 (Pass `--sprint`/`--pr` only if this is a numbered sprint / multi-PR sprint; omit for hotfixes.) The script writes `docs/journal/entries/YYYY-MM-DD-bd-<suffix>-<slug>.md` with the frontmatter and the 5 empty sections.
 

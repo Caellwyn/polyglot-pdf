@@ -70,8 +70,10 @@ def test_id_suffix(bead_id, expected):
 # --- claim: collision checks gate the claim ---
 
 def test_claim_aborts_on_pr_collision(monkeypatch, capsys):
+    # An OPEN PR whose TITLE carries the bead id is a real live claim -> abort.
     recorder = _RunRecorder([
-        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="#42  some PR  open")),
+        (lambda c: c[:3] == ["gh", "pr", "list"],
+         _proc(stdout='[{"number": 42, "title": "feat: thing (bd yourturn-group-nbj1)"}]')),
     ])
     monkeypatch.setattr(bs, "_run", recorder)
     args = types.SimpleNamespace(id="yourturn-group-nbj1", repo=bs.DEFAULT_REPO)
@@ -80,6 +82,40 @@ def test_claim_aborts_on_pr_collision(monkeypatch, capsys):
     assert "ABORT" in capsys.readouterr().out
     # Must NOT have claimed.
     assert not recorder.ran("update", "--claim")
+    # The collision query must be scoped to OPEN PRs (not --state all), so a
+    # merged PR can't block the bead forever (bd polyglot-pdf-9pe).
+    assert recorder.ran("gh", "pr", "list", "--state", "open")
+    assert not recorder.ran("--state", "all")
+
+
+def test_claim_ignores_pr_that_only_mentions_bead_in_body(monkeypatch):
+    # The false positive that motivated 9pe: a (merged or open) PR that only
+    # MENTIONS the bead in its body -- e.g. as a deferred finding -- must NOT
+    # block the claim. We search open PRs, but the authoritative filter is the
+    # TITLE; a body-only mention won't appear in --json title, so even if the
+    # server-side --search surfaces the PR, the title filter drops it.
+    recorder = _RunRecorder([
+        # gh's --search matched on body text, but the title has no bead id.
+        (lambda c: c[:3] == ["gh", "pr", "list"],
+         _proc(stdout='[{"number": 46, "title": "docs: unrelated title, no bead id here"}]')),
+        (lambda c: c[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+         _proc(stdout="dev")),
+        (lambda c: c[:3] == ["git", "branch", "-a"], _proc(stdout="* dev")),
+    ])
+    monkeypatch.setattr(bs, "_run", recorder)
+    args = types.SimpleNamespace(id="yourturn-group-nbj1", repo=bs.DEFAULT_REPO)
+    rc = bs.cmd_claim(args)
+    assert rc == bs.EXIT_OK
+    assert recorder.ran("update", "--claim")  # the claim proceeded
+
+
+def test_pr_collision_returns_none_on_empty_json(monkeypatch):
+    # gh pr list --json emits "[]" (not empty string) when nothing matches.
+    recorder = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="[]")),
+    ])
+    monkeypatch.setattr(bs, "_run", recorder)
+    assert bs._pr_collision("yourturn-group-nbj1", bs.DEFAULT_REPO) is None
 
 
 def test_claim_aborts_on_branch_collision(monkeypatch, capsys):
