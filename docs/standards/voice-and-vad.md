@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/demo/useDemoVAD.ts frontend/src/vad-tuning
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -115,4 +115,4 @@ Two standing mitigations (both marked HALLUCINATION_REDUCTION in config.py):
 - **`PROACTIVE_AUDIO = False`.** Enabling it made Gemini ignore dirty/choppy audio
   but also stop calling tools — deprecated, left off.
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*

@@ -109,11 +109,11 @@
   - Clarify JIT schema integration status
   - Standardize section vs parts terminology
 
-- [ ] **Resolve terminology inconsistencies** - Parts vs Sections
-  - Standardize on "sections" for navigation
-  - Document that "parts" are organizational units in schema
-  - Update comments in VoiceOverlayMobile.tsx (line 720)
-  - Update backend token logging variable name (`current_part_id` → `current_section_id`)
+- [x] **Resolve terminology inconsistencies** - Parts vs Sections — DONE via the
+  docs-reorg epic: canon in `docs/standards/terminology.md` (`polyglot-pdf-m3f`), the
+  internal `current_part_id` → `current_section_id` backend rename in
+  `polyglot-pdf-gfb.4`. Remaining: the wire/log-format `part` keys (`polyglot-pdf-zun`)
+  and the `VoiceOverlayMobile.tsx` comment cleanup. (Tracked in beads, not here.)
 
 ---
 

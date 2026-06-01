@@ -77,13 +77,13 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    never log field values/PII/PHI server-side. See the re-orientation brief.
 5. **"Section" is the navigation unit; "part" is a real but distinct level.**
    The hierarchy is Form > Parts > Sections > Fields -- *part* is an optional
-   grouping of sections, **not** a synonym for section. The drift to avoid:
-   section-state vars mis-named `current_part_id` / `part_id` (e.g.
-   `backend/adapters/live_ai_gemini.py`). Don't add new ones. Full canon
-   (incl. field-id brackets, form-session vs session) in
-   [`docs/standards/terminology.md`](docs/standards/terminology.md)
-   (`polyglot-pdf-m3f`); the behavior-preserving rename of the holdouts is
-   tracked under `polyglot-pdf-gfb.4`.
+   grouping of sections, **not** a synonym for section. Don't name section-state
+   `current_part_id` / `part_id`. The internal holdouts have been renamed
+   (`polyglot-pdf-gfb.4`); the only remaining `part` drift is on the **wire format**
+   (the token-log payload key + the WS-handshake manifest keys), sequenced against
+   consumers under `polyglot-pdf-zun`. Full canon (incl. field-id brackets,
+   form-session vs session) in
+   [`docs/standards/terminology.md`](docs/standards/terminology.md) (`polyglot-pdf-m3f`).
 
 ---
 

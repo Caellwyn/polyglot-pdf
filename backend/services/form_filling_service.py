@@ -140,7 +140,7 @@ class FormFillingService:
                 self._live_ai.set_session_context(
                     form_session_id=form_session_id or session_id,  # Use persistent ID if available
                     form_id=form_id,
-                    current_part_id=None,  # Will be updated on section switch
+                    current_section_id=None,  # Will be updated on section switch
                 )
                 _log.info("Token logging context set successfully",
                          form_session_id=form_session_id or session_id)
