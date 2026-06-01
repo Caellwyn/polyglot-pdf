@@ -332,3 +332,65 @@ async def test_run_session_loop_dispatches_tool_calls():
     await adapter.finalize()
 
 
+def _count_summary_emits(mock_log) -> int:
+    """How many session_cost_summary lines a mocked adapter._log emitted."""
+    return sum(
+        1 for c in mock_log.info.call_args_list
+        if c.args and c.args[0] == "session_cost_summary"
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_cost_summary_emitted_once_on_finalize():
+    """finalize() emits exactly one session_cost_summary when tokens were billed."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter.set_session_context(form_session_id="fs-1", form_id="I-90")
+    # Simulate a session that billed some tokens.
+    adapter._session_total_tokens = 500
+    adapter._session_prompt_tokens = 400
+    adapter._session_total_cost = 0.0123
+    adapter._session_audio_input_tokens = 200
+
+    await adapter.finalize()
+
+    assert _count_summary_emits(adapter._log) == 1
+    summary_call = next(
+        c for c in adapter._log.info.call_args_list
+        if c.args and c.args[0] == "session_cost_summary"
+    )
+    assert summary_call.kwargs["total_tokens"] == 500
+    assert summary_call.kwargs["form_session_id"] == "fs-1"
+
+
+@pytest.mark.asyncio
+async def test_session_cost_summary_emitted_once_across_double_finalize():
+    """A second finalize() must NOT re-emit (guards downstream double-count)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._session_total_tokens = 42
+
+    await adapter.finalize()
+    await adapter.finalize()
+
+    assert _count_summary_emits(adapter._log) == 1
+
+
+@pytest.mark.asyncio
+async def test_session_cost_summary_not_emitted_for_zero_token_session():
+    """No summary line for a session that never billed any tokens (no noise)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    # _session_total_tokens stays 0 (never started / never billed).
+
+    await adapter.finalize()
+
+    assert _count_summary_emits(adapter._log) == 0
+
+
