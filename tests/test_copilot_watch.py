@@ -45,11 +45,18 @@ def test_is_copilot(login, expected):
 # --- exit-code contract (finding #5: TIMEOUT distinct from ERROR) ---
 
 def test_exit_code_map():
-    assert cw._EXIT_CODES == {"COMMENTS": 0, "CLEAN": 0, "TIMEOUT": 2, "ERROR": 1}
+    assert cw._EXIT_CODES == {
+        "COMMENTS": 0,
+        "CLEAN": 0,
+        "MERGED": 0,
+        "TIMEOUT": 2,
+        "ERROR": 1,
+    }
 
 
 @pytest.mark.parametrize(
-    "state,code", [("COMMENTS", 0), ("CLEAN", 0), ("TIMEOUT", 2), ("ERROR", 1)]
+    "state,code",
+    [("COMMENTS", 0), ("CLEAN", 0), ("MERGED", 0), ("TIMEOUT", 2), ("ERROR", 1)],
 )
 def test_emit_returns_matching_exit_code(state, code, capsys):
     assert cw._emit(state, "detail") == code
