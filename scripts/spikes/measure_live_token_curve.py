@@ -17,8 +17,10 @@ soundfile) and feeds it on the realtime path, bracketed by activity_start/end
 No PII: prompts are fictional; the only identifiers sent to the logger are
 synthetic (form_id="SPIKE", form_session_id="spike-<tier>-<run>").
 
-Run (from repo root, GEMINI_API_KEY in env, network for gTTS):
-    PYTHONPATH=. backend/.venv/Scripts/python.exe scripts/spikes/measure_live_token_curve.py
+Run (from repo root, with GEMINI_API_KEY in env + network for gTTS). The script
+injects the repo root into sys.path itself, so PYTHONPATH is not required:
+    # Windows:       backend\\.venv\\Scripts\\python.exe scripts/spikes/measure_live_token_curve.py
+    # macOS / Linux: backend/.venv/bin/python      scripts/spikes/measure_live_token_curve.py
 Options: --turns N (default 10), --runs M per tier (default 2), --csv <path>.
 """
 

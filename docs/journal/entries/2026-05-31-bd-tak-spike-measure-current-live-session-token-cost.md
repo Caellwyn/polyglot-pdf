@@ -64,6 +64,17 @@ future BigQuery phase).
   spike), logger-path divergence (low-confidence; both anchored to `__file__`).
   *[fresh-eyes F2, F6]*
 - **Copilot:** round 1 = 2 inline comments (both adopted; overlapped fresh-eyes).
+  Round 2 = 4 inline comments after a flaky re-review (two `copilot_work_finished_failure`
+  events before it landed). Round-2 triage:
+  - **Adopted:** (a) **race fix** — the `session_cost_summary` was emitted at the top
+    of `finalize()`, before `_bg_task` is cancelled/awaited, so `_run_session_loop`
+    could still be updating `_session_total_*`; moved the emission to AFTER the bg
+    task is cancelled (inside `_task_lock`) so the totals are final. (b) Added 3 unit
+    tests (emit-once, double-finalize-still-once, no-emit-for-zero-tokens). (c) Made
+    the harness docstring run command cross-platform + noted PYTHONPATH isn't required.
+  - **Rejected:** Copilot's claim that the PR/journal describes "unrelated
+    FieldRenderer.tsx fixes" — false positive (no FieldRenderer anywhere in the diff;
+    verified).
 
 **Discovered during the spike, filed separately (NOT fixed here):**
 - **`polyglot-pdf-p1t`** (P2): the default VAD config sends
