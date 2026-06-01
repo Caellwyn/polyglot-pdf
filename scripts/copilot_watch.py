@@ -602,29 +602,50 @@ def _new_inline_findings(repo: str, pr: int, since: datetime | None) -> list:
     return findings
 
 
+def _has_any_copilot_inline(repo: str, pr: int) -> bool:
+    """True if Copilot has left ANY inline review comment on the PR (any round).
+
+    Used only to gate the change-ask-prose FALLBACK in
+    _classify_issue_comment_round: when Copilot reviews via inline comments (its
+    normal mode), the absence of a NEW one this round already decides the verdict,
+    so stale prior-round prose must not re-open a clean round. The prose fallback
+    fires only for a PR where Copilot never left an inline comment at all.
+    """
+    for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
+        if _is_copilot((c.get("user") or {}).get("login", "")):
+            return True
+    return False
+
+
 def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
     """Classify a round whose verdict arrives as a Copilot ISSUE COMMENT (no review).
 
-    FINDINGS-BASED (default-clean-unless-flagged). Approval is the ABSENCE of an
-    actionable finding, not the presence of a recognized approval phrase -- so
-    Copilot inventing a new "looks fine" wording can no longer cause a false
-    COMMENTS or a TIMEOUT. The order of checks, strongest signal first:
+    INLINE-FINDINGS-FIRST (default-clean-unless-a-finding-exists). The verdict
+    rests on a STRUCTURAL fact Copilot can't reword away -- whether it left a new
+    actionable inline comment on the current diff this round -- NOT on matching its
+    prose. Both prose lists (the approval allowlist and the change-ask denylist)
+    are unbounded-NL whack-a-mole: a novel approval phrasing read as COMMENTS, OR
+    (the bd-x8o case) an ACKNOWLEDGMENT whose prose trips a change-ask word
+    ("the issues the reviewer *raised* were already addressed") read as COMMENTS.
+    Inline findings don't have that ambiguity, so they lead. Order:
 
-      1. ERROR body            -> ERROR (Copilot failed; not a verdict).
-      2. exact `LGTM` / known approval phrase, no change-ask -> CLEAN (fast path).
-      3. comment asks for a change (_CHANGE_ASK_SIGNALS) -> COMMENTS (a prose-only
-         ask: "please fix X" with no inline anchor still gets caught).
-      4. a NEW actionable inline finding exists this round -> COMMENTS (the prose
-         is just a summary; the inline comment governs).
-      5. otherwise -> CLEAN (Copilot commented, asked for nothing, left no inline
-         finding -- that IS an approval, whatever words it chose).
+      1. ERROR body -> ERROR (Copilot failed; not a verdict).
+      2. a NEW actionable inline finding this round -> COMMENTS. This is the ONLY
+         primary COMMENTS trigger -- a real "please change X" from Copilot is an
+         inline comment on the diff, regardless of the summary prose's wording.
+      3. exact `LGTM` / known approval phrase (no change-ask) -> CLEAN (fast path).
+      4. FALLBACK, only when there are NO inline comments at all to consult:
+         change-ask prose -> COMMENTS (a prose-only "please fix X" with no inline
+         anchor still gets caught).
+      5. otherwise -> CLEAN (no new inline finding, not a change-ask -> approval by
+         absence, whatever words Copilot chose).
 
     Returns an exit code, or None if no Copilot issue comment at/after `since`
     exists yet (caller keeps polling -- the surface may just be lagging).
-    Residual risk accepted: a substantive ask delivered ONLY as summary prose with
-    none of the change-ask signal words AND no inline comment would read CLEAN; in
-    practice Copilot's actionable findings are inline, and the human merge is the
-    final gate.
+    Residual risk accepted: a substantive ask delivered ONLY as summary prose,
+    with no inline comment anywhere on the PR AND no change-ask signal word, would
+    read CLEAN; in practice Copilot's actionable findings are inline, and the
+    human merge + fresh-eyes are the backstops.
     """
     copilot_comments = [
         c
@@ -641,21 +662,9 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
     if body.startswith(COPILOT_ERROR_BODY_PREFIX):
         return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
 
-    # 2. Explicit approval (exact LGTM or a known phrase with no change-ask).
-    if _is_approval_comment(body):
-        return _emit(
-            "CLEAN",
-            "Copilot approved via issue comment (no findings):\n\n{}".format(body),
-        )
-
-    # 3. Prose that asks for a change stays COMMENTS even with no inline anchor.
-    if _has_change_ask(body):
-        return _emit(
-            "COMMENTS",
-            "Copilot's comment asks for a change:\n\n{}".format(body),
-        )
-
-    # 4. No change-ask prose -- defer to the deterministic inline-finding check.
+    # 2. PRIMARY signal: a NEW actionable inline finding this round -> COMMENTS.
+    # This leads, so an acknowledgment that merely mentions a change-ask word
+    # ("the issues raised were addressed") can no longer flip a clean round.
     inline = _new_inline_findings(repo, pr, since)
     if inline:
         return _emit(
@@ -665,11 +674,31 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
             ),
         )
 
-    # 5. Commented, asked for nothing, no inline finding -> approval by absence.
+    # 3. No new inline finding. An explicit approval (exact LGTM / known phrase) is
+    # a fast, unambiguous CLEAN.
+    if _is_approval_comment(body):
+        return _emit(
+            "CLEAN",
+            "Copilot approved via issue comment (no inline findings):\n\n{}".format(body),
+        )
+
+    # 4. FALLBACK: only when Copilot left NO inline comments AT ALL on the PR does
+    # change-ask prose decide -- a prose-only "please fix X" with no anchor. If any
+    # inline comments exist (even prior-round), the absence of a NEW one in step 2
+    # already governs, so we do not let stale-round prose re-open a clean round.
+    any_inline = _has_any_copilot_inline(repo, pr)
+    if not any_inline and _has_change_ask(body):
+        return _emit(
+            "COMMENTS",
+            "Copilot left no inline comments but its prose asks for a change:\n\n{}".format(body),
+        )
+
+    # 5. No new inline finding, not an explicit approval, no prose-only ask -> the
+    # round is clean (approval by absence of any actionable finding).
     return _emit(
         "CLEAN",
-        "Copilot commented with no actionable finding (no change-ask, no inline "
-        "comment this round) -> treating as approval:\n\n{}".format(body),
+        "Copilot commented with no new inline finding this round -> treating as "
+        "approval (verdict is by inline findings, not prose):\n\n{}".format(body),
     )
 
 

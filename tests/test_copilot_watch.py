@@ -356,6 +356,66 @@ def test_issue_comment_nonapproval_round_is_comments(capsys, monkeypatch):
     assert (rc, result) == (0, "COMMENTS")
 
 
+# --- bd polyglot-pdf-x8o: inline-findings-first (acknowledgment prose != COMMENTS) ---
+
+def test_acknowledgment_prose_with_changeask_word_no_inline_is_clean(capsys, monkeypatch):
+    # THE bd-x8o regression (PR #48 r2): a no-findings ACKNOWLEDGMENT whose prose
+    # contains a change-ask word ("the issues the reviewer raised were already
+    # addressed") must be CLEAN when there is no NEW inline finding -- the prose
+    # must not flip a clean round to COMMENTS.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "The two issues the reviewer raised were already addressed "
+                      "in the second commit. The guard now also covers attr access "
+                      "so it would catch a regression. All tests pass."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "CLEAN")
+
+
+def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
+    # If a NEW actionable inline finding exists this round, it's COMMENTS even when
+    # the issue-comment prose reads like an approval -- inline leads.
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "Looks good overall, no further changes needed."}]
+    inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:04Z",
+               "path": "app/x.py", "position": 4, "line": 12,
+               "body": "this off-by-one is a real bug"}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=inline,
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
+def test_changeask_prose_with_stale_inline_but_no_new_finding_is_clean(capsys, monkeypatch):
+    # Copilot left an inline comment in a PRIOR round (created before `since`), and
+    # this round only posts acknowledgment prose containing a change-ask word.
+    # No NEW inline finding -> CLEAN. The prose fallback must NOT fire, because
+    # Copilot DOES review via inline comments here (so absence of a new one decides).
+    since = cw._parse_iso("2026-05-28T12:00:00Z")
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:05:00Z",
+              "body": "The previously raised issue should now be resolved; please "
+                      "confirm. Nothing else."}]
+    inline = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T11:00:00Z",
+               "path": "app/x.py", "position": 2, "line": 5, "body": "prior-round ask"}]
+    _patch_api(monkeypatch, reviews=[], issue=issue, inline=inline,
+               timeline=[_reviewed_event("2026-05-28T12:04:00Z")])
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=since)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_prose_only_changeask_no_inline_anywhere_is_comments(capsys, monkeypatch):
+    # The legitimate fallback: Copilot left NO inline comments at all on the PR and
+    # its prose genuinely asks for a change -> COMMENTS (a prose-only ask is caught).
+    issue = [{"user": {"login": "Copilot"}, "created_at": "2026-05-28T12:00:05Z",
+              "body": "One more thing: please also update the changelog before merge."}]
+    rc, result = _run_watch_result(
+        capsys, monkeypatch, reviews=[], issue=issue, inline=[],
+        timeline=[_reviewed_event()])
+    assert (rc, result) == (0, "COMMENTS")
+
+
 def test_finished_with_issue_comment_approval_is_clean(capsys, monkeypatch):
     # Fix A via the "finished" branch: timeline=finished (no new reviewed) and
     # an approval issue comment -> CLEAN, not "produced no review".
