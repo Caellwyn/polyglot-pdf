@@ -168,13 +168,20 @@ def _pr_collision(bead_id: str, repo: str) -> str | None:
         *mentions* the bead as a deferred/related finding (which is exactly how
         9pe got false-blocked by the merged PR that filed it). PR titles carry
         the id by convention (rule R4: `... (bd <full-id>)`), so we confirm the
-        id is in the TITLE before calling it a collision. `--search` still
-        narrows the server-side fetch; the title check is the authoritative
-        filter.
+        id is in the TITLE before calling it a collision. The `--search` term is
+        QUOTED so GitHub treats the hyphenated id as one phrase rather than
+        OR-ing its hyphen-split tokens; it only narrows the server-side fetch,
+        so a loose match there is harmless -- the title check below is the
+        authoritative filter.
+
+    The title match requires an id BOUNDARY (the id is not immediately followed
+    by another id char: alnum / `.` / `_` / `-`), so a shorter id is not a false
+    positive for a longer one that has it as a prefix -- e.g. `...-ab1` must not
+    match a title carrying `...-ab12` (fresh-eyes finding on PR #47).
     """
     proc = _run(
-        ["gh", "pr", "list", "--search", bead_id, "--state", "open",
-         "--json", "number,title", "--repo", repo],
+        ["gh", "pr", "list", "--search", '"{}"'.format(bead_id), "--state",
+         "open", "--json", "number,title", "--repo", repo],
         check=False,
     )
     # `gh pr list` exits 0 with `[]` when nothing matches. A non-zero exit here
@@ -192,10 +199,11 @@ def _pr_collision(bead_id: str, repo: str) -> str | None:
         raise RuntimeError(
             "gh pr list returned unparseable JSON: {}".format(exc)
         )
-    # Authoritative filter: the bead id must appear in the PR TITLE. Match is
-    # case-insensitive and substring (the title carries `(bd <full-id>)`).
-    needle = bead_id.lower()
-    hits = [pr for pr in prs if needle in (pr.get("title") or "").lower()]
+    # Authoritative filter: the bead id must appear in the PR TITLE as a whole
+    # id, not as a prefix of a longer id. `(?!...)` rejects a trailing id char
+    # so `polyglot-pdf-ab1` does not match a title carrying `polyglot-pdf-ab12`.
+    needle = re.compile(re.escape(bead_id) + r"(?![0-9A-Za-z._-])", re.IGNORECASE)
+    hits = [pr for pr in prs if needle.search(pr.get("title") or "")]
     if not hits:
         return None
     return "; ".join(

@@ -78,7 +78,7 @@ Run the housekeeping audit (pull + orphans + stale + push):
 
 Run the freshness checker (see `docs/doc-architecture.md` for the system it enforces):
 
-!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; cd "$WT" && "$R/backend/.venv/Scripts/python.exe" "$WT/scripts/check_doc_freshness.py"`
+!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; test -n "$WT" && cd "$WT" || { echo "ERROR: could not resolve worktree root (git rev-parse --show-toplevel failed)"; exit 1; }; "$R/backend/.venv/Scripts/python.exe" "$WT/scripts/check_doc_freshness.py"`
 
 **Why `$WT`, not `$R`, for this script** (`bd polyglot-pdf-9pe`): the freshness
 checker sets `REPO_ROOT` to its own location's parent and reads docs + `git`
@@ -128,7 +128,7 @@ Then YOU fill it in (this is judgment, not mechanics):
 
 Run the full suite (if slow, run it in the background and wait for the notification rather than polling):
 
-`REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q`  -- where `$WT` is the worktree root (the dir you're working in). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection.
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q`  -- `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the test path expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection.
 
 If anything FAILS, stop and fix it before continuing -- a red suite is not eligible for a PR. If the project defines extra verification harnesses for the area you touched, run those too.
 

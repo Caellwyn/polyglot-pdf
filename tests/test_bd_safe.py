@@ -118,11 +118,36 @@ def test_pr_collision_returns_none_on_empty_json(monkeypatch):
     assert bs._pr_collision("yourturn-group-nbj1", bs.DEFAULT_REPO) is None
 
 
+def test_pr_collision_does_not_match_longer_id_prefix(monkeypatch):
+    # A shorter id must not collide with a PR for a LONGER id that has it as a
+    # prefix: claiming `...-ab1` must not be blocked by a PR titled `(bd ...-ab12)`
+    # (fresh-eyes finding on PR #47). The title boundary check enforces this.
+    recorder = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "list"],
+         _proc(stdout='[{"number": 7, "title": "feat: x (bd yourturn-group-ab12)"}]')),
+    ])
+    monkeypatch.setattr(bs, "_run", recorder)
+    assert bs._pr_collision("yourturn-group-ab1", bs.DEFAULT_REPO) is None
+    # ...but the exact id still collides.
+    assert bs._pr_collision("yourturn-group-ab12", bs.DEFAULT_REPO) is not None
+
+
+def test_pr_collision_search_term_is_quoted(monkeypatch):
+    # The --search term must be quoted so GitHub treats the hyphenated id as one
+    # phrase instead of OR-ing its hyphen-split tokens (fresh-eyes finding #47).
+    recorder = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="[]")),
+    ])
+    monkeypatch.setattr(bs, "_run", recorder)
+    bs._pr_collision("yourturn-group-nbj1", bs.DEFAULT_REPO)
+    assert recorder.ran("--search", '"yourturn-group-nbj1"')
+
+
 def test_claim_aborts_on_branch_collision(monkeypatch, capsys):
     # A FOREIGN worker's branch carries the suffix while I'm on a DIFFERENT
     # branch -- the exclusion must NOT suppress it, so the claim still aborts.
     recorder = _RunRecorder([
-        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="")),  # no PR
+        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="[]")),  # no PR
         (lambda c: c[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"],
          _proc(stdout="dev")),  # I'm on dev, not the colliding branch
         (lambda c: c[:3] == ["git", "branch", "-a"],
@@ -137,7 +162,7 @@ def test_claim_aborts_on_branch_collision(monkeypatch, capsys):
 
 def test_claim_brackets_with_pull_and_push(monkeypatch):
     recorder = _RunRecorder([
-        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="")),       # no PR
+        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="[]")),       # no PR
         (lambda c: c[:3] == ["git", "branch", "-a"], _proc(stdout="* dev")),  # no match
     ])
     monkeypatch.setattr(bs, "_run", recorder)
@@ -301,7 +326,7 @@ def test_claim_succeeds_when_only_own_branch_present(monkeypatch):
     # The end-to-end fix: claim run from inside the bead's own worktree
     # branch must NOT self-abort -- it should claim.
     rec = _RunRecorder([
-        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="")),  # no PR
+        (lambda c: c[:3] == ["gh", "pr", "list"], _proc(stdout="[]")),  # no PR
         (lambda c: c[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"],
          _proc(stdout="feature/dw03-closeout-skill")),
         (lambda c: c[:3] == ["git", "branch", "-a"],
