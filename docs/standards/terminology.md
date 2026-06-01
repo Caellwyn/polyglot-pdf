@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-05-30. See [journal entries](../journal/entries/) for chronological history.*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-part-section-state.md](../journal/entries/2026-06-01-bd-gfb.4-rename-part-section-state.md) for closeout details.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -30,34 +30,33 @@ The schema is a strict hierarchy -- **Form > Parts > Sections > Fields** (see
 
 ### The legacy "part" drift (do not propagate)
 
-"Part" leaks into a few **state-variable names where a *section* is actually
+"Part" leaked into **state-variable names where a *section* is actually
 meant** -- a naming bug, not a real part reference. Canonical state is
 `currentSectionId` / `completedSections` (frontend) and section-keyed identifiers
-(backend). The known holdouts, all meaning "current section":
+(backend).
 
-- `backend/adapters/live_ai_gemini.py` -- `self._current_part_id` (init line 177),
-  the `current_part_id` parameter of **`set_session_context()`** (lines 227, 238 --
-  *not* the constructor; `__init__` only sets it to `None`), and the `part_id=`
-  log field (line 1231).
-- `backend/utils/token_file_logger.py` -- the `part_id` parameter (line 71) and
-  the `"part_id": part_id` log-payload key (**line 111**; line 99 is just its
-  docstring).
-- `backend/services/form_filling_service.py:144` -- `current_part_id=None,
-  # Will be updated on section switch` (the comment proves the conflation).
+The **internal** holdouts were renamed to section-canonical names in
+`polyglot-pdf-gfb.4` (behavior-preserving): `live_ai_gemini.py`'s
+`self._current_section_id` + the `current_section_id` parameter of
+`set_session_context()`, and the `form_filling_service.py` call site.
+
+**Remaining drift is on the wire format** -- still named `part` because renaming a
+key is a data-format change that must be sequenced against its consumers (tracked
+in `polyglot-pdf-zun`):
+
+- `backend/utils/token_file_logger.py` -- the `part_id` parameter (line 71) and the
+  `"part_id": part_id` log-payload key (**line 111**) in `token_usage.jsonl`. The
+  producer (`live_ai_gemini.py`) already passes the current **section** id into this
+  `part_id=` kwarg; only the key name is unrenamed.
 - `backend/services/manifest_service.py` + `frontend/src/schema-forms/utils/manifestUtils.ts`
-  -- the JIT manifest's `current_part`/`previous_parts` keys hold **section**
-  data, not real `FormPart`s: `buildHandshakeManifest(currentSectionId, ...)`
-  looks the ID up in `schema.sections` and even errors with `Part ${id} not
-  found`. Same naming-bug-on-section-state as the others; renaming these is a
-  log/handshake **wire-format** change, so it's sequenced carefully in the
-  follow-up rather than ambiguous.
+  -- the JIT manifest's `current_part`/`previous_parts` keys hold **section** data,
+  not real `FormPart`s: `buildHandshakeManifest(currentSectionId, ...)` looks the ID
+  up in `schema.sections` and even errors with `Part ${id} not found`. These are on
+  the WS-handshake wire format (both ends must change in lockstep).
 - Frontend test fixture `frontend/src/schema-forms/state/schemaFormState.test.ts.NEEDS_SECTION_REFACTOR`
   (filename already flags it).
 
-Don't add new `part_id`/`currentPartId` names for section state. Renaming the
-holdouts is tracked in `polyglot-pdf-gfb.4`. Most are behavior-preserving, but
-the manifest and token-log keys are on the **handshake/log wire format**, so that
-bead sequences those renames against their consumers rather than doing them blind.
+Don't add new `part_id`/`currentPartId` names for section state.
 
 ## Field IDs and brackets
 

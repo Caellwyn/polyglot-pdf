@@ -178,7 +178,7 @@ class LiveAIGemini(ILiveAI):
         # Session context for token logging (set by service)
         self._form_session_id: Optional[str] = None
         self._form_id: Optional[str] = None
-        self._current_part_id: Optional[str] = None
+        self._current_section_id: Optional[str] = None
     
     @asynccontextmanager
     async def connect(self, model: str, config: Dict[str, Any]) -> AsyncIterator[LiveAISession]:
@@ -228,18 +228,20 @@ class LiveAIGemini(ILiveAI):
         self,
         form_session_id: str,
         form_id: str,
-        current_part_id: Optional[str] = None,
+        current_section_id: Optional[str] = None,
     ):
         """Set session context for token logging.
 
         Args:
             form_session_id: Overall form filling session ID (persists across Gemini sessions)
             form_id: Form identifier (e.g., "I-90")
-            current_part_id: Current part ID (e.g., "part_1")
+            current_section_id: Current section ID (the user-facing navigation unit;
+                see docs/standards/terminology.md — this was historically mis-named
+                "part", a section-state naming bug, bd polyglot-pdf-gfb.4)
         """
         self._form_session_id = form_session_id
         self._form_id = form_id
-        self._current_part_id = current_part_id
+        self._current_section_id = current_section_id
 
     def set_callbacks(
         self,
@@ -1280,7 +1282,10 @@ class LiveAIGemini(ILiveAI):
                                                         form_id=self._form_id,
                                                         form_session_id=self._form_session_id,
                                                         gemini_session_id=self._instance_id,
-                                                        part_id=self._current_part_id,
+                                                        # value is the current SECTION id; the logger's
+                                                        # `part_id` kwarg/key is wire-format drift renamed
+                                                        # separately (bd polyglot-pdf-gfb.4 wire-format split)
+                                                        part_id=self._current_section_id,
                                                         # This event's token counts
                                                         prompt_tokens=prompt_tokens,
                                                         response_tokens=response_tokens,
