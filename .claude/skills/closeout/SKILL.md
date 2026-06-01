@@ -183,3 +183,43 @@ Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomous
 3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
 
 The PR is already a normal, mergeable PR -- there is no flip step. The merge is the maintainer's: **never run `gh pr merge` yourself.** Pinging the maintainer is the autonomous endpoint.
+
+## Step 8.5 -- Record the harness telemetry row (deterministic)
+
+Append one row to `docs/journal/harness_ledger.jsonl` capturing this closeout's
+cost (bd polyglot-pdf-hrn.1). The script is **zero-model-token**: it parses the
+session transcript JSONL for the token split (orchestrator-vs-subagent, by
+model) and wall-clock; you only pass the handful of numbers a script can't read
+off the transcript. Run the **worktree's copy** so the ledger path resolves into
+THIS checkout (same `$WT` rule as Steps 3/4):
+
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
+
+(The explicit `%Y-%m-%dT%H:%M:%SZ` form is used instead of `%FT%TZ` because `%F`
+/`%T` are GNU `date` extensions -- BSD/macOS `date` would emit the literal format
+string and land junk in `--recorded-at`. The script also has a UTC fallback if
+`--recorded-at` is omitted entirely.)
+
+Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
+PR). Fill the counters from what actually happened this session:
+- `--arm` -- the experiment arm you ran. **Phase A (the default, until the
+  counter says otherwise): pass `A`.** The script prints the next-phase
+  directive after it writes; you can also check it any time with
+  `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
+- `--cost-category` -- `production` for normal feature/bug work; **`audit`** for a
+  closeout whose work was measurement / cross-arm bug-reporting (audit work is
+  never charged to the arm doing it -- the plan's fairness rule).
+- `--copilot-rounds` -- how many Copilot review rounds this PR took (final = CLEAN).
+- `--maintainer-touchpoints` -- times you had to ping/ask the maintainer.
+- `--deferred-nits` -- nit beads you filed instead of fixing inline (the
+  denominator for the nit-turned-blocker rate).
+- `--haiku-escalations` -- times a Haiku fresh-eyes pass self-escalated to Sonnet
+  (0 until arm B ships; diagnostic, not a failure).
+- `--errors-shipped` -- known bugs shipped in this PR (usually 0; a later
+  nit-turned-blocker audit may revise this retroactively against the deferring arm).
+
+This is **warn-only**: a missing/failed ledger row must never block the merge.
+If the script exits non-zero (e.g. it can't locate the transcript), note the
+telemetry gap in the journal entry and continue -- do NOT loop on it. The script
+also bumps `.beads/experiment_state.json`; pass `--no-counter` only for an audit
+re-run you don't want counted.
