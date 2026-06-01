@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -33,7 +33,7 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   `finalize_gemini_session()`): closes ONLY the Gemini session (keeps the WebSocket
   alive) under `_task_lock`, setting `_intentional_shutdown = True` — used for the
   Level-3 farewell so the client can later `restart_gemini_session`.
-- **`set_session_context(form_session_id, form_id, current_part_id)`**: injects the
+- **`set_session_context(form_session_id, form_id, current_section_id)`**: injects the
   ids used for token logging (token events only fire when these are set — see
   [../standards/logging-and-cost.md](../standards/logging-and-cost.md)).
 
@@ -112,4 +112,4 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 - **Barge-in flush is frontend-side** — the backend only logs+skips on interrupt
   (no flush signal); don't expect a server sentinel.
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*

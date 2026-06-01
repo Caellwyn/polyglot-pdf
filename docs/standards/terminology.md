@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-part-section-state.md](../journal/entries/2026-06-01-bd-gfb.4-rename-part-section-state.md) for closeout details.*
+*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
