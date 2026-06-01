@@ -97,7 +97,7 @@ honors to unlock locked widgets (see [pdf-filling.md](pdf-filling.md)).
 (canonical) **or** `conditional_logic` (a legacy alias of the same
 `ConditionalBehavior` type, still emitted by some generated form-kit schemas,
 e.g. i-90). The richer `controls_fields` / `ConditionalControl`
-(shows/hides/locks/unlocks/makes_required) supersedes the deprecated
+(shows/hides/locks/unlocks/makes_required/makes_optional) supersedes the deprecated
 `conditional_fields`.
 
 ## Backend half
