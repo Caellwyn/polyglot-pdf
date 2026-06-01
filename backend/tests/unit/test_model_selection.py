@@ -7,6 +7,10 @@ after import would NOT affect a later Settings() — constructor args are the
 reliable way to exercise the validator. See bd polyglot-pdf-4cm.
 """
 
+import os
+
+import pytest
+
 from backend.config import (
     MODEL_NATIVE_PREMIUM,
     MODEL_NATIVE_STANDARD,
@@ -25,6 +29,23 @@ def test_premium_tier_resolves_to_3_1_live():
     s = Settings(USE_PREMIUM_MODEL=True, MODEL_NATIVE="")
     assert s.MODEL_NATIVE == MODEL_NATIVE_PREMIUM
     assert s.MODEL_NATIVE == "gemini-3.1-flash-live-preview"
+
+
+def test_default_resolves_to_3_1_premium():
+    """Regression: with NO flag supplied, the default tier is premium/3.1.
+
+    bd polyglot-pdf-4p0 flipped the `USE_PREMIUM_MODEL` field default to true
+    because the 2.5 native-audio preview is flaky on the audio path
+    (bd polyglot-pdf-daa). Pin the no-arg default so a future accidental flip
+    back to 2.5 is caught here. The field default is read from os.getenv at
+    class-definition time, so an explicit `USE_PREMIUM_MODEL` env override would
+    invalidate this assertion — skip in that case rather than report a false fail.
+    """
+    if os.getenv("USE_PREMIUM_MODEL") is not None:
+        pytest.skip("USE_PREMIUM_MODEL is set in the env; can't assert the code default")
+    s = Settings(MODEL_NATIVE="")  # USE_PREMIUM_MODEL left at its field default
+    assert s.USE_PREMIUM_MODEL is True
+    assert s.MODEL_NATIVE == MODEL_NATIVE_PREMIUM == "gemini-3.1-flash-live-preview"
 
 
 def test_explicit_model_native_overrides_flag():

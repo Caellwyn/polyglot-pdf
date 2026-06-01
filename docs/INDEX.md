@@ -58,3 +58,17 @@ Per-file entries live in [`journal/entries/`](journal/entries/), tagged per
 [`journal/TAGS.md`](journal/TAGS.md). Grep by tag to find every entry on a topic.
 Start here for verified current architecture:
 [`2026-05-30-bd-j2l-reorientation-brief.md`](journal/entries/2026-05-30-bd-j2l-reorientation-brief.md).
+
+## Archive (superseded -- history only)
+
+Pre-reorg canonical/source docs, kept verbatim for history. **Do not cite as
+current** -- their content lives in the tier-1/tier-2 docs above.
+
+| Archived doc | Superseded by |
+|--------------|---------------|
+| [`archive/PROJECT_CONTEXT.md`](archive/PROJECT_CONTEXT.md) | CLAUDE.md + this INDEX + the tier-2 set |
+| [`archive/TECHNICAL_GUIDE.md`](archive/TECHNICAL_GUIDE.md) | [`technical_guide.md`](technical_guide.md) + `components/` + `standards/` |
+| [`archive/AUTH_AND_PROFILES_PLAN.md`](archive/AUTH_AND_PROFILES_PLAN.md) | [`components/auth.md`](components/auth.md) |
+| [`archive/ENV_VARIABLES.md`](archive/ENV_VARIABLES.md) | [`components/config-deployment.md`](components/config-deployment.md) |
+| [`archive/releases/`](archive/releases/README.md) | the journal (legacy dated release notes) |
+| [`../planning_documents/archived/`](../planning_documents/archived/README.md) | various tier-2 docs (see its README) |

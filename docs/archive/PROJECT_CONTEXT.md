@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-06-01 (bd polyglot-pdf-4p0).** Superseded by the 3-tier docs:
+> start at [`../../CLAUDE.md`](../../CLAUDE.md) + [`../INDEX.md`](../INDEX.md). The
+> current-state content from this file now lives in the tier-2 `docs/components/` +
+> `docs/standards/` docs. Kept verbatim for history only — do not edit or cite as
+> current.
+
 # Polyglot PDF Form System - Project Context & Guidelines
 
 **Last Updated**: November 18, 2025

@@ -46,8 +46,11 @@ async def test_live_ai_gemini_real_connection():
     if not api_key:
         pytest.skip("GEMINI_API_KEY is not configured")
 
-    # Default to the standard native audio-to-audio model we actually run
-    # (the old gemini-live-2.5-flash-preview string 1008'd — see config.py).
+    # Pins the 2.5 native-audio model. NOTE: this is NO LONGER the app default
+    # (default is now 3.1, USE_PREMIUM_MODEL=true) — but 3.1 1007s on this minimal
+    # AUDIO-only config, so the test still drives 2.5; reworking it to exercise the
+    # 3.1 default via the real adapter config is tracked in bd polyglot-pdf-a7k.
+    # (The old gemini-live-2.5-flash-preview string 1008'd — see config.py.)
     model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
     adapter = LiveAIGemini(api_key=api_key, model=model)
 

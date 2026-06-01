@@ -37,7 +37,7 @@ later phases" — that's stale; `main.py:7` already does it.)
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier (3.1 premium vs 2.5 standard). See [ai-models.md](../standards/ai-models.md). |
+| `USE_PREMIUM_MODEL` | `true` | Flips the active native-audio model tier — `true` → 3.1 premium (the reliable default), `false` → 2.5 standard (cheaper). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
 | `USE_JIT_SCHEMA` | `false` | Send a field **manifest** + load each full field schema just-in-time (token reduction), using `JIT_SYSTEM_INSTRUCTION` instead of `SYSTEM_INSTRUCTION`. See [schema-forms.md](schema-forms.md). |
 | `DISABLE_GEMINI_VAD` | `True` (code constant, CRITICAL) | Turns off Gemini auto-VAD; the client drives turn-taking with manual `activity_start/end`. See [voice-and-vad.md](../standards/voice-and-vad.md). |
@@ -76,8 +76,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.
 
-> `backend/ENV_VARIABLES.md` is the legacy env doc being superseded here; it
-> predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
+> The legacy env doc (`ENV_VARIABLES.md`, now archived at
+> [`../archive/ENV_VARIABLES.md`](../archive/ENV_VARIABLES.md)) is superseded by this
+> doc; it predates the `.env.DEV` marker mechanism and describes `VFF_DEV_LOGGING` as the
 > dev-logging switch. **`VFF_DEV_LOGGING` is dead config:** no code reads it (the
 > only remaining reference is a stale comment in `callback_handler.py:194`); the
 > real gate is the `.env.DEV` marker above. The stale comment is tracked for
