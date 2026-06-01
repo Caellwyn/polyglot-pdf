@@ -41,9 +41,9 @@ export function FieldRenderer({
     return null; // Hide field
   }
 
-  // Check if field should be unlocked when shown conditionally
-  // If the field has conditional_behavior with unlock_method "flip_readonly_bit",
-  // it should be editable when the show_if condition is met
+  // Check if field should be unlocked when shown conditionally.
+  // Checks both the canonical key (conditional_behavior) and the legacy alias
+  // (conditional_logic) still emitted by generated form-kit schemas (e.g. i-90).
   const shouldUnlock =
     field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
     field.conditional_logic?.unlock_method === "flip_readonly_bit";
@@ -153,7 +153,8 @@ export function FieldRenderer({
       );
 
     case "number":
-      // Number field uses TextField with type="number" (HTML5)
+      // Number fields render as a plain text input. TextField only special-cases
+      // email/tel for its HTML input type; everything else (incl. this) is type="text".
       return (
         <TextField
           field={{ ...field, type: "text" }}
