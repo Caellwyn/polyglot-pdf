@@ -31,7 +31,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
 | PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
 | Auth | `components/auth.md` _(planned -- `polyglot-pdf-y3l`)_ | _(see bead)_ |
-| Config + deployment | `components/config-deployment.md` _(planned -- `polyglot-pdf-22q`)_ | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
+| Config + deployment | [`components/config-deployment.md`](components/config-deployment.md) | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
 
 ## Standards (tier 2 -- cross-cutting)
 
