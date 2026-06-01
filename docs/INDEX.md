@@ -14,7 +14,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Doc | Covers |
 |-----|--------|
 | [`doc-architecture.md`](doc-architecture.md) | The 3-tier progressive-discovery doc system + the freshness discipline. |
-| [`technical_guide.md`](technical_guide.md) | System-wide routes / endpoints / cross-surface gotchas. _(skeleton -- being populated under `polyglot-pdf-gfb.2`; until then use the brief + cited code paths.)_ |
+| [`technical_guide.md`](technical_guide.md) | System-wide routes / endpoints / cross-surface gotchas. |
 | [`doctrine/workflow.md`](doctrine/workflow.md) | Beads cadence, session start/end, the agent-swarm tooling. |
 | [`doctrine/review-flow.md`](doctrine/review-flow.md) | The parallel Copilot + fresh-eyes review procedure. |
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | feature -> dev (staging) -> main (prod) promotion. |
@@ -30,7 +30,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Gemini Live voice adapter (session, tools, audio) | [`components/voice-ai.md`](components/voice-ai.md) | `backend/adapters/live_ai_gemini.py` |
 | Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
 | PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
-| Auth | `components/auth.md` _(planned -- `polyglot-pdf-y3l`)_ | _(see bead)_ |
+| Auth | [`components/auth.md`](components/auth.md) | `frontend/src/contexts/AuthContext.tsx`, `backend/services/auth.py`, `firestore.rules` |
 | Config + deployment | [`components/config-deployment.md`](components/config-deployment.md) | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
 
 ## Standards (tier 2 -- cross-cutting)
