@@ -59,7 +59,7 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 ### Working Features
 - ✅ Firebase Authentication (Google sign-in + email/password)
 - ✅ Authorized-email gating for sign-up (Firestore `authorized_emails` collection)
-- ✅ Gemini Live API voice integration (`gemini-live-2.5-flash-native-audio`)
+- ✅ Gemini Live API voice integration (`gemini-2.5-flash-native-audio-preview-12-2025`)
 - ✅ Schema-driven form filling with section navigation
 - ✅ 18+ spoken languages with real-time switching
 - ✅ Stateless backend architecture (HIPAA compliant)
@@ -355,7 +355,7 @@ sessionStorage.clear()
 - ❌ Modify `.venv` or example files
 
 **Always Do:**
-- ✅ Use latest Gemini model: `gemini-live-2.5-flash-preview-native-audio-09-2025`
+- ✅ Use the configured native-audio model (`MODEL_NATIVE`); current default `gemini-2.5-flash-native-audio-preview-12-2025`
 - ✅ Create unit tests before making changes
 - ✅ Maintain stateless backend (client = source of truth)
 - ✅ Update `TECHNICAL_GUIDE.md` after code changes

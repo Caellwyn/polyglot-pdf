@@ -16,7 +16,7 @@
 
 ### Always Do
 
-- ✅ Use latest Gemini model: `gemini-live-2.5-flash-native-audio`
+- ✅ Use the configured native-audio model (`MODEL_NATIVE`); current default `gemini-2.5-flash-native-audio-preview-12-2025`
 - ✅ Write tests alongside implementation (not after)
 - ✅ Maintain stateless backend (client holds form state, server holds schemas)
 - ✅ Prioritize accuracy over speed (especially for non-English speakers)
@@ -141,7 +141,7 @@ The project is transitioning from a demo-based architecture to a schema-driven a
 
 ### Always Do
 
-- ✅ Use latest Gemini model: `gemini-live-2.5-flash-native-audio`
+- ✅ Use the configured native-audio model (`MODEL_NATIVE`); current default `gemini-2.5-flash-native-audio-preview-12-2025`
 - ✅ Write tests alongside implementation (not after)
 - ✅ Maintain stateless backend (client holds form state, server holds schemas)
 - ✅ Prioritize accuracy over speed (especially for non-English speakers)
