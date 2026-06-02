@@ -113,12 +113,17 @@ text**; PR title + body; the telemetry counters; branch + base; whether to pass
 (prep ATTENTION, a rebase conflict, any tooling error, a missing brief input). You
 then resume: launch the watcher from the `WATCH_CMD` it returns, spawn fresh-eyes,
 run the Step-7 loop, and -- for a review-worthy PR -- do the **second** tiny
-`closeout_finish.py --close-beads` (telemetry + close) call after Copilot is CLEAN.
+`closeout_finish.py --bead <id> --close-only` call after Copilot is CLEAN.
 
 **Two-call bead close.** A **review-skipped** PR (docs/beads/journal-only) has no
 review loop, so the single `closeout_finish.py` run carries `--close-beads` and
-closes immediately. A **review-worthy** PR opens WITHOUT `--close-beads`; you close
-after the loop reaches CLEAN. `closeout_finish.py` never blocks on the watcher.
+closes immediately (one call, one telemetry row). A **review-worthy** PR opens
+WITHOUT `--close-beads`; after the loop reaches CLEAN you close with the second
+call using **`--close-only`** -- which closes the bead(s) and does NOTHING else
+(no commit/rebase/push/PR/telemetry). **Use `--close-only`, NOT `--close-beads`,
+for the second call:** the first call already wrote the telemetry row, so a second
+`--close-beads` run would append a DUPLICATE row and contaminate the A/B metrics
+(bd hrn.15). `closeout_finish.py` never blocks on the watcher.
 
 **Preview first:** `closeout_finish.py ... --dry-run` prints the fully-resolved
 plan (every command with `$R`/`$WT`/`$PY` substituted) and performs **zero** side

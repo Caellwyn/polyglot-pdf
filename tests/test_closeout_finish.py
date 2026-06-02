@@ -86,7 +86,7 @@ def _args(**over):
         review_worthy=False, skip_review=True, commit_message=None,
         arm="A", cost_category="production", copilot_rounds=0,
         maintainer_touchpoints=0, deferred_nits=0, haiku_escalations=0,
-        errors_shipped=0, close_beads=False, dry_run=False,
+        errors_shipped=0, close_beads=False, close_only=False, dry_run=False,
     )
     base.update(over)
     return argparse.Namespace(**base)
@@ -109,11 +109,18 @@ def _restore_run():
 # CLI contract
 # --------------------------------------------------------------------------- #
 class TestCLIContract:
-    def test_requires_a_review_flag(self):
-        with pytest.raises(SystemExit):
-            cf.build_parser().parse_args(
-                ["--bead", "x", "--branch", "b", "--pr-title", "t",
-                 "--pr-body-file", "f"])
+    def test_requires_a_review_flag(self, monkeypatch):
+        # A PR-opening run (not --close-only) with neither review flag must fail
+        # the precondition check in main() (the gate moved from argparse to main()
+        # so --close-only can omit it).
+        rec = RunRecorder()
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "x", "--branch", "b", "--pr-title", "t",
+                      "--pr-body-file", "f"])
+        assert rc == cf.EXIT_PRECONDITION
 
     def test_review_flags_mutually_exclusive(self):
         with pytest.raises(SystemExit):
@@ -299,6 +306,72 @@ class TestCloseBeadsGated:
         assert any("proj-aa11" in j for j in closes)
         assert any("proj-bb22" in j for j in closes)
         assert job.out["beads_closed"] == "proj-aa11,proj-bb22"
+
+
+# --------------------------------------------------------------------------- #
+# --close-only (the two-call second call) — must NOT write a telemetry row
+# --------------------------------------------------------------------------- #
+class TestCloseOnly:
+    def test_closes_bead_and_writes_no_telemetry_row(self):
+        # The whole point of hrn.15: --close-only closes the bead but does NOT
+        # append a ledger row (the first call already did), so no double-count.
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
+                   skip_review=False, bead=["proj-aa11"])
+        assert job.run() == cf.EXIT_OK
+        joined = rec.joined()
+        # bead WAS closed
+        assert any("bd_safe" in j and "close" in j for j in joined)
+        # but the ledger was NOT invoked (no duplicate telemetry row)
+        assert not any("harness_ledger.py" in j for j in joined)
+        # and no PR/commit/push/rebase happened
+        assert not any("pr create" in j or "commit" in j or "push" in j
+                       or "pull --rebase" in j for j in joined)
+        assert job.out["RESULT"] == "CLOSED-ONLY"
+
+    def test_close_only_dry_run_makes_no_calls(self, capsys):
+        # --close-only --dry-run skips the ledger preview entirely (close-only
+        # writes no row), so it must make ZERO subprocess calls (fresh-eyes
+        # Finding 4 -- guards against a future regression adding one).
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
+                   skip_review=False, dry_run=True)
+        assert job.run() == cf.EXIT_OK
+        assert len(rec.calls) == 0, rec.joined()
+        out = capsys.readouterr().out
+        assert "close-only" in out and "RESULT: DRY-RUN" in out
+
+    def test_close_only_closes_even_without_close_beads_flag(self):
+        # Defensive: a programmatic caller setting close_only but NOT close_beads
+        # must still close (not silently no-op) -- fresh-eyes Finding 2.
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=False, review_worthy=False,
+                   skip_review=False, bead=["proj-aa11"])
+        assert job.run() == cf.EXIT_OK
+        assert any("bd_safe" in j and "close" in j for j in rec.joined())
+        assert job.out["beads_closed"] == "proj-aa11"
+
+    def test_main_close_only_needs_no_pr_flags(self, monkeypatch):
+        # --close-only must parse + run WITHOUT --branch/--pr-title/--pr-body-file
+        # or a review gate (they're only required for a PR-opening run).
+        rec = RunRecorder()
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11", "--close-only"])
+        assert rc == cf.EXIT_OK
+        assert any("bd_safe" in j and "close" in j for j in rec.joined())
+
+    def test_main_pr_run_still_requires_flags(self, monkeypatch):
+        # A NON-close-only run with the PR flags omitted must fail precondition.
+        rec = RunRecorder()
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11", "--skip-review"])  # no --branch etc.
+        assert rc == cf.EXIT_PRECONDITION
 
 
 # --------------------------------------------------------------------------- #

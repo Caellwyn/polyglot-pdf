@@ -35,10 +35,13 @@ Bead close must happen AFTER Copilot is CLEAN (SKILL Step 8). For a
 **review-skipped** PR (docs/beads/journal-only) there is no review loop, so the
 single call can carry ``--close-beads`` and close immediately. For a
 **review-worthy** PR, the first call opens the PR WITHOUT ``--close-beads``; the
-orchestrator drives the review loop to CLEAN, then runs a tiny second call
-(``--close-beads`` + telemetry, no PR work) or a direct ``bd_safe.py close``.
-The script never blocks on the watcher (that would defeat the background-watch
-design and only help the rare zero-findings case).
+orchestrator drives the review loop to CLEAN, then runs a tiny second call with
+**``--close-only``** -- which closes the bead(s) and does NOTHING else (no commit,
+rebase, push, PR, or telemetry). The telemetry row was already written by the
+first call, so ``--close-only`` is what prevents a DUPLICATE ledger row that would
+contaminate the A/B metrics (bd hrn.15). The script never blocks on the watcher
+(that would defeat the background-watch design and only help the rare
+zero-findings case).
 
 Worktree safety
 ---------------
@@ -278,12 +281,17 @@ class Closeout:
             )
 
     def close_beads(self) -> None:
-        if not self.args.close_beads:
+        # --close-only exists solely to close, so it closes regardless of the
+        # --close-beads flag (a programmatic caller that set close_only but not
+        # close_beads should still close, not silently no-op -- fresh-eyes PR #59).
+        if not self.args.close_beads and not self.args.close_only:
             return
         bd_safe = self.WT / "scripts" / "bd_safe.py"
         closed = []
         for b in self.args.bead:
-            reason = "Closed at /closeout for PR #{} (bd {})".format(self.out["PR"], b)
+            pr = self.out["PR"]
+            reason = ("Closed at /closeout for PR #{} (bd {})".format(pr, b)
+                      if pr != "-" else "Closed at /closeout (bd {})".format(b))
             _run([str(self.PY), str(bd_safe), "close", b, "--reason", reason])
             closed.append(b)
         self.out["beads_closed"] = ",".join(closed) if closed else "-"
@@ -292,6 +300,16 @@ class Closeout:
     def steps(self) -> list[tuple[str, object]]:
         """The ordered (label, callable) plan. Labels drive --dry-run output."""
         plan: list[tuple[str, object]] = []
+        # --close-only is the SECOND call of the two-call review-worthy pattern:
+        # the PR was already opened (and its telemetry row already written) by the
+        # first call, so here we ONLY close the bead(s). Skipping commit/rebase/
+        # push/PR/telemetry is what prevents a DUPLICATE ledger row (bd hrn.15).
+        if self.args.close_only:
+            plan.append((
+                '"{}" "{}/scripts/bd_safe.py" close {} --reason "..."'.format(
+                    self.PY, self.wt, " ".join(self.args.bead)),
+                self.close_beads))
+            return plan
         if self.args.commit_message:
             plan.append((
                 'git -C "{}" commit -m "{}"'.format(self.wt, self.args.commit_message),
@@ -332,26 +350,34 @@ class Closeout:
             print("WT = {}".format(self.WT))
             print("PY = {}".format(self.PY))
             print("repo = {}".format(self.repo))
-            print("review = {}".format(
-                "review-worthy" if self.args.review_worthy else "skip-review"))
+            if self.args.close_only:
+                print("mode = close-only (no PR / no telemetry)")
+            else:
+                print("review = {}".format(
+                    "review-worthy" if self.args.review_worthy else "skip-review"))
             print("--- plan ---")
             for i, (label, _fn) in enumerate(plan, 1):
                 print("  {}. {}".format(i, label))
-            # Exercise the ledger's own preview so even that is path-checked.
-            ledger = self.WT / "scripts" / "harness_ledger.py"
-            print("--- ledger --dry-run preview ---")
-            prev = _run([str(self.PY), str(ledger), "--dry-run",
-                         *sum((["--bead", b] for b in self.args.bead), []),
-                         *(["--arm", self.args.arm] if self.args.arm else [])],
-                        check=False)
-            print((prev.stdout or prev.stderr or "(no ledger preview)").strip())
+            # Exercise the ledger's own preview so even that is path-checked --
+            # but close-only writes NO ledger row, so there's nothing to preview.
+            if not self.args.close_only:
+                ledger = self.WT / "scripts" / "harness_ledger.py"
+                print("--- ledger --dry-run preview ---")
+                prev = _run([str(self.PY), str(ledger), "--dry-run",
+                             *sum((["--bead", b] for b in self.args.bead), []),
+                             *(["--arm", self.args.arm] if self.args.arm else [])],
+                            check=False)
+                print((prev.stdout or prev.stderr or "(no ledger preview)").strip())
             print("RESULT: DRY-RUN")
             return EXIT_OK
 
         for _label, fn in plan:
             fn()  # type: ignore[operator]
-        self.out["RESULT"] = ("OPENED-REVIEW" if self.args.review_worthy
-                              else "OPENED-NOREVIEW")
+        if self.args.close_only:
+            self.out["RESULT"] = "CLOSED-ONLY"
+        else:
+            self.out["RESULT"] = ("OPENED-REVIEW" if self.args.review_worthy
+                                  else "OPENED-NOREVIEW")
         self._emit()
         return EXIT_OK
 
@@ -372,14 +398,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--bead", action="append", default=[], required=True,
                    help="Full bead id; repeat for a bundled PR.")
-    p.add_argument("--branch", required=True, help="The feature branch to push.")
+    # --branch / --pr-title / --pr-body-file and the review gate are required for a
+    # normal open-the-PR run but NOT for --close-only (the second call closes a
+    # bead on an already-open PR); main() enforces them conditionally.
+    p.add_argument("--branch", default=None, help="The feature branch to push.")
     p.add_argument("--base", default="origin/dev",
                    help="Integration branch (default: origin/dev).")
-    p.add_argument("--pr-title", required=True)
-    p.add_argument("--pr-body-file", required=True,
+    p.add_argument("--pr-title", default=None)
+    p.add_argument("--pr-body-file", default=None,
                    help="Path to the PR body (a file, to avoid quoting + keep the "
                         "trigger OUT of the body).")
-    gate = p.add_mutually_exclusive_group(required=True)
+    gate = p.add_mutually_exclusive_group(required=False)
     gate.add_argument("--review-worthy", action="store_true",
                       help="Request a Copilot review (post the trigger comment).")
     gate.add_argument("--skip-review", action="store_true",
@@ -396,6 +425,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--close-beads", action="store_true",
                    help="Close the bead(s) now (only when review is already CLEAN; "
                         "default OFF -- see the two-call pattern in the docstring).")
+    p.add_argument("--close-only", action="store_true",
+                   help="SECOND call of the two-call review-worthy pattern: close "
+                        "the bead(s) ONLY -- no commit/rebase/push/PR/telemetry "
+                        "(the first call already wrote the telemetry row). Implies "
+                        "--close-beads. Avoids a duplicate ledger row (bd hrn.15).")
     p.add_argument("--dry-run", action="store_true",
                    help="Print the fully-resolved plan; perform ZERO MUTATING side "
                         "effects (read-only git root-resolution still runs).")
@@ -404,6 +438,26 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    # --close-only implies --close-beads (it exists to close, nothing else).
+    if args.close_only:
+        args.close_beads = True
+    else:
+        # Normal open-the-PR run: the PR flags + review gate are required here
+        # (they're argparse-optional only so --close-only can omit them).
+        missing = [f for f, v in (("--branch", args.branch),
+                                  ("--pr-title", args.pr_title),
+                                  ("--pr-body-file", args.pr_body_file)) if not v]
+        if missing:
+            sys.stderr.write(
+                "closeout_finish.py: missing required arg(s) for a PR-opening run: "
+                "{}\n".format(", ".join(missing)))
+            return EXIT_PRECONDITION
+        if not (args.review_worthy or args.skip_review):
+            sys.stderr.write(
+                "closeout_finish.py: exactly one of --review-worthy/--skip-review "
+                "is required for a PR-opening run.\n")
+            return EXIT_PRECONDITION
 
     try:
         R, WT = resolve_roots()
@@ -417,11 +471,11 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_FAIL
 
     # Branch sanity: the --branch arg must match the checked-out branch, else a
-    # push/rebase would operate on the wrong branch. Skip under --dry-run (it has
-    # no side effects, so a mismatch shouldn't block the rehearsal). FAIL CLOSED:
-    # if we cannot read the current branch at all, that's a precondition failure,
-    # not a reason to skip the guard and push blindly.
-    if not args.dry_run:
+    # push/rebase would operate on the wrong branch. Skip under --dry-run (no side
+    # effects) and under --close-only (no push/rebase happens). FAIL CLOSED: if we
+    # cannot read the current branch at all, that's a precondition failure, not a
+    # reason to skip the guard and push blindly.
+    if not args.dry_run and not args.close_only:
         cur = _run(["git", "-C", str(WT), "rev-parse", "--abbrev-ref", "HEAD"],
                    check=False)
         current = (cur.stdout or "").strip()
