@@ -86,7 +86,7 @@ def _args(**over):
         review_worthy=False, skip_review=True, commit_message=None,
         arm="A", cost_category="production", copilot_rounds=0,
         maintainer_touchpoints=0, deferred_nits=0, haiku_escalations=0,
-        errors_shipped=0, close_beads=False, start_watcher=False, dry_run=False,
+        errors_shipped=0, close_beads=False, dry_run=False,
     )
     base.update(over)
     return argparse.Namespace(**base)
@@ -143,9 +143,12 @@ class TestDryRun:
         job = _job(rec, dry_run=True, review_worthy=True, skip_review=False,
                    commit_message="c")
         assert job.run() == cf.EXIT_OK
+        # The ledger preview MUST have run (else the test passes vacuously with
+        # zero calls -- the Finding-7 gap).
+        assert len(rec.calls) >= 1, "dry-run made no subprocess call at all"
         # The ONLY allowed subprocess in dry-run is the ledger's own --dry-run.
+        assert all("--dry-run" in j for j in rec.joined()), rec.joined()
         for joined in rec.joined():
-            assert "--dry-run" in joined, "dry-run made a mutating call: {}".format(joined)
             assert "commit" not in joined and "push" not in joined
             assert "pr create" not in joined and "gh api" not in joined
             assert "bd_safe" not in joined
@@ -311,3 +314,31 @@ class TestBranchMismatch:
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
                       "--pr-title", "t", "--pr-body-file", "f", "--skip-review"])
         assert rc == cf.EXIT_PRECONDITION
+
+    def test_fails_closed_when_branch_unreadable(self, monkeypatch):
+        # If `git rev-parse` yields no branch, FAIL (don't silently skip the
+        # guard and push blindly) -- fresh-eyes Finding 4.
+        rec = RunRecorder(responses={"rev-parse --abbrev-ref": (0, "", "")})
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
+                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review"])
+        assert rc == cf.EXIT_PRECONDITION
+
+    def test_dry_run_skips_branch_guard(self, monkeypatch):
+        # --dry-run is a rehearsal: a branch mismatch must NOT block the preview
+        # (fresh-eyes Finding 5). It should print the plan and exit 0.
+        rec = RunRecorder(responses={"rev-parse --abbrev-ref": (0, "other", ""),
+                                     "--dry-run": (0, "{}", "")})
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
+                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review",
+                      "--dry-run"])
+        assert rc == cf.EXIT_OK
+        # the branch guard's rev-parse must NOT have run under dry-run
+        assert not any("rev-parse --abbrev-ref" in j for j in rec.joined())

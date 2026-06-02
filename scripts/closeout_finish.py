@@ -217,8 +217,11 @@ class Closeout:
             "--title", self.args.pr_title,
             "--body-file", self.args.pr_body_file,
         ])
-        # `gh pr create` prints the PR URL on the last line; the number is its tail.
-        url = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout.strip() else ""
+        # `gh pr create` prints the PR URL (…/pull/<n>); pick the line that looks
+        # like one rather than blindly taking the last line (gh may print a
+        # trailing notice). Fall back to the last non-empty line.
+        lines = [ln.strip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
+        url = next((ln for ln in lines if "/pull/" in ln), lines[-1] if lines else "")
         num = url.rstrip("/").rsplit("/", 1)[-1]
         if not num.isdigit():
             raise CloseoutError("could not parse PR number from: {!r}".format(url))
@@ -324,7 +327,7 @@ class Closeout:
     def run(self) -> int:
         plan = self.steps()
         if self.args.dry_run:
-            print("=== closeout_finish DRY RUN (no side effects) ===")
+            print("=== closeout_finish DRY RUN (no mutating side effects) ===")
             print("R  = {}".format(self.R))
             print("WT = {}".format(self.WT))
             print("PY = {}".format(self.PY))
@@ -393,11 +396,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--close-beads", action="store_true",
                    help="Close the bead(s) now (only when review is already CLEAN; "
                         "default OFF -- see the two-call pattern in the docstring).")
-    p.add_argument("--start-watcher", action="store_true",
-                   help="(Testing only) start the watcher instead of printing the "
-                        "command. The orchestrator should normally launch it itself.")
     p.add_argument("--dry-run", action="store_true",
-                   help="Print the fully-resolved plan; perform ZERO side effects.")
+                   help="Print the fully-resolved plan; perform ZERO MUTATING side "
+                        "effects (read-only git root-resolution still runs).")
     return p
 
 
@@ -416,15 +417,24 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_FAIL
 
     # Branch sanity: the --branch arg must match the checked-out branch, else a
-    # push/rebase would operate on the wrong branch.
-    cur = _run(["git", "-C", str(WT), "rev-parse", "--abbrev-ref", "HEAD"],
-               check=False)
-    current = (cur.stdout or "").strip()
-    if current and current != args.branch:
-        sys.stderr.write(
-            "closeout_finish.py: --branch {!r} != checked-out branch {!r}\n".format(
-                args.branch, current))
-        return EXIT_PRECONDITION
+    # push/rebase would operate on the wrong branch. Skip under --dry-run (it has
+    # no side effects, so a mismatch shouldn't block the rehearsal). FAIL CLOSED:
+    # if we cannot read the current branch at all, that's a precondition failure,
+    # not a reason to skip the guard and push blindly.
+    if not args.dry_run:
+        cur = _run(["git", "-C", str(WT), "rev-parse", "--abbrev-ref", "HEAD"],
+                   check=False)
+        current = (cur.stdout or "").strip()
+        if not current:
+            sys.stderr.write(
+                "closeout_finish.py: could not determine the current branch "
+                "(git rev-parse failed); refusing to push blindly.\n")
+            return EXIT_PRECONDITION
+        if current != args.branch:
+            sys.stderr.write(
+                "closeout_finish.py: --branch {!r} != checked-out branch {!r}\n".format(
+                    args.branch, current))
+            return EXIT_PRECONDITION
 
     repo = swarm_config.repo()
     job = Closeout(args, R, WT, PY, repo)
