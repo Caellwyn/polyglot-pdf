@@ -14,8 +14,6 @@
       "WebFetch(domain:polyglot-demo-aa709.firebaseapp.com)",
       "Bash(grep -o 'Login.\\\\{0,2000\\\\}' /tmp/jan_bundle.js)",
       "Bash(grep -oP 'function [A-Z][a-z]*\\\\\\(\\\\\\).{0,3000}Sign in with Google.{0,1000}' /tmp/jan_bundle.js)",
-      "Bash(python3.exe -c \":*)",
-      "Bash(node -e \":*)",
       "Bash(python scripts/bd_safe.py:*)",
       "Bash(python scripts/closeout_housekeeping.py:*)",
       "Bash(python scripts/journal_scaffold.py:*)",
