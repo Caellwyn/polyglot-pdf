@@ -168,6 +168,14 @@ def check_preconditions(WT: Path, base: str) -> dict:
             detail += "Uncommitted changes:\n{}\n".format(dirty)
         if commits:
             detail += "\nCommits ahead:\n{}".format(commits)
+        elif not dirty:
+            # No commits AND a clean tree: explain why the section is otherwise
+            # empty. (When also dirty, the "no commits ahead" problem is already
+            # in the summary; spell it out here too so the detail isn't just the
+            # uncommitted-file list with no mention of the second problem.)
+            detail += "No commits ahead of {}.".format(base)
+        else:
+            detail += "\n(No commits ahead of {} either.)".format(base)
         return _result("preconditions", STATUS_ATTENTION,
                        "; ".join(problems), detail)
     return _result("preconditions", STATUS_OK,
@@ -227,6 +235,18 @@ def check_docs(py: Path, WT: Path) -> dict:
     except (OSError, subprocess.SubprocessError) as exc:
         return _result("docs", STATUS_FAIL, "could not run freshness check: {}".format(exc))
     out = (proc.stdout or "").strip()
+    # check_doc_freshness.py is documented to ALWAYS exit 0; a non-zero code
+    # therefore means it CRASHED (unhandled exception, bad import), in which
+    # case stdout is empty/partial and the "STALE" scan below would falsely read
+    # CLEAN -> a false READY that lets stale docs through. Treat a non-zero exit
+    # as a tooling FAIL, not OK (fresh-eyes PR #54). The beads/test checks
+    # already key on the exit code; this brings docs in line.
+    if proc.returncode != 0:
+        detail = out + ("\n" + proc.stderr.strip() if proc.stderr.strip() else "")
+        return _result("docs", STATUS_FAIL,
+                       "doc-freshness check exited {} (crashed; verdict unreliable)".format(
+                           proc.returncode),
+                       detail)
     # The checker prints "STALE" per stale doc and an all-clear line otherwise.
     # Case-sensitive on the literal marker it emits.
     if "STALE" in out:
@@ -338,6 +358,19 @@ def render_todo(results: list[dict], status: str) -> str:
             lines.append("  - {}: {}".format(r["check"], r["summary"]))
             if r["detail"]:
                 lines.append("    {}".format(r["detail"].replace("\n", "\n    ")))
+        # A FAIL outranks any co-occurring ATTENTION in the verdict, but the
+        # orchestrator still has to act on BOTH -- a dirty tree doesn't go away
+        # because the docs check also crashed. Surface the attention items (with
+        # their detail) too, so a mixed FAIL+ATTENTION run doesn't cost a second
+        # round-trip to discover the dirty tree (fresh-eyes PR #54).
+        attention = [r for r in results if r["status"] == STATUS_ATTENTION]
+        if attention:
+            lines.append("\nAlso needs triage (non-blocking on the prep error):")
+            for r in attention:
+                lines.append("  - {}: {}".format(r["check"], r["summary"]))
+            for r in attention:
+                if r["detail"]:
+                    lines.append("\n--- {} detail ---\n{}".format(r["check"], r["detail"]))
     return "\n".join(lines)
 
 

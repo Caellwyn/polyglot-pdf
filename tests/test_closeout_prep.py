@@ -104,6 +104,24 @@ class TestPreconditions:
         r = prep.check_preconditions(pathlib.Path("/wt"), "origin/dev")
         assert r["status"] == prep.STATUS_ATTENTION
         assert "no commits ahead" in r["summary"]
+        # Clean tree + no commits -> detail explains the empty commits section.
+        assert "No commits ahead" in r["detail"]
+
+    def test_dirty_and_no_commits_detail_mentions_both(self, monkeypatch):
+        # When BOTH problems hold, the detail must mention the no-commits issue,
+        # not just the uncommitted-file list (fresh-eyes PR #54).
+        def fake_git(args, cwd=None):
+            if args[:2] == ["status", "--short"]:
+                return _cp(0, stdout=" M foo.py\n")  # dirty
+            if args[0] == "log":
+                return _cp(0, stdout="")  # none ahead
+            return _cp(0)
+        monkeypatch.setattr(prep, "_git", fake_git)
+        r = prep.check_preconditions(pathlib.Path("/wt"), "origin/dev")
+        assert r["status"] == prep.STATUS_ATTENTION
+        assert "DIRTY" in r["summary"] and "no commits ahead" in r["summary"]
+        assert "foo.py" in r["detail"]
+        assert "No commits ahead" in r["detail"]  # second problem spelled out
 
     def test_bad_base_ref_is_attention_with_git_message(self, monkeypatch):
         def fake_git(args, cwd=None):
@@ -186,6 +204,17 @@ class TestDocs:
         assert r["status"] == prep.STATUS_ATTENTION
         assert "STALE" in r["summary"]
 
+    def test_nonzero_exit_is_fail_not_false_clean(self, monkeypatch, tmp_path):
+        # The freshness checker is documented to always exit 0; a non-zero exit
+        # means it CRASHED, so empty stdout must NOT read as OK (fresh-eyes PR
+        # #54). It must be FAIL, never a false-clean.
+        self._mk(tmp_path)
+        monkeypatch.setattr(prep, "_run_check_script",
+                            lambda *a, **k: _cp(1, stdout="", stderr="Traceback ... ImportError"))
+        r = prep.check_docs(pathlib.Path("py"), tmp_path)
+        assert r["status"] == prep.STATUS_FAIL
+        assert "crashed" in r["summary"]
+
 
 # --------------------------------------------------------------------------- #
 # Tests (Step 4): pytest exit-code mapping + summary parse
@@ -242,6 +271,21 @@ class TestRender:
         assert "RESULT: PREP-ERROR" in out
         assert "beads: bd missing" in out
 
+    def test_prep_error_still_surfaces_attention_detail(self):
+        # A FAIL outranks a co-occurring ATTENTION in the verdict, but the
+        # ATTENTION item's detail must STILL be shown so a mixed run doesn't cost
+        # a second round-trip to discover the dirty tree (fresh-eyes PR #54).
+        results = [
+            prep._result("preconditions", prep.STATUS_ATTENTION, "dirty", detail="M foo.py"),
+            prep._result("docs", prep.STATUS_FAIL, "freshness crashed", detail="Traceback"),
+        ]
+        out = prep.render_todo(results, prep.STATUS_FAIL)
+        assert "RESULT: PREP-ERROR" in out
+        assert "docs: freshness crashed" in out          # the headline FAIL
+        assert "Also needs triage" in out                # the attention section
+        assert "preconditions: dirty" in out
+        assert "M foo.py" in out                          # the attention DETAIL is present
+
 
 # --------------------------------------------------------------------------- #
 # CLI wiring (main): json + skip-tests + exit code, with checks stubbed
@@ -270,9 +314,17 @@ class TestMain:
 
     def test_main_skip_tests_omits_test_check(self, monkeypatch, tmp_path, capsys):
         self._stub_roots(monkeypatch, tmp_path)
-        for name in ("check_preconditions", "check_beads", "check_docs"):
-            monkeypatch.setattr(prep, name,
-                                (lambda n: (lambda *a, **k: prep._result(n.split("_")[1], prep.STATUS_OK, "ok")))(name))
+        # Map each check function to the check name it reports, explicitly (not
+        # by string-splitting the function name -- that was fragile against a
+        # multi-segment name like check_foo_bar; fresh-eyes PR #54).
+        check_names = {
+            "check_preconditions": "preconditions",
+            "check_beads": "beads",
+            "check_docs": "docs",
+        }
+        for fn_name, check in check_names.items():
+            monkeypatch.setattr(prep, fn_name,
+                                (lambda c: (lambda *a, **k: prep._result(c, prep.STATUS_OK, "ok")))(check))
         called = {"tests": False}
         def boom(*a, **k):
             called["tests"] = True
