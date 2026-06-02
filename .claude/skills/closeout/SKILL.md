@@ -33,11 +33,12 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 ## Hard rules (read before doing anything)
 
-- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. A normal PR triggers Copilot's round-1 review on OPEN, so Copilot runs in parallel with fresh-eyes -- you keep the parallelism with no draft. The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
-- **NEVER use a draft PR + ready-flip.** The draft->ready flip is ITSELF a Copilot trigger (GitHub re-reviews when a PR is marked ready -- there is no ruleset toggle for it), so a draft costs TWO Copilot reviews of the same final content. Copilot review tokens are SCARCE; never trigger a redundant review of content Copilot already approved. A normal PR has no flip event, so this waste is structurally impossible.
+- **Copilot review is OPT-IN, not automatic (since 2026-06-01).** Automatic Copilot review on PR open is DISABLED in repo settings, and Copilot is now metered per-token against a finite monthly credit pool -- a wasted review is wasted money. A review fires ONLY when the PR contains the literal trigger `@copilot please review`. **Put that trigger in the PR BODY** (the `gh pr create --body`), NOT as a separate comment -- a body trigger costs zero extra Claude turns; a comment costs one. **Omit the trigger entirely for a PR that does not warrant a review** (see the Step 6 review-worthiness gate); a docs-only / beads-only / journal-only / trivial PR gets NO trigger and skips the whole watch loop.
+- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Copilot runs in parallel with it ONLY when the PR is review-worthy and you included the body trigger. The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
+- **NEVER use a draft PR + ready-flip.** With auto-review off the flip no longer triggers Copilot, but a draft still adds a state flip for no benefit and risks a future settings change re-arming flip-triggered reviews. Always open normal. Copilot review tokens are SCARCE; never trigger a redundant review of content Copilot already approved.
 - **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
-- **Loop Copilot until it has NO comments.** After a fix-push, Copilot re-reviews (`review_on_push`, ~4 min); ALSO post `@copilot please review` as a backstop. Adopt -> push -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `copilot_watch` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean).
-- **Never leave a `copilot_watch.py` background process running once it is no longer needed** -- i.e. once Copilot reports CLEAN (no comments) OR the branch is merged. The watcher self-exits at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so a watch you READ is already gone; the hazard is an orphaned watch you launched and walked away from. It runs as a `run_in_background` **Bash** task (no `TaskStop` handle) -- if one is still alive at CLEAN or merge, kill it by PID. ERROR/TIMEOUT do NOT mean "keep watching": that watch has already exited; surface the state to the maintainer (per the loop rule above) rather than spawning a fresh watcher that would then linger.
+- **Loop Copilot until it has NO comments (only if the PR is review-worthy).** With auto-review off, a fix-push does NOT re-trigger Copilot on its own -- you MUST post `@copilot please review` to request each re-review. Adopt -> push -> post trigger (capture its timestamp) -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `pr_review_watcher.py` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean). A PR that skipped review per the Step 6 gate has no loop at all.
+- **Never leave a `pr_review_watcher.py` background process running once it is no longer needed** -- i.e. once Copilot reports CLEAN (no comments) OR the branch is merged. The watcher self-exits at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so a watch you READ is already gone; the hazard is an orphaned watch you launched and walked away from. It runs as a `run_in_background` **Bash** task (no `TaskStop` handle) -- if one is still alive at CLEAN or merge, kill it by PID. ERROR/TIMEOUT do NOT mean "keep watching": that watch has already exited; surface the state to the maintainer (per the loop rule above) rather than spawning a fresh watcher that would then linger.
 - **All beads writes go through `scripts/bd_safe.py`** (or direct `bd` with pull/push bracketing). Beads writes are main-thread only -- that's you, the orchestrator, not a subagent.
 - **Run every git command with `git -C "<worktree-abs-path>"`** if you're in a worktree -- a bare `cd` can land you in the main repo's checkout (the shell cwd resets between tool calls).
 
@@ -89,7 +90,7 @@ branch introduced (and false-flags ones the branch already fixed). Run the
 **worktree's own copy** (`$WT/scripts/...`) with cwd at `$WT` so the gate checks
 the code under review. `$R` is still correct for the venv interpreter (the venv
 lives only in the main repo) and for repo-content-agnostic scripts
-(`closeout_housekeeping.py` reads only `bd`; `copilot_watch.py` reads only the
+(`closeout_housekeeping.py` reads only `bd`; `pr_review_watcher.py` reads only the
 GitHub API). If `$WT` and `$R` are the same path, you're in the main checkout
 and both forms behave identically.
 
@@ -136,25 +137,45 @@ If anything FAILS, stop and fix it before continuing -- a red suite is not eligi
 
 The journal entry and any doc bumps must ship in THIS PR, on THIS branch. Stage and commit them now, then re-run `git status --short` to confirm the tree is clean again.
 
-## Step 6 -- Open a NORMAL PR and start BOTH reviews in parallel
+## Step 6 -- Decide review-worthiness, then open a NORMAL PR and start reviews
 
-Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR and start fresh-eyes. Copilot's round-1 review fires automatically on PR open, so the two run concurrently.
+**First, judge whether this PR warrants a Copilot review at all** (the orchestrator
+makes this call -- there is no script gate). Copilot is metered per-token against a
+finite monthly pool since 2026-06-01, so a review of a PR that can't contain a code
+regression is wasted money. Decision rule:
 
-1. **Open a NORMAL (NOT draft) PR** into the integration branch:
-   `gh pr create --base dev --title "<scope>(<context>): <summary> (bd <full-id>)" --body "<summary + a 'Fresh-eyes review' section you'll fill after triage>"`
-   Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe AND avoids the draft->ready flip that would cost a second redundant Copilot review.
-2. **Start Copilot-watch** (round 1) via `run_in_background` so you're woken once with the verdict, no polling turns:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/copilot_watch.py" <pr#>`  (same invocation for the re-watch loop in Step 7)
+- **Skip Copilot** (do NOT include the trigger; do NOT start `pr_review_watcher.py`) when the
+  diff cannot introduce a runtime/logic regression -- e.g. it touches ONLY docs
+  (`docs/`, `*.md`), `.beads/`, journal entries, or other non-executed prose/config.
+  A pure doc bump, a beads sync, or a journal-only PR is in this bucket.
+- **Request Copilot** (include the body trigger; run the watch loop) when the diff
+  touches executable source (`backend/`, `frontend/src/`, scripts, CI, config that
+  changes runtime behavior) in any non-trivial way.
+- **When genuinely ambiguous, request the review** -- a wasted review is cheaper than
+  a shipped regression. "Ambiguous" means a real judgment call, not "I'd rather not
+  wait"; do not use the gate to dodge review of actual code.
+
+Fresh-eyes ALWAYS runs regardless of this gate (it costs no Copilot credit).
+
+Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR and start fresh-eyes. If the PR is review-worthy, the body trigger requests Copilot's round-1 review on open, so it runs concurrently with fresh-eyes.
+
+1. **Open a NORMAL (NOT draft) PR** into the integration branch. **If review-worthy, put `@copilot please review` in the BODY** (not a separate comment -- that wastes a Claude turn). If you're skipping review per the gate above, OMIT the trigger:
+   `gh pr create --base dev --title "<scope>(<context>): <summary> (bd <full-id>)" --body "<summary + (if review-worthy) a line containing '@copilot please review' + a 'Fresh-eyes review' section you'll fill after triage>"`
+   Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe.
+2. **(Review-worthy PRs only) Start Copilot-watch** (round 1) via `run_in_background` so you're woken once with the verdict, no polling turns:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#>`  (same invocation for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch.
 3. **Spawn the fresh-eyes reviewer** concurrently. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type); otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "sonnet", ... })`. Substitute the branch name. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
 
-Both run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum.
+For a review-worthy PR both reviewers run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum. For a review-skipped PR, only fresh-eyes runs.
 
 ## Step 7 -- Fix the COMBINED round-1 issues, then loop Copilot until clean
 
-**Wait for BOTH round-1 reviewers, then fix their findings together in one batch** (so the next push carries all of them and Copilot re-reviews once, not once per reviewer):
+**If you skipped Copilot per the Step 6 gate, there is no Copilot round here** -- triage fresh-eyes only (below), then go straight to Step 8. The rest of this step applies only to review-worthy PRs.
+
+**Wait for BOTH round-1 reviewers, then fix their findings together in one batch** (so the next push carries all of them and you request ONE Copilot re-review, not one per reviewer):
 
 - **Fresh-eyes (one pass):** triage -- high-confidence findings fixed inline; the rest filed as a bead BEFORE moving on (the PR body is an audit log, not a tracker); record the adopt/reject/defer breakdown for the PR body + journal.
-- **Copilot round 1:** `copilot_watch.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2) -- handle ALL four:
+- **Copilot round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2) -- handle ALL four:
   - **CLEAN** (no comments) -> Copilot already happy; if fresh-eyes also produced no on-branch fixes, skip straight to Step 8.
   - **COMMENTS** -> triage like fresh-eyes (adopt inline / defer to beads).
   - **ERROR** (quota/failure) -> surface to the maintainer; NO auto-retry (a quota error won't clear for hours). NOT a clean state.
@@ -162,14 +183,14 @@ Both run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not
 
 Commit the combined fixes, then **push once and loop Copilot to clean:**
 1. Rebase on the FEATURE branch (NOT the integration branch): `git pull --rebase origin <branch>` -- picks up anything pushed to the branch. (Step 6's one-time pre-push rebase was against the integration branch; the loop rebases against the feature branch.)
-2. Push the fix commit. The push auto-re-triggers Copilot (`review_on_push`, ~4 min).
-3. **Post `@copilot please review` AND capture the comment's server timestamp** -- this timestamp is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Use the API form so you get `created_at` back:
+2. Push the fix commit. With auto-review OFF, the push does NOT trigger Copilot by itself -- the explicit trigger in the next sub-step is what requests the re-review (it is the trigger, not a backstop).
+3. **Post `@copilot please review` AND capture the comment's server timestamp** -- this REQUESTS the re-review (auto-review is off, so without this comment Copilot never re-runs), and the timestamp is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Use the API form so you get `created_at` back:
    `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f body='@copilot please review' --jq .created_at)`
 4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/copilot_watch.py" <pr#> --since "$TS"`
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`
    Repeat the COMMENTS -> fix -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN**. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
-**As soon as Copilot reports CLEAN, make sure no `copilot_watch.py` is still running** (a lingering watcher wastes tokens). `copilot_watch.py` exits on its own at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so the one you just read is already gone -- the real hazard is an EARLIER watch you launched and never read, or a re-watch you started and then abandoned. The watcher runs as a `run_in_background` **Bash** task (not an agent task, so there is no `TaskStop` handle) -- if one is still alive, kill it by its background task / PID (e.g. `Stop-Process`). Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
+**As soon as Copilot reports CLEAN, make sure no `pr_review_watcher.py` is still running** (a lingering watcher wastes tokens). `pr_review_watcher.py` exits on its own at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so the one you just read is already gone -- the real hazard is an EARLIER watch you launched and never read, or a re-watch you started and then abandoned. The watcher runs as a `run_in_background` **Bash** task (not an agent task, so there is no `TaskStop` handle) -- if one is still alive, kill it by its background task / PID (e.g. `Stop-Process`). Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
 
 Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is one pass (round 1 only); only Copilot loops.
 
@@ -177,7 +198,7 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is
 
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
-0. **Confirm no `copilot_watch.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `copilot_watch` process running past CLEAN or past merge.
+0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
 1. **Update the PR body** so the "Fresh-eyes review" section records the final adopt/reject/defer breakdown (and the Copilot rounds, if notable).
 2. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
 3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.

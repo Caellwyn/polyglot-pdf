@@ -62,9 +62,12 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
 2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
-   PR and runs fresh-eyes **in parallel with** Copilot's auto-review, loops to
-   clean, then the maintainer merges. No draft PRs; never hand-poll Copilot. See
-   the "Closeout" section below and
+   PR and runs fresh-eyes, **requesting Copilot in parallel only when the PR is
+   review-worthy.** Copilot review is OPT-IN since 2026-06-01 (metered per-token,
+   finite monthly credits) -- auto-review is OFF, so a review fires only when the
+   PR BODY contains `@copilot please review`; docs/beads/journal-only PRs skip it.
+   Then closeout loops Copilot to clean and the maintainer merges. No draft PRs;
+   never hand-poll Copilot. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
@@ -126,14 +129,22 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   parallel-review setup and tempts hand-polling).
-- **Copilot is watched by a script, never by hand.** `/closeout` launches
-  `scripts/copilot_watch.py <pr#>` via `run_in_background`; the harness wakes you
-  once with the classified verdict -- one of `CLEAN`/`COMMENTS` (both exit 0),
-  `ERROR` (exit 1), or `TIMEOUT` (exit 2). Never treat `ERROR`/`TIMEOUT` as clean.
-  **Never poll `gh api .../comments` yourself** -- that's the expensive manual
-  loop the watcher exists to replace, and hand-polling silently misses feedback.
-- **Fresh-eyes runs in parallel** with Copilot round 1; you fix the COMBINED
-  findings, push once, and **loop Copilot until it reports `CLEAN`.**
+- **Copilot review is OPT-IN -- request it only for review-worthy PRs.** Auto-review
+  on open is OFF (metered credits). The orchestrator judges per-PR whether the diff
+  can regress runtime behavior; if so, it puts `@copilot please review` in the PR
+  BODY (not a comment -- that wastes a turn). Docs-only / `.beads`-only /
+  journal-only / trivial PRs get NO trigger and skip the watch loop. With auto-review
+  off, each re-review must also be explicitly requested via `@copilot please review`.
+- **Copilot is watched by a script, never by hand.** For a review-worthy PR,
+  `/closeout` launches `scripts/pr_review_watcher.py <pr#>` via `run_in_background`; the
+  harness wakes you once with the classified verdict -- one of `CLEAN`/`COMMENTS`
+  (both exit 0), `ERROR` (exit 1), or `TIMEOUT` (exit 2). Never treat
+  `ERROR`/`TIMEOUT` as clean. **Never poll `gh api .../comments` yourself** -- that's
+  the expensive manual loop the watcher exists to replace, and hand-polling silently
+  misses feedback.
+- **Fresh-eyes runs in parallel** with Copilot round 1 (and runs even when Copilot is
+  skipped); you fix the COMBINED findings, push once, and **loop Copilot until it
+  reports `CLEAN`.**
 - Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
   to merge** -- it never merges (that's the maintainer's).
 

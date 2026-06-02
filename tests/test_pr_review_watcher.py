@@ -1,9 +1,13 @@
-"""Tests for scripts/copilot_watch.py.
+"""Tests for scripts/pr_review_watcher.py.
 
 Imports the script as a module (repo precedent: test_doc_freshness.py,
 test_reset_dev_db_script.py) and exercises the pure classification logic
 without hitting the network. The round-scoping tests monkeypatch
 `_run_gh_api` so no `gh` call is made.
+
+The reviewer-specific behavior lives in `ReviewerProfile`s (cw.COPILOT_PROFILE
+/ cw.CODEX_PROFILE); classification helpers take a profile. Tests that don't
+care which reviewer default to the Copilot profile via `PROFILE`.
 """
 
 import datetime
@@ -15,14 +19,18 @@ import pytest
 
 
 SCRIPT_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent / "scripts" / "copilot_watch.py"
+    pathlib.Path(__file__).resolve().parent.parent / "scripts" / "pr_review_watcher.py"
 )
-spec = importlib.util.spec_from_file_location("copilot_watch", SCRIPT_PATH)
+spec = importlib.util.spec_from_file_location("pr_review_watcher", SCRIPT_PATH)
 cw = importlib.util.module_from_spec(spec)
-sys.modules["copilot_watch"] = cw
+sys.modules["pr_review_watcher"] = cw
 spec.loader.exec_module(cw)
 
 UTC = datetime.timezone.utc
+
+# Default profile for tests that are reviewer-agnostic (the classification
+# heuristics are shared). Reviewer-specific tests reference cw.CODEX_PROFILE.
+PROFILE = cw.COPILOT_PROFILE
 
 
 # --- author detection (finding #1: must NOT match generic actions bot) ---
@@ -38,8 +46,8 @@ UTC = datetime.timezone.utc
         ("", False),
     ],
 )
-def test_is_copilot(login, expected):
-    assert cw._is_copilot(login) is expected
+def test_is_reviewer_copilot(login, expected):
+    assert cw._is_reviewer(login, PROFILE) is expected
 
 
 # --- exit-code contract (finding #5: TIMEOUT distinct from ERROR) ---
@@ -143,7 +151,7 @@ def _reviewed_event(when="2026-05-28T12:00:01Z"):
 def _run_watch_result(capsys, monkeypatch, **api):
     """Run watch() and return (exit_code, RESULT-state-string)."""
     _patch_api(monkeypatch, **api)
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=PROFILE)
     out = capsys.readouterr().out
     result = None
     for line in out.splitlines():
@@ -175,7 +183,7 @@ def test_inline_matched_by_review_id_not_timestamp(monkeypatch):
     ]
     _patch_api(monkeypatch, inline=inline)
     floor = cw._parse_iso(review["submitted_at"])
-    findings = cw._collect_findings("o/r", 1, floor, review)
+    findings = cw._collect_findings("o/r", 1, floor, review, PROFILE)
     assert any("same-round finding" in f for f in findings)
 
 
@@ -191,7 +199,7 @@ def test_inline_from_other_review_id_excluded(monkeypatch):
         }
     ]
     _patch_api(monkeypatch, inline=inline)
-    findings = cw._collect_findings("o/r", 1, None, review)
+    findings = cw._collect_findings("o/r", 1, None, review, PROFILE)
     assert not any("stale finding" in f for f in findings)
 
 
@@ -247,22 +255,22 @@ def test_working_then_deadline_is_timeout(capsys, monkeypatch):
     # copilot_work_started but no terminal event -> keep waiting, then TIMEOUT.
     timeline = [{"event": "copilot_work_started", "created_at": "2026-05-28T12:00:00Z"}]
     _patch_api(monkeypatch, timeline=timeline)
-    rc = cw.watch("o/r", 1, timeout_min=0, poll_sec=0, since=None)
+    rc = cw.watch("o/r", 1, timeout_min=0, poll_sec=0, since=None, profile=PROFILE)
     out = capsys.readouterr().out
     assert rc == 2 and "RESULT: TIMEOUT" in out and "started but not finished" in out
 
 
 def test_timeline_state_detection(monkeypatch):
     _patch_api(monkeypatch, timeline=[_reviewed_event()])
-    assert cw._timeline_state("o/r", 1, None) == "reviewed"
+    assert cw._timeline_state("o/r", 1, None, PROFILE) == "reviewed"
     _patch_api(monkeypatch, timeline=[{"event": "copilot_work_finished",
                                        "created_at": "2026-05-28T12:00:00Z"}])
-    assert cw._timeline_state("o/r", 1, None) == "finished"
+    assert cw._timeline_state("o/r", 1, None, PROFILE) == "finished"
     _patch_api(monkeypatch, timeline=[{"event": "copilot_work_started",
                                        "created_at": "2026-05-28T12:00:00Z"}])
-    assert cw._timeline_state("o/r", 1, None) == "working"
+    assert cw._timeline_state("o/r", 1, None, PROFILE) == "working"
     _patch_api(monkeypatch, timeline=[])
-    assert cw._timeline_state("o/r", 1, None) is None
+    assert cw._timeline_state("o/r", 1, None, PROFILE) is None
 
 
 def test_latest_review_wins(monkeypatch):
@@ -271,7 +279,7 @@ def test_latest_review_wins(monkeypatch):
     newer = {"id": 2, "state": "APPROVED", "submitted_at": "2026-05-28T12:00:00Z",
              "body": "new", "user": {"login": "Copilot"}}
     _patch_api(monkeypatch, reviews=[older, newer])
-    latest = cw._latest_copilot_review("o/r", 1, None)
+    latest = cw._latest_reviewer_review("o/r", 1, None, PROFILE)
     assert latest["id"] == 2
 
 
@@ -410,7 +418,7 @@ def test_genuine_prose_ask_with_stale_inline_is_comments(capsys, monkeypatch):
                "path": "app/x.py", "position": 2, "line": 5, "body": "prior-round ask"}]
     _patch_api(monkeypatch, reviews=[], issue=issue, inline=inline,
                timeline=[_reviewed_event("2026-05-28T12:04:00Z")])
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=since)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=since, profile=PROFILE)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: COMMENTS" in out
 
@@ -438,17 +446,17 @@ def test_finished_with_issue_comment_approval_is_clean(capsys, monkeypatch):
 
 def test_is_approval_comment_strict():
     # Clean approvals.
-    assert cw._is_approval_comment("No further changes were needed.")
-    assert cw._is_approval_comment("the contract is consistent; no changes needed")
+    assert cw._is_approval_comment("No further changes were needed.", PROFILE)
+    assert cw._is_approval_comment("the contract is consistent; no changes needed", PROFILE)
     # MIXED comment (approval phrase + a change ask) must NOT be CLEAN
     # (fresh-eyes finding #1 / #7).
     assert not cw._is_approval_comment(
-        "No changes needed in section 3, but please fix the null check in section 4.")
+        "No changes needed in section 3, but please fix the null check in section 4.", PROFILE)
     assert not cw._is_approval_comment(
-        "No further changes to the imports; however the main function has a bug.")
+        "No further changes to the imports; however the main function has a bug.", PROFILE)
     # Clear non-approvals.
-    assert not cw._is_approval_comment("please fix the typo")
-    assert not cw._is_approval_comment("")
+    assert not cw._is_approval_comment("please fix the typo", PROFILE)
+    assert not cw._is_approval_comment("", PROFILE)
 
 
 def test_latest_by_created_ignores_list_order():
@@ -573,7 +581,7 @@ def test_commented_review_overview_body_only_is_clean(capsys, monkeypatch):
 def test_exception_or_multiblock_phrasing_not_approval(body):
     # These all OPEN with a kept approval phrase but carry a real finding; the
     # shape guard + exception-connector signals must keep them out of CLEAN.
-    assert not cw._is_approval_comment(body)
+    assert not cw._is_approval_comment(body, PROFILE)
 
 
 def test_exception_clause_issue_comment_is_comments(capsys, monkeypatch):
@@ -588,7 +596,7 @@ def test_exception_clause_issue_comment_is_comments(capsys, monkeypatch):
 def test_long_comment_starting_with_approval_phrase_not_approval():
     # A long body that merely opens with an approval phrase is not approval-shaped.
     body = "No further changes are needed " + ("x " * 120)  # > 200 chars
-    assert not cw._is_approval_comment(body)
+    assert not cw._is_approval_comment(body, PROFILE)
 
 
 # --- round-3 review hardening (fresh-eyes + Copilot on PR #45) ---
@@ -620,7 +628,7 @@ def test_paren_list_finding_is_not_approval():
     # FE #1: a finding using "1)" list syntax with no change-ask verb must not
     # ride the allowlist to CLEAN.
     assert not cw._is_approval_comment(
-        "No further changes needed.\n1) the helper name is unclear")
+        "No further changes needed.\n1) the helper name is unclear", PROFILE)
 
 
 def test_commented_review_overview_body_with_inline_finding_is_comments(capsys, monkeypatch):
@@ -648,7 +656,7 @@ def test_collect_findings_prose_only_finding_is_not_counted(monkeypatch):
               "body": "The null pointer on line 45 is still present.",
               "user": {"login": "Copilot"}}
     monkeypatch.setattr(cw, "_run_gh_api", lambda path: [])  # no inline / issue comments
-    result = cw._collect_findings("o/r", 1, None, review)
+    result = cw._collect_findings("o/r", 1, None, review, PROFILE)
     assert result == []  # accepted-risk: prose-only finding not detected
 
 
@@ -674,7 +682,7 @@ def test_runtime_error_fallback_clean_when_body_is_neutral_overview(capsys, monk
         return {"state": "open"}
 
     monkeypatch.setattr(cw, "_run_gh_api", fake)
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=PROFILE)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out
 
@@ -697,7 +705,7 @@ def test_runtime_error_fallback_comments_when_state_changes_requested(capsys, mo
         return {"state": "open"}
 
     monkeypatch.setattr(cw, "_run_gh_api", fake)
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=PROFILE)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: COMMENTS" in out
 
@@ -708,7 +716,7 @@ def test_since_scopes_out_prior_round_review(monkeypatch):
               "body": "round 1", "user": {"login": "Copilot"}}
     _patch_api(monkeypatch, reviews=[round1])
     since = cw._parse_iso("2026-05-28T12:30:00Z")
-    assert cw._latest_copilot_review("o/r", 1, since) is None
+    assert cw._latest_reviewer_review("o/r", 1, since, PROFILE) is None
 
 
 def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
@@ -739,6 +747,189 @@ def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
     _patch_api(monkeypatch, reviews=[review], inline=inline, issue=issue,
                timeline=timeline)
     since = cw._parse_iso("2026-05-30T19:06:16Z")
-    rc = cw.watch("o/r", 21, timeout_min=0, poll_sec=0, since=since)
+    rc = cw.watch("o/r", 21, timeout_min=0, poll_sec=0, since=since, profile=PROFILE)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out
+
+
+# ===========================================================================
+# Codex profile (bd polyglot-pdf-hrn.10): the reviewer-agnostic classifier
+# driven by CODEX_PROFILE. Codex differs from Copilot in four ways exercised
+# here: (1) bot login "chatgpt-codex-connector[bot]", (2) NO copilot_work_*
+# timeline events (uses_timeline=False), (3) its clean verdict is an issue
+# comment "Codex Review: Didn't find any major issues. 👍", (4) error sentinel.
+# ===========================================================================
+
+CODEX = cw.CODEX_PROFILE
+_CODEX_LOGIN = "chatgpt-codex-connector[bot]"
+
+
+@pytest.mark.parametrize(
+    "login,expected",
+    [
+        ("chatgpt-codex-connector[bot]", True),
+        ("Codex", True),
+        ("copilot-pull-request-reviewer[bot]", False),  # disjoint from Copilot
+        ("github-actions[bot]", False),
+        ("", False),
+    ],
+)
+def test_is_reviewer_codex(login, expected):
+    assert cw._is_reviewer(login, CODEX) is expected
+
+
+def test_codex_profile_does_not_use_timeline():
+    # Codex emits no copilot_work_* events, so _timeline_state must report
+    # "reviewed" every poll (= go look at the review surfaces) WITHOUT reading
+    # the timeline at all -- even when the timeline is empty.
+    assert CODEX.uses_timeline is False
+    # No monkeypatch of _run_gh_api: if it tried to read the timeline this would
+    # raise. It must not.
+    assert cw._timeline_state("o/r", 1, None, CODEX) == "reviewed"
+
+
+def test_codex_clean_sentinel_is_clean(capsys, monkeypatch):
+    # Codex's clean verdict: no review, an issue comment with the "didn't find
+    # any major issues" sentinel. No timeline events at all.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Codex Review: Didn't find any major issues. \U0001f44d",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_codex_clean_sentinel_via_is_approval_comment():
+    # The sentinel rides the shared approval path only for the Codex profile;
+    # the Copilot profile must NOT treat it as an approval (it's not a Copilot
+    # phrasing), proving the profile actually gates the sentinel.
+    sentinel = "Codex Review: Didn't find any major issues."
+    assert cw._is_approval_comment(sentinel, CODEX) is True
+    assert cw._is_approval_comment(sentinel, PROFILE) is False
+
+
+def test_has_clean_reaction_detects_thumbs_up():
+    # The 👍 rollup ("+1" > 0) is the canonical Codex approval. Copilot has no
+    # clean_reaction, so the SAME payload must read False for it.
+    has = {"reactions": {"+1": 1, "-1": 0}}
+    none_ = {"reactions": {"+1": 0}}
+    assert cw._has_clean_reaction(has, CODEX) is True
+    assert cw._has_clean_reaction(none_, CODEX) is False
+    assert cw._has_clean_reaction({}, CODEX) is False           # no rollup -> False
+    assert cw._has_clean_reaction(has, PROFILE) is False         # Copilot: no reaction signal
+
+
+def test_codex_thumbs_up_reaction_is_clean(capsys, monkeypatch):
+    # The documented canonical signal: Codex 👍 reaction on its own comment ->
+    # CLEAN, even with a body the prose heuristics wouldn't match on their own.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Reviewed the latest changes.",  # no approval phrase
+        "reactions": {"+1": 1},
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert "reaction" in out  # classified via the reaction path, not prose
+
+
+def test_codex_thumbs_up_on_empty_comment_is_clean(capsys, monkeypatch):
+    # Codex can 👍 with an empty/minimal body. The reaction alone is the verdict.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "",
+        "reactions": {"+1": 2},
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_codex_inline_finding_beats_thumbs_up(capsys, monkeypatch):
+    # ORDERING GUARANTEE: a 👍 reaction must NOT override a real inline finding.
+    # A comment with a 👍 AND a same-round inline ask is COMMENTS, not CLEAN --
+    # the inline-findings check ranks above the reaction check.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Mostly good.",
+        "reactions": {"+1": 1},
+    }]
+    inline = [{
+        "user": {"login": _CODEX_LOGIN},
+        "pull_request_review_id": 99,
+        "created_at": "2026-06-01T12:00:01Z",
+        "path": "backend/config.py", "line": 5, "position": 1,
+        "body": "This default will break when MODEL_NATIVE is unset.",
+    }]
+    _patch_api(monkeypatch, issue=issue, inline=inline)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: COMMENTS" in out
+    assert "MODEL_NATIVE" in out
+
+
+def test_codex_inline_finding_is_comments(capsys, monkeypatch):
+    # Codex left a real review with an inline finding -> COMMENTS.
+    review = {"id": 77, "state": "COMMENTED", "submitted_at": "2026-06-01T12:00:01Z",
+              "body": "", "user": {"login": _CODEX_LOGIN}}
+    inline = [{
+        "user": {"login": _CODEX_LOGIN},
+        "pull_request_review_id": 77,
+        "created_at": "2026-06-01T12:00:00Z",
+        "path": "scripts/pr_review_watcher.py", "line": 42, "position": 1,
+        "body": "Add MERGED to the closeout watcher states.",
+    }]
+    _patch_api(monkeypatch, reviews=[review], inline=inline)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: COMMENTS" in out
+    assert "Add MERGED" in out
+
+
+def test_codex_error_sentinel_is_error(capsys, monkeypatch):
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Codex encountered an error and could not complete the review.",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 1 and "RESULT: ERROR" in out
+
+
+def test_codex_change_ask_prose_is_comments(capsys, monkeypatch):
+    # A Codex issue-comment that asks for a change (no inline) -> COMMENTS, via
+    # the same change-ask gate the Copilot path uses.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Please fix the null-default handling in config.py before merge.",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: COMMENTS" in out
+
+
+def test_codex_ignores_copilot_comment(capsys, monkeypatch):
+    # A Copilot comment on the PR must NOT be read as Codex's verdict (disjoint
+    # logins). With only a Copilot comment present, the Codex watch finds no
+    # Codex verdict and TIMEOUTs rather than falsely classifying.
+    issue = [{
+        "user": {"login": "copilot-pull-request-reviewer[bot]"},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "LGTM",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=0, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 2 and "RESULT: TIMEOUT" in out

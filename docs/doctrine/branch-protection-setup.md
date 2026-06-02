@@ -63,10 +63,13 @@ To recreate from scratch, POST the JSON in the journal entry to
 
 ## Copilot / Codex review agents
 
-`.github/copilot-instructions.md` and `.github/codex-instructions.md` govern the
-automated reviewers. Key contract: **always post a top-level summary comment on
-every round** (it's the author's polling-agent signal — a silent finish hangs
-the agent), assign findings-bearing `dev` PRs to `@caellwynai-josh`, and never
-commit directly (comment-only). The copilot instructions were tightened on the
-zero-findings/LGTM case because Copilot had been finishing silently when work
-was satisfactory.
+`.github/copilot-instructions.md` (Copilot) and the "If you are reviewing a PR"
+section of [`AGENTS.md`](../../AGENTS.md) (Codex) govern the automated reviewers --
+each bot reads only its own file. Key contract: **always post a top-level summary
+comment on every round** (it's the author's polling-agent signal — a silent finish
+hangs the agent), assign findings-bearing `dev` PRs to `@caellwynai-josh`, and
+never commit directly (comment-only). The copilot instructions were tightened on
+the zero-findings/LGTM case because Copilot had been finishing silently when work
+was satisfactory. (Codex's review rules were consolidated into AGENTS.md and the
+never-read `.github/codex-instructions.md` removed -- Codex discovers AGENTS.md,
+not that file.)

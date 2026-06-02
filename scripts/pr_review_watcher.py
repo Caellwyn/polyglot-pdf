@@ -1,46 +1,58 @@
-"""Watch a GitHub PR for GitHub Copilot review COMPLETION, then exit.
+"""Watch a GitHub PR for a bot code-review COMPLETION, then exit.
+
+Supports two reviewers behind `--reviewer copilot|codex` (default: copilot).
+The CLASSIFICATION logic (approval-phrase / change-ask / inline-findings-first
+heuristics) is shared and reviewer-agnostic -- it is the product of many past
+false-positive/false-negative fixes (each cited `bd <id>`), so it is preserved
+verbatim across reviewers. Only the reviewer-SPECIFIC bits vary, and they are
+isolated in a `ReviewerProfile` (see PROFILES below): the bot login marker, how
+"the review finished" is detected, the error sentinel, and the clean signal.
 
 Background
 ----------
-The development cycle waits on Copilot's auto-review after every PR open
-(and after every "@copilot please review" re-trigger). Historically the
-orchestrating agent polled `gh api .../comments` every few minutes -- each
-poll a full, expensive model turn that did nothing but run one shell
-command and check whether a counter moved. This script moves that wait OUT
-of the model: run it via the agent harness's `run_in_background`, and the
-agent is woken exactly once, when the review reaches a terminal state, with
-the verdict already classified. Zero polling turns.
+The development cycle waits on the bot's review after every re-trigger
+("@copilot please review" / "@codex review"). Historically the orchestrating
+agent polled `gh api .../comments` every few minutes -- each poll a full,
+expensive model turn that did nothing but run one shell command and check
+whether a counter moved. This script moves that wait OUT of the model: run it
+via the agent harness's `run_in_background`, and the agent is woken exactly
+once, when the review reaches a terminal state, with the verdict already
+classified. Zero polling turns.
 
 Why "review completion", not "a new comment"
 ---------------------------------------------
-The COMMON case is Copilot finishing a review with NO inline comments (just
-a completed review whose state is the verdict). "No comment yet" and "done,
-nothing to say" look identical if you only watch the inline-comment stream,
-so a naive new-comment watcher would hang forever on a clean review. This
-script instead watches for the review to COMPLETE and then classifies the
-terminal state.
+The COMMON case is the bot finishing a review with NO inline comments (just a
+completed review whose state, or a 👍 reaction, is the verdict). "No comment
+yet" and "done, nothing to say" look identical if you only watch the
+inline-comment stream, so a naive new-comment watcher would hang forever on a
+clean review. This script instead watches for the review to COMPLETE and then
+classifies the terminal state.
 
-Timeline-driven lifecycle
--------------------------
-The authoritative "where is the review" signal is the issue TIMELINE
-(`/issues/{n}/timeline`), NOT the reviews/comments endpoints -- those only
-populate after a verdict submits, so they can't tell "not started" from "in
-progress" from "finished with nothing," and they hide two terminal states
-(Copilot error; finished-with-no-review). The watcher reads the timeline:
-
+Detecting "the review finished" (reviewer-specific)
+---------------------------------------------------
+COPILOT exposes a lifecycle on the issue TIMELINE (`/issues/{n}/timeline`):
   copilot_work_started   -> in flight; keep waiting (no premature TIMEOUT)
   reviewed               -> a verdict submitted; classify it (below)
   copilot_work_finished  -> Copilot done, produced no review -> CLEAN
+These are the authoritative "where is the review" signals -- the
+reviews/comments endpoints only populate after a verdict submits, so they
+can't tell "not started" from "in progress" from "finished with nothing."
 
-Once a `reviewed` event lands, the findings come from three surfaces (a
-verdict can land on any; watching one misses the others):
+CODEX emits NO such timeline events. Its completion is detected directly from
+the review surfaces: a posted review / inline comments (= findings), or its
+clean sentinel -- a 👍 reaction plus a "Codex Review: Didn't find any major
+issues" issue comment. With no in-flight signal, the Codex profile relies on
+the --since floor and the timeout to bound the wait.
+
+Once the review has landed, the findings come from three surfaces (a verdict
+can land on any; watching one misses the others):
 
   1. Inline review comments  -> GET /repos/{o}/{r}/pulls/{n}/comments
   2. Top-level reviews        -> GET /repos/{o}/{r}/pulls/{n}/reviews
   3. PR issue comments        -> GET /repos/{o}/{r}/issues/{n}/comments
 
-A `reviewed` event whose body is "Copilot encountered an error..." is an
-ERROR, not a finding.
+A review event whose body is the reviewer's error sentinel (e.g. "Copilot
+encountered an error...") is an ERROR, not a finding.
 
 Two staleness traps these surfaces hide, both handled:
 
@@ -49,17 +61,17 @@ Two staleness traps these surfaces hide, both handled:
     it re-matches its (frozen) review by id on every poll, so a resolved
     round-1 comment would loop the closeout forever. Outdated inline comments
     are dropped (a genuine new finding has a non-null position).
-  - Copilot's RE-review verdict (after "@copilot please review") frequently
-    lands as an ISSUE COMMENT, not a formal review -- it has no state and never
-    appears in /reviews. Reading /reviews alone would re-select the frozen
-    prior review (false COMMENTS) or, with a --since floor, find nothing (false
-    TIMEOUT). So when no in-window review exists, we classify from the latest
-    in-window Copilot issue comment: an explicit approval phrase ("no further
-    changes...") -> CLEAN, otherwise COMMENTS.
+  - A RE-review verdict (after the re-trigger) frequently lands as an ISSUE
+    COMMENT, not a formal review -- it has no state and never appears in
+    /reviews. Reading /reviews alone would re-select the frozen prior review
+    (false COMMENTS) or, with a --since floor, find nothing (false TIMEOUT). So
+    when no in-window review exists, we classify from the latest in-window bot
+    issue comment: an explicit approval phrase ("no further changes...") ->
+    CLEAN, otherwise COMMENTS.
 
 Terminal states (printed as the final line: "RESULT: <STATE>")
 --------------------------------------------------------------
-  COMMENTS -- review complete, Copilot left findings. The findings are
+  COMMENTS -- review complete, the bot left findings. The findings are
               printed so the agent sees them without another API call.
   CLEAN    -- review complete, no findings (the common case). Also covers a
               PR that was closed WITHOUT being merged while nothing was pending.
@@ -68,11 +80,10 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
               `gh pr view` to learn the outcome: treat it as "done + already
               merged" -> skip the maintainer-merge ping, go straight to bead
               close. Exit 0, like CLEAN.
-  ERROR    -- the review failed or Copilot hit a quota/availability error.
+  ERROR    -- the review failed or the bot hit a quota/availability error.
               Surfaced to the user; NO auto-retry (a quota error will not
               clear for hours, so backoff just burns wall-clock). The user
-              decides whether to wait out the reset or proceed without
-              Copilot.
+              decides whether to wait out the reset or proceed without a review.
   TIMEOUT  -- no completed review appeared within --timeout-min. Distinct
               from ERROR (exit code 2 vs 1) so a caller can retry-later on a
               timeout but investigate on a genuine failure.
@@ -83,13 +94,12 @@ script dying silently (which would look like "still waiting" forever).
 
 Usage
 -----
-    python scripts/copilot_watch.py <pr-number> [--repo OWNER/REPO]
-        [--timeout-min N] [--poll-sec N] [--since ISO8601]
+    python scripts/pr_review_watcher.py <pr-number> [--reviewer copilot|codex]
+        [--repo OWNER/REPO] [--timeout-min N] [--poll-sec N] [--since ISO8601]
 
 `--since` lets the caller scope detection to reviews/comments created after
-a known timestamp (e.g. the moment of a "@copilot please review"
-re-trigger), so a re-review loop does not re-detect the previous round's
-verdict.
+a known timestamp (e.g. the moment of a "@codex review" re-trigger), so a
+re-review loop does not re-detect the previous round's verdict.
 
 Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
 ERROR are distinct so a shell caller can retry-later on a timeout but
@@ -106,6 +116,7 @@ import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 # Make this script's dir importable so `import swarm_config` works under both
@@ -139,15 +150,6 @@ def _setup_utf8_stdio() -> None:
                 # protects us.
                 pass
 
-# Login substrings that identify the Copilot reviewer. Must match Copilot
-# specifically and NOT the generic "github-actions[bot]" actor, which is
-# shared by every Actions workflow (CI status, labelers, release bots) --
-# matching it would misclassify an unrelated bot's review as a Copilot
-# verdict and exit early with a bogus result. Copilot's review actor has
-# consistently carried "copilot" in its login (e.g. "copilot-pull-request-
-# reviewer[bot]"); match that case-insensitive substring only.
-COPILOT_LOGIN_MARKERS = ("copilot",)
-
 # Review states that represent a CURRENT verdict. APPROVED /
 # CHANGES_REQUESTED / COMMENTED are "the review finished with a verdict";
 # PENDING is still in progress. DISMISSED is deliberately EXCLUDED: a
@@ -161,18 +163,100 @@ TERMINAL_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
 NON_CLEAN_STATES = {"CHANGES_REQUESTED"}
 
 # Copilot's lifecycle on the issue TIMELINE (/issues/{n}/timeline). These are
-# the authoritative "where is the review" signals -- the reviews/comments
-# endpoints only populate after a verdict submits, so they can't distinguish
-# "not started" from "in progress" from "finished with nothing." Event names
-# confirmed against live PRs 2026-05-29.
+# the authoritative "where is the review" signals for Copilot -- the
+# reviews/comments endpoints only populate after a verdict submits, so they
+# can't distinguish "not started" from "in progress" from "finished with
+# nothing." Event names confirmed against live PRs 2026-05-29. CODEX does NOT
+# emit these (its profile detects completion from the review surfaces instead).
 COPILOT_WORK_STARTED = "copilot_work_started"    # in flight -- keep waiting
 COPILOT_WORK_FINISHED = "copilot_work_finished"  # terminal: done (may be CLEAN)
-COPILOT_REVIEWED = "reviewed"                     # terminal: a verdict submitted
+TIMELINE_REVIEWED = "reviewed"                    # terminal: a verdict submitted
 
-# When Copilot fails (e.g. quota), it posts a `reviewed` event whose BODY is
-# this sentence -- NOT a real verdict. Detect it so it classifies as ERROR
-# instead of being mistaken for a COMMENTS finding.
-COPILOT_ERROR_BODY_PREFIX = "Copilot encountered an error"
+
+@dataclass(frozen=True)
+class ReviewerProfile:
+    """The reviewer-SPECIFIC knobs the shared classifier reads.
+
+    Everything that differs between GitHub Copilot and OpenAI Codex lives here;
+    the classification heuristics below take a profile and are otherwise
+    identical for both. Adding a third reviewer is a new profile, not new
+    branching in the classifier.
+
+    Fields:
+      key                -- the --reviewer value ("copilot" / "codex").
+      label              -- human name for messages ("Copilot" / "Codex").
+      login_markers      -- case-insensitive substrings that identify the bot's
+                            login. Must match the bot specifically and NOT the
+                            generic "github-actions[bot]" actor (shared by every
+                            Actions workflow -- matching it would misclassify an
+                            unrelated bot's review as this reviewer's verdict).
+      error_body_prefix  -- a review/comment body starting with this is the
+                            bot's failure sentinel (quota/availability), NOT a
+                            finding -> ERROR.
+      uses_timeline      -- True if the bot emits copilot_work_* timeline
+                            events (Copilot). False (Codex) means completion is
+                            inferred from the review surfaces + --since floor.
+      clean_sentinels    -- extra issue-comment phrases that mean "done, no
+                            findings" for THIS reviewer (e.g. Codex's "didn't
+                            find any major issues"). Merged into the shared
+                            approval check; the shared LGTM/no-further-changes
+                            phrases apply to every reviewer.
+      clean_reaction     -- a GitHub reaction (rollup key, e.g. "+1" for 👍) the
+                            bot adds to its OWN comment to signal approval. When
+                            set, a bot comment carrying this reaction with a
+                            positive count classifies CLEAN -- the canonical,
+                            language-independent approval signal. None for a
+                            reviewer that signals approval only in prose
+                            (Copilot). The rollup ships inline on the comment
+                            payload (comment["reactions"]["+1"]), so this costs
+                            no extra API call.
+    """
+
+    key: str
+    label: str
+    login_markers: tuple[str, ...]
+    error_body_prefix: str
+    uses_timeline: bool
+    clean_sentinels: tuple[str, ...] = ()
+    clean_reaction: str | None = None
+
+
+# Copilot: review actor login carries "copilot" (e.g.
+# "copilot-pull-request-reviewer[bot]"); emits copilot_work_* timeline events;
+# fails with "Copilot encountered an error...".
+COPILOT_PROFILE = ReviewerProfile(
+    key="copilot",
+    label="Copilot",
+    login_markers=("copilot",),
+    error_body_prefix="Copilot encountered an error",
+    uses_timeline=True,
+)
+
+# Codex (OpenAI ChatGPT GitHub app): review actor login is
+# "chatgpt-codex-connector[bot]" (confirmed from a live PR 2026-06-01). Emits
+# NO timeline lifecycle events -- completion is detected from the review
+# surfaces. The CANONICAL clean signal is a 👍 ("+1") reaction Codex adds to its
+# own approval comment (documented behavior) -- `clean_reaction="+1"` makes that
+# the primary CLEAN path, independent of the comment's prose/language. The text
+# sentinels below ("Codex Review: Didn't find any major issues") are a
+# belt-and-suspenders fallback for a clean comment that arrives before/without
+# the reaction. The bot does NOT carry "copilot" in its login, so the markers
+# stay disjoint and a Codex run never matches a Copilot comment.
+CODEX_PROFILE = ReviewerProfile(
+    key="codex",
+    label="Codex",
+    login_markers=("codex",),
+    error_body_prefix="Codex encountered an error",
+    uses_timeline=False,
+    clean_reaction="+1",  # 👍 -- the documented canonical approval signal
+    clean_sentinels=(
+        "didn't find any major issues",
+        "didn’t find any major issues",  # curly apostrophe variant (GitHub renders this)
+        "no major issues",
+    ),
+)
+
+PROFILES = {p.key: p for p in (COPILOT_PROFILE, CODEX_PROFILE)}
 
 
 def _run_gh_api(path: str) -> object:
@@ -219,9 +303,10 @@ def _run_gh_api(path: str) -> object:
         raise RuntimeError("gh api {} returned non-JSON: {}".format(path, exc))
 
 
-def _is_copilot(login: str) -> bool:
+def _is_reviewer(login: str, profile: ReviewerProfile) -> bool:
+    """True if `login` is the configured reviewer bot (per the profile markers)."""
     lo = (login or "").lower()
-    return any(marker in lo for marker in COPILOT_LOGIN_MARKERS)
+    return any(marker in lo for marker in profile.login_markers)
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -258,8 +343,8 @@ def _pr_closed_state(repo: str, pr: int) -> str | None:
     return "closed"
 
 
-def _latest_copilot_review(repo: str, pr: int, since: datetime | None):
-    """Return the most recent COMPLETED Copilot review at/after `since`, or None.
+def _latest_reviewer_review(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
+    """Return the most recent COMPLETED review by this reviewer at/after `since`, or None.
 
     Surface 2 (top-level reviews). A completed review IS the verdict even
     when it carries no inline comments -- this is how CLEAN is detected. We
@@ -273,7 +358,7 @@ def _latest_copilot_review(repo: str, pr: int, since: datetime | None):
         login = (rv.get("user") or {}).get("login", "")
         state = rv.get("state", "")
         submitted = rv.get("submitted_at") or rv.get("created_at") or ""
-        if not _is_copilot(login):
+        if not _is_reviewer(login, profile):
             continue
         if state not in TERMINAL_REVIEW_STATES:
             continue  # PENDING -- still reviewing
@@ -291,30 +376,40 @@ def _latest_copilot_review(repo: str, pr: int, since: datetime | None):
     return latest
 
 
-def _timeline_state(repo: str, pr: int, since: datetime | None):
-    """Read Copilot's lifecycle from the issue timeline.
+def _timeline_state(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
+    """Read the reviewer's lifecycle from the issue timeline.
 
     Returns one of:
       "reviewed"  -- a `reviewed` event landed (verdict; classify via reviews
                      endpoint -- could be COMMENTS / CLEAN / ERROR-body).
-      "finished"  -- `copilot_work_finished` with no later `reviewed`: Copilot
+      "finished"  -- `copilot_work_finished` with no later `reviewed`: the bot
                      is done and produced no review -> treat as CLEAN.
       "working"   -- `copilot_work_started` seen, no terminal event yet: keep
                      waiting (do NOT TIMEOUT prematurely; a verdict is coming).
-      None        -- no Copilot activity at/after `since`: not started yet.
+      None        -- no reviewer activity at/after `since`: not started yet.
+
+    For a reviewer that emits NO timeline lifecycle events (Codex,
+    `profile.uses_timeline == False`), there is no in-flight signal to read, so
+    this always returns "reviewed" -- meaning "go look at the review surfaces
+    directly." The surface classifiers (`_classify_reviewed` ->
+    `_classify_issue_comment_round`) return None when nothing has landed yet,
+    which the poll loop treats as "keep waiting," so we still don't TIMEOUT
+    prematurely; the --since floor and timeout bound the wait instead.
 
     Only events at/after `since` count, so a re-review round is not confused
     with the previous round's terminal events.
     """
+    if not profile.uses_timeline:
+        return "reviewed"
     started = finished = reviewed = False
     for ev in _run_gh_api("repos/{}/issues/{}/timeline".format(repo, pr)) or []:
         name = ev.get("event", "")
         actor = (ev.get("actor") or ev.get("user") or {}).get("login", "")
         when = ev.get("created_at") or ev.get("submitted_at") or ""
         # review_requested carries the requester as actor (a human), so don't
-        # gate the copilot_* / reviewed events on actor being Copilot for the
-        # request event; but the work/review events themselves are Copilot's.
-        if name == COPILOT_REVIEWED and _is_copilot(actor) and _after(when, since):
+        # gate the copilot_* / reviewed events on actor being the bot for the
+        # request event; but the work/review events themselves are the bot's.
+        if name == TIMELINE_REVIEWED and _is_reviewer(actor, profile) and _after(when, since):
             reviewed = True
         elif name == COPILOT_WORK_FINISHED and _after(when, since):
             finished = True
@@ -329,8 +424,8 @@ def _timeline_state(repo: str, pr: int, since: datetime | None):
     return None
 
 
-def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
-    """Collect Copilot findings tied to the current review round.
+def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, profile: ReviewerProfile):
+    """Collect the reviewer's findings tied to the current review round.
 
     Inline comments are matched EXACTLY to this round by
     `pull_request_review_id == review['id']` -- not by timestamp. Copilot
@@ -357,13 +452,13 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
     # caller still flips to COMMENTS on a CHANGES_REQUESTED state or any inline
     # finding below, so a genuine verdict is never lost.
     body = (review.get("body") or "").strip()
-    if body and _has_change_ask(body) and not _is_approval_comment(body):
+    if body and _has_change_ask(body) and not _is_approval_comment(body, profile):
         findings.append("[review:{}] {}".format(review.get("state", "?"), body))
 
     # Surface 1: inline review comments, matched to THIS review by id.
     for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
-        if _is_copilot(login) and c.get("pull_request_review_id") == review_id:
+        if _is_reviewer(login, profile) and c.get("pull_request_review_id") == review_id:
             # GitHub sets `position` to null once a comment's anchor falls out
             # of the CURRENT diff -- the canonical "outdated" signal. An
             # outdated comment is a prior round's finding that later commits
@@ -394,9 +489,9 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict):
         created = c.get("created_at", "")
         body = (c.get("body") or "").strip()
         if (
-            _is_copilot(login)
+            _is_reviewer(login, profile)
             and _after(created, floor)
-            and not _is_approval_comment(body)
+            and not _is_approval_comment(body, profile)
             and _has_change_ask(body)
         ):
             findings.append("[issue-comment] {}".format(body))
@@ -550,12 +645,18 @@ def _is_approval_shaped(body: str) -> bool:
     return True
 
 
-def _is_approval_comment(body: str) -> bool:
+def _is_approval_comment(body: str, profile: ReviewerProfile) -> bool:
     # Fast path: the exact canonical signal is always an approval, no heuristics.
     if _is_exact_lgtm(body):
         return True
     lo = (body or "").lower()
-    if not any(p in lo for p in _APPROVAL_PATTERNS):
+    # The reviewer's own clean sentinels (e.g. Codex's "didn't find any major
+    # issues") are added to the shared approval phrasings. They still go through
+    # the same shape + change-ask gates below, so a sentinel that appears inside a
+    # long multi-finding comment does NOT ride to CLEAN -- the protections that
+    # ended the Copilot whack-a-mole apply unchanged.
+    approval_phrases = _APPROVAL_PATTERNS + profile.clean_sentinels
+    if not any(p in lo for p in approval_phrases):
         return False
     # An approval phrase is present, but it only counts if the comment is also
     # approval-SHAPED (short/flat) AND does not ALSO ask for a change. A long or
@@ -564,6 +665,32 @@ def _is_approval_comment(body: str) -> bool:
     if not _is_approval_shaped(body):
         return False
     return not _has_change_ask(body)
+
+
+def _has_clean_reaction(comment: dict, profile: ReviewerProfile) -> bool:
+    """True if `comment` carries the profile's canonical approval reaction (👍).
+
+    Reads the `reactions` rollup that GitHub ships INLINE on the comment payload
+    (no extra API call): `comment["reactions"]["+1"]` is the count of 👍. A
+    positive count means the bot signed off via its documented approval signal.
+    Returns False when the profile defines no clean_reaction (Copilot), when the
+    rollup is absent, or when the count is zero -- so it can only ever ADD a
+    CLEAN signal, never suppress a finding.
+
+    Note: the rollup is a count, not an actor list, so this does not prove the
+    BOT (vs a human) added the 👍. The caller only consults it on a comment it
+    has already attributed to the bot, and a human thumbs-up on the bot's own
+    approval comment would agree with it anyway, so the count is sufficient.
+    """
+    if not profile.clean_reaction:
+        return False
+    rollup = comment.get("reactions")
+    if not isinstance(rollup, dict):
+        return False
+    try:
+        return int(rollup.get(profile.clean_reaction, 0)) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _latest_by_created(comments: list) -> dict | None:
@@ -576,21 +703,21 @@ def _latest_by_created(comments: list) -> dict | None:
     return max(comments, key=lambda c: c.get("created_at", ""))
 
 
-def _new_inline_findings(repo: str, pr: int, since: datetime | None) -> list:
-    """Actionable Copilot inline comments for THIS round (the deterministic core).
+def _new_inline_findings(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile) -> list:
+    """Actionable reviewer inline comments for THIS round (the deterministic core).
 
-    An actionable finding is an inline review comment that (a) is Copilot's,
+    An actionable finding is an inline review comment that (a) is the bot's,
     (b) lands on the CURRENT diff (non-null `position` -- a null position is an
     outdated prior-round anchor, never a live ask), and (c) was created at/after
     `since` (the round floor). This is the fact the whole classifier rests on:
-    a real "please change X" from Copilot is an inline comment on the diff. Its
-    presence/absence does NOT depend on what words Copilot puts in its summary,
+    a real "please change X" from the bot is an inline comment on the diff. Its
+    presence/absence does NOT depend on what words the bot puts in its summary,
     so it can't be defeated by novel approval phrasing.
     """
     findings = []
     for c in _run_gh_api("repos/{}/pulls/{}/comments".format(repo, pr)) or []:
         login = (c.get("user") or {}).get("login", "")
-        if not _is_copilot(login):
+        if not _is_reviewer(login, profile):
             continue
         if "position" in c and c["position"] is None:
             continue  # outdated anchor -- not a live finding
@@ -617,10 +744,10 @@ def _strip_quotes(body: str) -> str:
     )
 
 
-def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
-    """Classify a round whose verdict arrives as a Copilot ISSUE COMMENT (no review).
+def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
+    """Classify a round whose verdict arrives as a bot ISSUE COMMENT (no review).
 
-    INLINE-FINDINGS-FIRST. The verdict leads on a STRUCTURAL fact Copilot can't
+    INLINE-FINDINGS-FIRST. The verdict leads on a STRUCTURAL fact the bot can't
     reword away -- whether it left a NEW actionable inline comment on the current
     diff this round -- because the approval-allowlist and change-ask-denylist prose
     heuristics are both unbounded-NL whack-a-mole. Prose is only a tie-breaker when
@@ -628,99 +755,121 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None):
     the echoed `> @copilot please review` trigger can't masquerade as a change-ask
     (bd polyglot-pdf-x8o). Order:
 
-      1. ERROR body -> ERROR (Copilot failed; not a verdict).
+      1. ERROR body -> ERROR (the bot failed; not a verdict).
       2. a NEW actionable inline finding this round -> COMMENTS. The primary signal:
-         a real "please change X" from Copilot is an inline comment on the diff,
+         a real "please change X" from the bot is an inline comment on the diff,
          regardless of the summary prose's wording.
-      3. exact `LGTM` / known approval phrase -> CLEAN (fast path).
-      4. change-ask prose (on the quote-stripped body) -> COMMENTS. Ungated: a
+      3. the profile's canonical approval REACTION (Codex's 👍 / "+1") on the bot
+         comment -> CLEAN. This is the documented, language-independent approval
+         signal, so it ranks above prose -- but BELOW inline findings (a 👍 plus a
+         real inline ask is still COMMENTS).
+      4. exact `LGTM` / known approval phrase / reviewer clean sentinel -> CLEAN
+         (fast path). For Codex this is the prose fallback when the reaction is
+         absent ("Didn't find any major issues").
+      5. change-ask prose (on the quote-stripped body) -> COMMENTS. Ungated: a
          genuine prose-only "please fix Y" is a real ask even on a PR that also has
          prior-round inline comments, so this must NOT be suppressed (an earlier
          gate here caused a false-CLEAN -- fresh-eyes on PR #49).
-      5. otherwise -> CLEAN (no new inline finding, no change-ask -> approval by
-         absence, whatever words Copilot chose).
+      6. otherwise -> CLEAN (no new inline finding, no change-ask -> approval by
+         absence, whatever words the bot chose).
 
-    Returns an exit code, or None if no Copilot issue comment at/after `since`
+    Returns an exit code, or None if no bot issue comment at/after `since`
     exists yet (caller keeps polling -- the surface may just be lagging).
     Residual risk accepted: a substantive ask phrased with none of the change-ask
     signal words AND delivered with no inline anchor would read CLEAN; in practice
-    Copilot's actionable findings are inline, and human merge + fresh-eyes backstop.
+    the bot's actionable findings are inline, and human merge + fresh-eyes backstop.
     """
-    copilot_comments = [
+    bot_comments = [
         c
         for c in (_run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or [])
-        if _is_copilot((c.get("user") or {}).get("login", ""))
+        if _is_reviewer((c.get("user") or {}).get("login", ""), profile)
         and _after(c.get("created_at", ""), since)
     ]
-    latest = _latest_by_created(copilot_comments)
+    latest = _latest_by_created(bot_comments)
     if latest is None:
         return None
     body = (latest.get("body") or "").strip()
-    # Analyze prose on the quote-stripped body so an echoed trigger ("> @copilot
-    # please review") can't trip change-ask/approval heuristics. The full body is
+    # Analyze prose on the quote-stripped body so an echoed trigger ("> @codex
+    # review") can't trip change-ask/approval heuristics. The full body is
     # still shown in the emitted detail for the human reader.
     prose = _strip_quotes(body)
 
-    # 1. Copilot-failed sentinel.
-    if body.startswith(COPILOT_ERROR_BODY_PREFIX):
-        return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
+    # 1. Bot-failed sentinel.
+    if body.startswith(profile.error_body_prefix):
+        return _emit("ERROR", "{} could not review this PR: {}".format(profile.label, body))
 
     # 2. PRIMARY signal: a NEW actionable inline finding this round -> COMMENTS.
     # This leads, so an acknowledgment that merely mentions a change-ask word
     # ("the issues raised were addressed") can no longer flip a clean round.
-    inline = _new_inline_findings(repo, pr, since)
+    inline = _new_inline_findings(repo, pr, since, profile)
     if inline:
         return _emit(
             "COMMENTS",
-            "Copilot left {} inline finding(s) this round:\n\n{}".format(
-                len(inline), "\n\n".join(inline)
+            "{} left {} inline finding(s) this round:\n\n{}".format(
+                profile.label, len(inline), "\n\n".join(inline)
             ),
         )
 
-    # 3. No new inline finding. An explicit approval (exact LGTM / known phrase) is
-    # a fast, unambiguous CLEAN.
-    if _is_approval_comment(prose):
+    # 3. Canonical approval REACTION (Codex's 👍). The documented, language-
+    # independent sign-off. Ranks above prose but below inline findings (checked
+    # above), so a 👍 can never override a real inline ask.
+    if _has_clean_reaction(latest, profile):
         return _emit(
             "CLEAN",
-            "Copilot approved via issue comment (no inline findings):\n\n{}".format(body),
+            "{} approved via {} reaction (no inline findings):\n\n{}".format(
+                profile.label, profile.clean_reaction, body or "(empty comment)"
+            ),
         )
 
-    # 4. Change-ask prose (quote-stripped) -> COMMENTS. Ungated by design: a real
+    # 4. No reaction. An explicit prose approval (exact LGTM / known phrase /
+    # reviewer clean sentinel) is the fallback CLEAN.
+    if _is_approval_comment(prose, profile):
+        return _emit(
+            "CLEAN",
+            "{} approved via issue comment (no inline findings):\n\n{}".format(
+                profile.label, body
+            ),
+        )
+
+    # 5. Change-ask prose (quote-stripped) -> COMMENTS. Ungated by design: a real
     # prose-only "please fix Y" must be caught even when the PR has prior-round
     # inline comments (gating this on inline-history caused a false-CLEAN).
     if _has_change_ask(prose):
         return _emit(
             "COMMENTS",
-            "Copilot's comment prose asks for a change:\n\n{}".format(body),
+            "{}'s comment prose asks for a change:\n\n{}".format(profile.label, body),
         )
 
-    # 5. No new inline finding, not an explicit approval, no prose-only ask -> the
-    # round is clean (approval by absence of any actionable finding).
+    # 6. No new inline finding, no approval reaction, not an explicit approval, no
+    # prose-only ask -> the round is clean (approval by absence of any finding).
     return _emit(
         "CLEAN",
-        "Copilot commented with no new inline finding this round -> treating as "
-        "approval (verdict is by inline findings, not prose):\n\n{}".format(body),
+        "{} commented with no new inline finding this round -> treating as "
+        "approval (verdict is by inline findings, not prose):\n\n{}".format(
+            profile.label, body
+        ),
     )
 
 
-def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
-    """A `reviewed` event landed; fetch the review and emit the verdict.
+def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
+    """A verdict is expected; fetch the review and emit it (or None to keep polling).
 
     Handles three sub-cases:
-      - ERROR-body ("Copilot encountered an error...") -> ERROR, not a finding.
+      - ERROR-body (the profile's error sentinel) -> ERROR, not a finding.
       - findings present OR a non-clean state (CHANGES_REQUESTED) -> COMMENTS.
       - otherwise -> CLEAN.
     If the findings fetch fails after we know a verdict exists, we still emit
     the verdict from the review body / state rather than discarding it.
     """
-    review = _latest_copilot_review(repo, pr, since)
+    review = _latest_reviewer_review(repo, pr, since, profile)
     if review is None:
-        # No in-window formal REVIEW. Either (1) Copilot delivered this round's
+        # No in-window formal REVIEW. Either (1) the bot delivered this round's
         # verdict as an ISSUE COMMENT (re-reviews often do -- no state, no
-        # review_id, absent from /reviews), or (2) the reviews endpoint just
-        # hasn't caught up yet. Try the issue-comment surface; if nothing there
-        # either, signal the caller to keep polling.
-        rc = _classify_issue_comment_round(repo, pr, since)
+        # review_id, absent from /reviews; Codex's clean verdict is always an
+        # issue comment + 👍), or (2) the reviews endpoint just hasn't caught up
+        # yet. Try the issue-comment surface; if nothing there either, signal the
+        # caller to keep polling.
+        rc = _classify_issue_comment_round(repo, pr, since, profile)
         if rc is not None:
             return rc
         return None
@@ -728,8 +877,8 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
     body = (review.get("body") or "").strip()
     state = review.get("state", "")
 
-    if body.startswith(COPILOT_ERROR_BODY_PREFIX):
-        return _emit("ERROR", "Copilot could not review this PR: {}".format(body))
+    if body.startswith(profile.error_body_prefix):
+        return _emit("ERROR", "{} could not review this PR: {}".format(profile.label, body))
 
     floor = since
     submitted = review.get("submitted_at") or review.get("created_at") or ""
@@ -741,7 +890,7 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
         pass
 
     try:
-        findings = _collect_findings(repo, pr, floor, review)
+        findings = _collect_findings(repo, pr, floor, review, profile)
     except RuntimeError as exc:
         # Verdict already known -- do not throw it away on a secondary fetch
         # failure. Mirror the findings-based body rule: a COMMENTED review's
@@ -750,35 +899,44 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None) -> int:
         # (Using a plain `or body` here would flip every clean review to COMMENTS
         # whenever the inline fetch hiccups, since the overview body is always
         # present -- the exact false-COMMENTS this redesign removes.)
-        body_is_finding = bool(body) and _has_change_ask(body) and not _is_approval_comment(body)
+        body_is_finding = (
+            bool(body) and _has_change_ask(body) and not _is_approval_comment(body, profile)
+        )
         if state in NON_CLEAN_STATES or body_is_finding:
             return _emit(
                 "COMMENTS",
-                "Copilot review complete (state={}, could not fetch inline "
-                "comments: {}). Body:\n\n{}".format(state, exc, body or "(none)"),
+                "{} review complete (state={}, could not fetch inline "
+                "comments: {}). Body:\n\n{}".format(profile.label, state, exc, body or "(none)"),
             )
         return _emit(
             "CLEAN",
-            "Copilot review complete, no actionable review-body finding "
-            "(could not fetch inline comments: {}).".format(exc),
+            "{} review complete, no actionable review-body finding "
+            "(could not fetch inline comments: {}).".format(profile.label, exc),
         )
 
     # A CHANGES_REQUESTED state is a verdict even with no findings text.
     if findings or state in NON_CLEAN_STATES:
-        detail = "Copilot left {} finding(s):\n\n{}".format(
-            len(findings), "\n\n".join(findings)
-        ) if findings else "Copilot review state={} with no inline findings.".format(state)
+        detail = "{} left {} finding(s):\n\n{}".format(
+            profile.label, len(findings), "\n\n".join(findings)
+        ) if findings else "{} review state={} with no inline findings.".format(profile.label, state)
         return _emit("COMMENTS", detail)
-    return _emit("CLEAN", "Copilot review complete with no findings.")
+    return _emit("CLEAN", "{} review complete with no findings.".format(profile.label))
 
 
-def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime | None) -> int:
-    """Poll the timeline until Copilot reaches a terminal state, then classify.
+def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime | None,
+          profile: ReviewerProfile) -> int:
+    """Poll until the reviewer reaches a terminal state, then classify.
 
-    Timeline-driven: `copilot_work_started` means "keep waiting" (a verdict is
-    coming, so we never TIMEOUT while Copilot is provably mid-review);
-    `reviewed` means classify the verdict; `copilot_work_finished` with no
-    review means Copilot finished and produced nothing (CLEAN).
+    For a TIMELINE reviewer (Copilot): `copilot_work_started` means "keep
+    waiting" (a verdict is coming, so we never TIMEOUT while it is provably
+    mid-review); `reviewed` means classify the verdict; `copilot_work_finished`
+    with no review means it finished and produced nothing (CLEAN).
+
+    For a NON-timeline reviewer (Codex): `_timeline_state` returns "reviewed"
+    every poll, so we probe the review surfaces directly each time;
+    `_classify_reviewed` returns None until a verdict (review, or issue comment
+    + clean sentinel) lands, which falls through to the wait below. There is no
+    "working" signal, so the deadline alone bounds the wait.
     """
     deadline = time.monotonic() + timeout_min * 60
     consecutive_errors = 0
@@ -787,32 +945,32 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
             # A merge is the most decisive terminal state -- once the PR is
             # merged the review verdict is moot, and the merge event lands in
             # the same timeline. Check it FIRST so the caller learns "merged"
-            # without a separate `gh pr view`, regardless of Copilot's status.
+            # without a separate `gh pr view`, regardless of the bot's status.
             # (One fetch per poll; reused for the closed-without-merge case below.)
             closed_state = _pr_closed_state(repo, pr)
             if closed_state == "merged":
-                return _emit("MERGED", "PR was merged; no Copilot review pending.")
+                return _emit("MERGED", "PR was merged; no review pending.")
 
-            state = _timeline_state(repo, pr, since)
+            state = _timeline_state(repo, pr, since, profile)
             if state == "reviewed":
-                rc = _classify_reviewed(repo, pr, since)
+                rc = _classify_reviewed(repo, pr, since, profile)
                 if rc is not None:
                     return rc
-                # reviews endpoint not yet consistent -- fall through to wait.
+                # Verdict not landed/consistent yet -- fall through to wait.
             elif state == "finished":
-                # Finished with no in-window formal review -- but Copilot may
+                # Finished with no in-window formal review -- but the bot may
                 # have delivered its verdict as an ISSUE COMMENT (the common
                 # shape for a re-review). Classify that before concluding
                 # "nothing to say."
-                rc = _classify_issue_comment_round(repo, pr, since)
+                rc = _classify_issue_comment_round(repo, pr, since, profile)
                 if rc is not None:
                     return rc
                 return _emit(
-                    "CLEAN", "Copilot finished work and produced no review."
+                    "CLEAN", "{} finished work and produced no review.".format(profile.label)
                 )
             # state == "working" or None -> keep polling (below). closed_state
             # (fetched above) carries the closed-without-merge case; only act on
-            # it when Copilot never produced a verdict (state is None).
+            # it when the bot never produced a verdict (state is None).
             if state is not None:
                 closed_state = None
         except RuntimeError as exc:
@@ -822,18 +980,18 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
             if consecutive_errors >= MAX_CONSECUTIVE_API_ERRORS:
                 return _emit(
                     "ERROR",
-                    "Copilot watch failed {} times in a row; giving up. "
-                    "Last error: {}".format(consecutive_errors, exc),
+                    "{} watch failed {} times in a row; giving up. "
+                    "Last error: {}".format(profile.label, consecutive_errors, exc),
                 )
             time.sleep(poll_sec)
             continue
         consecutive_errors = 0
 
-        # Only treat a closed-without-merge PR as terminal when Copilot never
+        # Only treat a closed-without-merge PR as terminal when the bot never
         # started -- if it is "working", let the review land even as the PR
         # closes. (Merged is already handled at the top of the loop.)
         if closed_state == "closed":
-            return _emit("CLEAN", "PR is closed (not merged); no Copilot review pending.")
+            return _emit("CLEAN", "PR is closed (not merged); no review pending.")
 
         if time.monotonic() >= deadline:
             # "working" past the deadline is still a TIMEOUT, but the message
@@ -841,15 +999,22 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
             note = "started but not finished" if state == "working" else "never started"
             return _emit(
                 "TIMEOUT",
-                "Timed out after {} min; Copilot review {}.".format(timeout_min, note),
+                "Timed out after {} min; {} review {}.".format(timeout_min, profile.label, note),
             )
         time.sleep(poll_sec)
 
 
 def main(argv: list[str] | None = None) -> int:
     _setup_utf8_stdio()
-    parser = argparse.ArgumentParser(description="Watch a PR for Copilot review completion.")
+    parser = argparse.ArgumentParser(description="Watch a PR for a bot code-review completion.")
     parser.add_argument("pr", type=int, help="PR number")
+    parser.add_argument(
+        "--reviewer",
+        choices=sorted(PROFILES),
+        default="copilot",
+        help="Which review bot to watch (default: copilot). Switch to 'codex' "
+        "at the Copilot->Codex cutover (bd polyglot-pdf-hrn.9).",
+    )
     parser.add_argument(
         "--repo", default=swarm_config.repo(), help="OWNER/REPO"
     )
@@ -863,6 +1028,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    profile = PROFILES[args.reviewer]
+
     since = None
     if args.since:
         try:
@@ -873,7 +1040,7 @@ def main(argv: list[str] | None = None) -> int:
             return _emit("ERROR", "Bad --since value: {}".format(exc))
 
     try:
-        return watch(args.repo, args.pr, args.timeout_min, args.poll_sec, since)
+        return watch(args.repo, args.pr, args.timeout_min, args.poll_sec, since, profile)
     except KeyboardInterrupt:
         return _emit("ERROR", "Interrupted.")
     except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently

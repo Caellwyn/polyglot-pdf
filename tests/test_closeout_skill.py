@@ -109,7 +109,7 @@ def test_opens_normal_pr_and_parallel_reviews(body):
     # instruction is checked, not a description mention.
     lo = body.lower()
     assert "gh pr create" in body
-    assert "copilot_watch.py" in body  # Copilot watcher started on open
+    assert "pr_review_watcher.py" in body  # review watcher started for a review-worthy PR
     assert "fresh-eyes" in lo          # fresh-eyes spawned alongside
 
 
@@ -138,7 +138,7 @@ def test_copilot_loops_until_clean(body):
         "skill body must loop Copilot until it has no comments"
     assert "@copilot please review" in body, \
         "skill must post the explicit re-trigger after a fix-push"
-    assert "timeout" in lo, "skill must handle copilot_watch's TIMEOUT state"
+    assert "timeout" in lo, "skill must handle pr_review_watcher's TIMEOUT state"
 
 
 def test_ping_to_merge_is_the_autonomous_endpoint(body):
