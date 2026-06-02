@@ -58,16 +58,42 @@ Working-tree status (MUST be clean before closeout):
 Commits on this branch vs the integration branch:
 !`git log --oneline origin/dev..HEAD`
 
-## Step 0 -- Preconditions
+## Step 0 -- Prep: preconditions + beads + docs + tests in ONE run (deterministic)
 
-1. Confirm the working tree is clean (the `git status --short` above is empty). If it is NOT, stop and tell the user: closeout assumes committed work. Do not proceed.
-2. Confirm there is at least one commit ahead of the integration branch (`origin/dev` above; rename if your integration branch differs). If empty, there's nothing to close out.
+Steps 0/1/2/4 (preconditions, beads housekeeping, doc-freshness, tests) are four
+deterministic checks. `scripts/closeout_prep.py` runs **all four in one call** and
+prints a single structured TODO, so you read ONE verdict instead of four
+skill-load echoes (bd polyglot-pdf-hrn.2). Run the **worktree's copy** so it
+audits THIS branch (same `$WT` rule as the steps it wraps; the venv still comes
+from `$R`):
 
-## Step 1 -- Beads housekeeping (deterministic)
+!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/closeout_prep.py")`
 
-Run the housekeeping audit (pull + orphans + stale + push):
+Read the `RESULT:` line:
+- **READY** (exit 0) -- all four checks clean; skip the per-step detail below and
+  go straight to Step 3 (journal). Steps 1/2/4 are already satisfied.
+- **ATTENTION** (exit 3) -- one or more checks need triage. The TODO lists exactly
+  which (`preconditions` / `beads` / `docs` / `tests`) with the detail inline.
+  Triage each per the matching step below, then re-run prep (or just the one
+  check) until READY.
+- **PREP-ERROR** (exit 1) -- a check could not RUN (e.g. venv/script not found);
+  this is a tooling failure, not a closeout verdict. Fix the tooling, or fall back
+  to the individual hand-run commands in the steps below, before continuing.
 
-!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; "$R/backend/.venv/Scripts/python.exe" "$R/scripts/closeout_housekeeping.py"`
+The prep script **only reports** -- every fix below (commit a dirty tree, close an
+orphan, bump a stale doc, fix a red test) is still your judgment. Steps 0--2 and 4
+below are the triage reference the prep output points into; you do NOT separately
+re-run their commands when prep already reported READY.
+
+### Step 0 detail -- Preconditions (triage if prep flagged `preconditions`)
+
+1. Working tree must be clean. If `preconditions` is flagged DIRTY, stop and tell the user: closeout assumes committed work. Do not proceed until it's committed/stashed.
+2. There must be at least one commit ahead of the integration branch (`origin/dev`; rename if yours differs). If prep reports "no commits ahead," there's nothing to close out.
+
+### Step 1 detail -- Beads housekeeping (triage if prep flagged `beads`)
+
+Prep runs the housekeeping audit (pull + orphans + stale + push) for you. To
+re-run it standalone after a fix: `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; "$R/backend/.venv/Scripts/python.exe" "$R/scripts/closeout_housekeeping.py"`
 
 - **CLEAN** -> nothing to triage; continue.
 - **SLIP-FOUND** -> triage what it surfaced:
@@ -75,11 +101,12 @@ Run the housekeeping audit (pull + orphans + stale + push):
   - A stale IN_PROGRESS bead -> decide its real state (close / defer / drop) and transition it.
 - File a NEW bead (via `bd_safe.py` or bracketed `bd create`) for EVERY deferred / out-of-scope finding surfaced this sprint. Commit-message notes are not tracker entries. If the sprint identified ordered next steps, wire them with `bd dep add <later> <earlier>` (the FIRST arg is what gets blocked; for an epic, the epic is blocked BY its children, so `bd dep add <epic> <child>`) so `bd ready` surfaces only the unblocked step. `bd_safe.py dep-add --epic/--child` (or `--blocked/--prereq`) makes the direction un-invertible.
 
-## Step 2 -- Doc freshness (deterministic)
+## Step 2 detail -- Doc freshness (triage if prep flagged `docs`)
 
-Run the freshness checker (see `docs/doc-architecture.md` for the system it enforces):
+Prep runs the freshness checker for you (see `docs/doc-architecture.md` for the
+system it enforces). To re-run it standalone after a doc fix:
 
-!`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; test -n "$WT" && cd "$WT" || { echo "ERROR: could not resolve worktree root (git rev-parse --show-toplevel failed)"; exit 1; }; "$R/backend/.venv/Scripts/python.exe" "$WT/scripts/check_doc_freshness.py"`
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; test -n "$WT" && cd "$WT" || { echo "ERROR: could not resolve worktree root (git rev-parse --show-toplevel failed)"; exit 1; }; "$R/backend/.venv/Scripts/python.exe" "$WT/scripts/check_doc_freshness.py"`
 
 **Why `$WT`, not `$R`, for this script** (`bd polyglot-pdf-9pe`): the freshness
 checker sets `REPO_ROOT` to its own location's parent and reads docs + `git`
@@ -125,11 +152,15 @@ Then YOU fill it in (this is judgment, not mechanics):
 - **Trigger / What shipped / Lessons / Doc freshness / Files touched:** write the prose. In "What shipped" include the fresh-eyes triage breakdown (adopt/reject/defer + the bead ids for deferrals). In "Doc freshness" record which docs were bumped or reviewed-and-left.
 - If a lesson **generalizes** (applies anywhere in the codebase), also add a one-liner to the relevant `docs/standards/*.md` citing this entry.
 
-## Step 4 -- Run the test suite (deterministic)
+## Step 4 detail -- Test suite (triage if prep flagged `tests`; re-run after a code fix)
 
-Run the full suite (if slow, run it in the background and wait for the notification rather than polling):
+Prep already ran the suite in Step 0 (`backend/tests/`, excluding the flaky
+`external` live-Gemini test). That result stands through Steps 3/5 as long as you
+do NOT change code after it -- journal/doc work doesn't. **If you DO change code
+during triage** (a fresh-eyes/Copilot fix in Step 7, or a Step-1 fix that touched
+source), re-run the suite so the PR ships a green run:
 
-`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q`  -- `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the test path expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection.
+`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q -m "not external"`  -- `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the test path expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection. (If slow, run it in the background and wait for the notification rather than polling.)
 
 If anything FAILS, stop and fix it before continuing -- a red suite is not eligible for a PR. If the project defines extra verification harnesses for the area you touched, run those too.
 
