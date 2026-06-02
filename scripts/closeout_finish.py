@@ -281,7 +281,10 @@ class Closeout:
             )
 
     def close_beads(self) -> None:
-        if not self.args.close_beads:
+        # --close-only exists solely to close, so it closes regardless of the
+        # --close-beads flag (a programmatic caller that set close_only but not
+        # close_beads should still close, not silently no-op -- fresh-eyes PR #59).
+        if not self.args.close_beads and not self.args.close_only:
             return
         bd_safe = self.WT / "scripts" / "bd_safe.py"
         closed = []

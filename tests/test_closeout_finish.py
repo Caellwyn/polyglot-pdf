@@ -329,6 +329,28 @@ class TestCloseOnly:
                        or "pull --rebase" in j for j in joined)
         assert job.out["RESULT"] == "CLOSED-ONLY"
 
+    def test_close_only_dry_run_makes_no_calls(self, capsys):
+        # --close-only --dry-run skips the ledger preview entirely (close-only
+        # writes no row), so it must make ZERO subprocess calls (fresh-eyes
+        # Finding 4 -- guards against a future regression adding one).
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
+                   skip_review=False, dry_run=True)
+        assert job.run() == cf.EXIT_OK
+        assert len(rec.calls) == 0, rec.joined()
+        out = capsys.readouterr().out
+        assert "close-only" in out and "RESULT: DRY-RUN" in out
+
+    def test_close_only_closes_even_without_close_beads_flag(self):
+        # Defensive: a programmatic caller setting close_only but NOT close_beads
+        # must still close (not silently no-op) -- fresh-eyes Finding 2.
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=False, review_worthy=False,
+                   skip_review=False, bead=["proj-aa11"])
+        assert job.run() == cf.EXIT_OK
+        assert any("bd_safe" in j and "close" in j for j in rec.joined())
+        assert job.out["beads_closed"] == "proj-aa11"
+
     def test_main_close_only_needs_no_pr_flags(self, monkeypatch):
         # --close-only must parse + run WITHOUT --branch/--pr-title/--pr-body-file
         # or a review gate (they're only required for a PR-opening run).
