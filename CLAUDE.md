@@ -108,6 +108,23 @@ trivial, no-consequence asks -- without letting work creep beyond what a bead
 authorizes. **The bead is the unit of authorization.** (We will loosen this later
 if it over-escalates.)
 
+**`AskUserQuestion` is for decisions you are genuinely BLOCKED on -- never for
+confirmation, for sharing a call you've already reached, or for transparency's
+sake.** If you find yourself asking to *check* a decision, to *show* your
+reasoning, or because a choice feels worth surfacing, that is the over-escalation
+anti-pattern: decide it and put it in the merge report's defended-decision list
+instead (that list is where you're transparent, at zero blocking cost). The test
+is "am I *unable to proceed* without the answer?", not "would the maintainer maybe
+want a say?" **One legitimate exception that is NOT over-asking:** when the
+maintainer **directly asks you something or tells you to do something** and you are
+**genuinely low-confidence about what they meant**, a clarifying question is a fair
+*reply* -- clarifying the intent of a direct request is responsiveness, not
+escalation. But note the flip side: when the maintainer **delegates a call to you**
+("whatever you think", "expand it if it helps", "your call"), **deciding it IS the
+response** -- re-asking reads as not listening. Delegated technical calls
+(what tags should exist, how to structure a module, which helper to reuse) are
+yours the moment they're delegated; do not bounce them back.
+
 Run this decision procedure for any choice you face:
 
 1. **Is it on the NEVER list?** -> Don't do it yourself, and don't ask permission
@@ -134,12 +151,21 @@ Run this decision procedure for any choice you face:
      default. (You are the technical expert; the maintainer is the product owner.)
    - **A bead that is ambiguous, self-contradictory, or proven untenable** -- it
      can't proceed without the owner revising it.
+   - **Isolate the kernel -- never staple a decidable question onto a genuine
+     one.** When something genuinely needs the maintainer, ask ONLY the
+     irreducible part. Do not bundle a step-3 decide-it-yourself choice into the
+     same ask "while you're here" -- decide that part, and escalate only the
+     kernel. (E.g. *"which beads to pick + how to bundle them"* is yours; if the
+     real question is whether a marker bead is stale, ask only that.)
    - **Exception -- scope creep: file a bead, don't ask.** If you notice
      worthwhile work *beyond* the bead's scope that **isn't itself a decision the
      maintainer needs to make now** (if it is, escalate it per step 2 instead),
      do NOT ask and do NOT silently expand the bead -- **file a new bead** (via a
      pull/push-bracketed `bd create`; `bd_safe.py` has no `create` subcommand) and
-     continue.
+     continue. **Deciding *whether* out-of-scope work happens at all is itself a
+     decide-or-file call, never an ask** -- "should I also do X?" is the
+     anti-pattern; either fold it in (if trivially in service of the bead), file a
+     bead, or skip it, and note which.
 3. **Everything else -> DECIDE it yourself, and note the call.** The common path:
    implementing the bead/plan as written, plus trivia with no consequence beyond
    this sprint. Explicitly includes:
@@ -148,7 +174,11 @@ Run this decision procedure for any choice you face:
      data structures, local refactors, test structure, and small architectural
      changes obviously required to carry out the bead. (Textbook "architecture"
      at this scale is YOURS; only the bigger, beyond-the-bead commitments in
-     step 2 escalate.)
+     step 2 escalate.) **This includes the *form* of an artifact when the bead is
+     silent on it** -- doc vs. machine-readable config, file layout, which section
+     a rule lives in. A bead that says "tag files high/med/low" without naming the
+     format leaves the format to YOU; pick the reversible default and note it, do
+     not ask.
    - **PR shaping** -- bundle small changes, nits, and few-line fixes into one PR
      to save tokens; split when a bead turns out more complex than expected or
      when bundling would hurt reviewability (split on the fly). Also branch
@@ -157,11 +187,17 @@ Run this decision procedure for any choice you face:
      equally-good ready beads to pick next; nit-vs-blocker triage (per the
      closeout rule); commit granularity; worktree placement; doc/journal/test
      mechanics.
-   - **Test:** *does this choice have any practical effect beyond completing this
-     bead this sprint?* If no -> decide and note it. If unsure, prefer the
-     reversible option, prefer staying within the current bead, decide, and note
-     it -- a noted decision the maintainer can correct later is cheaper than a
-     blocking question.
+   **The consequence Test (apply to every choice before even considering an ask):**
+   *does this choice have any practical effect beyond completing this bead this
+   sprint?* If no -> decide and note it; you are done, do not ask. If unsure,
+   **prefer the reversible option, prefer staying within the current bead, decide,
+   and note it** -- a noted decision the maintainer can correct later is cheaper
+   than a blocking question. A low-consequence choice never clears this Test into
+   an ask, even when it has no single obvious default: "no obvious default" plus
+   "no consequence beyond the sprint" still means **you pick** (reversible default)
+   and note it -- it does not mean escalate. Escalation is reserved for the step-2
+   cases (a real commitment or a product/direction call), not for "I'd like a
+   second opinion."
 
 **Escalating is a hard STOP -- so defer it until nothing further can be done
 without the answer.** Asking the maintainer a blocking question ends your turn and
@@ -180,7 +216,10 @@ apparent blocker shrinks or several questions accumulate into one stop instead o
 three. Then ask -- with a clear note of exactly what you need decided -- and stop.
 The work still stops at the ask; the point is that **as much as possible is already
 done** when it does, so the maintainer's one reply unblocks the most. Never
-best-guess a product/direction call just to avoid the stop.
+best-guess a product/direction call just to avoid the stop. **A question that
+arises before you've started the work is almost never blocking yet** -- resist the
+urge to front-load a batch of questions at kickoff; start the independent work
+first, and most "questions" dissolve into decisions or answer themselves.
 
 **The PR / merge report is the maintainer's standing checkpoint AND the audit
 surface for this rule.** Write it for the product owner, not an engineer: **plain
