@@ -250,9 +250,11 @@ CODEX_PROFILE = ReviewerProfile(
     uses_timeline=False,
     clean_reaction="+1",  # 👍 -- the documented canonical approval signal
     clean_sentinels=(
-        "didn't find any major issues",
-        "didn’t find any major issues",  # curly apostrophe variant (GitHub renders this)
-        "no major issues",
+        "didn't find any major issues",   # straight apostrophe U+0027
+        "didn’t find any major issues",   # NOT a duplicate -- curly apostrophe U+2019;
+                                          # GitHub's markdown renderer emits this form.
+                                          # Both variants are pinned by a test; keep both.
+        "no major issues",                # apostrophe-free fallback
     ),
 )
 
@@ -969,9 +971,17 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
                     "CLEAN", "{} finished work and produced no review.".format(profile.label)
                 )
             # state == "working" or None -> keep polling (below). closed_state
-            # (fetched above) carries the closed-without-merge case; only act on
-            # it when the bot never produced a verdict (state is None).
-            if state is not None:
+            # (fetched above) carries the closed-without-merge case. Suppress it
+            # ONLY while the bot is provably mid-review ("working"), so a review
+            # that is in flight can still land even as the PR closes. We must NOT
+            # suppress on "reviewed", because a NON-timeline reviewer (Codex)
+            # ALWAYS reports "reviewed" (it has no in-flight signal) -- gating on
+            # `state is not None` there made the closed-without-merge terminal
+            # below structurally unreachable for Codex, so an abandoned Codex PR
+            # would TIMEOUT instead of CLEAN (fresh-eyes PR #52). A genuine Codex
+            # verdict is already returned above via _classify_reviewed; reaching
+            # here means no verdict yet, so honoring closed_state is correct.
+            if state == "working":
                 closed_state = None
         except RuntimeError as exc:
             # Transient (network blip, token refresh, 5xx, gh hang/missing).
@@ -994,9 +1004,19 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
             return _emit("CLEAN", "PR is closed (not merged); no review pending.")
 
         if time.monotonic() >= deadline:
-            # "working" past the deadline is still a TIMEOUT, but the message
-            # distinguishes "never started" from "started but slow".
-            note = "started but not finished" if state == "working" else "never started"
+            # The TIMEOUT note describes how far the review got. For a TIMELINE
+            # reviewer (Copilot) we can distinguish "started but slow" from
+            # "never started" via the in-flight signal. A NON-timeline reviewer
+            # (Codex) has no such signal -- `state` is always "reviewed" there,
+            # which does NOT mean a verdict landed (none did, or we'd have
+            # returned above), so reporting "never started" would be misleading.
+            # Say "did not complete" for that case instead (fresh-eyes PR #52).
+            if not profile.uses_timeline:
+                note = "did not complete in the window"
+            elif state == "working":
+                note = "started but not finished"
+            else:
+                note = "never started"
             return _emit(
                 "TIMEOUT",
                 "Timed out after {} min; {} review {}.".format(timeout_min, profile.label, note),

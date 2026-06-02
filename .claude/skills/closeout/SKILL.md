@@ -33,8 +33,8 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 ## Hard rules (read before doing anything)
 
-- **Copilot review is OPT-IN, not automatic (since 2026-06-01).** Automatic Copilot review on PR open is DISABLED in repo settings, and Copilot is now metered per-token against a finite monthly credit pool -- a wasted review is wasted money. A review fires ONLY when the PR contains the literal trigger `@copilot please review`. **Put that trigger in the PR BODY** (the `gh pr create --body`), NOT as a separate comment -- a body trigger costs zero extra Claude turns; a comment costs one. **Omit the trigger entirely for a PR that does not warrant a review** (see the Step 6 review-worthiness gate); a docs-only / beads-only / journal-only / trivial PR gets NO trigger and skips the whole watch loop.
-- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Copilot runs in parallel with it ONLY when the PR is review-worthy and you included the body trigger. The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
+- **Copilot review is OPT-IN, not automatic (since 2026-06-01).** Automatic Copilot review on PR open is DISABLED in repo settings, and Copilot is now metered per-token against a finite monthly credit pool -- a wasted review is wasted money. A review fires ONLY when a PR **COMMENT** contains the literal trigger `@copilot please review`. The trigger in the PR *body* does NOT work (verified on PR #52) -- it must be a comment. To avoid spending an extra Claude turn on that comment, **CHAIN it into the same Bash call as `gh pr create`** (a `&&` sequence -- see Step 6), and capture the comment's `created_at` as the watch's `--since` floor in that same call. **Omit the trigger entirely for a PR that does not warrant a review** (see the Step 6 review-worthiness gate); a docs-only / beads-only / journal-only / trivial PR gets NO trigger and skips the whole watch loop.
+- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Copilot runs in parallel with it ONLY when the PR is review-worthy and you posted the trigger comment (chained into the create call). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** With auto-review off the flip no longer triggers Copilot, but a draft still adds a state flip for no benefit and risks a future settings change re-arming flip-triggered reviews. Always open normal. Copilot review tokens are SCARCE; never trigger a redundant review of content Copilot already approved.
 - **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
 - **Loop Copilot until it has NO comments (only if the PR is review-worthy).** With auto-review off, a fix-push does NOT re-trigger Copilot on its own -- you MUST post `@copilot please review` to request each re-review. Adopt -> push -> post trigger (capture its timestamp) -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `pr_review_watcher.py` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean). A PR that skipped review per the Step 6 gate has no loop at all.
@@ -148,22 +148,34 @@ regression is wasted money. Decision rule:
   diff cannot introduce a runtime/logic regression -- e.g. it touches ONLY docs
   (`docs/`, `*.md`), `.beads/`, journal entries, or other non-executed prose/config.
   A pure doc bump, a beads sync, or a journal-only PR is in this bucket.
-- **Request Copilot** (include the body trigger; run the watch loop) when the diff
-  touches executable source (`backend/`, `frontend/src/`, scripts, CI, config that
-  changes runtime behavior) in any non-trivial way.
+- **Request Copilot** (post the trigger comment, chained into the create call; run
+  the watch loop) when the diff touches executable source (`backend/`,
+  `frontend/src/`, scripts, CI, config that changes runtime behavior) in any
+  non-trivial way.
 - **When genuinely ambiguous, request the review** -- a wasted review is cheaper than
   a shipped regression. "Ambiguous" means a real judgment call, not "I'd rather not
   wait"; do not use the gate to dodge review of actual code.
 
 Fresh-eyes ALWAYS runs regardless of this gate (it costs no Copilot credit).
 
-Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR and start fresh-eyes. If the PR is review-worthy, the body trigger requests Copilot's round-1 review on open, so it runs concurrently with fresh-eyes.
+Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes.
 
-1. **Open a NORMAL (NOT draft) PR** into the integration branch. **If review-worthy, put `@copilot please review` in the BODY** (not a separate comment -- that wastes a Claude turn). If you're skipping review per the gate above, OMIT the trigger:
-   `gh pr create --base dev --title "<scope>(<context>): <summary> (bd <full-id>)" --body "<summary + (if review-worthy) a line containing '@copilot please review' + a 'Fresh-eyes review' section you'll fill after triage>"`
-   Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe.
-2. **(Review-worthy PRs only) Start Copilot-watch** (round 1) via `run_in_background` so you're woken once with the verdict, no polling turns:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#>`  (same invocation for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch.
+**The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
+
+1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just the summary + a 'Fresh-eyes review' section you'll fill after triage. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
+   ```bash
+   PR=$(gh pr create --base dev \
+        --title "<scope>(<context>): <summary> (bd <full-id>)" \
+        --body "<summary + a 'Fresh-eyes review' section>" \
+        | grep -oE '[0-9]+$')
+   # review-worthy ONLY -- chain the trigger comment + capture its server time:
+   TS=$(gh api repos/<owner>/<repo>/issues/$PR/comments \
+        -f body='@copilot please review' --jq .created_at)
+   echo "PR=$PR TS=$TS"
+   ```
+   Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
+2. **(Review-worthy PRs only) Start the round-1 watch with `--since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. Passing `--since` here (unlike the old auto-review-on-open flow) scopes detection to the review you just requested, so a stale prior comment can't be re-detected:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`  (same invocation, same `--since` discipline, for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch.
 3. **Spawn the fresh-eyes reviewer** concurrently. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type); otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "sonnet", ... })`. Substitute the branch name. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
 
 For a review-worthy PR both reviewers run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum. For a review-skipped PR, only fresh-eyes runs.

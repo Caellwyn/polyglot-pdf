@@ -11,7 +11,7 @@ rationale for each choice is preserved below so it is not re-litigated.
 ```
 clean tree
   -> judge review-worthiness              [orchestrator: does this diff warrant Copilot?]
-  -> open a NORMAL (non-draft) PR         [if review-worthy: "@copilot please review" in BODY]
+  -> open a NORMAL (non-draft) PR         [if review-worthy: chain "@copilot please review" COMMENT into the create call]
   -> spawn fresh-eyes reviewer            [ALWAYS; runs in PARALLEL with Copilot if requested]
   -> fix the COMBINED round-1 findings    [one batch -> one re-review]
   -> push, then post "@copilot please review"  [REQUESTS the re-review; auto-review is off]
@@ -28,9 +28,11 @@ only and has no Copilot loop.
 - **Copilot review is OPT-IN (since 2026-06-01).** GitHub changed Copilot pricing
   to per-token metering against a finite monthly credit pool -- no more unlimited
   tier. We disabled automatic review-on-open in repo settings; a review now fires
-  ONLY when the PR contains `@copilot please review`. Two consequences encoded
-  below: we judge whether a PR is even worth a review, and we put the trigger in
-  the PR BODY (not a comment) so requesting it costs zero extra Claude turns.
+  ONLY when a PR COMMENT contains `@copilot please review` (the trigger in the PR
+  *body* does NOT work -- verified on PR #52). Two consequences encoded below: we
+  judge whether a PR is even worth a review, and we CHAIN the trigger comment into
+  the same Bash call as `gh pr create` (capturing its `created_at` as the watch
+  `--since` floor) so requesting it costs zero extra Claude turns.
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs get NO trigger and skip the watch loop entirely -- reviewing them
@@ -38,9 +40,9 @@ only and has no Copilot loop.
   `frontend/src/`, scripts, runtime config) get the trigger. When genuinely
   ambiguous, request the review -- a wasted review is cheaper than a shipped bug,
   but the gate is not an excuse to dodge review of real code.
-- **Parallel round 1 (for review-worthy PRs).** The body trigger requests Copilot
-  on PR-open; fresh-eyes (a Sonnet subagent reading the REAL diff) runs at the
-  same time. Total round-1 wait is max(copilot, fresh-eyes), not the sum. They
+- **Parallel round 1 (for review-worthy PRs).** The chained trigger comment requests
+  Copilot the moment the PR opens; fresh-eyes (a Sonnet subagent reading the REAL
+  diff) runs at the same time. Total round-1 wait is max(copilot, fresh-eyes), not the sum. They
   catch different bug classes -- Copilot is good at local correctness, fresh-eyes
   at "what did the author's own priorities blind them to." Fresh-eyes runs even
   when Copilot is skipped (it costs no credit).

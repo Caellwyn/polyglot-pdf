@@ -64,8 +64,9 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
    PR and runs fresh-eyes, **requesting Copilot in parallel only when the PR is
    review-worthy.** Copilot review is OPT-IN since 2026-06-01 (metered per-token,
-   finite monthly credits) -- auto-review is OFF, so a review fires only when the
-   PR BODY contains `@copilot please review`; docs/beads/journal-only PRs skip it.
+   finite monthly credits) -- auto-review is OFF, so a review fires only when a PR
+   COMMENT contains `@copilot please review` (the trigger is chained into the
+   create call -- one Bash turn, not a body line); docs/beads/journal-only PRs skip it.
    Then closeout loops Copilot to clean and the maintainer merges. No draft PRs;
    never hand-poll Copilot. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).

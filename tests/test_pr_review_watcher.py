@@ -933,3 +933,38 @@ def test_codex_ignores_copilot_comment(capsys, monkeypatch):
     rc = cw.watch("o/r", 1, timeout_min=0, poll_sec=0, since=None, profile=CODEX)
     out = capsys.readouterr().out
     assert rc == 2 and "RESULT: TIMEOUT" in out
+
+
+def test_codex_closed_without_merge_is_clean(capsys, monkeypatch):
+    # Fresh-eyes PR #52, finding 2: a non-timeline reviewer (Codex) ALWAYS
+    # reports state="reviewed", which previously nullified closed_state every
+    # poll and made the closed-without-merge terminal unreachable -- an abandoned
+    # Codex PR TIMEOUTed (exit 2) instead of going CLEAN (exit 0). With no Codex
+    # verdict and the PR closed-not-merged, the watch must now reach CLEAN.
+    _patch_api(monkeypatch, pr_state="closed")  # closed, no `merged` -> "closed"
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert "closed" in out.lower()
+
+
+def test_codex_timeout_note_is_not_never_started(capsys, monkeypatch):
+    # Fresh-eyes PR #52, finding 1: for a non-timeline reviewer there is no
+    # in-flight signal, so the TIMEOUT note must NOT claim "never started"
+    # (Codex may well be mid-review). It should say it didn't complete instead.
+    _patch_api(monkeypatch)  # open PR, no verdict, no timeline
+    rc = cw.watch("o/r", 1, timeout_min=0, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 2 and "RESULT: TIMEOUT" in out
+    assert "never started" not in out
+    assert "did not complete" in out
+
+
+def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
+    # Guard: the finding-2 fix must NOT regress Copilot. A closed-not-merged PR
+    # with no Copilot timeline activity (state is None) still reaches CLEAN.
+    _patch_api(monkeypatch, pr_state="closed")
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=PROFILE)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert "closed" in out.lower()
