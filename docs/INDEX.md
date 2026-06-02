@@ -46,6 +46,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Logging + cost | [`standards/logging-and-cost.md`](standards/logging-and-cost.md) |
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | [`standards/testing.md`](standards/testing.md) |
+| Risk rating (high/med/low; feeds fresh-eyes self-escalation) | [`standards/risk-rating.md`](standards/risk-rating.md) |
 
 ## External references (vendored SDK docs)
 

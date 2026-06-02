@@ -33,6 +33,7 @@ On a small diff, closeout may route this review to a cheaper model (Haiku) to sa
 
 **If -- and only if -- the caller's prompt says you are running as Haiku**, before rendering a verdict, decide whether the change is risky despite being short. STOP and recommend a Sonnet re-review (do NOT render a normal verdict) if ANY of these hold:
 
+- the change touches a **file (or function) rated `high` in [`docs/standards/risk-rating.md`](../../docs/standards/risk-rating.md)** -- that doc is a pre-computed list of the high-blast-radius surfaces in this repo; a touch of one is the cheapest possible "this is risky despite being short" signal. (The next three triggers are the *criteria* behind that doc -- check them yourself for any file not listed there, since unlisted files default to `low`);
 - the change touches a **function or class that is imported/used elsewhere** (a signature, return shape, or behavior change can break callers you can't see in a short diff);
 - it **spans multiple surfaces** (e.g. both backend and frontend, or routing + adapter + config together) -- breadth multiplies the ways a small edit misbehaves;
 - it touches **Gemini / `google-genai` wiring** (the live-AI adapter, tool/function declarations, model/config selection, VAD/activity signals) -- this SDK's failure modes are subtle and under-documented, so it always warrants the stronger model.

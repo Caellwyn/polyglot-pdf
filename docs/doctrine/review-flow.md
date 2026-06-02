@@ -1,6 +1,6 @@
 # Review-flow doctrine: parallel Copilot + fresh-eyes, looped to clean
 
-*Last updated: 2026-06-01.*
+*Last updated: 2026-06-02.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
@@ -63,6 +63,18 @@ only and has no Copilot loop.
   (exit 1, surface to maintainer, no auto-retry -- a quota error will not clear
   for hours), TIMEOUT (exit 2, treat like ERROR -- NEVER interpret silence as
   CLEAN). An unhandled state must never fall through to "done."
+- **Resolve mechanical merge conflicts inline; escalate only structural ones.**
+  When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
+  an automatic escalation. **Mechanical / ordering** conflicts (append-only journal
+  or ledger rows, changelog interleaving, independent additions to the same
+  list/table) are resolved inline by **keeping both sides** in a sensible order,
+  then re-reading the merged region to confirm both intents survived. **Escalate
+  (STOP and ask) only on genuine structural incompatibility** -- the two sides
+  change the same logic/contract incompatibly so keeping both is wrong and
+  choosing is a design call; ambiguous counts as structural. On escalation, abort
+  the rebase first so the branch is left clean. Full procedure + the inline-vs-
+  escalate boundary: the closeout skill's Step-7 "Merge-conflict resolution in the
+  loop" (bd polyglot-pdf-hrn.6).
 - **Never run `gh pr merge`.** The merge is the maintainer's alone.
 
 ## Fresh-eyes specifics

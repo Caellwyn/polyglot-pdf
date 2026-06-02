@@ -189,7 +189,7 @@ regression is wasted money. Decision rule:
 
 Fresh-eyes ALWAYS runs regardless of this gate (it costs no Copilot credit).
 
-Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes.
+Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes. (**If this pre-push `git pull --rebase origin dev` hits a merge conflict, resolve it per Step 7's "Merge-conflict resolution in the loop"** -- mechanical/ordering conflicts inline, structural ones escalate; the same boundary applies to both rebases.)
 
 **The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
 
@@ -259,6 +259,51 @@ Commit the combined fixes, then **push once and loop Copilot to clean:**
 4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`
    Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN or you hit `MAX_COPILOT_ROUNDS` (3)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
+
+### Merge-conflict resolution in the loop (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
+
+The rebase in sub-step 1 (`git pull --rebase origin <branch>`) -- and the Step-6
+pre-push `git pull --rebase origin dev` -- can hit a **merge conflict** when the
+feature branch and the integration branch touched the same lines. When that
+happens, **the orchestrator resolves it; it is not an automatic escalation.** Most
+closeout conflicts are mechanical (two PRs each appended a journal entry, a
+changelog line, or a bead row), and stopping to ask the maintainer to hand-merge a
+journal ordering is exactly the kind of trivial, no-consequence ask the escalation
+doctrine says to decide yourself (see CLAUDE.md "Escalation vs. autonomy").
+
+**Resolve inline (decide it yourself)** when the conflict is **mechanical /
+ordering** -- both sides are independently correct and the only question is how to
+arrange them. This is the common case:
+
+- **append-only ordering** -- journal entries, `harness_ledger.jsonl` rows, a
+  CHANGELOG, a doc's "Related" list: **keep BOTH sides**, ordered the natural way
+  (chronological for journal/ledger, then re-stamp if a date/sequence collides);
+- **independent additions to the same list/table** -- two new rows in a doc table,
+  two new entries in `MEMORY.md` or an index: keep both, in a sensible order;
+- **a pure interleave** where neither side changed the other's lines, git just
+  couldn't pick an order.
+
+After an inline resolution, **re-read the merged region** to confirm both sides'
+intent survived (an append-both that accidentally drops one side is the failure
+mode), then `git add` + `git rebase --continue` and proceed with the push.
+
+**Escalate (STOP and ask the maintainer)** ONLY on a **genuine structural
+incompatibility** -- where keeping both sides is *not* correct and choosing
+between them is a real decision:
+
+- the two sides change the **same logic / contract** in incompatible ways (both
+  edited the same function body, the same wire-format key, the same config value)
+  and reconciling them requires a **design call**, not an ordering call;
+- resolving it would **silently drop or override** the other PR's behavior change;
+- you **cannot tell** whether both intents survive a merge -- ambiguous counts as
+  structural (same safe-default spirit as "ambiguous = blocker" above).
+
+When you escalate a structural conflict, **abort the rebase** (`git rebase --abort`)
+so the branch is left clean, not half-merged, then ping the maintainer with the
+conflicting hunks and what each side was trying to do. Per the hard-stop rule,
+first finish anything that does *not* depend on the resolution. (Verification of
+this boundary -- synthetic mechanical conflict resolves inline, synthetic
+structural conflict escalates -- is recorded in this bead's journal entry.)
 
 **As soon as Copilot reports CLEAN, make sure no `pr_review_watcher.py` is still running** (a lingering watcher wastes tokens). `pr_review_watcher.py` exits on its own at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so the one you just read is already gone -- the real hazard is an EARLIER watch you launched and never read, or a re-watch you started and then abandoned. The watcher runs as a `run_in_background` **Bash** task (not an agent task, so there is no `TaskStop` handle) -- if one is still alive, kill it by its background task / PID (e.g. `Stop-Process`). Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
 
