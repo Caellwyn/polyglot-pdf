@@ -162,11 +162,11 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 
 **The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
 
-1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just the summary + a 'Fresh-eyes review' section you'll fill after triage. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
+1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just a **brief what-shipped summary + bead id(s)**. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Copilot outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
    ```bash
    PR=$(gh pr create --base dev \
         --title "<scope>(<context>): <summary> (bd <full-id>)" \
-        --body "<summary + a 'Fresh-eyes review' section>" \
+        --body "<brief what-shipped summary + bead id(s); written once, not revisited>" \
         | grep -oE '[0-9]+$')
    # review-worthy ONLY -- chain the trigger comment + capture its server time:
    TS=$(gh api repos/<owner>/<repo>/issues/$PR/comments \
@@ -176,9 +176,19 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
 2. **(Review-worthy PRs only) Start the round-1 watch with `--since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. Passing `--since` here (unlike the old auto-review-on-open flow) scopes detection to the review you just requested, so a stale prior comment can't be re-detected:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`  (same invocation, same `--since` discipline, for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch.
-3. **Spawn the fresh-eyes reviewer** concurrently. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type); otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "sonnet", ... })`. Substitute the branch name. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
+3. **Pick the fresh-eyes model from diff size (A/B arm B), then spawn the reviewer** concurrently.
 
-For a review-worthy PR both reviewers run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum. For a review-skipped PR, only fresh-eyes runs.
+   **First run the deterministic router** so the cheap model handles small diffs (bd polyglot-pdf-hrn.4). It is zero-token -- size in, model name out, NO risk judgment (the risk call happens inside the fresh-eyes turn, by the cheap model):
+   `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/pick_review_model.py" --base origin/dev)`
+   It prints `haiku` (≤ ~80 changed lines) or `sonnet`. **Run the worktree's OWN copy (`$WT/scripts/...`), and `cd "$WT"` first** -- two distinct worktree-safety reasons (same discipline as Steps 2/3/4): (a) the script file itself only exists in THIS branch until merge, so `$R/scripts/...` (the main checkout) would be a "file not found" pre-merge; and (b) the script runs `git diff` in its own cwd, so without `cd "$WT"` -- if the shell cwd has drifted to the main checkout -- it would measure the MAIN repo's `origin/dev...HEAD` (typically ~0 lines) and silently route every review to `haiku`. `$R` supplies only the venv interpreter. On a measurement failure it prints `sonnet` and exits 1 (fail toward the capable model); use whatever it printed.
+
+   **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set in the env, that session-wide override wins over any per-agent `model:`, so the picker is moot -- **skip it and use Sonnet** (the control arm). Run the picker only when that env var is unset. **Note whether arm B was active this session** (it was, if you let the picker route AND `CLAUDE_CODE_SUBAGENT_MODEL` was unset) -- Step 8.5 turns the active arms into the single `--arm` value (and honors the Phase-A baseline default). Count any Haiku self-escalations for `--haiku-escalations`.
+
+   **Then spawn the reviewer** with the chosen model. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type) with a `model` override of the picked value; otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. Substitute the branch name. **If you picked `haiku`, your prompt MUST tell the reviewer it is running as Haiku** -- that one sentence is what arms the agent's self-escalation clause (a Haiku run that finds the change risky -- a cross-file symbol, multiple surfaces, or `google-genai` wiring -- stops and recommends a Sonnet re-review instead of rendering a verdict). Without that sentence the clause is dormant and you lose the safety net. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
+
+   **If the Haiku reviewer self-escalates** (its STATUS line is `BLOCKED` + "escalating to Sonnet re-review"), re-spawn the SAME fresh-eyes reviewer with `model: sonnet` and use that verdict; count the escalation for Step 8.5's `--haiku-escalations`.
+
+For a review-worthy PR both reviewers run simultaneously -- total round-1 wait is `max(copilot, fresh-eyes)`, not the sum. For a review-skipped PR, only fresh-eyes runs. (A Haiku self-escalation adds a short Sonnet re-run after the cheap pass; that is the expected, diagnostic cost of arm B, not a failure.)
 
 ## Step 7 -- Fix the COMBINED round-1 issues, then loop Copilot until clean
 
@@ -189,9 +199,26 @@ For a review-worthy PR both reviewers run simultaneously -- total round-1 wait i
 - **Fresh-eyes (one pass):** triage -- high-confidence findings fixed inline; the rest filed as a bead BEFORE moving on (the PR body is an audit log, not a tracker); record the adopt/reject/defer breakdown for the PR body + journal.
 - **Copilot round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2) -- handle ALL four:
   - **CLEAN** (no comments) -> Copilot already happy; if fresh-eyes also produced no on-branch fixes, skip straight to Step 8.
-  - **COMMENTS** -> triage like fresh-eyes (adopt inline / defer to beads).
+  - **COMMENTS** -> the watcher already printed the comment bodies; **you** (the orchestrator) judge each one nit-vs-blocker per the decision rule below, then adopt blockers inline / defer true nits to a bead.
   - **ERROR** (quota/failure) -> surface to the maintainer; NO auto-retry (a quota error won't clear for hours). NOT a clean state.
   - **TIMEOUT** (no completed review in the window) -> treat like ERROR: surface to the maintainer, never interpret silence as CLEAN. You may re-run the watch once with a longer `--timeout-min`, but never auto-clear on a timeout.
+
+### The nit-vs-blocker decision rule (A/B arm C -- bd polyglot-pdf-hrn.5)
+
+`pr_review_watcher.py` only detects the terminal state and **extracts the comment bodies** -- a script cannot reliably tell a nit from a blocker, so **the orchestrator makes that call.** For EACH Copilot finding (and each deferred fresh-eyes finding), classify and act:
+
+- **Blocker -- address now, then loop.** Anything that *is*, or *might be*, a correctness / security / data-loss / regression issue. **Ambiguous counts as a blocker** (safe default): if you cannot confidently say "this is purely cosmetic and changes no behavior," treat it as a blocker and fix it. A wasted fix is cheap; a shipped regression is not.
+- **True nit -- defer, don't fix inline.** A finding that is unambiguously cosmetic / stylistic / non-behavioral (naming preference, a comment-wording tweak, an optional micro-refactor with no functional effect). Do **not** fix these inline (that just spawns another review round for no behavior change). Instead **file them as ONE follow-up bead** (see the convention below) and proceed.
+- **When in doubt, it's a blocker.** Do not use "nit" as an excuse to skip a fix you're unsure about -- the whole point of "ambiguous = blocker" is that the cheap mistake (an extra fix) is the one we choose.
+
+**Deferred-nit bead convention.** File **one** bead per closeout collecting that PR's true nits (not one bead per nit): title `chore(nits): deferred review nits from PR #<n>`, body listing each nit with its source (`copilot`/`fresh-eyes`) + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 8.5). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 8.5's `--deferred-nits`.
+
+**Hard loop ceiling.** The Copilot adopt-and-loop cycle is bounded at **`MAX_COPILOT_ROUNDS = 3`** rounds. If Copilot still reports COMMENTS after 3 rounds of you addressing blockers, **stop looping and escalate to the maintainer** (do not loop forever): summarize the still-open findings, what you changed each round, and why they persist, and let the maintainer decide. Reaching the ceiling is an escalation, never an auto-clear -- never treat "I'm tired of looping" as CLEAN. (Round 1 from Step 6 counts as round 1; the re-watch loop below is rounds 2 and 3.)
+
+**A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
+- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker, ceiling 3.
+- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Copilot finding inline before looping (no deferral, so `--deferred-nits 0`). Same ceiling.
+**Note whether arm C was active** (it was, if `CLOSEOUT_LOOP_MODE` is unset/`blockers`); Step 8.5 combines the active arms into the single `--arm` value and applies the Phase-A default.
 
 Commit the combined fixes, then **push once and loop Copilot to clean:**
 1. Rebase on the FEATURE branch (NOT the integration branch): `git pull --rebase origin <branch>` -- picks up anything pushed to the branch. (Step 6's one-time pre-push rebase was against the integration branch; the loop rebases against the feature branch.)
@@ -200,7 +227,7 @@ Commit the combined fixes, then **push once and loop Copilot to clean:**
    `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f body='@copilot please review' --jq .created_at)`
 4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`
-   Repeat the COMMENTS -> fix -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN**. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
+   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN or you hit `MAX_COPILOT_ROUNDS` (3)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 **As soon as Copilot reports CLEAN, make sure no `pr_review_watcher.py` is still running** (a lingering watcher wastes tokens). `pr_review_watcher.py` exits on its own at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so the one you just read is already gone -- the real hazard is an EARLIER watch you launched and never read, or a re-watch you started and then abandoned. The watcher runs as a `run_in_background` **Bash** task (not an agent task, so there is no `TaskStop` handle) -- if one is still alive, kill it by its background task / PID (e.g. `Stop-Process`). Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
 
@@ -211,9 +238,10 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
-1. **Update the PR body** so the "Fresh-eyes review" section records the final adopt/reject/defer breakdown (and the Copilot rounds, if notable).
-2. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
-3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
+1. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
+2. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
+
+**Do NOT go back and rewrite the PR body after review.** The fresh-eyes triage breakdown and the Copilot-round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 8.2, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` after the PR is approved is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` (Step 6) is the only body write. Whatever you put there at open time stands; the durable record is the journal.
 
 The PR is already a normal, mergeable PR -- there is no flip step. The merge is the maintainer's: **never run `gh pr merge` yourself.** Pinging the maintainer is the autonomous endpoint.
 
@@ -235,10 +263,20 @@ string and land junk in `--recorded-at`. The script also has a UTC fallback if
 
 Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
 PR). Fill the counters from what actually happened this session:
-- `--arm` -- the experiment arm you ran. **Phase A (the default, until the
-  counter says otherwise): pass `A`.** The script prints the next-phase
-  directive after it writes; you can also check it any time with
-  `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
+- `--arm` -- the experiment arm you ran, as a SINGLE value derived from which
+  arms were active (Steps 6.3 / 7 told you to note each):
+  - **Phase A (the default, until the counter says otherwise): pass `A`** --
+    regardless of what Steps 6.3/7 noted. In Phase A you are measuring the
+    baseline, so the arm is `A` even though the picker/loop ran their normal
+    path; the B/C notes only become the arm value once the phase directive has
+    advanced to B/C toggling. Mislabeling a baseline closeout `B`/`C` would
+    prematurely advance the phase counters and invalidate the baseline.
+  - **Once toggling (directive says "start B/C"):** pass `B` if only arm B was
+    active, `C` if only arm C, **`BC` if BOTH were active** this session, or `A`
+    if both were forced off by their control env vars. Combine -- never pass two
+    `--arm` flags; the counter takes one arm label per row.
+  The script prints the next-phase directive after it writes; check it any time
+  with `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
 - `--cost-category` -- `production` for normal feature/bug work; **`audit`** for a
   closeout whose work was measurement / cross-arm bug-reporting (audit work is
   never charged to the arm doing it -- the plan's fairness rule).

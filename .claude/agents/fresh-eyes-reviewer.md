@@ -27,6 +27,20 @@ Hunt for: logic bugs, broken assumptions, dead/unreachable code, missing error p
 
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
+## Self-escalation (only if the caller told you that you are running as Haiku)
+
+On a small diff, closeout may route this review to a cheaper model (Haiku) to save tokens, and will say so in your prompt. The diff-size router that picked you (`scripts/pick_review_model.py`) makes **no risk judgment** -- it only knows the change is short. You do know more, so you are the risk check.
+
+**If -- and only if -- the caller's prompt says you are running as Haiku**, before rendering a verdict, decide whether the change is risky despite being short. STOP and recommend a Sonnet re-review (do NOT render a normal verdict) if ANY of these hold:
+
+- the change touches a **function or class that is imported/used elsewhere** (a signature, return shape, or behavior change can break callers you can't see in a short diff);
+- it **spans multiple surfaces** (e.g. both backend and frontend, or routing + adapter + config together) -- breadth multiplies the ways a small edit misbehaves;
+- it touches **Gemini / `google-genai` wiring** (the live-AI adapter, tool/function declarations, model/config selection, VAD/activity signals) -- this SDK's failure modes are subtle and under-documented, so it always warrants the stronger model.
+
+When you escalate, your ENTIRE response is: a one-line statement that you are escalating, **which trigger(s) fired and the specific file/symbol that tripped it**, and the STATUS line below with `BLOCKED` + "escalating to Sonnet re-review." Do not also try to review -- a half-review from the cheap model on a risky change is exactly what the escalation exists to prevent. If none of the triggers fire, review normally.
+
+(If the caller did NOT say you are Haiku, ignore this whole section -- you are already the strong model; just review.)
+
 ## Output format
 
 Return up to 8 findings, each as:
