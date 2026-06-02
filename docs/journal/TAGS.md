@@ -22,6 +22,8 @@ Renaming a tag means editing every entry that uses it (avoid).
 - refactor
 - hotfix
 - postmortem
+- harness
+- doctrine
 
 ## Usage example
 
