@@ -123,7 +123,11 @@ escalation. But note the flip side: when the maintainer **delegates a call to yo
 ("whatever you think", "expand it if it helps", "your call"), **deciding it IS the
 response** -- re-asking reads as not listening. Delegated technical calls
 (what tags should exist, how to structure a module, which helper to reuse) are
-yours the moment they're delegated; do not bounce them back.
+yours the moment they're delegated; do not bounce them back. **Tiebreaker for the
+ambiguous middle** ("handle it however makes sense" -- could be a vague direct
+request or a delegation): treat it as a **delegation and decide** -- only ask if
+you're *also* low-confidence on the underlying intent AND the choice is a step-2
+case (a real commitment or product/direction call). Decide-by-default wins the tie.
 
 Run this decision procedure for any choice you face:
 
@@ -151,21 +155,26 @@ Run this decision procedure for any choice you face:
      default. (You are the technical expert; the maintainer is the product owner.)
    - **A bead that is ambiguous, self-contradictory, or proven untenable** -- it
      can't proceed without the owner revising it.
-   - **Isolate the kernel -- never staple a decidable question onto a genuine
-     one.** When something genuinely needs the maintainer, ask ONLY the
-     irreducible part. Do not bundle a step-3 decide-it-yourself choice into the
-     same ask "while you're here" -- decide that part, and escalate only the
-     kernel. (E.g. *"which beads to pick + how to bundle them"* is yours; if the
-     real question is whether a marker bead is stale, ask only that.)
+
+   **When you DO escalate, isolate the kernel -- never staple a decidable question
+   onto a genuine one.** (This is a *how-to-escalate* rule, not a fourth trigger.)
+   Ask ONLY the irreducible part. Do not bundle a step-3 decide-it-yourself choice
+   into the same ask "while you're here" -- decide that part, and escalate only the
+   kernel. (E.g. *"which beads to pick + how to bundle them"* is yours; if the real
+   question is whether a marker bead is stale, ask only that.)
+
    - **Exception -- scope creep: file a bead, don't ask.** If you notice
      worthwhile work *beyond* the bead's scope that **isn't itself a decision the
      maintainer needs to make now** (if it is, escalate it per step 2 instead),
      do NOT ask and do NOT silently expand the bead -- **file a new bead** (via a
      pull/push-bracketed `bd create`; `bd_safe.py` has no `create` subcommand) and
-     continue. **Deciding *whether* out-of-scope work happens at all is itself a
-     decide-or-file call, never an ask** -- "should I also do X?" is the
-     anti-pattern; either fold it in (if trivially in service of the bead), file a
-     bead, or skip it, and note which.
+     continue. **For out-of-scope work that is NOT itself a step-2 case, deciding
+     *whether* it happens is a decide-or-file call, never an ask** -- the bare
+     "should I also do X?" (where X is small/reversible) is the anti-pattern: fold
+     it in (if trivially in service of the bead), file a bead, or skip it, and note
+     which. This does **not** override the step-2 carve-out above: if X is itself a
+     longer-term commitment or a product/direction call, it escalates like any
+     other step-2 item -- "it's out of scope" is not a loophole around step 2.
 3. **Everything else -> DECIDE it yourself, and note the call.** The common path:
    implementing the bead/plan as written, plus trivia with no consequence beyond
    this sprint. Explicitly includes:
@@ -187,17 +196,22 @@ Run this decision procedure for any choice you face:
      equally-good ready beads to pick next; nit-vs-blocker triage (per the
      closeout rule); commit granularity; worktree placement; doc/journal/test
      mechanics.
-   **The consequence Test (apply to every choice before even considering an ask):**
-   *does this choice have any practical effect beyond completing this bead this
-   sprint?* If no -> decide and note it; you are done, do not ask. If unsure,
-   **prefer the reversible option, prefer staying within the current bead, decide,
-   and note it** -- a noted decision the maintainer can correct later is cheaper
-   than a blocking question. A low-consequence choice never clears this Test into
-   an ask, even when it has no single obvious default: "no obvious default" plus
-   "no consequence beyond the sprint" still means **you pick** (reversible default)
-   and note it -- it does not mean escalate. Escalation is reserved for the step-2
-   cases (a real commitment or a product/direction call), not for "I'd like a
-   second opinion."
+   - **The consequence Test -- apply to EVERY choice before even considering an
+     ask** (this is the pre-ask filter; do not skip it). *Does this choice have any
+     practical effect beyond completing this bead this sprint?* If no -> decide and
+     note it; you are done, do not ask. If unsure, **prefer the reversible option,
+     prefer staying within the current bead, decide, and note it** -- a noted
+     decision the maintainer can correct later is cheaper than a blocking question.
+     A low-consequence choice never clears this Test into an ask, even with no
+     single obvious default: "no obvious default" + "no consequence beyond the
+     sprint" still means **you pick** (reversible default) and note it.
+     **Order of operations:** check step 2 FIRST -- if the choice is a step-2 case
+     (a real commitment or a product/direction call), it escalates *regardless* of
+     how small its immediate consequence looks; the Test only governs choices that
+     are NOT step-2 cases. The "no obvious default" in step 2 (a product tradeoff)
+     and the "no obvious default" here (a low-stakes pick) are different animals:
+     step 2 escalates, the Test decides. Never use the Test to reclassify a genuine
+     product/direction call as "low-consequence" to avoid escalating it.
 
 **Escalating is a hard STOP -- so defer it until nothing further can be done
 without the answer.** Asking the maintainer a blocking question ends your turn and
@@ -219,7 +233,11 @@ done** when it does, so the maintainer's one reply unblocks the most. Never
 best-guess a product/direction call just to avoid the stop. **A question that
 arises before you've started the work is almost never blocking yet** -- resist the
 urge to front-load a batch of questions at kickoff; start the independent work
-first, and most "questions" dissolve into decisions or answer themselves.
+first, and most "questions" dissolve into decisions or answer themselves. (The one
+"almost": a step-2 question on which *literally everything* downstream depends --
+the bead itself is ambiguous/untenable and no independent work exists to do first.
+That is genuinely blocking at kickoff; a low-consequence pick or a question with
+*any* independent work ahead of it is not.)
 
 **The PR / merge report is the maintainer's standing checkpoint AND the audit
 surface for this rule.** Write it for the product owner, not an engineer: **plain
