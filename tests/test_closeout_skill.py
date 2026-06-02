@@ -85,15 +85,23 @@ def test_runs_inline_not_forked(frontmatter):
 # --- body contract ---
 
 def test_references_the_wrapped_scripts(skill_text):
-    # The three step-2 scripts the skill wraps, plus the reused freshness
+    # The deterministic scripts the skill wraps, plus the reused freshness
     # checker -- a rename of any of these without updating the skill is caught.
     for script in (
         "scripts/closeout_housekeeping.py",
         "scripts/journal_scaffold.py",
         "scripts/bd_safe.py",
         "scripts/check_doc_freshness.py",
+        "scripts/closeout_finish.py",
     ):
         assert script in skill_text, "skill must reference {}".format(script)
+
+
+def test_documents_mechanical_handoff(skill_text):
+    # The skill must describe the closeout-runner delegation + the --dry-run
+    # preview (bd polyglot-pdf-hrn.13) so the cheap-model handoff stays documented.
+    assert "closeout-runner" in skill_text
+    assert "--dry-run" in skill_text
 
 
 def test_covers_doc_freshness_step(skill_text):

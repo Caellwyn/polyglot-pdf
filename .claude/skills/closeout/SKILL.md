@@ -85,6 +85,51 @@ orphan, bump a stale doc, fix a red test) is still your judgment. Steps 0--2 and
 below are the triage reference the prep output points into; you do NOT separately
 re-run their commands when prep already reported READY.
 
+## Mechanical handoff -- you do the judgment, a cheap subagent does the glue (bd polyglot-pdf-hrn.13)
+
+Closeout splits into **judgment** (yours, the orchestrator's) and **mechanics**
+(deterministic glue). To stop spending the expensive model on git plumbing, the
+mechanics can be delegated to the cheap `closeout-runner` subagent
+(`.claude/agents/closeout-runner.md`, Haiku). The split:
+
+- **YOURS (judgment, never delegate):** triaging any prep `ATTENTION`; bumping
+  stale docs; **writing the journal prose**; the **review-worthiness gate** (Step
+  6); spawning + triaging **fresh-eyes**; the **nit-vs-blocker** calls and the
+  Copilot loop (Step 7); resolving a merge conflict; **naming which beads close**;
+  the merge ping; any escalation.
+- **DELEGABLE (mechanics):** running `closeout_prep.py`; writing the
+  already-composed journal entry to disk; and running **`scripts/closeout_finish.py`**
+  -- the one-shot glue that commits the staged work, rebases, pushes, opens the PR
+  (and, for a review-worthy PR, posts the `@copilot please review` comment +
+  captures its timestamp + PRINTS the watch command), records the telemetry row,
+  and (when told) closes the bead(s). It resolves the `$R`/`$WT`/`$PY` worktree
+  traps **internally**, so neither you nor the subagent re-derives them.
+
+**The flow:** you make the judgments (prep is READY, the journal prose is written,
+the review verdict is decided), then hand the `closeout-runner` a structured brief
+(bead id(s) + close reason; the review verdict; the **complete filled journal
+text**; PR title + body; the telemetry counters; branch + base; whether to pass
+`--close-beads`). It runs the glue and **stops back at every judgment point**
+(prep ATTENTION, a rebase conflict, any tooling error, a missing brief input). You
+then resume: launch the watcher from the `WATCH_CMD` it returns, spawn fresh-eyes,
+run the Step-7 loop, and -- for a review-worthy PR -- do the **second** tiny
+`closeout_finish.py --close-beads` (telemetry + close) call after Copilot is CLEAN.
+
+**Two-call bead close.** A **review-skipped** PR (docs/beads/journal-only) has no
+review loop, so the single `closeout_finish.py` run carries `--close-beads` and
+closes immediately. A **review-worthy** PR opens WITHOUT `--close-beads`; you close
+after the loop reaches CLEAN. `closeout_finish.py` never blocks on the watcher.
+
+**Preview first:** `closeout_finish.py ... --dry-run` prints the fully-resolved
+plan (every command with `$R`/`$WT`/`$PY` substituted) and performs **zero** side
+effects -- run it once to confirm before the real call, and as the way to rehearse
+this skill without opening junk PRs.
+
+**Delegation is optional.** Every mechanical step below also documents its raw
+hand-run form; if you are not delegating, run `closeout_finish.py` yourself (it is
+the same turn savings minus the subagent). The judgment steps are identical either
+way. See `closeout_finish.py --help` for the full flag list.
+
 ### Step 0 detail -- Preconditions (triage if prep flagged `preconditions`)
 
 1. Working tree must be clean. If `preconditions` is flagged DIRTY, stop and tell the user: closeout assumes committed work. Do not proceed until it's committed/stashed.
@@ -147,7 +192,22 @@ must move it into the worktree by hand -- prefer the `$WT` form above.
 
 (Pass `--sprint`/`--pr` only if this is a numbered sprint / multi-PR sprint; omit for hotfixes.) The script writes `docs/journal/entries/YYYY-MM-DD-bd-<suffix>-<slug>.md` with the frontmatter and the 5 empty sections.
 
-Then YOU fill it in (this is judgment, not mechanics):
+**Write the entry ONCE -- do not use the empty-file-then-Edit dance.** The
+default file-write mode above writes an empty skeleton, which then forces a
+Read-before-Edit to fill it (3 wasted turns -- see bd polyglot-pdf-hrn.13). Prefer
+ONE of these single-write paths instead:
+- run `journal_scaffold.py <bead-id> --print [--sprint N]` (it writes NOTHING,
+  emits the skeleton to stdout), read the path it WOULD use from the naming rule
+  (`docs/journal/entries/<date>-bd-<suffix>-<slug>.md`), and `Write` the FILLED
+  entry (prose already composed) to that path in one shot; or
+- if you delegate the mechanical tail to the `closeout-runner` subagent (see the
+  Mechanical handoff note at the top), hand it the complete filled prose and it
+  writes the entry once.
+The `--print` flag exists precisely so the structure never has to be written
+twice.
+
+Then YOU fill it in (this is judgment, not mechanics) -- compose this prose BEFORE
+the single write above:
 - **tags:** replace the `tags: []` placeholder with 1-5 tags **verbatim from `docs/journal/TAGS.md`** -- never invent a tag. Most-specific first. (If the project hasn't set up a tag vocabulary, the scaffolded placeholder can stay or you can add `docs/journal/TAGS.md`.)
 - **Trigger / What shipped / Lessons / Doc freshness / Files touched:** write the prose. In "What shipped" include the fresh-eyes triage breakdown (adopt/reject/defer + the bead ids for deferrals). In "Doc freshness" record which docs were bumped or reviewed-and-left.
 - If a lesson **generalizes** (applies anywhere in the codebase), also add a one-liner to the relevant `docs/standards/*.md` citing this entry.
