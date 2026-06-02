@@ -96,6 +96,101 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 The rules that override default behavior. Product-specific invariants live in
 "Top scar tissue" above; the cross-cutting workflow rules follow.
 
+### Escalation vs. autonomy
+
+**Default to DECIDING. Make the call, then state what you chose and why in one
+line.** Asking the maintainer is the rare exception, not the safe fallback.
+Escalation runs one level at a time: a subagent escalates to you (the
+orchestrator); you escalate to the maintainer -- each only when the level below
+genuinely cannot resolve it. **This is an incremental step, not the final word:**
+the current goal is narrow -- stop burning tokens and maintainer attention on
+trivial, no-consequence asks -- without letting work creep beyond what a bead
+authorizes. **The bead is the unit of authorization.** (We will loosen this later
+if it over-escalates.)
+
+Run this decision procedure for any choice you face:
+
+1. **Is it on the NEVER list?** -> Don't do it yourself, and don't ask permission
+   to do it yourself. You never `git push --force`, never deploy to any
+   environment, and never run `gh pr merge`. The maintainer gates all deployment
+   and clicks every merge; dev merges go through PR + review. (Deliberately
+   conservative while autonomy ramps up.) **Pinging the maintainer that a PR is
+   ready for them to merge is NOT "asking to merge"** -- it's the handoff that ends
+   closeout, and it stays required (see "Closeout" below).
+2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
+   or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
+   - **A longer-term / cross-cutting commitment not explicit in the bead** -- a
+     change reaching beyond completing this bead: a new contract other code
+     depends on (wire format, API shape, shared schema); a new
+     operational/cost/security dependency (a service, datastore, paid API, queue,
+     anything needing provisioning or secrets); breaking a documented invariant
+     (stateless backend, client-owns-state, PII rules -- see "Top scar tissue");
+     or an architectural change **bigger than the small, obvious one clearly in
+     service of the bead's instructions**. (That line has a soft edge -- when
+     genuinely unsure, escalate; it's deliberately conservative for now and will
+     be sharpened once we see which way it errs.)
+   - **A product / direction / scope call** -- *what* to build or prioritize, a
+     product-or-UX-vs-complexity or cost-vs-quality tradeoff with no obvious
+     default. (You are the technical expert; the maintainer is the product owner.)
+   - **A bead that is ambiguous, self-contradictory, or proven untenable** -- it
+     can't proceed without the owner revising it.
+   - **Exception -- scope creep: file a bead, don't ask.** If you notice
+     worthwhile work *beyond* the bead's scope that **isn't itself a decision the
+     maintainer needs to make now** (if it is, escalate it per step 2 instead),
+     do NOT ask and do NOT silently expand the bead -- **file a new bead** (via a
+     pull/push-bracketed `bd create`; `bd_safe.py` has no `create` subcommand) and
+     continue.
+3. **Everything else -> DECIDE it yourself, and note the call.** The common path:
+   implementing the bead/plan as written, plus trivia with no consequence beyond
+   this sprint. Explicitly includes:
+   - **Implementation / internal structure** -- module and function
+     decomposition, naming, which existing helper to reuse, where code lives,
+     data structures, local refactors, test structure, and small architectural
+     changes obviously required to carry out the bead. (Textbook "architecture"
+     at this scale is YOURS; only the bigger, beyond-the-bead commitments in
+     step 2 escalate.)
+   - **PR shaping** -- bundle small changes, nits, and few-line fixes into one PR
+     to save tokens; split when a bead turns out more complex than expected or
+     when bundling would hurt reviewability (split on the fly). Also branch
+     basing/stacking and rebase strategy.
+   - **Process mechanics** -- plan-first vs. build-directly; which of several
+     equally-good ready beads to pick next; nit-vs-blocker triage (per the
+     closeout rule); commit granularity; worktree placement; doc/journal/test
+     mechanics.
+   - **Test:** *does this choice have any practical effect beyond completing this
+     bead this sprint?* If no -> decide and note it. If unsure, prefer the
+     reversible option, prefer staying within the current bead, decide, and note
+     it -- a noted decision the maintainer can correct later is cheaper than a
+     blocking question.
+
+**Escalating is a hard STOP -- so defer it until nothing further can be done
+without the answer.** Asking the maintainer a blocking question ends your turn and
+halts the process entirely: you cannot poll for whether they're present, wait an
+open-ended amount of time, or keep working "in the background" while a question is
+pending (resuming would need a fresh agent the maintainer starts later). Because the
+stop is total, **don't escalate the moment a question arises.** When you hit
+something that needs the maintainer, keep going on everything that does *not* depend
+on the answer: finish the independent work, commit/park it cleanly (never leave it
+half-edited), and resolve anything you discover you can actually decide yourself.
+The trigger to ask is a **dependency** condition, not a position in the task: you
+escalate once you've reached the point where **nothing further can proceed without
+the answer** -- which may come early (everything downstream needs the decision) or
+late (lots of independent work remained). Often, by working up to that point, the
+apparent blocker shrinks or several questions accumulate into one stop instead of
+three. Then ask -- with a clear note of exactly what you need decided -- and stop.
+The work still stops at the ask; the point is that **as much as possible is already
+done** when it does, so the maintainer's one reply unblocks the most. Never
+best-guess a product/direction call just to avoid the stop.
+
+**The PR / merge report is the maintainer's standing checkpoint AND the audit
+surface for this rule.** Write it for the product owner, not an engineer: **plain
+language, no jargon or acronyms** -- a real overview of what got done and why, and
+then **LIST each autonomous decision you made and briefly DEFEND it** (what you
+chose, and why it was yours to decide rather than escalate). The maintainer
+reviews every merge, so this defended decision list is where they catch anything
+**decided that should have been escalated** -- the real risk of widening autonomy.
+Make the decisions easy to scan; do not bury them.
+
 ### Task tracking
 - Beads (`bd`) is the canonical tracker. Pull-before-read, push-after-write.
   Full cadence: [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).

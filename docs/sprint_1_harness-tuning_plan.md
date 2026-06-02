@@ -29,17 +29,27 @@ The orchestrator does the **grunt work of implementing the maintainer's choices*
 never *owns* the project:
 
 > Maintainer creates a plan → AI breaks the plan into beads → AI completes beads,
-> **spawning new beads** when a bead's scope suggests splitting, when bugs arise, or
-> when nits are suggested → AI **reports the choices it made** → AI **auto-records
-> scar-tissue** for minor gotchas → AI **escalates major decisions** (a dead/changed
-> endpoint model, a new dependency or architecture, UX-vs-complexity or
-> cost-vs-quality tradeoffs, anything not derivable from the plan) → when a plan is
-> **complete or proves untenable, AI stops and pings** the maintainer for new
-> instructions.
+> **spawning new beads** when a bead's scope suggests splitting, when bugs arise,
+> when nits are suggested, or **when worthwhile work runs beyond a bead's scope**
+> (file a bead rather than ask or silently expand — *unless* the out-of-scope item
+> is itself a decision the maintainer must make, which escalates instead) → AI
+> **reports the choices it
+> made** → AI **auto-records scar-tissue** for minor gotchas → AI **escalates the
+> calls that are genuinely the owner's** (a product/direction/scope call; a
+> **longer-term commitment the bead doesn't call for** — a new contract, a new
+> operational/cost/security dependency, a broken documented invariant, or an
+> architectural change *bigger than the small obvious one serving the bead*; an
+> ambiguous/untenable bead) → when a plan is **complete or proves untenable, AI
+> stops and pings** the maintainer for new instructions.
 
 The human gate moves from "merge to `dev`" up to **merge to `main` + regular audit
-reports**. Autonomy is for *pre-defined build direction and addressing bugs/nits* —
-never for inventing features or making architectural/product judgment calls.
+reports**. Autonomy is for *implementing the maintainer's plan and addressing
+bugs/nits* — including the implementation and small bead-serving architecture
+decisions, which are the orchestrator's. It is **never** for inventing features,
+making product/direction judgment calls, or longer-term commitments a bead doesn't
+authorize. The full rule (the 3-step decision procedure, the NEVER list, and the
+defended-decision merge report) is the **Escalation vs. autonomy** section of
+[`CLAUDE.md`](../CLAUDE.md) (`polyglot-pdf-hrn.11`).
 
 ### What the review found (the system is already good — don't regress these)
 
