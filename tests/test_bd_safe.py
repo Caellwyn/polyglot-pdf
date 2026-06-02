@@ -1,6 +1,6 @@
 """Tests for scripts/bd_safe.py.
 
-Imports the script as a module (repo precedent: test_copilot_watch.py,
+Imports the script as a module (repo precedent: test_pr_review_watcher.py,
 test_doc_freshness.py) and exercises the wrapper logic with `_run`
 monkeypatched so no `bd`/`gh`/`git` subprocess is ever spawned. The point of
 the tests is the SAFETY behaviors: pull-then-push bracketing fires, the two

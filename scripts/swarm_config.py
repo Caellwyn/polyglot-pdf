@@ -1,6 +1,6 @@
 """Project-specific configuration for the claude-swarm-kit scripts.
 
-The swarm scripts (bd_safe.py, copilot_watch.py, journal_scaffold.py,
+The swarm scripts (bd_safe.py, pr_review_watcher.py, journal_scaffold.py,
 closeout_housekeeping.py) are otherwise product-agnostic. The two values that
 DO differ per project live here, resolved in this precedence order:
 

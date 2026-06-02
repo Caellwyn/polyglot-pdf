@@ -1,6 +1,6 @@
 """Tests for scripts/closeout_housekeeping.py.
 
-Module-import + monkeypatched `_run` (repo precedent: test_copilot_watch.py).
+Module-import + monkeypatched `_run` (repo precedent: test_pr_review_watcher.py).
 Verifies the pull/push bracketing and the clean-vs-slip classification of the
 two audits, with no real bd subprocess.
 """

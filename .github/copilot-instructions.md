@@ -65,8 +65,8 @@ author exactly like "I never re-reviewed" — so it blocks the merge just the sa
   suggestions and applies the changes. Committing directly breaks the author's
   ability to rebase/amend cleanly, can conflict with their in-progress local
   work, muddies the review history, and turns a reviewable finding into a silent
-  fix nobody checks. (The companion `codex-instructions.md` has the same rule
-  with more detail.)
+  fix nobody checks. (The Codex reviewer carries the same rule in its
+  "If you are reviewing a PR" section of [`AGENTS.md`](../AGENTS.md).)
 - Do NOT skip the top-level summary comment. The author depends on it as the
   review-finished signal — on every round, findings or not.
 

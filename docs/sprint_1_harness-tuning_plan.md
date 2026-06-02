@@ -43,6 +43,11 @@ never for inventing features or making architectural/product judgment calls.
 
 ### What the review found (the system is already good — don't regress these)
 
+> **Note (post-sprint):** `copilot_watch.py` was later renamed to
+> `pr_review_watcher.py` and generalized to `--reviewer copilot|codex`
+> (bd `polyglot-pdf-hrn.10`). This plan's prose keeps the original name as the
+> point-in-time record; the live script is `scripts/pr_review_watcher.py`.
+
 - **Mechanical work is deterministic / zero-token** (`bd_safe.py`,
   `closeout_housekeeping.py`, `check_doc_freshness.py`, `journal_scaffold.py`,
   `copilot_watch.py`). Tokens are spent only on judgment.
