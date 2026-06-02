@@ -162,11 +162,11 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 
 **The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
 
-1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just the summary + a 'Fresh-eyes review' section you'll fill after triage. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
+1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just a **brief what-shipped summary + bead id(s)**. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Copilot outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
    ```bash
    PR=$(gh pr create --base dev \
         --title "<scope>(<context>): <summary> (bd <full-id>)" \
-        --body "<summary + a 'Fresh-eyes review' section>" \
+        --body "<brief what-shipped summary + bead id(s); written once, not revisited>" \
         | grep -oE '[0-9]+$')
    # review-worthy ONLY -- chain the trigger comment + capture its server time:
    TS=$(gh api repos/<owner>/<repo>/issues/$PR/comments \
@@ -238,9 +238,10 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
-1. **Update the PR body** so the "Fresh-eyes review" section records the final adopt/reject/defer breakdown (and the Copilot rounds, if notable).
-2. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
-3. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
+1. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
+2. **Ping the maintainer to merge** with a tight summary: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL.
+
+**Do NOT go back and rewrite the PR body after review.** The fresh-eyes triage breakdown and the Copilot-round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 8.2, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` after the PR is approved is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` (Step 6) is the only body write. Whatever you put there at open time stands; the durable record is the journal.
 
 The PR is already a normal, mergeable PR -- there is no flip step. The merge is the maintainer's: **never run `gh pr merge` yourself.** Pinging the maintainer is the autonomous endpoint.
 
