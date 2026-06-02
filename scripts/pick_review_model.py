@@ -106,7 +106,7 @@ def changed_lines(shortstat: str) -> int:
     changed`` count is intentionally ignored -- the threshold is about how much
     a reviewer must read (lines), not how many files it spans.
     """
-    if not shortstat:
+    if not shortstat or not shortstat.strip():
         return 0
     ins = _INSERTIONS_RE.search(shortstat)
     dels = _DELETIONS_RE.search(shortstat)

@@ -179,10 +179,10 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 3. **Pick the fresh-eyes model from diff size (A/B arm B), then spawn the reviewer** concurrently.
 
    **First run the deterministic router** so the cheap model handles small diffs (bd polyglot-pdf-hrn.4). It is zero-token -- size in, model name out, NO risk judgment (the risk call happens inside the fresh-eyes turn, by the cheap model):
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pick_review_model.py" --base origin/dev`
-   It prints `haiku` (≤ ~80 changed lines) or `sonnet`. On a measurement failure it prints `sonnet` and exits 1 (fail toward the capable model); use whatever it printed.
+   `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/pick_review_model.py" --base origin/dev)`
+   It prints `haiku` (≤ ~80 changed lines) or `sonnet`. **Run the worktree's OWN copy (`$WT/scripts/...`), and `cd "$WT"` first** -- two distinct worktree-safety reasons (same discipline as Steps 2/3/4): (a) the script file itself only exists in THIS branch until merge, so `$R/scripts/...` (the main checkout) would be a "file not found" pre-merge; and (b) the script runs `git diff` in its own cwd, so without `cd "$WT"` -- if the shell cwd has drifted to the main checkout -- it would measure the MAIN repo's `origin/dev...HEAD` (typically ~0 lines) and silently route every review to `haiku`. `$R` supplies only the venv interpreter. On a measurement failure it prints `sonnet` and exits 1 (fail toward the capable model); use whatever it printed.
 
-   **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set in the env, that session-wide override wins over any per-agent `model:`, so the picker is moot -- **skip it and use Sonnet** (the control arm). Run the picker only when that env var is unset. Record which arm you ran for Step 8.5 (`--arm B` when you let the picker route; `--arm A`/control otherwise) and count any Haiku self-escalations for `--haiku-escalations`.
+   **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set in the env, that session-wide override wins over any per-agent `model:`, so the picker is moot -- **skip it and use Sonnet** (the control arm). Run the picker only when that env var is unset. **Note whether arm B was active this session** (it was, if you let the picker route AND `CLAUDE_CODE_SUBAGENT_MODEL` was unset) -- Step 8.5 turns the active arms into the single `--arm` value (and honors the Phase-A baseline default). Count any Haiku self-escalations for `--haiku-escalations`.
 
    **Then spawn the reviewer** with the chosen model. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type) with a `model` override of the picked value; otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. Substitute the branch name. **If you picked `haiku`, your prompt MUST tell the reviewer it is running as Haiku** -- that one sentence is what arms the agent's self-escalation clause (a Haiku run that finds the change risky -- a cross-file symbol, multiple surfaces, or `google-genai` wiring -- stops and recommends a Sonnet re-review instead of rendering a verdict). Without that sentence the clause is dormant and you lose the safety net. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
 
@@ -218,7 +218,7 @@ For a review-worthy PR both reviewers run simultaneously -- total round-1 wait i
 **A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
 - unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker, ceiling 3.
 - `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Copilot finding inline before looping (no deferral, so `--deferred-nits 0`). Same ceiling.
-Record which arm you ran for Step 8.5 (`--arm C` when you ran the deferral rule; `--arm A`/control when `CLOSEOUT_LOOP_MODE=zero`).
+**Note whether arm C was active** (it was, if `CLOSEOUT_LOOP_MODE` is unset/`blockers`); Step 8.5 combines the active arms into the single `--arm` value and applies the Phase-A default.
 
 Commit the combined fixes, then **push once and loop Copilot to clean:**
 1. Rebase on the FEATURE branch (NOT the integration branch): `git pull --rebase origin <branch>` -- picks up anything pushed to the branch. (Step 6's one-time pre-push rebase was against the integration branch; the loop rebases against the feature branch.)
@@ -262,10 +262,20 @@ string and land junk in `--recorded-at`. The script also has a UTC fallback if
 
 Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
 PR). Fill the counters from what actually happened this session:
-- `--arm` -- the experiment arm you ran. **Phase A (the default, until the
-  counter says otherwise): pass `A`.** The script prints the next-phase
-  directive after it writes; you can also check it any time with
-  `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
+- `--arm` -- the experiment arm you ran, as a SINGLE value derived from which
+  arms were active (Steps 6.3 / 7 told you to note each):
+  - **Phase A (the default, until the counter says otherwise): pass `A`** --
+    regardless of what Steps 6.3/7 noted. In Phase A you are measuring the
+    baseline, so the arm is `A` even though the picker/loop ran their normal
+    path; the B/C notes only become the arm value once the phase directive has
+    advanced to B/C toggling. Mislabeling a baseline closeout `B`/`C` would
+    prematurely advance the phase counters and invalidate the baseline.
+  - **Once toggling (directive says "start B/C"):** pass `B` if only arm B was
+    active, `C` if only arm C, **`BC` if BOTH were active** this session, or `A`
+    if both were forced off by their control env vars. Combine -- never pass two
+    `--arm` flags; the counter takes one arm label per row.
+  The script prints the next-phase directive after it writes; check it any time
+  with `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
 - `--cost-category` -- `production` for normal feature/bug work; **`audit`** for a
   closeout whose work was measurement / cross-arm bug-reporting (audit work is
   never charged to the arm doing it -- the plan's fairness rule).
