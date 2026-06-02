@@ -110,10 +110,13 @@ if it over-escalates.)
 
 Run this decision procedure for any choice you face:
 
-1. **Is it on the NEVER list?** -> Don't do it, and don't ask to. You never
-   `git push --force`, never deploy to any environment, and never merge a PR. The
-   maintainer gates all deployment and clicks every merge; dev merges go through
-   PR + review. (Deliberately conservative while autonomy ramps up.)
+1. **Is it on the NEVER list?** -> Don't do it yourself, and don't ask permission
+   to do it yourself. You never `git push --force`, never deploy to any
+   environment, and never run `gh pr merge`. The maintainer gates all deployment
+   and clicks every merge; dev merges go through PR + review. (Deliberately
+   conservative while autonomy ramps up.) **Pinging the maintainer that a PR is
+   ready for them to merge is NOT "asking to merge"** -- it's the handoff that ends
+   closeout, and it stays required (see "Closeout" below).
 2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
    or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
    - **A longer-term / cross-cutting commitment not explicit in the bead** -- a
@@ -132,9 +135,10 @@ Run this decision procedure for any choice you face:
    - **A bead that is ambiguous, self-contradictory, or proven untenable** -- it
      can't proceed without the owner revising it.
    - **Exception -- scope creep: file a bead, don't ask.** If you notice
-     worthwhile work *beyond* the bead's scope that isn't a decision the
-     maintainer needs to make now, do NOT ask and do NOT silently expand the bead
-     -- **file a new bead** (via `bd_safe.py` / bracketed `bd create`) and
+     worthwhile work *beyond* the bead's scope that **isn't itself a decision the
+     maintainer needs to make now** (if it is, escalate it per step 2 instead),
+     do NOT ask and do NOT silently expand the bead -- **file a new bead** (via a
+     pull/push-bracketed `bd create`; `bd_safe.py` has no `create` subcommand) and
      continue.
 3. **Everything else -> DECIDE it yourself, and note the call.** The common path:
    implementing the bead/plan as written, plus trivia with no consequence beyond
@@ -159,10 +163,24 @@ Run this decision procedure for any choice you face:
      it -- a noted decision the maintainer can correct later is cheaper than a
      blocking question.
 
-**If a decision is genuinely the maintainer's but they're away mid-task, STOP and
-wait** at that point -- park the work, note exactly what you need decided, and do
-not best-guess a product/direction call to keep moving. (Reversible technical work
-you own may continue.)
+**Escalating is a hard STOP -- so defer it until nothing further can be done
+without the answer.** Asking the maintainer a blocking question ends your turn and
+halts the process entirely: you cannot poll for whether they're present, wait an
+open-ended amount of time, or keep working "in the background" while a question is
+pending (resuming would need a fresh agent the maintainer starts later). Because the
+stop is total, **don't escalate the moment a question arises.** When you hit
+something that needs the maintainer, keep going on everything that does *not* depend
+on the answer: finish the independent work, commit/park it cleanly (never leave it
+half-edited), and resolve anything you discover you can actually decide yourself.
+The trigger to ask is a **dependency** condition, not a position in the task: you
+escalate once you've reached the point where **nothing further can proceed without
+the answer** -- which may come early (everything downstream needs the decision) or
+late (lots of independent work remained). Often, by working up to that point, the
+apparent blocker shrinks or several questions accumulate into one stop instead of
+three. Then ask -- with a clear note of exactly what you need decided -- and stop.
+The work still stops at the ask; the point is that **as much as possible is already
+done** when it does, so the maintainer's one reply unblocks the most. Never
+best-guess a product/direction call just to avoid the stop.
 
 **The PR / merge report is the maintainer's standing checkpoint AND the audit
 surface for this rule.** Write it for the product owner, not an engineer: **plain

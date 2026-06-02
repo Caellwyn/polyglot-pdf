@@ -31,7 +31,9 @@ never *owns* the project:
 > Maintainer creates a plan → AI breaks the plan into beads → AI completes beads,
 > **spawning new beads** when a bead's scope suggests splitting, when bugs arise,
 > when nits are suggested, or **when worthwhile work runs beyond a bead's scope**
-> (file a bead rather than ask or silently expand) → AI **reports the choices it
+> (file a bead rather than ask or silently expand — *unless* the out-of-scope item
+> is itself a decision the maintainer must make, which escalates instead) → AI
+> **reports the choices it
 > made** → AI **auto-records scar-tissue** for minor gotchas → AI **escalates the
 > calls that are genuinely the owner's** (a product/direction/scope call; a
 > **longer-term commitment the bead doesn't call for** — a new contract, a new
