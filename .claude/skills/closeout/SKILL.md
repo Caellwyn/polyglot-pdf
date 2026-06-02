@@ -189,7 +189,7 @@ regression is wasted money. Decision rule:
 
 Fresh-eyes ALWAYS runs regardless of this gate (it costs no Copilot credit).
 
-Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes.
+Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes. (**If this pre-push `git pull --rebase origin dev` hits a merge conflict, resolve it per Step 7's "Merge-conflict resolution in the loop"** -- mechanical/ordering conflicts inline, structural ones escalate; the same boundary applies to both rebases.)
 
 **The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
 

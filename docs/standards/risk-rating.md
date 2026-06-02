@@ -63,11 +63,11 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 
 | File | Why high |
 |------|----------|
-| `backend/adapters/live_ai_gemini.py` | The only `google-genai` importer; the Gemini Live adapter (criterion 1). Drives all tool calls and spends tokens (criterion 3). |
+| `backend/adapters/live_ai_gemini.py` | The only non-test `google-genai` importer; the Gemini Live adapter (criterion 1). Drives all tool calls and spends tokens (criterion 3). |
 | `backend/ports/live_ai_port.py` | The AI port contract the adapter implements and the routes depend on (criterion 2 + the genai boundary). |
 | `backend/routes/websocket_routes.py` | The WS session handshake/routing contract -- the wire format the client rebuilds context from (criterion 2). |
 | `backend/routes/pdf_fill_routes.py` | Fills/renders the PDF the user signs; a bug corrupts the legal artifact (criterion 3). |
-| `backend/config.py` | Model/config selection, including which Gemini model and VAD env are read; imported ~11 places (criteria 1 + 2). |
+| `backend/config.py` | Model/config selection, including which Gemini model and VAD env are read; imported by ~7 source modules (criteria 1 + 2). |
 | `backend/services/callback_handler.py` | The PII/PHI logging path (field IDs, spoken-name labels) -- the policy surface (criterion 3). |
 | `backend/services/form_kits.py` | The form-kit definitions PDF filling and schema forms both build on (criterion 2 + 3). |
 | `backend/models/` (`tool_models.py`, `websocket_models.py`, `form_models.py`) | Shared schemas / tool declarations crossing the adapter, routes, and client wire (criteria 1 + 2). |

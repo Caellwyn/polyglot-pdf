@@ -1,6 +1,6 @@
 # Review-flow doctrine: parallel Copilot + fresh-eyes, looped to clean
 
-*Last updated: 2026-06-01.*
+*Last updated: 2026-06-02.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
