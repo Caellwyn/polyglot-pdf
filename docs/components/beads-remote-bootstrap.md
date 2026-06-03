@@ -92,6 +92,28 @@ untouched (this self-heal is for disposable remote/web containers only).
 4. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
    runs in this container stay quiet and re-runs no-op.
 
+## Staying fresh: pull before every read, pull before every push
+
+Bootstrapping is a one-time **per-container** hydrate — it is **not** a substitute
+for the standing
+[pull-before-read / push-after-write rule](../doctrine/workflow.md#beads-is-the-system-of-record).
+Multiple sessions (local and remote) read and write the canonical store
+concurrently, so **no session may trust its local store between operations**:
+
+- **Before every `bd ready` / claim / read that drives a decision, and before every
+  push:** `bd dolt pull`. The local store is a cache; `refs/dolt/data` is truth.
+- This works **only after the bootstrap has run** — the bootstrap is what wires the
+  `origin` dolt remote to the authenticated proxy (`bd dolt remote list` shows
+  `git+http://local_proxy@…`). Until then `bd dolt pull` fails with "no Dolt remote
+  configured" and bd falls back to the **stale committed `.beads/issues.jsonl`
+  snapshot** — which is exactly the trap the hydration marker (above) guards against.
+- The committed `.beads/issues.jsonl` is a **backup, never a source of truth** in a
+  session. Treat any pre-pull `bd ready` output as provisional.
+
+`scripts/bd_safe.py` already brackets every *write* with pull→write→push; the
+remaining discipline is the **pull before reads**, which no `bd` hook can enforce —
+it is doctrine the session follows.
+
 ## The one caveat: schema version on push
 
 A remote session runs bd **`@latest`** (newer schema than the maintainer's
