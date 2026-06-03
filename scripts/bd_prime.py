@@ -29,6 +29,49 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OVERRIDE = REPO_ROOT / ".claude" / "prime-closeout-override.md"
+BOOTSTRAP = REPO_ROOT / "scripts" / "beads_remote_bootstrap.py"
+
+def _beads_unhydrated() -> bool:
+    """True when the beads store is not usable in this container: either bd cannot
+    open the DB at all, or it opens an *empty* store. The empty case matters --
+    ``bd prime`` (which we just ran) auto-creates an empty, perfectly-openable DB,
+    so a fresh remote container looks "fine" while pointing at zero issues. Keying
+    off ``total_issues`` catches that; the maintainer's populated local checkout
+    (issues > 0) never trips it. Any probe failure is treated as un-hydrated."""
+    try:
+        p = subprocess.run(
+            ["bd", "stats", "--json"], cwd=REPO_ROOT,
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return True
+    if p.returncode != 0 or not (p.stdout or "").strip():
+        return True
+    try:
+        import json
+        return int(json.loads(p.stdout)["summary"]["total_issues"]) == 0
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _bootstrap_banner() -> str:
+    return (
+        "\n"
+        "============================================================\n"
+        "BEADS NOT HYDRATED IN THIS CONTAINER\n"
+        "------------------------------------------------------------\n"
+        "The beads issue database did not open. In a fresh remote/web\n"
+        "session the Dolt store (refs/dolt/data) must be hydrated first.\n"
+        "Run this once, then `bd ready` / `bd show` work normally:\n"
+        "\n"
+        "    python scripts/beads_remote_bootstrap.py\n"
+        "\n"
+        "(Ignore any \"No git remote configured\" line above -- this repo\n"
+        "DOES sync beads, through refs/dolt/data over the git origin.)\n"
+        "Details: docs/components/beads-remote-bootstrap.md\n"
+        "============================================================\n"
+    )
 
 # bd is given this long to emit prime context before we treat it as hung. Prime
 # is a fast local read, so a generous ceiling still bounds a wedged session.
@@ -83,6 +126,12 @@ def main() -> int:
     sys.stdout.write(result.stdout)
     if result.stderr:
         sys.stderr.write(result.stderr)
+
+    # If the beads store is not usable here (fresh/empty remote container), emit
+    # one actionable bootstrap instruction. The bootstrap is idempotent, so a rare
+    # false positive is harmless. Only when the helper actually exists.
+    if BOOTSTRAP.exists() and _beads_unhydrated():
+        sys.stdout.write(_bootstrap_banner())
 
     # Only append the close-protocol correction when prime actually emitted the
     # generic protocol it is meant to correct. --memories-only output omits it,

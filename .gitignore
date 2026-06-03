@@ -44,3 +44,5 @@ tmp_*
 .beads-credential-key
 .beads/embeddeddolt/
 .beads/.auto-import-*.jsonl
+# dolt CLI cached by scripts/beads_remote_bootstrap.py (remote-session hydration)
+.beads/.cache/
