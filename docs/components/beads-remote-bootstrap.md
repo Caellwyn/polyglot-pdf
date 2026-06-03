@@ -11,17 +11,20 @@ fresh on every session.
 
 ## TL;DR
 
-A new remote container has the **code** but not the **beads database**. Run once:
+A new remote container has the **code** but not the **beads database**.
+`python scripts/beads_remote_bootstrap.py` hydrates it (and on later sessions
+*refreshes* it). It runs automatically in two places:
 
-```
-python scripts/beads_remote_bootstrap.py
-```
+- the cloud **setup script** (once, for the snapshot — initial hydrate), and
+- the **SessionStart hook** (every session — re-point the rotated proxy port +
+  `bd dolt pull`, so each session starts on the freshest canonical state).
 
-Then `bd ready` / `bd show` / `bd create` work normally. The SessionStart hook
-([`scripts/bd_prime.py`](../../scripts/bd_prime.py)) prints a banner pointing here
-whenever a remote container hasn't hydrated the live store — empty, un-openable,
-**or showing a stale committed snapshot** — so a session never has to rediscover
-this.
+You can also run it by hand anytime; it's idempotent. The SessionStart hook
+([`scripts/bd_prime.py`](../../scripts/bd_prime.py)) additionally prints a banner
+pointing here if the store is still un-hydrated, empty, **or a stale committed
+snapshot** — so a session never has to rediscover this. After hydration,
+`bd ready` / `bd show` / `bd create` work normally (keep pulling before reads —
+see [Staying fresh](#staying-fresh-pull-before-every-read-pull-before-every-push)).
 
 ## Why it's needed (three independent blockers)
 
@@ -114,6 +117,30 @@ concurrently, so **no session may trust its local store between operations**:
 `scripts/bd_safe.py` already brackets every *write* with pull→write→push; the
 remaining discipline is the **pull before reads**, which no `bd` hook can enforce —
 it is doctrine the session follows.
+
+### Automatic per-session refresh (SessionStart, NOT the setup script)
+
+On the dedicated cloud environment the setup script **runs once and the filesystem
+is snapshot-cached**, so it can only do the *one-time* heavy lifting (install `bd`,
+deps, and the initial `bd bootstrap` hydrate). It **cannot** keep sessions fresh —
+worse, the snapshot freezes three things that go stale for every later session:
+
+1. the hydrated store (other sessions push after the snapshot),
+2. the `.beads/.cache/.hydrated` marker (so the session thinks it's current), and
+3. the dolt `origin` remote URL — whose **proxy port rotates every session**, so the
+   baked-in URL points at a dead port and `bd dolt pull` would fail.
+
+So freshness lives in the **SessionStart hook** (`.claude/settings.json` runs
+`python scripts/beads_remote_bootstrap.py || true` before `bd_prime.py`), which runs
+every session. When the script finds an already-hydrated (snapshot) store it does
+**not** no-op: it re-points the dolt `origin` remote at the *current* git origin
+(fixing the rotated port) and runs `bd dolt pull`, so the session starts on the
+freshest canonical state. A truly cold container (snapshot miss) falls through to a
+full bootstrap. This is a session-start *floor*, not a replacement for the
+pull-before-read discipline above during a long session.
+
+**Setup script** → one-time hydrate (`python scripts/beads_remote_bootstrap.py`).
+**SessionStart hook** → per-session refresh (same script; auto re-point + pull).
 
 ## The one caveat: schema version on push
 

@@ -159,6 +159,41 @@ def mark_hydrated() -> None:
     HYDRATION_MARKER.write_text(f"hydrated from refs/dolt/data at {stamp}\n", encoding="utf-8")
 
 
+def refresh_remote_and_pull() -> bool:
+    """Re-point the dolt ``origin`` remote at the CURRENT proxy git origin, then pull
+    the freshest canonical state. Cheap; meant to run every session.
+
+    Why re-point every time: the authenticated proxy origin's **port rotates** each
+    session (and the whole filesystem -- including the dolt remote and the hydration
+    marker -- is snapshot-cached), so a remote URL baked into the snapshot points at
+    a dead port. We rewrite it from the live ``git remote get-url origin`` before
+    pulling. Remote-container only; a local checkout's dolt remote is already right."""
+    try:
+        origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT, timeout=10).stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    if not origin:
+        return False
+    dolt_url = origin if origin.startswith("git+") else "git+" + origin
+    # `bd dolt remote add` updates the dolt-level remote (gitignored .dolt/) AND
+    # rewrites `sync.remote` in the tracked config.yaml with this session's port.
+    # Restore config.yaml so the tree stays clean -- `bd dolt pull` uses the
+    # dolt-level remote, so the proxy URL survives where it matters.
+    original = CONFIG.read_text(encoding="utf-8")
+    try:
+        run(["bd", "dolt", "remote", "remove", "origin"], cwd=REPO_ROOT, timeout=30)  # ignore if absent
+        run(["bd", "dolt", "remote", "add", "origin", dolt_url], cwd=REPO_ROOT, timeout=30)
+        vlog(f"re-pointed dolt origin -> {dolt_url}")
+    finally:
+        CONFIG.write_text(original, encoding="utf-8")
+    pull = run(["bd", "dolt", "pull"], cwd=REPO_ROOT, timeout=180)
+    if pull.returncode == 0:
+        vlog("pull complete")
+        return True
+    vlog("pull failed: " + ((pull.stderr or pull.stdout or "")[-300:]))
+    return False
+
+
 # --------------------------------------------------------------------------- #
 # dolt CLI acquisition (only needed for the wisp repair)                       #
 # --------------------------------------------------------------------------- #
@@ -341,9 +376,20 @@ def main() -> int:
     # signal. A stale committed .beads/issues.jsonl can make bd report a populated
     # but outdated store (e.g. a 5-day-old snapshot), which would otherwise fool this
     # check into a no-op and strand the session on stale data.
+    #
+    # NB: "hydrated" is NOT "fresh". The filesystem (store + marker + dolt remote) is
+    # snapshot-cached, so a session inherits a store frozen at snapshot time while
+    # other sessions keep pushing. So when we already hold the store, we still pull
+    # the freshest canonical state (re-pointing the rotated proxy port first). This
+    # is what makes a SessionStart invocation keep every session current.
     if HYDRATION_MARKER.exists() and is_hydrated():
-        log(f"beads database already hydrated this container "
-            f"({bd_total_issues()} issues) -- nothing to do.")
+        if is_remote_container():
+            ok = refresh_remote_and_pull()
+            log(f"already hydrated; {'refreshed from remote' if ok else 'refresh skipped'} "
+                f"({bd_total_issues()} issues).")
+        else:
+            log(f"already hydrated (local, {bd_total_issues()} issues); "
+                "standing pull-before-read doctrine applies.")
         return 0
 
     if not is_remote_container():
