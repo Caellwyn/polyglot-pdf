@@ -170,9 +170,12 @@ def ensure_dolt() -> str | None:
             with urllib.request.urlopen(url, timeout=120) as resp:
                 shutil.copyfileobj(resp, tf)
             tarball = tf.name
-        with tarfile.open(tarball) as t:
-            t.extractall(DOLT_CACHE)
-        os.unlink(tarball)
+        try:
+            with tarfile.open(tarball) as t:
+                t.extractall(DOLT_CACHE)
+        finally:
+            if os.path.exists(tarball):
+                os.unlink(tarball)
         if cached.exists():
             cached.chmod(0o755)
             return str(cached)
@@ -278,7 +281,10 @@ def repair_wisps(dolt: str) -> None:
 
         ddl = ["SET FOREIGN_KEY_CHECKS=0;"]
         for t in tbls:
-            create = q(src_db, f"SHOW CREATE TABLE `{t}`")[0]["Create Table"]
+            create_rows = q(src_db, f"SHOW CREATE TABLE `{t}`")
+            if not create_rows or "Create Table" not in create_rows[0]:
+                raise RuntimeError(f"could not read CREATE TABLE for {t!r} from throwaway db")
+            create = create_rows[0]["Create Table"]
             ddl.append(create.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1) + ";")
         ddl.append("SET FOREIGN_KEY_CHECKS=1;")
         schema_sql = "\n".join(ddl)
