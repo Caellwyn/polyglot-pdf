@@ -42,3 +42,5 @@ tmp_*
 .dolt/
 *.db
 .beads-credential-key
+.beads/embeddeddolt/
+.beads/.auto-import-*.jsonl
