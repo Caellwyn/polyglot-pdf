@@ -349,3 +349,44 @@ class TestMain:
         monkeypatch.setattr(prep, "venv_python", lambda R: tmp_path / "no-such-python")
         rc = prep.main(["--skip-tests"])
         assert rc == 1
+
+
+# --------------------------------------------------------------------------- #
+# cp1252 stdout regression (bd polyglot-pdf-hrn.16)
+# --------------------------------------------------------------------------- #
+class TestCp1252Stdout:
+    """render_todo embeds bd orphans/stale output, which carries non-cp1252
+    glyphs (U+2713 checkmark, U+23F0 alarm-clock). On a cp1252 Windows console
+    print() raised UnicodeEncodeError and the script exited PREP-ERROR instead
+    of printing its verdict. The module-level stream reconfigure (matching
+    journal_scaffold.py / closeout_finish.py) fixes it."""
+
+    def test_reconfigure_idiom_present_at_module_top(self):
+        src = SCRIPT_PATH.read_text(encoding="utf-8")
+        # The exact sibling idiom: reconfigure stdout/stderr to utf-8/replace.
+        assert 'reconfigure(encoding="utf-8", errors="replace")' in src
+
+    def test_glyph_print_survives_cp1252_stream_after_reconfigure(self):
+        # Reproduce the failure mode directly: a cp1252 text stream that the
+        # reconfigure idiom converts to utf-8/replace must then print the audit
+        # glyphs without raising (it crashed before the fix).
+        import io
+        stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+        # U+2713 and U+23F0 are the glyphs bd emits in orphans/stale output.
+        stream.write("orphan ✓ stale ⏰")
+        stream.flush()  # must not raise UnicodeEncodeError
+
+    def test_render_todo_with_glyphs_is_encodable_utf8(self):
+        # A TODO whose detail carries the bd glyphs must round-trip through utf-8
+        # (what the reconfigured stream uses) without loss.
+        results = [
+            prep._result("beads", prep.STATUS_ATTENTION,
+                         "orphans/stale", detail="✓ done  ⏰ stale"),
+        ]
+        out = prep.render_todo(results, prep.STATUS_ATTENTION)
+        assert "✓" in out and "⏰" in out
+        out.encode("utf-8")  # the reconfigured stream's codec -- must not raise
