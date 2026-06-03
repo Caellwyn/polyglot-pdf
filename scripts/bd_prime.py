@@ -38,7 +38,8 @@ HYDRATION_MARKER = REPO_ROOT / ".beads" / ".cache" / ".hydrated"
 
 def _is_remote_container() -> bool:
     """True in an ephemeral remote/web container (authenticated local-proxy git
-    origin). There, the committed .beads/issues.jsonl is never authoritative."""
+    origin with the ``local_proxy@`` username marker). There, the committed
+    .beads/issues.jsonl is never authoritative."""
     try:
         p = subprocess.run(
             ["git", "remote", "get-url", "origin"], cwd=REPO_ROOT,
@@ -47,7 +48,7 @@ def _is_remote_container() -> bool:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
-    return "local_proxy" in (p.stdout or "")
+    return "local_proxy@" in (p.stdout or "")
 
 
 def _store_empty_or_broken() -> bool:

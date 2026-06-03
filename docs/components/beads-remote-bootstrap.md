@@ -61,8 +61,9 @@ store — so "`total_issues > 0`" looks hydrated while the session is actually
 staring at an old, partial tracker (e.g. 30 issues instead of 117). That is worse
 than failing loudly.
 
-So in a **remote container** (detected by the `local_proxy` git origin) the
-committed JSONL is **never** treated as authoritative. The bootstrap writes a
+So in a **remote container** (detected by the git origin's `local_proxy@`
+username marker) the committed JSONL is **never** treated as authoritative. The
+bootstrap writes a
 per-container marker — **`.beads/.cache/.hydrated`** — *only* after a successful
 hydrate from `refs/dolt/data`, and that marker (not an issue count) is the
 authoritative "this container holds the live store" signal for both the script's

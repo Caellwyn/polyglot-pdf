@@ -141,14 +141,15 @@ def wipe_local_db() -> None:
 
 def is_remote_container() -> bool:
     """True in an ephemeral remote/web container, detected by the authenticated
-    local-proxy git origin. In that case the committed ``.beads/issues.jsonl`` is
-    never authoritative -- the live store must come from ``refs/dolt/data`` -- and
-    the destructive wipe-and-clone below is safe (the container is disposable)."""
+    local-proxy git origin's ``local_proxy@`` username marker. In that case the
+    committed ``.beads/issues.jsonl`` is never authoritative -- the live store
+    must come from ``refs/dolt/data`` -- and the destructive wipe-and-clone
+    below is safe (the container is disposable)."""
     try:
         p = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT, timeout=10)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
-    return "local_proxy" in (p.stdout or "")
+    return "local_proxy@" in (p.stdout or "")
 
 
 def mark_hydrated() -> None:
