@@ -63,6 +63,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -70,6 +71,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG = REPO_ROOT / ".beads" / "config.yaml"
 # Cache the fetched dolt CLI here so repeated runs in one container are cheap.
 DOLT_CACHE = REPO_ROOT / ".beads" / ".cache"
+# Per-container marker, written ONLY after a successful hydrate from refs/dolt/data.
+# Its presence -- not a mere issue count -- is the authoritative "this container
+# holds the live store" signal: a stale committed .beads/issues.jsonl can make bd
+# report a populated-but-outdated store, which would otherwise fool the idempotency
+# check (and the bd_prime banner) into thinking all is well. See main().
+HYDRATION_MARKER = DOLT_CACHE / ".hydrated"
 DOLT_RELEASE = "https://github.com/dolthub/dolt/releases/latest/download/{asset}.tar.gz"
 
 VERBOSE = False
@@ -122,13 +129,33 @@ def is_hydrated() -> bool:
 
 
 def wipe_local_db() -> None:
-    """Remove any local (empty/partial/auto-created) embedded DB so ``bd bootstrap``
-    clones a clean copy. Only the gitignored, ephemeral data dir is touched."""
+    """Remove any local (empty/partial/auto-created/stale-JSONL) embedded DB so
+    ``bd bootstrap`` clones a clean copy. Only the gitignored, ephemeral data dir
+    is touched."""
     for cand in (".beads/embeddeddolt", ".beads/dolt"):
         d = REPO_ROOT / cand
         if d.is_dir():
             vlog(f"removing stale local db dir: {d}")
             shutil.rmtree(d, ignore_errors=True)
+
+
+def is_remote_container() -> bool:
+    """True in an ephemeral remote/web container, detected by the authenticated
+    local-proxy git origin. In that case the committed ``.beads/issues.jsonl`` is
+    never authoritative -- the live store must come from ``refs/dolt/data`` -- and
+    the destructive wipe-and-clone below is safe (the container is disposable)."""
+    try:
+        p = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT, timeout=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return "local_proxy" in (p.stdout or "")
+
+
+def mark_hydrated() -> None:
+    """Record that this container now holds the live store (hydrated from the ref)."""
+    HYDRATION_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    HYDRATION_MARKER.write_text(f"hydrated from refs/dolt/data at {stamp}\n", encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -309,15 +336,33 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="show every sub-step")
     VERBOSE = ap.parse_args().verbose
 
-    if is_hydrated():
-        log(f"beads database already hydrated ({bd_total_issues()} issues) -- nothing to do.")
+    # Already hydrated THIS container? The marker -- not a mere issue count -- is the
+    # signal. A stale committed .beads/issues.jsonl can make bd report a populated
+    # but outdated store (e.g. a 5-day-old snapshot), which would otherwise fool this
+    # check into a no-op and strand the session on stale data.
+    if HYDRATION_MARKER.exists() and is_hydrated():
+        log(f"beads database already hydrated this container "
+            f"({bd_total_issues()} issues) -- nothing to do.")
         return 0
 
-    # Drop any empty/partial DB (e.g. the one `bd prime` auto-creates) so the
-    # clone is clean, then hydrate over the authenticated proxy.
+    if not is_remote_container():
+        # This script wipes and re-clones the local DB -- only safe in a disposable
+        # remote container. On a real local checkout, never destroy local state.
+        if is_hydrated():
+            log("not a remote container; local store is populated -- leaving it "
+                "untouched. (This self-heal is for remote/web sessions only.)")
+            return 0
+        log("not a remote container and no local store found; run 'bd bootstrap' "
+            "manually. (This self-heal only runs in remote/web containers.)")
+        return 1
+
+    # Remote container: drop any empty/partial/stale DB (the one `bd prime`
+    # auto-creates, or a stale JSONL import) so the clone is clean, then hydrate
+    # over the authenticated proxy.
     wipe_local_db()
     hydrate_via_proxy()
     if is_hydrated():
+        mark_hydrated()
         log(f"hydrated ({bd_total_issues()} issues). Done.")
         return 0
 
@@ -334,6 +379,7 @@ def main() -> int:
         return 1
 
     if is_hydrated():
+        mark_hydrated()
         log(f"hydrated + repaired ({bd_total_issues()} issues). Done.")
         return 0
     log("ERROR: bd still cannot open a populated database after repair. Re-run with "

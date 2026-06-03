@@ -19,8 +19,9 @@ python scripts/beads_remote_bootstrap.py
 
 Then `bd ready` / `bd show` / `bd create` work normally. The SessionStart hook
 ([`scripts/bd_prime.py`](../../scripts/bd_prime.py)) prints a banner pointing here
-whenever it detects an un-hydrated or empty store, so a session never has to
-rediscover this.
+whenever a remote container hasn't hydrated the live store — empty, un-openable,
+**or showing a stale committed snapshot** — so a session never has to rediscover
+this.
 
 ## Why it's needed (three independent blockers)
 
@@ -49,14 +50,37 @@ block a naive `bd bootstrap`:
    that already has the local wisp tables. Only a fresh clone trips it. This is an
    upstream beads fresh-clone bug.)
 
+### The stale-snapshot trap (why a hydration marker, not an issue count)
+
+There is a fourth, subtler failure that an issue count alone cannot catch. The
+repo also ships a committed `.beads/issues.jsonl` **backup snapshot**, and bd is
+configured (via `issue-prefix` in `config.yaml`) to rebuild a local DB from it on
+a fresh clone. In a remote container that snapshot can be **days stale** (it is
+only refreshed when someone commits it), yet it makes `bd` report a *populated*
+store — so "`total_issues > 0`" looks hydrated while the session is actually
+staring at an old, partial tracker (e.g. 30 issues instead of 117). That is worse
+than failing loudly.
+
+So in a **remote container** (detected by the `local_proxy` git origin) the
+committed JSONL is **never** treated as authoritative. The bootstrap writes a
+per-container marker — **`.beads/.cache/.hydrated`** — *only* after a successful
+hydrate from `refs/dolt/data`, and that marker (not an issue count) is the
+authoritative "this container holds the live store" signal for both the script's
+idempotency check and the `bd_prime` banner. Fresh container ⇒ no marker ⇒
+re-hydrate, no matter what the JSONL snapshot says.
+
 ## What the script does
 
-Idempotent; safe to run anytime. It NEVER pushes.
+Idempotent; safe to run anytime. It NEVER pushes. On a **non-remote** checkout it
+refuses the destructive wipe-and-clone and leaves a populated local store
+untouched (this self-heal is for disposable remote/web containers only).
 
-1. **Already hydrated?** (`bd stats --json` → `summary.total_issues > 0`) → exit.
-   The `> 0` check is load-bearing: `bd prime` auto-creates an *empty but openable*
-   DB, so "does bd open?" alone is a false positive that would strand the session on
-   an empty tracker. The script wipes any such empty/partial DB before cloning.
+1. **Already hydrated this container?** (`.beads/.cache/.hydrated` marker exists
+   **and** `bd stats --json` → `summary.total_issues > 0`) → exit. Both halves
+   matter: `bd prime` auto-creates an *empty but openable* DB, and a stale JSONL
+   snapshot creates a *populated but outdated* one — the marker is what
+   distinguishes either from the real live store. The script wipes any such
+   empty / partial / stale DB before cloning.
 2. **Hydrate** over the authenticated proxy origin (`sync.remote` neutralised, then
    restored). This already advances the clone through migrations 41→46.
 3. **Repair wisps** (only if bd still can't open): recreate the `wisps` / `wisp_*`
@@ -65,6 +89,8 @@ Idempotent; safe to run anytime. It NEVER pushes.
    runs its final migration (0047) and opens. Needs a `dolt` CLI: PATH → cached
    download → latest release download → `go install`, in that order, cached under
    the gitignored `.beads/.cache/`.
+4. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
+   runs in this container stay quiet and re-runs no-op.
 
 ## The one caveat: schema version on push
 
@@ -85,7 +111,7 @@ a fresh clone). Do this before — or right after — the first remote-session p
 ## Related
 
 - [`scripts/bd_prime.py`](../../scripts/bd_prime.py) — SessionStart hook; prints the
-  bootstrap banner when the store is un-hydrated/empty.
+  bootstrap banner when a remote container's store is un-hydrated, empty, or stale.
 - `.beads/config.yaml` — `sync.remote` (the github URL the script temporarily steers
   around) and the dolt data-dir.
 - Closeout / beads workflow: [`../doctrine/workflow.md`](../doctrine/workflow.md).
