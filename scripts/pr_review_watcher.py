@@ -546,11 +546,24 @@ def _safe_print(text: str) -> None:
 # computed) is the whole reason the close lives here and not in a shell wrapper.
 _LAST_STATE: str | None = None
 
+# True only when the most recent CLEAN was an ACTUAL passed-review verdict (the
+# bot reviewed and found nothing), NOT one of the "no review pending" CLEANs
+# (an abandoned PR closed-without-merge also emits CLEAN -- review semantics:
+# nothing to wait for). The --close-on-clean hook MUST gate on this: closing the
+# bead on an abandoned PR would mark un-shipped work done (fresh-eyes PR #60,
+# Finding 1). Set by _emit(..., review_verdict=True) at the genuine site only.
+_LAST_CLEAN_WAS_REVIEW: bool = False
 
-def _emit(state: str, detail: str = "") -> int:
-    """Print the contract result block and return the matching exit code."""
-    global _LAST_STATE
+
+def _emit(state: str, detail: str = "", *, review_verdict: bool = False) -> int:
+    """Print the contract result block and return the matching exit code.
+
+    ``review_verdict=True`` marks a CLEAN that is a genuine passed-review verdict
+    (vs. a "no review pending" CLEAN); only the former may trigger a bead close.
+    """
+    global _LAST_STATE, _LAST_CLEAN_WAS_REVIEW
     _LAST_STATE = state
+    _LAST_CLEAN_WAS_REVIEW = bool(review_verdict) and state == "CLEAN"
     if detail:
         _safe_print(detail)
     _safe_print("RESULT: {}".format(state))
@@ -939,7 +952,8 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: Revi
             profile.label, len(findings), "\n\n".join(findings)
         ) if findings else "{} review state={} with no inline findings.".format(profile.label, state)
         return _emit("COMMENTS", detail)
-    return _emit("CLEAN", "{} review complete with no findings.".format(profile.label))
+    return _emit("CLEAN", "{} review complete with no findings.".format(profile.label),
+                 review_verdict=True)
 
 
 def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime | None,
@@ -1144,12 +1158,15 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently
         return _emit("ERROR", "Unexpected crash: {!r}".format(exc))
 
-    # CLEAN-trigger bead close (bd hrn.14). Fire ONLY on the CLEAN terminal
-    # state -- not merely on exit 0, which CLEAN shares with COMMENTS/MERGED.
-    # MERGED already implies the close happened (or the maintainer merged
-    # deliberately); COMMENTS means the loop continues; ERROR/TIMEOUT must never
-    # close. A failed close downgrades the exit so the orchestrator triages it.
-    if args.close_on_clean and _LAST_STATE == "CLEAN":
+    # CLEAN-trigger bead close (bd hrn.14). Fire ONLY on a CLEAN that is a
+    # GENUINE passed-review verdict -- not merely on exit 0 (shared with
+    # COMMENTS/MERGED), and not on the "no review pending" CLEAN that an
+    # abandoned PR (closed-without-merge) emits: closing the bead there would
+    # mark un-shipped work done (fresh-eyes PR #60, Finding 1). COMMENTS means
+    # the loop continues; ERROR/TIMEOUT must never close; MERGED is the
+    # maintainer's deliberate action, handled by the orchestrator. A failed
+    # close downgrades the exit so the orchestrator triages it.
+    if args.close_on_clean and _LAST_STATE == "CLEAN" and _LAST_CLEAN_WAS_REVIEW:
         if _close_beads_on_clean(args.close_on_clean) != 0:
             return EXIT_CLOSE_FAILED
     return code

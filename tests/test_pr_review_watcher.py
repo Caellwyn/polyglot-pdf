@@ -978,11 +978,21 @@ def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
 # _emit, which sets cw._LAST_STATE) and _close_beads_on_clean (to spy on whether
 # the close fired) -- no network, no bd/git.
 
-def _run_main_with_state(monkeypatch, state, close_args, *, close_rc=0):
+def _run_main_with_state(monkeypatch, state, close_args, *, close_rc=0,
+                         review_verdict=True):
     """Drive main() with a stubbed watch() that emits `state`, recording whether
-    the bead-close ran. Returns (exit_code, close_called, beads_passed)."""
+    the bead-close ran. Returns (exit_code, close_called, beads_passed).
+
+    `review_verdict` controls whether a CLEAN is marked a genuine passed-review
+    verdict (the close gate) vs. a "no review pending" CLEAN (abandoned PR)."""
+    # Reset the module-level state so a prior test can't leak a stale CLEAN into
+    # this run's close gate (test-order independence -- fresh-eyes PR #60 #4).
+    monkeypatch.setattr(cw, "_LAST_STATE", None)
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+
     def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
-        return cw._emit(state, "{} (stubbed)".format(state))
+        return cw._emit(state, "{} (stubbed)".format(state),
+                        review_verdict=review_verdict)
     monkeypatch.setattr(cw, "watch", fake_watch)
 
     calls = {}
@@ -1029,6 +1039,48 @@ def test_close_failure_downgrades_exit_for_triage(monkeypatch):
         close_rc=cw.EXIT_CLOSE_FAILED)
     assert called is True
     assert rc == cw.EXIT_CLOSE_FAILED
+
+
+def test_clean_that_is_not_a_review_verdict_does_not_close(monkeypatch):
+    # A CLEAN that is NOT a passed-review verdict (e.g. an abandoned PR closed
+    # without merge -> "no review pending") must NOT close the bead -- that would
+    # mark un-shipped work done (fresh-eyes PR #60, Finding 1).
+    rc, called, _ = _run_main_with_state(
+        monkeypatch, "CLEAN", ["--close-on-clean", "polyglot-pdf-x1"],
+        review_verdict=False)
+    assert called is False
+    assert rc == 0
+
+
+def test_closed_without_merge_does_not_close_bead_real_path(monkeypatch, capsys):
+    # End-to-end via the REAL watch(): a closed-without-merge PR emits CLEAN
+    # ("no review pending"), but with --close-on-clean the bead must stay open.
+    # This is the actual Finding-1 path (the stubbed test above pins the gate;
+    # this pins that the real watch() marks this CLEAN as non-verdict).
+    _patch_api(monkeypatch, pr_state="closed")
+    monkeypatch.setattr(cw, "_LAST_STATE", None)
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    spy = {}
+    monkeypatch.setattr(cw, "_close_beads_on_clean",
+                        lambda beads: spy.setdefault("called", beads) or 0)
+    rc = cw.main(["1", "--repo", "o/r", "--timeout-min", "1", "--poll-sec", "0",
+                  "--close-on-clean", "polyglot-pdf-x1"])
+    out = capsys.readouterr().out
+    assert "RESULT: CLEAN" in out          # the review verdict is still CLEAN
+    assert "called" not in spy             # but the bead close did NOT fire
+    assert rc == 0
+
+
+def test_genuine_review_clean_sets_verdict_flag(monkeypatch, capsys):
+    # The genuine "review complete with no findings" CLEAN must mark the verdict
+    # flag so the close CAN fire (the positive half of Finding 1's fix).
+    review = {"user": {"login": "Copilot"}, "state": "COMMENTED", "body": "",
+              "submitted_at": "2026-05-28T12:00:02Z", "id": 1}
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _run_watch_result(
+        capsys, monkeypatch, reviews=[review], timeline=[_reviewed_event()])
+    assert cw._LAST_STATE == "CLEAN"
+    assert cw._LAST_CLEAN_WAS_REVIEW is True
 
 
 def test_close_beads_on_clean_invokes_close_only(monkeypatch):
