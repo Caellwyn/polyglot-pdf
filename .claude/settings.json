@@ -76,6 +76,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python scripts/beads_remote_bootstrap.py || true"
+          },
+          {
+            "type": "command",
             "command": "python scripts/bd_prime.py"
           }
         ]

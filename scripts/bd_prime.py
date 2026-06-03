@@ -30,14 +30,32 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OVERRIDE = REPO_ROOT / ".claude" / "prime-closeout-override.md"
 BOOTSTRAP = REPO_ROOT / "scripts" / "beads_remote_bootstrap.py"
+# Written by beads_remote_bootstrap.py only after a successful hydrate from
+# refs/dolt/data. In a remote container its presence is the authoritative
+# "live store is here" signal (see _beads_unhydrated).
+HYDRATION_MARKER = REPO_ROOT / ".beads" / ".cache" / ".hydrated"
 
-def _beads_unhydrated() -> bool:
-    """True when the beads store is not usable in this container: either bd cannot
-    open the DB at all, or it opens an *empty* store. The empty case matters --
-    ``bd prime`` (which we just ran) auto-creates an empty, perfectly-openable DB,
-    so a fresh remote container looks "fine" while pointing at zero issues. Keying
-    off ``total_issues`` catches that; the maintainer's populated local checkout
-    (issues > 0) never trips it. Any probe failure is treated as un-hydrated."""
+
+def _is_remote_container() -> bool:
+    """True in an ephemeral remote/web container (authenticated local-proxy git
+    origin with the ``local_proxy@`` username marker). There, the committed
+    .beads/issues.jsonl is never authoritative."""
+    try:
+        p = subprocess.run(
+            ["git", "remote", "get-url", "origin"], cwd=REPO_ROOT,
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    return "local_proxy@" in (p.stdout or "")
+
+
+def _store_empty_or_broken() -> bool:
+    """True when bd cannot open the DB at all, or opens an *empty* store. The empty
+    case matters -- ``bd prime`` (which we just ran) auto-creates an empty,
+    perfectly-openable DB, so a fresh container looks "fine" while pointing at zero
+    issues. Any probe failure is treated as un-hydrated."""
     try:
         p = subprocess.run(
             ["bd", "stats", "--json"], cwd=REPO_ROOT,
@@ -55,17 +73,37 @@ def _beads_unhydrated() -> bool:
         return True
 
 
+def _beads_unhydrated() -> bool:
+    """True when this container's beads store isn't the live one.
+
+    In a **remote container**, require a successful bootstrap (the hydration
+    marker) regardless of issue count: a stale committed .beads/issues.jsonl can
+    make bd report a populated-but-outdated store, so "issues > 0" is NOT enough --
+    only the marker proves the live refs/dolt/data store was hydrated. Elsewhere
+    (the maintainer's local checkout, or an already-bootstrapped remote container)
+    fall back to flagging just a genuinely empty/unopenable store, so a populated
+    local never trips the banner."""
+    if _is_remote_container() and not HYDRATION_MARKER.exists():
+        return True
+    return _store_empty_or_broken()
+
+
 def _bootstrap_banner() -> str:
     return (
         "\n"
         "============================================================\n"
-        "BEADS NOT HYDRATED IN THIS CONTAINER\n"
+        "BEADS STORE NOT HYDRATED IN THIS CONTAINER\n"
         "------------------------------------------------------------\n"
-        "The beads issue database did not open. In a fresh remote/web\n"
-        "session the Dolt store (refs/dolt/data) must be hydrated first.\n"
-        "Run this once, then `bd ready` / `bd show` work normally:\n"
+        "This remote/web container does not yet hold the live beads\n"
+        "store (refs/dolt/data). Any issues shown so far may be EMPTY\n"
+        "or a STALE committed snapshot -- not the current tracker.\n"
+        "Hydrate first, then `bd ready` / `bd show` reflect the truth:\n"
         "\n"
         "    python scripts/beads_remote_bootstrap.py\n"
+        "\n"
+        "After that, ALWAYS `bd dolt pull` before `bd ready` and before\n"
+        "any push -- other sessions write concurrently; the local store\n"
+        "is only a cache, never trusted between operations.\n"
         "\n"
         "(Ignore any \"No git remote configured\" line above -- this repo\n"
         "DOES sync beads, through refs/dolt/data over the git origin.)\n"
