@@ -111,19 +111,29 @@ the review verdict is decided), then hand the `closeout-runner` a structured bri
 text**; PR title + body; the telemetry counters; branch + base; whether to pass
 `--close-beads`). It runs the glue and **stops back at every judgment point**
 (prep ATTENTION, a rebase conflict, any tooling error, a missing brief input). You
-then resume: launch the watcher from the `WATCH_CMD` it returns, spawn fresh-eyes,
-run the Step-7 loop, and -- for a review-worthy PR -- do the **second** tiny
-`closeout_finish.py --bead <id> --close-only` call after Copilot is CLEAN.
+then resume: launch the watcher from the `WATCH_CMD` it returns (adding
+`--close-on-clean <bead-id>` -- see below), spawn fresh-eyes, and run the Step-7
+loop. For a review-worthy PR you no longer make a separate post-CLEAN close call:
+the watcher does it.
 
-**Two-call bead close.** A **review-skipped** PR (docs/beads/journal-only) has no
-review loop, so the single `closeout_finish.py` run carries `--close-beads` and
-closes immediately (one call, one telemetry row). A **review-worthy** PR opens
-WITHOUT `--close-beads`; after the loop reaches CLEAN you close with the second
-call using **`--close-only`** -- which closes the bead(s) and does NOTHING else
-(no commit/rebase/push/PR/telemetry). **Use `--close-only`, NOT `--close-beads`,
-for the second call:** the first call already wrote the telemetry row, so a second
-`--close-beads` run would append a DUPLICATE row and contaminate the A/B metrics
-(bd hrn.15). `closeout_finish.py` never blocks on the watcher.
+**CLEAN-trigger bead close (the second "call" is now the watcher -- bd hrn.14).**
+A **review-skipped** PR (docs/beads/journal-only) has no review loop, so the single
+`closeout_finish.py` run carries `--close-beads` and closes immediately (one call,
+one telemetry row). A **review-worthy** PR opens WITHOUT `--close-beads`; the
+bead-close happens DETERMINISTICALLY when the review terminates CLEAN, driven by
+`pr_review_watcher.py --close-on-clean <bead-id>` (one `--close-on-clean` per bead,
+on the round-1 watch AND every re-watch). On a CLEAN terminal state -- and ONLY
+CLEAN, never COMMENTS/ERROR/TIMEOUT -- the watcher runs `closeout_finish.py
+--close-only` itself (which is `bd_safe close` -> `bd dolt push`), closing the
+bead(s) and **waking you only for the merge ping**, not for the close. This removes
+the orchestrator turn the old manual second call cost. **Why `--close-only` and not
+a commit/push:** bead state syncs via `bd dolt push` to the bead remote,
+independent of the PR/git -- so there is nothing to commit or push and no
+merge-race (the re-exported `.beads/*.jsonl` mirror is left dirty for the next
+manual `bd` sync). **Telemetry stays clean:** `--close-only` writes NO ledger row,
+so the first call's row is not duplicated (the hrn.15 A/B discipline). If the close
+itself fails the watcher exits **CLOSE-FAILED (3)** so you triage it instead of
+pinging merge. `closeout_finish.py` never blocks on the watcher.
 
 **Preview first:** `closeout_finish.py ... --dry-run` prints the fully-resolved
 plan (every command with `$R`/`$WT`/`$PY` substituted) and performs **zero** side
@@ -270,8 +280,8 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
    echo "PR=$PR TS=$TS"
    ```
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
-2. **(Review-worthy PRs only) Start the round-1 watch with `--since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. Passing `--since` here (unlike the old auto-review-on-open flow) scopes detection to the review you just requested, so a stale prior comment can't be re-detected:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`  (same invocation, same `--since` discipline, for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch.
+2. **(Review-worthy PRs only) Start the round-1 watch with `--since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. Passing `--since` here (unlike the old auto-review-on-open flow) scopes detection to the review you just requested, so a stale prior comment can't be re-detected. **Pass `--close-on-clean <bead-id>` (one per bead) too** so the watcher closes the bead(s) DETERMINISTICALLY if this round terminates CLEAN -- no orchestrator turn spent on the close (bd hrn.14); see the "CLEAN-trigger bead close" note above:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS" --close-on-clean <bead-id> [--close-on-clean <bead-id2> ...]`  (same invocation, same `--since` + `--close-on-clean` discipline, for the re-watch loop in Step 7). **Skip this entirely for a review-skipped PR** -- there is no Copilot round to watch (a review-skipped PR closes its bead in the single `closeout_finish.py` run, not via the watcher).
 3. **Pick the fresh-eyes model from diff size (A/B arm B), then spawn the reviewer** concurrently.
 
    **First run the deterministic router** so the cheap model handles small diffs (bd polyglot-pdf-hrn.4). It is zero-token -- size in, model name out, NO risk judgment (the risk call happens inside the fresh-eyes turn, by the cheap model):
@@ -293,8 +303,9 @@ For a review-worthy PR both reviewers run simultaneously -- total round-1 wait i
 **Wait for BOTH round-1 reviewers, then fix their findings together in one batch** (so the next push carries all of them and you request ONE Copilot re-review, not one per reviewer):
 
 - **Fresh-eyes (one pass):** triage -- high-confidence findings fixed inline; the rest filed as a bead BEFORE moving on (the PR body is an audit log, not a tracker); record the adopt/reject/defer breakdown for the PR body + journal.
-- **Copilot round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2) -- handle ALL four:
-  - **CLEAN** (no comments) -> Copilot already happy; if fresh-eyes also produced no on-branch fixes, skip straight to Step 8.
+- **Copilot round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2; plus **CLOSE-FAILED=3** when `--close-on-clean` was passed and the deterministic close itself failed) -- handle ALL of them:
+  - **CLEAN** (no comments) -> Copilot already happy. **If `--close-on-clean` was passed, the watcher has ALREADY closed the bead(s)** -- do NOT make a separate `--close-only` call (that would be the removed second turn). If fresh-eyes also produced no on-branch fixes, go to Step 8 (the bead is already closed; Step 8 just does telemetry + the merge ping). **One caveat -- the fresh-eyes race:** pass `--close-on-clean` on the round-1 watch ONLY once fresh-eyes is known to have produced no on-branch fixes; if fresh-eyes fixes are still pending, a round-1 CLEAN would close the bead before those fixes are reviewed. In that case launch round 1 WITHOUT `--close-on-clean`, push the fresh-eyes fixes, and carry `--close-on-clean` on the re-watch instead (every re-watch follows you having addressed everything, so its CLEAN is genuinely terminal).
+  - **CLOSE-FAILED** (exit 3) -> the review WAS clean but the mechanical bead-close failed (the watcher prints the `closeout_finish.py` error). Do NOT ping "ready to merge"; triage the close (re-run `closeout_finish.py --bead <id> --close-only` by hand, or surface to the maintainer if it's a `bd`/network failure). The review verdict still stands -- only the close needs fixing.
   - **COMMENTS** -> the watcher already printed the comment bodies; **you** (the orchestrator) judge each one nit-vs-blocker per the decision rule below, then adopt blockers inline / defer true nits to a bead.
   - **ERROR** (quota/failure) -> surface to the maintainer; NO auto-retry (a quota error won't clear for hours). NOT a clean state.
   - **TIMEOUT** (no completed review in the window) -> treat like ERROR: surface to the maintainer, never interpret silence as CLEAN. You may re-run the watch once with a longer `--timeout-min`, but never auto-clear on a timeout.
@@ -321,8 +332,8 @@ Commit the combined fixes, then **push once and loop Copilot to clean:**
 2. Push the fix commit. With auto-review OFF, the push does NOT trigger Copilot by itself -- the explicit trigger in the next sub-step is what requests the re-review (it is the trigger, not a backstop).
 3. **Post `@copilot please review` AND capture the comment's server timestamp** -- this REQUESTS the re-review (auto-review is off, so without this comment Copilot never re-runs), and the timestamp is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Use the API form so you get `created_at` back:
    `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f body='@copilot please review' --jq .created_at)`
-4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS"`
+4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round. Carry `--close-on-clean <bead-id>` (one per bead) on the re-watch too, so whichever round reaches CLEAN closes the bead(s) deterministically:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS" --close-on-clean <bead-id> [...]`
    Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN or you hit `MAX_COPILOT_ROUNDS` (3)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 ### Merge-conflict resolution in the loop (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
@@ -379,7 +390,7 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is
 Once Copilot is CLEAN (no comments) and fresh-eyes is triaged, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Copilot went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
-1. **Close the bead(s)** this PR resolves at PR handoff -- one `scripts/bd_safe.py close <full-id> --reason "..."` per bead the PR closes (at least one; all of them if the PR bundled several).
+1. **Close the bead(s)** this PR resolves at PR handoff -- **but only if they are not already closed.** For a **review-worthy** PR the watcher's `--close-on-clean` already closed them when the review went CLEAN (Step 7); do NOT re-close (a redundant `bd close` is a no-op but a wasted turn). Close here ONLY when the watcher did NOT (a **review-skipped** PR -- where `closeout_finish.py --close-beads` already closed in the single run, so nothing to do here either; or a recovery after a **CLOSE-FAILED** that you then fixed). When you do close by hand: one `scripts/bd_safe.py close <full-id> --reason "..."` per bead (at least one; all of them if the PR bundled several). If you're unsure, `bd show <id>` -- a re-close of an already-closed bead is harmless but skip it.
 2. **Ping the maintainer to merge** with a summary written **for the product owner in plain language -- no jargon, no acronyms** (this is the maintainer's standing checkpoint AND the audit surface for the escalation rule; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, Copilot rounds (final = CLEAN), and the PR URL. **Then LIST each judgment call you made autonomously this PR and briefly DEFEND it** -- what you chose, and why it was yours to decide rather than escalate. Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided but should have been escalated.
 
 **Do NOT go back and rewrite the PR body after review.** The fresh-eyes triage breakdown and the Copilot-round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 8.2, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` after the PR is approved is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` (Step 6) is the only body write. Whatever you put there at open time stands; the durable record is the journal.

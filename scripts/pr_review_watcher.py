@@ -539,8 +539,18 @@ def _safe_print(text: str) -> None:
             pass
 
 
+# The terminal state of the most recent _emit() call. main() reads it after
+# watch() returns so the --close-on-clean hook can fire on the CLEAN state
+# SPECIFICALLY -- not merely on exit 0, which CLEAN and COMMENTS share. Keeping
+# the CLEAN/COMMENTS distinction inside this module (where it is already
+# computed) is the whole reason the close lives here and not in a shell wrapper.
+_LAST_STATE: str | None = None
+
+
 def _emit(state: str, detail: str = "") -> int:
     """Print the contract result block and return the matching exit code."""
+    global _LAST_STATE
+    _LAST_STATE = state
     if detail:
         _safe_print(detail)
     _safe_print("RESULT: {}".format(state))
@@ -1031,6 +1041,53 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
         time.sleep(poll_sec)
 
 
+# Exit code for a CLEAN review whose deterministic bead-close FAILED. Distinct
+# from the review states so the harness wakes the orchestrator to TRIAGE the
+# close rather than handing it a "ready to merge" ping with no close behind it.
+# (The review itself WAS clean -- only the mechanical close failed.)
+EXIT_CLOSE_FAILED = 3
+
+
+def _close_beads_on_clean(beads: list[str]) -> int:
+    """Run the deterministic bead-close after a CLEAN review (bd hrn.14).
+
+    This is the watcher's CLEAN-trigger close: it shells out to the existing,
+    verified ``closeout_finish.py --close-only`` path (which runs ``bd_safe
+    close`` -> ``bd dolt pull/close/push``), so the bead is authoritatively
+    closed and synced to the bead remote. Bead state syncs via ``bd dolt push``,
+    independent of the PR/git -- so there is NOTHING to commit or push here, and
+    no merge-race. ``bd close`` re-exports the tracked ``.beads/*.jsonl`` mirror,
+    leaving the worktree dirty; that is intentionally left for the next manual
+    ``bd`` sync (maintainer's call -- the close is already durable in Dolt).
+
+    Returns 0 on a clean close, EXIT_CLOSE_FAILED otherwise (so main() can wake
+    the orchestrator to triage instead of reporting a false "ready to merge").
+    Called ONLY on the CLEAN terminal state.
+    """
+    finish = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "closeout_finish.py")
+    cmd = [sys.executable, finish, "--close-only"]
+    for b in beads:
+        cmd += ["--bead", b]
+    _safe_print("--close-on-clean: closing bead(s) {} via {}".format(
+        ", ".join(beads), os.path.basename(finish)))
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+    except Exception as exc:  # noqa: BLE001 -- never die mid-close; report it
+        _safe_print("CLOSE-FAILED: could not run {}: {!r}".format(finish, exc))
+        return EXIT_CLOSE_FAILED
+    if proc.stdout:
+        _safe_print(proc.stdout.strip())
+    if proc.returncode != 0:
+        _safe_print("CLOSE-FAILED: {} exited {} ({})".format(
+            os.path.basename(finish), proc.returncode,
+            (proc.stderr or "").strip()))
+        return EXIT_CLOSE_FAILED
+    _safe_print("CLOSE-OK: bead(s) {} closed.".format(", ".join(beads)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     _setup_utf8_stdio()
     parser = argparse.ArgumentParser(description="Watch a PR for a bot code-review completion.")
@@ -1053,6 +1110,19 @@ def main(argv: list[str] | None = None) -> int:
         help="ISO8601; only count reviews/comments at or after this time "
         "(use the moment of a re-trigger to avoid re-detecting the prior round)",
     )
+    parser.add_argument(
+        "--close-on-clean",
+        action="append",
+        default=[],
+        metavar="BEAD_ID",
+        help="Full bead id to auto-close IF (and only if) the review terminates "
+        "CLEAN -- the deterministic, zero-model-token bead-close (bd hrn.14). "
+        "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
+        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/MERGED. "
+        "On a close FAILURE the watcher exits {} so the orchestrator is woken to "
+        "triage rather than handed a false 'ready to merge'.".format(
+            EXIT_CLOSE_FAILED),
+    )
     args = parser.parse_args(argv)
 
     profile = PROFILES[args.reviewer]
@@ -1067,11 +1137,22 @@ def main(argv: list[str] | None = None) -> int:
             return _emit("ERROR", "Bad --since value: {}".format(exc))
 
     try:
-        return watch(args.repo, args.pr, args.timeout_min, args.poll_sec, since, profile)
+        code = watch(args.repo, args.pr, args.timeout_min, args.poll_sec,
+                     since, profile)
     except KeyboardInterrupt:
         return _emit("ERROR", "Interrupted.")
     except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently
         return _emit("ERROR", "Unexpected crash: {!r}".format(exc))
+
+    # CLEAN-trigger bead close (bd hrn.14). Fire ONLY on the CLEAN terminal
+    # state -- not merely on exit 0, which CLEAN shares with COMMENTS/MERGED.
+    # MERGED already implies the close happened (or the maintainer merged
+    # deliberately); COMMENTS means the loop continues; ERROR/TIMEOUT must never
+    # close. A failed close downgrades the exit so the orchestrator triages it.
+    if args.close_on_clean and _LAST_STATE == "CLEAN":
+        if _close_beads_on_clean(args.close_on_clean) != 0:
+            return EXIT_CLOSE_FAILED
+    return code
 
 
 if __name__ == "__main__":

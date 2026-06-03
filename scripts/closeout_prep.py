@@ -67,6 +67,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+# render_todo embeds bd orphans/stale output, which carries non-cp1252 glyphs
+# (checkmark U+2713, alarm-clock U+23F0). A cp1252 Windows console -- e.g. when
+# this runs inside a subshell that didn't inherit UTF-8 -- would crash on
+# print(), so reconfigure to UTF-8 with errors="replace" (Python 3.7+). Same
+# idiom as journal_scaffold.py and closeout_finish.py.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 # Status vocabulary for each check. "ok" = nothing to do; "attention" = the
 # orchestrator must triage something (not a script failure); "fail" = the check
 # itself could not run.
