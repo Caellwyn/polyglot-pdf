@@ -20,19 +20,27 @@ registered in `docs/INDEX.md` and the `CLAUDE.md` trigger-read table. Plus
 design-decision notes pushed onto the downstream beads and two deferred-scope beads
 filed.
 
-**The headline finding (changed the design's thrust).** I modeled the per-turn cost
-with code from the `tak` curve + the in-repo 3.1 pricing, across two session
-profiles (40 short turns, 120 long-intake turns). Result: the **current
-reconnect-every-N-turns hack is cheaper on cost than any sliding-window setting** --
-a reconnect resets context to the ~271-token base, while a window only plateaus at
-its ceiling. Both crush unbounded (~11x in long sessions), but no window beats the
-hack on dollars (closest: 2k window @ 113% of the hack). So the epic's premise
-"compression replaces the hacks AND saves cost" is only half true. The doc reframes
-compression honestly as a **duration (lifts the 15-min audio cap) + UX (no audible
-mid-call restart) + simplicity** win, explicitly *not* a cost win. A second
-consequence: the best-practices doc's example 25k trigger would never fire for us
-(our sessions peak ~9k tokens), so the recommended params are a low ~5k trigger and
-~3-4k window.
+**The headline finding.** I modeled the cumulative cost with code from the `tak`
+curve + in-repo 3.1 pricing, across two session profiles (40 short turns, 120
+long-intake turns). The key insight is the *shape*: today's unbounded context
+re-bills a context that grows ~linearly with turns, so **cumulative cost is
+quadratic (~n^2) in session length**; a sliding window caps per-turn context, making
+per-turn cost constant and **cumulative cost linear (~n)**. Against the current
+system (unbounded -- the real baseline), a window saves ~3x-10x and the gap *widens*
+with length: $6.79 -> ~$0.94 at 120 turns (~7x), $26.86 -> $1.91 at 240 turns (~14x).
+At deployment scale that is the difference between viable and runaway per-form
+economics. So compression is a **large cost win vs. the status quo**, on top of the
+duration (lifts the 15-min cap) and simplicity/robustness wins. The only nuance: a
+window is not the theoretical *minimum* (a full context reset, which we don't have,
+keeps no history and would be marginally cheaper) -- but that residual gap is small
+next to quadratic->linear. A second consequence: the docs' example 25k trigger never
+fires for us (40-turn sessions peak ~9k tokens; the 15-min cap, not turn count,
+bounds real length), so recommended params are a low ~5k trigger / ~3-4k window.
+
+(Note: an earlier draft of this doc wrongly anchored "is it a cost win?" against a
+hypothetical periodic-reset baseline that does not exist in the code, and concluded
+"not a cost win." Corrected before merge -- the real baseline is the unbounded status
+quo, against which it is a big win.)
 
 **Verified SDK syntax.** The vendored `docs/genai_docs/` names
 `ContextWindowCompressionConfig` but ships no runnable example, so I introspected

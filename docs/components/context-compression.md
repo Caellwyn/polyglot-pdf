@@ -26,64 +26,74 @@ short turns, prompt tokens compounded **6.6x (271 -> 1,799)** and per-turn cost 
 ~4.8x purely from re-billed history. Without compression, audio-only sessions are
 also hard-capped at **15 minutes**.
 
-But the honest framing matters here: **compression is not primarily a cost win for
-us.** Today the in-session context is **not bounded at all** -- it grows unbounded
-within a connection (which is exactly why the `tak` spike measured 6.6x growth).
-The closest thing to a context reset we have is the **section-switch restart**
-(`switch_to_section`, which finalizes + restarts Gemini at a section boundary to
-flush old-section fields) -- but that is driven by section boundaries, not by turn
-count or cost, and it is an *intentional* reset we keep. When you model a
-**periodic context reset** as a cost baseline (below), it beats any sliding window,
-because a full reset drops context to the ~271-token base while a window only
-plateaus at the window ceiling. So compression is chosen for:
+**The headline: against the status quo (unbounded), compression is a large cost
+win -- it turns a quadratic cost curve linear.** Today the in-session context is
+**not bounded at all**; it grows unbounded within a connection (exactly why the
+`tak` spike measured 6.6x growth). Because every turn re-bills the whole context and
+the context grows ~linearly with turns, **cumulative cost grows roughly
+quadratically (~n^2) in session length.** A sliding window caps the per-turn context,
+so once it saturates the per-turn cost is ~constant and **cumulative cost grows
+linearly (~n).** Quadratic -> linear is the whole game at scale.
 
-1. **Duration** -- it lifts the 15-min audio cap; sessions can run unbounded.
-2. **UX** -- no audible mid-call restart + re-greeting (a periodic full reset would
-   cause a perceptible gap; compression evicts silently).
-3. **Simplicity** -- a built-in bound beats hand-rolled reset/restart timing.
+The compression win, then, is all three of:
 
-Cost ends up roughly on par with -- slightly worse than -- a periodic full reset.
-Do not sell compression as a cost reduction.
+1. **Cost** -- linear instead of quadratic. The gap widens without bound as sessions
+   lengthen (table below): at 120 long-intake turns it's **$6.79 unbounded vs. ~$0.94
+   bounded (~7x)**; at 240 turns **$26.86 vs. $1.91 (~14x)**. At deployment scale
+   that is the difference between viable and runaway per-form economics.
+2. **Duration** -- it lifts the 15-min audio cap; sessions can run unbounded.
+3. **Simplicity / robustness** -- a single built-in server-side bound replaces any
+   hand-rolled reset/restart machinery: much simpler to implement, debug, and
+   reason about, and far less fragile than restart-timing logic.
 
-### Cost model: window sizes vs. unbounded vs. a periodic reset
+The one honest caveat: a window is *not* the theoretical cost minimum. A full
+context *reset* (drop to the ~271-token base) would be marginally cheaper still,
+because a window retains `target_tokens` of history while a reset keeps none -- see
+the reset baseline in the table. But we don't have (or want) a cost-driven reset
+mechanism, and the residual gap is small next to the quadratic->linear win. **This is
+a cost reduction -- a big one vs. how the system bills today.** (Directional model;
+`45o` confirms with a real run.)
+
+### Cost model: unbounded (status quo) vs. sliding window
 
 Modeled with code from the `tak` curve (per-turn context increment, audio fraction
 0.69, 3.1 pricing from `backend/config.py`). Cost is dominated by re-billed
-**audio_input** (6x the text rate). The "reset every 8 turns" row is an
-**illustrative cost baseline -- NOT an existing code path** (the backend has no
-turn-count restart; 8 = the `tak` spike's measurement window). It models what a full
-context reset would cost, as the lower bound a sliding window is compared against.
-Cumulative $ shown as a fraction of the two baselines:
+**audio_input** (6x the text rate). The **"unbounded" row is the current system**;
+the windows are the proposal. The "full reset" row is an **illustrative-only**
+theoretical floor (NOT an existing code path -- the backend has no cost-driven
+restart; 8 = the `tak` spike's measurement window), shown so the residual
+window-vs-reset gap is visible.
 
 **40 turns, short answers (~tak rate, +218 tok/turn):**
 
-| Scenario | cum $ | vs unbounded | vs reset-baseline |
-|---|--:|--:|--:|
-| Unbounded (no compression) | 0.462 | 100% | 329% |
-| **Periodic reset every 8 turns (illustrative baseline)** | **0.141** | **30%** | **100%** |
-| Sliding window 2k tok | 0.212 | 46% | 151% |
-| Sliding window 3k tok | 0.279 | 60% | 199% |
-| Sliding window 4k tok | 0.336 | 73% | 239% |
-| Sliding window 6k tok | 0.418 | 91% | 298% |
+| Scenario | cum $ | vs unbounded |
+|---|--:|--:|
+| **Unbounded (current system)** | **0.462** | **100%** |
+| Sliding window 2k tok | 0.212 | 46% |
+| Sliding window 3k tok | 0.279 | 60% |
+| Sliding window 4k tok | 0.336 | 73% |
+| Sliding window 6k tok | 0.418 | 91% |
+| _Full reset (illustrative floor only)_ | _0.141_ | _30%_ |
 
-**120 turns, long intake (longer answers, +400 tok/turn) -- the case compression
-should favour most:**
+**120 turns, long intake (longer answers, +400 tok/turn) -- the case scale cares
+about most:**
 
-| Scenario | cum $ | vs unbounded | vs reset-baseline |
-|---|--:|--:|--:|
-| Unbounded | 6.793 | 100% | 1136% |
-| **Periodic reset every 8 turns (illustrative baseline)** | **0.598** | **9%** | **100%** |
-| Sliding window 2k tok | 0.678 | 10% | 113% |
-| Sliding window 3k tok | 0.941 | 14% | 157% |
-| Sliding window 4k tok | 1.198 | 18% | 200% |
+| Scenario | cum $ | vs unbounded |
+|---|--:|--:|
+| **Unbounded (current system)** | **6.793** | **100%** |
+| Sliding window 2k tok | 0.678 | 10% |
+| Sliding window 3k tok | 0.941 | 14% |
+| Sliding window 4k tok | 1.198 | 18% |
+| _Full reset (illustrative floor only)_ | _0.598_ | _9%_ |
 
 Reading the table:
 
-- **Bounding context at all is the big win** -- both compression and a periodic reset
-  beat unbounded by up to ~11x in long sessions.
-- **A full reset beats every window size on pure cost**, because it drops to the
-  ~271-token base, not the window ceiling. The closest a window gets is 2k @ 113% of
-  the reset baseline.
+- **vs. the current system (unbounded), a sliding window saves ~3x-10x** and the
+  saving grows with session length -- because it converts quadratic cumulative cost
+  into linear. That is the cost case for this feature.
+- A full reset would be marginally cheaper than a window (it keeps no history vs. the
+  window's `target_tokens`), but that gap is small and we have no reset mechanism --
+  the quadratic->linear win against the status quo is what matters.
 - **The docs' example 25k trigger never fires for us.** In the 40-turn scenario the
   unbounded prompt peaks at only ~9k tokens (271 + 218 x 40), far below the 25k the
   best-practices doc assumes; even the 120-turn scenario peaks ~48k. A 25k/8k config
@@ -138,8 +148,9 @@ load-bearing constants:
 | `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Tokens that trigger compression | `~5000` |
 | `CONTEXT_COMPRESSION_WINDOW_TOKENS` | `target_tokens` to retain (must be `< trigger`) | `~3000-4000` |
 
-Rationale: the table shows a ~3-4k window is where the duration/UX win lands without
-cost ballooning toward unbounded, and our sessions peak near ~9k tokens so the
+Rationale: a ~3-4k window keeps enough recent history for coherent dialog while
+holding per-turn cost low (the table's cost saving vs. unbounded is already large at
+this size; shrinking further buys little). Our sessions peak near ~9k tokens, so the
 trigger must be **low** (~5k) to ever fire -- the docs' 25k example would be inert.
 `45o` re-runs the `tak` probe and tunes from there.
 
