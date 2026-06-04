@@ -27,32 +27,40 @@ short turns, prompt tokens compounded **6.6x (271 -> 1,799)** and per-turn cost 
 also hard-capped at **15 minutes**.
 
 But the honest framing matters here: **compression is not primarily a cost win for
-us.** We already bound cost with a manual reconnect-every-N-turns hack, and when you
-model the numbers (below) that hack is actually *cheaper* than any sliding window,
-because a reconnect resets context to the ~271-token base while a window only
+us.** Today the in-session context is **not bounded at all** -- it grows unbounded
+within a connection (which is exactly why the `tak` spike measured 6.6x growth).
+The closest thing to a context reset we have is the **section-switch restart**
+(`switch_to_section`, which finalizes + restarts Gemini at a section boundary to
+flush old-section fields) -- but that is driven by section boundaries, not by turn
+count or cost, and it is an *intentional* reset we keep. When you model a
+**periodic context reset** as a cost baseline (below), it beats any sliding window,
+because a full reset drops context to the ~271-token base while a window only
 plateaus at the window ceiling. So compression is chosen for:
 
 1. **Duration** -- it lifts the 15-min audio cap; sessions can run unbounded.
-2. **UX** -- no audible mid-call restart + re-greeting (the reconnect hack causes a
-   perceptible gap every N turns).
-3. **Simplicity** -- it lets us sideline fragile restart-timing logic.
+2. **UX** -- no audible mid-call restart + re-greeting (a periodic full reset would
+   cause a perceptible gap; compression evicts silently).
+3. **Simplicity** -- a built-in bound beats hand-rolled reset/restart timing.
 
-Cost ends up roughly on par with (slightly worse than) today's hack. Do not sell
-this as a cost reduction.
+Cost ends up roughly on par with -- slightly worse than -- a periodic full reset.
+Do not sell compression as a cost reduction.
 
-### Cost model: window sizes vs. unbounded vs. the reconnect hack
+### Cost model: window sizes vs. unbounded vs. a periodic reset
 
 Modeled with code from the `tak` curve (per-turn context increment, audio fraction
 0.69, 3.1 pricing from `backend/config.py`). Cost is dominated by re-billed
-**audio_input** (6x the text rate). Cumulative $ shown as a fraction of the two
-baselines:
+**audio_input** (6x the text rate). The "reset every 8 turns" row is an
+**illustrative cost baseline -- NOT an existing code path** (the backend has no
+turn-count restart; 8 = the `tak` spike's measurement window). It models what a full
+context reset would cost, as the lower bound a sliding window is compared against.
+Cumulative $ shown as a fraction of the two baselines:
 
 **40 turns, short answers (~tak rate, +218 tok/turn):**
 
-| Scenario | cum $ | vs unbounded | vs reconnect-hack |
+| Scenario | cum $ | vs unbounded | vs reset-baseline |
 |---|--:|--:|--:|
 | Unbounded (no compression) | 0.462 | 100% | 329% |
-| **Reconnect every 8 turns (current hack)** | **0.141** | **30%** | **100%** |
+| **Periodic reset every 8 turns (illustrative baseline)** | **0.141** | **30%** | **100%** |
 | Sliding window 2k tok | 0.212 | 46% | 151% |
 | Sliding window 3k tok | 0.279 | 60% | 199% |
 | Sliding window 4k tok | 0.336 | 73% | 239% |
@@ -61,24 +69,27 @@ baselines:
 **120 turns, long intake (longer answers, +400 tok/turn) -- the case compression
 should favour most:**
 
-| Scenario | cum $ | vs unbounded | vs reconnect-hack |
+| Scenario | cum $ | vs unbounded | vs reset-baseline |
 |---|--:|--:|--:|
 | Unbounded | 6.793 | 100% | 1136% |
-| **Reconnect every 8 turns (current hack)** | **0.598** | **9%** | **100%** |
+| **Periodic reset every 8 turns (illustrative baseline)** | **0.598** | **9%** | **100%** |
 | Sliding window 2k tok | 0.678 | 10% | 113% |
 | Sliding window 3k tok | 0.941 | 14% | 157% |
 | Sliding window 4k tok | 1.198 | 18% | 200% |
 
 Reading the table:
 
-- **Bounding context at all is the big win** -- both compression and the reconnect
-  hack beat unbounded by up to ~11x in long sessions.
-- **The reconnect hack beats every window size on pure cost**, because it resets to
-  the ~271-token base, not the window ceiling. The closest a window gets is 2k @
-  113% of the hack.
-- **The docs' example 25k trigger never fires for us.** Our 40-turn sessions peak at
-  ~9k prompt tokens, far below the 25k the best-practices doc assumes. A 25k/8k
-  config is effectively a no-op; useful windows are 2k-4k.
+- **Bounding context at all is the big win** -- both compression and a periodic reset
+  beat unbounded by up to ~11x in long sessions.
+- **A full reset beats every window size on pure cost**, because it drops to the
+  ~271-token base, not the window ceiling. The closest a window gets is 2k @ 113% of
+  the reset baseline.
+- **The docs' example 25k trigger never fires for us.** In the 40-turn scenario the
+  unbounded prompt peaks at only ~9k tokens (271 + 218 x 40), far below the 25k the
+  best-practices doc assumes; even the 120-turn scenario peaks ~48k. A 25k/8k config
+  is effectively a no-op in short sessions; useful windows are 2k-4k. **In practice
+  the 15-min audio cap, not a turn count, is what bounds real session length** -- so
+  `45o` must re-measure with compression on rather than assume the 9k figure.
 
 The model is a single-session directional baseline; `45o` validates it with a real
 re-run (see Validation).
@@ -158,12 +169,12 @@ The three layers differ, and compression changes one of them:
 | **Cloud Run backend** | **Never** stores it. In-memory, in-transit only. **Unchanged by compression.** |
 | **Gemini** | *May* hold it **ephemerally in its context window**. |
 
-Enabling a sliding window means PII sits in **Gemini's** ephemeral context under
-sliding-window eviction rather than being flushed to the base system instruction
-every N turns by the reconnect hack. This is a different (generally *longer*)
-eviction profile, but it is still Gemini-side and ephemeral -- inherent to using the
-Live API at all. It is called out here so the change is a conscious, documented
-choice, not a silent one. See
+Enabling a sliding window changes *how* PII ages out of **Gemini's** ephemeral
+context: it is evicted on the sliding-window schedule rather than only at a
+section-switch restart or a session teardown. This is a different (generally
+*longer*-lived within a connection) eviction profile, but it is still Gemini-side
+and ephemeral -- inherent to using the Live API at all. It is called out here so the
+change is a conscious, documented choice, not a silent one. See
 [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md).
 
 ## Session resumption + GoAway -- deferred
@@ -181,28 +192,36 @@ connection. **Both are deferred out of `45o`**, filed as separate beads:
 
 ## Workaround sideline map (hand-off to `7kp`)
 
-Compression makes the **unbounded-growth problem** redundant, *not* every restart we
-built. `7kp` must distinguish "bounds context for cost" (sidelinable) from
-"intentional context reset" (keep). **Sideline, do not delete** -- the reconnect
-hack is actually cheaper on cost (table above), so a one-env-var revert path matters
-in case the compression metrics disappoint.
+**Important correction for `7kp`:** an audit of the current backend found that we
+**never actually built a cost-motivated context-bounding restart.** The mechanisms
+that *look* like candidates are all driven by other concerns:
 
-**Sideline behind `CONTEXT_COMPRESSION_ENABLED` (inverted), keep the code present:**
+- The **idle-timeout watchdog** (`WS_IDLE_TIMEOUT_SEC` in `backend/config.py`,
+  watchdog in `backend/routes/websocket_routes.py`) sends an `idle_timeout` message
+  and **closes the WebSocket** on inactivity. It does **not** call `finalize`, and it
+  is a connection-health / UX mechanism, not cost-bounding. **Keep it.**
+- The **Level-3 "farewell" finalize** (`finalize_gemini_session`, dispatched at
+  `backend/routes/websocket_routes.py` on a frontend `finalize_gemini_session`
+  message; timing in `backend/services/callback_handler.py`) is **frontend-initiated
+  after the goodbye prompt** -- a UX flow, not a cost timer. **Keep it.**
+- The **section-switch restart** (`switch_to_section`) is an intentional context
+  reset at a section boundary. **Keep it.**
 
-- The **cost-motivated forced `finalize`** that bounds context growth -- the
-  cost/cap-driven half of the idle-timeout -> Level-3 finalize path
-  (`WS_IDLE_TIMEOUT_SEC` in `backend/config.py`; `backend/routes/websocket_routes.py`;
-  `backend/services/callback_handler.py`) and any periodic-restart-for-cost logic.
-  When compression is ON, this is skipped (early-return), not removed. Flip the flag
-  off and the old behaviour is back byte-for-byte. A later cleanup bead deletes it
-  only after compression is confirmed in production.
+So there is **no cost-bounding hack for compression to retire** -- today the context
+simply grows unbounded (the `tak` curve). That means `7kp`'s scope shrinks to a
+verification/cleanup pass rather than a removal: confirm no restart path exists that
+was *implicitly* bounding cost, and coordinate with `polyglot-pdf-umv`. The epic
+title ("replace manual disconnect/restart hacks") was written before this audit; the
+"hacks" turned out to be UX/lifecycle mechanisms that stay. Gate compression itself
+behind `CONTEXT_COMPRESSION_ENABLED` so the *new* behaviour (bounded vs. unbounded
+context) is one env var from reverting; nothing existing needs sidelining.
 
 **Keep active regardless of the flag:**
 
 | Mechanism | Location | Why it stays |
 |---|---|---|
 | Section-switch restart (finalize + restart to flush old-section fields) | `backend/services/form_filling_service.py` `switch_to_section` | Intentional context *reset*, not cost-bounding. A window carries stale fields until evicted; we want them gone at the switch. (Coordinate with `polyglot-pdf-umv` -- restart-loses-section-metadata -- which may become moot.) |
-| Idle/UX recovery prompts (levels 1-2) | `backend/services/form_filling_service.py` | A UX concern, not a cost concern. Only the cost-motivated finalize is sidelined. |
+| Idle/UX recovery prompts (levels 1-3) + idle-timeout watchdog + farewell finalize | `backend/services/form_filling_service.py`, `backend/routes/websocket_routes.py` | UX / connection-health concerns, not cost-bounding. |
 | `_intentional_shutdown` retry-guard | `backend/adapters/live_ai_gemini.py` | Lifecycle correctness, unrelated to context size. |
 | Carried-over `previous_spoken_names` / section history in the SI | `backend/services/form_filling_service.py`, `backend/config.py` | This is client-owned rehydration -- the stateless contract, not a hack. |
 | Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for the compression win. |

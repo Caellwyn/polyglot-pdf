@@ -46,17 +46,21 @@ operates on the live in-session context only -- it does not touch handshake
 rehydration, adds no server-side state, and preserves the stateless invariant. It
 adds a three-layer PII table (client may store/send; Cloud Run never; Gemini holds
 ephemerally) per maintainer clarification, noting that a sliding window changes the
-*eviction profile* of PII in Gemini's context vs. the reconnect-flush -- a conscious,
-documented choice, not a silent one.
+*eviction profile* of PII in Gemini's context (window schedule vs. section-switch /
+teardown) -- a conscious, documented choice, not a silent one.
 
-**Workaround sideline map (hand-off to `7kp`).** Classified each manual workaround
-as keep vs. sideline. The only thing compression makes redundant is the
-cost-motivated forced-finalize; `7kp`'s contract is to **sideline it behind
-`CONTEXT_COMPRESSION_ENABLED` (inverted), not delete it**, so the cheaper hack is one
-env var from reverting if compression metrics disappoint. The section-switch restart
-(intentional context reset), UX recovery prompts, `_intentional_shutdown`,
-`previous_spoken_names` rehydration, token tracking, and the readiness queue all stay
-active.
+**Workaround map (hand-off to `7kp`) -- corrected after a code audit.** Fresh-eyes
+flagged, and I confirmed, that the backend **never built a cost-motivated
+context-bounding restart**: the idle-timeout watchdog closes the WS on inactivity
+(health/UX, does not call finalize), the Level-3 finalize is a frontend-initiated
+farewell flow (UX), and the section-switch restart is an intentional reset. Today
+context simply grows unbounded (the `tak` curve). So there is **nothing for
+compression to retire** -- `7kp`'s scope shrinks from "remove hacks" to a
+verification/cleanup pass, and the epic title ("replace manual disconnect/restart
+hacks") predates this audit. Compression itself is gated behind
+`CONTEXT_COMPRESSION_ENABLED` so the bounded-vs-unbounded behaviour is one env var
+from reverting. (My initial draft mischaracterized the idle/Level-3 path as a
+cost-motivated finalize; fixed before merge.)
 
 **Beads.** Updated `45o` (param + syntax notes) and `7kp` (sideline map). Filed two
 deferred-scope beads under epic `l3a`: `wnt` (evaluate `session_resumption` -- likely
