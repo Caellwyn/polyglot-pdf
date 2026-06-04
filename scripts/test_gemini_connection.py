@@ -26,19 +26,26 @@ async def test_connection():
         )
         print("   ✓ Client created successfully")
         
-        # Try to connect to Gemini Live
+        # Try to connect to Gemini Live. Default matches the contract test
+        # (backend/tests/contract/test_live_ai_gemini_integration.py): the active
+        # native-audio model, overridable via GEMINI_LIVE_MODEL. The previous
+        # hardcoded gemini-live-2.5-flash-preview-native-audio-09-2025 is a retired
+        # alias the Live API rejects (1008 not found), so this script always failed
+        # at connect (bd polyglot-pdf-0kv).
         print("\n3. Connecting to Gemini Live API...")
-        model = "gemini-live-2.5-flash-preview-native-audio-09-2025"
+        model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
+        # Native-audio models emit AUDIO only and reject TEXT modality (1007), so
+        # this diagnostic must request AUDIO and look for audio in the response.
         config = {
-            "response_modalities": ["TEXT"],
+            "response_modalities": ["AUDIO"],
         }
-        
+
         print(f"   Model: {model}")
         print("   Attempting connection...")
-        
+
         async with client.aio.live.connect(model=model, config=config) as session:
             print("   ✓ Connection established!")
-            
+
             # Try sending a simple message
             print("\n4. Testing message send:")
             await session.send_client_content(
@@ -46,19 +53,30 @@ async def test_connection():
                 turn_complete=True
             )
             print("   ✓ Message sent")
-            
-            # Try receiving response
+
+            # Try receiving response (native audio -> inline audio data, not text).
+            # Traverse server_content -> model_turn.parts -> inline_data.data, the
+            # pattern the vendored SDK reference uses (docs/genai_docs/).
             print("\n5. Waiting for response...")
             response_received = False
             async for response in session.receive():
-                if response.text is not None:
-                    print(f"   ✓ Response received: {response.text[:100]}")
-                    response_received = True
+                content = response.server_content
+                model_turn = content.model_turn if content else None
+                if model_turn:
+                    for part in model_turn.parts:
+                        if part.inline_data is not None and part.inline_data.data:
+                            print(f"   ✓ Audio response received ({len(part.inline_data.data)} bytes)")
+                            response_received = True
+                            break
+                if response_received:
                     break
-            
+
             if not response_received:
                 print("   ✗ No response received")
-        
+                # Don't fall through to the SUCCESS banner: the connection may
+                # be up but returning no usable audio (misconfig / API change).
+                raise RuntimeError("No audio response received from Gemini Live")
+
         print("\n" + "=" * 60)
         print("SUCCESS: All tests passed!")
         print("=" * 60)

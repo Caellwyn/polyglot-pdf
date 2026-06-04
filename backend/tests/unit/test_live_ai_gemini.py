@@ -471,3 +471,33 @@ def test_vad_enabled_omits_unspecified_and_none_knobs():
     assert result == {}
 
 
+def test_vad_invalid_sensitivity_is_skipped_not_fatal():
+    """bd polyglot-pdf-u01: a typo'd sensitivity (e.g. MEDIUM) is skipped, not raised.
+
+    A bad VAD_*_SENSITIVITY value used to KeyError out of _build_vad_settings;
+    the caller's broad except then dropped the ENTIRE realtime_input_config. The
+    fix whitelists LOW/HIGH/UNSPECIFIED and skips unknown values with a warning,
+    so the rest of the config (including the valid axis + padding) still applies.
+    """
+    import structlog
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from google.genai import types
+
+    # start is a typo, end is valid -> end + padding survive, start is dropped,
+    # and the dropped axis emits the invalid_vad_sensitivity_skipped warning.
+    with structlog.testing.capture_logs() as logs:
+        result = LiveAIGemini._build_vad_settings(
+            _vad_settings(disabled=False, start="MEDIUM", end="HIGH")
+        )
+
+    assert "start_of_speech_sensitivity" not in result
+    assert result["end_of_speech_sensitivity"] == types.EndSensitivity.END_SENSITIVITY_HIGH
+    assert result["prefix_padding_ms"] == 500
+    assert result["silence_duration_ms"] == 500
+
+    skipped = [e for e in logs if e.get("event") == "invalid_vad_sensitivity_skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["field"] == "VAD_START_SENSITIVITY"
+    assert skipped[0]["value"] == "MEDIUM"
+
+
