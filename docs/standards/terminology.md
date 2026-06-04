@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for the internal-rename closeout; the wire-format renames (token-log + handshake manifest) landed under bd polyglot-pdf-zun / tb7.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -40,21 +40,28 @@ The **internal** holdouts were renamed to section-canonical names in
 `self._current_section_id` + the `current_section_id` parameter of
 `set_session_context()`, and the `form_filling_service.py` call site.
 
-**Remaining drift is on the wire format** -- still named `part` because renaming a
-key is a data-format change that must be sequenced against its consumers (tracked
-in `polyglot-pdf-zun`):
+**Wire-format renames done in `polyglot-pdf-zun`:**
 
-- `backend/utils/token_file_logger.py` -- the `part_id` parameter (line 71) and the
-  `"part_id": part_id` log-payload key (**line 111**) in `token_usage.jsonl`. The
-  producer (`live_ai_gemini.py`) already passes the current **section** id into this
-  `part_id=` kwarg; only the key name is unrenamed.
-- `backend/services/manifest_service.py` + `frontend/src/schema-forms/utils/manifestUtils.ts`
-  -- the JIT manifest's `current_part`/`previous_parts` keys hold **section** data,
-  not real `FormPart`s: `buildHandshakeManifest(currentSectionId, ...)` looks the ID
-  up in `schema.sections` and even errors with `Part ${id} not found`. These are on
-  the WS-handshake wire format (both ends must change in lockstep).
-- Frontend test fixture `frontend/src/schema-forms/state/schemaFormState.test.ts.NEEDS_SECTION_REFACTOR`
-  (filename already flags it).
+- `backend/utils/token_file_logger.py` -- the payload key is now `section_id` (was
+  `part_id`); the producer (`live_ai_gemini.py`) passes `section_id=self._current_section_id`.
+  `token_usage.jsonl` events now carry the active section under `section_id`
+  (tb7 also fixed the **value**, which was permanently null before).
+- `frontend/src/schema-forms/utils/manifestUtils.ts` -- the JIT handshake manifest's
+  section keys are now section-canonical: `current_section`/`previous_sections`/
+  `section_id`/`section_label` (was `current_part`/`previous_parts`/`part_id`/
+  `part_label`). This rename is **frontend-internal**: the Python backend
+  (`backend/routes/websocket_routes.py`) consumes only `manifest.parts` (the section
+  navigation list, already section-canonical `{id, order, label}`), NOT the
+  `current_part`/`part_id` keys -- so it was not a both-ends-lockstep change.
+
+**Remaining `part`-named holdout (intentionally out of zun scope):**
+
+- `backend/services/manifest_service.py` `generate_part_manifest` / `format_manifest_for_context`
+  -- a SEPARATE backend-internal path feeding `ai_context.py` system-instruction text
+  ("CURRENT PART: ..."). It still emits `current_part`/`part_id`/`part_label`. Renaming
+  it changes the Gemini prompt wording (behavior-adjacent), so it is deferred; it is
+  not on either wire format. The `parts` navigation key (consumed by the backend) keeps
+  its name because that IS the backend wire contract.
 
 Don't add new `part_id`/`currentPartId` names for section state.
 

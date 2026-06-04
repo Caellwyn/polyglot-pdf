@@ -68,7 +68,7 @@ class TokenFileLogger:
         session_audio_output: int,
 
         # Optional context
-        part_id: Optional[str] = None,
+        section_id: Optional[str] = None,
         event_type: str = "token_usage",
     ) -> None:
         """
@@ -96,7 +96,7 @@ class TokenFileLogger:
             session_audio_input: Cumulative audio input tokens for this session
             session_text_output: Cumulative text output tokens for this session
             session_audio_output: Cumulative audio output tokens for this session
-            part_id: Current part ID (e.g., "part_1")
+            section_id: Current section ID (the user-facing navigation unit, e.g. "part_1_2_addresses")
             event_type: Event type (default: "token_usage")
         """
         event = {
@@ -108,7 +108,7 @@ class TokenFileLogger:
             "form_id": form_id,
             "form_session_id": form_session_id,
             "gemini_session_id": gemini_session_id,
-            "part_id": part_id,
+            "section_id": section_id,
 
             # This event's token counts
             "event": {

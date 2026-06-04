@@ -358,7 +358,7 @@
           <th>Time</th>
           <th>Form</th>
           <th>Session</th>
-          <th>Part</th>
+          <th>Section</th>
           <th>Tokens</th>
           <th>Text In</th>
           <th>Audio In</th>
@@ -639,14 +639,16 @@
           geminiSessionMap.set(sessionId, {
             id: sessionId,
             timestamp: event.timestamp,
-            part_id: event.part_id
+            // section_id is the current key; fall back to legacy part_id for
+            // older log lines (token_usage.jsonl accumulates both formats).
+            section_id: event.section_id ?? event.part_id
           });
         } else {
           // Keep earliest timestamp
           const existing = geminiSessionMap.get(sessionId);
           if (event.timestamp < existing.timestamp) {
             existing.timestamp = event.timestamp;
-            existing.part_id = event.part_id;
+            existing.section_id = event.section_id ?? event.part_id;
           }
         }
       });
@@ -660,8 +662,8 @@
         const date = new Date(session.timestamp);
         const timeStr = date.toLocaleString();
         const shortId = session.id.substring(0, 12);
-        const partInfo = session.part_id ? ` - ${session.part_id}` : '';
-        geminiSessionSelect.innerHTML += `<option value="${session.id}">${timeStr} (${shortId}${partInfo})</option>`;
+        const sectionInfo = session.section_id ? ` - ${session.section_id}` : '';
+        geminiSessionSelect.innerHTML += `<option value="${session.id}">${timeStr} (${shortId}${sectionInfo})</option>`;
       });
       geminiSessionSelect.value = currentGeminiSession;
     }
@@ -783,14 +785,14 @@
       tbody.innerHTML = events.map(event => {
         const time = new Date(event.timestamp).toLocaleTimeString();
         const shortSession = event.form_session_id.substring(0, 8);
-        const part = event.part_id || '-';
+        const section = (event.section_id ?? event.part_id) || '-';
 
         return `
           <tr>
             <td>${time}</td>
             <td><span class="badge badge-form">${event.form_id}</span></td>
             <td>${shortSession}</td>
-            <td><span class="badge badge-part">${part}</span></td>
+            <td><span class="badge badge-part">${section}</span></td>
             <td><strong>${event.event.total_tokens}</strong></td>
             <td>${event.event.text_input}</td>
             <td>${event.event.audio_input}</td>

@@ -1,26 +1,28 @@
 /**
- * Unit tests for Manifest Generation Utilities - Phase 3.2
+ * Unit tests for Manifest Generation Utilities - JIT schema loading
  *
  * Tests manifest generation for JIT schema loading:
- * - Part manifest generation
+ * - Section manifest generation
  * - Handshake manifest building
  * - Schema inclusion logic
  * - Token estimation
  *
- * @version 1.0.0
- * @date 2025-11-10
+ * Wire-format note: the manifest's section keys are section-canonical
+ * (current_section / previous_sections / section_id / section_label) per
+ * bd polyglot-pdf-zun. The `parts` navigation array keeps its key name
+ * because the backend wire contract reads manifest.parts.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
-  generatePartManifest,
+  generateSectionManifest,
   shouldIncludeSchema,
   buildHandshakeManifest,
   formatManifestForContext,
   estimateManifestTokens,
   getFieldSchema
 } from './manifestUtils';
-import type { FormSchema, FormPart } from '../types/schema';
+import type { FormSchema, FormSection } from '../types/schema';
 import type { SchemaFormState } from '../state/schemaFormState';
 
 describe('Manifest Generation Utilities', () => {
@@ -79,82 +81,85 @@ describe('Manifest Generation Utilities', () => {
         name: 'First Name',
         spoken_name: 'first name',
         type: 'text',
-        required: true
+        section_id: 'section-1a'
       },
       {
         id: 'lastName',
         name: 'Last Name',
         spoken_name: 'last name',
         type: 'text',
-        required: true
+        section_id: 'section-1a'
       },
       {
         id: 'email',
         name: 'Email',
         spoken_name: 'email address',
         type: 'email',
-        required: false
+        section_id: 'section-1b'
       },
       {
         id: 'phone',
         name: 'Phone',
         spoken_name: 'phone number',
         type: 'tel',
-        required: false
+        section_id: 'section-1b'
       },
       {
         id: 'street',
         name: 'Street',
         spoken_name: 'street address',
         type: 'text',
-        required: true
+        section_id: 'section-2a'
       },
       {
         id: 'city',
         name: 'City',
         spoken_name: 'city',
         type: 'text',
-        required: true
+        section_id: 'section-2a'
       },
       {
         id: 'state',
         name: 'State',
         spoken_name: 'state',
         type: 'select',
-        required: true,
+        section_id: 'section-2a',
         options: []
       }
     ]
   });
 
+  const sectionById = (schema: FormSchema, id: string): FormSection =>
+    schema.sections.find(s => s.id === id)!;
+
   const createTestState = (): SchemaFormState => ({
     schema: createTestSchema(),
     fieldValues: {},
-    currentPartId: 'part-1',
-    completedParts: new Set(),
+    currentSectionId: 'section-1a',
+    completedSections: new Set(),
     validationErrors: {},
     lastUpdated: Date.now(),
     loadedFieldIds: new Set(),
     jitModeEnabled: true
-  });
+  } as SchemaFormState);
 
-  describe('generatePartManifest', () => {
-    it('should generate manifest for a part with all fields', () => {
+  describe('generateSectionManifest', () => {
+    it('should generate manifest for a section with all fields', () => {
       const schema = createTestSchema();
-      const part = schema.parts[0]; // part-1
+      const section = sectionById(schema, 'section-1a');
 
-      const manifest = generatePartManifest(part, schema);
+      const manifest = generateSectionManifest(section, schema);
 
-      expect(manifest.part_id).toBe('part-1');
-      expect(manifest.part_label).toBe('Personal Information');
-      expect(manifest.fields).toHaveLength(4); // firstName, lastName, email, phone
+      expect(manifest.section_id).toBe('section-1a');
+      expect(manifest.section_label).toBe('Name');
+      expect(manifest.fields).toHaveLength(2); // firstName, lastName
     });
 
     it('should include field_id and spoken_name in manifest entries', () => {
       const schema = createTestSchema();
-      const part = schema.parts[0];
+      const section = sectionById(schema, 'section-1a');
 
-      const manifest = generatePartManifest(part, schema);
+      const manifest = generateSectionManifest(section, schema);
 
       expect(manifest.fields[0]).toEqual({
         field_id: 'firstName',
@@ -166,27 +171,14 @@ describe('Manifest Generation Utilities', () => {
       });
     });
 
-    it('should maintain field order from sections', () => {
+    it('should maintain field order from the section', () => {
       const schema = createTestSchema();
-      const part = schema.parts[0];
+      const section = sectionById(schema, 'section-2a');
 
-      const manifest = generatePartManifest(part, schema);
+      const manifest = generateSectionManifest(section, schema);
 
       const fieldIds = manifest.fields.map(f => f.field_id);
-      expect(fieldIds).toEqual(['firstName', 'lastName', 'email', 'phone']);
-    });
-
-    it('should handle part with multiple sections', () => {
-      const schema = createTestSchema();
-      const part = schema.parts[0]; // Has section-1a and section-1b
-
-      const manifest = generatePartManifest(part, schema);
-
-      expect(manifest.fields.length).toBeGreaterThan(0);
-      // Should include fields from both sections
-      const fieldIds = manifest.fields.map(f => f.field_id);
-      expect(fieldIds).toContain('firstName'); // from section-1a
-      expect(fieldIds).toContain('email'); // from section-1b
+      expect(fieldIds).toEqual(['street', 'city', 'state']);
     });
 
     it('should use name as fallback if spoken_name missing', () => {
@@ -194,8 +186,8 @@ describe('Manifest Generation Utilities', () => {
       // Remove spoken_name from a field
       schema.fields[0].spoken_name = undefined as any;
 
-      const part = schema.parts[0];
-      const manifest = generatePartManifest(part, schema);
+      const section = sectionById(schema, 'section-1a');
+      const manifest = generateSectionManifest(section, schema);
 
       expect(manifest.fields[0].spoken_name).toBe('First Name');
     });
@@ -231,45 +223,58 @@ describe('Manifest Generation Utilities', () => {
   });
 
   describe('buildHandshakeManifest', () => {
-    it('should build manifest for current part', () => {
+    it('should build manifest for current section', () => {
       const schema = createTestSchema();
       const state = createTestState();
 
-      const manifest = buildHandshakeManifest('part-1', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
-      expect(manifest.current_part.part_id).toBe('part-1');
-      expect(manifest.current_part.part_label).toBe('Personal Information');
-      expect(manifest.current_part.fields.length).toBeGreaterThan(0);
+      expect(manifest.current_section.section_id).toBe('section-1a');
+      expect(manifest.current_section.section_label).toBe('Name');
+      expect(manifest.current_section.fields.length).toBeGreaterThan(0);
     });
 
-    it('should include no previous parts if none completed', () => {
+    it('should include the section navigation list under the parts wire key', () => {
       const schema = createTestSchema();
       const state = createTestState();
 
-      const manifest = buildHandshakeManifest('part-1', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
-      expect(manifest.previous_parts).toHaveLength(0);
+      expect(manifest.parts.map(p => p.id)).toEqual([
+        'section-1a',
+        'section-1b',
+        'section-2a'
+      ]);
     });
 
-    it('should include previous parts if completed', () => {
+    it('should include no previous sections if none completed', () => {
       const schema = createTestSchema();
       const state = createTestState();
-      state.completedParts.add('part-1');
-      state.currentPartId = 'part-2';
 
-      const manifest = buildHandshakeManifest('part-2', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
-      expect(manifest.previous_parts).toHaveLength(1);
-      expect(manifest.previous_parts[0].part_id).toBe('part-1');
+      expect(manifest.previous_sections).toHaveLength(0);
     });
 
-    it('should throw error if part not found', () => {
+    it('should include previous sections if completed', () => {
+      const schema = createTestSchema();
+      const state = createTestState();
+      state.completedSections.add('section-1a');
+      state.currentSectionId = 'section-1b';
+
+      const manifest = buildHandshakeManifest('section-1b', schema, state);
+
+      expect(manifest.previous_sections).toHaveLength(1);
+      expect(manifest.previous_sections[0].section_id).toBe('section-1a');
+    });
+
+    it('should throw error if section not found', () => {
       const schema = createTestSchema();
       const state = createTestState();
 
       expect(() => {
         buildHandshakeManifest('non-existent', schema, state);
-      }).toThrow('Part non-existent not found');
+      }).toThrow('Section non-existent not found');
     });
   });
 
@@ -277,31 +282,31 @@ describe('Manifest Generation Utilities', () => {
     it('should format manifest as pipe-separated text', () => {
       const schema = createTestSchema();
       const state = createTestState();
-      const manifest = buildHandshakeManifest('part-1', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
       const formatted = formatManifestForContext(manifest);
 
-      expect(formatted).toContain('CURRENT PART: Personal Information');
+      expect(formatted).toContain('CURRENT SECTION: Name');
       expect(formatted).toContain('firstName|first name');
       expect(formatted).toContain('lastName|last name');
     });
 
-    it('should include previous parts section when applicable', () => {
+    it('should include previous sections block when applicable', () => {
       const schema = createTestSchema();
       const state = createTestState();
-      state.completedParts.add('part-1');
+      state.completedSections.add('section-1a');
 
-      const manifest = buildHandshakeManifest('part-2', schema, state);
+      const manifest = buildHandshakeManifest('section-1b', schema, state);
       const formatted = formatManifestForContext(manifest);
 
-      expect(formatted).toContain('PREVIOUS PARTS (lookup only):');
-      expect(formatted).toContain('Personal Information:');
+      expect(formatted).toContain('PREVIOUS SECTIONS (lookup only):');
+      expect(formatted).toContain('Name:');
     });
 
     it('should use pipe separator for field entries', () => {
       const schema = createTestSchema();
       const state = createTestState();
-      const manifest = buildHandshakeManifest('part-1', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
       const formatted = formatManifestForContext(manifest);
 
@@ -314,7 +319,7 @@ describe('Manifest Generation Utilities', () => {
     it('should return a positive token estimate', () => {
       const schema = createTestSchema();
       const state = createTestState();
-      const manifest = buildHandshakeManifest('part-1', schema, state);
+      const manifest = buildHandshakeManifest('section-1a', schema, state);
 
       const tokens = estimateManifestTokens(manifest);
 
@@ -326,12 +331,12 @@ describe('Manifest Generation Utilities', () => {
       const schema = createTestSchema();
       const state = createTestState();
 
-      const manifest1 = buildHandshakeManifest('part-1', schema, state);
+      const manifest1 = buildHandshakeManifest('section-1a', schema, state);
       const tokens1 = estimateManifestTokens(manifest1);
 
-      // Add completed part to increase manifest size
-      state.completedParts.add('part-1');
-      const manifest2 = buildHandshakeManifest('part-2', schema, state);
+      // Add completed section to increase manifest size
+      state.completedSections.add('section-1a');
+      const manifest2 = buildHandshakeManifest('section-1b', schema, state);
       const tokens2 = estimateManifestTokens(manifest2);
 
       expect(tokens2).toBeGreaterThan(tokens1);
@@ -367,7 +372,7 @@ describe('Manifest Generation Utilities', () => {
       expect(field?.name).toBe('Email');
       expect(field?.spoken_name).toBe('email address');
       expect(field?.type).toBe('email');
-      expect(field?.required).toBe(false);
+      expect(field?.section_id).toBe('section-1b');
     });
   });
 });

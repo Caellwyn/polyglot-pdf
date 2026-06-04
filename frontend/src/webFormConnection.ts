@@ -754,6 +754,7 @@ export class WebFormConnection {
           schema: sectionSchema,
           current_values: sectionValues,
           metadata: {
+            section_id: currentSection?.id,
             section_number: currentSection?.order ?? 1,
             total_sections: updatedState.schema.sections.length,
             section_label: currentSection?.label || '',

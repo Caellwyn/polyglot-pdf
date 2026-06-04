@@ -27,7 +27,7 @@ Backend (Python) - Gemini Live API
   ├── live_ai_gemini.py extracts usage_metadata from Gemini responses
   ├── token_file_logger.py writes to logs/token_usage.jsonl
   ├── latency_logger.py writes to logs/latency/*.jsonl (if enabled)
-  └── Each event tagged with: form_id, form_session_id, gemini_session_id, part_id
+  └── Each event tagged with: form_id, form_session_id, gemini_session_id, section_id
 
 Monitor Server (Node.js)
   ├── server.js watches token_usage.jsonl and latest latency log
@@ -155,7 +155,7 @@ Token events are logged to `backend/logs/token_usage.jsonl` in newline-delimited
   "form_id": "I-90",
   "form_session_id": "web_abc123",
   "gemini_session_id": "LiveAI-xyz456",
-  "part_id": "part_1",
+  "section_id": "part_1_2_addresses",
   "event": {
     "prompt_tokens": 100,
     "response_tokens": 50,
@@ -208,7 +208,8 @@ Latency events are logged to `backend/logs/latency/*.jsonl` (rotating files) in 
 - **form_session_id**: Overall form filling session (persists across Gemini session switches)
 - **session_id** (in latency): Ephemeral session ID for this connection
 - **gemini_session_id** (in tokens): Specific Gemini connection (changes when switching parts/sections)
-- **part_id**: Current form part (e.g., "part_1", "part_2")
+- **section_id**: Current form section (e.g., "part_1_2_addresses"); older log
+  lines may still carry the legacy `part_id` key (the dashboard reads either)
 
 This allows tracking both token usage and latency across multiple sessions for a single form completion.
 
