@@ -190,7 +190,27 @@ def refresh_remote_and_pull() -> bool:
     if pull.returncode == 0:
         vlog("pull complete")
         return True
-    vlog("pull failed: " + ((pull.stderr or pull.stdout or "")[-300:]))
+    msg = (pull.stderr or "") + (pull.stdout or "")
+    # A container hydrated BEFORE the bd polyglot-pdf-0q8 fix is frozen on a stale
+    # JSONL seed whose history is unrelated to the ref, so the pull's merge aborts
+    # with "no common ancestor". The failed pull still FETCHED the ref into
+    # origin/main, so self-heal by resetting the working branch onto it, then re-pull.
+    if "no common ancestor" in msg or "diverged" in msg:
+        log("local store diverged from the ref (pre-0q8 stale-seed bug); reconciling ...")
+        dolt = ensure_dolt()
+        if dolt:
+            try:
+                if reconcile_working_branch_onto_ref(dolt):
+                    pull2 = run(["bd", "dolt", "pull"], cwd=REPO_ROOT, timeout=180)
+                    if pull2.returncode == 0:
+                        log("reconciled onto the canonical ref; pull complete.")
+                        return True
+                    msg = (pull2.stderr or "") + (pull2.stdout or "")
+            except Exception as e:  # noqa: BLE001
+                vlog(f"reconcile failed: {e}")
+        else:
+            vlog("no dolt CLI available to reconcile the diverged store")
+    vlog("pull failed: " + (msg[-300:]))
     return False
 
 
@@ -366,6 +386,73 @@ def repair_wisps(dolt: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# reconcile the working branch with the fetched ref (the stale-seed fix)       #
+# --------------------------------------------------------------------------- #
+def _remote_tracking_ref(dolt: str, clone_db: Path) -> str | None:
+    """The dolt remote-tracking branch holding the real refs/dolt/data history
+    (normally ``origin/main``). ``bd bootstrap`` fetches the ref into this branch
+    even in the failure mode where it seeds the WORKING branch from stale JSONL."""
+    p = run([dolt, "branch", "-a"], cwd=clone_db, timeout=30)
+    refs = [m.group(1) for ln in (p.stdout or "").splitlines()
+            if (m := re.search(r"remotes/(origin/\S+)", ln))]
+    if not refs:
+        return None
+    return "origin/main" if "origin/main" in refs else refs[0]
+
+
+def _issue_count(dolt: str, clone_db: Path, ref: str | None = None) -> int | None:
+    """Rows in ``issues`` on the working branch (ref=None) or ``as of`` a branch/
+    commit. None if the query fails (e.g. the table is absent on a wedged clone)."""
+    sql = "select count(*) as n from issues" + (f" as of '{ref}'" if ref else "")
+    p = run([dolt, "sql", "-r", "json", "-q", sql], cwd=clone_db, timeout=120)
+    try:
+        return int(json.loads((p.stdout or "").strip())["rows"][0]["n"])
+    except (ValueError, KeyError, IndexError, json.JSONDecodeError):
+        return None
+
+
+def reconcile_working_branch_onto_ref(dolt: str) -> bool:
+    """Ensure the working branch DESCENDS from refs/dolt/data, not a stale JSONL seed.
+
+    The fresh-clone bug (bd polyglot-pdf-0q8): in a remote container ``bd bootstrap``
+    fetches refs/dolt/data into the remote-tracking branch (``origin/main``) but,
+    because the cloned history can't open until the dolt-ignored wisp tables are
+    repaired, it seeds the WORKING branch from the stale committed
+    ``.beads/issues.jsonl`` instead. The working branch and ``origin/main`` then sit
+    on UNRELATED roots: the session is frozen on the stale snapshot and every
+    ``bd dolt pull``/``push`` dies with "no common ancestor".
+
+    Fix: hard-reset the working branch onto the ref so it shares the ref's history.
+    The dolt-IGNORED wisp tables are local working state (not committed), so they
+    SURVIVE the reset -- bd still opens the DB and no wisp re-repair is needed
+    (verified against the live 124-issue store under bd polyglot-pdf-0q8). Returns
+    True iff it reset.
+
+    No-op (returns False) when the working branch already holds the ref's data
+    (count >= ref): a healthy, in-sync container is never disturbed."""
+    clone_db = _dolt_db_dir(_data_dir_from_config())
+    if clone_db is None:
+        vlog("reconcile: no dolt db dir found")
+        return False
+    ref = _remote_tracking_ref(dolt, clone_db)
+    if ref is None:
+        vlog("reconcile: no remote-tracking ref to reconcile onto")
+        return False
+    ref_n = _issue_count(dolt, clone_db, ref)
+    work_n = _issue_count(dolt, clone_db, None)
+    if ref_n is None:
+        vlog(f"reconcile: could not count issues on {ref}")
+        return False
+    if work_n is not None and work_n >= ref_n:
+        vlog(f"reconcile: working branch already current ({work_n} >= {ref_n} on {ref})")
+        return False
+    log(f"working branch is a stale seed ({work_n} issues) vs ref {ref} ({ref_n}); "
+        "resetting onto the ref ...")
+    run([dolt, "reset", "--hard", ref], cwd=clone_db, timeout=180, check=True)
+    return True
+
+
+# --------------------------------------------------------------------------- #
 def main() -> int:
     global VERBOSE
     ap = argparse.ArgumentParser(description="Hydrate the beads DB in a remote container.")
@@ -408,30 +495,46 @@ def main() -> int:
     # over the authenticated proxy.
     wipe_local_db()
     hydrate_via_proxy()
-    if is_hydrated():
-        mark_hydrated()
-        log(f"hydrated ({bd_total_issues()} issues). Done.")
-        return 0
+    dolt: str | None = None
+    if not is_hydrated():
+        log("clone is missing the dolt-ignored wisp tables; repairing ...")
+        dolt = ensure_dolt()
+        if not dolt:
+            log("ERROR: could not obtain a 'dolt' CLI to repair wisp tables. "
+                "Install dolt (https://github.com/dolthub/dolt) and re-run.")
+            return 1
+        try:
+            repair_wisps(dolt)
+        except Exception as e:  # noqa: BLE001
+            log(f"ERROR: wisp repair failed: {e}")
+            return 1
+        if not is_hydrated():
+            log("ERROR: bd still cannot open a populated database after repair. Re-run "
+                "with --verbose and inspect, or read docs/components/beads-remote-bootstrap.md.")
+            return 1
 
-    log("clone is missing the dolt-ignored wisp tables; repairing ...")
-    dolt = ensure_dolt()
-    if not dolt:
-        log("ERROR: could not obtain a 'dolt' CLI to repair wisp tables. "
-            "Install dolt (https://github.com/dolthub/dolt) and re-run.")
-        return 1
-    try:
-        repair_wisps(dolt)
-    except Exception as e:  # noqa: BLE001
-        log(f"ERROR: wisp repair failed: {e}")
-        return 1
+    # bd now opens a populated DB -- but `bd bootstrap` may have seeded the WORKING
+    # branch from the stale committed JSONL rather than the fetched ref, leaving the
+    # session frozen on an old snapshot with `bd dolt pull`/`push` broken (bd
+    # polyglot-pdf-0q8). Reconcile onto the ref BEFORE marking hydrated, so the
+    # marker only ever certifies the live store.
+    if dolt is None:
+        dolt = ensure_dolt()
+    if dolt:
+        try:
+            reconcile_working_branch_onto_ref(dolt)
+        except Exception as e:  # noqa: BLE001 -- best-effort; keep the openable DB we have
+            vlog(f"reconcile skipped ({e}); proceeding on the current working branch")
+    else:
+        vlog("no dolt CLI to verify the working branch against the ref; "
+             "the working branch may be a stale seed")
 
-    if is_hydrated():
-        mark_hydrated()
-        log(f"hydrated + repaired ({bd_total_issues()} issues). Done.")
-        return 0
-    log("ERROR: bd still cannot open a populated database after repair. Re-run with "
-        "--verbose and inspect, or read docs/components/beads-remote-bootstrap.md.")
-    return 1
+    if not is_hydrated():
+        log("ERROR: store not populated after reconcile.")
+        return 1
+    mark_hydrated()
+    log(f"hydrated ({bd_total_issues()} issues). Done.")
+    return 0
 
 
 if __name__ == "__main__":

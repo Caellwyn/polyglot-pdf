@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-03*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix.*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
@@ -73,6 +73,19 @@ authoritative "this container holds the live store" signal for both the script's
 idempotency check and the `bd_prime` banner. Fresh container ⇒ no marker ⇒
 re-hydrate, no matter what the JSONL snapshot says.
 
+> **The marker alone was NOT enough (bd polyglot-pdf-0q8).** The marker proves
+> *when* a hydrate ran, not *what* the working branch ended up pointing at. In the
+> failure mode this fix closes, `bd bootstrap` fetched the real ref into the
+> remote-tracking branch (`origin/main`) but seeded the **working** branch from the
+> stale committed JSONL — because the cloned history can't open until the
+> dolt-ignored wisp tables are repaired, bd fell back to a JSONL rebuild. The two
+> branches then sat on **unrelated roots**, so the marker got written over a 30-issue
+> snapshot while the live ref held 124, and every `bd dolt pull`/`push` died with
+> *"no common ancestor."* The marker faithfully said "hydrated" — at stale data. The
+> fix is the **reconcile step** (step 4 below): the marker is now only written after
+> the working branch has been hard-reset onto the ref, so it can never again certify
+> a stale seed.
+
 ## What the script does
 
 Idempotent; safe to run anytime. It NEVER pushes. On a **non-remote** checkout it
@@ -93,8 +106,20 @@ untouched (this self-heal is for disposable remote/web containers only).
    runs its final migration (0047) and opens. Needs a `dolt` CLI: PATH → cached
    download → latest release download → `go install`, in that order, cached under
    the gitignored `.beads/.cache/`.
-4. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
-   runs in this container stay quiet and re-runs no-op.
+4. **Reconcile onto the ref** (the bd polyglot-pdf-0q8 fix): once bd opens a
+   populated DB, compare the working branch's issue count to the fetched ref
+   (`origin/main`). If the working branch is a **stale JSONL seed** (fewer issues
+   than the ref, on an unrelated root), `dolt reset --hard origin/main` rebases the
+   working branch onto the real history. The dolt-IGNORED wisp tables are local
+   working state and **survive the reset**, so bd stays open and no wisp re-repair is
+   needed. A healthy, already-current container (working count ≥ ref) is a no-op.
+   This is what makes `bd dolt pull`/`push` work — without it the two branches share
+   no common ancestor. The same reconcile also runs on the **already-hydrated
+   refresh path**, so a container hydrated *before* this fix self-heals on its next
+   session when its `bd dolt pull` fails with "no common ancestor."
+5. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
+   runs in this container stay quiet and re-runs no-op. Written only AFTER the
+   reconcile, so the marker never certifies a stale seed.
 
 ## Staying fresh: pull before every read, pull before every push
 
