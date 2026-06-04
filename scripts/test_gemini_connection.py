@@ -28,7 +28,11 @@ async def test_connection():
         
         # Try to connect to Gemini Live
         print("\n3. Connecting to Gemini Live API...")
-        model = "gemini-live-2.5-flash-preview-native-audio-09-2025"
+        # Read the model from env (GEMINI_LIVE_MODEL) like the contract test does,
+        # falling back to the current 2.5 native-audio default. The old
+        # gemini-live-2.5-flash-preview-native-audio-09-2025 alias is retired and
+        # 1008s (not found) on bidiGenerateContent -- see backend/config.py.
+        model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
         config = {
             "response_modalities": ["TEXT"],
         }
