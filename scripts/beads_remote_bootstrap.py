@@ -403,7 +403,8 @@ def _remote_tracking_ref(dolt: str, clone_db: Path) -> str | None:
 def _issue_count(dolt: str, clone_db: Path, ref: str | None = None) -> int | None:
     """Rows in ``issues`` on the working branch (ref=None) or ``as of`` a branch/
     commit. None if the query fails (e.g. the table is absent on a wedged clone)."""
-    sql = "select count(*) as n from issues" + (f" as of '{ref}'" if ref else "")
+    escaped_ref = ref.replace("'", "''") if ref else None
+    sql = "select count(*) as n from issues" + (f" as of '{escaped_ref}'" if escaped_ref else "")
     p = run([dolt, "sql", "-r", "json", "-q", sql], cwd=clone_db, timeout=120)
     try:
         return int(json.loads((p.stdout or "").strip())["rows"][0]["n"])
