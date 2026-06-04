@@ -1352,10 +1352,7 @@ class LiveAIGemini(ILiveAI):
                                                         form_id=self._form_id,
                                                         form_session_id=self._form_session_id,
                                                         gemini_session_id=self._instance_id,
-                                                        # value is the current SECTION id; the logger's
-                                                        # `part_id` kwarg/key is wire-format drift renamed
-                                                        # separately (bd polyglot-pdf-gfb.4 wire-format split)
-                                                        part_id=self._current_section_id,
+                                                        section_id=self._current_section_id,
                                                         # This event's token counts
                                                         prompt_tokens=prompt_tokens,
                                                         response_tokens=response_tokens,

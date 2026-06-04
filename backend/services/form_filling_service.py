@@ -76,6 +76,7 @@ class FormFillingService:
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         form_session_id: Optional[str] = None,
+        current_section_id: Optional[str] = None,
     ):
         """Start a voice form filling session (web forms only).
 
@@ -91,6 +92,8 @@ class FormFillingService:
             current_values: Pre-filled values (ignored by backend - client is source of truth)
             system_instruction: System instruction to include in initial Gemini config
             form_session_id: Persistent form session ID from frontend (survives reconnects)
+            current_section_id: Current section ID, threaded into token-logging context
+                so token events carry the active section (bd polyglot-pdf-tb7)
         """
         self._websocket = websocket
         self._session_id = session_id
@@ -140,7 +143,7 @@ class FormFillingService:
                 self._live_ai.set_session_context(
                     form_session_id=form_session_id or session_id,  # Use persistent ID if available
                     form_id=form_id,
-                    current_section_id=None,  # Will be updated on section switch
+                    current_section_id=current_section_id,
                 )
                 _log.info("Token logging context set successfully",
                          form_session_id=form_session_id or session_id)
@@ -556,6 +559,8 @@ class FormFillingService:
             schema=section_schema,
             current_values=section_values,
             system_instruction=system_instruction,
+            # Thread the new section id into token-log context (bd polyglot-pdf-tb7)
+            current_section_id=section_metadata.get("section_id"),
         )
         
         # 3. Notify frontend that section switch is complete

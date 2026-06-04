@@ -21,11 +21,11 @@ export interface FieldManifestEntry {
 }
 
 /**
- * Part manifest structure
+ * Section manifest structure
  */
-export interface PartManifest {
-  part_id: string;
-  part_label: string;
+export interface SectionManifest {
+  section_id: string;
+  section_label: string;
   fields: FieldManifestEntry[];
 }
 
@@ -33,8 +33,12 @@ export interface PartManifest {
  * Complete handshake manifest
  */
 export interface HandshakeManifest {
-  current_part: PartManifest;
-  previous_parts: PartManifest[];
+  current_section: SectionManifest;
+  previous_sections: SectionManifest[];
+  // Section navigation list consumed by the backend (websocket_routes.py reads
+  // manifest.parts). The `parts` key is the backend wire-format contract; its
+  // values are section data (bd polyglot-pdf-zun).
+  parts: Array<{ id: string; order: number; label: string }>;
 }
 
 /**
@@ -45,12 +49,12 @@ export interface HandshakeManifest {
  *
  * @param section - The section to generate manifest for
  * @param schema - Full form schema
- * @returns Part manifest with minimal field info
+ * @returns Section manifest with minimal field info
  */
-export function generatePartManifest(
+export function generateSectionManifest(
   section: FormSection,
   schema: FormSchema
-): PartManifest {
+): SectionManifest {
   const fields: FieldManifestEntry[] = [];
 
   // Extract fields from the section
@@ -67,8 +71,8 @@ export function generatePartManifest(
   }
 
   return {
-    part_id: section.id,
-    part_label: section.label,
+    section_id: section.id,
+    section_label: section.label,
     fields
   };
 }
@@ -109,26 +113,30 @@ export function buildHandshakeManifest(
   // Find current section
   const currentSection = schema.sections.find(s => s.id === currentSectionId);
   if (!currentSection) {
-    throw new Error(`Part ${currentSectionId} not found in schema`);
+    throw new Error(`Section ${currentSectionId} not found in schema`);
   }
 
   // Generate manifest for current section
-  const current_part = generatePartManifest(currentSection, schema);
+  const current_section = generateSectionManifest(currentSection, schema);
 
   // Generate manifests for all completed sections (for cross-section queries)
-  const previous_parts: PartManifest[] = [];
+  const previous_sections: SectionManifest[] = [];
 
   for (const sectionId of state.completedSections) {
     const section = schema.sections.find(s => s.id === sectionId);
     if (section) {
-      previous_parts.push(generatePartManifest(section, schema));
+      previous_sections.push(generateSectionManifest(section, schema));
     }
   }
 
   return {
-    current_part,
-    previous_parts,
-    // Include sections metadata for section navigation
+    current_section,
+    previous_sections,
+    // Section navigation list. NOTE: the `parts` key name is the backend
+    // wire-format contract (websocket_routes.py reads manifest.parts); the
+    // VALUES are section data. Renaming this key requires a coordinated
+    // backend change -- out of scope for the frontend-internal rename (bd
+    // polyglot-pdf-zun).
     parts: schema.sections.map(s => ({
       id: s.id,
       order: s.order,
@@ -141,7 +149,7 @@ export function buildHandshakeManifest(
  * Format manifest as pipe-separated text for Gemini context
  *
  * Converts manifest to lightweight text format:
- * "CURRENT PART: Part 1
+ * "CURRENT SECTION: Section 1
  *  Fields: firstName|first name | lastName|last name | ..."
  *
  * @param manifest - Handshake manifest
@@ -150,27 +158,27 @@ export function buildHandshakeManifest(
 export function formatManifestForContext(manifest: HandshakeManifest): string {
   const lines: string[] = [];
 
-  // Current part header
-  lines.push(`CURRENT PART: ${manifest.current_part.part_label}`);
+  // Current section header
+  lines.push(`CURRENT SECTION: ${manifest.current_section.section_label}`);
 
-  // Current part fields (pipe-separated)
-  const currentFields = manifest.current_part.fields
+  // Current section fields (pipe-separated)
+  const currentFields = manifest.current_section.fields
     .map(f => `${f.field_id}|${f.spoken_name}`)
     .join(' | ');
 
   lines.push(`Fields: ${currentFields}`);
 
-  // Previous parts (if any)
-  if (manifest.previous_parts.length > 0) {
+  // Previous sections (if any)
+  if (manifest.previous_sections.length > 0) {
     lines.push('');
-    lines.push('PREVIOUS PARTS (lookup only):');
+    lines.push('PREVIOUS SECTIONS (lookup only):');
 
-    for (const part of manifest.previous_parts) {
-      const partFields = part.fields
+    for (const section of manifest.previous_sections) {
+      const sectionFields = section.fields
         .map(f => `${f.field_id}|${f.spoken_name}`)
         .join(' | ');
 
-      lines.push(`${part.part_label}: ${partFields}`);
+      lines.push(`${section.section_label}: ${sectionFields}`);
     }
   }
 

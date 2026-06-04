@@ -120,6 +120,42 @@ async def test_switch_to_section_closes_and_recreates_gemini():
 
 
 @pytest.mark.asyncio
+async def test_switch_to_section_threads_section_id_into_token_context():
+    """bd polyglot-pdf-tb7: the active section id reaches set_session_context on switch.
+
+    Previously start_session always passed current_section_id=None, so every
+    token event logged a null section. switch_to_section must forward the new
+    section's id (from section_metadata) so the token log carries a real section.
+    """
+    service = FormFillingService()
+
+    live_ai = AsyncMock()
+    service._live_ai = live_ai
+    service._session_id = "test-session"
+    service._websocket = AsyncMock()
+
+    section_metadata = {
+        "section_id": "part_2_1_personal",
+        "section_number": 2,
+        "total_sections": 3,
+        "section_label": "Personal Information",
+        "previous_spoken_names": [],
+    }
+
+    await service.switch_to_section(
+        section_schema={"fields": []},
+        section_values={},
+        section_metadata=section_metadata,
+        initial_field_hint=None,
+    )
+
+    # set_session_context should have been called with the new section id, not None.
+    assert live_ai.set_session_context.called
+    ctx_kwargs = live_ai.set_session_context.call_args.kwargs
+    assert ctx_kwargs["current_section_id"] == "part_2_1_personal"
+
+
+@pytest.mark.asyncio
 async def test_switch_to_section_handles_no_live_ai():
     """switch_to_section should handle gracefully when no LiveAI configured."""
     service = FormFillingService()

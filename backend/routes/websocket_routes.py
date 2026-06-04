@@ -163,6 +163,7 @@ async def _handle_fill_session(
 	schema: dict | None = None,  # For web forms
 	current_values: dict | None = None,  # For reconnect
 	fill_language: str = "English",  # Language for AI to use
+	section_id: str | None = None,  # Current section ID (for token-log context, bd polyglot-pdf-tb7)
 	section_number: int | None = None,  # Phase 3: Current section (1-indexed)
 	section_label: str | None = None,  # Phase 3: Section label
 	total_sections: int | None = None,  # Phase 3: Total sections
@@ -206,6 +207,7 @@ async def _handle_fill_session(
 			current_values=current_values,  # Pre-filled values for reconnect
 			system_instruction=system_instruction,  # Include in initial Gemini config
 			form_session_id=form_session_id,  # Persistent ID from frontend
+			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
 		)
 	
 	try:
@@ -712,6 +714,7 @@ async def fill_form_from_schema(
 		schema=schema,  # Form schema for AI context
 		current_values=current_values,  # Pre-filled values for reconnect
 		fill_language=fill_language,  # Language for AI to use
+		section_id=section_id,  # Current section ID for token-log context (bd polyglot-pdf-tb7)
 		section_number=section_number,  # Phase 3: Current section
 		section_label=section_label,  # Phase 3: Section label
 		total_sections=total_sections,  # Phase 3: Total sections
