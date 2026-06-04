@@ -191,7 +191,10 @@ class CallbackHandler:
         #   - Field IDs (not field values)
         #   - Session metadata
         #
-        # Development (_dev_log): MAY log field values ONLY when VFF_DEV_LOGGING=true
+        # Development (_dev_log): MAY log field values ONLY when the
+        #   `backend/.env.DEV` marker file exists (DEV_LOGGING_ENABLED, gated in
+        #   backend/utils/dev_file_logger.py). NOT VFF_DEV_LOGGING -- that env
+        #   var is dead config (no code reads it; see docs/components/config-deployment.md).
         #   - Writes to local files: backend/logs/gemini_YYYY-MM-DD.jsonl
         #   - Never deployed to production
         #   - Used for local debugging only

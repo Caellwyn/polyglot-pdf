@@ -589,15 +589,48 @@ class LiveAIGemini(ILiveAI):
 
         Returns ``{}`` when VAD is enabled but no knobs are set (Gemini then
         uses its own defaults). bd polyglot-pdf-p1t
+
+        A *typo'd* sensitivity value (e.g. ``VAD_*_SENSITIVITY=MEDIUM``) is
+        whitelisted/skipped with a warning rather than allowed to raise: an
+        unrecognized enum lookup used to ``KeyError`` out of here and the broad
+        ``except`` in the caller dropped the ENTIRE ``realtime_input_config``,
+        silently reverting to Gemini's default VAD while the adapter still sent
+        manual ``activity_start/end`` — a conflicting turn-taking state.
+        bd polyglot-pdf-u01
         """
         if settings.DISABLE_GEMINI_VAD:
             return {'disabled': True}
 
+        # Valid sensitivities are LOW / HIGH (UNSPECIFIED means "leave unset");
+        # anything else is a config typo and is skipped, not fatal.
+        _VALID_SENSITIVITY = {'LOW', 'HIGH', 'UNSPECIFIED'}
+
+        def _resolve_sensitivity(raw, enum_type, prefix, field):
+            if not raw or raw == 'UNSPECIFIED':
+                return None
+            if raw not in _VALID_SENSITIVITY:
+                structlog.get_logger().warning(
+                    "invalid_vad_sensitivity_skipped",
+                    field=field,
+                    value=raw,
+                    valid=sorted(_VALID_SENSITIVITY),
+                )
+                return None
+            return enum_type[f"{prefix}_{raw}"]
+
         vad_settings: Dict[str, Any] = {}
-        if settings.VAD_START_SENSITIVITY and settings.VAD_START_SENSITIVITY != 'UNSPECIFIED':
-            vad_settings['start_of_speech_sensitivity'] = types.StartSensitivity[f"START_SENSITIVITY_{settings.VAD_START_SENSITIVITY}"]
-        if settings.VAD_END_SENSITIVITY and settings.VAD_END_SENSITIVITY != 'UNSPECIFIED':
-            vad_settings['end_of_speech_sensitivity'] = types.EndSensitivity[f"END_SENSITIVITY_{settings.VAD_END_SENSITIVITY}"]
+        start = _resolve_sensitivity(
+            settings.VAD_START_SENSITIVITY, types.StartSensitivity,
+            'START_SENSITIVITY', 'VAD_START_SENSITIVITY',
+        )
+        if start is not None:
+            vad_settings['start_of_speech_sensitivity'] = start
+        end = _resolve_sensitivity(
+            settings.VAD_END_SENSITIVITY, types.EndSensitivity,
+            'END_SENSITIVITY', 'VAD_END_SENSITIVITY',
+        )
+        if end is not None:
+            vad_settings['end_of_speech_sensitivity'] = end
         if settings.VAD_PREFIX_PADDING_MS is not None:
             vad_settings['prefix_padding_ms'] = settings.VAD_PREFIX_PADDING_MS
         if settings.VAD_SILENCE_DURATION_MS is not None:
