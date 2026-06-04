@@ -8,7 +8,7 @@ CLAUDE.md mandates a strict cadence around every beads write:
     the local Dolt DB is a cache; the remote at refs/dolt/data is truth.
     Skipping the pull is the "bd 50c" parallel-claim bug class (two workers
     claim the same bead because neither saw the other's claim).
-  - Before claiming a bead, run TWO collision checks so a bead another
+  - Before claiming a bead, run THREE collision checks so a bead another
     worker is mid-flight on is not re-claimed:
       1. gh pr list --search "<full-id>" --state OPEN, then confirm the id is
          in the PR TITLE (PR titles carry the full bead ID per CLAUDE.md rule
@@ -17,6 +17,13 @@ CLAUDE.md mandates a strict cadence around every beads write:
          bead as a deferred/related finding (bd polyglot-pdf-9pe).
       2. git branch -a | grep "<id-suffix>"            (branches carry the
          suffix only, e.g. "ab12")
+      3. change-surface overlap (bd polyglot-pdf-h2r.1): the bead's declared
+         `metadata.surfaces` (files it will MODIFY) vs the surfaces of every
+         ACTIVE claim (in_progress AND backed by a live branch/PR). A
+         prefix-aware overlap is a HARD block -- two workers writing the same
+         file conflict regardless of intent. Checks 1+2 catch a collision only
+         AFTER a branch/PR exists; check 3 catches it at claim time. Skippable
+         with --no-surface-check for a deliberate maintainer re-claim.
   - Dependency direction is easy to invert (scar tissue rule 13): the FIRST
     arg to `bd dep add` is what gets BLOCKED, the SECOND unblocks it. The
     epic trap: an epic is BLOCKED BY its children, so the epic is the first
@@ -29,10 +36,11 @@ the /closeout skill and the orchestrator wrap; it spends zero model tokens.
 
 Subcommands
 -----------
-    python scripts/bd_safe.py claim <id>
-        Pull -> two collision checks (ABORT if either matches) -> claim ->
-        push. The collision checks are the whole point of claim; if a PR or
-        branch already carries this bead, another worker owns it.
+    python scripts/bd_safe.py claim <id> [--no-surface-check]
+        Pull -> three collision checks (ABORT if any matches) -> claim ->
+        push. The collision checks are the whole point of claim; if a PR,
+        branch, or an active claim's change-surfaces already cover this bead,
+        another worker owns it. --no-surface-check drops only the surface guard.
 
     python scripts/bd_safe.py close <id> [--reason "..."]
         Pull -> close -> push.
@@ -293,23 +301,190 @@ def _is_own_current_branch(branch_line: str, current_branch: str | None) -> bool
     return name == current_branch
 
 
-def cmd_claim(args: argparse.Namespace) -> int:
-    """Pull -> two collision checks -> claim -> push.
+# --- change-surface overlap (the R1 collision guard, bd polyglot-pdf-h2r.1) ---
+#
+# The PR/branch checks above catch a collision only AFTER the other worker has
+# pushed a branch or opened a PR. The surface guard catches it EARLIER, at
+# selection/claim time, by comparing the files each bead declares it will
+# MODIFY. A bead's `metadata.surfaces` is a structured list of paths (files or
+# directory prefixes ending in "/"); two beads collide if any surface of one is
+# the same as, or nested under, a surface of the other. Reads don't collide --
+# only declared writes do -- so a bead with no surfaces declared is treated as
+# UNKNOWN (see _surfaces_overlap) and conservatively collides with everything.
 
-    The collision checks gate the claim: if EITHER a PR or a branch already
-    carries this bead, abort with EXIT_ABORT_COLLISION so the caller switches
-    to that worker's branch instead of double-claiming.
+
+def _normalize_surface(surface: str) -> str:
+    """Canonicalize a surface path for prefix comparison.
+
+    Forward-slashes (bd metadata + this repo's convention are POSIX-style even
+    on Windows), no leading "./", collapse repeated slashes. A trailing slash is
+    PRESERVED -- it is the signal that the surface is a directory prefix that
+    should match anything nested under it.
+    """
+    s = surface.strip().replace("\\", "/")
+    while s.startswith("./"):
+        s = s[2:]
+    # Collapse duplicate slashes but keep a single trailing slash if present.
+    had_trailing = s.endswith("/")
+    parts = [p for p in s.split("/") if p != ""]
+    s = "/".join(parts)
+    if had_trailing and s:
+        s += "/"
+    return s
+
+
+def _one_surface_overlaps(a: str, b: str) -> bool:
+    """True if surfaces `a` and `b` refer to overlapping write targets.
+
+    Prefix-aware (the R1 design, h2r.1): a directory surface collides with any
+    file or directory nested under it.
+      - identical paths overlap;
+      - a dir prefix `x/` overlaps any path equal to `x` or starting with `x/`;
+      - two files overlap only if identical.
+    Comparison is on normalized, slash-delimited path SEGMENTS so that `scripts/`
+    matches `scripts/foo.py` but NOT a sibling like `scripts-extra/foo.py`
+    (a raw startswith would false-match the latter).
+    """
+    a = _normalize_surface(a)
+    b = _normalize_surface(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # Treat each as a dir prefix and test containment of the other. A dir prefix
+    # "x/" contains "y" iff y == x or y starts with "x/". Strip the trailing
+    # slash to get the bare dir path, then require a segment boundary.
+    a_dir = a[:-1] if a.endswith("/") else a
+    b_dir = b[:-1] if b.endswith("/") else b
+    if a.endswith("/") and (b == a_dir or b.startswith(a_dir + "/")):
+        return True
+    if b.endswith("/") and (a == b_dir or a.startswith(b_dir + "/")):
+        return True
+    return False
+
+
+def _surfaces_overlap(surfaces_a, surfaces_b) -> bool:
+    """True if any declared surface in A overlaps any in B.
+
+    UNKNOWN-surface policy (conservative, per the bead's "no override" intent):
+    if EITHER side declares no surfaces, we cannot prove the writes are
+    disjoint, so we report an overlap. A bead that wants to be schedulable
+    alongside others must declare what it will modify -- silence is treated as
+    "could touch anything," not "touches nothing."
+    """
+    if not surfaces_a or not surfaces_b:
+        return True
+    return any(
+        _one_surface_overlaps(sa, sb) for sa in surfaces_a for sb in surfaces_b
+    )
+
+
+def _bead_surfaces(bead_id: str) -> list:
+    """Return a bead's declared change-surfaces (metadata.surfaces), or []."""
+    proc = _run(["bd", "show", bead_id, "--json"], check=False)
+    if proc.returncode != 0:
+        # A show failure is surfaced by the caller's own error path; here, be
+        # conservative and return [] so the UNKNOWN policy (overlap) applies.
+        return []
+    try:
+        data = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+    # `bd show --json` returns a list; the bead itself is the first element.
+    bead = data[0] if isinstance(data, list) and data else data
+    meta = (bead or {}).get("metadata") or {}
+    surfaces = meta.get("surfaces")
+    return list(surfaces) if isinstance(surfaces, list) else []
+
+
+def _active_claim_ids(exclude_id: str) -> list:
+    """Ids of beads that are an ACTIVE claim: in_progress AND backed by a live
+    branch or open PR (so a stale/abandoned in_progress bead does not block
+    forever -- the h2r.1 "active claim" definition). `exclude_id` (the bead being
+    claimed/selected) is never counted against itself.
+    """
+    proc = _run(
+        ["bd", "list", "--status", "in_progress", "--json"], check=False
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "bd list (active-claims) failed: {}".format(
+                (proc.stderr or "").strip() or "no stderr"
+            )
+        )
+    try:
+        beads = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("bd list returned unparseable JSON: {}".format(exc))
+    current = _current_branch()
+    active = []
+    for bead in beads:
+        bead_id = bead.get("id")
+        if not bead_id or bead_id == exclude_id:
+            continue
+        # "live work" = a PR title OR a branch (other than this worktree's own)
+        # carries the id. Reuses the same checks the same-bead guard uses.
+        if _pr_collision(bead_id, DEFAULT_REPO) or _branch_collision(
+            bead_id, current_branch=current
+        ):
+            active.append(bead_id)
+    return active
+
+
+def _surface_collision(bead_id: str) -> str | None:
+    """Return a description of the FIRST active claim whose change-surfaces
+    overlap `bead_id`'s, or None if no active claim collides.
+
+    This is the R1 write-overlap guard. It is a HARD block with no override
+    (h2r.1): two workers writing the same file is a conflict regardless of
+    intent. An active claim that declares no surfaces (UNKNOWN) collides with
+    everything by the conservative policy in _surfaces_overlap.
+    """
+    mine = _bead_surfaces(bead_id)
+    for active_id in _active_claim_ids(exclude_id=bead_id):
+        theirs = _bead_surfaces(active_id)
+        if _surfaces_overlap(mine, theirs):
+            shared = sorted(
+                {
+                    "{} ~ {}".format(sa, sb)
+                    for sa in (mine or ["(none declared)"])
+                    for sb in (theirs or ["(none declared)"])
+                    if _surfaces_overlap([sa], [sb]) or not mine or not theirs
+                }
+            )
+            return "{} (overlapping surfaces: {})".format(
+                active_id, "; ".join(shared) or "UNKNOWN on one side"
+            )
+    return None
+
+
+def cmd_claim(args: argparse.Namespace) -> int:
+    """Pull -> three collision checks -> claim -> push.
+
+    The collision checks gate the claim: if a PR, a branch, OR an active claim's
+    change-surfaces overlap this bead, abort with EXIT_ABORT_COLLISION so the
+    caller switches to that worker's branch / picks a non-overlapping bead
+    instead of double-claiming. The surface check is the R1 backstop
+    (bd polyglot-pdf-h2r.1) for selection paths that did not go through
+    /next-bead; pass --no-surface-check to skip it (e.g. a deliberate
+    maintainer re-claim).
     """
     _dolt_pull()
 
     pr_hit = _pr_collision(args.id, args.repo)
     branch_hit = _branch_collision(args.id, current_branch=_current_branch())
-    if pr_hit or branch_hit:
+    surface_hit = None
+    if not getattr(args, "no_surface_check", False):
+        surface_hit = _surface_collision(args.id)
+    if pr_hit or branch_hit or surface_hit:
         print("ABORT: {} appears to be mid-flight already.".format(args.id))
         if pr_hit:
             print("  matching PR(s):\n{}".format(pr_hit))
         if branch_hit:
             print("  matching branch(es):\n{}".format(branch_hit))
+        if surface_hit:
+            print("  write-surface overlap with active claim:\n  {}".format(
+                surface_hit))
         print(
             "Switch to that worker's branch/PR instead of re-claiming "
             "(CLAUDE.md collision rule)."
@@ -384,6 +559,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_claim = sub.add_parser("claim", help="Collision-checked claim of a bead.")
     p_claim.add_argument("id", help="Full bead id, e.g. {}".format(swarm_config.example_bead_id()))
     p_claim.add_argument("--repo", default=DEFAULT_REPO, help="OWNER/REPO")
+    p_claim.add_argument(
+        "--no-surface-check",
+        action="store_true",
+        help="Skip the change-surface overlap guard (PR/branch checks still run).",
+    )
     p_claim.set_defaults(func=cmd_claim)
 
     p_close = sub.add_parser("close", help="Pull/push-bracketed close.")
