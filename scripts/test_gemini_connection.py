@@ -73,7 +73,10 @@ async def test_connection():
 
             if not response_received:
                 print("   ✗ No response received")
-        
+                # Don't fall through to the SUCCESS banner: the connection may
+                # be up but returning no usable audio (misconfig / API change).
+                raise RuntimeError("No audio response received from Gemini Live")
+
         print("\n" + "=" * 60)
         print("SUCCESS: All tests passed!")
         print("=" * 60)
