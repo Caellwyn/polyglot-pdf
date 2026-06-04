@@ -103,8 +103,23 @@ def _classify(candidates: list, active_ids: list) -> dict:
 
 
 def cmd_next(args: argparse.Namespace) -> int:
+    stale_warning = None
     if not args.no_pull:
-        bd_safe._dolt_pull()
+        try:
+            bd_safe._dolt_pull()
+        except Exception as exc:  # noqa: BLE001
+            # On a remote container bd's dolt-native pull can fail/hang even though
+            # the store was freshly hydrated over the proxy (bd polyglot-pdf-j47). A
+            # failed pull must TAINT the output as possibly-stale, not abort the whole
+            # engine -- otherwise /next-bead is unusable on remote. Freshness is still
+            # checkable: the bootstrap stamps the loaded refs/dolt/data commit in
+            # .beads/.cache/.hydrated.
+            detail = (str(exc).strip().splitlines() or ["see logs"])[0]
+            stale_warning = (
+                "bd dolt pull failed ({}); candidates may be STALE -- verify the "
+                "store is fresh (.beads/.cache/.hydrated stamps the loaded "
+                "refs/dolt/data commit) before acting on this list.".format(detail)
+            )
 
     candidates = _ready_candidates()
     # Active claims are independent of any single candidate, so compute once with
@@ -113,9 +128,13 @@ def cmd_next(args: argparse.Namespace) -> int:
     active_ids = bd_safe._active_claim_ids(exclude_id="")
     result = _classify(candidates, active_ids)
     result["active_claims"] = active_ids
+    if stale_warning:
+        result["stale_warning"] = stale_warning
 
     print(json.dumps(result, indent=2))
 
+    if stale_warning:
+        print("\nWARNING: {}".format(stale_warning), file=sys.stderr)
     if not args.quiet:
         avail, blk = result["available"], result["blocked"]
         print(

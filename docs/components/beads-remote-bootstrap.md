@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate.*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
@@ -118,10 +118,27 @@ untouched (this self-heal is for disposable remote/web containers only).
    no common ancestor. The same reconcile also runs on the **already-hydrated
    refresh path**, so a container hydrated *before* this fix self-heals on its next
    session when its `bd dolt pull` fails with "no common ancestor."
-5. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
+5. **Sync over the LIVE proxy** (the bd polyglot-pdf-j47 fix): bd's *dolt-native*
+   pull can fail (`Error 1105: no remote`) or hang (~180s) against the proxy --
+   it defaults to the unreachable public `sync.remote` github URL, and the dolt
+   remote baked into the snapshot points at a dead, rotated port. So the script
+   **re-points the dolt `origin` at this session's live proxy** and lands
+   `refs/dolt/data` with **plain `git fetch`** (which works over the proxy even
+   when dolt-native sync does not), then a **bounded** `bd dolt pull` (no silent
+   180s hang) before reconciling. This runs on both the fresh and the
+   already-hydrated paths.
+6. **Freshness gate -- FAIL LOUD** (bd polyglot-pdf-j47): the original bug was
+   *silent* -- a false `hydrated (30 issues). Done.` printed over a stale JSONL
+   snapshot, so the agent had no signal to distrust `bd ready`. The gate uses the
+   reachable anchor `git ls-remote origin refs/dolt/data`: if that live ref exists
+   but bd did **not** load it (`origin/main` absent ⇒ bd is serving the committed
+   `.beads/issues.jsonl`), the script prints a loud `STALE STORE ... DO NOT trust
+   'bd ready'` and **exits non-zero** -- it does NOT mark hydrated. A reachable-ref
+   container that loaded it passes.
+7. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
    runs in this container stay quiet and re-runs no-op. Written only AFTER the
-   reconcile step; if no `dolt` CLI could be obtained to reconcile, the script logs
-   a loud warning first (the only path that can still mark over a stale seed).
+   reconcile + freshness gate pass, and **stamped with the verified
+   `refs/dolt/data` commit** so freshness is checkable, not inferred from a count.
 
 ## Staying fresh: pull before every read, pull before every push
 
