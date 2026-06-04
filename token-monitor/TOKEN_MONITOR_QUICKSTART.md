@@ -34,11 +34,11 @@ This will:
 
 ## Session Tracking
 
-- **form_session_id**: Entire form completion (persists across part switches)
+- **form_session_id**: Entire form completion (persists across section switches)
 - **gemini_session_id**: Individual Gemini connection
-- **part_id**: Current form part
+- **section_id**: Current form section (older logs may carry the legacy `part_id` key)
 
-This allows tracking total cost even when switching Gemini sessions between form parts.
+This allows tracking total cost even when switching Gemini sessions between form sections.
 
 ## Full Documentation
 
