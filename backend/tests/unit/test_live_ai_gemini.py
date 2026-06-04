@@ -530,6 +530,10 @@ async def _capture_session_config(monkeypatch, **settings_overrides):
 
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=_FakeLive()))
     adapter._audio_queue = asyncio.Queue()
+    # _handle_session starts a text_sender task that awaits _text_queue.get(); without
+    # this the task crashes on a None queue in the background (silently swallowed, but
+    # a strict-task-exception pytest config would surface it). fresh-eyes PR #76.
+    adapter._text_queue = asyncio.Queue()
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
     await adapter.finalize()
@@ -565,17 +569,70 @@ async def test_compression_block_absent_when_disabled(monkeypatch):
     assert "context_window_compression" not in config
 
 
-def test_compression_window_clamped_below_trigger():
+def test_compression_window_clamped_below_trigger_when_enabled():
     """The Live API requires target_tokens < trigger_tokens. A misconfig that
-    inverts them must be clamped, not passed through, so the API never rejects it."""
+    inverts them must be clamped (when compression is enabled), not passed through,
+    so the API never rejects it."""
     from backend.config import Settings
 
     s = Settings(
+        CONTEXT_COMPRESSION_ENABLED=True,
         CONTEXT_COMPRESSION_TRIGGER_TOKENS=4000,
         CONTEXT_COMPRESSION_WINDOW_TOKENS=8000,  # invalid: >= trigger
     )
 
     assert s.CONTEXT_COMPRESSION_WINDOW_TOKENS < s.CONTEXT_COMPRESSION_TRIGGER_TOKENS
     assert s.CONTEXT_COMPRESSION_WINDOW_TOKENS == 2000  # trigger // 2
+
+
+def test_compression_window_not_clamped_when_disabled():
+    """When compression is OFF the values are inert; we must NOT silently rewrite
+    them (an operator may be pre-staging values before flipping the flag)."""
+    from backend.config import Settings
+
+    s = Settings(
+        CONTEXT_COMPRESSION_ENABLED=False,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=1000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=2000,  # inverted, but inert while disabled
+    )
+
+    assert s.CONTEXT_COMPRESSION_WINDOW_TOKENS == 2000  # left untouched
+
+
+@pytest.mark.asyncio
+async def test_compression_clamped_value_reaches_connect(monkeypatch):
+    """End-to-end: an inverted window with compression ENABLED reaches connect() as
+    the CLAMPED value (< trigger), not the raw one -- the path that actually keeps the
+    API from rejecting the config. fresh-eyes PR #76."""
+    from backend.config import Settings
+
+    # Build via Settings(**kwargs) so the validator clamp runs, then drive the adapter.
+    settings = Settings(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=4000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=8000,  # invalid; clamped to 2000
+    )
+    from backend import config as _config
+    monkeypatch.setattr(_config, "get_settings", lambda: settings)
+
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    captured = {}
+
+    class _FakeLive:
+        async def connect(self, *, model, config):
+            captured["config"] = config
+            return _DummySession()
+
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=_FakeLive()))
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await adapter.finalize()
+
+    cwc = captured["config"]["context_window_compression"]
+    assert cwc["trigger_tokens"] == 4000
+    assert cwc["sliding_window"]["target_tokens"] == 2000  # clamped, not 8000
 
 

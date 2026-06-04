@@ -97,8 +97,11 @@ class Settings(BaseModel):
 			)
 		# The Live API requires target_tokens (window) < trigger_tokens. If a misconfig
 		# inverts them, clamp the window below the trigger rather than send a config the
-		# API rejects. (Only matters when compression is enabled.)
-		if self.CONTEXT_COMPRESSION_WINDOW_TOKENS >= self.CONTEXT_COMPRESSION_TRIGGER_TOKENS:
+		# API rejects. Only clamp when compression is ENABLED: otherwise the values are
+		# inert and silently rewriting them would surprise an operator pre-staging values
+		# before flipping the flag. (fresh-eyes PR #76.)
+		if (self.CONTEXT_COMPRESSION_ENABLED
+				and self.CONTEXT_COMPRESSION_WINDOW_TOKENS >= self.CONTEXT_COMPRESSION_TRIGGER_TOKENS):
 			self.CONTEXT_COMPRESSION_WINDOW_TOKENS = max(1, self.CONTEXT_COMPRESSION_TRIGGER_TOKENS // 2)
 		return self
 

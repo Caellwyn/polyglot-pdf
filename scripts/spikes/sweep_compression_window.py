@@ -360,7 +360,11 @@ async def main_async(args: argparse.Namespace) -> int:
         _config.get_settings = lambda s=settings: s
         try:
             for run in range(args.runs):
-                fsid = f"sweep-{label.split()[0]}-{window}-{run}"
+                # Tag the session id by configuration so token-log filtering is
+                # unambiguous: the unbounded baseline has no window, so use "off"
+                # rather than the 0 sentinel (which reads like a window value).
+                wtag = str(window) if enabled else "off"
+                fsid = f"sweep-{label.split()[0]}-{wtag}-{run}"
                 print(f"\n--- {label} | run {run + 1}/{args.runs} | {args.turns} audio turns ---")
                 latencies: list[float] = []
                 try:
