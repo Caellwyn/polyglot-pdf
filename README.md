@@ -419,13 +419,14 @@ For each project:
 
 ### Firestore Security Rules
 
-See `firestore.rules` — users can only read/write their own profile document. The `authorized_emails` collection is readable by unauthenticated users (required for pre-signup check) but not writable from the client.
+See `firestore.rules` (wired into `firebase.json`, so `firebase deploy --only firestore:rules` ships it) — users can only read/write their own profile document, and the `authorized_emails` collection is readable by unauthenticated users (required for the pre-signup check) but not writable from the client. **Deploy these rules per project:** the deployed rules can lag the repo, and a project left on default-deny breaks both email signup and the profile-doc sync.
 
 ### Deployment Checklist
 
 - [ ] `GOOGLE_API_KEY` set in Cloud Run for target project
 - [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
 - [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
+- [ ] Firestore security rules deployed (`firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync
 - [ ] `authorized_emails` collection populated for email sign-up users
 - [ ] `.env.demo` / `.env.production` contain correct `VITE_WS_URL` and Firebase config
 - [ ] Verify WebSocket connects after deploy (check Cloud Run logs for `ws_connect`)
