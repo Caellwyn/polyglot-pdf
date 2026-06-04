@@ -32,6 +32,11 @@ async def test_connection():
         # falling back to the current 2.5 native-audio default. The old
         # gemini-live-2.5-flash-preview-native-audio-09-2025 alias is retired and
         # 1008s (not found) on bidiGenerateContent -- see backend/config.py.
+        # NOTE: the default native-audio model emits AUDIO only, so the TEXT
+        # modality below still 1007s against it; override GEMINI_LIVE_MODEL with
+        # a text-capable model to exercise the full round-trip. Fully reworking
+        # this diagnostic against the real adapter config is tracked in bd
+        # polyglot-pdf-a7k.
         model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
         config = {
             "response_modalities": ["TEXT"],

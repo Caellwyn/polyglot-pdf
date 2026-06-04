@@ -26,8 +26,9 @@ scar-tissue rule (below).
 - **jpe (fixed):** `backend/services/callback_handler.py` -- the `_dev_log`
   comment now names the real gate (the `backend/.env.DEV` marker, via
   `dev_file_logger.DEV_LOGGING_ENABLED`) instead of the dead `VFF_DEV_LOGGING`
-  env var. Comment-only change; verified `_dev_log` is gated by `.env.DEV` at
-  `callback_handler.py:204` and `dev_file_logger.py:55`.
+  env var. Comment-only change; verified `_dev_log` is gated by `.env.DEV`
+  (the fixed comment at `callback_handler.py:194-195`, confirmed at
+  `callback_handler.py:205` and `dev_file_logger.py:55`).
 - **0kv (fixed):** `scripts/test_gemini_connection.py` -- replaced the
   hardcoded retired alias `gemini-live-2.5-flash-preview-native-audio-09-2025`
   with `os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")`,
@@ -52,6 +53,19 @@ scar-tissue rule (below).
 Review-worthiness: this is a comment + diagnostic-script + tier-1-doc-text PR
 with zero runtime-behavior change, so Copilot review is skipped per the Step-6
 gate; fresh-eyes still runs.
+
+**Fresh-eyes triage (sonnet, arm B):** 4 findings, all addressed.
+- #1 (high) -- `test_gemini_connection.py` still 1007s on the `TEXT` modality
+  against the native-audio default. **Deferred** -- out of scope for 0kv (which
+  was strictly the retired alias); filed as **bd polyglot-pdf-0y2** (the
+  standalone-diagnostic analogue of a7k). Added an in-script NOTE pointing there.
+- #2 (med) -- journal cited `callback_handler.py:204` for the gate; the +1-line
+  edit shifted it. **Adopted** -- corrected to lines 194-195 / 205.
+- #3 (med) -- script comment was incomplete about the post-fix 1007. **Adopted**
+  -- added the NOTE comment (same fix as the #1 pointer).
+- #4 (med) -- CLAUDE.md rule #6 over-claimed the cp1252 rationale for TS/JS.
+  **Adopted** -- split the rule: correctness rule for Python (cp1252),
+  consistency rule for the UTF-8 TS/JS frontend.
 
 ## Lessons
 
