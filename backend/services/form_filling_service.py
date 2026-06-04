@@ -394,11 +394,14 @@ class FormFillingService:
         # single-section forms / before any switch, which yields the original behavior.
         sm = self._last_section_metadata or {}
         sm_number = sm.get("section_number")
-        # Mirror switch_to_section's label fallback so a restart reproduces the same
-        # section label the switch used (f"Section {n}" when the section had no label).
-        sm_label = sm.get("section_label")
-        if sm_label is None and sm_number is not None:
-            sm_label = f"Section {sm_number}"
+        # Mirror switch_to_section's label EXPRESSION exactly (line ~573):
+        # `.get("section_label", f"Section {n}")` -- the default fires only on a MISSING
+        # key, so a present-but-None label passes through as None (build_form_context then
+        # falls back to form_title). Using the same expression here keeps a restart's
+        # label identical to the switch's, including that present-None edge (fresh-eyes
+        # PR #82). When there was no prior switch, sm is {} -> label is None -> default
+        # non-sectioned behavior, which is correct.
+        sm_label = sm.get("section_label", f"Section {sm_number}") if sm_number is not None else None
         system_instruction = self.build_form_context_message(
             self._schema,
             {},  # Empty values - frontend maintains state
@@ -548,7 +551,10 @@ class FormFillingService:
         # Retain section metadata so a later restart_gemini_session can rebuild the
         # system instruction with this position instead of defaulting to section 1
         # (bd polyglot-pdf-umv). Navigation state only -- no field values stored.
-        self._last_section_metadata = section_metadata
+        # Shallow-copy so a later mutation of the caller's dict (it arrives via JSON
+        # through the request coordinator) can't silently change what a restart rebuilds
+        # (fresh-eyes PR #82 -- latent aliasing, no current trigger but cheap to close).
+        self._last_section_metadata = dict(section_metadata)
 
         _log.info("switching_section",
                  session_id=self._session_id,
