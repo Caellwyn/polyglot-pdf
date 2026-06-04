@@ -29,6 +29,11 @@ class _DummySession:
     async def send_tool_response(self, **kwargs):
         self.inputs.append(('tool', kwargs))
 
+    async def send_client_content(self, **kwargs):
+        # The adapter's text_sender / queued-content paths call this
+        # (live_ai_gemini.py send_client_content); capture for assertions.
+        self.inputs.append(('client_content', kwargs))
+
     def receive(self):
         return _EmptyAsyncIterator()
 
@@ -191,8 +196,11 @@ async def test_run_session_loop_awaits_coroutine_connect():
     fake_live = _FakeLive()
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
 
-    # Pre-create the audio queue to satisfy the sender loop
+    # Pre-create the audio + text queues to satisfy the sender loops. Without
+    # _text_queue the text_sender task crashes on a None queue in the background
+    # (silently swallowed but real). (PR #76 follow-up.)
     adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
 
@@ -224,6 +232,7 @@ async def test_run_session_loop_handles_async_context_manager():
 
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
     adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()  # else text_sender crashes on None (PR #76 follow-up)
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
 
@@ -281,6 +290,7 @@ async def test_run_session_loop_dispatches_tool_calls():
 
     adapter._on_tool_call = on_tool_call
     adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()  # else text_sender crashes on None (PR #76 follow-up)
 
     class _ToolCallSession:
         def __init__(self):
