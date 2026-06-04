@@ -61,12 +61,18 @@ silently. Stored as bd memories `compression-noop-on-native-audio-live` and
 - **The SDK serializing a config proves nothing about whether the server implements it.**
   A type can exist for an unreleased feature; the config flows to the wire and is
   silently dropped. Only an endpoint probe tells you it's live.
-- **Google/genai docs go stale confidently.** The best-practices doc actively *claims*
-  compression works, with an example for a model class it doesn't apply to. Worse than
-  silence.
+- **The vendored docs did NOT mislead us; SDK introspection did.** Honest trace: the
+  vendored `live-api-best-practices.md` correctly named compression as the long-session
+  cost lever (true at the API-surface level) and never claimed native-audio support. The
+  wrong belief was minted in `nv0` by introspecting `google.genai.types`, seeing
+  `ContextWindowCompressionConfig`, and writing "verified SDK syntax" -- promoting *the
+  type exists* to *the feature works*. Don't do that: a load-bearing availability
+  assumption gets a cheap connect probe BEFORE building, not "the SDK has the type."
 - **Eliminate by cheap probes, not reasoning.** Each hypothesis (api_version, model,
   trigger floor) was killed by a tiny targeted run, not by argument -- which is what kept
-  a wrong lead (v1alpha) from becoming a production change.
+  a wrong lead (v1alpha) from becoming a production change. But note the cost asymmetry:
+  the *right* time for the first probe was before building (one connect call), not after
+  a full sweep.
 
 ## Doc freshness
 

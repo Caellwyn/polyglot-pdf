@@ -55,13 +55,22 @@ data or live web docs.
   available** for our model family. Keep `CONTEXT_COMPRESSION_ENABLED=False`; do not
   re-investigate unless Google announces native-audio support. Diagnostics under epic
   `polyglot-pdf-l3a`.
-- **Capability/availability questions get a live-endpoint PROBE, not a doc read.** The
-  compression stub above is the worked example: Google's prose *claims* it works, the
-  vendored docs + Context7 are stale/mangled, and the SDK type serializes a config the
-  server ignores. Docs and SDK types describe the INTENDED API and run ahead of the
-  server; they go stale silently. For "does feature X work on model Y / what's the
-  min-max / is it live yet," probe the endpoint. (bd memory
-  `gemini-capability-questions-need-endpoint-probe`.)
+- **An SDK type's EXISTENCE is not evidence the feature is IMPLEMENTED.** This is the
+  real lesson from the compression dead end above -- *not* "docs lie." Honest trace: the
+  vendored docs here were CORRECT (they named compression as the long-session cost lever,
+  true at the API-surface level, and never claimed native-audio support -- they did not
+  mislead us). The false confidence came from **SDK introspection**: `nv0` opened
+  `google.genai.types`, saw `ContextWindowCompressionConfig` with real fields, and wrote
+  "verified SDK syntax / canonical" -- over-reading *the type exists* as *the feature
+  works on our model*. For preview/Live features the SDK ships **ahead of the server**,
+  so a type can exist for something unimplemented; introspection gives you a config's
+  SHAPE, never its AVAILABILITY. Rule: do **not** promote "the SDK has a type for X" to
+  "X works" in a design doc. When a feature is **load-bearing** for a plan, confirm
+  availability with **one cheap connect-and-watch-one-turn probe BEFORE building** -- not
+  a full sweep after. (Probing is for load-bearing availability assumptions, not every
+  SDK question -- probes cost real tokens. Here the expensive mistake was building the
+  feature + a 4-session sweep on an unverified premise; a single connect probe would have
+  caught it first.) (bd memory `gemini-capability-questions-need-endpoint-probe`.)
 
 ## Related project context
 
