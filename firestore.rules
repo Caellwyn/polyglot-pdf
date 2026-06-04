@@ -1,8 +1,21 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // User profile docs (users/{uid}): a signed-in user may read/write only
+    // their own profile. Written by AuthContext.onAuthStateChanged on login.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Email-signup allowlist (authorized_emails): signUpWithEmail queries this
+    // collection while the user is still UNAUTHENTICATED (before
+    // createUserWithEmailAndPassword), so the read must be allowed without auth.
+    // It is read-only -- never client-writable; entries are managed out of band
+    // (Firebase Console / admin tooling). See docs/components/auth.md.
+    match /authorized_emails/{doc} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

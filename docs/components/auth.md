@@ -1,8 +1,8 @@
 # Auth
 
-**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules
+**Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-bmz-firestore-authorized-emails-rule.md](../journal/entries/2026-06-04-bd-bmz-firestore-authorized-emails-rule.md) for closeout details.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -46,14 +46,26 @@ and the `VFF_DISABLE_AUTH` dev bypass are in
 there's no match. So email signup is allowlisted; **Google sign-in is not gated by
 this check.**
 
-> **Rules gap (verify before relying on this).** The pre-signup query reads
-> `authorized_emails` while the user is **unauthenticated**, but the checked-in
-> `firestore.rules` has **no `authorized_emails` rule** — only `/users/{userId}`.
-> Under Firestore default-deny that read would fail, so either the **deployed** rules
-> grant `authorized_emails` read (and the repo file is out of sync — an ops risk) or
-> email signup is currently broken with a permission error instead of the
-> "not authorized" message. The README asserts it's "readable by unauthenticated
-> users", but the repo doesn't encode that. Tracked in bd `polyglot-pdf-bmz`.
+**Firestore rule.** Because that pre-signup query runs while the user is
+**unauthenticated**, `firestore.rules` allows an unauthenticated **read** of
+`authorized_emails` (and forbids client **writes** — entries are managed out of
+band):
+
+```
+match /authorized_emails/{doc} {
+  allow read: if true;
+  allow write: if false;
+}
+```
+
+> **Deploy note (bd `polyglot-pdf-bmz`).** The repo `firestore.rules` is now the
+> intended source of truth and is wired into `firebase.json` (`firestore.rules`),
+> but the **deployed** rules can lag until someone runs
+> `firebase deploy --only firestore:rules` per project. As of this fix the demo
+> project (`polyglot-demo-aa709`) had pure default-deny deployed (no
+> `authorized_emails` **and** no `/users` rule), so email signup AND the profile
+> sync below were both failing there until the corrected rules are deployed. The
+> deploy is a maintainer action.
 
 ## User profile (Firestore `users/{uid}`)
 
