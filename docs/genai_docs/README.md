@@ -43,6 +43,25 @@ data or live web docs.
 - **Compounding cost is the dominant lever.** Every turn re-bills the entire
   accumulated context window; native audio accrues ~25 tokens/sec. Context-window
   compression / size limits are the first-class fix (see epic `polyglot-pdf-l3a`).
+- **DEAD END: `contextWindowCompression` is an unreleased/unsupported STUB on
+  native-audio Live models -- do not pursue it.** (Verified 2026-06-04, bd
+  `polyglot-pdf-l3a.1`.) The SDK type exists ahead of the server implementation: the
+  config serializes, the server ACCEPTS it (no rejection, triggers 200-4096), but it
+  NEVER evicts -- prompt tokens compound past the trigger exactly as with compression
+  off, on both `gemini-3.1-flash-live-preview` and
+  `gemini-2.5-flash-native-audio-preview-12-2025`, identically under `v1alpha`/`v1beta`.
+  No cascade Live model is reachable on our key (all `1008`); the docs' compression
+  example uses a cascade model. The cost lever the `l3a` epic was premised on is **not
+  available** for our model family. Keep `CONTEXT_COMPRESSION_ENABLED=False`; do not
+  re-investigate unless Google announces native-audio support. Diagnostics under epic
+  `polyglot-pdf-l3a`.
+- **Capability/availability questions get a live-endpoint PROBE, not a doc read.** The
+  compression stub above is the worked example: Google's prose *claims* it works, the
+  vendored docs + Context7 are stale/mangled, and the SDK type serializes a config the
+  server ignores. Docs and SDK types describe the INTENDED API and run ahead of the
+  server; they go stale silently. For "does feature X work on model Y / what's the
+  min-max / is it live yet," probe the endpoint. (bd memory
+  `gemini-capability-questions-need-endpoint-probe`.)
 
 ## Related project context
 
