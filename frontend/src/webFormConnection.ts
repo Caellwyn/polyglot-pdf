@@ -18,6 +18,7 @@ import {
 } from "./navigation";
 import { shouldShowField } from "./schema-forms/utils/validation";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
+import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
 export type ConnectionStatus =
   | "disconnected"
@@ -1334,7 +1335,7 @@ export class WebFormConnection {
           element.classList.add('field-highlight');
           setTimeout(() => {
             element.classList.remove('field-highlight');
-          }, 1500);
+          }, FIELD_HIGHLIGHT_DURATION_MS);
         }
       }, 50);
     }
