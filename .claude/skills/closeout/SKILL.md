@@ -135,6 +135,17 @@ so the first call's row is not duplicated (the hrn.15 A/B discipline). If the cl
 itself fails the watcher exits **CLOSE-FAILED (3)** so you triage it instead of
 pinging merge. `closeout_finish.py` never blocks on the watcher.
 
+**When YOU run `--close-only` by hand** (the fresh-eyes-race path: round 1 watched
+WITHOUT `--close-on-clean`, then you close after CLEAN -- see Step 7), it runs the
+slow `bd dolt push`, so **the harness backgrounds it and notifies you on
+completion -- exactly like the watcher.** Fire it and **END YOUR TURN; do not
+`sleep`/`cat`/poll its output file.** The bead-close is committed locally before
+the push finishes (a `bd show <id>` will already read CLOSED if you must check), so
+there is nothing to wait on -- the `RESULT: CLOSED-ONLY` line arrives via the task
+notification. This is the same "a `run_in_background` / auto-backgrounded task is a
+hard STOP" rule the round-1 watch states at Step 6.2 ("no polling turns"); it
+applies to **every** backgrounded step here, not just the watcher.
+
 **Preview first:** `closeout_finish.py ... --dry-run` prints the fully-resolved
 plan (every command with `$R`/`$WT`/`$PY` substituted) and performs **zero** side
 effects -- run it once to confirm before the real call, and as the way to rehearse
