@@ -20,6 +20,7 @@ import { SectionRenderer } from "./SectionRenderer";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue } from "../utils/fieldValue";
+import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
@@ -123,10 +124,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       element.classList.add('field-highlight');
 
-      // Remove highlight after a delay
+      // Remove highlight after the pulse animation completes
       setTimeout(() => {
         element.classList.remove('field-highlight');
-      }, 2000);
+      }, FIELD_HIGHLIGHT_DURATION_MS);
     }
   };
 
