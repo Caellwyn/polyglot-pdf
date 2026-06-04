@@ -48,6 +48,7 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 |--------------------|------|
 | WebSocket session routing / handshake (`backend/routes/websocket_routes.py`) | `docs/components/websocket-routing.md` |
 | Gemini Live adapter, tools, models (`backend/adapters/live_ai_gemini.py`, `backend/config.py`) | `docs/components/voice-ai.md` + `docs/standards/ai-models.md` + [`docs/genai_docs/`](docs/genai_docs/README.md) (authoritative SDK syntax) |
+| Context-window compression / session cost+duration bounding (`ContextWindowCompressionConfig`) | `docs/components/context-compression.md` |
 | Anything calling the `google-genai` SDK (`from google import genai`) | [`docs/genai_docs/`](docs/genai_docs/README.md) -- vendored SDK reference; web search + Context7 are unreliable for this SDK |
 | Schema forms / client state (`frontend/src/schema-forms/`, `frontend/src/shared/`) | `docs/components/schema-forms.md` |
 | PDF filling (`backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py`) | `docs/components/pdf-filling.md` |
