@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-03.*
+*Last updated: 2026-06-04.*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 
@@ -238,21 +238,35 @@ context) is one env var from reverting; nothing existing needs sidelining.
 | Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for the compression win. |
 | Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | A connect race-condition fix, orthogonal to context size. |
 
-## Validation (for `45o`)
+## Validation status -- measured NEGATIVE on the cost plateau (`45o`, 2026-06-04)
 
-Re-run the `tak` probe with compression on:
+**The cost model above is MODELED, not yet measured-confirmed -- and the first live
+validation came back negative.** A window-size sweep
+(`scripts/spikes/sweep_compression_window.py`, findings in
+`scripts/spikes/sweep_compression_window_findings.md`) drove the production adapter
+with compression on across triggers 5000 and 2000 and windows 1k-4k. In every config,
+the API's own `prompt_token_count` **kept compounding (10x-14x over 12 audio turns) with
+no eviction** -- even on turns where the prompt clearly exceeded `trigger_tokens`. The
+quadratic->linear plateau did **not** appear. The config reaches the wire correctly
+(verified), so this is a semantic result, tracked as **`polyglot-pdf-l3a.1`** (open):
+on `gemini-3.1-flash-live-preview`, documented compression did not bound billed prompt
+tokens within a short audio session. **Until `l3a.1` resolves, the cost win is
+unproven; keep `CONTEXT_COMPRESSION_ENABLED=False`** (the shipped default). The
+compression code is wired, tested, and reversible behind that one env var.
 
-```
-PYTHONPATH=. backend/.venv/Scripts/python.exe scripts/spikes/measure_live_token_curve.py \
-    --turns 8 --runs 1 --csv scripts/spikes/tak_token_curve.csv
-```
+The one clean positive: **response latency was low and stable** across all window sizes
+(median ~0.8-1.1s, p90 ~1.2-1.8s) -- no latency cost from enabling compression.
 
-Success criteria:
+The original success criteria (kept as the bar `l3a.1` must clear):
 
-1. **Prompt tokens plateau at the window size** instead of climbing 6.6x.
+1. **Prompt tokens plateau at the window size** instead of compounding. *(NOT met --
+   the headline finding above.)*
 2. **A session survives past the 15-min audio cap** -- the primary, non-cost win.
-3. The measured curve roughly matches the modeled table above (confirming the model
-   held); tune `trigger`/`window` from there.
+   *(Not yet exercised; the sweep ran short 12-turn sessions.)*
+3. The measured curve matches the modeled table. *(NOT met; the model's plateau did not
+   reproduce.)*
 
-Reuse the existing session-end cost summary in `finalize()`
-([logging-and-cost.md](../standards/logging-and-cost.md)) as the measurement surface.
+Harness reuse: the sweep captures cost from the session-end summary in `finalize()`
+([logging-and-cost.md](../standards/logging-and-cost.md)) and latency from the
+`on_audio` callback. The older single-config probe
+(`scripts/spikes/measure_live_token_curve.py`) measured the unbounded baseline.
