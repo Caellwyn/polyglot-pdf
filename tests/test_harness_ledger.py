@@ -321,6 +321,21 @@ class TestMainCLI:
         assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 1
         assert ledger.derive_experiment_state(ledger_path)["baseline_A"] == 1
 
+    def test_main_counts_the_just_appended_row(self, tmp_path, monkeypatch):
+        # Pin the append-BEFORE-refresh ordering: with the ledger already holding
+        # N arm="A" rows, one more closeout must show N+1 -- proving the new row
+        # is counted, not a pre-append snapshot. A 1-row test can't catch a
+        # reorder (0->1 either way); a pre-populated ledger can.
+        t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
+        ledger_path = tmp_path / "harness_ledger.jsonl"
+        state_path = tmp_path / "experiment_state.json"
+        _write_ledger(ledger_path, ["A", "A", "A"])  # N = 3 before this run
+        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
+        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--recorded-at", "x"])
+        assert rc == 0
+        assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 4
+
     def test_main_no_counter_skips_cache_refresh(self, tmp_path, monkeypatch):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
         ledger_path = tmp_path / "harness_ledger.jsonl"
@@ -377,3 +392,18 @@ class TestMainCLI:
         rc = ledger.main(["--print-directive"])
         assert rc == 0
         assert "Phase A (baseline)" in capsys.readouterr().out
+
+    def test_main_print_directive_reflects_ledger_not_cache(self, tmp_path, monkeypatch, capsys):
+        # Distinguish the NEW (derive-from-ledger) path from the OLD
+        # (read-the-cache) path: a populated LEDGER with NO cache file must drive
+        # the directive past Phase A. The old code (reading the absent cache)
+        # would still say "Phase A (baseline)"; only deriving from the ledger
+        # advances it.
+        led = tmp_path / "harness_ledger.jsonl"
+        _write_ledger(led, ["A"] * 16)  # baseline_A=16 > 15 -> "Phase A done"
+        monkeypatch.setattr(ledger, "LEDGER_PATH", led)
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")
+        rc = ledger.main(["--print-directive"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Phase A done" in out and "Phase A (baseline)" not in out

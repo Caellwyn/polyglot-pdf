@@ -131,14 +131,15 @@ def discover_transcript(cwd: str | None = None) -> Path | None:
 # --------------------------------------------------------------------------- #
 # Transcript parsing
 # --------------------------------------------------------------------------- #
-def _iter_records(transcript: Path):
-    """Yield parsed JSON objects from a transcript, skipping malformed lines.
+def _iter_records(path: Path):
+    """Yield parsed JSON objects from a JSONL file, skipping malformed lines.
 
-    Transcripts are appended line-by-line; a crashed write can leave a final
-    partial line. We skip unparseable lines rather than abort -- a single bad
-    line must not cost the whole telemetry row.
+    Used for BOTH the session transcript and the telemetry ledger -- each is
+    appended line-by-line, and a crashed write can leave a final partial line.
+    We skip unparseable lines rather than abort -- a single bad line must not
+    cost the whole telemetry row (or the whole derived count).
     """
-    with transcript.open(encoding="utf-8", errors="replace") as f:
+    with path.open(encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -443,12 +444,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--print-directive",
         action="store_true",
-        help="Print the current phase directive and exit (no row, no bump).",
+        help="Print the current phase directive (derived from the ledger) and "
+        "exit -- writes nothing.",
     )
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="Parse + assemble the row and print it, but do not append or bump.",
+        help="Parse + assemble the row and print it, but do not append it or "
+        "refresh the cache.",
     )
     return p
 

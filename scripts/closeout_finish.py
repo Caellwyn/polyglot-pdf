@@ -332,7 +332,7 @@ class Closeout:
                 if (status.stderr or status.stdout).strip() else "no output")
             return
         if not status.stdout.strip():
-            return  # clean (e.g. --no-bump dry-run, or ledger GAP) -- nothing to commit
+            return  # clean (e.g. --dry-run, or a ledger GAP) -- nothing to commit
         pr = self.out["PR"]
         msg = ("chore(harness): PR #{} telemetry row (recorded by closeout_finish.py)"
                .format(pr) if pr != "-"
