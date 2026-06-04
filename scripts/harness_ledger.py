@@ -340,18 +340,26 @@ def phase_directive(state: dict) -> str:
     return "Phase A (baseline): run as-is, just measure (baseline_A <= 15)."
 
 
-def bump_experiment_state(arm: str | None, path: Path = EXPERIMENT_STATE_PATH) -> dict:
-    """Increment the counter for ``arm`` and persist. Returns the new state.
+_ARM_TO_KEY = {"A": "baseline_A", "B": "arm_B", "C": "arm_C", "BC": "arm_BC"}
 
-    Arm -> counter key: A->baseline_A, B->arm_B, C->arm_C, BC->arm_BC. An
-    unknown / missing arm leaves the counters untouched (we still rewrite the
-    file so a brand-new run materializes it). ``phase`` is recomputed from the
-    counts so the stored phase never drifts from the numbers.
+
+def derive_experiment_state(ledger_path: Path = LEDGER_PATH) -> dict:
+    """Recompute the experiment-state counter by COUNTING ledger rows by arm.
+
+    The ledger is the single source of truth; this is a pure projection, so the
+    counter can never lose an increment to a parallel-branch merge (the whole
+    point of bd polyglot-pdf-8o4). baseline_A = #rows with arm=="A", arm_B =
+    #"B", arm_C = #"C", arm_BC = #"BC". Rows with a null / unknown arm count
+    toward nothing (matches the old "no --arm doesn't bump" behavior). A missing
+    ledger -> all-zeros; malformed lines are skipped (``_iter_records``). ``phase``
+    is derived from the counts so it never drifts from the numbers.
     """
-    state = load_experiment_state(path)
-    key = {"A": "baseline_A", "B": "arm_B", "C": "arm_C", "BC": "arm_BC"}.get(arm or "")
-    if key:
-        state[key] = state.get(key, 0) + 1
+    state = {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
+    if ledger_path.is_file():
+        for row in _iter_records(ledger_path):
+            key = _ARM_TO_KEY.get(row.get("arm") or "")
+            if key:
+                state[key] += 1
     # Derive a coarse phase label from the counts (A -> B/C -> BC -> report).
     if state["arm_BC"] > 10:
         state["phase"] = "report"
@@ -361,8 +369,22 @@ def bump_experiment_state(arm: str | None, path: Path = EXPERIMENT_STATE_PATH) -
         state["phase"] = "BC-toggle"
     else:
         state["phase"] = "A"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    return state
+
+
+def refresh_experiment_state(
+    ledger_path: Path = LEDGER_PATH, state_path: Path = EXPERIMENT_STATE_PATH
+) -> dict:
+    """Re-derive the counter from the ledger and write the local cache file.
+
+    Returns the derived state. The cache file (``.beads/experiment_state.json``)
+    is gitignored -- it is a convenience view for humans / ``cat``, NOT a
+    source of truth and never committed, so it can never collide on a merge.
+    Call this AFTER appending the row so the new row is counted.
+    """
+    state = derive_experiment_state(ledger_path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
 
 
@@ -385,7 +407,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--arm",
         choices=VALID_ARMS,
-        help="Experiment arm this session ran (A/B/C/BC). Bumps the counter.",
+        help="Experiment arm this session ran (A/B/C/BC). Recorded on the row; "
+        "the counter is derived by counting rows per arm.",
     )
     p.add_argument(
         "--cost-category",
@@ -414,7 +437,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--no-counter",
         action="store_true",
-        help="Do not bump .beads/experiment_state.json (e.g. audit re-runs).",
+        help="Skip refreshing the gitignored .beads/experiment_state.json cache. "
+        "Counts come from the ledger regardless, so this is cosmetic.",
     )
     p.add_argument(
         "--print-directive",
@@ -447,10 +471,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.print_directive:
-        # Pass the module-level path explicitly so a test (or a runtime
-        # reassignment of EXPERIMENT_STATE_PATH) is honored -- the function's
-        # default arg is bound at def-time and would ignore a monkeypatch.
-        print(phase_directive(load_experiment_state(EXPERIMENT_STATE_PATH)))
+        # Derive the directive from the LEDGER on demand (not the cache file), so
+        # it works even with the gitignored cache absent. Pass the module-level
+        # path explicitly so a test's monkeypatched LEDGER_PATH is honored -- the
+        # function's default arg is bound at def-time and would ignore it.
+        print(phase_directive(derive_experiment_state(LEDGER_PATH)))
         return 0
 
     transcript = args.transcript or discover_transcript()
@@ -475,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         print(json.dumps(row, indent=2, ensure_ascii=False))
-        print("\n[dry-run] not appended; counter not bumped.", file=sys.stderr)
+        print("\n[dry-run] not appended; cache not refreshed.", file=sys.stderr)
         return 0
 
     # Pass module-level paths explicitly (not via the functions' def-time
@@ -495,24 +520,26 @@ def main(argv: list[str] | None = None) -> int:
         ledger_display = str(LEDGER_PATH)
 
     if not args.no_counter:
-        # The counter's whole purpose is arm-attributed accumulation, so a
-        # bump without --arm is almost always a closeout that forgot the flag
-        # (the row also lands with arm=null). Warn loudly but don't hard-fail:
-        # an intentional no-arm bump is rare but legitimate, and a telemetry
-        # row must never block the merge. --no-counter is the explicit
-        # "I meant to skip the bump" path and is silent.
+        # The counter is arm-attributed accumulation, so a run without --arm is
+        # almost always a closeout that forgot the flag (the row also lands with
+        # arm=null and contributes to no arm's count). Warn loudly but don't
+        # hard-fail: an intentional no-arm run is rare but legitimate, and a
+        # telemetry row must never block the merge. --no-counter is the explicit
+        # "skip refreshing the cache" path and is silent. The COUNTS come from
+        # the ledger regardless of this flag -- refresh only rewrites the
+        # gitignored local cache (the row we just appended is now counted).
         if not args.arm:
             sys.stderr.write(
                 "harness_ledger.py: WARNING -- no --arm given; the row records "
-                "arm=null and the experiment counter is NOT bumped. Pass "
-                "--arm A|B|C|BC (or --no-counter if this is deliberate).\n"
+                "arm=null and contributes to no arm's count. Pass "
+                "--arm A|B|C|BC (or --no-counter to skip the cache refresh).\n"
             )
-        state = bump_experiment_state(args.arm, EXPERIMENT_STATE_PATH)
+        state = refresh_experiment_state(LEDGER_PATH, EXPERIMENT_STATE_PATH)
         print(f"Ledger row appended to {ledger_display}")
         print(f"Experiment state: {json.dumps(state)}")
         print(f"Directive: {phase_directive(state)}")
     else:
-        print(f"Ledger row appended to {ledger_display} (counter not bumped).")
+        print(f"Ledger row appended to {ledger_display} (cache not refreshed).")
 
     return 0
 

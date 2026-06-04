@@ -46,3 +46,7 @@ tmp_*
 .beads/.auto-import-*.jsonl
 # dolt CLI cached by scripts/beads_remote_bootstrap.py (remote-session hydration)
 .beads/.cache/
+# experiment counter is a derived cache (counted from harness_ledger.jsonl by
+# scripts/harness_ledger.py), not source of truth -- untracked so parallel
+# closeouts can't collide on it (bd polyglot-pdf-8o4)
+.beads/experiment_state.json

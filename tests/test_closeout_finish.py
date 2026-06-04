@@ -318,8 +318,10 @@ class TestTelemetryWarnOnly:
 # tool-owned files or the row is orphaned in the working tree.
 # --------------------------------------------------------------------------- #
 class TestTelemetryCommitPush:
-    # The two files harness_ledger.py owns -- the status guard reports them dirty.
-    _DIRTY_STATUS = (0, " M docs/journal/harness_ledger.jsonl\n M .beads/experiment_state.json", "")
+    # The one file harness_ledger.py commits -- the status guard reports it dirty.
+    # The experiment counter is now a gitignored derived cache (bd
+    # polyglot-pdf-8o4) and is NOT committed, so it never appears here.
+    _DIRTY_STATUS = (0, " M docs/journal/harness_ledger.jsonl", "")
 
     def test_commits_and_pushes_dirty_telemetry_files(self):
         rec = RunRecorder(responses={
@@ -328,10 +330,11 @@ class TestTelemetryCommitPush:
         })
         job = _job(rec, skip_review=True, review_worthy=False)
         assert job.run() == cf.EXIT_OK
-        # A commit naming BOTH telemetry files (by explicit path) happened.
+        # A commit naming the ledger (by explicit path) happened.
         commits = [j for j in rec.joined() if "commit" in j and "harness_ledger.jsonl" in j]
         assert len(commits) == 1, rec.joined()
-        assert ".beads/experiment_state.json" in commits[0]
+        # The counter is gitignored -- it must NOT be staged/committed.
+        assert ".beads/experiment_state.json" not in commits[0]
         # The PR number is in the commit message.
         assert "PR #7" in commits[0]
         # TWO pushes happened: the initial branch push (-u) AND the telemetry

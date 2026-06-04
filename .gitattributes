@@ -1,0 +1,7 @@
+# Telemetry ledger is strictly append-only (one JSON object per line). The
+# `union` built-in merge driver keeps BOTH sides' added lines on a conflict, so
+# two PRs that each append a closeout telemetry row auto-merge instead of
+# colliding (bd polyglot-pdf-8o4). Order is not preserved across an auto-merge,
+# but nothing reads the ledger by position -- the experiment counter is derived
+# by counting rows' `arm` field, which is order-independent.
+docs/journal/harness_ledger.jsonl merge=union
