@@ -54,7 +54,7 @@ def _make_fake(ready, in_progress, surfaces_by_id, live_ids):
             return _proc(stdout=json.dumps(ready))
         if cmd[:2] == ["bd", "list"]:
             return _proc(stdout=json.dumps(in_progress))
-        if cmd[:3][:2] == ["bd", "show"]:
+        if cmd[:2] == ["bd", "show"]:
             bead_id = cmd[2]
             return _proc(stdout=_bead_json(surfaces_by_id.get(bead_id, [])))
         if cmd[:3] == ["gh", "pr", "list"]:

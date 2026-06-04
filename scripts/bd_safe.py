@@ -322,6 +322,7 @@ def _normalize_surface(surface: str) -> str:
     should match anything nested under it.
     """
     s = surface.strip().replace("\\", "/")
+    raw = s  # post-strip, post-backslash: distinguishes "" from "./" / "/"
     while s.startswith("./"):
         s = s[2:]
     # Collapse duplicate slashes but keep a single trailing slash if present.
@@ -330,6 +331,14 @@ def _normalize_surface(surface: str) -> str:
     s = "/".join(parts)
     if had_trailing and s:
         s += "/"
+    # A non-empty input that collapses to nothing -- "./", "/", ".//" -- is the
+    # REPO ROOT, i.e. "everything." Returning "" here would make it overlap
+    # nothing (a false negative: a bead claiming the whole repo would silently
+    # opt out of the guard). Canonicalize it to the root dir prefix "/" so the
+    # prefix logic in _one_surface_overlaps treats it as containing every path.
+    # A genuinely empty input ("") stays "" (handled as no-surface by callers).
+    if not s and raw:
+        return "/"
     return s
 
 
@@ -349,6 +358,10 @@ def _one_surface_overlaps(a: str, b: str) -> bool:
     b = _normalize_surface(b)
     if not a or not b:
         return False
+    # "/" is the repo-root prefix (from a "./"-style surface): it contains every
+    # path, so it overlaps any non-empty surface.
+    if a == "/" or b == "/":
+        return True
     if a == b:
         return True
     # Treat each as a dir prefix and test containment of the other. A dir prefix
@@ -394,7 +407,12 @@ def _bead_surfaces(bead_id: str) -> list:
     bead = data[0] if isinstance(data, list) and data else data
     meta = (bead or {}).get("metadata") or {}
     surfaces = meta.get("surfaces")
-    return list(surfaces) if isinstance(surfaces, list) else []
+    if not isinstance(surfaces, list):
+        return []
+    # Keep only string entries -- a malformed bead (a null/number/nested list in
+    # surfaces) must not crash the overlap math with an AttributeError deep in
+    # _normalize_surface. Non-string junk is dropped, not coerced.
+    return [s for s in surfaces if isinstance(s, str)]
 
 
 def _active_claim_ids(exclude_id: str) -> list:
@@ -424,9 +442,19 @@ def _active_claim_ids(exclude_id: str) -> list:
             continue
         # "live work" = a PR title OR a branch (other than this worktree's own)
         # carries the id. Reuses the same checks the same-bead guard uses.
-        if _pr_collision(bead_id, DEFAULT_REPO) or _branch_collision(
-            bead_id, current_branch=current
-        ):
+        # Per-bead error isolation: a transient gh/git failure for ONE
+        # in-progress bead must not abort the whole enumeration (the surface
+        # check makes many of these calls). On failure, conservatively COUNT the
+        # bead as active -- a spurious block is safer than silently missing a
+        # real active claim.
+        try:
+            is_live = bool(
+                _pr_collision(bead_id, DEFAULT_REPO)
+                or _branch_collision(bead_id, current_branch=current)
+            )
+        except RuntimeError:
+            is_live = True
+        if is_live:
             active.append(bead_id)
     return active
 
@@ -443,18 +471,20 @@ def _surface_collision(bead_id: str) -> str | None:
     mine = _bead_surfaces(bead_id)
     for active_id in _active_claim_ids(exclude_id=bead_id):
         theirs = _bead_surfaces(active_id)
-        if _surfaces_overlap(mine, theirs):
+        if not _surfaces_overlap(mine, theirs):
+            continue
+        if not mine or not theirs:
+            # UNKNOWN on at least one side -> the conservative collide-with-
+            # everything case; there is no concrete overlapping pair to name.
+            detail = "UNKNOWN surfaces (one side declared none)"
+        else:
             shared = sorted(
-                {
-                    "{} ~ {}".format(sa, sb)
-                    for sa in (mine or ["(none declared)"])
-                    for sb in (theirs or ["(none declared)"])
-                    if _surfaces_overlap([sa], [sb]) or not mine or not theirs
-                }
+                "{} ~ {}".format(sa, sb)
+                for sa in mine for sb in theirs
+                if _one_surface_overlaps(sa, sb)
             )
-            return "{} (overlapping surfaces: {})".format(
-                active_id, "; ".join(shared) or "UNKNOWN on one side"
-            )
+            detail = "overlapping surfaces: {}".format("; ".join(shared))
+        return "{} ({})".format(active_id, detail)
     return None
 
 

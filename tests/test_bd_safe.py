@@ -367,10 +367,29 @@ def test_pr_collision_check_failure_raises(monkeypatch):
         ("scripts/", "scripts", True),                    # dir prefix vs bare dir name
         ("scripts", "scripts/foo.py", False),             # bare 'scripts' is a FILE, no nesting
         ("", "scripts/foo.py", False),                    # empty never overlaps (per-surface)
+        ("./", "scripts/foo.py", True),                   # "./" = repo root -> overlaps all (#1)
+        ("/", "anything/at/all.py", True),                # root prefix overlaps all (#1)
+        (".//", "docs/x.md", True),                       # multi "./" collapses to root (#1)
     ],
 )
 def test_one_surface_overlaps(a, b, expected):
     assert bs._one_surface_overlaps(a, b) is expected
+
+
+def test_normalize_surface_root_forms():
+    # A non-empty input that collapses to nothing is the repo root "/", NOT ""
+    # (empty would falsely overlap nothing). A genuinely empty input stays "".
+    assert bs._normalize_surface("./") == "/"
+    assert bs._normalize_surface("/") == "/"
+    assert bs._normalize_surface(".//") == "/"
+    assert bs._normalize_surface("") == ""
+    assert bs._normalize_surface("   ") == ""
+
+
+def test_root_surface_does_not_silently_opt_out_of_guard():
+    # The #1 false-negative: a bead declaring "./" must still collide.
+    assert bs._surfaces_overlap(["./"], ["scripts/foo.py"]) is True
+    assert bs._surfaces_overlap(["scripts/foo.py"], ["/"]) is True
 
 
 def test_surfaces_overlap_unknown_policy():
@@ -407,6 +426,22 @@ def test_bead_surfaces_missing_metadata_returns_empty(monkeypatch):
     assert bs._bead_surfaces("proj-aaa1") == []
 
 
+def test_bead_surfaces_filters_non_string_junk(monkeypatch):
+    # A malformed surfaces list (null/number/nested) must not crash the overlap
+    # math later -- non-strings are dropped, strings kept (#2).
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=json.dumps(
+             [{"id": "x", "metadata": {"surfaces": ["scripts/", None, 7, ["nested"], "docs/x.md"]}}]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1") == ["scripts/", "docs/x.md"]
+    # And the kept surfaces still drive overlap without raising.
+    assert bs._surfaces_overlap(
+        bs._bead_surfaces("proj-aaa1"), ["scripts/foo.py"]
+    ) is True
+
+
 def test_active_claim_ids_filters_to_live_work(monkeypatch):
     # in_progress beads: foo has an open PR (live -> active); bar has neither PR
     # nor branch (stale -> NOT active); the exclude_id is never counted.
@@ -431,6 +466,33 @@ def test_active_claim_ids_filters_to_live_work(monkeypatch):
     assert active == ["proj-foo"]          # foo live, bar stale dropped
     assert "proj-bar" not in active
     assert "proj-self" not in active        # excluded
+
+
+def test_active_claim_ids_isolates_per_bead_failure(monkeypatch):
+    # A transient gh failure for ONE in-progress bead must not abort the whole
+    # enumeration; that bead is conservatively counted as active (#5).
+    def fake(cmd, *, check=True):
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([
+                {"id": "proj-boom", "status": "in_progress"},
+                {"id": "proj-ok", "status": "in_progress"},
+            ]))
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            if "proj-boom" in " ".join(cmd):
+                # _pr_collision raises RuntimeError on a non-zero gh exit.
+                return _proc(returncode=1, stderr="gh transient")
+            if "proj-ok" in " ".join(cmd):
+                return _proc(stdout='[{"number":2,"title":"y (bd proj-ok)"}]')
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    active = bs._active_claim_ids(exclude_id="")
+    # boom counted (conservative on failure), ok counted (live PR).
+    assert set(active) == {"proj-boom", "proj-ok"}
 
 
 def test_claim_aborts_on_surface_overlap(monkeypatch, capsys):

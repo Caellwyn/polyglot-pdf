@@ -61,6 +61,30 @@ A deterministic write-overlap guard plus the judgment wrapper around it.
    everything -- declaring surfaces is what makes a bead schedulable alongside
    others. Conservative, matches "ambiguous = block."
 
+### Review
+
+Copilot round 1: **CLEAN** (no inline findings) -- and Copilot's agent landed
+the blocked allowlist entry itself (commit `3209f6c`, all three python-path
+variants), so the deferred item below is resolved on-branch.
+
+Fresh-eyes (sonnet, arm B): **5 findings, all addressed.**
+- #1 (high, FALSE NEGATIVE) -- `_normalize_surface("./")` collapsed to `""`,
+  which overlaps nothing, so a bead claiming the repo root silently opted out of
+  the guard. **Fixed:** non-empty-collapses-to-empty now canonicalizes to the
+  root prefix `"/"`, which overlaps every path; genuinely-empty stays `""`.
+- #2 (high, crash) -- a non-string element in `surfaces` crashed
+  `_normalize_surface` with `AttributeError`. **Fixed:** `_bead_surfaces` filters
+  to `str` entries.
+- #3 (high, dead code) -- unreachable `"UNKNOWN on one side"` fallback in
+  `_surface_collision`. **Fixed:** rewrote the description branch (explicit
+  UNKNOWN case vs. named overlapping pairs).
+- #4 (high, test clarity) -- `cmd[:3][:2]` no-op slice in `test_next_bead.py`.
+  **Fixed:** `cmd[:2]`.
+- #5 (med, error isolation) -- one gh failure mid-loop aborted the whole
+  active-claim enumeration. **Fixed:** per-bead try/except; on failure the bead
+  is conservatively counted as active (a spurious block beats a missed claim).
+- +7 regression tests for the fixes (full `tests/` suite 360 green).
+
 ### Deferred / noted
 
 - **Allowlist entry blocked.** Adding `Bash(python scripts/next_bead.py:*)` (+
