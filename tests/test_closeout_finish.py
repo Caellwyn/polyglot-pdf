@@ -307,8 +307,12 @@ class TestTelemetryCommitPush:
         assert ".beads/experiment_state.json" in commits[0]
         # The PR number is in the commit message.
         assert "PR #7" in commits[0]
-        # A push followed it.
-        assert any("push" in j and "feat/x" in j for j in rec.joined())
+        # TWO pushes happened: the initial branch push (-u) AND the telemetry
+        # push (plain). Asserting >=2 (not just "a push exists") is what actually
+        # proves the TELEMETRY push ran -- the initial push alone would satisfy a
+        # bare "any push" check (fresh-eyes PR #70 F2).
+        pushes = [j for j in rec.joined() if " push " in (" " + j + " ") and "feat/x" in j]
+        assert len(pushes) == 2, pushes
         assert "committed+pushed" in job.out["telemetry"]
 
     def test_noop_when_telemetry_clean(self):
@@ -346,6 +350,24 @@ class TestTelemetryCommitPush:
         job = _job(rec, skip_review=True, review_worthy=False)
         assert job.run() == cf.EXIT_OK
         assert "PUSH-FAILED" in job.out["telemetry"]
+        # the stderr reason propagates into the annotation (covers the
+        # splitlines()[-1] extraction -- fresh-eyes PR #70 F3)
+        assert "remote rejected" in job.out["telemetry"]
+
+    def test_status_check_failure_is_surfaced_not_silent(self):
+        # If `git status` itself fails, the step must NOT silently return (which
+        # would re-orphan the row) -- it annotates STATUS-CHECK-FAILED, warn-only
+        # (fresh-eyes PR #70 F1).
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "status --porcelain": (128, "", "fatal: not a git repository"),
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        assert job.run() == cf.EXIT_OK
+        assert "STATUS-CHECK-FAILED" in job.out["telemetry"]
+        # and it did NOT attempt a telemetry commit after the failed guard
+        assert not any("commit" in j and "harness_ledger.jsonl" in j
+                       for j in rec.joined())
 
     def test_close_only_never_commits_telemetry(self):
         # --close-only returns before the telemetry steps -> no status/commit/push.

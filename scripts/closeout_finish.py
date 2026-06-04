@@ -307,6 +307,14 @@ class Closeout:
         # real dirty state of exactly these two paths.
         status = _run(["git", "-C", self.wt, "status", "--porcelain", "--",
                        *self._TELEMETRY_FILES], check=False)
+        if status.returncode != 0:
+            # The guard itself failed (broken git / bad path). Don't silently
+            # treat that as "clean" -- that would re-orphan the row, the exact bug
+            # this step fixes. Surface it (still warn-only). (fresh-eyes PR #70 F1)
+            self.out["telemetry"] += " | STATUS-CHECK-FAILED: {}".format(
+                (status.stderr or status.stdout or "").strip().splitlines()[-1]
+                if (status.stderr or status.stdout).strip() else "no output")
+            return
         if not status.stdout.strip():
             return  # clean (e.g. --no-bump dry-run, or ledger GAP) -- nothing to commit
         pr = self.out["PR"]
