@@ -20,9 +20,39 @@ durable work.
   The local store is a cache; the remote is truth. Skipping the pull is the
   parallel-claim bug class (two workers claim the same bead because neither saw
   the other's claim). `scripts/bd_safe.py` brackets every write for you.
+- **Claim before you edit.** After picking a bead, run `bd_safe.py claim <id>`
+  BEFORE touching any file. Its collision checks (below) refuse a bead another
+  worker already owns. Skipping the claim is what causes duplicate-work
+  collisions even when the pull cadence is followed.
 - **Dependency direction is easy to invert:** the FIRST arg to `bd dep add` is
   what gets BLOCKED. An epic is blocked BY its children, so `bd dep add <epic>
   <child>`. `bd_safe.py dep-add --epic/--child` makes this un-invertible.
+
+## Self-selection + the change-surface collision guard
+
+Selecting the next bead is a JUDGMENT call (continue an epic vs. bundle small
+nits vs. priority) made SAFE by a deterministic write-overlap guard. The
+`/next-bead` skill is the front door; `scripts/next_bead.py` is its engine.
+
+- **Every bead declares its change-surfaces** -- a structured `metadata.surfaces`
+  list of the files/dirs it will **MODIFY** (not read; reads don't collide).
+  Declare at creation -- `--metadata` takes a full JSON object, e.g.
+  `bd create ... --metadata '{"surfaces":["scripts/","docs/x.md"]}'` -- and via
+  the spawn convention. A trailing slash (`scripts/`, `.claude/skills/`) means
+  "this directory and anything nested under it." **A bead with no declared
+  surfaces is UNKNOWN** and conservatively collides with everything.
+- **`/next-bead` surfaces ready candidates and HARD-blocks write-overlaps.**
+  `next_bead.py` cross-references each ready bead's surfaces against every ACTIVE
+  claim (in_progress AND backed by a live branch/PR -- a stale claim does not
+  block) and splits them into `available` vs `blocked`. **There is no
+  orchestrator override:** two processes writing the same file is a conflict
+  regardless of intent. You pick only from `available`. Selection + claiming
+  only -- `/next-bead` never merges.
+- **Three collision checks gate every claim** (`bd_safe.py claim`): (1) an OPEN
+  PR whose TITLE carries the id; (2) a foreign branch carrying the id-suffix;
+  (3) **change-surface overlap** with an active claim. Checks 1-2 catch a
+  collision only AFTER a branch/PR exists; check 3 catches it at claim time.
+  `--no-surface-check` drops only check 3 (a deliberate maintainer re-claim).
 
 ## The swarm scripts (zero model tokens)
 

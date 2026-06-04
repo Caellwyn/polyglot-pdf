@@ -8,6 +8,7 @@ collision checks gate a claim, and the dep-add direction cannot be inverted.
 """
 
 import importlib.util
+import json
 import pathlib
 import subprocess
 import sys
@@ -348,3 +349,240 @@ def test_pr_collision_check_failure_raises(monkeypatch):
     monkeypatch.setattr(bs, "_run", recorder)
     with pytest.raises(RuntimeError):
         bs._pr_collision("yourturn-group-nbj1", bs.DEFAULT_REPO)
+
+
+# --- change-surface overlap (R1 collision guard, bd polyglot-pdf-h2r.1) ---
+
+@pytest.mark.parametrize(
+    "a,b,expected",
+    [
+        ("scripts/foo.py", "scripts/foo.py", True),       # identical file
+        ("scripts/foo.py", "scripts/bar.py", False),      # sibling files
+        ("scripts/", "scripts/foo.py", True),             # dir prefix contains file
+        ("scripts/foo.py", "scripts/", True),             # symmetric
+        ("scripts/", "scripts-extra/foo.py", False),      # sibling DIR, not nested
+        (".claude/skills/", ".claude/skills/closeout/SKILL.md", True),
+        ("./scripts/foo.py", "scripts/foo.py", True),     # leading ./ normalized
+        ("scripts\\foo.py", "scripts/foo.py", True),      # backslash normalized
+        ("scripts/", "scripts", True),                    # dir prefix vs bare dir name
+        ("scripts", "scripts/foo.py", False),             # bare 'scripts' is a FILE, no nesting
+        ("", "scripts/foo.py", False),                    # empty never overlaps (per-surface)
+        ("./", "scripts/foo.py", True),                   # "./" = repo root -> overlaps all (#1)
+        ("/", "anything/at/all.py", True),                # root prefix overlaps all (#1)
+        (".//", "docs/x.md", True),                       # multi "./" collapses to root (#1)
+    ],
+)
+def test_one_surface_overlaps(a, b, expected):
+    assert bs._one_surface_overlaps(a, b) is expected
+
+
+def test_normalize_surface_root_forms():
+    # A non-empty input that collapses to nothing is the repo root "/", NOT ""
+    # (empty would falsely overlap nothing). A genuinely empty input stays "".
+    assert bs._normalize_surface("./") == "/"
+    assert bs._normalize_surface("/") == "/"
+    assert bs._normalize_surface(".//") == "/"
+    assert bs._normalize_surface("") == ""
+    assert bs._normalize_surface("   ") == ""
+
+
+def test_root_surface_does_not_silently_opt_out_of_guard():
+    # The #1 false-negative: a bead declaring "./" must still collide.
+    assert bs._surfaces_overlap(["./"], ["scripts/foo.py"]) is True
+    assert bs._surfaces_overlap(["scripts/foo.py"], ["/"]) is True
+
+
+def test_surfaces_overlap_unknown_policy():
+    # Either side empty (UNKNOWN) -> conservative overlap.
+    assert bs._surfaces_overlap([], ["scripts/x.py"]) is True
+    assert bs._surfaces_overlap(["scripts/x.py"], []) is True
+    assert bs._surfaces_overlap([], []) is True
+    # Both declared + disjoint -> no overlap.
+    assert bs._surfaces_overlap(["docs/a.md"], ["scripts/b.py"]) is False
+    # Both declared + intersecting -> overlap.
+    assert bs._surfaces_overlap(["scripts/"], ["docs/x", "scripts/y.py"]) is True
+
+
+def _bead_show_json(surfaces):
+    # Shape of `bd show <id> --json` (a list whose [0] is the bead).
+    return json.dumps([{"id": "x", "metadata": {"surfaces": surfaces}}])
+
+
+def test_bead_surfaces_parses_metadata(monkeypatch):
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=_bead_show_json(["scripts/", "docs/x.md"]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1") == ["scripts/", "docs/x.md"]
+
+
+def test_bead_surfaces_missing_metadata_returns_empty(monkeypatch):
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1") == []
+
+
+def test_bead_surfaces_filters_non_string_junk(monkeypatch):
+    # A malformed surfaces list (null/number/nested) must not crash the overlap
+    # math later -- non-strings are dropped, strings kept (#2).
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=json.dumps(
+             [{"id": "x", "metadata": {"surfaces": ["scripts/", None, 7, ["nested"], "docs/x.md"]}}]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1") == ["scripts/", "docs/x.md"]
+    # And the kept surfaces still drive overlap without raising.
+    assert bs._surfaces_overlap(
+        bs._bead_surfaces("proj-aaa1"), ["scripts/foo.py"]
+    ) is True
+
+
+def test_active_claim_ids_filters_to_live_work(monkeypatch):
+    # in_progress beads: foo has an open PR (live -> active); bar has neither PR
+    # nor branch (stale -> NOT active); the exclude_id is never counted.
+    def fake(cmd, *, check=True):
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([
+                {"id": "proj-foo", "status": "in_progress"},
+                {"id": "proj-bar", "status": "in_progress"},
+                {"id": "proj-self", "status": "in_progress"},
+            ]))
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            if "proj-foo" in " ".join(cmd):
+                return _proc(stdout='[{"number":1,"title":"x (bd proj-foo)"}]')
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")  # no foreign branches
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    active = bs._active_claim_ids(exclude_id="proj-self")
+    assert active == ["proj-foo"]          # foo live, bar stale dropped
+    assert "proj-bar" not in active
+    assert "proj-self" not in active        # excluded
+
+
+def test_active_claim_ids_isolates_per_bead_failure(monkeypatch):
+    # A transient gh failure for ONE in-progress bead must not abort the whole
+    # enumeration; that bead is conservatively counted as active (#5).
+    def fake(cmd, *, check=True):
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([
+                {"id": "proj-boom", "status": "in_progress"},
+                {"id": "proj-ok", "status": "in_progress"},
+            ]))
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            if "proj-boom" in " ".join(cmd):
+                # _pr_collision raises RuntimeError on a non-zero gh exit.
+                return _proc(returncode=1, stderr="gh transient")
+            if "proj-ok" in " ".join(cmd):
+                return _proc(stdout='[{"number":2,"title":"y (bd proj-ok)"}]')
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    active = bs._active_claim_ids(exclude_id="")
+    # boom counted (conservative on failure), ok counted (live PR).
+    assert set(active) == {"proj-boom", "proj-ok"}
+
+
+def test_claim_aborts_on_surface_overlap(monkeypatch, capsys):
+    # No PR/branch collision on the bead itself, but an ACTIVE foreign claim
+    # writes an overlapping surface -> hard block (the R1 guard).
+    def fake(cmd, *, check=True):
+        if cmd[:2] == ["bd", "dolt"]:
+            return _proc()
+        if cmd[:3] == ["gh", "pr", "list"]:
+            # the bead being claimed has no PR; the active claim 'other' does.
+            if "proj-other" in " ".join(cmd):
+                return _proc(stdout='[{"number":9,"title":"x (bd proj-other)"}]')
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([{"id": "proj-other", "status": "in_progress"}]))
+        if cmd[:3] == ["bd", "show", "proj-mine"]:
+            return _proc(stdout=_bead_show_json(["scripts/"]))
+        if cmd[:3] == ["bd", "show", "proj-other"]:
+            return _proc(stdout=_bead_show_json(["scripts/foo.py"]))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    args = types.SimpleNamespace(
+        id="proj-mine", repo=bs.DEFAULT_REPO, no_surface_check=False
+    )
+    rc = bs.cmd_claim(args)
+    assert rc == bs.EXIT_ABORT_COLLISION
+    out = capsys.readouterr().out
+    assert "write-surface overlap" in out
+    assert "proj-other" in out
+
+
+def test_claim_no_surface_check_flag_skips_guard(monkeypatch):
+    # --no-surface-check drops ONLY the surface guard; the claim proceeds even
+    # with an overlapping active claim present.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        # bd list should NOT even be consulted when the guard is skipped, but be
+        # safe if it is.
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([{"id": "proj-other", "status": "in_progress"}]))
+        if cmd[:3] == ["bd", "show", "proj-other"]:
+            return _proc(stdout=_bead_show_json(["scripts/foo.py"]))
+        if cmd[:3] == ["bd", "show", "proj-mine"]:
+            return _proc(stdout=_bead_show_json(["scripts/"]))
+        return _proc()
+    rec_calls = []
+    orig = fake
+    def tracking(cmd, *, check=True):
+        rec_calls.append(list(cmd))
+        return orig(cmd, check=check)
+    monkeypatch.setattr(bs, "_run", tracking)
+    args = types.SimpleNamespace(
+        id="proj-mine", repo=bs.DEFAULT_REPO, no_surface_check=True
+    )
+    rc = bs.cmd_claim(args)
+    assert rc == bs.EXIT_OK
+    assert any("--claim" in c for c in rec_calls)
+    # guard skipped: no bd list (active-claim enumeration) was run.
+    assert not any(c[:2] == ["bd", "list"] for c in rec_calls)
+
+
+def test_claim_proceeds_when_surfaces_disjoint(monkeypatch):
+    # An active claim exists but its surfaces are disjoint -> claim proceeds.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["gh", "pr", "list"]:
+            if "proj-other" in " ".join(cmd):
+                return _proc(stdout='[{"number":9,"title":"x (bd proj-other)"}]')
+            return _proc(stdout="[]")
+        if cmd[:3] == ["git", "branch", "-a"]:
+            return _proc(stdout="* dev")
+        if cmd[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return _proc(stdout="dev")
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout=json.dumps([{"id": "proj-other", "status": "in_progress"}]))
+        if cmd[:3] == ["bd", "show", "proj-other"]:
+            return _proc(stdout=_bead_show_json(["docs/a.md"]))
+        if cmd[:3] == ["bd", "show", "proj-mine"]:
+            return _proc(stdout=_bead_show_json(["scripts/b.py"]))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    args = types.SimpleNamespace(
+        id="proj-mine", repo=bs.DEFAULT_REPO, no_surface_check=False
+    )
+    assert bs.cmd_claim(args) == bs.EXIT_OK
