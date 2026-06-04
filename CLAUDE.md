@@ -88,6 +88,17 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    consumers under `polyglot-pdf-zun`. Full canon (incl. field-id brackets,
    form-session vs session) in
    [`docs/standards/terminology.md`](docs/standards/terminology.md) (`polyglot-pdf-m3f`).
+6. **ASCII ONLY in code files.** In `.py` / `.ts` / `.tsx` / `.js` and any other
+   source file -- including comments and string literals -- use plain ASCII: `--`
+   not an em-dash, `"`/`'` not smart quotes, no emoji. **For Python this is a
+   correctness rule:** Windows' default console is cp1252, and non-ASCII glyphs
+   in code that reaches `print()`/stdout (or a file opened without an explicit
+   encoding) crash with `UnicodeDecodeError` / `UnicodeEncodeError` -- this repo
+   has burned multiple beads on exactly that (39a, 6xp, 4ln, hrn.14/16). **For
+   the TS/JS frontend** (read as UTF-8 by Vite/Node, so no cp1252 crash) it is a
+   consistency rule: one ASCII style across all source. **Markdown/docs are
+   exempt** -- Unicode is fine there. Match the surrounding code's existing ASCII
+   style.
 
 ---
 
