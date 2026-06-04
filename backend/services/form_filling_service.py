@@ -38,6 +38,14 @@ class FormFillingService:
         self._session_id = None
         # Web session state - schema only (no field caching)
         self._schema: Optional[Dict[str, Any]] = None  # Schema for context only
+        # Last section metadata seen via switch_to_section. Navigation state (NOT
+        # field values/PII), retained for the connection lifetime so a mid-session
+        # restart (restart_gemini_session, e.g. after a Level-3 farewell) can rebuild
+        # the system instruction WITH the user's section position + previously-spoken
+        # field names -- otherwise the restart defaults to "section 1 of 1" and loses
+        # access to earlier-section lookups (bd polyglot-pdf-umv). None until the first
+        # section switch (single-section forms never switch, so None is correct there).
+        self._last_section_metadata: Optional[Dict[str, Any]] = None
         self._fill_language: str = "English"  # Default fill language
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
         # JIT schema loading: Track which field schemas have been sent to Gemini
@@ -378,10 +386,26 @@ class FormFillingService:
         
         # Build system instruction from existing schema
         # Note: Backend doesn't store current_values (client is source of truth)
-        # For restart, we use empty dict since frontend will sync values if needed
+        # For restart, we use empty dict since frontend will sync values if needed.
+        # Thread the retained section metadata (bd polyglot-pdf-umv) so the rebuilt SI
+        # keeps the user's section position + previously-spoken field names. Without
+        # it, a mid-section restart defaults to "section 1 of 1" with no prior history,
+        # so Gemini loses its place and can re-ask earlier-section fields. None for
+        # single-section forms / before any switch, which yields the original behavior.
+        sm = self._last_section_metadata or {}
+        sm_number = sm.get("section_number")
+        # Mirror switch_to_section's label fallback so a restart reproduces the same
+        # section label the switch used (f"Section {n}" when the section had no label).
+        sm_label = sm.get("section_label")
+        if sm_label is None and sm_number is not None:
+            sm_label = f"Section {sm_number}"
         system_instruction = self.build_form_context_message(
             self._schema,
-            {}  # Empty values - frontend maintains state
+            {},  # Empty values - frontend maintains state
+            section_number=sm_number,
+            total_sections=sm.get("total_sections"),
+            section_label=sm_label,
+            previous_spoken_names=sm.get("previous_spoken_names"),
         )
         
         # Restart Gemini session (doesn't re-accept WebSocket)
@@ -520,8 +544,13 @@ class FormFillingService:
         
         section_number = section_metadata.get("section_number", 1)
         total_sections = section_metadata.get("total_sections", 1)
-        
-        _log.info("switching_section", 
+
+        # Retain section metadata so a later restart_gemini_session can rebuild the
+        # system instruction with this position instead of defaulting to section 1
+        # (bd polyglot-pdf-umv). Navigation state only -- no field values stored.
+        self._last_section_metadata = section_metadata
+
+        _log.info("switching_section",
                  session_id=self._session_id,
                  section_number=section_number,
                  total_sections=total_sections)
