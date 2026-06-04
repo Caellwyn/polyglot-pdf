@@ -110,8 +110,10 @@ Usage
         [--repo OWNER/REPO] [--timeout-min N] [--poll-sec N] [--since ISO8601]
 
 `--since` lets the caller scope detection to reviews/comments created after
-a known timestamp (e.g. the moment of a "@codex review" re-trigger), so a
-re-review loop does not re-detect the previous round's verdict.
+a known timestamp, so a re-review loop does not re-detect the previous round's
+verdict. For Copilot (requested via the reviewer API) the floor is a UTC
+timestamp captured just BEFORE the reviewer request (there is no comment
+created_at); for Codex it is the "@codex review" comment's created_at.
 
 Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
 ERROR are distinct so a shell caller can retry-later on a timeout but
@@ -1129,8 +1131,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--since",
         default=None,
-        help="ISO8601; only count reviews/comments at or after this time "
-        "(use the moment of a re-trigger to avoid re-detecting the prior round)",
+        help="ISO8601; only count reviews/comments at or after this time, to "
+        "avoid re-detecting the prior round. For Copilot use a UTC timestamp "
+        "captured just BEFORE the reviewer request; for Codex, the re-trigger "
+        "comment's created_at.",
     )
     parser.add_argument(
         "--close-on-clean",

@@ -1,7 +1,7 @@
 """Project-specific configuration for the claude-swarm-kit scripts.
 
 The swarm scripts (bd_safe.py, pr_review_watcher.py, journal_scaffold.py,
-closeout_housekeeping.py) are otherwise product-agnostic. The two values that
+closeout_housekeeping.py) are otherwise product-agnostic. The three values that
 DO differ per project live here, resolved in this precedence order:
 
   1. Environment variable  (SWARM_REPO / SWARM_BEAD_PREFIX /

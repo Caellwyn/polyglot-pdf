@@ -188,24 +188,42 @@ class TestWorktreeSafety:
 # --------------------------------------------------------------------------- #
 class TestReviewWorthy:
     def test_opens_requests_reviewer_and_captures_ts(self, monkeypatch):
-        # TS is now a UTC floor captured BEFORE the request (no comment
-        # created_at to read), so pin _utcnow for a deterministic assertion.
-        monkeypatch.setattr(cf, "_utcnow", lambda: "2026-06-04T12:00:00Z")
+        # TS is the UTC floor captured BEFORE the reviewer-request POST (no comment
+        # created_at to read). The order matters: the review's submitted_at must be
+        # >= the floor, so _utcnow() MUST be read before the gh api call. Use a
+        # call-order log shared by both _utcnow and _run to PIN that ordering, not
+        # just the value (a reordered floor-after-POST would otherwise pass).
+        order = []
+        monkeypatch.setattr(
+            cf, "_utcnow",
+            lambda: (order.append("utcnow"), "2026-06-04T12:00:00Z")[1])
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False)
+
+        # Wrap the recorder seam to log when the reviewer-request POST happens, so
+        # we can assert _utcnow() (the floor) was read BEFORE it. _job sets cf._run
+        # = rec, so install the wrapper AFTER _job.
+        def _ordered_run(cmd, **kw):
+            if "requested_reviewers" in " ".join(cmd):
+                order.append("request")
+            return rec(cmd, **kw)
+        cf._run = _ordered_run  # restored by the _restore_run autouse fixture
         assert job.run() == cf.EXIT_OK
         assert job.out["PR"] == "42"
         assert job.out["TS"] == "2026-06-04T12:00:00Z"
+        # the floor was read BEFORE the reviewer request was POSTed.
+        assert order.index("utcnow") < order.index("request"), order
         # the review is REQUESTED via the reviewer API, not @-mentioned in a
         # comment (a comment routes to the coding agent -- bd polyglot-pdf-1pr).
         api = [j for j in rec.joined() if "gh api" in j]
-        assert api and "pulls/42/requested_reviewers" in api[0]
-        assert cf.REVIEW_REVIEWER_SLUG in api[0]
-        # never the old comment-trigger endpoint or the @-mention string.
-        assert "issues/42/comments" not in api[0]
-        assert "@copilot please review" not in api[0]
+        assert any("pulls/42/requested_reviewers" in j for j in api)
+        assert any(cf.REVIEW_REVIEWER_SLUG in j for j in api)
+        # never the old comment-trigger endpoint or the @-mention string, on ANY
+        # call (not just the first -- the regression guard against reverting).
+        assert not any("issues/42/comments" in j for j in api)
+        assert not any("@copilot please review" in j for j in rec.joined())
         # watch command printed (in the output block), referencing the PR + since
         assert "pr_review_watcher.py" in job.out["WATCH_CMD"]
         assert "--since" in job.out["WATCH_CMD"] and "42" in job.out["WATCH_CMD"]
@@ -225,9 +243,12 @@ class TestReviewWorthy:
 
     def test_pr_create_uses_bare_base_name(self):
         # gh pr create --base wants the branch NAME ('dev'), not 'origin/dev'.
+        # (No "gh api" response is stubbed: the reviewer-request POST returns
+        # success-empty by default and its body is ignored -- TS comes from
+        # _utcnow(), not the gh api response, since this flow has no comment
+        # created_at to read.)
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
-            "gh api": (0, "2026-06-02T12:00:00Z", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False, base="origin/dev")
         job.run()
