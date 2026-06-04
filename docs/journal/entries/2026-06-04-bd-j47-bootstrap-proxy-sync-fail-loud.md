@@ -75,9 +75,11 @@ collateral): a failed `bd dolt pull` now **taints the output** with a
 Done against the live store on this container (the previous fix's lesson: do not
 ship unverifiable remote-infra guesses):
 
-- **Fail-loud gate, both ways:** healthy store -> `origin_main_count` 124 (gate
-  passes, marks); stale store (a copy with `origin/main` removed) -> `None` (gate
-  fires the `STALE STORE` error, returns non-zero, no marker).
+- **Fail-loud gate, both ways:** healthy store -> `origin_main_present` true (gate
+  passes, marks); stale store (a copy with `origin/main` removed) -> false (gate
+  fires the `STALE STORE` error, returns non-zero, no marker). Per fresh-eyes the
+  gate keys off branch PRESENCE, not an issue count, so a transient count-query
+  failure on a healthy store can't false-trip it.
 - **Freshness anchor:** `_live_ref_commit()` returns the live `6d9585...` over the
   proxy via plain git.
 - **Full fresh-container mock:** dropped the marker, ran the bootstrap end to end
@@ -86,6 +88,27 @@ ship unverifiable remote-infra guesses):
   (124 issues, all statuses).
 - **next_bead:** a forced pull failure yields exit 0 with a `stale_warning` (not an
   abort); `--no-pull` still produces candidates.
+
+## Fresh-eyes triage
+
+Sonnet fresh-eyes returned 7 findings; 6 adopted, 1 accepted-as-is:
+
+- **Adopted (4, high):** `git fetch refs/dolt/data:refs/dolt/data` fails non-ff on
+  repeat -> forced refspec `+refs/dolt/data:...`.
+- **Adopted (7, high):** `live is None` warned but still marked + exit 0 (silent
+  success over unverified data) -> now does NOT mark when freshness can't be
+  verified; next session re-verifies.
+- **Adopted (2, med):** gate keyed off `origin_main_count() is None`, conflating a
+  truly-absent ref with a transient count-query failure -> gate now keys off
+  `origin_main_present()` (branch existence).
+- **Adopted (3, med):** `refresh_remote_and_pull` returned `True` even when the
+  post-reconcile pull failed -> returns the actual pull result.
+- **Adopted (1, med):** `repoint` left `config.yaml` dirty if it had not pre-existed
+  -> restores prior content or removes a bd-created file.
+- **Adopted (6, low):** `repoint` now catches `bd`-not-on-PATH instead of crashing.
+- **Accepted (5, low):** `/next-bead`'s pull is bounded by bd_safe's 120s, not 90s
+  -- still bounded (not a silent hang), and lowering the shared bd_safe timeout is
+  out of scope.
 
 ## Doc freshness
 

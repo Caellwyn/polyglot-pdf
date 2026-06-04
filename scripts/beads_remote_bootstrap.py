@@ -193,8 +193,9 @@ def refresh_remote_and_pull() -> bool:
                 if reconcile_working_branch_onto_ref(dolt):
                     ok2, _ = bd_dolt_pull()
                     log("reconciled onto the canonical ref"
-                        + ("; pull complete." if ok2 else " (working branch now on origin/main)."))
-                    return True  # working branch is aligned to origin/main regardless
+                        + ("; pull complete." if ok2
+                           else "; post-reconcile pull failed (may be behind live)."))
+                    return ok2  # only claim 'refreshed' if the re-pull confirmed it
             except Exception as e:  # noqa: BLE001
                 vlog(f"reconcile failed: {e}")
         else:
@@ -472,7 +473,10 @@ def _git_fetch_dolt_ref() -> bool:
     bd's dolt-native pull isn't. Lands the canonical dolt ref locally so a
     subsequent reconcile/pull has it to work from. Best-effort."""
     try:
-        p = run(["git", "fetch", "origin", "refs/dolt/data:refs/dolt/data"],
+        # Force (+) the local-side ref update: refs/dolt/data can advance
+        # non-fast-forward, and a non-ff update of a direct local ref FAILS without
+        # the leading '+', silently leaving us on a stale ref (fresh-eyes j47).
+        p = run(["git", "fetch", "origin", "+refs/dolt/data:refs/dolt/data"],
                 cwd=REPO_ROOT, timeout=120)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -493,14 +497,23 @@ def repoint_dolt_remote_to_proxy() -> bool:
     if not origin:
         return False
     dolt_url = origin if origin.startswith("git+") else "git+" + origin
-    original = CONFIG.read_text(encoding="utf-8") if CONFIG.exists() else None
+    existed = CONFIG.exists()
+    original = CONFIG.read_text(encoding="utf-8") if existed else None
     try:
         run(["bd", "dolt", "remote", "remove", "origin"], cwd=REPO_ROOT, timeout=30)  # ignore if absent
         run(["bd", "dolt", "remote", "add", "origin", dolt_url], cwd=REPO_ROOT, timeout=30)
         vlog(f"re-pointed dolt origin -> {dolt_url}")
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        vlog(f"could not re-point dolt remote ({e})")
+        return False
     finally:
-        if original is not None:
+        # Keep the tree clean: `bd dolt remote add` rewrites sync.remote in the
+        # tracked config.yaml. Restore prior content, or remove the file entirely
+        # if bd created it where none existed (fresh-eyes j47).
+        if existed:
             CONFIG.write_text(original, encoding="utf-8")
+        elif CONFIG.exists():
+            CONFIG.unlink()
     return True
 
 
@@ -514,17 +527,17 @@ def bd_dolt_pull(timeout: int = 90) -> tuple[bool, str]:
     return p.returncode == 0, (p.stderr or "") + (p.stdout or "")
 
 
-def origin_main_count(dolt: str) -> int | None:
-    """Issue count on the dolt remote-tracking branch (``origin/main``), or None if
-    that branch is ABSENT -- i.e. the dolt fetch never loaded the ref and bd is
-    serving the stale committed JSONL. This is the freshness check's core signal."""
+def origin_main_present(dolt: str) -> bool:
+    """Whether the dolt remote-tracking branch (``origin/main``) EXISTS -- i.e. bd
+    actually loaded the canonical ref. This is the freshness gate's real signal: an
+    ABSENT branch means the dolt fetch never landed the ref and bd is serving the
+    stale committed JSONL. Keyed on branch PRESENCE, not an issue count, so a
+    transient `dolt sql` count failure on a healthy store can't false-trip the gate
+    (fresh-eyes j47)."""
     clone_db = _dolt_db_dir(_data_dir_from_config())
     if clone_db is None:
-        return None
-    ref = _remote_tracking_ref(dolt, clone_db)
-    if ref is None:
-        return None
-    return _issue_count(dolt, clone_db, ref)
+        return False
+    return _remote_tracking_ref(dolt, clone_db) is not None
 
 
 def quiet_beads_hygiene() -> None:
@@ -636,17 +649,25 @@ def main() -> int:
     # FAIL LOUD and non-zero instead of marking a stale snapshot as hydrated.
     live = _live_ref_commit()
     if live is None:
+        # Cannot reach refs/dolt/data to verify freshness. Do NOT certify (no
+        # marker) so the next session re-verifies -- marking here would be the same
+        # silent-success-over-unverified-data failure this fix exists to kill
+        # (fresh-eyes j47). The store is usable this session but may be stale.
         log("WARNING: refs/dolt/data is unreachable -- cannot verify freshness; "
-            "proceeding, but 'bd ready' may be stale (pull before trusting it).")
-    elif dolt is None:
-        log("WARNING: no 'dolt' CLI to verify the store against refs/dolt/data @ "
-            f"{live[:10]}; 'bd ready' may be stale.")
-    elif origin_main_count(dolt) is None:
+            "NOT marking hydrated (next session re-verifies). 'bd ready' may be "
+            "stale this session -- pull before trusting it.")
+        return 0
+    if dolt is None:
+        log(f"WARNING: no 'dolt' CLI to verify the store against refs/dolt/data @ "
+            f"{live[:10]}; NOT marking hydrated (next session re-verifies). "
+            "'bd ready' may be stale.")
+        return 0
+    if not origin_main_present(dolt):
         log("ERROR: STALE STORE -- the live tracker refs/dolt/data @ "
-            f"{live[:10]} was NOT loaded; bd is serving the committed "
-            ".beads/issues.jsonl snapshot. DO NOT trust 'bd ready' / 'bd show' / "
-            "'bd list'. Re-run 'python scripts/beads_remote_bootstrap.py --verbose' "
-            "and see docs/components/beads-remote-bootstrap.md.")
+            f"{live[:10]} was NOT loaded (origin/main absent); bd is serving the "
+            "committed .beads/issues.jsonl snapshot. DO NOT trust 'bd ready' / "
+            "'bd show' / 'bd list'. Re-run 'python scripts/beads_remote_bootstrap.py "
+            "--verbose' and see docs/components/beads-remote-bootstrap.md.")
         return 1
 
     mark_hydrated(live)
