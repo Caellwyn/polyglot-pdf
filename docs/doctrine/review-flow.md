@@ -1,6 +1,6 @@
 # Review-flow doctrine: parallel Copilot + fresh-eyes, looped to clean
 
-*Last updated: 2026-06-02.*
+*Last updated: 2026-06-04.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
@@ -11,10 +11,10 @@ rationale for each choice is preserved below so it is not re-litigated.
 ```
 clean tree
   -> judge review-worthiness              [orchestrator: does this diff warrant Copilot?]
-  -> open a NORMAL (non-draft) PR         [if review-worthy: chain "@copilot please review" COMMENT into the create call]
+  -> open a NORMAL (non-draft) PR         [if review-worthy: chain a REVIEWER REQUEST (requested_reviewers) into the create call]
   -> spawn fresh-eyes reviewer            [ALWAYS; runs in PARALLEL with Copilot if requested]
   -> fix the COMBINED round-1 findings    [one batch -> one re-review]
-  -> push, then post "@copilot please review"  [REQUESTS the re-review; auto-review is off]
+  -> push, then RE-REQUEST the reviewer   [re-POST requested_reviewers; re-fires a fresh formal review]
   -> loop: watch Copilot -> fix -> push -> re-request   [until Copilot has NO comments]
   -> close bead + ping the maintainer to merge
 ```
@@ -28,11 +28,24 @@ only and has no Copilot loop.
 - **Copilot review is OPT-IN (since 2026-06-01).** GitHub changed Copilot pricing
   to per-token metering against a finite monthly credit pool -- no more unlimited
   tier. We disabled automatic review-on-open in repo settings; a review now fires
-  ONLY when a PR COMMENT contains `@copilot please review` (the trigger in the PR
-  *body* does NOT work -- verified on PR #52). Two consequences encoded below: we
-  judge whether a PR is even worth a review, and we CHAIN the trigger comment into
-  the same Bash call as `gh pr create` (capturing its `created_at` as the watch
-  `--since` floor) so requesting it costs zero extra Claude turns.
+  when we **request the review bot as a reviewer** (`POST .../pulls/$PR/requested_reviewers`
+  with `reviewers[]=copilot-pull-request-reviewer[bot]`). Two consequences encoded
+  below: we judge whether a PR is even worth a review, and we CHAIN the reviewer
+  request into the same Bash call as `gh pr create` (capturing a UTC timestamp
+  *before* it as the watch `--since` floor) so requesting it costs zero extra
+  Claude turns.
+- **Why a REVIEWER REQUEST, not an `@copilot please review` COMMENT (bd
+  polyglot-pdf-1pr).** An `@copilot` comment invokes the Copilot **coding agent**
+  -- the agentic worker that clones the repo, starts MCP servers, and **commits to
+  the PR** (or declines with "per your rules") -- NOT Copilot code review. The two
+  are different products. Confirmed on throwaway PR #74: requesting
+  `copilot-pull-request-reviewer[bot]` as a reviewer fires a real code review that
+  lands as a formal review (state COMMENTED/APPROVED/CHANGES_REQUESTED) with zero
+  commits, and emits the `copilot_work_started`/`reviewed` timeline events the
+  watcher already keys on. The slug is reviewer-agnostic config
+  (`swarm_config.review_reviewer_slug()`), so the staged Codex switch (bd hrn.9) is
+  a config change. (This corrects the earlier body-vs-comment framing from hrn.10,
+  which was itself wrong: the comment was never code review at all.)
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs get NO trigger and skip the watch loop entirely -- reviewing them
@@ -55,10 +68,11 @@ only and has no Copilot loop.
   draft provides is already guaranteed by allow_auto_merge=false (see
   promotion-tiers.md), which makes the manual merge the only gate regardless of
   draft state. Always open normal.
-- **Loop Copilot until CLEAN.** With auto-review off, a fix-push does NOT
-  re-trigger Copilot -- you MUST post "@copilot please review" to request each
-  re-review (it is the trigger now, not a belt-and-suspenders backstop). Fresh-eyes
-  is one pass (round 1 only); only Copilot loops.
+- **Loop Copilot until CLEAN.** A fix-push does NOT re-trigger Copilot -- you MUST
+  RE-REQUEST the review bot as a reviewer (re-POST `requested_reviewers`) to
+  request each re-review. Re-requesting an already-completed reviewer re-fires a
+  fresh formal review (verified on PR #74). Fresh-eyes is one pass (round 1 only);
+  only Copilot loops.
 - **Handle all four pr_review_watcher.py states.** CLEAN/COMMENTS (exit 0), ERROR
   (exit 1, surface to maintainer, no auto-retry -- a quota error will not clear
   for hours), TIMEOUT (exit 2, treat like ERROR -- NEVER interpret silence as

@@ -51,11 +51,13 @@ the "review finished" signal the author's watcher polls for. Silence reads as
 "never reviewed" and stalls the merge forever.
 
 - ZERO findings (satisfied, including round 2+ where all prior findings are
-  addressed): the comment body must be EXACTLY the four characters LGTM, alone --
-  no preamble, no summary, no SHAs. The watcher greps for an exact LGTM body; any
-  extra prose breaks the match. Do NOT write "prior findings resolved" or any
-  sentence -- just LGTM. Put LGTM in a formal Approve review's body if the
-  platform lets you; otherwise post it as a top-level issue comment.
+  addressed): submit a formal **Approve** review -- that approved state is the
+  clean signal the author's watcher reads. If you also write a body, it must be
+  EXACTLY the four characters LGTM, alone -- no preamble, no summary, no SHAs (the
+  watcher greps for an exact LGTM body as a fallback; any extra prose breaks that
+  match). Do NOT write "prior findings resolved" or any sentence -- approve, or
+  just LGTM. If the platform won't let you Approve, post LGTM as a top-level issue
+  comment.
 - HAS findings: post file-level comments AND a top-level summary, and assign the
   PR to @caellwynai-josh so the follow-up agent picks it up.
 - Base branch main: do NOT assign regardless of outcome, but STILL post a

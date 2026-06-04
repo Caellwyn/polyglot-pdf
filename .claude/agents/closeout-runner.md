@@ -100,9 +100,10 @@ R=...; WT=...; PY=...; PYTHONPATH="$WT" "$PY" "$WT/scripts/closeout_finish.py" \
   [--close-beads]
 ```
 
-Write the PR body text to a temp file first and pass it via `--pr-body-file` (never
-inline -- the body must never contain the `@copilot please review` trigger). Read
-the script's `RESULT:` block.
+Write the PR body text to a temp file first and pass it via `--pr-body-file` (to
+avoid shell-quoting a multi-line body; the script requests the review bot as a
+reviewer, so there is no trigger string to keep out of the body). Read the
+script's `RESULT:` block.
 
 **You may run `closeout_finish.py ... --dry-run` FIRST** to preview the plan if you
 want to confirm the paths before the real run -- it has zero side effects.
