@@ -192,7 +192,7 @@ This workflow keeps dev and prod aligned: the frontend manifest and the backend 
 - Schema CRUD API
 - Enhanced form renderer with numbered paragraphs
 
-See `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for detailed architecture plans.
+See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`docs/technical_guide.md`](docs/technical_guide.md) for the detailed architecture reference.
 
 ## 🛠️ Tech Stack
 
@@ -236,17 +236,30 @@ npm test
 
 ### Manual Testing
 
-See `planning_documents/MANUAL_TESTING_GUIDE.md` for detailed testing procedures (to be updated for new features).
+See [`docs/standards/testing.md`](docs/standards/testing.md) for the testing approach and conventions.
 
 ## 📚 Documentation
 
-### Planning Documents (`planning_documents/`)
+Documentation follows a 3-tier progressive-discovery system. Start with the tier-1
+entry points and follow them on demand:
 
-- **REFACTOR_IMPLEMENTATION_PLAN.md** - Detailed phase-by-phase implementation plan with testable deliverables
-- **PROJECT_CONTEXT.md** - Project vision, design principles, and development guidelines
-- **TECHNICAL_GUIDE.md** - Complete technical reference (updated after code changes)
-- **0_gemini_live_documentation.md** - Gemini Live API reference and best practices
-- **5_LOGGING_OVERHAUL_PLAN.md** - Logging infrastructure specification
+- **[`CLAUDE.md`](CLAUDE.md)** - Tier-1, always-loaded project guide (architecture
+  summary, critical rules, scar tissue) and the entry point for AI assistants.
+- **[`docs/INDEX.md`](docs/INDEX.md)** - The canonical documentation map; points at
+  every tier-2 / tier-3 doc.
+- **[`docs/technical_guide.md`](docs/technical_guide.md)** - Complete technical
+  reference.
+- **[`docs/components/`](docs/components/)** - Per-surface guides (WebSocket
+  routing, voice AI, schema forms, PDF filling).
+- **[`docs/standards/`](docs/standards/)** - Cross-cutting rules (HIPAA/PII policy,
+  stateless architecture, VAD, AI models, logging).
+- **[`docs/genai_docs/`](docs/genai_docs/README.md)** - Vendored `google-genai`
+  SDK reference (authoritative for Gemini Live syntax).
+- **[`docs/journal/entries/`](docs/journal/entries/)** - The chronological record
+  ("why was this built this way?").
+
+> Historical planning material has been archived under `docs/archive/` and
+> `planning_documents/archived/`; it is no longer canonical reading.
 
 ### Key Concepts
 
@@ -327,8 +340,8 @@ sessionStorage.clear()
 
 ### Development Workflow
 
-1. Read `planning_documents/PROJECT_CONTEXT.md` first
-2. Review `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` for current phase
+1. Read [`CLAUDE.md`](CLAUDE.md) and [`docs/INDEX.md`](docs/INDEX.md) first
+2. Check the issue tracker (beads: `bd ready`) for the next unit of work
 3. Create feature branch from current development branch
 4. Make changes with tests
 5. Run test suite: `pytest backend/tests -v`
@@ -341,7 +354,7 @@ sessionStorage.clear()
 - Python: Follow PEP 8, use type hints
 - TypeScript: Follow project ESLint config
 - Add tests for new features (target: 80% backend, 70% frontend coverage)
-- Update planning documents for architectural changes
+- Update the relevant docs (tier-2 component/standards docs + a journal entry) for architectural changes
 - Never log PII/PHI in backend logs
 - Use structured logging with metadata only
 
@@ -358,7 +371,7 @@ sessionStorage.clear()
 - ✅ Use the configured native-audio model (`MODEL_NATIVE`); current default `gemini-2.5-flash-native-audio-preview-12-2025`
 - ✅ Create unit tests before making changes
 - ✅ Maintain stateless backend (client = source of truth)
-- ✅ Update `TECHNICAL_GUIDE.md` after code changes
+- ✅ Update the relevant tier-2 doc + add a journal entry after code changes
 - ✅ Use `textContent` or `escapeHtml()` for display
 
 ## 🚢 Deployment
@@ -429,6 +442,6 @@ See `firestore.rules` — users can only read/write their own profile document. 
 
 ---
 
-**For AI Assistants**: Read `planning_documents/PROJECT_CONTEXT.md` and `planning_documents/REFACTOR_IMPLEMENTATION_PLAN.md` before making changes to this codebase.
+**For AI Assistants**: Read [`CLAUDE.md`](CLAUDE.md) and [`docs/INDEX.md`](docs/INDEX.md) before making changes to this codebase.
 
 **For Developers**: This project is currently in a major refactor phase. The existing voice form filler is functional, and we're building new PDF and admin UI features around it. See the implementation plan for the roadmap.
