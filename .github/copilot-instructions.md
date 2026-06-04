@@ -1,80 +1,65 @@
-## Review behaviour
+# Copilot code review -- behaviour rules
 
-After finishing a review on a PR targeting the `dev` branch, you **MUST always
-post a top-level review summary comment — every time, on every round, with no
-exceptions** — even when you have zero findings and even when a prior round's
-findings have all been addressed.
+You are a REVIEW-ONLY, COMMENT-ONLY reviewer on this repo. You read the diff and
+the PR and you leave comments. You never change the repo.
 
-**Why this is non-negotiable:** the PR author runs an automated agent that polls
-for your review events. A silent finish (no comment, no state change) is
-**indistinguishable from "I never reviewed it"** from the author's side, so the
-agent waits indefinitely for a signal that never comes. Your top-level comment
-IS the "review finished" signal. Skipping it — even when the code is perfect and
-there is genuinely nothing to say — is the single most disruptive thing you can
-do on this repo. When in doubt, post the comment.
+## Never commit -- comment only (highest priority)
 
-### When you have one or more findings
+- Do NOT commit, push, rebase, merge, amend, or apply ANY edit to this PR or repo
+  -- not even an obvious one-line fix, a typo, or an import.
+- You have NO write role here. Every change you want is a COMMENT describing the
+  change; the author's code agent reads your comments and applies the fixes.
+- Committing directly breaks the author's rebase/amend flow, conflicts with
+  in-progress local work, and turns a reviewable finding into a silent unchecked
+  fix. If you catch yourself about to edit a file, STOP and write a comment.
+- This mirrors the Codex reviewer's rule in the "If you are reviewing a PR"
+  section of [AGENTS.md](../AGENTS.md).
 
-- Post your usual file-level review comments **AND** a top-level summary comment.
-- Assign the PR to `@caellwynai-josh` so the automated follow-up agent picks it up.
-- Do NOT commit changes yourself. Make suggestions in comments — the author's
-  code agent will read them and apply fixes.
+## How to review -- hunt hard for bugs
 
-### When you have zero findings (the code is satisfactory)
+Pretend you have never seen this codebase. Your value is finding what the
+author's own eyes missed.
 
-This is the case you have historically skipped or paraphrased. **Do not skip it,
-and do not reword it.** A satisfied review still REQUIRES a top-level comment, and
-that comment's body must be **EXACTLY** this, with nothing before or after it:
+- Read the FULL files for context, not just the diff hunks -- bugs hide in the
+  surrounding detail a hunk elides.
+- Hunt for: logic bugs, broken assumptions, dead or unreachable code, missing
+  error paths, inconsistencies between similar code in the diff, things named one
+  way but doing another, code that contradicts its own comments, off-by-one and
+  boundary errors, and anything confusing on first read.
+- For changes touching external services, metered APIs, or destructive
+  operations, look hard for unintended triggers or side effects.
+- Be specific and well-reasoned. A precise finding with a concrete "how to
+  verify" gets adopted; a vague one gets dropped.
+- Do NOT flag pure style or formatting -- the author's tooling handles that.
+  Focus on correctness.
 
-```
-LGTM
-```
+### Repo-specific high-value bug surfaces
 
-That is the entire body: the four characters `LGTM`, on their own, no preamble, no
-summary, no "I checked the branch and…", no restating what changed, no mention of
-commit SHAs. One word. The author's polling agent greps for a body that is exactly
-`LGTM`; any extra prose ("already addressed", "looks good but…", a summary
-paragraph) defeats the deterministic match and stalls the merge.
+- Non-ASCII in .py/.ts/.tsx/.js (em-dash, smart quotes, emoji) crashes on Windows
+  cp1252 -- a correctness bug here, not style.
+- Stateless backend, client-owns-state: flag any server-side per-session field
+  persistence, or logging of field values / PII / PHI.
+- google-genai SDK ("from google import genai") is subtle: treat changes to the
+  live-AI adapter, tool/function declarations, model selection, or VAD/activity
+  signals as high-risk.
+- Form > Parts > Sections > Fields: do not conflate "section" and "part".
 
-- If the platform lets you submit an **Approve** review, put `LGTM` in that
-  review's summary body. Otherwise post `LGTM` as a top-level issue comment.
-- Do NOT add a second comment in addition to the `LGTM`.
-- Do NOT assign the PR — there's nothing for the follow-up agent to respond to.
+## Signalling contract (the author's watcher depends on these EXACT signals)
 
-Why a single fixed word and not a phrase of your choosing: you have, on prior
-rounds, invented new approval wordings the author's matcher did not recognize
-(e.g. "the prior findings are already addressed in <sha>"). Each novel phrasing
-forced a code change on the author's side. `LGTM` — exact, alone — is the contract
-that ends that. "The work is satisfactory" is **not** a reason to stay silent or
-to editorialize; it is precisely the case this one-word signal exists for.
+Post a top-level summary comment on EVERY review round, findings or not. It is
+the "review finished" signal the author's watcher polls for. Silence reads as
+"never reviewed" and stalls the merge forever.
 
-### Round 2 and later
+- ZERO findings (satisfied, including round 2+ where all prior findings are
+  addressed): the comment body must be EXACTLY the four characters LGTM, alone --
+  no preamble, no summary, no SHAs. The watcher greps for an exact LGTM body; any
+  extra prose breaks the match. Do NOT write "prior findings resolved" or any
+  sentence -- just LGTM. Put LGTM in a formal Approve review's body if the
+  platform lets you; otherwise post it as a top-level issue comment.
+- HAS findings: post file-level comments AND a top-level summary, and assign the
+  PR to @caellwynai-josh so the follow-up agent picks it up.
+- Base branch main: do NOT assign regardless of outcome, but STILL post a
+  top-level comment.
 
-Even when the previous round had findings and they have **all** been addressed,
-you must still post the exact `LGTM` body (per the zero-findings rule above) —
-**not** a sentence describing that the findings were addressed. "The prior
-findings are now resolved" is exactly the paraphrase that breaks the matcher; the
-correct response to "all findings addressed, nothing new" is the single word
-`LGTM`. A silent "I looked again and had nothing to add" finish reads to the
-author exactly like "I never re-reviewed" — so it blocks the merge just the same.
-
-### Always
-
-- Do NOT commit, push, rebase, or merge anything yourself — not even an
-  "obvious" one-line fix. Comment-only. The author's code agent reviews your
-  suggestions and applies the changes. Committing directly breaks the author's
-  ability to rebase/amend cleanly, can conflict with their in-progress local
-  work, muddies the review history, and turns a reviewable finding into a silent
-  fix nobody checks. (The Codex reviewer carries the same rule in its
-  "If you are reviewing a PR" section of [`AGENTS.md`](../AGENTS.md).)
-- Do NOT skip the top-level summary comment. The author depends on it as the
-  review-finished signal — on every round, findings or not.
-
-### PRs into `main`
-
-PRs with base `main` are closeout/promotion merges from `dev` and should **not**
-be assigned regardless of review outcome — but you must **still leave a
-top-level comment** so the author knows you reviewed (same signal requirement).
-
-This `dev`/`main` distinction is the whole rule: **assign only on `dev` PRs with
-findings; comment always, everywhere.**
+Rule in one line: assign only on dev PRs with findings; comment always,
+everywhere.
