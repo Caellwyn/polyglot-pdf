@@ -775,11 +775,11 @@ def _strip_quotes(body: str) -> str:
     opens with `> @copilot please review`. That quoted "please" tripped
     _has_change_ask and turned a clean acknowledgment into a false COMMENTS
     (bd polyglot-pdf-x8o). The quote is a trigger we sent, never the bot's
-    verdict, so strip all `>`-prefixed lines before any prose analysis. (Copilot
-    is now requested as a reviewer, not @-mentioned -- bd polyglot-pdf-1pr -- so
-    this mainly defends the Codex / legacy-comment path now, but it stays cheap
-    and reviewer-agnostic.) Leading
-    whitespace before `>` is tolerated (nested/indented quotes).
+    verdict, so strip all `>`-prefixed lines before any prose analysis. Leading
+    whitespace before `>` is tolerated (nested/indented quotes). (Copilot is now
+    requested as a reviewer, not @-mentioned -- bd polyglot-pdf-1pr -- so this
+    mainly defends the Codex / legacy-comment path now, but it stays cheap and
+    reviewer-agnostic.)
     """
     return "\n".join(
         line for line in (body or "").splitlines() if not line.lstrip().startswith(">")
