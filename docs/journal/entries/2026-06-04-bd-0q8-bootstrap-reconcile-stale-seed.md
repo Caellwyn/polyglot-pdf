@@ -51,12 +51,15 @@ working branch's issue count to the fetched ref (`origin/main`); if the working
 branch is a stale seed (fewer issues, unrelated root), `dolt reset --hard
 origin/main` rebases it onto the real history. The dolt-IGNORED wisp tables are
 local working state, so they **survive the reset** -- bd stays open and no wisp
-re-repair is needed. Wired into `main()` (run before the marker is written, so the
-marker can never again certify a stale seed) and into the already-hydrated
-`refresh_remote_and_pull()` path (so a container hydrated *before* this fix
-self-heals on its next session when its pull fails with "no common ancestor").
-The reconcile no-ops when the working branch already holds the ref's data (count
->= ref), so a healthy container is never disturbed.
+re-repair is needed. Wired into `main()` (run before the marker is written) and
+into the already-hydrated `refresh_remote_and_pull()` path (so a container
+hydrated *before* this fix self-heals on its next session when its pull fails with
+"no common ancestor"). The reconcile no-ops when the working branch already holds
+the ref's data (count >= ref) and -- per fresh-eyes -- when the working-branch
+count can't be read at all (a failed count must never trigger a destructive
+reset), so a healthy container is never disturbed. The one residual gap (no `dolt`
+CLI obtainable to reconcile in the no-repair path) is logged as a loud warning,
+not skipped silently.
 
 This was validated against the live store on a throwaway copy (the maintainer
 chose the script fix only, not an in-place recovery of this container):
@@ -68,8 +71,23 @@ chose the script fix only, not an in-place recovery of this container):
 
 ### Fresh-eyes triage
 
-Pending at time of writing -- fresh-eyes runs at closeout against the real diff;
-its findings and the adopt/reject/defer breakdown go in the merge ping.
+Sonnet fresh-eyes returned four findings:
+
+- **Adopted (1):** `work_n is None` fell through to an unguarded `dolt reset
+  --hard` -- a transient count-query failure could nuke a healthy branch. Now
+  treated as "can't safely reset, skip."
+- **Adopted (2):** in the no-repair path, if `ensure_dolt()` returns None the
+  reconcile was skipped at `vlog` (verbose-only) level while the marker was still
+  written -- defeating the guarantee silently. Escalated to a loud `log` warning
+  and corrected the doc/journal wording.
+- **Resolved-by-#1 (4):** a single-quote in a fallback ref name would break the
+  `as of '<ref>'` count query -> count None -> now safely skips (the unguarded
+  reset that made this dangerous is gone).
+- **Deferred (3):** a diverged-but-equal-count working branch would no-op the
+  reconcile and not retry the pull. Low confidence, no realistic trigger (a stale
+  seed always has FEWER issues than the monotonically-growing ref). Filed as a
+  follow-up bead to consider merge-base-based divergence detection instead of the
+  count heuristic.
 
 ## Doc freshness
 

@@ -443,7 +443,13 @@ def reconcile_working_branch_onto_ref(dolt: str) -> bool:
     if ref_n is None:
         vlog(f"reconcile: could not count issues on {ref}")
         return False
-    if work_n is not None and work_n >= ref_n:
+    if work_n is None:
+        # Could not count the working branch (transient dolt error / table absent).
+        # Do NOT reset blindly -- a failed count must never trigger a destructive
+        # hard-reset of a possibly-healthy branch. Skip; the next session re-checks.
+        vlog("reconcile: could not count working-branch issues; skipping reset")
+        return False
+    if work_n >= ref_n:
         vlog(f"reconcile: working branch already current ({work_n} >= {ref_n} on {ref})")
         return False
     log(f"working branch is a stale seed ({work_n} issues) vs ref {ref} ({ref_n}); "
@@ -526,8 +532,13 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001 -- best-effort; keep the openable DB we have
             vlog(f"reconcile skipped ({e}); proceeding on the current working branch")
     else:
-        vlog("no dolt CLI to verify the working branch against the ref; "
-             "the working branch may be a stale seed")
+        # No dolt CLI means we cannot verify the working branch descends from the
+        # ref before marking hydrated -- the one case where the marker can still
+        # certify a stale seed. Make it LOUD (not verbose-only) so the gap is
+        # visible; the refresh path will re-attempt reconcile next session.
+        log("WARNING: no 'dolt' CLI available to verify the working branch against "
+            "the ref; if this container was seeded from stale JSONL, 'bd dolt pull' "
+            "may fail until dolt is installed and the next session reconciles.")
 
     if not is_hydrated():
         log("ERROR: store not populated after reconcile.")

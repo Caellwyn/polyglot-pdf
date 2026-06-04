@@ -83,8 +83,9 @@ re-hydrate, no matter what the JSONL snapshot says.
 > snapshot while the live ref held 124, and every `bd dolt pull`/`push` died with
 > *"no common ancestor."* The marker faithfully said "hydrated" — at stale data. The
 > fix is the **reconcile step** (step 4 below): the marker is now only written after
-> the working branch has been hard-reset onto the ref, so it can never again certify
-> a stale seed.
+> the reconcile has rebased a stale working branch onto the ref. (The one residual
+> gap -- no `dolt` CLI obtainable to reconcile -- is logged as a loud warning rather
+> than failing silently, and the refresh path retries the reconcile next session.)
 
 ## What the script does
 
@@ -119,7 +120,8 @@ untouched (this self-heal is for disposable remote/web containers only).
    session when its `bd dolt pull` fails with "no common ancestor."
 5. **Mark hydrated** — write `.beads/.cache/.hydrated` so subsequent `bd prime`
    runs in this container stay quiet and re-runs no-op. Written only AFTER the
-   reconcile, so the marker never certifies a stale seed.
+   reconcile step; if no `dolt` CLI could be obtained to reconcile, the script logs
+   a loud warning first (the only path that can still mark over a stale seed).
 
 ## Staying fresh: pull before every read, pull before every push
 
