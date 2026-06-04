@@ -2,9 +2,18 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-04.*
+*Last updated: 2026-06-04 (l3a.1 root cause: compression is a no-op on native-audio).*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
+
+> **STATUS (2026-06-04): DEAD END -- compression does NOT work on our models.**
+> `ContextWindowCompressionConfig` is an unreleased/unsupported stub on the
+> native-audio Live models we use: the server accepts the config but never evicts
+> (bd `polyglot-pdf-l3a.1`, closed; see [Validation status](#validation-status----dead-end-compression-is-a-no-op-on-native-audio) below). The
+> cost-win design that follows is the ORIGINAL premise and **did not hold** -- it is
+> kept for context and in case Google later ships native-audio support. The feature
+> stays `CONTEXT_COMPRESSION_ENABLED=False`. Do not re-pursue without re-verifying
+> against the live endpoint first.
 
 The Gemini Live API can bound its own context window server-side via
 `ContextWindowCompressionConfig` (a compression *trigger* + a *sliding window*).
@@ -238,21 +247,26 @@ context) is one env var from reverting; nothing existing needs sidelining.
 | Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for the compression win. |
 | Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | A connect race-condition fix, orthogonal to context size. |
 
-## Validation status -- measured NEGATIVE on the cost plateau (`45o`, 2026-06-04)
+## Validation status -- DEAD END: compression is a no-op on native-audio (`l3a.1`, 2026-06-04)
 
-**The cost model above is MODELED, not yet measured-confirmed -- and the first live
-validation came back negative.** A window-size sweep
-(`scripts/spikes/sweep_compression_window.py`, findings in
-`scripts/spikes/sweep_compression_window_findings.md`) drove the production adapter
-with compression on across triggers 5000 and 2000 and windows 1k-4k. In every config,
-the API's own `prompt_token_count` **kept compounding (10x-14x over 12 audio turns) with
-no eviction** -- even on turns where the prompt clearly exceeded `trigger_tokens`. The
-quadratic->linear plateau did **not** appear. The config reaches the wire correctly
-(verified), so this is a semantic result, tracked as **`polyglot-pdf-l3a.1`** (open):
-on `gemini-3.1-flash-live-preview`, documented compression did not bound billed prompt
-tokens within a short audio session. **Until `l3a.1` resolves, the cost win is
-unproven; keep `CONTEXT_COMPRESSION_ENABLED=False`** (the shipped default). The
-compression code is wired, tested, and reversible behind that one env var.
+**The cost model above is MODELED, and live validation came back NEGATIVE: compression
+is a silent no-op on the native-audio Live models.** A window-size sweep
+(`scripts/spikes/sweep_compression_window.py`,
+`scripts/spikes/sweep_compression_window_findings.md`) found `prompt_token_count` kept
+compounding (10x-14x) with compression on, even past `trigger_tokens`. The `l3a.1`
+root-cause diagnostics (`scripts/spikes/l3a1_compression_rootcause_findings.md`) then
+RULED OUT every config-side cause: the config serializes correctly, the server **accepts**
+it (no rejection across triggers 200-4096), and behavior is **identical under `v1alpha`
+and `v1beta`** (so the preview-API-version theory is wrong) and **identical on
+`gemini-2.5-flash-native-audio` and `gemini-3.1-flash-live`** (so it isn't 3.1-specific).
+**Conclusion: `contextWindowCompression` is accepted but never honored -- no eviction --
+on any native-audio Live model reachable on this key.** Most likely it is simply not
+implemented for native-audio Live models (the genai docs' compression example uses a
+*cascade* model, which this key cannot reach to compare). **Keep
+`CONTEXT_COMPRESSION_ENABLED=False`.** The config is plumbed and reversible: if Google
+ships eviction for native-audio later, the existing flag turns it on with no code change.
+The one untested branch (does it evict on a cascade model?) needs a key with cascade
+Live access; until then `l3a.1` stays open as a watch item, not an active bug.
 
 The one clean positive: **response latency was low and stable** across all window sizes
 (median ~0.8-1.1s, p90 ~1.2-1.8s) -- no latency cost from enabling compression.

@@ -123,6 +123,11 @@ class LiveAIGemini(ILiveAI):
         self._on_transcript = None
         self._on_audio = None
         self._on_tool_call = None
+        # Optional diagnostic observer for the RAW per-turn usage_metadata object
+        # (default None = production no-op). Lets a measurement harness inspect fields
+        # the cost path does not consume -- e.g. cached_content_token_count / traffic_type
+        # -- to tell context-compression activation from a silent no-op (bd l3a.1).
+        self._on_raw_usage = None
         self._system_instruction: Optional[str] = None
         self._function_declarations: Optional[List[Dict[str, Any]]] = None
 
@@ -1246,6 +1251,16 @@ class LiveAIGemini(ILiveAI):
                                     if hasattr(event, 'usage_metadata') and event.usage_metadata:
                                         try:
                                             usage = event.usage_metadata
+
+                                            # Diagnostic-only: hand the RAW usage object to an
+                                            # optional observer before we reduce it to cost fields.
+                                            # None in production (no-op); a harness uses it to read
+                                            # cached_content_token_count / traffic_type (bd l3a.1).
+                                            if self._on_raw_usage is not None:
+                                                try:
+                                                    self._on_raw_usage(usage)
+                                                except Exception:
+                                                    pass  # never let a diagnostic observer break billing
 
                                             # Extract token counts (Python SDK uses snake_case)
                                             # Handle None values defensively - API may return None for some fields
