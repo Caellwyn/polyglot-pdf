@@ -455,6 +455,9 @@ PR). Fill the counters from what actually happened this session:
 
 This is **warn-only**: a missing/failed ledger row must never block the merge.
 If the script exits non-zero (e.g. it can't locate the transcript), note the
-telemetry gap in the journal entry and continue -- do NOT loop on it. The script
-also bumps `.beads/experiment_state.json`; pass `--no-counter` only for an audit
-re-run you don't want counted.
+telemetry gap in the journal entry and continue -- do NOT loop on it. The
+experiment counter is **derived from the ledger** (counted by `arm`), not bumped;
+the script refreshes a gitignored local cache (`.beads/experiment_state.json`)
+that is never committed and can't collide on a parallel merge (bd
+polyglot-pdf-8o4). `--no-counter` only skips that cache refresh (cosmetic; the
+counts live in the ledger regardless).

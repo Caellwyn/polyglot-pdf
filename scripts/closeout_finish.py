@@ -12,12 +12,14 @@ judgment -- so this script collapses the mechanical subset into ONE process wher
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
 
 The telemetry row is written AFTER the closeout commit + push, so a dedicated
-``commit_push_telemetry`` step commits + pushes the two tool-owned files
-(``docs/journal/harness_ledger.jsonl`` + ``.beads/experiment_state.json``) by
-EXPLICIT PATH -- otherwise the row sits uncommitted in the working tree and is
-lost when the worktree is archived (bd polyglot-pdf-3yf). This is the ONE place
-the script commits its own files; it still never ``git add``s the orchestrator's
-content. WARN-ONLY, like the telemetry write itself.
+``commit_push_telemetry`` step commits + pushes the tool-owned ledger
+(``docs/journal/harness_ledger.jsonl``) by EXPLICIT PATH -- otherwise the row
+sits uncommitted in the working tree and is lost when the worktree is archived
+(bd polyglot-pdf-3yf). The experiment counter (``.beads/experiment_state.json``)
+is NOT committed: it is a gitignored cache derived from the ledger (bd
+polyglot-pdf-8o4). This is the ONE place the script commits its own files; it
+still never ``git add``s the orchestrator's content. WARN-ONLY, like the
+telemetry write itself.
 
 It is the Steps-5-8.5 analogue of how ``closeout_prep.py`` collapses Steps
 0/1/2/4. The orchestrator (or a cheap ``closeout-runner`` subagent it delegates
@@ -299,16 +301,19 @@ class Closeout:
                 if (proc.stderr or proc.stdout).strip() else "no output",
             )
 
-    # The two files harness_ledger.py owns (fixed repo-relative paths). Committed
-    # by commit_push_telemetry so the row is never orphaned in the working tree.
-    _TELEMETRY_FILES = ("docs/journal/harness_ledger.jsonl", ".beads/experiment_state.json")
+    # The one tool-owned file committed by commit_push_telemetry so the row is
+    # never orphaned in the working tree (bd polyglot-pdf-3yf). The experiment
+    # counter (.beads/experiment_state.json) is NO LONGER committed -- it is a
+    # gitignored cache derived from the ledger (bd polyglot-pdf-8o4), so it can't
+    # collide on a parallel merge and there's nothing to commit for it.
+    _TELEMETRY_FILES = ("docs/journal/harness_ledger.jsonl",)
 
     def commit_push_telemetry(self) -> None:
         """Commit + push the ledger row this run just wrote (bd polyglot-pdf-3yf).
 
-        The ``telemetry`` step appends to the two tool-owned files AFTER commit +
-        push, so without this step the row sits uncommitted in the working tree
-        and is lost when the worktree is archived. Staging is by EXPLICIT PATH
+        The ``telemetry`` step appends to the ledger AFTER commit + push, so
+        without this step the row sits uncommitted in the working tree and is
+        lost when the worktree is archived. Staging is by EXPLICIT PATH
         (never ``git add -A``), so the script still never stages the
         orchestrator's content -- only its OWN bookkeeping. WARN-ONLY, mirroring
         ``telemetry``: a failure here annotates ``out["telemetry"]`` but never
@@ -327,7 +332,7 @@ class Closeout:
                 if (status.stderr or status.stdout).strip() else "no output")
             return
         if not status.stdout.strip():
-            return  # clean (e.g. --no-bump dry-run, or ledger GAP) -- nothing to commit
+            return  # clean (e.g. --dry-run, or a ledger GAP) -- nothing to commit
         pr = self.out["PR"]
         msg = ("chore(harness): PR #{} telemetry row (recorded by closeout_finish.py)"
                .format(pr) if pr != "-"

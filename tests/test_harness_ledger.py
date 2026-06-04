@@ -215,29 +215,76 @@ class TestAppendRow:
 # --------------------------------------------------------------------------- #
 # Experiment counter + directives
 # --------------------------------------------------------------------------- #
+def _write_ledger(path, arms):
+    """Write a ledger JSONL with one row per entry in `arms` (each an arm value
+    or None). Only the `arm` field matters for derive_experiment_state."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for a in arms:
+            f.write(json.dumps({"arm": a}) + "\n")
+
+
 class TestExperimentState:
     def test_load_default_when_absent(self, tmp_path):
         state = ledger.load_experiment_state(tmp_path / "nope.json")
         assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
-    def test_bump_increments_correct_counter(self, tmp_path):
-        path = tmp_path / "experiment_state.json"
-        s1 = ledger.bump_experiment_state("A", path)
-        assert s1["baseline_A"] == 1 and s1["phase"] == "A"
-        s2 = ledger.bump_experiment_state("B", path)
-        assert s2["arm_B"] == 1 and s2["baseline_A"] == 1
-        # Persisted across calls.
-        on_disk = json.loads(path.read_text(encoding="utf-8"))
-        assert on_disk["arm_B"] == 1
+    def test_derive_counts_rows_by_arm(self, tmp_path):
+        # The counter is now a projection of the ledger: count rows per arm.
+        led = tmp_path / "harness_ledger.jsonl"
+        _write_ledger(led, ["A", "A", "B", "BC"])
+        state = ledger.derive_experiment_state(led)
+        assert state["baseline_A"] == 2
+        assert state["arm_B"] == 1
+        assert state["arm_C"] == 0
+        assert state["arm_BC"] == 1
+        assert state["phase"] == "A"
 
-    def test_unknown_arm_leaves_counters_but_materializes_file(self, tmp_path):
-        path = tmp_path / "experiment_state.json"
-        state = ledger.bump_experiment_state(None, path)
-        assert state["baseline_A"] == 0
-        assert path.is_file()
+    def test_derive_ignores_null_and_unknown_arm(self, tmp_path):
+        # null / unknown arms count toward nothing (the old "no --arm doesn't
+        # bump" behavior, now expressed as "no arm key matches").
+        led = tmp_path / "harness_ledger.jsonl"
+        _write_ledger(led, ["A", "A", None, "X"])
+        state = ledger.derive_experiment_state(led)
+        assert state["baseline_A"] == 2
+        assert state["arm_B"] == state["arm_C"] == state["arm_BC"] == 0
+
+    def test_derive_missing_ledger_returns_zeros(self, tmp_path):
+        state = ledger.derive_experiment_state(tmp_path / "nope.jsonl")
+        assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
+
+    def test_derive_skips_malformed_line(self, tmp_path):
+        # A crashed write can leave a partial last line; it must not cost the
+        # whole count (the same tolerance _iter_records gives the transcript).
+        led = tmp_path / "harness_ledger.jsonl"
+        led.write_text(
+            json.dumps({"arm": "A"}) + "\n" + '{"arm": "A", partial',
+            encoding="utf-8",
+        )
+        assert ledger.derive_experiment_state(led)["baseline_A"] == 1
+
+    def test_derive_phase_thresholds(self, tmp_path):
+        led = tmp_path / "harness_ledger.jsonl"
+        # baseline_A > 15 -> BC-toggle.
+        _write_ledger(led, ["A"] * 16)
+        assert ledger.derive_experiment_state(led)["phase"] == "BC-toggle"
+        # arm_B > 10 and arm_C > 10 -> BC.
+        _write_ledger(led, ["A"] * 16 + ["B"] * 11 + ["C"] * 11)
+        assert ledger.derive_experiment_state(led)["phase"] == "BC"
+        # arm_BC > 10 -> report (most-advanced wins).
+        _write_ledger(led, ["A"] * 16 + ["B"] * 11 + ["C"] * 11 + ["BC"] * 11)
+        assert ledger.derive_experiment_state(led)["phase"] == "report"
+
+    def test_refresh_writes_cache_matching_derived_counts(self, tmp_path):
+        led = tmp_path / "harness_ledger.jsonl"
+        cache = tmp_path / "experiment_state.json"
+        _write_ledger(led, ["A", "A", "B"])
+        state = ledger.refresh_experiment_state(led, cache)
+        assert state["baseline_A"] == 2 and state["arm_B"] == 1
+        # The cache file is written and matches the returned state.
+        assert json.loads(cache.read_text(encoding="utf-8")) == state
 
     def test_phase_transitions_and_directives(self, tmp_path):
-        path = tmp_path / "experiment_state.json"
         # Phase A: baseline_A <= 15.
         s = {"baseline_A": 15, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
         assert "Phase A (baseline)" in ledger.phase_directive(s)
@@ -251,35 +298,12 @@ class TestExperimentState:
         s["arm_BC"] = 11
         assert "FINAL report" in ledger.phase_directive(s)
 
-    def test_phase_label_derived_from_counts_on_bump(self, tmp_path):
-        path = tmp_path / "experiment_state.json"
-        path.write_text(json.dumps({"baseline_A": 16, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}), encoding="utf-8")
-        state = ledger.bump_experiment_state("B", path)
-        assert state["phase"] == "BC-toggle"  # baseline_A > 15
-
-    def test_bump_sets_phase_bc_when_both_arms_done(self, tmp_path):
-        # arm_B and arm_C both already > 10; bumping either keeps them > 10.
-        # bump_experiment_state must label the derived phase "BC" (not just the
-        # phase_directive path, which test_phase_transitions covers separately).
-        path = tmp_path / "experiment_state.json"
-        path.write_text(json.dumps({"baseline_A": 16, "arm_B": 11, "arm_C": 10, "arm_BC": 0, "phase": "BC-toggle"}), encoding="utf-8")
-        state = ledger.bump_experiment_state("C", path)  # arm_C -> 11
-        assert state["arm_C"] == 11
-        assert state["phase"] == "BC"
-
-    def test_bump_sets_phase_report_when_combined_arm_done(self, tmp_path):
-        path = tmp_path / "experiment_state.json"
-        path.write_text(json.dumps({"baseline_A": 16, "arm_B": 11, "arm_C": 11, "arm_BC": 10, "phase": "BC"}), encoding="utf-8")
-        state = ledger.bump_experiment_state("BC", path)  # arm_BC -> 11
-        assert state["arm_BC"] == 11
-        assert state["phase"] == "report"
-
 
 # --------------------------------------------------------------------------- #
 # End-to-end CLI
 # --------------------------------------------------------------------------- #
 class TestMainCLI:
-    def test_main_appends_and_bumps(self, tmp_path, monkeypatch):
+    def test_main_appends_and_derives_counter(self, tmp_path, monkeypatch):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=42, out=7))])
         ledger_path = tmp_path / "harness_ledger.jsonl"
         state_path = tmp_path / "experiment_state.json"
@@ -293,9 +317,26 @@ class TestMainCLI:
         row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
         assert row["tokens"]["total"]["input_tokens"] == 42
         assert row["beads"] == ["polyglot-pdf-hrn.1"]
+        # The counter is DERIVED from the just-appended row (cache reflects it).
         assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 1
+        assert ledger.derive_experiment_state(ledger_path)["baseline_A"] == 1
 
-    def test_main_no_counter_skips_bump(self, tmp_path, monkeypatch):
+    def test_main_counts_the_just_appended_row(self, tmp_path, monkeypatch):
+        # Pin the append-BEFORE-refresh ordering: with the ledger already holding
+        # N arm="A" rows, one more closeout must show N+1 -- proving the new row
+        # is counted, not a pre-append snapshot. A 1-row test can't catch a
+        # reorder (0->1 either way); a pre-populated ledger can.
+        t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
+        ledger_path = tmp_path / "harness_ledger.jsonl"
+        state_path = tmp_path / "experiment_state.json"
+        _write_ledger(ledger_path, ["A", "A", "A"])  # N = 3 before this run
+        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
+        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--recorded-at", "x"])
+        assert rc == 0
+        assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 4
+
+    def test_main_no_counter_skips_cache_refresh(self, tmp_path, monkeypatch):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
         ledger_path = tmp_path / "harness_ledger.jsonl"
         state_path = tmp_path / "experiment_state.json"
@@ -303,7 +344,10 @@ class TestMainCLI:
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
         rc = ledger.main(["--transcript", str(t), "--arm", "A", "--no-counter", "--recorded-at", "x"])
         assert rc == 0
+        # --no-counter skips the cache write; the row is still appended, so the
+        # count is recoverable by deriving from the ledger.
         assert not state_path.exists()
+        assert ledger.derive_experiment_state(ledger_path)["baseline_A"] == 1
 
     def test_main_missing_transcript_returns_1(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ledger, "claude_projects_dir", lambda: tmp_path / "projects")
@@ -323,7 +367,7 @@ class TestMainCLI:
 
     def test_main_warns_when_arm_missing_but_counter_on(self, tmp_path, monkeypatch, capsys):
         # No --arm + no --no-counter: the row lands with arm=null and the
-        # counter is materialized but no arm is incremented; a warning fires.
+        # cache is refreshed but no arm is counted; a warning fires.
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
         ledger_path = tmp_path / "harness_ledger.jsonl"
         state_path = tmp_path / "experiment_state.json"
@@ -335,12 +379,31 @@ class TestMainCLI:
         assert "no --arm given" in err
         row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
         assert row["arm"] is None
-        # File materialized, but no arm counter moved.
+        # Cache refreshed, but the null-arm row counted toward nothing.
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
-    def test_main_print_directive(self, tmp_path, monkeypatch, capsys):
+    def test_main_print_directive_derives_without_cache(self, tmp_path, monkeypatch, capsys):
+        # --print-directive must derive from the LEDGER on demand, working even
+        # with the gitignored cache file absent. Point LEDGER_PATH at a missing
+        # ledger -> all-zeros -> Phase A.
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")
         rc = ledger.main(["--print-directive"])
         assert rc == 0
         assert "Phase A (baseline)" in capsys.readouterr().out
+
+    def test_main_print_directive_reflects_ledger_not_cache(self, tmp_path, monkeypatch, capsys):
+        # Distinguish the NEW (derive-from-ledger) path from the OLD
+        # (read-the-cache) path: a populated LEDGER with NO cache file must drive
+        # the directive past Phase A. The old code (reading the absent cache)
+        # would still say "Phase A (baseline)"; only deriving from the ledger
+        # advances it.
+        led = tmp_path / "harness_ledger.jsonl"
+        _write_ledger(led, ["A"] * 16)  # baseline_A=16 > 15 -> "Phase A done"
+        monkeypatch.setattr(ledger, "LEDGER_PATH", led)
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")
+        rc = ledger.main(["--print-directive"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Phase A done" in out and "Phase A (baseline)" not in out
