@@ -10,9 +10,11 @@ isolated in a `ReviewerProfile` (see PROFILES below): the bot login marker, how
 
 Background
 ----------
-The development cycle waits on the bot's review after every re-trigger
-("@copilot please review" / "@codex review"). Historically the orchestrating
-agent polled `gh api .../comments` every few minutes -- each poll a full,
+The development cycle waits on the bot's review after every review request
+(Copilot is REQUESTED as a reviewer via POST .../requested_reviewers -- NOT
+@-mentioned, which would invoke the coding agent; bd polyglot-pdf-1pr). Codex
+still uses a "@codex review" comment. Historically the orchestrating agent
+polled `gh api .../comments` every few minutes -- each poll a full,
 expensive model turn that did nothing but run one shell command and check
 whether a counter moved. This script moves that wait OUT of the model: run it
 via the agent harness's `run_in_background`, and the agent is woken exactly
@@ -61,13 +63,16 @@ Two staleness traps these surfaces hide, both handled:
     it re-matches its (frozen) review by id on every poll, so a resolved
     round-1 comment would loop the closeout forever. Outdated inline comments
     are dropped (a genuine new finding has a non-null position).
-  - A RE-review verdict (after the re-trigger) frequently lands as an ISSUE
-    COMMENT, not a formal review -- it has no state and never appears in
-    /reviews. Reading /reviews alone would re-select the frozen prior review
-    (false COMMENTS) or, with a --since floor, find nothing (false TIMEOUT). So
-    when no in-window review exists, we classify from the latest in-window bot
-    issue comment: an explicit approval phrase ("no further changes...") ->
-    CLEAN, otherwise COMMENTS.
+  - A RE-review verdict can land as an ISSUE COMMENT rather than a formal
+    review -- it has no state and never appears in /reviews. (With the
+    reviewer-request flow a Copilot re-review lands as a fresh FORMAL review
+    with a later submitted_at -- verified on PR #74 -- so this is now mainly a
+    Codex / legacy-comment fallback, but it is kept because it is cheap and
+    defends every reviewer.) Reading /reviews alone would re-select the frozen
+    prior review (false COMMENTS) or, with a --since floor, find nothing (false
+    TIMEOUT). So when no in-window review exists, we classify from the latest
+    in-window bot issue comment: an explicit approval phrase ("no further
+    changes...") -> CLEAN, otherwise COMMENTS.
 
 Terminal states (printed as the final line: "RESULT: <STATE>")
 --------------------------------------------------------------
@@ -764,11 +769,14 @@ def _new_inline_findings(repo: str, pr: int, since: datetime | None, profile: Re
 def _strip_quotes(body: str) -> str:
     """Drop markdown blockquote lines (`> ...`) from a comment body.
 
-    Copilot's re-review issue comment ECHOES the trigger as a quote -- e.g. it
+    A bot's re-review issue comment can ECHO a trigger as a quote -- e.g. it
     opens with `> @copilot please review`. That quoted "please" tripped
     _has_change_ask and turned a clean acknowledgment into a false COMMENTS
-    (bd polyglot-pdf-x8o). The quote is the trigger we sent, never Copilot's
-    verdict, so strip all `>`-prefixed lines before any prose analysis. Leading
+    (bd polyglot-pdf-x8o). The quote is a trigger we sent, never the bot's
+    verdict, so strip all `>`-prefixed lines before any prose analysis. (Copilot
+    is now requested as a reviewer, not @-mentioned -- bd polyglot-pdf-1pr -- so
+    this mainly defends the Codex / legacy-comment path now, but it stays cheap
+    and reviewer-agnostic.) Leading
     whitespace before `>` is tolerated (nested/indented quotes).
     """
     return "\n".join(

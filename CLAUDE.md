@@ -65,11 +65,15 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
    PR and runs fresh-eyes, **requesting Copilot in parallel only when the PR is
    review-worthy.** Copilot review is OPT-IN since 2026-06-01 (metered per-token,
-   finite monthly credits) -- auto-review is OFF, so a review fires only when a PR
-   COMMENT contains `@copilot please review` (the trigger is chained into the
-   create call -- one Bash turn, not a body line); docs/beads/journal-only PRs skip it.
-   Then closeout loops Copilot to clean and the maintainer merges. No draft PRs;
-   never hand-poll Copilot. See the "Closeout" section below and
+   finite monthly credits) -- auto-review is OFF, so a review fires only when you
+   **REQUEST the review bot as a reviewer** via the reviewer API
+   (`gh api repos/<owner>/<repo>/pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
+   chained into the create call). **NEVER @-mention `@copilot please review` in a
+   comment** -- that invokes the Copilot *coding agent*, which commits to the PR
+   instead of reviewing (bd polyglot-pdf-1pr, confirmed on PR #74);
+   docs/beads/journal-only PRs skip the request. Then closeout loops Copilot to
+   clean (re-requesting the reviewer each round) and the maintainer merges. No
+   draft PRs; never hand-poll Copilot. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
@@ -296,10 +300,13 @@ Do NOT hand-roll the review cycle. In particular:
   parallel-review setup and tempts hand-polling).
 - **Copilot review is OPT-IN -- request it only for review-worthy PRs.** Auto-review
   on open is OFF (metered credits). The orchestrator judges per-PR whether the diff
-  can regress runtime behavior; if so, it puts `@copilot please review` in the PR
-  BODY (not a comment -- that wastes a turn). Docs-only / `.beads`-only /
-  journal-only / trivial PRs get NO trigger and skip the watch loop. With auto-review
-  off, each re-review must also be explicitly requested via `@copilot please review`.
+  can regress runtime behavior; if so, it **requests the review bot as a reviewer**
+  (`gh api .../pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
+  chained into the create call). **Never @-mention `@copilot please review` in a
+  comment -- that invokes the coding agent, which commits to the PR** (bd
+  polyglot-pdf-1pr). Docs-only / `.beads`-only / journal-only / trivial PRs get NO
+  request and skip the watch loop. Each re-review is requested the same way --
+  re-POST `requested_reviewers` after the fix-push.
 - **Copilot is watched by a script, never by hand.** For a review-worthy PR,
   `/closeout` launches `scripts/pr_review_watcher.py <pr#>` via `run_in_background`; the
   harness wakes you once with the classified verdict -- one of `CLEAN`/`COMMENTS`

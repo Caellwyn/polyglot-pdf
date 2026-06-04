@@ -4,7 +4,8 @@ The swarm scripts (bd_safe.py, pr_review_watcher.py, journal_scaffold.py,
 closeout_housekeeping.py) are otherwise product-agnostic. The two values that
 DO differ per project live here, resolved in this precedence order:
 
-  1. Environment variable  (SWARM_REPO / SWARM_BEAD_PREFIX) -- wins if set.
+  1. Environment variable  (SWARM_REPO / SWARM_BEAD_PREFIX /
+     SWARM_REVIEW_REVIEWER_SLUG) -- wins if set.
   2. swarm.config.json at the repo root  -- the committed per-project config.
   3. The hardcoded fallbacks below  -- last resort; edit them if you prefer
      not to ship a swarm.config.json.
@@ -14,6 +15,9 @@ DO differ per project live here, resolved in this precedence order:
 `myproject-ab12`); it is informational -- the scripts derive the branch-grep
 suffix from the FULL id at runtime, so this is only used for help text and
 validation hints.
+`review_reviewer_slug` is the bot login requested via the GitHub reviewer API
+to fire an automated PR code review (see the fallback comment below for why this
+is a reviewer request, NOT a comment mention).
 
 The kit's init script (`scripts/swarm_init.py`) writes swarm.config.json for
 you; you normally never edit this file.
@@ -30,6 +34,14 @@ from pathlib import Path
 # project fails loudly rather than silently targeting the wrong repo.
 _FALLBACK_REPO = "OWNER/REPO"
 _FALLBACK_BEAD_PREFIX = "project"
+# The PR-review bot requested via the GitHub reviewer API (NOT a comment
+# mention). Requesting this bot as a reviewer fires Copilot CODE REVIEW; posting
+# an "@copilot please review" COMMENT instead invokes the Copilot CODING AGENT
+# (clones the repo, runs MCP servers, commits) -- the wrong product (bd
+# polyglot-pdf-1pr, confirmed on throwaway PR #74). To switch reviewers later
+# (e.g. Codex, bd hrn.9) set SWARM_REVIEW_REVIEWER_SLUG or the config key; the
+# closeout glue + watcher are otherwise reviewer-agnostic.
+_FALLBACK_REVIEW_REVIEWER_SLUG = "copilot-pull-request-reviewer[bot]"
 
 _CONFIG_FILENAME = "swarm.config.json"
 
@@ -70,6 +82,20 @@ def bead_prefix() -> str:
         os.environ.get("SWARM_BEAD_PREFIX", "").strip()
         or _config.get("bead_prefix", "").strip()
         or _FALLBACK_BEAD_PREFIX
+    )
+
+
+def review_reviewer_slug() -> str:
+    """Bot login requested via the GitHub reviewer API to fire a PR code review.
+
+    Env > config file > fallback. Default is Copilot's review bot. NOTE: this is
+    requested as a REVIEWER (POST .../requested_reviewers), never @-mentioned in a
+    comment (a comment routes to the coding agent -- bd polyglot-pdf-1pr).
+    """
+    return (
+        os.environ.get("SWARM_REVIEW_REVIEWER_SLUG", "").strip()
+        or _config.get("review_reviewer_slug", "").strip()
+        or _FALLBACK_REVIEW_REVIEWER_SLUG
     )
 
 

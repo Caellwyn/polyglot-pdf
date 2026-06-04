@@ -5,8 +5,8 @@ What this is
 The /closeout skill's Steps 5-8.5 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
 command: commit the staged closeout work, pre-push rebase, push, open the PR
-(optionally chaining the ``@copilot please review`` trigger + capturing its
-timestamp), record the telemetry row, **commit + push that telemetry row**, and
+(optionally requesting the Copilot review bot as a REVIEWER + capturing a UTC
+watch floor), record the telemetry row, **commit + push that telemetry row**, and
 close the bead(s). Every one of those is **deterministic mechanics** -- no
 judgment -- so this script collapses the mechanical subset into ONE process where
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
@@ -121,9 +121,13 @@ EXIT_REBASE_CONFLICT = 4
 
 SUBPROCESS_TIMEOUT_SEC = 600
 
-# The literal Copilot trigger. MUST be posted as a PR COMMENT, never in the body
-# (the body form does not fire a review -- verified on PR #52).
-COPILOT_TRIGGER = "@copilot please review"
+# The review bot is REQUESTED via the GitHub reviewer API (POST
+# .../requested_reviewers), NOT @-mentioned in a comment: an "@copilot please
+# review" comment invokes the Copilot CODING AGENT (clones the repo, runs MCP
+# servers, commits) instead of Copilot CODE REVIEW (bd polyglot-pdf-1pr,
+# confirmed on throwaway PR #74). The slug is reviewer-agnostic config so a later
+# Codex switch (bd hrn.9) is a one-line change.
+REVIEW_REVIEWER_SLUG = swarm_config.review_reviewer_slug()
 
 
 class CloseoutError(Exception):
@@ -239,19 +243,26 @@ class Closeout:
         self.out["PR"] = num
 
     def request_review(self) -> None:
-        """Post the Copilot trigger as a COMMENT and capture its created_at."""
+        """Request the review bot as a REVIEWER and capture the watch floor.
+
+        Requests the bot via POST .../requested_reviewers (which fires Copilot
+        CODE REVIEW); a comment mention would invoke the coding agent instead (bd
+        polyglot-pdf-1pr). The review lands as a formal review with a later
+        ``submitted_at``, so the ``--since`` floor is a UTC timestamp captured
+        just BEFORE the request -- there is no comment ``created_at`` to read.
+        """
         if not self.args.review_worthy:
             return
         pr = self.out["PR"]
-        proc = _run([
+        # Capture the floor BEFORE the request so the review's submitted_at is
+        # always >= it (no comment created_at exists for a reviewer request).
+        ts = _utcnow()
+        _run([
             "gh", "api",
-            "repos/{}/issues/{}/comments".format(self.repo, pr),
-            "-f", "body={}".format(COPILOT_TRIGGER),
-            "--jq", ".created_at",
+            "repos/{}/pulls/{}/requested_reviewers".format(self.repo, pr),
+            "-X", "POST",
+            "-f", "reviewers[]={}".format(REVIEW_REVIEWER_SLUG),
         ])
-        ts = (proc.stdout or "").strip()
-        if not ts:
-            raise CloseoutError("Copilot trigger posted but no created_at returned")
         self.out["TS"] = ts
         # PRINT the watch command; the orchestrator launches it run_in_background.
         watcher = self.WT / "scripts" / "pr_review_watcher.py"
@@ -383,9 +394,10 @@ class Closeout:
             self.open_pr))
         if self.args.review_worthy:
             plan.append((
-                "gh api repos/{}/issues/<PR>/comments -f body='{}' --jq .created_at "
-                "(then PRINT the run_in_background watch command)".format(
-                    self.repo, COPILOT_TRIGGER),
+                "gh api repos/{}/pulls/<PR>/requested_reviewers -X POST "
+                "-f 'reviewers[]={}' (request the review bot; capture a UTC "
+                "--since floor; then PRINT the run_in_background watch "
+                "command)".format(self.repo, REVIEW_REVIEWER_SLUG),
                 self.request_review))
         plan.append((
             '"{}" "{}/scripts/harness_ledger.py" --bead {} --arm {} ... '
@@ -468,11 +480,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Integration branch (default: origin/dev).")
     p.add_argument("--pr-title", default=None)
     p.add_argument("--pr-body-file", default=None,
-                   help="Path to the PR body (a file, to avoid quoting + keep the "
-                        "trigger OUT of the body).")
+                   help="Path to the PR body (a file, to avoid shell-quoting a "
+                        "multi-line body).")
     gate = p.add_mutually_exclusive_group(required=False)
     gate.add_argument("--review-worthy", action="store_true",
-                      help="Request a Copilot review (post the trigger comment).")
+                      help="Request a Copilot review (request the review bot as a "
+                           "PR reviewer).")
     gate.add_argument("--skip-review", action="store_true",
                       help="Docs/beads/journal-only PR -- no Copilot review.")
     p.add_argument("--commit-message", default=None,

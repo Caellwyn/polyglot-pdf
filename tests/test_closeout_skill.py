@@ -138,14 +138,21 @@ def test_no_draft_pr(body):
 def test_copilot_loops_until_clean(body):
     # The Copilot round is not one-shot: adopt -> push -> re-review until it
     # reports no comments. Assert against the BODY (not the description) so the
-    # operative loop instruction is what's pinned. Also require the
-    # belt-and-suspenders re-trigger and that all four watch states (incl.
-    # TIMEOUT) are handled -- a TIMEOUT must never be treated as clean.
+    # operative loop instruction is what's pinned. The re-review is REQUESTED by
+    # re-requesting the reviewer (NOT an @-mention comment -- that invokes the
+    # coding agent, bd polyglot-pdf-1pr), and all four watch states (incl.
+    # TIMEOUT) must be handled -- a TIMEOUT must never be treated as clean.
     lo = body.lower()
     assert re.search(r"(until|loop)[^\n]*(clean|no comment)", lo), \
         "skill body must loop Copilot until it has no comments"
-    assert "@copilot please review" in body, \
-        "skill must post the explicit re-trigger after a fix-push"
+    assert "requested_reviewers" in lo, \
+        "skill must re-request the reviewer (the reviewer API) to re-trigger review"
+    # Regression guard: the @-mention must NOT be POSTED as a comment body -- that
+    # invokes the Copilot coding agent, not code review (bd polyglot-pdf-1pr). The
+    # skill may NAME the pattern to forbid it (it does), so guard the active
+    # trigger shape (`-f body=...@copilot please review`), not the mere mention.
+    assert not re.search(r"body=['\"]?@copilot please review", body), \
+        "skill must NOT POST @copilot please review as a comment (invokes the coding agent)"
     assert "timeout" in lo, "skill must handle pr_review_watcher's TIMEOUT state"
 
 

@@ -6,8 +6,9 @@ Pins the safety-critical contract of the closeout glue script:
   - --dry-run performs ZERO mutating subprocess calls (the highest-value test --
     it pins the "preview has no side effects" promise);
   - worktree safety: every git call is `git -C <WT>`; no `git add` ever;
-  - review-worthy opens the PR, posts the trigger as a COMMENT (never the body),
-    captures TS, and prints the watch command; skip-review does none of that;
+  - review-worthy opens the PR, REQUESTS the review bot as a reviewer (never an
+    @-mention comment -- bd polyglot-pdf-1pr), captures a UTC --since floor, and
+    prints the watch command; skip-review does none of that;
   - a rebase conflict aborts the rebase and exits REBASE-CONFLICT (4);
   - telemetry is warn-only (a ledger failure does not change the exit code);
   - --close-beads gates the bd close calls (0 without, N with).
@@ -186,36 +187,41 @@ class TestWorktreeSafety:
 # Review-worthy vs skip-review
 # --------------------------------------------------------------------------- #
 class TestReviewWorthy:
-    def test_opens_triggers_and_captures_ts(self, capsys):
+    def test_opens_requests_reviewer_and_captures_ts(self, monkeypatch):
+        # TS is now a UTC floor captured BEFORE the request (no comment
+        # created_at to read), so pin _utcnow for a deterministic assertion.
+        monkeypatch.setattr(cf, "_utcnow", lambda: "2026-06-04T12:00:00Z")
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
-            "gh api": (0, "2026-06-02T12:00:00Z", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False)
         assert job.run() == cf.EXIT_OK
         assert job.out["PR"] == "42"
-        assert job.out["TS"] == "2026-06-02T12:00:00Z"
-        # trigger posted as a COMMENT via gh api, with the literal trigger body
+        assert job.out["TS"] == "2026-06-04T12:00:00Z"
+        # the review is REQUESTED via the reviewer API, not @-mentioned in a
+        # comment (a comment routes to the coding agent -- bd polyglot-pdf-1pr).
         api = [j for j in rec.joined() if "gh api" in j]
-        assert api and "issues/42/comments" in api[0]
-        assert cf.COPILOT_TRIGGER in api[0]
+        assert api and "pulls/42/requested_reviewers" in api[0]
+        assert cf.REVIEW_REVIEWER_SLUG in api[0]
+        # never the old comment-trigger endpoint or the @-mention string.
+        assert "issues/42/comments" not in api[0]
+        assert "@copilot please review" not in api[0]
         # watch command printed (in the output block), referencing the PR + since
         assert "pr_review_watcher.py" in job.out["WATCH_CMD"]
         assert "--since" in job.out["WATCH_CMD"] and "42" in job.out["WATCH_CMD"]
         assert job.out["RESULT"] == "OPENED-REVIEW"
 
-    def test_trigger_never_in_pr_body(self):
+    def test_request_is_reviewer_api_not_a_comment(self):
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
-            "gh api": (0, "2026-06-02T12:00:00Z", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False)
         job.run()
-        # the create call uses --body-file (a path), never an inline body carrying
-        # the trigger string.
+        # the create call uses --body-file (a path); the @-mention trigger string
+        # must appear NOWHERE in any mutating call (it invokes the coding agent).
         create = [j for j in rec.joined() if "pr create" in j][0]
         assert "--body-file" in create
-        assert cf.COPILOT_TRIGGER not in create
+        assert not any("@copilot please review" in j for j in rec.joined())
 
     def test_pr_create_uses_bare_base_name(self):
         # gh pr create --base wants the branch NAME ('dev'), not 'origin/dev'.

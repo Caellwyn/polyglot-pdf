@@ -33,11 +33,11 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 ## Hard rules (read before doing anything)
 
-- **Copilot review is OPT-IN, not automatic (since 2026-06-01).** Automatic Copilot review on PR open is DISABLED in repo settings, and Copilot is now metered per-token against a finite monthly credit pool -- a wasted review is wasted money. A review fires ONLY when a PR **COMMENT** contains the literal trigger `@copilot please review`. The trigger in the PR *body* does NOT work (verified on PR #52) -- it must be a comment. To avoid spending an extra Claude turn on that comment, **CHAIN it into the same Bash call as `gh pr create`** (a `&&` sequence -- see Step 6), and capture the comment's `created_at` as the watch's `--since` floor in that same call. **Omit the trigger entirely for a PR that does not warrant a review** (see the Step 6 review-worthiness gate); a docs-only / beads-only / journal-only / trivial PR gets NO trigger and skips the whole watch loop.
-- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Copilot runs in parallel with it ONLY when the PR is review-worthy and you posted the trigger comment (chained into the create call). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
+- **Copilot review is OPT-IN, not automatic (since 2026-06-01).** Automatic Copilot review on PR open is DISABLED in repo settings, and Copilot is metered per-token against a finite monthly credit pool -- a wasted review is wasted money. A review fires when you **REQUEST the review bot as a reviewer** via the reviewer API (`gh api repos/<owner>/<repo>/pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`). **Do NOT @-mention `@copilot please review` in a comment** -- that invokes the Copilot **coding agent** (clones the repo, runs MCP servers, COMMITS to the PR), not code review (root cause bd polyglot-pdf-1pr, confirmed on PR #74). **CHAIN the request into the same Bash call as `gh pr create`** (a `&&` sequence -- see Step 6), and capture a UTC timestamp BEFORE it as the watch's `--since` floor in that same call. **Omit the request entirely for a PR that does not warrant a review** (see the Step 6 review-worthiness gate); a docs-only / beads-only / journal-only / trivial PR gets NO request and skips the whole watch loop.
+- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Copilot runs in parallel with it ONLY when the PR is review-worthy and you requested the review bot as a reviewer (chained into the create call). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** With auto-review off the flip no longer triggers Copilot, but a draft still adds a state flip for no benefit and risks a future settings change re-arming flip-triggered reviews. Always open normal. Copilot review tokens are SCARCE; never trigger a redundant review of content Copilot already approved.
 - **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
-- **Loop Copilot until it has NO comments (only if the PR is review-worthy).** With auto-review off, a fix-push does NOT re-trigger Copilot on its own -- you MUST post `@copilot please review` to request each re-review. Adopt -> push -> post trigger (capture its timestamp) -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `pr_review_watcher.py` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean). A PR that skipped review per the Step 6 gate has no loop at all.
+- **Loop Copilot until it has NO comments (only if the PR is review-worthy).** A fix-push does NOT re-trigger Copilot on its own -- you MUST RE-REQUEST the review bot as a reviewer (re-POST `requested_reviewers`) to request each re-review. Adopt -> push -> re-request reviewer (capture a UTC floor first) -> re-watch -> repeat until clean; only then is Copilot done. Handle all four `pr_review_watcher.py` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean). A PR that skipped review per the Step 6 gate has no loop at all.
 - **Never leave a `pr_review_watcher.py` background process running once it is no longer needed** -- i.e. once Copilot reports CLEAN (no comments) OR the branch is merged. The watcher self-exits at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so a watch you READ is already gone; the hazard is an orphaned watch you launched and walked away from. It runs as a `run_in_background` **Bash** task (no `TaskStop` handle) -- if one is still alive at CLEAN or merge, kill it by PID. ERROR/TIMEOUT do NOT mean "keep watching": that watch has already exited; surface the state to the maintainer (per the loop rule above) rather than spawning a fresh watcher that would then linger.
 - **All beads writes go through `scripts/bd_safe.py`** (or direct `bd` with pull/push bracketing). Beads writes are main-thread only -- that's you, the orchestrator, not a subagent.
 - **Run every git command with `git -C "<worktree-abs-path>"`** if you're in a worktree -- a bare `cd` can land you in the main repo's checkout (the shell cwd resets between tool calls).
@@ -100,8 +100,8 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
 - **DELEGABLE (mechanics):** running `closeout_prep.py`; writing the
   already-composed journal entry to disk; and running **`scripts/closeout_finish.py`**
   -- the one-shot glue that commits the staged work, rebases, pushes, opens the PR
-  (and, for a review-worthy PR, posts the `@copilot please review` comment +
-  captures its timestamp + PRINTS the watch command), records the telemetry row,
+  (and, for a review-worthy PR, requests the review bot as a reviewer +
+  captures a UTC watch floor + PRINTS the watch command), records the telemetry row,
   and (when told) closes the bead(s). It resolves the `$R`/`$WT`/`$PY` worktree
   traps **internally**, so neither you nor the subagent re-derives them.
 
@@ -261,11 +261,11 @@ makes this call -- there is no script gate). Copilot is metered per-token agains
 finite monthly pool since 2026-06-01, so a review of a PR that can't contain a code
 regression is wasted money. Decision rule:
 
-- **Skip Copilot** (do NOT include the trigger; do NOT start `pr_review_watcher.py`) when the
+- **Skip Copilot** (do NOT request the reviewer; do NOT start `pr_review_watcher.py`) when the
   diff cannot introduce a runtime/logic regression -- e.g. it touches ONLY docs
   (`docs/`, `*.md`), `.beads/`, journal entries, or other non-executed prose/config.
   A pure doc bump, a beads sync, or a journal-only PR is in this bucket.
-- **Request Copilot** (post the trigger comment, chained into the create call; run
+- **Request Copilot** (request the review bot as a reviewer, chained into the create call; run
   the watch loop) when the diff touches executable source (`backend/`,
   `frontend/src/`, scripts, CI, config that changes runtime behavior) in any
   non-trivial way.
@@ -277,17 +277,18 @@ Fresh-eyes ALWAYS runs regardless of this gate (it costs no Copilot credit).
 
 Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR, request Copilot (if review-worthy), and start fresh-eyes. The Copilot request and the watch both run concurrently with fresh-eyes. (**If this pre-push `git pull --rebase origin dev` hits a merge conflict, resolve it per Step 7's "Merge-conflict resolution in the loop"** -- mechanical/ordering conflicts inline, structural ones escalate; the same boundary applies to both rebases.)
 
-**The trigger MUST be a PR COMMENT, not the body.** `@copilot please review` in the PR *body* does NOT fire a review (verified the hard way on PR #52) -- only a comment does. To keep it to ONE Claude turn, CHAIN the comment into the same Bash call as `gh pr create` (a `&&` sequence, not a second turn). The comment-creation API returns the comment's `created_at`, which is ALSO the `--since` floor the round-1 watch and the re-watch loop need -- capture it in the same command.
+**REQUEST the review bot as a REVIEWER -- never @-mention it in a comment.** Posting `@copilot please review` as a PR *comment* invokes the Copilot **coding agent** (it clones the repo, starts MCP servers, and COMMITS to the PR or declines "per your rules"), NOT Copilot code review (root cause confirmed on throwaway PR #74; bd polyglot-pdf-1pr). The correct trigger is the reviewer API: `gh api repos/<owner>/<repo>/pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`. This fires a real code review that lands as a FORMAL review (and emits the `copilot_work_started`/`reviewed` timeline events the watcher keys on). Chain it into the same Bash call as `gh pr create` (a `&&` sequence, ONE turn). There is no comment `created_at` to read, so capture a UTC timestamp **before** the request as the `--since` floor (the review's `submitted_at` is always later). The reviewer slug is reviewer-agnostic config (`swarm_config.review_reviewer_slug()`), so a later Codex switch is a config change.
 
-1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) post the trigger comment and capture its timestamp -- all in ONE Bash call.** Do NOT put the trigger in `--body`; the body is just a **brief what-shipped summary + bead id(s)**. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Copilot outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, run only the `gh pr create` (no comment, no `TS`):
+1. **Open a NORMAL (NOT draft) PR, then (if review-worthy) request the review bot as a reviewer and capture the watch floor -- all in ONE Bash call.** The body is just a **brief what-shipped summary + bead id(s)**. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Copilot outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, run only the `gh pr create` (no reviewer request, no `TS`):
    ```bash
    PR=$(gh pr create --base dev \
         --title "<scope>(<context>): <summary> (bd <full-id>)" \
         --body "<brief what-shipped summary + bead id(s); written once, not revisited>" \
         | grep -oE '[0-9]+$')
-   # review-worthy ONLY -- chain the trigger comment + capture its server time:
-   TS=$(gh api repos/<owner>/<repo>/issues/$PR/comments \
-        -f body='@copilot please review' --jq .created_at)
+   # review-worthy ONLY -- capture the floor FIRST, then request the reviewer:
+   TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+   gh api repos/<owner>/<repo>/pulls/$PR/requested_reviewers \
+        -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
    echo "PR=$PR TS=$TS"
    ```
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
@@ -340,12 +341,12 @@ For a review-worthy PR both reviewers run simultaneously -- total round-1 wait i
 
 Commit the combined fixes, then **push once and loop Copilot to clean:**
 1. Rebase on the FEATURE branch (NOT the integration branch): `git pull --rebase origin <branch>` -- picks up anything pushed to the branch. (Step 6's one-time pre-push rebase was against the integration branch; the loop rebases against the feature branch.)
-2. Push the fix commit. With auto-review OFF, the push does NOT trigger Copilot by itself -- the explicit trigger in the next sub-step is what requests the re-review (it is the trigger, not a backstop).
-3. **Post `@copilot please review` AND capture the comment's server timestamp** -- this REQUESTS the re-review (auto-review is off, so without this comment Copilot never re-runs), and the timestamp is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Use the API form so you get `created_at` back:
-   `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f body='@copilot please review' --jq .created_at)`
+2. Push the fix commit. The push does NOT re-trigger Copilot by itself -- the re-request in the next sub-step is what requests the re-review.
+3. **Capture a UTC floor, then RE-REQUEST the review bot as a reviewer** -- this REQUESTS the re-review (re-POSTing `requested_reviewers` re-fires a fresh formal review -- verified on PR #74), and the floor is the round boundary the re-watch needs (without it, the watcher re-detects the PREVIOUS round's verdict and loops forever; see `bd polyglot-pdf-6xp`). Capture the floor BEFORE the request (the new review's `submitted_at` is always later):
+   `TS=$(date -u +%Y-%m-%dT%H:%M:%SZ); gh api repos/<owner>/<repo>/pulls/<pr#>/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`
 4. **Re-watch with `--since "$TS"`** (`run_in_background`), scoping detection to THIS round. Carry `--close-on-clean <bead-id>` (one per bead) on the re-watch too, so whichever round reaches CLEAN closes the bead(s) deterministically:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --since "$TS" --close-on-clean <bead-id> [...]`
-   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-trigger(capture TS) -> re-watch loop **until Copilot reports CLEAN or you hit `MAX_COPILOT_ROUNDS` (3)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
+   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-request(capture TS) -> re-watch loop **until Copilot reports CLEAN or you hit `MAX_COPILOT_ROUNDS` (3)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 ### Merge-conflict resolution in the loop (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
 
