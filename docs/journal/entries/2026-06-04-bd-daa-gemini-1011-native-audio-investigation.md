@@ -61,10 +61,15 @@ entry.
 
 `backend/adapters/live_ai_gemini.py` catches `ConnectionClosed` (which a 1011
 close surfaces as) in the receive loop, logs
-`gemini_session_connection_closed`, and breaks. The outer session loop has
-retry-with-backoff for transient name-resolution / socket errors, but
-**intentional** shutdown suppresses retry. There is **no model-level fallback**:
-nothing automatically switches a 1011-flapping 2.5 session over to 3.1 mid-flight.
+`gemini_session_connection_closed`, and breaks the event loop. That exit is
+clean: `_handle_session` returns without re-raising, so the outer session loop
+sees no exception and ends the session WITHOUT retrying -- its
+retry-with-backoff path fires only for transient name-resolution / socket errors
+(`socket.gaierror` / `socket.error`), which a 1011 is not. (That socket-error
+retry is itself gated by `_intentional_shutdown`, but the gate is irrelevant to a
+1011, which never reaches the retry decision in the first place.) There is **no
+model-level fallback**: nothing automatically switches a 1011-flapping 2.5
+session over to 3.1 mid-flight.
 That is acceptable given the default already avoids the broken model, but it
 means a deployment that *opts into* the 2.5 tier and then hits the 1011 storm
 gets a dropped session rather than a graceful degrade. Captured as a follow-up
