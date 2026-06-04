@@ -73,6 +73,20 @@ class Settings(BaseModel):
 	VAD_PREFIX_PADDING_MS: int | None = 500  # Milliseconds of audio before speech start to include
 	VAD_SILENCE_DURATION_MS: int | None = 500  # Milliseconds of silence before ending speech
 
+	# === Context-window compression (Gemini Live) ===
+	# Server-side ContextWindowCompressionConfig: a sliding window bounds the live
+	# context so per-turn re-billing stops compounding (quadratic -> linear cumulative
+	# cost) and audio sessions can run past the 15-min cap. Design + cost model:
+	# docs/components/context-compression.md (epic polyglot-pdf-l3a, bead -45o).
+	# All three are tuning knobs, not load-bearing constants: ENABLED gates the whole
+	# feature (default off until validated). TRIGGER = tokens before a turn that fire
+	# compression; WINDOW = target_tokens to retain (must be < trigger). Our sessions
+	# peak near ~9k tokens, so the trigger must be low (~5k) to ever fire -- the docs'
+	# 25k example would be inert here.
+	CONTEXT_COMPRESSION_ENABLED: bool = os.getenv("CONTEXT_COMPRESSION_ENABLED", "false").lower() == "true"
+	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS", "5000"))
+	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS", "3000"))
+
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
@@ -81,6 +95,11 @@ class Settings(BaseModel):
 			self.MODEL_NATIVE = (
 				MODEL_NATIVE_PREMIUM if self.USE_PREMIUM_MODEL else MODEL_NATIVE_STANDARD
 			)
+		# The Live API requires target_tokens (window) < trigger_tokens. If a misconfig
+		# inverts them, clamp the window below the trigger rather than send a config the
+		# API rejects. (Only matters when compression is enabled.)
+		if self.CONTEXT_COMPRESSION_WINDOW_TOKENS >= self.CONTEXT_COMPRESSION_TRIGGER_TOKENS:
+			self.CONTEXT_COMPRESSION_WINDOW_TOKENS = max(1, self.CONTEXT_COMPRESSION_TRIGGER_TOKENS // 2)
 		return self
 
 	# Tool declarations for web forms (stateless, client-managed)

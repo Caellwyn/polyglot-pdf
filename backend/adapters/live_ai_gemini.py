@@ -705,7 +705,27 @@ class LiveAIGemini(ILiveAI):
         if self._enable_transcripts:
             config['input_audio_transcription'] = {}
             config['output_audio_transcription'] = {}
-        
+
+        # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
+        # sliding window bounds the live context so per-turn re-billing stops compounding
+        # (quadratic -> linear cumulative cost) and audio sessions can run past the 15-min
+        # cap. Gated behind CONTEXT_COMPRESSION_ENABLED (default off) so it's one env var
+        # from reverting. Syntax verified against the installed google-genai; the SDK
+        # accepts these snake_case keys and aliases them to triggerTokens / slidingWindow /
+        # targetTokens. See docs/components/context-compression.md.
+        if settings.CONTEXT_COMPRESSION_ENABLED:
+            config["context_window_compression"] = {
+                "trigger_tokens": settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS,
+                "sliding_window": {
+                    "target_tokens": settings.CONTEXT_COMPRESSION_WINDOW_TOKENS,
+                },
+            }
+            self._log.info(
+                "context_window_compression_enabled",
+                trigger_tokens=settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS,
+                window_tokens=settings.CONTEXT_COMPRESSION_WINDOW_TOKENS,
+            )
+
         if self._system_instruction:
             config["system_instruction"] = self._system_instruction
             # Log initial system instruction for debugging -- never log its text:

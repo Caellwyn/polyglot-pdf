@@ -501,3 +501,81 @@ def test_vad_invalid_sensitivity_is_skipped_not_fatal():
     assert skipped[0]["value"] == "MEDIUM"
 
 
+# === Context-window compression (epic polyglot-pdf-l3a, bead -45o) ===
+
+async def _capture_session_config(monkeypatch, **settings_overrides):
+    """Drive _run_session_loop with a fake live client and return the config dict
+    it passed to connect(). settings_overrides patches the compression knobs on the
+    settings object the adapter reads via get_settings() inside the loop.
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend import config as _config
+
+    base = _config.get_settings()
+    for key, value in settings_overrides.items():
+        setattr(base, key, value)
+    # The adapter imports get_settings locally inside _run_session_loop, so patch the
+    # module attribute it resolves at call time.
+    monkeypatch.setattr(_config, "get_settings", lambda: base)
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    captured = {}
+
+    class _FakeLive:
+        async def connect(self, *, model, config):
+            captured["config"] = config
+            return _DummySession()
+
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=_FakeLive()))
+    adapter._audio_queue = asyncio.Queue()
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    await adapter.finalize()
+    return captured["config"]
+
+
+@pytest.mark.asyncio
+async def test_compression_block_present_when_enabled(monkeypatch):
+    """With CONTEXT_COMPRESSION_ENABLED, the connect config carries the sliding
+    window with the configured trigger/target token values."""
+    config = await _capture_session_config(
+        monkeypatch,
+        CONTEXT_COMPRESSION_ENABLED=True,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=5000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=3000,
+    )
+
+    assert "context_window_compression" in config
+    cwc = config["context_window_compression"]
+    assert cwc["trigger_tokens"] == 5000
+    assert cwc["sliding_window"]["target_tokens"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_compression_block_absent_when_disabled(monkeypatch):
+    """With the flag off (the default), no compression key is sent -- the live
+    context stays unbounded, exactly as before this feature."""
+    config = await _capture_session_config(
+        monkeypatch,
+        CONTEXT_COMPRESSION_ENABLED=False,
+    )
+
+    assert "context_window_compression" not in config
+
+
+def test_compression_window_clamped_below_trigger():
+    """The Live API requires target_tokens < trigger_tokens. A misconfig that
+    inverts them must be clamped, not passed through, so the API never rejects it."""
+    from backend.config import Settings
+
+    s = Settings(
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=4000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=8000,  # invalid: >= trigger
+    )
+
+    assert s.CONTEXT_COMPRESSION_WINDOW_TOKENS < s.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert s.CONTEXT_COMPRESSION_WINDOW_TOKENS == 2000  # trigger // 2
+
+
