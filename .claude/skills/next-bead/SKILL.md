@@ -25,12 +25,13 @@ merging.
 the judgment step; it never overrides the hard write-overlap block.
 
 > **Repo layout (polyglot-pdf).** The Python interpreter is the backend venv in
-> the MAIN repo (`backend/.venv`); worktrees have none. Resolve it from anywhere
-> via the git common dir and run the WORKTREE's own script copy:
+> the MAIN repo (`backend/.venv`); worktrees have none, and **remote/web
+> containers have no venv at all** -- so fall back to `python3`. Resolve it from
+> anywhere via the git common dir and run the WORKTREE's own script copy:
 > ```bash
 > R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 > WT="$(git rev-parse --show-toplevel)"
-> PY="$R/backend/.venv/Scripts/python.exe"   # macOS/Linux: $R/backend/.venv/bin/python
+> PY="$R/backend/.venv/Scripts/python.exe"; [ -x "$PY" ] || PY="$R/backend/.venv/bin/python"; [ -x "$PY" ] || PY=python3
 > ```
 > Shell state does NOT persist between tool calls -- prepend these in the SAME
 > Bash call as the script.
@@ -38,7 +39,7 @@ the judgment step; it never overrides the hard write-overlap block.
 ## Step 1 -- Run the deterministic engine (zero-token)
 
 ```bash
-R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/next_bead.py"
+R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; [ -x "$PY" ] || PY="$R/backend/.venv/bin/python"; [ -x "$PY" ] || PY=python3; "$PY" "$WT/scripts/next_bead.py"
 ```
 
 `next_bead.py` runs `bd dolt pull`, then emits JSON with three keys:
@@ -95,7 +96,7 @@ decide-and-note doctrine. This is a decide-it-yourself call -- do NOT escalate
 2. **Claim via the safe wrapper** (it re-runs ALL three collision checks --
    PR, branch, and the surface guard -- as a backstop, then pull/claim/push):
    ```bash
-   R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/bd_safe.py" claim <full-bead-id>
+   R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; [ -x "$PY" ] || PY="$R/backend/.venv/bin/python"; [ -x "$PY" ] || PY=python3; "$PY" "$WT/scripts/bd_safe.py" claim <full-bead-id>
    ```
    - **Exit 0 `CLAIMED:`** -> proceed to the work.
    - **Exit 2 `ABORT`** -> a collision appeared between Step 1 and now (a race:

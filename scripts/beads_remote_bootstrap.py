@@ -152,11 +152,15 @@ def is_remote_container() -> bool:
     return "local_proxy@" in (p.stdout or "")
 
 
-def mark_hydrated() -> None:
-    """Record that this container now holds the live store (hydrated from the ref)."""
+def mark_hydrated(live_ref: str | None = None) -> None:
+    """Record that this container now holds the live store (hydrated from the ref).
+    Stamp the canonical ``refs/dolt/data`` commit it was verified against, so
+    freshness is checkable, not inferred from an issue count (bd polyglot-pdf-j47)."""
     HYDRATION_MARKER.parent.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    HYDRATION_MARKER.write_text(f"hydrated from refs/dolt/data at {stamp}\n", encoding="utf-8")
+    ref = f" (refs/dolt/data {live_ref})" if live_ref else ""
+    HYDRATION_MARKER.write_text(
+        f"hydrated from refs/dolt/data at {stamp}{ref}\n", encoding="utf-8")
 
 
 def refresh_remote_and_pull() -> bool:
@@ -168,44 +172,29 @@ def refresh_remote_and_pull() -> bool:
     marker -- is snapshot-cached), so a remote URL baked into the snapshot points at
     a dead port. We rewrite it from the live ``git remote get-url origin`` before
     pulling. Remote-container only; a local checkout's dolt remote is already right."""
-    try:
-        origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT, timeout=10).stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    if not repoint_dolt_remote_to_proxy():
         return False
-    if not origin:
-        return False
-    dolt_url = origin if origin.startswith("git+") else "git+" + origin
-    # `bd dolt remote add` updates the dolt-level remote (gitignored .dolt/) AND
-    # rewrites `sync.remote` in the tracked config.yaml with this session's port.
-    # Restore config.yaml so the tree stays clean -- `bd dolt pull` uses the
-    # dolt-level remote, so the proxy URL survives where it matters.
-    original = CONFIG.read_text(encoding="utf-8")
-    try:
-        run(["bd", "dolt", "remote", "remove", "origin"], cwd=REPO_ROOT, timeout=30)  # ignore if absent
-        run(["bd", "dolt", "remote", "add", "origin", dolt_url], cwd=REPO_ROOT, timeout=30)
-        vlog(f"re-pointed dolt origin -> {dolt_url}")
-    finally:
-        CONFIG.write_text(original, encoding="utf-8")
-    pull = run(["bd", "dolt", "pull"], cwd=REPO_ROOT, timeout=180)
-    if pull.returncode == 0:
+    # Plain git reliably lands refs/dolt/data over the proxy even when bd's
+    # dolt-native pull stalls -- do it first so a reconcile always has the ref.
+    _git_fetch_dolt_ref()
+    ok, msg = bd_dolt_pull()
+    if ok:
         vlog("pull complete")
         return True
-    msg = (pull.stderr or "") + (pull.stdout or "")
     # A container hydrated BEFORE the bd polyglot-pdf-0q8 fix is frozen on a stale
     # JSONL seed whose history is unrelated to the ref, so the pull's merge aborts
-    # with "no common ancestor". The failed pull still FETCHED the ref into
-    # origin/main, so self-heal by resetting the working branch onto it, then re-pull.
+    # with "no common ancestor". The fetch above still landed the ref into
+    # origin/main, so self-heal by resetting the working branch onto it.
     if "no common ancestor" in msg or "diverged" in msg:
         log("local store diverged from the ref (pre-0q8 stale-seed bug); reconciling ...")
         dolt = ensure_dolt()
         if dolt:
             try:
                 if reconcile_working_branch_onto_ref(dolt):
-                    pull2 = run(["bd", "dolt", "pull"], cwd=REPO_ROOT, timeout=180)
-                    if pull2.returncode == 0:
-                        log("reconciled onto the canonical ref; pull complete.")
-                        return True
-                    msg = (pull2.stderr or "") + (pull2.stdout or "")
+                    ok2, _ = bd_dolt_pull()
+                    log("reconciled onto the canonical ref"
+                        + ("; pull complete." if ok2 else " (working branch now on origin/main)."))
+                    return True  # working branch is aligned to origin/main regardless
             except Exception as e:  # noqa: BLE001
                 vlog(f"reconcile failed: {e}")
         else:
@@ -460,6 +449,99 @@ def reconcile_working_branch_onto_ref(dolt: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# freshness anchor + proxy sync (bd polyglot-pdf-j47)                          #
+# --------------------------------------------------------------------------- #
+# The report from a fresh remote session showed bd's dolt-NATIVE sync can fail or
+# hang (`Error 1105: no remote` / 180s) against the proxy, while PLAIN git over the
+# same proxy reaches refs/dolt/data fine. So we use plain git as the reliable
+# freshness anchor and never trust a silent "hydrated".
+def _live_ref_commit() -> str | None:
+    """Commit of ``refs/dolt/data`` on the proxy origin -- the freshness anchor.
+    Plain ``git ls-remote`` works over the proxy even when bd's dolt sync does not.
+    None if unreachable (then we cannot verify freshness)."""
+    try:
+        p = run(["git", "ls-remote", "origin", "refs/dolt/data"], cwd=REPO_ROOT, timeout=30)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    out = (p.stdout or "").split()
+    return out[0] if p.returncode == 0 and out else None
+
+
+def _git_fetch_dolt_ref() -> bool:
+    """Fetch ``refs/dolt/data`` over the proxy with PLAIN git -- reliable even when
+    bd's dolt-native pull isn't. Lands the canonical dolt ref locally so a
+    subsequent reconcile/pull has it to work from. Best-effort."""
+    try:
+        p = run(["git", "fetch", "origin", "refs/dolt/data:refs/dolt/data"],
+                cwd=REPO_ROOT, timeout=120)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return p.returncode == 0
+
+
+def repoint_dolt_remote_to_proxy() -> bool:
+    """Point the dolt-level ``origin`` remote at THIS session's live proxy git origin.
+    The proxy port rotates each session and the dolt remote is snapshot-cached, so a
+    baked URL is dead -- and the committed ``sync.remote`` points at the unreachable
+    public github URL. ``bd dolt remote add`` also rewrites ``sync.remote`` in the
+    tracked config.yaml, so we restore config.yaml to keep the tree clean (the
+    dolt-level remote is what ``bd dolt pull`` actually uses). Returns True if set."""
+    try:
+        origin = run(["git", "remote", "get-url", "origin"], cwd=REPO_ROOT, timeout=10).stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    if not origin:
+        return False
+    dolt_url = origin if origin.startswith("git+") else "git+" + origin
+    original = CONFIG.read_text(encoding="utf-8") if CONFIG.exists() else None
+    try:
+        run(["bd", "dolt", "remote", "remove", "origin"], cwd=REPO_ROOT, timeout=30)  # ignore if absent
+        run(["bd", "dolt", "remote", "add", "origin", dolt_url], cwd=REPO_ROOT, timeout=30)
+        vlog(f"re-pointed dolt origin -> {dolt_url}")
+    finally:
+        if original is not None:
+            CONFIG.write_text(original, encoding="utf-8")
+    return True
+
+
+def bd_dolt_pull(timeout: int = 90) -> tuple[bool, str]:
+    """``bd dolt pull`` BOUNDED so it can never silently hang (the report saw a 180s
+    hang reported as nothing). Returns (ok, combined-output)."""
+    try:
+        p = run(["bd", "dolt", "pull"], cwd=REPO_ROOT, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"bd dolt pull timed out after {timeout}s (proxy dolt-sync hang)"
+    return p.returncode == 0, (p.stderr or "") + (p.stdout or "")
+
+
+def origin_main_count(dolt: str) -> int | None:
+    """Issue count on the dolt remote-tracking branch (``origin/main``), or None if
+    that branch is ABSENT -- i.e. the dolt fetch never loaded the ref and bd is
+    serving the stale committed JSONL. This is the freshness check's core signal."""
+    clone_db = _dolt_db_dir(_data_dir_from_config())
+    if clone_db is None:
+        return None
+    ref = _remote_tracking_ref(dolt, clone_db)
+    if ref is None:
+        return None
+    return _issue_count(dolt, clone_db, ref)
+
+
+def quiet_beads_hygiene() -> None:
+    """Silence the per-command noise the report flagged (best-effort, never fatal):
+    tighten ``.beads`` perms (the clone leaves 0755) and set a default
+    ``beads.role`` (a remote ephemeral session is a contributor)."""
+    try:
+        (REPO_ROOT / ".beads").chmod(0o700)
+    except OSError:
+        pass
+    try:
+        run(["git", "config", "beads.role", "contributor"], cwd=REPO_ROOT, timeout=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
+# --------------------------------------------------------------------------- #
 def main() -> int:
     global VERBOSE
     ap = argparse.ArgumentParser(description="Hydrate the beads DB in a remote container.")
@@ -479,8 +561,12 @@ def main() -> int:
     if HYDRATION_MARKER.exists() and is_hydrated():
         if is_remote_container():
             ok = refresh_remote_and_pull()
-            log(f"already hydrated; {'refreshed from remote' if ok else 'refresh skipped'} "
-                f"({bd_total_issues()} issues).")
+            if ok:
+                log(f"already hydrated; refreshed from remote ({bd_total_issues()} issues).")
+            else:
+                log("WARNING: already hydrated but could NOT refresh from the remote "
+                    f"({bd_total_issues()} issues may be stale); pull before trusting "
+                    "'bd ready' (see docs/components/beads-remote-bootstrap.md).")
         else:
             log(f"already hydrated (local, {bd_total_issues()} issues); "
                 "standing pull-before-read doctrine applies.")
@@ -497,9 +583,10 @@ def main() -> int:
             "manually. (This self-heal only runs in remote/web containers.)")
         return 1
 
-    # Remote container: drop any empty/partial/stale DB (the one `bd prime`
-    # auto-creates, or a stale JSONL import) so the clone is clean, then hydrate
-    # over the authenticated proxy.
+    # Remote container: quiet the noisy per-command warnings, then drop any
+    # empty/partial/stale DB (the one `bd prime` auto-creates, or a stale JSONL
+    # import) so the clone is clean, then hydrate over the authenticated proxy.
+    quiet_beads_hygiene()
     wipe_local_db()
     hydrate_via_proxy()
     dolt: str | None = None
@@ -520,31 +607,49 @@ def main() -> int:
                 "with --verbose and inspect, or read docs/components/beads-remote-bootstrap.md.")
             return 1
 
-    # bd now opens a populated DB -- but `bd bootstrap` may have seeded the WORKING
-    # branch from the stale committed JSONL rather than the fetched ref, leaving the
-    # session frozen on an old snapshot with `bd dolt pull`/`push` broken (bd
-    # polyglot-pdf-0q8). Reconcile onto the ref BEFORE marking hydrated, so the
-    # marker only ever certifies the live store.
+    # bd now opens a populated DB, but `bd bootstrap` may have left the dolt remote
+    # pointing at the unreachable public `sync.remote` and seeded the WORKING branch
+    # from the stale committed JSONL (origin/main absent). Re-point the dolt remote
+    # at the LIVE proxy and land refs/dolt/data over PLAIN git (reliable even when
+    # bd's dolt-native pull stalls -- bd polyglot-pdf-j47), then reconcile the
+    # working branch onto it (bd polyglot-pdf-0q8).
     if dolt is None:
         dolt = ensure_dolt()
+    repoint_dolt_remote_to_proxy()
+    _git_fetch_dolt_ref()
+    bd_dolt_pull()
     if dolt:
         try:
             reconcile_working_branch_onto_ref(dolt)
         except Exception as e:  # noqa: BLE001 -- best-effort; keep the openable DB we have
             vlog(f"reconcile skipped ({e}); proceeding on the current working branch")
-    else:
-        # No dolt CLI means we cannot verify the working branch descends from the
-        # ref before marking hydrated -- the one case where the marker can still
-        # certify a stale seed. Make it LOUD (not verbose-only) so the gap is
-        # visible; the refresh path will re-attempt reconcile next session.
-        log("WARNING: no 'dolt' CLI available to verify the working branch against "
-            "the ref; if this container was seeded from stale JSONL, 'bd dolt pull' "
-            "may fail until dolt is installed and the next session reconciles.")
 
     if not is_hydrated():
         log("ERROR: store not populated after reconcile.")
         return 1
-    mark_hydrated()
+
+    # Freshness gate (bd polyglot-pdf-j47): NEVER report success on a stale store.
+    # The previous bug was SILENT -- a false "Done." over a stale JSONL snapshot, so
+    # the agent had no signal to distrust `bd ready`. refs/dolt/data is the reachable
+    # freshness anchor (plain git works over the proxy even when dolt sync does not).
+    # If bd did not load it -- origin/main absent => serving the committed JSONL --
+    # FAIL LOUD and non-zero instead of marking a stale snapshot as hydrated.
+    live = _live_ref_commit()
+    if live is None:
+        log("WARNING: refs/dolt/data is unreachable -- cannot verify freshness; "
+            "proceeding, but 'bd ready' may be stale (pull before trusting it).")
+    elif dolt is None:
+        log("WARNING: no 'dolt' CLI to verify the store against refs/dolt/data @ "
+            f"{live[:10]}; 'bd ready' may be stale.")
+    elif origin_main_count(dolt) is None:
+        log("ERROR: STALE STORE -- the live tracker refs/dolt/data @ "
+            f"{live[:10]} was NOT loaded; bd is serving the committed "
+            ".beads/issues.jsonl snapshot. DO NOT trust 'bd ready' / 'bd show' / "
+            "'bd list'. Re-run 'python scripts/beads_remote_bootstrap.py --verbose' "
+            "and see docs/components/beads-remote-bootstrap.md.")
+        return 1
+
+    mark_hydrated(live)
     log(f"hydrated ({bd_total_issues()} issues). Done.")
     return 0
 
