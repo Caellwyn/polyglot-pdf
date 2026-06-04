@@ -6,10 +6,18 @@ The /closeout skill's Steps 5-8.5 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
 command: commit the staged closeout work, pre-push rebase, push, open the PR
 (optionally chaining the ``@copilot please review`` trigger + capturing its
-timestamp), record the telemetry row, and close the bead(s). Every one of those
-is **deterministic mechanics** -- no judgment -- so this script collapses the
-mechanical subset into ONE process where the path traps are solved once,
-internally (bd polyglot-pdf-hrn.13).
+timestamp), record the telemetry row, **commit + push that telemetry row**, and
+close the bead(s). Every one of those is **deterministic mechanics** -- no
+judgment -- so this script collapses the mechanical subset into ONE process where
+the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
+
+The telemetry row is written AFTER the closeout commit + push, so a dedicated
+``commit_push_telemetry`` step commits + pushes the two tool-owned files
+(``docs/journal/harness_ledger.jsonl`` + ``.beads/experiment_state.json``) by
+EXPLICIT PATH -- otherwise the row sits uncommitted in the working tree and is
+lost when the worktree is archived (bd polyglot-pdf-3yf). This is the ONE place
+the script commits its own files; it still never ``git add``s the orchestrator's
+content. WARN-ONLY, like the telemetry write itself.
 
 It is the Steps-5-8.5 analogue of how ``closeout_prep.py`` collapses Steps
 0/1/2/4. The orchestrator (or a cheap ``closeout-runner`` subagent it delegates
@@ -280,6 +288,55 @@ class Closeout:
                 if (proc.stderr or proc.stdout).strip() else "no output",
             )
 
+    # The two files harness_ledger.py owns (fixed repo-relative paths). Committed
+    # by commit_push_telemetry so the row is never orphaned in the working tree.
+    _TELEMETRY_FILES = ("docs/journal/harness_ledger.jsonl", ".beads/experiment_state.json")
+
+    def commit_push_telemetry(self) -> None:
+        """Commit + push the ledger row this run just wrote (bd polyglot-pdf-3yf).
+
+        The ``telemetry`` step appends to the two tool-owned files AFTER commit +
+        push, so without this step the row sits uncommitted in the working tree
+        and is lost when the worktree is archived. Staging is by EXPLICIT PATH
+        (never ``git add -A``), so the script still never stages the
+        orchestrator's content -- only its OWN bookkeeping. WARN-ONLY, mirroring
+        ``telemetry``: a failure here annotates ``out["telemetry"]`` but never
+        changes the exit code (the PR is already open; a telemetry-commit hiccup
+        must not fail the closeout)."""
+        # Nothing to do if telemetry didn't actually write (GAP) -- guard on the
+        # real dirty state of exactly these two paths.
+        status = _run(["git", "-C", self.wt, "status", "--porcelain", "--",
+                       *self._TELEMETRY_FILES], check=False)
+        if status.returncode != 0:
+            # The guard itself failed (broken git / bad path). Don't silently
+            # treat that as "clean" -- that would re-orphan the row, the exact bug
+            # this step fixes. Surface it (still warn-only). (fresh-eyes PR #70 F1)
+            self.out["telemetry"] += " | STATUS-CHECK-FAILED: {}".format(
+                (status.stderr or status.stdout or "").strip().splitlines()[-1]
+                if (status.stderr or status.stdout).strip() else "no output")
+            return
+        if not status.stdout.strip():
+            return  # clean (e.g. --no-bump dry-run, or ledger GAP) -- nothing to commit
+        pr = self.out["PR"]
+        msg = ("chore(harness): PR #{} telemetry row (recorded by closeout_finish.py)"
+               .format(pr) if pr != "-"
+               else "chore(harness): telemetry row (recorded by closeout_finish.py)")
+        commit = _run(["git", "-C", self.wt, "commit", "-m", msg, "--",
+                       *self._TELEMETRY_FILES], check=False)
+        if commit.returncode != 0:
+            self.out["telemetry"] += " | COMMIT-FAILED: {}".format(
+                (commit.stderr or commit.stdout or "").strip().splitlines()[-1]
+                if (commit.stderr or commit.stdout).strip() else "no output")
+            return
+        push = _run(["git", "-C", self.wt, "push", "origin", self.args.branch],
+                    check=False)
+        if push.returncode != 0:
+            self.out["telemetry"] += " | PUSH-FAILED: {}".format(
+                (push.stderr or push.stdout or "").strip().splitlines()[-1]
+                if (push.stderr or push.stdout).strip() else "no output")
+        else:
+            self.out["telemetry"] += " (committed+pushed)"
+
     def close_beads(self) -> None:
         # --close-only exists solely to close, so it closes regardless of the
         # --close-beads flag (a programmatic caller that set close_only but not
@@ -335,6 +392,11 @@ class Closeout:
             "(warn-only)".format(self.PY, self.wt, ",".join(self.args.bead),
                                  self.args.arm or "-"),
             self.telemetry))
+        plan.append((
+            'git -C "{}" commit -m "chore(harness): PR #<PR> telemetry row" -- {} '
+            "&& git push (warn-only; bd polyglot-pdf-3yf)".format(
+                self.wt, " ".join(self._TELEMETRY_FILES)),
+            self.commit_push_telemetry))
         if self.args.close_beads:
             plan.append((
                 '"{}" "{}/scripts/bd_safe.py" close {} --reason "..."'.format(

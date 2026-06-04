@@ -286,6 +286,100 @@ class TestTelemetryWarnOnly:
 
 
 # --------------------------------------------------------------------------- #
+# Telemetry commit+push (bd polyglot-pdf-3yf): the ledger row is written AFTER
+# the closeout commit+push, so a dedicated step must commit+push the two
+# tool-owned files or the row is orphaned in the working tree.
+# --------------------------------------------------------------------------- #
+class TestTelemetryCommitPush:
+    # The two files harness_ledger.py owns -- the status guard reports them dirty.
+    _DIRTY_STATUS = (0, " M docs/journal/harness_ledger.jsonl\n M .beads/experiment_state.json", "")
+
+    def test_commits_and_pushes_dirty_telemetry_files(self):
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "status --porcelain": self._DIRTY_STATUS,
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        assert job.run() == cf.EXIT_OK
+        # A commit naming BOTH telemetry files (by explicit path) happened.
+        commits = [j for j in rec.joined() if "commit" in j and "harness_ledger.jsonl" in j]
+        assert len(commits) == 1, rec.joined()
+        assert ".beads/experiment_state.json" in commits[0]
+        # The PR number is in the commit message.
+        assert "PR #7" in commits[0]
+        # TWO pushes happened: the initial branch push (-u) AND the telemetry
+        # push (plain). Asserting >=2 (not just "a push exists") is what actually
+        # proves the TELEMETRY push ran -- the initial push alone would satisfy a
+        # bare "any push" check (fresh-eyes PR #70 F2).
+        pushes = [j for j in rec.joined() if " push " in (" " + j + " ") and "feat/x" in j]
+        assert len(pushes) == 2, pushes
+        assert "committed+pushed" in job.out["telemetry"]
+
+    def test_noop_when_telemetry_clean(self):
+        # If the ledger wrote nothing (GAP) / nothing is dirty, no commit/push.
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            # status returns empty (recorder default) -> clean -> nothing to do
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        job.run()
+        # No telemetry-file commit happened.
+        assert not any("commit" in j and "harness_ledger.jsonl" in j
+                       for j in rec.joined())
+
+    def test_uses_git_C_worktree_and_no_git_add(self):
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "status --porcelain": self._DIRTY_STATUS,
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        job.run()
+        # Every git call (incl. the new commit+push) is `git -C <WT>` and none use add.
+        for cmd in rec.calls:
+            if cmd and cmd[0] == "git":
+                assert cmd[1] == "-C" and cmd[2] == str(FAKE_WT), cmd
+                assert "add" not in " ".join(cmd), cmd
+
+    def test_push_failure_is_warn_only(self):
+        # A failed telemetry push must NOT fail the run (the PR is already open).
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "status --porcelain": self._DIRTY_STATUS,
+            "push origin feat/x": (1, "", "remote rejected"),
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        assert job.run() == cf.EXIT_OK
+        assert "PUSH-FAILED" in job.out["telemetry"]
+        # the stderr reason propagates into the annotation (covers the
+        # splitlines()[-1] extraction -- fresh-eyes PR #70 F3)
+        assert "remote rejected" in job.out["telemetry"]
+
+    def test_status_check_failure_is_surfaced_not_silent(self):
+        # If `git status` itself fails, the step must NOT silently return (which
+        # would re-orphan the row) -- it annotates STATUS-CHECK-FAILED, warn-only
+        # (fresh-eyes PR #70 F1).
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "status --porcelain": (128, "", "fatal: not a git repository"),
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        assert job.run() == cf.EXIT_OK
+        assert "STATUS-CHECK-FAILED" in job.out["telemetry"]
+        # and it did NOT attempt a telemetry commit after the failed guard
+        assert not any("commit" in j and "harness_ledger.jsonl" in j
+                       for j in rec.joined())
+
+    def test_close_only_never_commits_telemetry(self):
+        # --close-only returns before the telemetry steps -> no status/commit/push.
+        rec = RunRecorder()
+        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
+                   skip_review=False, bead=["proj-aa11"])
+        job.run()
+        assert not any("status --porcelain" in j or "harness_ledger.jsonl" in j
+                       for j in rec.joined())
+
+
+# --------------------------------------------------------------------------- #
 # Bead-close gating
 # --------------------------------------------------------------------------- #
 class TestCloseBeadsGated:
