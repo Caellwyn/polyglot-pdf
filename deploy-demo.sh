@@ -72,18 +72,20 @@ if [ "$DEPLOY_GCP" = true ]; then
         --project="$GCP_PROJECT"
 fi
 
-# 2. Deploy Frontend + Firestore rules to Firebase project
+# 2. Deploy Firestore rules + Frontend to Firebase project
 if [ "$DEPLOY_FIREBASE" = true ]; then
-    echo -e "${GREEN}[INFO]${NC} 🌐 Stage 2: Deploying Frontend to Firebase ($FIREBASE_PROJECT)..."
     export POLYGLOT_PROJECT_NAME="$FIREBASE_PROJECT"
-    ./deploy-all.sh --frontend
 
-    # Deploy Firestore security rules (firestore.rules, wired via firebase.json).
-    # deploy-all.sh ships hosting only; rules must be deployed too or the demo
-    # project stays on default-deny -- which breaks email signup (the unauth
-    # authorized_emails read) and the users/{uid} profile sync on login.
-    echo -e "${GREEN}[INFO]${NC} 🔒 Stage 2b: Deploying Firestore rules to Firebase ($FIREBASE_PROJECT)..."
+    # Deploy Firestore security rules (firestore.rules, wired via firebase.json)
+    # BEFORE the frontend: deploy-all.sh ships hosting only, and the demo project
+    # otherwise stays on default-deny -- which breaks email signup (the unauth
+    # authorized_emails read) and the users/{uid} profile sync on login. Rules
+    # first so the new frontend never goes live against stale rules.
+    echo -e "${GREEN}[INFO]${NC} 🔒 Stage 2a: Deploying Firestore rules to Firebase ($FIREBASE_PROJECT)..."
     firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT"
+
+    echo -e "${GREEN}[INFO]${NC} 🌐 Stage 2b: Deploying Frontend to Firebase ($FIREBASE_PROJECT)..."
+    ./deploy-all.sh --frontend
 fi
 
 echo -e "${GREEN}[INFO]${NC} ✅ Demo Deployment Complete!"

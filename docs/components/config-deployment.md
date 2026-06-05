@@ -109,10 +109,11 @@ stages):
   hosting`.
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
-  **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, and
-  runs only on a frontend/full deploy. A project left on default-deny breaks email
-  signup (the unauth `authorized_emails` read) and the `users/{uid}` profile sync
-  -- see [auth.md](auth.md).
+  **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, runs
+  only on a frontend/full deploy, and runs **before** the frontend so the new
+  frontend never goes live against stale rules. A project left on default-deny
+  breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
+  profile sync -- see [auth.md](auth.md).
 
 ### Frontend → backend wiring
 
