@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -42,6 +42,16 @@ constants):
 - `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the
   field-labeling/normalizer path (normalizer currently deprecated; kept as an
   env knob and surfaced on `/health`).
+- `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
+  model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
+  `GOOGLE_CLOUD_PROJECT` (compliance-friendly; prod default). `false` -> Gemini
+  Developer API (**AI Studio**) via `GEMINI_API_KEY` -- the *only* credential AI
+  Studio accepts (no ADC/SA path). This matters because **model availability
+  differs by service**: as of 2026-06 `gemini-3.1-flash-live-preview` is NOT on
+  Vertex (it `1008`s -- "policy violation"), but IS on AI Studio. The **demo**
+  runs `VERTEXAI=false,USE_PREMIUM_MODEL=true` to get 3.1 (its key is injected via
+  Secret Manager); switch demo back to Vertex once 3.1 ships there. Surfaced on
+  `/health` as `vertexai`.
 
 `backend/dependencies.py` is the **one** place the model reaches the adapter:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
@@ -71,4 +81,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*

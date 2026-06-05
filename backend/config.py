@@ -40,7 +40,16 @@ class Settings(BaseModel):
 	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "true").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
-	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
+	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
+	# True (DEFAULT) -> Vertex via service-account ADC + GOOGLE_CLOUD_PROJECT
+	#   (compliance-friendly; required for prod). Vertex preview-model access is
+	#   gated per-project: as of 2026-06, gemini-3.1-flash-live-preview is NOT yet
+	#   available on Vertex, so it 1008s ("policy violation") under this path.
+	# False -> Gemini Developer API (AI Studio) via GEMINI_API_KEY, which DOES
+	#   have 3.1. Set VERTEXAI=false (with USE_PREMIUM_MODEL=true) on the demo
+	#   service to run 3.1 until Vertex ships it. Env-overridable so demo/prod can
+	#   flip without a code edit; mirrors USE_PREMIUM_MODEL / DISABLE_GEMINI_VAD.
+	VERTEXAI: bool = os.getenv("VERTEXAI", "true").lower() == "true"
 	# CRITICAL VAD MODE TOGGLE (bd polyglot-pdf-333).
 	#   False (DEFAULT) -> NATIVE mode: Gemini's own automatic VAD drives turn
 	#     detection. The adapter sends the VAD_* sensitivity knobs below; the

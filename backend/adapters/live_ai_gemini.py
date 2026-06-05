@@ -92,6 +92,11 @@ class LiveAIGemini(ILiveAI):
         self._project = project
         self._location = location
         self._model_name = model
+        # Persist the API key so the client-reconstruction path in connect()
+        # (used on session restart / section-switch reconnect) can rebuild a
+        # keyed AI Studio client. Without this, a rebuilt non-Vertex client
+        # would fall back to ADC and fail (bare ClientCls()).
+        self._api_key = api_key
         self._client = None
         
         try:
@@ -202,6 +207,8 @@ class LiveAIGemini(ILiveAI):
                             project=self._project or os.getenv("GOOGLE_CLOUD_PROJECT"),
                             location=self._location
                         )
+                    elif self._api_key is not None:
+                        self._client = ClientCls(api_key=self._api_key)
                     else:
                         self._client = ClientCls()
                 except Exception:
