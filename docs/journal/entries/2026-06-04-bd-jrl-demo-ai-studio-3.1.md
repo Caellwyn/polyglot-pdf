@@ -49,11 +49,15 @@ Run the demo on AI Studio so it can use 3.1; keep prod on Vertex (compliance).
 
 - **config.py**: `VERTEXAI` made env-overridable (`os.getenv("VERTEXAI","true")`),
   was a hardcoded `True`. It selects the **service/auth mode**, not the model.
-- **live_ai_gemini.py**: store `self._api_key` and use it in the client-
-  reconstruction branch in `connect()` (hit on section-switch reconnect /
-  `restart_gemini_session`). Previously the non-Vertex rebuild called bare
-  `ClientCls()`, dropping the key and falling back to ADC -- a latent bug that
-  would have made the AI-Studio reconnect path fail intermittently.
+- **live_ai_gemini.py**: store `self._api_key`. The load-bearing effect is in
+  `__init__`: the session loop calls `self._client.aio.live.connect(...)` directly
+  on the client built in `__init__` (it does NOT route through the public
+  `connect()` method), so persisting the key is what makes the AI-Studio
+  (`vertexai=False`) client correct. The public `connect()` method also gained a
+  matching keyed-rebuild branch (was bare `ClientCls()` -> ADC fallback), but
+  that path is belt-and-suspenders for external callers, not the hot reconnect
+  path. Also added a startup warning when `vertexai=False` and the key is missing
+  (logs, does not raise -- bare `LiveAIGemini()` is the default in mocked tests).
 - **main.py**: `/health` now reports `vertexai`, so a deploy can be verified
   without dumping env vars.
 - **Deploy (untracked scripts)**: `deploy-all.sh` gained a `BACKEND_EXTRA_ENV`
