@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-bmz-firestore-authorized-emails-rule.md](../journal/entries/2026-06-04-bd-bmz-firestore-authorized-emails-rule.md) for closeout details.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -58,14 +58,13 @@ match /authorized_emails/{doc} {
 }
 ```
 
-> **Deploy note (bd `polyglot-pdf-bmz`).** The repo `firestore.rules` is now the
-> intended source of truth and is wired into `firebase.json` (`firestore.rules`),
-> but the **deployed** rules can lag until someone runs
-> `firebase deploy --only firestore:rules` per project. As of this fix the demo
-> project (`polyglot-demo-aa709`) had pure default-deny deployed (no
-> `authorized_emails` **and** no `/users` rule), so email signup AND the profile
-> sync below were both failing there until the corrected rules are deployed. The
-> deploy is a maintainer action.
+> **Deploy note.** The repo `firestore.rules` is the source of truth and is wired
+> into `firebase.json` (`firestore.rules`). `deploy-demo.sh` and
+> `deploy-production.sh` ship it (`firebase deploy --only firestore:rules`) on any
+> frontend/full deploy, so a normal deploy keeps the live rules in sync with the
+> repo. A project left on default-deny breaks BOTH email signup (the unauth
+> `authorized_emails` read) and the `users/{uid}` profile sync below. Deploy is a
+> maintainer action (the NEVER-deploy rule).
 
 ## User profile (Firestore `users/{uid}`)
 

@@ -28,3 +28,22 @@ echo -e "${GREEN}[INFO]${NC} 🚀 Deploying to Production (Business) Channel..."
 echo -e "${GREEN}[INFO]${NC} Project: $POLYGLOT_PROJECT_NAME"
 
 ./deploy-all.sh "$@"
+
+# Deploy Firestore security rules (firestore.rules, wired via firebase.json)
+# whenever the frontend is in scope -- deploy-all.sh ships hosting only, and a
+# project left on default-deny breaks email signup (the unauth authorized_emails
+# read) and the users/{uid} profile sync on login. Skip on backend/form-kits-only
+# runs, which do not touch the frontend.
+DEPLOY_RULES=false
+if [ $# -eq 0 ] || [ "$1" = "--all" ]; then
+    DEPLOY_RULES=true
+else
+    for arg in "$@"; do
+        [ "$arg" = "--frontend" ] && DEPLOY_RULES=true
+    done
+fi
+
+if [ "$DEPLOY_RULES" = true ]; then
+    echo -e "${GREEN}[INFO]${NC} 🔒 Deploying Firestore rules to Firebase ($POLYGLOT_PROJECT_NAME)..."
+    firebase deploy --only firestore:rules --project "$POLYGLOT_PROJECT_NAME"
+fi
