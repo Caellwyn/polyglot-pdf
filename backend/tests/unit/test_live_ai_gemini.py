@@ -97,6 +97,29 @@ async def test_live_ai_gemini_connect(mock_google_ai_client):
 
 
 @pytest.mark.asyncio
+async def test_connect_rebuilds_client_with_api_key(mock_google_ai_client):
+    """connect() reconstruction path must rebuild a KEYED AI Studio client.
+
+    Regression guard for bd polyglot-pdf-jrl: if _client is torn down, the
+    rebuild branch in connect() must pass the stored api_key, not fall back to a
+    bare ClientCls() (which would resolve ADC and fail on the AI Studio path).
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    mock_genai, _ = mock_google_ai_client
+
+    # vertexai defaults to False -> AI Studio (API-key) path.
+    adapter = LiveAIGemini(api_key="test_key")
+    # __init__ already built one client; reset the call record and force a rebuild.
+    mock_genai.Client.reset_mock()
+    adapter._client = None
+
+    async with adapter.connect(model="gemini-test", config={"system_instruction": "x"}):
+        # The reconstruction branch must carry the key through, not call bare.
+        mock_genai.Client.assert_called_once_with(api_key="test_key")
+
+
+@pytest.mark.asyncio
 async def test_live_ai_session_send_audio(mock_google_ai_client):
     """Tests that send_audio formats the request correctly."""
     from backend.adapters.live_ai_gemini import LiveAIGeminiSession

@@ -22,10 +22,10 @@ later phases" — that's stale; `main.py:7` already does it.)
 **Two classes of setting — only one is env-overridable:**
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
-  `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `USE_JIT_SCHEMA`,
-  `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
-  `FORM_KITS_REMOTE_BASE_URL`, `FORM_KITS_REMOTE_PREFIX`,
-  `FORM_KITS_REMOTE_TIMEOUT_SEC`.
+  `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
+  `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `FORM_KITS_MODE`,
+  `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
+  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): `PROACTIVE_AUDIO`, the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
