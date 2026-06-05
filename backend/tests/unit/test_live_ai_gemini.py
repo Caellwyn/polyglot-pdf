@@ -402,6 +402,11 @@ async def test_send_text_turn_uses_client_content_for_2p5():
 
     session.send_client_content.assert_awaited_once()
     session.send_realtime_input.assert_not_called()
+    # 2.5 is the prod path -- pin the exact pre-fix payload shape so a future
+    # refactor can't silently change it (no explicit role; turn_complete=True).
+    kwargs = session.send_client_content.await_args.kwargs
+    assert kwargs["turns"] == {"parts": [{"text": "hello"}]}
+    assert kwargs["turn_complete"] is True
 
 
 def _count_summary_emits(mock_log) -> int:

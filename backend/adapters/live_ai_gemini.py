@@ -391,8 +391,11 @@ class LiveAIGemini(ILiveAI):
         if model_family(self._model_name) == "3.1":
             await session.send_realtime_input(text=text)
         else:
+            # Preserve the EXACT pre-fix 2.5 shape (no explicit role -- the SDK
+            # defaults the turn author to "user"): the point of the model gate is
+            # to leave the 2.5 / prod path untouched. Do not add a role key here.
             await session.send_client_content(
-                turns={"role": "user", "parts": [{"text": text}]},
+                turns={"parts": [{"text": text}]},
                 turn_complete=True,
             )
 
