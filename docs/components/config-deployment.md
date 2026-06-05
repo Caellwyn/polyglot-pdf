@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -105,13 +105,19 @@ stages):
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
   `gcloud run deploy ... --allow-unauthenticated --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
-  `FORM_KITS_REMOTE_PREFIX`. The container (`backend/Dockerfile`, `python:3.12-slim`)
-  runs `uvicorn backend.main:app` on `$PORT` (8080).
+  `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=false,USE_PREMIUM_MODEL=true`). The
+  container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
+  backend.main:app` on `$PORT` (8080).
 - **Form-kits** — uploads the local `form-kits/` tree to
   `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`.
-- **Frontend** — `npm run build` (output `frontend/dist`) → `firebase deploy --only
-  hosting`.
+- **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
+  `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
+  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting`. The
+  bare `npm run build` is NOT used: it loads `.env.production` under the default
+  Vite config, whose Firebase keys differ per channel — a demo built that way dies
+  with `auth/invalid-api-key`.
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
   **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, runs
@@ -136,4 +142,4 @@ when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for closeout details.*

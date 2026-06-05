@@ -12,8 +12,13 @@ __pycache__/
 *.pyo
 .vscode/
 
-# Allow .env.production (contains production defaults, safe to commit)
+# Allow .env.production / .env.demo (per-channel Vite build config). These hold
+# only public VITE_* values -- the channel WS URL + Firebase WEB config, which is
+# client-side and non-secret -- so committing them makes both channel builds
+# reproducible on any checkout. Real secrets (e.g. GEMINI_API_KEY) never live
+# here; they go in Secret Manager.
 !.env.production
+!.env.demo
 
 # example data files
 example_webforms/

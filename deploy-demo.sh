@@ -62,7 +62,12 @@ if [ "$DEPLOY_GCP" = true ]; then
     done
     [ ${#GCP_ARGS[@]} -eq 0 ] && GCP_ARGS=("--backend" "--form-kits")
 
-    ./deploy-all.sh "${GCP_ARGS[@]}"
+    # Demo runs on AI Studio (Gemini Developer API) so it can use 3.1
+    # (gemini-3.1-flash-live-preview), which is NOT yet on Vertex. VERTEXAI=false
+    # selects the API-key path; USE_PREMIUM_MODEL=true selects 3.1. The
+    # GEMINI_API_KEY itself is injected via Secret Manager (--set-secrets),
+    # configured out-of-band -- not set here. Prod stays on Vertex (no override).
+    BACKEND_EXTRA_ENV="VERTEXAI=false,USE_PREMIUM_MODEL=true" ./deploy-all.sh "${GCP_ARGS[@]}"
 
     # Update Cloud Run to use the custom Service Account
     echo -e "${GREEN}[INFO]${NC} 🔑 Ensuring Cloud Run uses service account $SA_NAME..."
@@ -84,8 +89,11 @@ if [ "$DEPLOY_FIREBASE" = true ]; then
     echo -e "${GREEN}[INFO]${NC} 🔒 Stage 2a: Deploying Firestore rules to Firebase ($FIREBASE_PROJECT)..."
     firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT"
 
+    # Build in demo mode so Vite loads .env.demo (the demo Firebase keys).
+    # A bare "npm run build" loads .env.production, which has no Firebase config
+    # for this project -- the app then dies with "auth/invalid-api-key".
     echo -e "${GREEN}[INFO]${NC} 🌐 Stage 2b: Deploying Frontend to Firebase ($FIREBASE_PROJECT)..."
-    ./deploy-all.sh --frontend
+    FRONTEND_BUILD_CMD="npm run build:schema:demo" ./deploy-all.sh --frontend
 fi
 
 echo -e "${GREEN}[INFO]${NC} ✅ Demo Deployment Complete!"
