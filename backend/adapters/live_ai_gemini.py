@@ -92,8 +92,35 @@ class LiveAIGemini(ILiveAI):
         self._project = project
         self._location = location
         self._model_name = model
-        self._client = None
-        
+        # Persist the API key so any later client rebuild (the reconstruction
+        # branch in connect()) can rebuild a keyed AI Studio client instead of a
+        # bare keyless one. The PRIMARY client used by the session loop is the one
+        # built just below in __init__ (the loop calls self._client.aio.live.connect
+        # directly, never the public connect() method), so storing the key here is
+        # what makes the AI Studio (vertexai=False) path work; the connect()
+        # rebuild is belt-and-suspenders for external callers of connect().
+        self._api_key = api_key
+
+        # Warn loudly on a misconfigured AI Studio path: vertexai=False (AI Studio)
+        # authenticates ONLY via an API key -- there is no ADC/service-account path.
+        # With no key, construction still falls through to a bare ClientCls() below,
+        # which silently tries ADC and then fails cryptically at the first session.
+        # We do NOT raise here: bare LiveAIGemini() (api_key=None, vertexai=False) is
+        # the default used by mocked unit tests, which never authenticate for real.
+        # Real deploys also surface this via /health's gemini_api_key_present flag.
+        if not vertexai and api_key is None:
+            try:
+                structlog.get_logger().warning(
+                    "live_ai_no_api_key_on_ai_studio_path",
+                    detail=(
+                        "vertexai=False (AI Studio) but no API key; client will fall "
+                        "back to ADC and likely fail at session start. Set "
+                        "GEMINI_API_KEY or VERTEXAI=true."
+                    ),
+                )
+            except Exception:
+                pass
+
         try:
             ClientCls = getattr(genai, "Client", None)
             if ClientCls is not None:
@@ -192,7 +219,11 @@ class LiveAIGemini(ILiveAI):
         Uses the underlying genai client's async context manager for live.connect.
         """
         if self._client is None or not hasattr(self._client, "aio"):
-            # Attempt to construct a Client instance if possible.
+            # Reconstruct a client if one was never built (or got torn down).
+            # NOTE: the session loop uses self._client.aio.live.connect directly
+            # and does NOT route through this method, so this branch is a guard for
+            # external callers of connect(), not the hot reconnect path. It mirrors
+            # __init__'s three-way construction (Vertex / keyed AI Studio / bare).
             ClientCls = getattr(genai, "Client", None)
             if ClientCls is not None:
                 try:
@@ -202,6 +233,8 @@ class LiveAIGemini(ILiveAI):
                             project=self._project or os.getenv("GOOGLE_CLOUD_PROJECT"),
                             location=self._location
                         )
+                    elif self._api_key is not None:
+                        self._client = ClientCls(api_key=self._api_key)
                     else:
                         self._client = ClientCls()
                 except Exception:

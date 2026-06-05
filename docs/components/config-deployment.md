@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -22,12 +22,12 @@ later phases" — that's stale; `main.py:7` already does it.)
 **Two classes of setting — only one is env-overridable:**
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
-  `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `USE_JIT_SCHEMA`,
-  `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
-  `FORM_KITS_REMOTE_BASE_URL`, `FORM_KITS_REMOTE_PREFIX`,
-  `FORM_KITS_REMOTE_TIMEOUT_SEC`.
+  `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
+  `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `FORM_KITS_MODE`,
+  `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
+  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
-  an env var): `VERTEXAI`, `DISABLE_GEMINI_VAD`, `PROACTIVE_AUDIO`, the audio rates
+  an env var): `PROACTIVE_AUDIO`, the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
   (`WS_IDLE_TIMEOUT_SEC` 120, `WS_PING_INTERVAL_SEC` 15, `WS_CHUNK_MS` 20,
   `WS_MAX_OUTBOX` 100, `WS_MAX_AUDIO_FRAME_BYTES` 32000), `MAX_UPLOAD_MB` 5, the
@@ -57,10 +57,15 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 
 ## Required & dev-only env vars
 
-- **`GEMINI_API_KEY`** — required (Google AI Studio / Vertex AI key). The `VERTEXAI`
-  field (a **code constant**, default `True`) makes the adapter also resolve
-  credentials via `GOOGLE_CLOUD_PROJECT` + ADC; the deploy scripts set
-  `GOOGLE_CLOUD_PROJECT`. (Changing `VERTEXAI` needs a code edit, not an env var.)
+- **`VERTEXAI`** (env, default `true`) — picks the auth/service mode. `true` →
+  Vertex AI via `GOOGLE_CLOUD_PROJECT` + service-account ADC (no key needed; prod
+  default). `false` → Gemini Developer API (**AI Studio**), which authenticates
+  **only** via `GEMINI_API_KEY` (no ADC/SA path). The demo runs `VERTEXAI=false`
+  to reach `gemini-3.1-flash-live-preview` (not yet on Vertex). See
+  [ai-models.md](../standards/ai-models.md).
+- **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
+  the Vertex path. On the demo Cloud Run service it is injected via **Secret
+  Manager** (`--set-secrets`), never as a plaintext env var.
 - **`backend/.env.DEV` marker file** — this **file's existence** (NOT an env var)
   flips `DEV_LOGGING_ENABLED` in `backend/utils/dev_file_logger.py`, which is the
   **single gate** for *both* dev-logging paths: the `DevFileLogger` itself **and**
@@ -131,4 +136,4 @@ when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for closeout details.*

@@ -60,6 +60,10 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]):
             "labeling": settings.MODEL_LABELING,
         },
         "use_premium_model": settings.USE_PREMIUM_MODEL,
+        # Auth/service mode: vertexai=true -> Vertex (ADC/SA); false -> AI Studio
+        # (Gemini Developer API via GEMINI_API_KEY). Lets a deploy be verified
+        # without dumping env vars.
+        "vertexai": settings.VERTEXAI,
         "audio": {
             "in_rate": settings.AUDIO_IN_RATE,
             "out_rate": settings.AUDIO_OUT_RATE,
