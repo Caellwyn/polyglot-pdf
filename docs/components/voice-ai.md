@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -53,13 +53,16 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   with field values — see bd `polyglot-pdf-hjo`); only its length is logged at
   DEBUG.
 
-## Manual activity signals (VAD)
+## Activity signals (VAD modes)
 
-Gemini's own VAD is disabled (`DISABLE_GEMINI_VAD=True`); the adapter sends manual
-`send_activity_start()` / `send_activity_end()` →
+Turn-taking depends on the `DISABLE_GEMINI_VAD` flag (bd polyglot-pdf-333; default
+`False` = **native** Gemini VAD). In **manual** mode (`DISABLE_GEMINI_VAD=True`)
+the adapter sends `send_activity_start()` / `send_activity_end()` →
 `session.send_realtime_input(activity_start=types.ActivityStart())` /
-`ActivityEnd()`. Both guard on `self._current_session is None`. Full rationale,
-ordering, and the energy-VAD tuning config are in
+`ActivityEnd()` (both guard on `self._current_session is None`). In **native**
+mode these methods **no-op early** -- Gemini's own VAD drives turns, so forwarding
+manual signals would create a conflicting turn-taking state. Full rationale, the
+single-toggle revert, and the frontend continuous-audio requirement are in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
 ## Barge-in
@@ -118,5 +121,3 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 - **Never log transcript/hint text** — only lengths (bd `polyglot-pdf-hjo`).
 - **Barge-in flush is frontend-side** — the backend only logs+skips on interrupt
   (no flush signal); don't expect a server sentinel.
-
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for closeout details.*
