@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -107,6 +107,13 @@ stages):
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`.
 - **Frontend** — `npm run build` (output `frontend/dist`) → `firebase deploy --only
   hosting`.
+- **Firestore rules** — `firebase deploy --only firestore:rules` ships
+  `firestore.rules` (wired via `firebase.json`). This step lives in the
+  **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, runs
+  only on a frontend/full deploy, and runs **before** the frontend so the new
+  frontend never goes live against stale rules. A project left on default-deny
+  breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
+  profile sync -- see [auth.md](auth.md).
 
 ### Frontend → backend wiring
 
@@ -124,4 +131,4 @@ when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
