@@ -9,6 +9,8 @@ files:
   - deploy-demo.sh
   - deploy-production.sh
   - frontend/.env.production
+  - frontend/.env.demo
+  - .gitignore
   - docs/components/config-deployment.md
 ---
 
@@ -39,8 +41,28 @@ the changes were at risk of being lost on any stash/reset. This commits them so
   `FRONTEND_BUILD_CMD` (not bare `npm run build`); backend env includes the
   `BACKEND_EXTRA_ENV` channel vars.
 
+- **frontend/.env.demo** -- committed (with a `!.env.demo` gitignore exception,
+  mirroring the existing `!.env.production`). It was gitignored and existed only
+  on the maintainer's machine, so `build:schema:demo` (which loads `.env.demo`)
+  would silently ship a demo build with NO Firebase config on any fresh checkout
+  / CI. It holds only public `VITE_*` values (channel WS URL + Firebase web
+  config), so committing it makes the demo build reproducible. (Caught by
+  fresh-eyes.)
+
 No secrets committed: `GEMINI_API_KEY` stays in Secret Manager (`--set-secrets`);
-the Firebase web config values are public client config.
+the Firebase web config values in `.env.demo` / `.env.production` are public
+client config (same class the repo already commits for `.env.production`).
+
+## Known follow-up (not a defect in this PR)
+
+`frontend/.env.production` ships with three Firebase fields still BLANK
+(`VITE_FIREBASE_API_KEY`, `_MESSAGING_SENDER_ID`, `_APP_ID`) -- placeholders only.
+A **prod** deploy will still `auth/invalid-api-key` until the maintainer pastes
+the values from the `polyglot-forms-919f2` Firebase console (`firebase
+apps:sdkconfig web --project polyglot-forms-919f2`). This is intentional and
+owner-action-pending: that project is not reachable from this session, and the
+demo (the live target) is fully configured via `.env.demo`. Fresh-eyes flagged
+the blanks; recorded here so they are not mistaken for done.
 
 ## Decisions (defended)
 
