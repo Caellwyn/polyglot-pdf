@@ -33,6 +33,18 @@ REGION="us-central1"
 FORM_KITS_BUCKET="${FORM_KITS_BUCKET:-polyglot-pdf-form-kits}"
 FORM_KITS_PREFIX="${FORM_KITS_PREFIX:-form-kits}"
 
+# Frontend build command, overridable by the channel deploy scripts. The deployed
+# app is the schema-forms app (index.html -> src/schema-forms/main.tsx), so the
+# build MUST run the schema config so Vite loads the right .env per channel and
+# bakes in the Firebase config:
+#   demo -> build:schema:demo (--mode demo -> .env.demo, demo Firebase keys)
+#   prod -> build:schema      (.env.production, prod Firebase keys)
+# A bare "vite build" (npm run build) loads .env.production under the default
+# config, which has no VITE_FIREBASE_* keys -- the app then dies at launch with
+# Firebase "auth/invalid-api-key". Default to the prod schema build so a direct
+# deploy-all.sh --frontend is safe.
+FRONTEND_BUILD_CMD="${FRONTEND_BUILD_CMD:-npm run build:schema}"
+
 # Print header
 echo ""
 log_info "═══════════════════════════════════════════════════════════"
@@ -128,13 +140,21 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     
     # Deploy to Cloud Run
     log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
+    # BACKEND_EXTRA_ENV: channel deploy scripts append channel-specific env vars
+    # here (e.g. the demo runs on AI Studio: VERTEXAI=false,USE_PREMIUM_MODEL=true).
+    # Default empty -> prod keeps the Vertex defaults baked into config.py.
+    # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
+    # NOT here -- never put the key in plaintext env vars.
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
+    [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
+
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
         --platform managed \
         --allow-unauthenticated \
         --project "$POLYGLOT_PROJECT_NAME" \
-        --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
+        --set-env-vars="$BACKEND_ENV"
     
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
     log_success "✅ Backend deployed successfully!"
@@ -258,9 +278,9 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         fi
     fi
 
-    # Build frontend
-    log_info "📦 Building frontend..."
-    npm run build
+    # Build frontend (channel-aware; see FRONTEND_BUILD_CMD above)
+    log_info "📦 Building frontend ($FRONTEND_BUILD_CMD)..."
+    $FRONTEND_BUILD_CMD
     
     # Deploy to Firebase Hosting
     log_info "🌐 Deploying to Firebase Hosting..."

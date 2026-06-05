@@ -49,4 +49,7 @@ if [ "$DEPLOY_RULES" = true ]; then
     firebase deploy --only firestore:rules --project "$POLYGLOT_PROJECT_NAME"
 fi
 
-./deploy-all.sh "$@"
+# Build with the prod schema config so Vite loads .env.production. (See the
+# FRONTEND_BUILD_CMD note in deploy-all.sh -- a bare "npm run build" ships an
+# empty Firebase config and the app dies with "auth/invalid-api-key".)
+FRONTEND_BUILD_CMD="npm run build:schema" ./deploy-all.sh "$@"
