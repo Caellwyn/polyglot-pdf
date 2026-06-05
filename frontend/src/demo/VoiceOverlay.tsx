@@ -582,6 +582,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Handle push-to-talk mode toggle
 	const handlePushToTalkToggle = async () => {
+		// bd polyglot-pdf-333: in native-VAD mode Gemini's own VAD drives turns and
+		// the audio layer streams continuous ungated audio. Don't let a PTT toggle
+		// pause VAD / mute input / re-arm the worklet noise gate (matches the
+		// VoiceOverlayMobile guard). Without this the toggle leaves inputMuted dirty
+		// and relies on the audioManager short-circuit ordering to keep streaming.
+		if (connectionManager?.isNativeVad()) return
+
 		const newMode = !pushToTalkMode
 		setPushToTalkMode(newMode)
 
