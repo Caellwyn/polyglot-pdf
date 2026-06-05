@@ -117,5 +117,3 @@ The WS auth gate is covered indirectly: the integration tests patch
 (`backend/tests/integration/test_websocket_ephemeral.py`) so the handshake tests run
 without a live token. There are **no frontend tests** for `AuthContext` / `Login` /
 `ProtectedRoute` yet. See [../standards/testing.md](../standards/testing.md).
-
-*Last updated: 2026-06-01*
