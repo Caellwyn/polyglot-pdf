@@ -365,6 +365,45 @@ async def test_run_session_loop_dispatches_tool_calls():
     await adapter.finalize()
 
 
+@pytest.mark.asyncio
+async def test_send_text_turn_uses_realtime_input_for_3p1():
+    """3.1 family text turns must go via send_realtime_input(text=), not
+    send_client_content -- the latter 1007s on gemini-3.1-flash-live-preview
+    (bd polyglot-pdf-1g6, verified against the live endpoint)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini(api_key="k", model="gemini-3.1-flash-live-preview")
+    session = SimpleNamespace(
+        send_realtime_input=AsyncMock(),
+        send_client_content=AsyncMock(),
+    )
+
+    await adapter._send_text_turn(session, "hello")
+
+    session.send_realtime_input.assert_awaited_once()
+    # text passed as the text= kwarg, not via turns/client_content
+    assert session.send_realtime_input.await_args.kwargs.get("text") == "hello"
+    session.send_client_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_text_turn_uses_client_content_for_2p5():
+    """2.5 (and other non-3.1) families keep send_client_content -- the
+    send_realtime_input(text=) path is unverified there, so we must not switch it."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini(api_key="k", model="gemini-2.5-flash-native-audio-preview-12-2025")
+    session = SimpleNamespace(
+        send_realtime_input=AsyncMock(),
+        send_client_content=AsyncMock(),
+    )
+
+    await adapter._send_text_turn(session, "hello")
+
+    session.send_client_content.assert_awaited_once()
+    session.send_realtime_input.assert_not_called()
+
+
 def _count_summary_emits(mock_log) -> int:
     """How many session_cost_summary lines a mocked adapter._log emitted."""
     return sum(
