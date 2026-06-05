@@ -36,6 +36,7 @@ export interface ConnectionManager {
 	sendRecoveryPrompt: (level: number, nextFieldHint?: string) => void  // Send recovery prompt (activity watchdog)
 	endGeminiSession: () => void  // End Gemini session only (keep WebSocket alive)
 	setPushToTalkMode: (enabled: boolean) => void  // Enable/disable PTT mode
+	isNativeVad: () => boolean  // bd polyglot-pdf-333: true when Gemini's own VAD drives turns
 	getFieldManager: () => FieldManager | null
 	getAudioManager: () => AudioManager | null
 	startRecording: () => Promise<void>
@@ -183,6 +184,10 @@ export function createConnectionManager(
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
 	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
+	// Native-VAD mode (bd polyglot-pdf-333): when true, Gemini's own VAD drives
+	// turns -- we suppress all manual activity signals (PTT + Silero) and stream
+	// continuous audio. Set from the backend session_ready handshake.
+	let nativeVad: boolean = false
 
 	// Initialize state
 	let state: SchemaFormState = SchemaFormStateManager.load() || SchemaFormStateManager.init(schema)
@@ -243,6 +248,15 @@ export function createConnectionManager(
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
 			onStatusChange('connected')
+		},
+		onNativeVadMode: (enabled) => {
+			// bd polyglot-pdf-333: backend told us whether Gemini's own VAD is
+			// driving turns. Flip the closure flag (gates the activity-signal
+			// sends below) and reconfigure the audio layer to stream continuous
+			// ungated audio (incl. silence) in native mode.
+			nativeVad = enabled
+			console.log('[VFF Connection] native VAD mode:', enabled)
+			audioManager?.setNativeVad(enabled)
 		},
 		onSectionChanged: () => {
 			// Gemini triggered a section switch - trigger UI refresh
@@ -503,6 +517,9 @@ export function createConnectionManager(
 		},
 
 		sendActivityStart() {
+			// bd polyglot-pdf-333: in native-VAD mode Gemini owns turn detection;
+			// suppress manual activity signals (this also covers the PTT button path).
+			if (nativeVad) return
 			console.log('[ConnectionManager] sendActivityStart called, connection:', connection, 'isNull:', connection === null)
 			if (connection) {
 				connection.sendActivityStart()
@@ -512,6 +529,7 @@ export function createConnectionManager(
 		},
 
 		async sendActivityEnd() {
+			if (nativeVad) return  // bd polyglot-pdf-333: see sendActivityStart
 			if (connection) {
 				await connection.sendActivityEnd()
 			}
@@ -538,6 +556,13 @@ export function createConnectionManager(
 		setPushToTalkMode(enabled: boolean) {
 			console.log(`[VFF Connection] Setting push-to-talk mode: ${enabled}`)
 			pushToTalkMode = enabled
+		},
+
+		// bd polyglot-pdf-333: lets the UI (VoiceOverlay PTT effect) skip its own
+		// worklet/mute reconfiguration in native-VAD mode, so it can't re-arm the
+		// worklet noise gate that native mode deliberately bypasses.
+		isNativeVad() {
+			return nativeVad
 		},
 
 		getFieldManager() {
@@ -732,6 +757,10 @@ export function createConnectionManager(
 		// VAD-based barge-in: Called when VAD detects speech start
 		// Sends activity_start signal before audio chunks begin streaming
 		onVADSpeechStart() {
+			// bd polyglot-pdf-333: in native-VAD mode Gemini owns turn-taking AND
+			// interruption (server_content.interrupted), so the client-side Silero
+			// activity signal + instant barge-in flush are intentionally disabled.
+			if (nativeVad) return
 			if (!audioManager) return			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
 
@@ -759,6 +788,7 @@ export function createConnectionManager(
 		// VAD-based speech end: Called when VAD detects speech end
 		// Sends activity_end signal to flush Gemini's audio buffer
 		onVADSpeechEnd() {
+			if (nativeVad) return  // bd polyglot-pdf-333: see onVADSpeechStart
 			if (!audioManager) return
 
 			// PUSH-TO-TALK MODE: Disable VAD-based barge-in

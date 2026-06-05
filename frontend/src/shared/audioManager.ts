@@ -26,6 +26,7 @@ export interface AudioManager {
 	getStream: () => MediaStream | null // Get the active microphone stream (for sharing with VAD)
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
 	setPTTMode: (enabled: boolean) => void // FIX (Nov 7, 2025): Notify worklet about PTT mode
+	setNativeVad: (enabled: boolean) => void // bd polyglot-pdf-333: stream continuous ungated audio for Gemini's own VAD
 	destroy: () => void
 }
 
@@ -58,6 +59,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
 	let inputMuted = false // Track if input should be muted (send silence)
 	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
+	// Native-VAD mode (bd polyglot-pdf-333): when true, stream ALL audio (incl.
+	// silence) ungated so Gemini's own VAD can detect turn boundaries. Bypasses
+	// the inputMuted/vadActive gate AND the all-zero silence skip below, and puts
+	// the worklet noise gate into bypass (via the setPTTMode worklet message).
+	let nativeVadEnabled = false
 
 	// Privacy gate: VAD-controlled audio flow
 	let vadActive = false // When false, don't send audio; when true, send real audio
@@ -159,12 +165,31 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			onAudioDataCallback = onAudioData
 
+			// bd polyglot-pdf-333: a freshly-created worklet defaults to
+			// noise-gate-ON. If native-VAD mode is active (e.g. after a
+			// reconnect/recording restart), re-apply the gate bypass so silence
+			// keeps streaming -- otherwise the gate silently re-arms mid-session.
+			if (nativeVadEnabled) {
+				nodes.workletNode.port.postMessage({ type: 'setPTTMode', enabled: true })
+			}
+
 			// Handle messages from AudioWorklet
 			nodes.workletNode.port.onmessage = (event: MessageEvent) => {
 				if (!recording || !onAudioDataCallback) return
 
 				const { type, pcmData } = event.data
 				if (type !== 'audio') return
+
+			// bd polyglot-pdf-333: NATIVE-VAD mode streams ALL audio ungated --
+			// no inputMuted/vadActive gate and no all-zero silence skip -- so
+			// Gemini's own VAD sees a continuous stream (incl. silence) to detect
+			// turn boundaries on. The worklet noise gate is bypassed separately via
+			// setNativeVad's setPTTMode worklet message. When false, the original
+			// gated path below runs unchanged.
+			if (nativeVadEnabled) {
+				onAudioDataCallback(pcmData)
+				return
+			}
 
 			// FIX (Nov 7, 2025): In PTT mode, bypass privacy gates when button is held
 			// PTT mode means user explicitly controls audio flow, so we don't need
@@ -558,12 +583,43 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	function setPTTMode(enabled: boolean): void {
 		console.log('[AudioManager] setPTTMode:', enabled)
 		pttModeEnabled = enabled
-		
+
 		// Notify worklet about PTT mode change (bypasses noise gate in PTT mode)
 		if (nodes.workletNode) {
 			nodes.workletNode.port.postMessage({
 				type: 'setPTTMode',
 				enabled: enabled
+			})
+		}
+	}
+
+	/**
+	 * Set native-VAD mode (bd polyglot-pdf-333).
+	 *
+	 * When enabled, audio streams continuously and ungated (the worklet onmessage
+	 * handler short-circuits past the privacy gate + all-zero skip) so Gemini's own
+	 * VAD has a stream -- including silence -- to detect turns on.
+	 *
+	 * It ALSO bypasses the worklet's RMS noise gate by reusing the existing
+	 * `setPTTMode` worklet message (the worklet only knows "noise gate on/off"):
+	 * without this the worklet would zero sub-threshold audio before JS ever sees
+	 * it, starving Gemini's VAD of the silence it needs. The JS-side `pttModeEnabled`
+	 * var stays false (the native short-circuit handles JS gating) -- the worklet's
+	 * internal pttMode and the JS one are intentionally decoupled here.
+	 *
+	 * @param enabled - true for native Gemini VAD, false to restore manual-VAD gating
+	 */
+	function setNativeVad(enabled: boolean): void {
+		console.log('[AudioManager] setNativeVad:', enabled)
+		nativeVadEnabled = enabled
+
+		// Bypass (enabled) / restore (disabled) the worklet noise gate so silence
+		// is streamed in native mode. On disable we hand control back to the normal
+		// PTT state so manual mode behaves exactly as before.
+		if (nodes.workletNode) {
+			nodes.workletNode.port.postMessage({
+				type: 'setPTTMode',
+				enabled: enabled ? true : pttModeEnabled
 			})
 		}
 	}
@@ -638,6 +694,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		getStream,
 		setVADActive,
 		setPTTMode,
+		setNativeVad,
 		destroy,
 	}
 }

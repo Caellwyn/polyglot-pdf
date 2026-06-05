@@ -702,6 +702,10 @@ async def fill_form_from_schema(
 		"session_id": ephemeral_id,
 		"ephemeral": True,  # Signal to client this is stateless
 		"jit_mode_enabled": settings.USE_JIT_SCHEMA,  # Signal if JIT schema loading is active
+		# Native-VAD mode toggle (bd polyglot-pdf-333): when True, Gemini's own VAD
+		# drives turns -- the frontend must stop sending manual activity signals and
+		# stream continuous audio. Mirror of the backend DISABLE_GEMINI_VAD flag.
+		"native_vad": not settings.DISABLE_GEMINI_VAD,
 	})
 
 	# Start form filling session with schema and current values

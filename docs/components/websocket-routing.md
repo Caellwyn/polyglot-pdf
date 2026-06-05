@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -40,8 +40,11 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    `section_label`, `total_sections`, `previous_spoken_names`), and
    `initial_field_hint`.
 5. Backend replies `{"type": "session_ready", "session_id": "web_…", "ephemeral":
-   true, "jit_mode_enabled": <bool>}`. The `session_id` is an ephemeral
-   per-connection id for log correlation only — it is **not** the `form_session_id`.
+   true, "jit_mode_enabled": <bool>, "native_vad": <bool>}`. The `session_id` is an
+   ephemeral per-connection id for log correlation only — it is **not** the
+   `form_session_id`. `native_vad` (= `not DISABLE_GEMINI_VAD`) tells the frontend
+   whether Gemini's own VAD is driving turns, so it can suppress manual activity
+   signals and stream continuous audio (bd polyglot-pdf-333; see voice-and-vad).
 
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.
@@ -119,5 +122,3 @@ against the code:
 > proposal* for auto-sending an initiating message on reconnect, not a description
 > of shipped behavior — treat it as historical. This doc describes the code as it
 > actually runs.
-
-*Last updated: 2026-06-01*

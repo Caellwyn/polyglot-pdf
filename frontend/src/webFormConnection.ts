@@ -38,6 +38,10 @@ export interface ConnectionCallbacks {
   onError?: (error: Error) => void;
   onAudioData?: (arrayBuffer: ArrayBuffer) => void;
   onNextField?: (fieldId: string | null) => void;
+  // Native-VAD mode toggle from the backend session_ready handshake (bd
+  // polyglot-pdf-333). When enabled, the connection layer must stop sending
+  // manual activity signals and stream continuous audio.
+  onNativeVadMode?: (enabled: boolean) => void;
 }
 
 export class WebFormConnection {
@@ -285,7 +289,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled } = message;
+    const { session_id, ephemeral, jit_mode_enabled, native_vad } = message;
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -296,6 +300,14 @@ export class WebFormConnection {
       if (jit_mode_enabled) {
         console.log('[WebFormConnection] ✅ JIT mode enabled by backend');
       }
+    }
+
+    // Native-VAD mode (bd polyglot-pdf-333): tell the connection/audio layer
+    // whether Gemini's own VAD is driving turns. Fire BEFORE onSessionReady so
+    // the audio layer is configured before any connected-state effects run.
+    // Default to false (manual VAD) when the backend doesn't send the field.
+    if (this.callbacks.onNativeVadMode) {
+      this.callbacks.onNativeVadMode(native_vad === true);
     }
 
     this.setStatus("connected");
