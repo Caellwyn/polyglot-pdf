@@ -2,7 +2,7 @@
 
 **Tracks:** backend/pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-05. See [../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md](../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -76,10 +76,10 @@ PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/ -m "not external" -q  # skip li
 
 `frontend/package.json` script: **`"test": "vitest --environment jsdom"`** (run
 `npm run test` from `frontend/`; a `pretest` hook runs `form-kits:prepare` first).
-Stack: `vitest ^1.6.0`, `@testing-library/react`, `@testing-library/user-event`,
-`jsdom`. There is **no separate `vitest.config.ts`** and **no `test` block in
-`vite.config.ts`** — vitest runs on defaults plus the `--environment jsdom` CLI
-flag.
+Stack: `vitest ^3.2.6` (on `vite ^6.4.3`), `@testing-library/react`,
+`@testing-library/user-event`, `jsdom`. There is **no separate `vitest.config.ts`**
+and **no `test` block in `vite.config.ts`** — vitest runs on defaults plus the
+`--environment jsdom` CLI flag.
 
 Test files are colocated next to the code as `*.test.ts(x)` (the `.spec.` suffix is
 not used). **Five are active** and run: schema-form utilities (`fieldValue`,
@@ -124,4 +124,4 @@ specifically so it could be unit-tested — `polyglot-pdf-p1t`). New pure logic 
 unit test; new multi-component flows get an integration test. The suite must be
 **green before a PR opens** — `/closeout` will not open a PR on a red suite.
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-05. See [../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md](../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md) for closeout details.*
