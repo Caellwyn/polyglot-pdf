@@ -106,7 +106,12 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     echo ""
     
     cd "$BACKEND_DIR"
-    
+
+    # No local-dependency self-heal here (unlike the frontend): the backend image
+    # is built fresh by Cloud Build on every deploy, and the Dockerfile runs
+    # "pip install -r requirements.txt" inside it. There is no local .venv in the
+    # deploy path, so nothing local can go stale.
+
     # Enable necessary APIs
     log_info "Ensuring necessary Google Cloud APIs are enabled..."
     gcloud services enable run.googleapis.com \
@@ -237,6 +242,22 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         exit 1
     fi
     
+    # Self-heal dependencies. node_modules is git-ignored, so a fresh checkout
+    # (or an "npm install" accidentally run from the repo root instead of here)
+    # leaves frontend/node_modules empty. The build's prebuild hook then calls
+    # tsx, which is not on disk, and fails with "tsx is not recognized". We are
+    # already in $FRONTEND_DIR (cd above), so this installs into the right tree
+    # no matter where the deploy was launched from. Test the actual binary the
+    # build needs -- catches both the empty and the partial-install cases.
+    if [ ! -x node_modules/.bin/tsx ]; then
+        log_info "Frontend dependencies missing -- installing..."
+        if [ -f package-lock.json ]; then
+            npm ci
+        else
+            npm install
+        fi
+    fi
+
     # Build frontend
     log_info "📦 Building frontend..."
     npm run build
