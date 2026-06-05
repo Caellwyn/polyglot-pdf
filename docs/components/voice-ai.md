@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change.*
+*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -49,9 +49,12 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   end-of-playback via the audio source's `onended`, which drives the activity
   watchdog.
 - **Text/hints:** `send_text_message()` queues hints; `send_client_content()`
-  prompts Gemini to actually speak. Hint text is **never logged** (callers build it
-  with field values — see bd `polyglot-pdf-hjo`); only its length is logged at
-  DEBUG.
+  prompts Gemini to actually speak. The actual wire send is **model-conditional**
+  via `_send_text_turn()` (bd `polyglot-pdf-1g6`): the **3.1 family** rejects
+  `send_client_content()` text turns with close code **1007**, so its text goes
+  via `session.send_realtime_input(text=...)`; **2.5 / others** keep
+  `send_client_content()`. Hint text is **never logged** (callers build it with
+  field values — see bd `polyglot-pdf-hjo`); only its length is logged at DEBUG.
 
 ## Activity signals (VAD modes)
 

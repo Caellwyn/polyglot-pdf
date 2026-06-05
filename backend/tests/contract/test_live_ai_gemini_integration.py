@@ -52,6 +52,17 @@ async def test_live_ai_gemini_real_connection():
     # 3.1 default via the real adapter config is tracked in bd polyglot-pdf-a7k.
     # (The old gemini-live-2.5-flash-preview string 1008'd — see config.py.)
     model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
+
+    # This smoke test drives text via a RAW send_client_content() call (line below),
+    # which the 3.1 family rejects with a 1007 (bd polyglot-pdf-1g6). The test is
+    # pinned to 2.5; if GEMINI_LIVE_MODEL is overridden to a 3.1 model, skip rather
+    # than reproduce that 1007 and look like a regression. The adapter's own text
+    # path is model-safe via _send_text_turn; reworking this test to exercise the
+    # 3.1 default through the adapter is tracked in bd polyglot-pdf-a7k.
+    from backend.config import model_family
+    if model_family(model) == "3.1":
+        pytest.skip("contract test uses raw send_client_content, which 3.1 1007s; pin 2.5 (bd a7k)")
+
     adapter = LiveAIGemini(api_key=api_key, model=model)
 
     # If the runtime lacks an async client surface, bail early with a helpful skip.

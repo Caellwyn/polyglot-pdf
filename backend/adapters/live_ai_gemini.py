@@ -21,7 +21,7 @@ from backend.utils.json_recovery import extract_json_from_part
 from backend.utils.dev_file_logger import get_dev_logger, DEV_LOGGING_ENABLED
 from backend.utils.structured_logger import get_logger as get_structured_logger
 from backend.utils.token_file_logger import get_token_logger
-from backend.config import get_pricing_for_model
+from backend.config import get_pricing_for_model, model_family
 
 from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
@@ -376,6 +376,29 @@ class LiveAIGemini(ILiveAI):
 
         await self._text_queue.put(text)
 
+    async def _send_text_turn(self, session, text: str) -> None:
+        """Send a user-role text turn to Gemini, choosing the method by model family.
+
+        gemini-3.1-flash-live-preview REJECTS send_client_content() text turns
+        with close code 1007 ("invalid argument") -- verified against the live AI
+        Studio endpoint (bd polyglot-pdf-1g6 / backend/scripts/probe_3p1_1007.py):
+        the same text via session.send_realtime_input(text=...) is accepted and
+        returns audio. So for the 3.1 family we use send_realtime_input(text=);
+        for 2.5 / others we keep send_client_content (the 2.5 path on
+        send_realtime_input is unconfirmed, so we do not change it). When the 2.5
+        family is re-verified this branch can collapse to a single call.
+        """
+        if model_family(self._model_name) == "3.1":
+            await session.send_realtime_input(text=text)
+        else:
+            # Preserve the EXACT pre-fix 2.5 shape (no explicit role -- the SDK
+            # defaults the turn author to "user"): the point of the model gate is
+            # to leave the 2.5 / prod path untouched. Do not add a role key here.
+            await session.send_client_content(
+                turns={"parts": [{"text": text}]},
+                turn_complete=True,
+            )
+
     async def send_client_content(self, text: str):
         """Send client content to Gemini to initiate a response.
 
@@ -424,10 +447,7 @@ class LiveAIGemini(ILiveAI):
                 except Exception as e:
                     self._log.warn("failed_to_append_debug_file", error=str(e))
 
-            await self._current_session.send_client_content(
-                turns={"parts": [{"text": text}],},
-                turn_complete=True
-            )
+            await self._send_text_turn(self._current_session, text)
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message_length=len(text))  # never log message text -- bd hjo
 
@@ -911,11 +931,8 @@ class LiveAIGemini(ILiveAI):
                             # Keeping them enables Gemini to properly process text messages.
                             # await session.send_realtime_input(activity_start=types.ActivityStart())
                             
-                            await session.send_client_content(
-                                turns={"role": "user", "parts": [{"text": text}]},
-                                turn_complete=True  # Explicitly complete the turn to trigger response
-                            )
-                            
+                            await self._send_text_turn(session, text)
+
                             # await session.send_realtime_input(activity_end=types.ActivityEnd())
                             
                             # Log successful text send for debugging
@@ -947,10 +964,7 @@ class LiveAIGemini(ILiveAI):
                     for queued_msg in self._pending_client_content:
                         try:
                             self._log.info("SEND_CLIENT_CONTENT (from queue)", message_length=len(queued_msg))  # never log message text -- bd hjo
-                            await session.send_client_content(
-                                turns={"parts": [{"text": queued_msg}],},
-                                turn_complete=True
-                            )
+                            await self._send_text_turn(session, queued_msg)
                         except Exception as exc:
                             self._log.error("queued_client_content_send_failed",
                                           error=str(exc),
