@@ -60,6 +60,10 @@ async def test_handshake_sends_session_ready(mock_fill_session, mock_verify_toke
     assert session_ready is not None
     assert session_ready["ephemeral"] is True
     assert session_ready["session_id"].startswith("web_")
+    # bd polyglot-pdf-333: session_ready advertises the native-VAD mode so the
+    # frontend can match the backend's turn-taking model.
+    from backend.routes.websocket_routes import settings as _route_settings
+    assert session_ready["native_vad"] == (not _route_settings.DISABLE_GEMINI_VAD)
 
     # Ensure helper is invoked with parsed handshake data
     mock_fill_session.assert_awaited_once()
@@ -68,6 +72,27 @@ async def test_handshake_sends_session_ready(mock_fill_session, mock_verify_toke
     assert helper_args[2] is mock_service
     assert helper_kwargs["schema"] == handshake_message["schema"]
     assert helper_kwargs["current_values"] == handshake_message["current_values"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("disable_gemini_vad,expected_native_vad", [(True, False), (False, True)])
+@patch("backend.routes.websocket_routes.verify_token")
+@patch("backend.routes.websocket_routes._handle_fill_session", new_callable=AsyncMock)
+async def test_session_ready_native_vad_tracks_flag(
+    mock_fill_session, mock_verify_token, mock_websocket, mock_service,
+    handshake_message, monkeypatch, disable_gemini_vad, expected_native_vad,
+):
+    """session_ready.native_vad is the inverse of DISABLE_GEMINI_VAD (bd polyglot-pdf-333)."""
+    from backend.routes import websocket_routes as _routes
+    monkeypatch.setattr(_routes.settings, "DISABLE_GEMINI_VAD", disable_gemini_vad)
+    mock_websocket.receive_text.return_value = json.dumps(handshake_message)
+
+    await fill_form_from_schema(mock_websocket, service=mock_service, token="test-token")
+
+    payloads = [args.args[0] for args in mock_websocket.send_json.await_args_list]
+    session_ready = next((p for p in payloads if p.get("type") == "session_ready"), None)
+    assert session_ready is not None
+    assert session_ready["native_vad"] is expected_native_vad
 
 
 @pytest.mark.asyncio

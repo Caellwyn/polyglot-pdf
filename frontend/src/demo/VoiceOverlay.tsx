@@ -139,6 +139,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => {
 		if (!connectionManager) return
 
+		// bd polyglot-pdf-333: in native-VAD mode Gemini's own VAD drives turns and
+		// the audio layer streams continuous ungated audio. Skip the PTT mute +
+		// worklet reconfiguration here -- otherwise this effect (which re-fires when
+		// the user toggles PTT) would re-arm the worklet noise gate and mute input,
+		// starving Gemini's VAD of the silence stream it needs.
+		if (connectionManager.isNativeVad()) return
+
 		connectionManager.setPushToTalkMode(pushToTalkMode)
 		const audioManager = connectionManager.getAudioManager()
 

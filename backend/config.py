@@ -41,7 +41,17 @@ class Settings(BaseModel):
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	VERTEXAI: bool = True # Whether to use Vertex AI for LLM and embedding operations.
-	DISABLE_GEMINI_VAD: bool = True  # CRITICAL: Disable Gemini's VAD when using manual activity_start/end signals
+	# CRITICAL VAD MODE TOGGLE (bd polyglot-pdf-333).
+	#   False (DEFAULT) -> NATIVE mode: Gemini's own automatic VAD drives turn
+	#     detection. The adapter sends the VAD_* sensitivity knobs below; the
+	#     frontend stops sending manual activity_start/end and streams continuous
+	#     audio (incl. silence) so Gemini's VAD has a stream to detect on.
+	#   True -> MANUAL mode: Gemini's VAD is off ({'disabled': True}); turn-taking
+	#     is driven by frontend client-side (Silero) VAD via manual activity
+	#     signals. This is the single revert switch.
+	# Env-overridable so demo/prod can flip without a code edit. See
+	# docs/standards/voice-and-vad.md.
+	DISABLE_GEMINI_VAD: bool = os.getenv("DISABLE_GEMINI_VAD", "false").lower() == "true"
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio DEPRECATED: gemini doesn't use tools when this is True.
 	

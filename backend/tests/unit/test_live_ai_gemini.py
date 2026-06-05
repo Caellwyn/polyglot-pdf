@@ -646,3 +646,53 @@ async def test_compression_clamped_value_reaches_connect(monkeypatch):
     assert cwc["sliding_window"]["target_tokens"] == 2000  # clamped, not 8000
 
 
+# --- Native-VAD activity-signal gating (bd polyglot-pdf-333) ---------------
+#
+# When Gemini's own VAD is enabled (DISABLE_GEMINI_VAD=False), the adapter must
+# NOT forward manual activity_start/end signals -- interleaving them with
+# automatic detection is the conflicting turn-taking state _build_vad_settings
+# warns about. When manual VAD is on (DISABLE_GEMINI_VAD=True) the signals fire.
+
+def _adapter_with_session_and_vad(monkeypatch, *, disable_gemini_vad):
+    """A LiveAIGemini with a mock active session and a patched DISABLE_GEMINI_VAD."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend import config as _config
+
+    base = _config.get_settings()
+    base.DISABLE_GEMINI_VAD = disable_gemini_vad
+    # send_activity_start/end import get_settings locally, so patch the module attr.
+    monkeypatch.setattr(_config, "get_settings", lambda: base)
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._current_session = AsyncMock()
+    return adapter
+
+
+@pytest.mark.asyncio
+async def test_activity_signals_suppressed_in_native_vad(monkeypatch):
+    """DISABLE_GEMINI_VAD=False -> activity_start/end are dropped (Gemini owns VAD)."""
+    adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=False)
+
+    await adapter.send_activity_start()
+    await adapter.send_activity_end()
+
+    adapter._current_session.send_realtime_input.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_activity_signals_fire_in_manual_vad(monkeypatch):
+    """DISABLE_GEMINI_VAD=True -> activity_start/end ARE sent (manual turn-taking)."""
+    adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=True)
+
+    await adapter.send_activity_start()
+    await adapter.send_activity_end()
+
+    assert adapter._current_session.send_realtime_input.await_count == 2
+    # The first call carries activity_start, the second activity_end.
+    first_kwargs = adapter._current_session.send_realtime_input.await_args_list[0].kwargs
+    second_kwargs = adapter._current_session.send_realtime_input.await_args_list[1].kwargs
+    assert "activity_start" in first_kwargs
+    assert "activity_end" in second_kwargs
+
+

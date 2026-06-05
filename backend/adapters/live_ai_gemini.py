@@ -406,6 +406,15 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
+        # Native-VAD guard (bd polyglot-pdf-333): when Gemini's own VAD is enabled
+        # (DISABLE_GEMINI_VAD=False), manual activity signals must NOT be sent --
+        # interleaving them with automatic detection is the conflicting turn-taking
+        # state _build_vad_settings warns about. Drop them server-side regardless of
+        # what the frontend sends.
+        from backend.config import get_settings
+        if not get_settings().DISABLE_GEMINI_VAD:
+            return
+
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("⚠️ ACTIVITY_START called but session is None")
@@ -425,6 +434,11 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
+        # Native-VAD guard (bd polyglot-pdf-333): see send_activity_start above.
+        from backend.config import get_settings
+        if not get_settings().DISABLE_GEMINI_VAD:
+            return
+
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("⚠️ ACTIVITY_END called but session is None")
