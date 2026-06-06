@@ -137,7 +137,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     if (!streamReady) return; // Wait for stream to be ready
 
     const initManager = async () => {
-      const token = user ? await user.getIdToken() : undefined;
+      // Pass a fresh-token callback (not a one-shot token) so reconnects --
+      // notably the post-disclaimer first-section switch -- re-fetch a valid
+      // token instead of connecting tokenless and getting 403 (bd polyglot-pdf-wq0).
+      const getToken = async () => (user ? await user.getIdToken() : undefined);
 
       const manager = createConnectionManager(
         schema, // Use prop schema, not state.schema
@@ -145,7 +148,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         'English',
         sharedStream || undefined,
         handleNextField,
-        token
+        getToken
       );
       connectionManagerRef.current = manager;
       setConnectionManager(manager);
