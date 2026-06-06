@@ -318,5 +318,21 @@ class TestANumberNormalization:
         assert "p1_line1_aliennumber" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
+    @pytest.mark.parametrize("raw", [
+        "A",        # just the prefix, no digits
+        "A---",     # prefix + separators, no digits
+        "ABCDEF",   # all letters
+        "A-",       # prefix + separator
+    ])
+    def test_a_number_with_no_digits_is_rejected_not_stored_empty(self, raw):
+        # A non-empty input that normalizes to "" must be REJECTED, not silently
+        # stored as empty (which would write blank to the PDF). bd 0zr / PR #98
+        # fresh-eyes finding.
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert "p1_line1_aliennumber" not in result["form_state"], f"{raw!r} must NOT be stored"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
 
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v

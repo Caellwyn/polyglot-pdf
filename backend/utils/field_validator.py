@@ -375,6 +375,21 @@ def validate_updates(fields: List[Dict[str, Any]], updates: Dict[str, Any]) -> D
         # stored, and written to the PDF (bd polyglot-pdf-0zr).
         normalized = normalize_value(field, value)
 
+        # Guard against normalization eating a non-empty input down to empty
+        # (e.g. an a_number like "A" or "A---" with no digits). validate_field_value
+        # SKIPS empty values (treating them as an unfilled optional field), so
+        # without this an all-non-digit input would be silently stored as "" and
+        # written blank to the PDF (fresh-eyes finding, PR #98). A raw value that
+        # had content but normalized to empty is invalid, not unfilled.
+        had_content = value is not None and str(value).strip() != ""
+        if had_content and (normalized is None or str(normalized) == ""):
+            validation_errors.append(ValidationError(
+                field.get("id", ""), field.get("name", field.get("id", "")),
+                value, "pattern", "Invalid format",
+                constraint_value=field.get("pattern"),
+            ).to_dict())
+            continue
+
         # validate_field_value now returns a list of errors
         errors = validate_field_value(field, normalized)
         if errors:

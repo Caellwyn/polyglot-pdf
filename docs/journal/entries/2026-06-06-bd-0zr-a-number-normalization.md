@@ -62,6 +62,26 @@ Verification: now `A12345678`, `A-12345678`, `A 1234 5678`, `a12345678`, and bar
 digits all APPLY and store canonical digits; `A1234` (too short after strip) and
 overlong input are still rejected.
 
+## Review triage (PR #98)
+
+Copilot posted only its overview (no inline findings -> clean). Fresh-eyes
+(Sonnet) raised 1 blocker + nits:
+
+- **Adopted (blocker):** an `a_number` input that normalized to empty (e.g. "A",
+  "A---", "ABCDEF" -- prefix/separators with no digits) bypassed validation,
+  because both validators SKIP empty values (treating them as an unfilled optional
+  field), so it was silently stored as "" and would write blank to the PDF. Fixed
+  on both sides: a non-empty raw value that normalizes to empty is now REJECTED as
+  a format error (a genuinely empty raw value is still treated as unfilled). Added
+  backend + frontend tests for the no-digit cases and the genuinely-empty case.
+- **Adopted (nit):** simplified `getattr(validation, 'format_preset', None)` to
+  direct attribute access (the Pydantic model always defines it).
+- **Noted, accepted by design:** storing the normalized value means the input box
+  shows "12345678" after a user types "A12345678". This is the direct consequence
+  of the maintainer's "canonical = bare digits" decision and is acceptable.
+- **Rejected:** the empty-string index-access safety concern -- confirmed safe in
+  both Python (`""[:1]`) and TS (`""[0]` is undefined, compares false).
+
 ## Lessons
 
 A field can be **unfillable by construction** when two validators on the two sides

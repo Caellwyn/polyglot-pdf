@@ -45,17 +45,28 @@ export function validateField(field: FormField, value: any): string | null {
   // Bug Fix: Unwrap FieldValue object before validation
   // Normalize to the canonical form first (e.g. strip an A-Number's "A" prefix)
   // so correct-but-differently-formatted input validates (bd polyglot-pdf-0zr).
-  const actualValue = normalizeFieldValue(field, unwrapFieldValue(value));
+  const rawValue = unwrapFieldValue(value);
+  const actualValue = normalizeFieldValue(field, rawValue);
 
   const rules = field.validation;
 
+  const rawHadContent = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== "";
+  const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
+
+  // Guard: if a non-empty input normalized down to empty (e.g. an a_number like
+  // "A" or "A---" with no digits), it is INVALID, not unfilled -- the empty-skip
+  // below would otherwise silently accept it (fresh-eyes finding, PR #98).
+  if (rawHadContent && normalizedEmpty) {
+    return `${field.name} format is invalid`;
+  }
+
   // Required check
-  if (rules.required && (actualValue === null || actualValue === undefined || actualValue === "")) {
+  if (rules.required && normalizedEmpty) {
     return `${field.name} is required`;
   }
 
   // Skip other checks if value is empty and not required
-  if (actualValue === null || actualValue === undefined || actualValue === "") {
+  if (normalizedEmpty) {
     return null;
   }
 

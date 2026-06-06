@@ -67,4 +67,17 @@ describe('validateField (a_number)', () => {
       expect(validateField(aNumberField, raw)).not.toBeNull();
     }
   );
+
+  // A non-empty input that normalizes to "" must be rejected, not treated as an
+  // unfilled (valid) optional field. bd 0zr / PR #98 fresh-eyes finding.
+  it.each(['A', 'A---', 'ABCDEF', 'A-'])(
+    'rejects no-digit input that normalizes to empty: %s',
+    (raw) => {
+      expect(validateField(aNumberField, raw)).not.toBeNull();
+    }
+  );
+
+  it('treats a genuinely empty optional value as valid (not a format error)', () => {
+    expect(validateField(aNumberField, '')).toBeNull();
+  });
 });

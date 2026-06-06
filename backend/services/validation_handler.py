@@ -193,7 +193,7 @@ class ValidationHandler:
                 # format_preset drives normalize_value() in field_validator (e.g.
                 # a_number strips the "A" prefix before pattern validation) -- it
                 # MUST be passed through or normalization never runs (bd 0zr).
-                if getattr(validation, 'format_preset', None) is not None:
+                if validation.format_preset is not None:
                     field_dict['format_preset'] = validation.format_preset
 
             # Add options if field has them (for select/radio/checkbox)
