@@ -71,27 +71,6 @@ def validation_handler_invalid_pattern():
 
 
 @pytest.fixture
-def validation_handler_invalid_digits():
-    """Mock handler that rejects non-digit characters."""
-    handler = MagicMock()
-    handler.return_value = {
-        "form_state": {},
-        "applied_fields": [],
-        "unknown_fields": [],
-        "validation_errors": [
-            {
-                "field_id": "p1_line1_aliennumber",
-                "field_name": "Alien Registration Number",
-                "value": "A1234567",
-                "constraint": "pattern",
-                "constraint_value": "^\\d{7,9}$"
-            }
-        ]
-    }
-    return handler
-
-
-@pytest.fixture
 def validation_handler_unknown_field():
     """Mock handler that reports unknown field."""
     handler = MagicMock()
@@ -183,33 +162,13 @@ class TestInvalidFieldUpdates:
         # Note: The fix ensures frontend receives empty form_state when validation fails
         # This is verified by the backend fix at callback_handler.py:305
 
-    @pytest.mark.asyncio
-    async def test_a_number_with_letter_prefix_returns_error(
-        self, mock_websocket, mock_coordinator, validation_handler_invalid_digits
-    ):
-        """A-number with 'A' prefix should fail validation (schema expects digits only)."""
-        handler = create_callback_handler(
-            mock_websocket, mock_coordinator, validation_handler_invalid_digits
-        )
-
-        # Gemini sends A-number with letter prefix
-        tool_response = await handler.on_tool_call(
-            tool_name="update_form_fields",
-            arguments={"field_id": "p1_line1_aliennumber", "value": "A1234567"}
-        )
-
-        # Verify failure response
-        assert tool_response["success"] is False
-        assert len(tool_response["applied_fields"]) == 0
-        assert len(tool_response["validation_errors"]) == 1
-
-        # Verify error mentions the invalid value
-        error_message = tool_response["message"]
-        assert "ERRORS:" in error_message
-        assert "A1234567" in error_message
-
-        # Note: Backend fix ensures invalid values don't reach frontend
-        # Empty form_state is sent when validation fails (callback_handler.py:305)
+    # NOTE: The old test_a_number_with_letter_prefix_returns_error asserted that
+    # an "A"-prefixed A-Number was REJECTED. That behavior was changed under bd
+    # polyglot-pdf-0zr: the "A" prefix (and separators) is the natural way users
+    # speak/write an A-Number, so the a_number format_preset now NORMALIZES it to
+    # the canonical bare-digit form before validation instead of rejecting it. The
+    # real normalize+validate behavior is covered by TestANumberNormalization
+    # below (against the actual field_validator, not a mocked handler).
 
     @pytest.mark.asyncio
     async def test_unknown_field_returns_clear_error(
@@ -312,6 +271,52 @@ class TestMultiFieldRejection:
         assert "field1" in tool_response["applied_fields"]
         # Success responses don't include validation_errors key
         assert "validation_errors" not in tool_response or len(tool_response.get("validation_errors", [])) == 0
+
+
+class TestANumberNormalization:
+    """Real (non-mocked) validate_updates behavior for the a_number format_preset.
+
+    Exercises backend/utils/field_validator.py directly to prove the A-Number is
+    normalized to its canonical bare-digit form before pattern validation, so
+    naturally-formatted input (with the "A" prefix and/or separators) is accepted
+    and the stored value is bare digits (bd polyglot-pdf-0zr).
+    """
+
+    A_NUMBER_FIELD = {
+        "id": "p1_line1_aliennumber",
+        "name": "Alien Registration Number",
+        "type": "text",
+        "pattern": r"^\d{7,9}$",
+        "maxLength": 9,
+        "format_preset": "a_number",
+    }
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("123456789", "123456789"),    # already canonical
+        ("A12345678", "12345678"),     # canonical A-prefix form
+        ("a12345678", "12345678"),     # lowercase prefix
+        ("A-12345678", "12345678"),    # dashed
+        ("A 1234 5678", "12345678"),   # spaced
+        ("1234567", "1234567"),        # 7 digits, no prefix
+    ])
+    def test_a_number_normalized_and_accepted(self, raw, expected):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" in result["valid_fields"], f"{raw!r} should be accepted"
+        assert result["form_state"]["p1_line1_aliennumber"] == expected, \
+            f"{raw!r} should store canonical {expected!r}"
+        assert result["validation_errors"] == []
+
+    @pytest.mark.parametrize("raw", [
+        "A1234",            # too short after stripping the A
+        "12345",            # too short
+        "A1234567890",      # too long after stripping
+    ])
+    def test_a_number_still_rejects_wrong_digit_count(self, raw):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.A_NUMBER_FIELD], {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v

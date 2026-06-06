@@ -14,6 +14,7 @@
 
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
+import { normalizeFieldValue } from "../utils/validation";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -200,16 +201,25 @@ export class SchemaFormStateManager {
     console.log(`[SchemaFormStateManager] updateField: ${fieldId} = ${JSON.stringify(value)}`);
     console.log(`[SchemaFormStateManager] Current state.fieldValues:`, state.fieldValues);
 
-    // If value is already a FieldValue, use it directly
+    // Normalize the raw value to its canonical stored form (e.g. strip an
+    // A-Number's "A" prefix/separators) so manual edits store the same canonical
+    // value the backend stores for AI fills (bd polyglot-pdf-0zr). Idempotent for
+    // already-canonical values (e.g. AI fills, which the backend pre-normalizes).
+    const field = state.schema.fields.find((f) => f.id === fieldId);
+
+    // If value is already a FieldValue, use it directly (normalize its .value)
     // Otherwise, wrap it
     let fieldValue: FieldValue;
     if (value && typeof value === 'object' && 'value' in value) {
       // Already a FieldValue object
-      fieldValue = value as FieldValue;
+      const fv = value as FieldValue;
+      fieldValue = field
+        ? { ...fv, value: normalizeFieldValue(field, fv.value) }
+        : fv;
     } else {
       // Wrap raw value in FieldValue
       fieldValue = {
-        value: value,
+        value: field ? normalizeFieldValue(field, value) : value,
         confirmed: options?.confirmed,
         confirmedAt: options?.confirmed ? new Date().toISOString() : undefined,
         confirmationMethod: options?.confirmationMethod,
