@@ -54,20 +54,22 @@ def load_schema(path: str) -> dict[str, Any]:
 
 
 def _norm_pfn(name: Optional[str]) -> Optional[str]:
-    """Normalize a pdf_field_name to its comparable leaf.
+    """Normalize a pdf_field_name for comparison: trim + lowercase, KEEP the path.
 
-    Both XFA full paths (form1[0].#subform[0].P1_checkbox4[0]) and short AcroForm
-    names (P1_checkbox4[0]) should compare equal -- mirror the production filler's
-    exact-then-endswith match by reducing to the final dotted segment, lowercased.
+    We deliberately do NOT reduce to the dotted leaf here. The production filler
+    matches exact-first, then endswith-fallback (pdf_fill_routes.py), precisely
+    because leaf names collide -- e.g. I-90 has 5 leaf-name collisions
+    (`p4_checkbox1a[0]` appears field-level AND option-level). Matching on the
+    full normalized path avoids pairing two unrelated fields that share a leaf;
+    the endswith fallback in `match_fields` recovers the XFA-vs-short-name case.
     """
     if not name:
         return None
-    leaf = name.split(".")[-1]
-    return leaf.strip().lower() or None
+    return name.strip().lower() or None
 
 
 def _field_pfns(f: dict[str, Any]) -> set[str]:
-    """All pdf_field_names a field is associated with (field-level + option-level)."""
+    """All normalized (full-path) pdf_field_names a field is associated with."""
     out: set[str] = set()
     n = _norm_pfn(f.get("pdf_field_name"))
     if n:
@@ -77,6 +79,20 @@ def _field_pfns(f: dict[str, Any]) -> set[str]:
         if n:
             out.add(n)
     return out
+
+
+def _pfn_equiv(a: str, b: str) -> bool:
+    """Two normalized pdf_field_names refer to the same widget?
+
+    Exact, or one is the XFA full path ending in the other's short name -- the
+    same exact-then-endswith rule the production filler uses. The endswith is
+    anchored on a `.` boundary so `p4_checkbox1a[0]` does NOT match
+    `p4_checkbox1[0]` (substring) -- only a true path-suffix counts.
+    """
+    if a == b:
+        return True
+    longer, shorter = (a, b) if len(a) >= len(b) else (b, a)
+    return longer.endswith("." + shorter)
 
 
 def _norm_text(s: Optional[str]) -> str:
@@ -103,24 +119,29 @@ class MatchResult:
 def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
     """Pair truth fields to draft fields without trusting either side's `id`.
 
-    Pass 1: match on shared normalized pdf_field_name (the reliable key).
-    Pass 2: among the leftovers, fuzzy-match on (section, name) above a threshold.
+    Pass 1a: exact normalized pdf_field_name overlap (fast, via an index).
+    Pass 1b: endswith-equivalent pdf_field_name (XFA full-path vs short name),
+             scanned among still-unused draft fields -- the production filler's
+             exact-then-endswith rule, robust to colliding leaf names.
+    Pass 2:  fuzzy (section, name) for whatever still has no PDF-name match.
+    Each draft field is consumed at most once (`draft_used`).
     """
     res = MatchResult()
     draft_used = [False] * len(draft)
+    draft_pfns = [_field_pfns(d) for d in draft]
 
-    # Index draft by each of its normalized pdf_field_names.
+    # Index draft by exact normalized pdf_field_name.
     draft_by_pfn: dict[str, list[int]] = {}
-    for i, d in enumerate(draft):
-        for pfn in _field_pfns(d):
+    for i, pfns in enumerate(draft_pfns):
+        for pfn in pfns:
             draft_by_pfn.setdefault(pfn, []).append(i)
 
     leftover_truth: list[dict] = []
 
-    # Pass 1: pdf_field_name overlap.
     for t in truth:
         t_pfns = _field_pfns(t)
         hit = None
+        # 1a: exact.
         for pfn in t_pfns:
             for i in draft_by_pfn.get(pfn, []):
                 if not draft_used[i]:
@@ -128,6 +149,14 @@ def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
                     break
             if hit is not None:
                 break
+        # 1b: endswith-equivalent (only if no exact hit and this field has a pfn).
+        if hit is None and t_pfns:
+            for i, used in enumerate(draft_used):
+                if used or not draft_pfns[i]:
+                    continue
+                if any(_pfn_equiv(tp, dp) for tp in t_pfns for dp in draft_pfns[i]):
+                    hit = i
+                    break
         if hit is not None:
             draft_used[hit] = True
             res.pairs.append((t, draft[hit]))
@@ -135,12 +164,11 @@ def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
             leftover_truth.append(t)
 
     # Pass 2: fuzzy (section, name) for the remainder.
-    leftover_draft_idx = [i for i, used in enumerate(draft_used) if not used]
     for t in leftover_truth:
         tk = _fuzzy_key(t)
         best_i, best_score = None, 0.0
-        for i in leftover_draft_idx:
-            if draft_used[i]:
+        for i, used in enumerate(draft_used):
+            if used:
                 continue
             score = SequenceMatcher(None, tk, _fuzzy_key(draft[i])).ratio()
             if score > best_score:
@@ -164,16 +192,25 @@ def _pct(num: int, den: int) -> float:
 
 
 def _opts_match(t: dict, d: dict) -> bool:
+    """Options recovered? Jaccard >= 0.8 (NOT recall-only).
+
+    Recall-only would reward an extractor that hallucinates 50 options for a
+    3-option field as long as the 3 correct ones are present. Jaccard penalizes
+    both misses AND spurious extras, so a conservative extractor isn't unfairly
+    beaten by a noisy one.
+    """
     t_opts = {(_norm_text(o.get("value")) or _norm_text(o.get("label")))
               for o in (t.get("options") or [])}
     d_opts = {(_norm_text(o.get("value")) or _norm_text(o.get("label")))
               for o in (d.get("options") or [])}
+    t_opts.discard("")
+    d_opts.discard("")
     if not t_opts:
         return True  # nothing to recover
     if not d_opts:
         return False
-    inter = len(t_opts & d_opts)
-    return inter / len(t_opts) >= 0.8
+    union = len(t_opts | d_opts)
+    return (len(t_opts & d_opts) / union) >= 0.8 if union else True
 
 
 def _pos_match(t: dict, d: dict, tol: float = 5.0) -> Optional[bool]:
@@ -208,28 +245,33 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
         attrs["type"][1] += 1
         if _norm_text(t.get("type")) == _norm_text(d.get("type")):
             attrs["type"][0] += 1
-        # pdf_field_name (any overlap counts)
-        if _field_pfns(t):
+        # pdf_field_name (exact-or-endswith-equivalent overlap counts)
+        t_pfns, d_pfns = _field_pfns(t), _field_pfns(d)
+        if t_pfns:
             attrs["pdf_field_name"][1] += 1
-            if _field_pfns(t) & _field_pfns(d):
+            if any(_pfn_equiv(a, b) for a in t_pfns for b in d_pfns):
                 attrs["pdf_field_name"][0] += 1
         # options
         if t.get("options"):
             attrs["options"][1] += 1
             if _opts_match(t, d):
                 attrs["options"][0] += 1
-        # validation (presence + same required-ness is enough signal here)
+        # validation: BOTH required-ness AND pattern must agree (an OR let a draft
+        # pass by getting only one right; and `str(None)` made two missing patterns
+        # compare equal as the string "none", masking a required mismatch).
         if t.get("validation"):
             attrs["validation"][1] += 1
             tv, dv = t.get("validation") or {}, d.get("validation") or {}
-            if dv and (tv.get("required") == dv.get("required")
-                       or _norm_text(str(tv.get("pattern"))) == _norm_text(str(dv.get("pattern")))):
+            req_ok = bool(tv.get("required")) == bool(dv.get("required"))
+            pat_ok = _norm_text(tv.get("pattern")) == _norm_text(dv.get("pattern"))
+            if dv and req_ok and pat_ok:
                 attrs["validation"][0] += 1
-        # section_id (normalized equality -- exact ids differ, but a good extractor
-        # groups the field under a same-named section)
-        attrs["section_id"][1] += 1
-        if _norm_text(t.get("section_id")) == _norm_text(d.get("section_id")):
-            attrs["section_id"][0] += 1
+        # section_id: only applicable when the truth field HAS a section (else a
+        # both-None pair would count as a correct hit and pad the metric).
+        if _norm_text(t.get("section_id")):
+            attrs["section_id"][1] += 1
+            if _norm_text(t.get("section_id")) == _norm_text(d.get("section_id")):
+                attrs["section_id"][0] += 1
         # pdf_position
         pm = _pos_match(t, d)
         if pm is not None:
@@ -253,10 +295,6 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # (b) RELATIONSHIP/logic scoring
 # --------------------------------------------------------------------------- #
-
-def _truth_field_lookup(truth_fields: list[dict]) -> dict[str, dict]:
-    return {f.get("id"): f for f in truth_fields}
-
 
 def _resolve_to_truth(match: MatchResult) -> dict[str, dict]:
     """Map each truth field id -> its matched draft field (or None)."""
@@ -297,9 +335,6 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
                     field_rels[k][0] += 1
 
     # Structural: parts, sections, tables, supplements (schema-level counts).
-    def count_present(items: list[dict], key_in_field: Optional[str] = None) -> int:
-        return len(items or [])
-
     struct = {}
     struct["parts"] = [len(draft.get("parts") or []), len(truth.get("parts") or [])]
     struct["sections"] = [len(draft.get("sections") or []),
