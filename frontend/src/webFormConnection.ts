@@ -20,6 +20,25 @@ import { shouldShowField } from "./schema-forms/utils/validation";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
+/**
+ * Remove a `token=...` query parameter from a ws URL, wherever it sits, without
+ * leaving a dangling or doubled separator (bd polyglot-pdf-wq0). Handles token
+ * alone (`?token=x`), first (`?token=x&a=b`), middle (`?a=b&token=x&c=d`), and
+ * last (`?a=b&token=x`); returns the URL unchanged when there is no token.
+ */
+export function stripToken(url: string): string {
+  const qIndex = url.indexOf("?");
+  if (qIndex === -1) return url;
+
+  const base = url.slice(0, qIndex);
+  const params = url
+    .slice(qIndex + 1)
+    .split("&")
+    .filter((p) => p.length > 0 && !p.startsWith("token="));
+
+  return params.length > 0 ? `${base}?${params.join("&")}` : base;
+}
+
 export type ConnectionStatus =
   | "disconnected"
   | "connecting"
@@ -110,8 +129,10 @@ export class WebFormConnection {
 
     // Strip any token already baked into the URL (e.g. a stale token from a
     // previously-stored connectedUrl) before appending the freshly-resolved one,
-    // so we never send two token params or a stale one.
-    const baseUrl = wsUrl.replace(/([?&])token=[^&]*/, '$1').replace(/[?&]$/, '');
+    // so we never send two token params or a stale one. stripToken handles the
+    // token appearing first, middle, last, or alone without leaving a dangling
+    // or doubled separator (it does NOT rely on the strip being unreachable).
+    const baseUrl = stripToken(wsUrl);
 
     // Append the resolved token to the URL
     let finalUrl = baseUrl;
@@ -126,8 +147,11 @@ export class WebFormConnection {
       this.idleTimedOut = false;
     }
 
-    // Store the URL we're connecting to
-    this.connectedUrl = finalUrl;
+    // Store the token-LESS base URL (bd polyglot-pdf-wq0). attemptReconnect()
+    // reconnects via this.connectedUrl; storing the base (not finalUrl) means the
+    // reconnect re-resolves a fresh token rather than replaying a stale one, and
+    // never depends on stripToken to undo a baked-in token.
+    this.connectedUrl = baseUrl;
 
     // Don't change status to "connecting" during section switches
     // (keeps current status visible until reconnected)

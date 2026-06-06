@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { WebFormConnection } from './webFormConnection'
+import { WebFormConnection, stripToken } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 
 // Minimal mock WebSocket that records the URL it was constructed with and
@@ -106,6 +106,21 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
     expect(url.match(/token=/g)?.length).toBe(1)
   })
 
+  it('strips a stale token that is the FIRST of several params without leaving ?& (regression for the strip edge case)', async () => {
+    const conn = new WebFormConnection(SCHEMA)
+    conn.setGetToken(async () => 'fresh')
+
+    // token first, with trailing params -- the case the old regex mangled into "?&".
+    await conn.connect('wss://example/ws/fill?token=STALE&version=2')
+
+    const url = lastUrl()
+    expect(url).not.toContain('STALE')
+    expect(url).not.toContain('?&')
+    expect(url).toContain('version=2')
+    expect(url).toContain('token=fresh')
+    expect(url.match(/token=/g)?.length).toBe(1)
+  })
+
   it('falls back to the last-known token when getToken throws', async () => {
     let calls = 0
     const conn = new WebFormConnection(SCHEMA)
@@ -132,5 +147,24 @@ describe('WebFormConnection auth-token plumbing (bd polyglot-pdf-wq0)', () => {
 
     expect(lastUrl()).toContain('token=explicit-token')
     expect(lastUrl()).not.toContain('callback-token')
+  })
+})
+
+describe('stripToken (bd polyglot-pdf-wq0)', () => {
+  it('returns the URL unchanged when there is no token', () => {
+    expect(stripToken('wss://x/ws')).toBe('wss://x/ws')
+    expect(stripToken('wss://x/ws?a=b')).toBe('wss://x/ws?a=b')
+  })
+  it('strips a token that is the only param', () => {
+    expect(stripToken('wss://x/ws?token=abc')).toBe('wss://x/ws')
+  })
+  it('strips a token that is first of several (no dangling ?&)', () => {
+    expect(stripToken('wss://x/ws?token=abc&a=b')).toBe('wss://x/ws?a=b')
+  })
+  it('strips a token that is in the middle', () => {
+    expect(stripToken('wss://x/ws?a=b&token=abc&c=d')).toBe('wss://x/ws?a=b&c=d')
+  })
+  it('strips a token that is last (no trailing separator)', () => {
+    expect(stripToken('wss://x/ws?a=b&token=abc')).toBe('wss://x/ws?a=b')
   })
 })
