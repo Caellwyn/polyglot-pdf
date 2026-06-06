@@ -39,6 +39,28 @@ class ValidationError:
         return result
 
 
+def normalize_value(field: Dict[str, Any], value: Any) -> Any:
+    """Normalize a raw input value to the field's canonical stored form.
+
+    Keyed on the field's format_preset so user/AI input can be accepted in the
+    natural way it is spoken or written and still satisfy the strict pattern.
+    Currently handles a_number: an Alien Registration Number is spoken/written as
+    "A" + 7-9 digits (often with dashes or spaces), but the PDF comb field stores
+    bare digits (pattern ^\\d{7,9}$, 9 cells). So we strip a leading A/a and all
+    non-digits, leaving the canonical digits. Non-a_number fields and non-string
+    values pass through unchanged (bd polyglot-pdf-0zr).
+    """
+    preset = field.get("format_preset")
+    if preset == "a_number" and isinstance(value, str):
+        stripped = value.strip()
+        # Drop a single leading A/a (the A-Number prefix), then keep only digits.
+        if stripped[:1] in ("A", "a"):
+            stripped = stripped[1:]
+        digits = re.sub(r"\D", "", stripped)
+        return digits
+    return value
+
+
 def validate_field_value(field: Dict[str, Any], value: Any) -> List[ValidationError]:
     """
     Validate a field value against its schema constraints.
@@ -347,16 +369,39 @@ def validate_updates(fields: List[Dict[str, Any]], updates: Dict[str, Any]) -> D
             # Field not in schema, skip (will be caught as unknown_field elsewhere)
             continue
 
+        # Normalize to the canonical stored form BEFORE validating, so input that
+        # is correct-but-differently-formatted (e.g. an A-Number with its "A"
+        # prefix) is accepted and the canonical value is what gets validated,
+        # stored, and written to the PDF (bd polyglot-pdf-0zr).
+        normalized = normalize_value(field, value)
+
+        # Guard against normalization eating a non-empty input down to empty
+        # (e.g. an a_number like "A" or "A---" with no digits). validate_field_value
+        # SKIPS empty values (treating them as an unfilled optional field), so
+        # without this an all-non-digit input would be silently stored as "" and
+        # written blank to the PDF (fresh-eyes finding, PR #98). A raw value that
+        # had content but normalized to empty is invalid, not unfilled.
+        had_content = value is not None and str(value).strip() != ""
+        if had_content and (normalized is None or str(normalized) == ""):
+            validation_errors.append(ValidationError(
+                field.get("id", ""), field.get("name", field.get("id", "")),
+                value, "pattern", "Invalid format",
+                constraint_value=field.get("pattern"),
+            ).to_dict())
+            continue
+
         # validate_field_value now returns a list of errors
-        errors = validate_field_value(field, value)
+        errors = validate_field_value(field, normalized)
         if errors:
-            # Add all errors for this field to the list
+            # Add all errors for this field to the list (report against the
+            # normalized value -- that is what failed the constraint).
             for error in errors:
                 validation_errors.append(error.to_dict())
         else:
-            # No errors - field is valid
+            # No errors - field is valid; store the NORMALIZED value so the
+            # client/PDF receive the canonical form, not the raw input.
             valid_fields.append(field_id)
-            form_state[field_id] = value
+            form_state[field_id] = normalized
 
     return {
         "valid_fields": valid_fields,

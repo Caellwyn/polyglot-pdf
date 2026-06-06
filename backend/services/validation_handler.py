@@ -190,6 +190,11 @@ class ValidationHandler:
                     field_dict['digits_only'] = validation.digits_only
                 if validation.date_constraint is not None:
                     field_dict['date_constraint'] = validation.date_constraint
+                # format_preset drives normalize_value() in field_validator (e.g.
+                # a_number strips the "A" prefix before pattern validation) -- it
+                # MUST be passed through or normalization never runs (bd 0zr).
+                if validation.format_preset is not None:
+                    field_dict['format_preset'] = validation.format_preset
 
             # Add options if field has them (for select/radio/checkbox)
             if hasattr(field_obj, 'options') and field_obj.options:

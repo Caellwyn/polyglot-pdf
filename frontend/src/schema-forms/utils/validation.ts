@@ -8,6 +8,29 @@ import type { FormField, ValidationRules } from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
 
 /**
+ * Normalize a raw input value to the field's canonical stored form, keyed on
+ * format_preset. Mirrors the backend normalize_value() in
+ * backend/utils/field_validator.py so client and server agree on what gets
+ * stored (bd polyglot-pdf-0zr).
+ *
+ * a_number: an Alien Registration Number is spoken/written as "A" + 7-9 digits
+ * (often with dashes/spaces), but the PDF comb field stores bare digits. Strip a
+ * leading A/a and all non-digits. Non-a_number fields and non-string values pass
+ * through unchanged.
+ */
+export function normalizeFieldValue(field: FormField, value: any): any {
+  const preset = field.validation?.format_preset;
+  if (preset === "a_number" && typeof value === "string") {
+    let stripped = value.trim();
+    if (stripped[0] === "A" || stripped[0] === "a") {
+      stripped = stripped.slice(1);
+    }
+    return stripped.replace(/\D/g, "");
+  }
+  return value;
+}
+
+/**
  * Validate a field value against its validation rules
  *
  * @param field - The field to validate
@@ -20,17 +43,30 @@ export function validateField(field: FormField, value: any): string | null {
   }
 
   // Bug Fix: Unwrap FieldValue object before validation
-  const actualValue = unwrapFieldValue(value);
+  // Normalize to the canonical form first (e.g. strip an A-Number's "A" prefix)
+  // so correct-but-differently-formatted input validates (bd polyglot-pdf-0zr).
+  const rawValue = unwrapFieldValue(value);
+  const actualValue = normalizeFieldValue(field, rawValue);
 
   const rules = field.validation;
 
+  const rawHadContent = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== "";
+  const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
+
+  // Guard: if a non-empty input normalized down to empty (e.g. an a_number like
+  // "A" or "A---" with no digits), it is INVALID, not unfilled -- the empty-skip
+  // below would otherwise silently accept it (fresh-eyes finding, PR #98).
+  if (rawHadContent && normalizedEmpty) {
+    return `${field.name} format is invalid`;
+  }
+
   // Required check
-  if (rules.required && (actualValue === null || actualValue === undefined || actualValue === "")) {
+  if (rules.required && normalizedEmpty) {
     return `${field.name} is required`;
   }
 
   // Skip other checks if value is empty and not required
-  if (actualValue === null || actualValue === undefined || actualValue === "") {
+  if (normalizedEmpty) {
     return null;
   }
 
@@ -190,9 +226,11 @@ function validateFormatPreset(
       break;
 
     case "a_number":
-      // A-Number: A followed by 8-9 digits
-      if (!/^A\d{8,9}$/.test(value)) {
-        return `${field.name} must be a valid A-Number (A########)`;
+      // A-Number canonical stored form is bare digits (7-9); the "A" prefix and
+      // any separators are stripped by normalizeFieldValue before we get here, so
+      // validate the digits (matches backend pattern ^\d{7,9}$). bd 0zr.
+      if (!/^\d{7,9}$/.test(value)) {
+        return `${field.name} must be a valid A-Number (7-9 digits)`;
       }
       break;
 
