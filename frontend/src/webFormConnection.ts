@@ -61,6 +61,16 @@ export class WebFormConnection {
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
 
+  // Auth token plumbing (bd polyglot-pdf-wq0). The backend /ws/fill gate rejects
+  // tokenless connections with HTTP 403. Reconnect paths (startSection,
+  // attemptReconnect) previously called connect() without a token, so every
+  // reconnect -- notably the post-disclaimer first-section switch -- got 403.
+  // We hold a getToken callback and fetch a FRESH token before every (re)connect,
+  // which also covers ~1h Firebase ID token expiry on long sessions. lastToken is
+  // a fallback so a one-off token-fetch failure does not regress a working path.
+  private getToken?: () => Promise<string | undefined>;
+  private lastToken?: string;
+
   // Fill language for form fields
   private fillLanguage: string = "English";
 
@@ -78,11 +88,36 @@ export class WebFormConnection {
       return;
     }
 
-    // Append token to URL if provided
-    let finalUrl = wsUrl;
-    if (token) {
-      const separator = wsUrl.includes('?') ? '&' : '?';
-      finalUrl = `${wsUrl}${separator}token=${token}`;
+    // Resolve the auth token for THIS connect (bd polyglot-pdf-wq0). Priority:
+    // explicit token arg (back-compat) > fresh token from getToken callback >
+    // last-known token (fallback if a one-off fetch fails). Fetching fresh on
+    // every (re)connect is what fixes the tokenless reconnect 403 and covers
+    // Firebase ID token expiry.
+    let resolvedToken = token;
+    if (!resolvedToken && this.getToken) {
+      try {
+        resolvedToken = await this.getToken();
+      } catch (error) {
+        console.warn('[WebFormConnection] getToken failed, falling back to last-known token', error);
+      }
+    }
+    if (!resolvedToken) {
+      resolvedToken = this.lastToken;
+    }
+    if (resolvedToken) {
+      this.lastToken = resolvedToken;
+    }
+
+    // Strip any token already baked into the URL (e.g. a stale token from a
+    // previously-stored connectedUrl) before appending the freshly-resolved one,
+    // so we never send two token params or a stale one.
+    const baseUrl = wsUrl.replace(/([?&])token=[^&]*/, '$1').replace(/[?&]$/, '');
+
+    // Append the resolved token to the URL
+    let finalUrl = baseUrl;
+    if (resolvedToken) {
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      finalUrl = `${baseUrl}${separator}token=${resolvedToken}`;
     }
 
     // Clear idle timeout flag on reconnect (user manually clicked reconnect)
@@ -136,6 +171,15 @@ export class WebFormConnection {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Register a callback that returns a fresh auth token (bd polyglot-pdf-wq0).
+   * connect() invokes this before every (re)connect so reconnects and long
+   * sessions always carry a valid, non-expired Firebase ID token.
+   */
+  setGetToken(getToken: () => Promise<string | undefined>): void {
+    this.getToken = getToken;
   }
 
   /**

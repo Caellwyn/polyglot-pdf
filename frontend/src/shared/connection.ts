@@ -172,7 +172,7 @@ export function createConnectionManager(
 	initialFillLanguage: string = 'English',
 	sharedStream?: MediaStream,
 	onNextField?: (fieldId: string | null) => void,
-	token?: string
+	getToken?: () => Promise<string | undefined>
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
@@ -400,6 +400,9 @@ export function createConnectionManager(
 						...callbacks,
 						onNextField
 					}, fillLanguage)
+					// Register the fresh-token callback so reconnects (startSection,
+					// auto-reconnect) re-fetch a valid token (bd polyglot-pdf-wq0).
+					if (getToken) connection.setGetToken(getToken)
 				}
 
 				// Capture any pre-filled values from DOM before connecting
@@ -407,7 +410,7 @@ export function createConnectionManager(
 
 				// Try to connect to localhost first
 				try {
-					await connection.connect(wsUrl, 10000, token)
+					await connection.connect(wsUrl)
 					connectedUrl = wsUrl  // Track successful connection
 					console.log('[VFF Connection] ✅ Connected:', wsUrl)
 				} catch (localError) {
@@ -422,9 +425,10 @@ export function createConnectionManager(
 						...callbacks,
 						onNextField
 					}, fillLanguage)
+					if (getToken) connection.setGetToken(getToken)
 					capturePreFilledValues(connection, schema)
 
-					await connection.connect(cloudUrl, 10000, token)
+					await connection.connect(cloudUrl)
 					connectedUrl = cloudUrl  // Track successful connection
 					console.log('[VFF Connection] ✅ Connected to cloud')
 				}
