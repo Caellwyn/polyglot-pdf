@@ -767,24 +767,19 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					currentStatus.toLowerCase() === 'switching_section' ||
 					currentStatus.toLowerCase().startsWith('reconnecting')
 
-				console.log('[PTT Keyboard] Space down, repeat:', e.repeat, 'isConnected:', isConnected, 'status:', currentStatus)
-
 				// Only trigger if not typing in a form field
 				const target = e.target as HTMLElement
 				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-					console.log('[PTT Keyboard] Ignoring - typing in form field')
 					return
 				}
 
 				// ALWAYS prevent default to stop page scrolling in PTT mode
 				e.preventDefault()
 
-				// Only trigger PTT if connected and not a repeat event
+				// Only trigger PTT if connected and not a repeat event (held-key
+				// auto-repeat fires keydown continuously; ignore those).
 				if (!e.repeat && isConnected) {
-					console.log('[PTT Keyboard] Calling handlePushToTalkPress()')
 					handlePushToTalkPress()
-				} else {
-					console.log('[PTT Keyboard] Not calling press - repeat:', e.repeat, 'isConnected:', isConnected)
 				}
 			}
 		}
@@ -798,11 +793,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					currentStatus.toLowerCase() === 'switching_section' ||
 					currentStatus.toLowerCase().startsWith('reconnecting')
 
-				console.log('[PTT Keyboard] Space up, isConnected:', isConnected, 'status:', currentStatus)
-
 				const target = e.target as HTMLElement
 				if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-					console.log('[PTT Keyboard] Ignoring - typing in form field')
 					return
 				}
 
@@ -811,10 +803,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 				// Only trigger PTT if connected
 				if (isConnected) {
-					console.log('[PTT Keyboard] Calling handlePushToTalkRelease()')
 					handlePushToTalkRelease()
-				} else {
-					console.log('[PTT Keyboard] Not calling release - isConnected:', isConnected)
 				}
 			}
 		}
