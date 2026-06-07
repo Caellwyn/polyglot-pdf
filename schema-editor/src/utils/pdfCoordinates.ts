@@ -1,17 +1,19 @@
 /**
  * PDF Coordinate Transformation Utilities
  *
- * Converts between PDF coordinate system and screen coordinate system.
+ * Scales between the schema's stored field rects and on-screen pixels.
  *
- * PDF Coordinates (from schema):
- * - Origin: bottom-left corner
- * - Y-axis: increases upward
- * - Units: points (72 points = 1 inch)
+ * IMPORTANT -- both are TOP-LEFT origin, so there is NO Y-axis flip here.
+ * Although PDF's NATIVE coordinate system is bottom-left origin (y up), the
+ * schema's pdf_position rects are NOT in that native space: they are emitted by
+ * the producer (scripts/bakeoff/acroform_dump.py) from PyMuPDF widget.rect.y0,
+ * and PyMuPDF normalizes to TOP-LEFT origin (y increases downward, like the
+ * screen). So converting schema rect -> screen is a pure scale, and the inverse
+ * is a pure unscale. Do NOT reintroduce a `pageHeight - y - height` flip -- it
+ * would mirror every overlay vertically (verified visually in bd 7a9.6).
  *
- * Screen Coordinates (browser/DOM):
- * - Origin: top-left corner
- * - Y-axis: increases downward
- * - Units: pixels
+ * Schema field rects (pdf_position): top-left origin, y down, points.
+ * Screen coordinates (browser/DOM):   top-left origin, y down, pixels.
  */
 
 import type { PDFPosition } from '../types/schema';

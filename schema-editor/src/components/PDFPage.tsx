@@ -113,6 +113,10 @@ export const PDFPage: React.FC<PDFPageProps> = ({
     // Cleanup
     return () => {
       cancelled = true;
+      // The cancelled run skips its own setIsRendering(false) (it must not set
+      // state after cleanup); clear it here so a superseded-but-still-mounted
+      // page cannot be left stuck showing the rendering spinner.
+      setIsRendering(false);
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
         renderTaskRef.current = null;
