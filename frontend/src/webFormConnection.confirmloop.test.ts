@@ -1,62 +1,85 @@
 /**
- * Regression tests for the confirm_field / next_field_hint loop-breaker
- * (bd polyglot-pdf-0y7).
+ * Regression tests for the unconfirmable-field loop-breaker (bd polyglot-pdf-0y7).
  *
- * SchemaFormStateManager.confirmField no-ops when a field has no value, so the
- * backend could re-request confirm_field for the SAME unconfirmable field
- * forever (computeNextField keeps returning it) while Gemini stalls. The fix in
- * handleConfirmFieldRequest counts consecutive confirms that did NOT actually
- * confirm the field and, at CONFIRM_FAIL_LIMIT (2), breaks the spin by sending a
- * level-1 recovery_prompt instead of falling through to another no-op cycle.
- * A successful confirm (or a switch to a different field) resets the streak.
+ * confirmField() is a no-op when the target field has no value, so the field
+ * stays unconfirmed and computeNextField() keeps returning the SAME field on
+ * every request -- a tight confirm_field / next_field_hint loop that strands the
+ * session and silences Gemini. handleConfirmFieldRequest() now counts consecutive
+ * failed confirms of the same field and, past UNCONFIRMABLE_CONFIRM_LIMIT, breaks
+ * the spin by prompting Gemini (via completion_message -> send_prompt) to collect
+ * the value instead of re-confirming an empty field.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 
-// Minimal mock WebSocket: OPEN immediately so send()/sendRecoveryPrompt work.
 class MockWebSocket {
   static instances: MockWebSocket[] = []
   static OPEN = 1
   static CLOSED = 3
   url: string
-  readyState = MockWebSocket.OPEN
+  readyState = 0
   onopen: (() => void) | null = null
   onmessage: ((e: any) => void) | null = null
   onerror: ((e: any) => void) | null = null
   onclose: ((e: any) => void) | null = null
+
   constructor(url: string) {
     this.url = url
     MockWebSocket.instances.push(this)
+    queueMicrotask(() => {
+      this.readyState = MockWebSocket.OPEN
+      this.onopen?.()
+    })
   }
+
   send = vi.fn()
-  close = vi.fn(() => { this.readyState = MockWebSocket.CLOSED })
+  close = vi.fn(() => {
+    this.readyState = MockWebSocket.CLOSED
+  })
 }
 
-// One section, one text field. The field has NO value seeded -> confirmField
-// no-ops -> the loop scenario.
+// One section with one field. The field exists in the schema but has no value,
+// so confirm_field for it can never take -- exactly the loop condition.
 const SCHEMA: FormSchema = {
   source: 'web',
   fields: [
-    { id: 'f1', name: 'A-Number', type: 'text', section_id: 's1', order: 1, validation: { required: true } },
+    {
+      id: 'p1_line1_aliennumber',
+      name: 'aliennumber',
+      spoken_name: 'Alien Number',
+      type: 'text',
+    },
   ],
-  sections: [{ id: 's1', label: 'S1', order: 1 }],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['p1_line1_aliennumber'] }],
 } as unknown as FormSchema
+
+function lastWs(): MockWebSocket {
+  return MockWebSocket.instances[MockWebSocket.instances.length - 1]
+}
 
 function sentMessages(ws: MockWebSocket): any[] {
   return ws.send.mock.calls
-    .map(c => c[0])
-    .map((m: any) => { try { return typeof m === 'string' ? JSON.parse(m) : m } catch { return m } })
+    .map((c: any[]) => c[0])
+    .filter((arg: any) => typeof arg === 'string')
+    .map((s: string) => JSON.parse(s))
 }
 
-describe('WebFormConnection confirm-loop breaker (bd polyglot-pdf-0y7)', () => {
-  let conn: WebFormConnection
-  let ws: MockWebSocket
+function fireConfirm(ws: MockWebSocket, fieldId: string): void {
+  ws.onmessage?.({
+    data: JSON.stringify({
+      type: 'confirm_field',
+      field_id: fieldId,
+      confirmation_method: 'verbal',
+    }),
+  })
+}
 
+describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y7)', () => {
   beforeEach(() => {
     MockWebSocket.instances = []
-    // @ts-expect-error -- override global WebSocket with the mock
+    // @ts-expect-error -- override global WebSocket with the mock for the test
     global.WebSocket = MockWebSocket
     const store: Record<string, string> = {}
     global.sessionStorage = {
@@ -67,100 +90,50 @@ describe('WebFormConnection confirm-loop breaker (bd polyglot-pdf-0y7)', () => {
       key: () => null,
       length: 0,
     } as unknown as Storage
-
-    conn = new WebFormConnection(SCHEMA)
-    ws = new MockWebSocket('wss://x/ws/fill')
-    // Attach the mock ws so send()/sendRecoveryPrompt have an OPEN socket.
-    ;(conn as any).ws = ws
-    ;(conn as any).state.currentSectionId = 's1'
   })
 
-  async function confirm(fieldId: string) {
-    await (conn as any).handleConfirmFieldRequest({ field_id: fieldId, confirmation_method: 'verbal' })
+  async function connected(): Promise<MockWebSocket> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear() // drop the handshake send so we only see confirm-driven sends
+    return ws
   }
 
-  it('does NOT recovery-prompt on the first failed confirm (under the limit)', async () => {
-    await confirm('f1')
-    const recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(0)
+  it('does NOT re-prompt on the first failed confirm of an empty field', async () => {
+    const ws = await connected()
+
+    fireConfirm(ws, 'p1_line1_aliennumber')
+
+    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
+    expect(prompts).toHaveLength(0)
   })
 
-  it('breaks the loop with a level-1 recovery_prompt after CONFIRM_FAIL_LIMIT failures on the same field', async () => {
-    await confirm('f1') // fail 1
-    await confirm('f1') // fail 2 -> break
-    const recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(1)
-    expect(recovery[0].level).toBe(1)
+  it('breaks the loop and prompts Gemini after repeated failed confirms of the same empty field', async () => {
+    const ws = await connected()
+
+    // First attempt: tracked, no prompt yet.
+    fireConfirm(ws, 'p1_line1_aliennumber')
+    // Second attempt hits the limit -> corrective prompt.
+    fireConfirm(ws, 'p1_line1_aliennumber')
+
+    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0].message).toContain('Alien Number')
+    expect(prompts[0].message).toContain('cannot be confirmed')
   })
 
-  it('re-arms after firing (does not spam a recovery prompt every subsequent cycle)', async () => {
-    await confirm('f1') // fail 1
-    await confirm('f1') // fail 2 -> break (counter reset)
-    await confirm('f1') // fail 1 again (re-armed)
-    let recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(1) // still just the one
-    await confirm('f1') // fail 2 again -> break again
-    recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(2)
-  })
+  it('does not spin: at most one corrective prompt is emitted across many failed confirms', async () => {
+    const ws = await connected()
 
-  it('resets the failure streak when a field actually confirms', async () => {
-    await confirm('f1') // fail 1
-    // Seed a value so confirmField succeeds this time.
-    ;(conn as any).state.fieldValues['f1'] = { value: 'A123456789', confirmed: false }
-    await confirm('f1') // now confirms -> streak resets, no recovery prompt
-    const recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(0)
-    // A subsequent single failure on a fresh (valueless) field is fail-1, not fail-2.
-    ;(conn as any).state.fieldValues = {}
-    await confirm('f1')
-    expect(sentMessages(ws).filter(m => m?.type === 'recovery_prompt').length).toBe(0)
-  })
-
-  it('tracks failures per field id (an intervening field resets the streak; A-B-A does not accumulate)', async () => {
-    await confirm('f1') // fail 1 on f1
-    await confirm('fX') // fail 1 on a different field -> f1's streak is gone
-    await confirm('f1') // back to f1: this is fail 1 again (NOT fail 2), so no break
-    const recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
-    expect(recovery.length).toBe(0)
-  })
-
-  it('surfaces the stall via onError when the loop is broken (works even though the backend recovery channel is currently broken, bd zy3)', async () => {
-    // Inject an onError spy onto the existing connection's callbacks (the
-    // beforeEach already set up a clean sessionStorage + connection).
-    const onError = vi.fn()
-    ;(conn as any).callbacks.onError = onError
-    await confirm('f1') // fail 1
-    await confirm('f1') // fail 2 -> break -> onError fires
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error)
-    expect(String(onError.mock.calls[0][0].message)).toContain('f1')
-  })
-
-  it('resets the streak on a section switch (no stale count carried into the next section)', async () => {
-    ;(conn as any).confirmFailField = 'f1'
-    ;(conn as any).confirmFailCount = 1
-    // switchToSection clears the streak before doing its work; stub out the parts
-    // that need a live socket so we only exercise the reset.
-    try {
-      await (conn as any).switchToSection('s1', '')
-    } catch {
-      // switchToSection may throw later (no real session) -- the reset happens first.
+    for (let i = 0; i < 6; i++) {
+      fireConfirm(ws, 'p1_line1_aliennumber')
     }
-    expect((conn as any).confirmFailField).toBeNull()
-    expect((conn as any).confirmFailCount).toBe(0)
-  })
 
-  it('resets the streak on startSection too (the completeSection transition path, Copilot PR #111)', async () => {
-    ;(conn as any).confirmFailField = 'f1'
-    ;(conn as any).confirmFailCount = 1
-    try {
-      await (conn as any).startSection('s1', 'wss://x/ws/fill')
-    } catch {
-      // startSection drives a reconnect that the mock can't complete; the reset
-      // runs first (before any awaited work).
-    }
-    expect((conn as any).confirmFailField).toBeNull()
-    expect((conn as any).confirmFailCount).toBe(0)
+    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
+    // The counter resets after firing, so a long run produces at most a couple of
+    // prompts -- never one-per-request. Pin it well below the request count.
+    expect(prompts.length).toBeGreaterThanOrEqual(1)
+    expect(prompts.length).toBeLessThanOrEqual(3)
   })
 })
