@@ -5,8 +5,34 @@ Pure functions for building field objects, fuzzy matching field names,
 and extracting field metadata from schemas. These functions are stateless
 and can be used independently of the FormFillingService.
 """
+import re
 from typing import Any, Dict, List, Optional
 from backend.models.form_models import FormField, FieldType
+
+
+# The frontend's formatNextFieldHint (frontend/src/navigation.ts) appends a
+# technical parenthetical to the SPOKEN hint, e.g.
+#   "Next field to fill is #1: 'Alien Registration Number' (field_id: 'p1_line1_aliennumber', type: text, required)"
+# Gemini reads that parenthetical aloud, so the user hears the raw field_id
+# (bd polyglot-pdf-dx7). The field_id is NOT needed in the spoken hint: Gemini
+# already gets every field_id from the FIELDS block of the system instruction
+# (ai_context.fields_text -> "ID: <field_id>"), which is what it passes to
+# update_form_fields. So we strip the parenthetical before any hint reaches the
+# SPOKEN path. Matches a trailing " (field_id: ...)" parenthetical (the whole
+# group the frontend emits) but leaves the rest of the hint intact.
+_SPOKEN_HINT_FIELD_ID_RE = re.compile(r"\s*\(field_id:\s*'[^']*'[^)]*\)")
+
+
+def strip_field_id_from_hint(hint: Optional[str]) -> Optional[str]:
+    """Remove the technical "(field_id: ...)" parenthetical from a spoken hint.
+
+    Safe to call on any hint (returns None/empty unchanged). Only affects the
+    SPOKEN path -- the field_id Gemini needs for the tool call comes from the
+    system instruction's FIELDS block, not the hint (bd polyglot-pdf-dx7).
+    """
+    if not hint:
+        return hint
+    return _SPOKEN_HINT_FIELD_ID_RE.sub("", hint).strip()
 
 
 def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:

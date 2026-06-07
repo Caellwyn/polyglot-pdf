@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
 import structlog
 
+from .field_utils import strip_field_id_from_hint
+
 _log = structlog.get_logger().bind(module="request_coordinator")
 
 
@@ -311,6 +313,15 @@ class RequestCoordinator:
                         received=request_id)
             return
         
+        # Strip the technical "(field_id: ...)" parenthetical here, at the single
+        # point where the frontend's spoken hint enters the backend, so EVERY
+        # consumer that forwards it to Gemini (the confirm_field tool response,
+        # initiating/section-switch messages) gets a field_id-free hint and Gemini
+        # never reads the raw field_id aloud (bd polyglot-pdf-dx7). The field_id
+        # Gemini needs for update_form_fields comes from the system instruction's
+        # FIELDS block, not this hint -- so stripping it here is safe.
+        hint = strip_field_id_from_hint(hint)
+
         # Resolve the future with the hint
         future = self._pending_next_field_request.get("future")
         if future and not future.done():

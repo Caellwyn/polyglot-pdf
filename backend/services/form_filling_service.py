@@ -12,6 +12,7 @@ from .field_utils import (
     build_fields_from_schema,
     get_available_spoken_names,
     find_similar_field_names,
+    strip_field_id_from_hint,
 )
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
@@ -251,10 +252,15 @@ class FormFillingService:
         # Store spoken language for section switching (persists across sections)
         self._spoken_language = spoken_language
 
+        # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
+        # read the raw field_id aloud (bd polyglot-pdf-dx7). The field_id is still
+        # available to Gemini via the system instruction's FIELDS block.
+        spoken_hint = strip_field_id_from_hint(next_field_hint)
+
         # Format initiating message template
         message = self._settings.INITIATING_MESSAGE.format(
             spoken_language=spoken_language,
-            next_field_hint=next_field_hint
+            next_field_hint=spoken_hint
         )
 
         _log.info("send_initiating_message",
