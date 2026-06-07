@@ -1,0 +1,96 @@
+# Tool-call flow (Gemini Live <-> backend <-> frontend)
+
+**Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
+
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for closeout details.*
+
+Map of what the CODE expects for each Gemini tool call vs. what is actually on
+the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
+key for reading a captured `backend/logs/gemini_<date>.jsonl` when debugging tool
+reliability (e.g. "why didn't `update_form_fields` land?"). The dev capture is
+local-only (`.env.DEV`-gated) -- see [voice-ai.md](voice-ai.md) for the adapter
+overview and [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md)
+for why full bodies never reach production logs.
+
+## The five tools Gemini is given
+
+Declared in `Settings.TOOL_DECLARATIONS` (`backend/config.py`), sent to Gemini at
+session setup (`live_ai_gemini.py` "Sending tool declarations"):
+
+| Tool | Purpose | Required args |
+|------|---------|---------------|
+| `update_form_fields` | Save ONE field's value | `field_id`, `value` |
+| `confirm_field` | Mark a filled field confirmed after the user verifies | `field_id`, `confirmation_method` |
+| `get_form_status` | Read which fields are filled | `field_ids` |
+| `get_field_value` | Look up one field by spoken name | `spoken_name` |
+| `switch_section` | Navigate to another section | `section_identifier` |
+
+## Inbound: how a tool call reaches the backend
+
+Gemini emits a tool call one of two ways; the adapter handles BOTH:
+
+1. **`server_content.model_turn.parts[].function_call`** (primary path) --
+   `live_ai_gemini.py`, the `for part in parts:` loop. dev-log: `tool_call` with
+   `path="model_turn.parts"`.
+2. **`event.tool_call.function_calls`** (alternate path) -- the
+   `if getattr(event, "tool_call", ...)` block. dev-log: `tool_call` with
+   `path="event.tool_call"`.
+
+Both parse `function_call.arguments` (JSON string or dict) into
+`parsed_arguments`, then invoke the registered callback
+`CallbackHandler.on_tool_call(tool_name, arguments)`
+(`backend/services/callback_handler.py`). The callback's return value becomes the
+**tool response** sent back to Gemini.
+
+**Failure points visible in the dev log:**
+- An **empty** `parsed_arguments` after parsing -> `invalid_tool_call` (the model
+  emitted the call name but no/blank args). Hypothesis: tool-def/example mismatch.
+- A tool call canceled by **barge-in** -> `interrupted` with
+  `canceled_tool_names` listing e.g. `update_form_fields`. Hypothesis: the user
+  spoke over the call before it completed.
+- No `tool_call` entry at all for a turn where the user gave a value -> Gemini
+  never emitted the call. Hypothesis: model not following the system instruction.
+
+## `update_form_fields` round-trip (code expectation)
+
+1. Gemini -> `update_form_fields(field_id, value)`.
+2. `on_tool_call` routes to `_handle_update_form_fields_tool`
+   (`callback_handler.py`): normalizes, validates, applies; then calls
+   `send_form_update(...)` which emits a **`form_updated`** WS message to the
+   frontend (value lands as `confirmed:false`).
+3. The callback returns a tool response (applied/unknown/validation result). The
+   adapter sends it back via `send_tool_response`. dev-log: `tool_callback_result`
+   (the body the callback produced) then `tool_response` (the body actually sent
+   on the wire).
+4. Gemini reads it back to the user and asks "Is that correct?"
+
+**Note:** `update_form_fields` deliberately does NOT fetch the next-field hint
+(that is deferred to `confirm_field`) to save a round-trip.
+
+## `confirm_field` round-trip (code expectation)
+
+1. Gemini -> `confirm_field(field_id, confirmation_method)`.
+2. `_handle_confirm_field_tool`: emits a **`confirm_field`** WS message to the
+   frontend, then **blocks up to 2s** on `request_next_field_hint()`
+   (`request_coordinator.py`), which asks the FRONTEND for the next field
+   (`get_next_field_hint` -> `next_field_hint_response`).
+3. The tool response returns `{success, field_confirmed, next_field_hint,
+   message}`. If the frontend does not answer in 2s, `next_field_hint` is `None`
+   and the message says "All fields confirmed" -- which can make Gemini think the
+   form is done. dev-log: `tool_callback_result` shows the exact response,
+   including whether `next_field_hint` was null.
+
+## Wire reality vs. expectation -- what to check
+
+When reading a captured session, line the dev-log `seq` order up against this map:
+
+- Did a `tool_call` for `update_form_fields` appear at all after the user spoke?
+- Were its `parsed_arguments` well-formed (`field_id` + `value`), or empty?
+- Did `tool_response` carry a validation error (hypothesis: validation block) or
+  a clean apply?
+- For `confirm_field`, did `next_field_hint` come back non-null within 2s?
+- Did an `interrupted` entry cancel a form-fill call?
+
+The active `model` is stamped on every entry, so a 3.1-vs-2.5 A/B
+(`USE_PREMIUM_MODEL`, see [config dev-feature block](../../backend/config.py))
+shows side by side which model emits the calls reliably.

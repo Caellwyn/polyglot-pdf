@@ -29,6 +29,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 |---------|-----|------|
 | WebSocket session routing / handshake | [`components/websocket-routing.md`](components/websocket-routing.md) | `backend/routes/websocket_routes.py` |
 | Gemini Live voice adapter (session, tools, audio) | [`components/voice-ai.md`](components/voice-ai.md) | `backend/adapters/live_ai_gemini.py` |
+| Tool-call flow (code expectation vs. wire; dev-log key) | [`components/tool-call-flow.md`](components/tool-call-flow.md) | `backend/adapters/live_ai_gemini.py`, `backend/services/callback_handler.py` |
 | Context-window compression (session cost/duration bounding) | [`components/context-compression.md`](components/context-compression.md) | `backend/adapters/live_ai_gemini.py`, `backend/config.py`, `backend/services/form_filling_service.py` |
 | Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
 | PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |

@@ -21,6 +21,20 @@ from pathlib import Path
 MODEL_NATIVE_PREMIUM = "gemini-3.1-flash-live-preview"
 MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
 
+# --- DEV FEATURE: model A/B toggle (bd polyglot-pdf-kbf) -----------------------
+# To A/B these two models for tool-call reliability (e.g. "does 3.1 emit
+# update_form_fields less reliably than 2.5?"), flip USE_PREMIUM_MODEL and
+# restart the backend -- each run is one clean sample. Locally, the dev runner
+# does this for you:
+#     ./scripts/dev-local.ps1                 # premium / 3.1 (default)
+#     ./scripts/dev-local.ps1 -Model standard # standard / 2.5
+# The active model is recorded on every structlog line (bound `model=...`) and on
+# every dev I/O capture entry (`model` field in gemini_<date>.jsonl), so a
+# captured session is unambiguously attributable to one model. Pricing is
+# family-aware (GEMINI_PRICING_BY_FAMILY) so cost tracking stays correct across
+# the swap. To pin an exact id instead of the flag, set MODEL_NATIVE in the env.
+# ------------------------------------------------------------------------------
+
 
 
 class Settings(BaseModel):

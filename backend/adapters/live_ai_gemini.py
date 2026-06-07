@@ -211,7 +211,40 @@ class LiveAIGemini(ILiveAI):
         self._form_session_id: Optional[str] = None
         self._form_id: Optional[str] = None
         self._current_section_id: Optional[str] = None
-    
+
+        # Monotonic per-instance sequence counter for the dev I/O log, so a
+        # captured gemini_<date>.jsonl can be re-ordered into the exact
+        # send/receive sequence even across interleaved turns (bd polyglot-pdf-kbf).
+        self._dev_io_seq: int = 0
+
+    def _dev_log_io(self, direction: str, message_type: str, content: Dict[str, Any]) -> None:
+        """Capture one Gemini send/receive event to the dev file logger.
+
+        DEV-ONLY: get_dev_logger() is a no-op unless backend/.env.DEV exists, so
+        this NEVER writes to Cloud Run / production logs -- it only appends to the
+        local backend/logs/gemini_<date>.jsonl. That gating is what lets us log
+        FULL message bodies (tool-call args, tool responses, hints = PII/PHI)
+        here, which the production structlog path must never do (bd polyglot-pdf-oeq).
+
+        Stamps each entry with a monotonic seq + the active model so a captured
+        log is fully reconstructable and A/B-distinguishable (bd polyglot-pdf-kbf).
+        Wrapped in a broad guard: debug logging must never break the session.
+        """
+        try:
+            self._dev_io_seq += 1
+            enriched = {"seq": self._dev_io_seq, "model": self._model_name}
+            enriched.update(content)
+            get_dev_logger().log_gemini_message(
+                direction=direction,
+                message_type=message_type,
+                content=enriched,
+                session_id=self._instance_id,
+                ws_session_id=self._form_session_id,
+            )
+        except Exception:
+            # Never let diagnostic logging interfere with the live session.
+            pass
+
     @asynccontextmanager
     async def connect(self, model: str, config: Dict[str, Any]) -> AsyncIterator[LiveAISession]:
         """Connects to the Gemini Live API and yields a session wrapper.
@@ -388,6 +421,14 @@ class LiveAIGemini(ILiveAI):
         send_realtime_input is unconfirmed, so we do not change it). When the 2.5
         family is re-verified this branch can collapse to a single call.
         """
+        # DEV-ONLY: the FULL text turn sent to Gemini (next-field hints, language
+        # /context prompts). The structlog path logs only its length (PII: text
+        # may embed field content -- bd hjo). Captures which send method was used
+        # per model family, to debug tool-call prompting (bd polyglot-pdf-kbf).
+        self._dev_log_io("send", "text_turn", {
+            "method": "send_realtime_input" if model_family(self._model_name) == "3.1" else "send_client_content",
+            "text": text,
+        })
         if model_family(self._model_name) == "3.1":
             await session.send_realtime_input(text=text)
         else:
@@ -1019,9 +1060,12 @@ class LiveAIGemini(ILiveAI):
                                         # ========================================
                                         interrupted = getattr(server_content, "interrupted", False)
                                         if interrupted:
-                                            # Get canceled tool call IDs
+                                            # Get canceled tool call IDs (and names: a barge-in that
+                                            # cancels an in-flight update_form_fields would explain a
+                                            # "tool call never landed" symptom -- bd polyglot-pdf-kbf).
                                             model_turn = getattr(server_content, "model_turn", None)
                                             canceled_ids = []
+                                            canceled_tool_names = []
                                             if model_turn:
                                                 parts = getattr(model_turn, "parts", [])
                                                 for part in parts:
@@ -1030,21 +1074,36 @@ class LiveAIGemini(ILiveAI):
                                                         call_id = getattr(function_call, "id", None)
                                                         if call_id:
                                                             canceled_ids.append(call_id)
-                                            
+                                                        fc_name = getattr(function_call, "name", None)
+                                                        if fc_name:
+                                                            canceled_tool_names.append(fc_name)
+
                                             import time
                                             now = time.time()
                                             elapsed_since_audio_start = None
                                             if hasattr(self, '_first_audio_time') and self._first_audio_time:
                                                 elapsed_since_audio_start = int((now - self._first_audio_time) * 1000)
-                                            
+
                                             self._log.info(
-                                                "🚨 GEMINI_INTERRUPTED", 
+                                                "🚨 GEMINI_INTERRUPTED",
                                                 canceled_tool_calls=len(canceled_ids),
                                                 call_ids=[cid[:8] for cid in canceled_ids],
+                                                # tool NAMES are safe to log (not values) and tell us if a
+                                                # form-fill call was the casualty of the barge-in.
+                                                canceled_tool_names=canceled_tool_names,
                                                 audio_chunks_before_interrupt=getattr(self, '_audio_chunk_count', 0),
                                                 elapsed_since_audio_start_ms=elapsed_since_audio_start,
                                                 timestamp_ms=int(now * 1000)
                                             )
+                                            # DEV-ONLY: full interrupt detail in-sequence with the rest of
+                                            # the I/O log, so a barge-in that killed a tool call is visible
+                                            # in the captured timeline (bd polyglot-pdf-kbf).
+                                            self._dev_log_io("receive", "interrupted", {
+                                                "canceled_tool_calls": len(canceled_ids),
+                                                "canceled_tool_names": canceled_tool_names,
+                                                "audio_chunks_before_interrupt": getattr(self, '_audio_chunk_count', 0),
+                                                "elapsed_since_audio_start_ms": elapsed_since_audio_start,
+                                            })
                                             
                                             # Reset audio tracking since generation was interrupted
                                             self._audio_chunk_count = 0
@@ -1127,6 +1186,18 @@ class LiveAIGemini(ILiveAI):
                                                                     parsed_arguments = {}
                                                             else:
                                                                 parsed_arguments = payload or {}
+
+                                                            # DEV-ONLY full-body capture: the exact tool call Gemini emitted
+                                                            # (raw payload + parsed args), to debug update_form_fields
+                                                            # reliability (bd polyglot-pdf-kbf). No-op in production.
+                                                            self._dev_log_io("receive", "tool_call", {
+                                                                "path": "model_turn.parts",
+                                                                "tool_name": tool_name,
+                                                                "call_id": call_id,
+                                                                "payload_type": type(payload).__name__,
+                                                                "payload_raw": repr(payload)[:2000] if payload is not None else None,
+                                                                "parsed_arguments": parsed_arguments,
+                                                            })
                                                             # If parsed_arguments is empty, attempt to recover JSON from
                                                             # non-data/code parts (some model responses put JSON into
                                                             # executable_code/code_execution_result sections).
@@ -1166,8 +1237,18 @@ class LiveAIGemini(ILiveAI):
                                                                                   callback_id=id(self._on_tool_call))
                                                                     
                                                                     response_payload = await self._on_tool_call(tool_name, parsed_arguments)
-                                                                    
+
                                                                     self._log.info("tool_callback_completed", tool=tool_name, response_ok=bool(response_payload))
+
+                                                                    # DEV-ONLY: the FULL response the callback produced for this
+                                                                    # tool -- i.e. the body Gemini will receive (validation errors,
+                                                                    # next_field_hint, "field confirmed", etc). This is what she
+                                                                    # reacts to when she says "trouble saving" (bd polyglot-pdf-kbf).
+                                                                    self._dev_log_io("receive", "tool_callback_result", {
+                                                                        "tool_name": tool_name,
+                                                                        "call_id": call_id,
+                                                                        "response": response_payload,
+                                                                    })
                                                                 except Exception as e:
                                                                     # Print full traceback to console for debugging
                                                                     import traceback
@@ -1253,12 +1334,29 @@ class LiveAIGemini(ILiveAI):
                                                     except Exception:
                                                         pass
 
+                                            # DEV-ONLY full-body capture for the alternate (event.tool_call) path
+                                            # (bd polyglot-pdf-kbf). No-op in production.
+                                            self._dev_log_io("receive", "tool_call", {
+                                                "path": "event.tool_call",
+                                                "tool_name": tool_name,
+                                                "call_id": call_id,
+                                                "payload_type": type(payload).__name__,
+                                                "payload_raw": repr(payload)[:2000] if payload is not None else None,
+                                                "parsed_arguments": parsed_arguments,
+                                            })
+
                                             response_payload = None
 
                                             if self._on_tool_call is not None and tool_name:
                                                 try:
                                                     response_payload = await self._on_tool_call(tool_name, parsed_arguments)
                                                     self._log.info("tool_callback_returned", tool_name=tool_name, has_response=response_payload is not None, response_keys=list(response_payload.keys()) if isinstance(response_payload, dict) else None)
+                                                    self._dev_log_io("receive", "tool_callback_result", {
+                                                        "path": "event.tool_call",
+                                                        "tool_name": tool_name,
+                                                        "call_id": call_id,
+                                                        "response": response_payload,
+                                                    })
                                                 except Exception as e:
                                                     # Print full traceback to console for debugging (PATH 2)
                                                     import traceback
@@ -1300,6 +1398,14 @@ class LiveAIGemini(ILiveAI):
                                                 response_chars=len(response_str),
                                                 estimated_tokens=estimated_tokens,
                                             )
+                                            # DEV-ONLY: the FULL tool-response body actually sent on the
+                                            # wire to Gemini (the redacted log above only records its
+                                            # size). Ground truth for what Gemini receives back from each
+                                            # tool (bd polyglot-pdf-kbf). No-op in production.
+                                            self._dev_log_io("send", "tool_response", {
+                                                "tool_name": resp.name,
+                                                "response": getattr(resp, "response", None),
+                                            })
 
                                         await session.send_tool_response(function_responses=responses)
                                         # Don't send additional prompts - just let Gemini process the tool responses
