@@ -1,13 +1,15 @@
 /**
  * Regression tests for the unconfirmable-field loop-breaker (bd polyglot-pdf-0y7).
  *
- * confirmField() is a no-op when the target field has no value, so the field
- * stays unconfirmed and computeNextField() keeps returning the SAME field on
- * every request -- a tight confirm_field / next_field_hint loop that strands the
- * session and silences Gemini. handleConfirmFieldRequest() now counts consecutive
- * failed confirms of the same field and, past UNCONFIRMABLE_CONFIRM_LIMIT, breaks
- * the spin by prompting Gemini (via completion_message -> send_prompt) to collect
- * the value instead of re-confirming an empty field.
+ * A confirm_field can only make progress when the field has a usable value.
+ * Without one, computeNextField() keeps returning the SAME field on every request
+ * -- a tight confirm_field / next_field_hint loop that strands the session and
+ * silences Gemini. handleConfirmFieldRequest() now gates on the field VALUE (not on
+ * confirmField()'s confirmed flag, which would falsely "succeed" on an empty-valued
+ * entry), counts consecutive failed confirms of the same field, and every
+ * CONFIRM_LIMIT attempts re-prompts Gemini (via completion_message -> send_prompt)
+ * to collect the value -- up to a hard REPROMPT_CAP, after which it stops entirely
+ * so a genuinely unfillable field does not spin even at the reduced re-prompt rate.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -40,8 +42,8 @@ class MockWebSocket {
   })
 }
 
-// One section with one field. The field exists in the schema but has no value,
-// so confirm_field for it can never take -- exactly the loop condition.
+// One section with one field. The field exists in the schema; whether it has a
+// value is controlled per-test via field_update, exactly as in production.
 const SCHEMA: FormSchema = {
   source: 'web',
   fields: [
@@ -66,12 +68,27 @@ function sentMessages(ws: MockWebSocket): any[] {
     .map((s: string) => JSON.parse(s))
 }
 
+function prompts(ws: MockWebSocket): any[] {
+  return sentMessages(ws).filter(m => m.type === 'completion_message')
+}
+
 function fireConfirm(ws: MockWebSocket, fieldId: string): void {
   ws.onmessage?.({
     data: JSON.stringify({
       type: 'confirm_field',
       field_id: fieldId,
       confirmation_method: 'verbal',
+    }),
+  })
+}
+
+// Drive a real value into the field through the production field_update path
+// (keyed by field name or id), so confirm_field can take.
+function fireFieldUpdate(ws: MockWebSocket, value: string): void {
+  ws.onmessage?.({
+    data: JSON.stringify({
+      type: 'field_update',
+      updates: { aliennumber: value },
     }),
   })
 }
@@ -105,8 +122,7 @@ describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y
 
     fireConfirm(ws, 'p1_line1_aliennumber')
 
-    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
-    expect(prompts).toHaveLength(0)
+    expect(prompts(ws)).toHaveLength(0)
   })
 
   it('breaks the loop and prompts Gemini after repeated failed confirms of the same empty field', async () => {
@@ -117,23 +133,47 @@ describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y
     // Second attempt hits the limit -> corrective prompt.
     fireConfirm(ws, 'p1_line1_aliennumber')
 
-    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
-    expect(prompts).toHaveLength(1)
-    expect(prompts[0].message).toContain('Alien Number')
-    expect(prompts[0].message).toContain('cannot be confirmed')
+    const p = prompts(ws)
+    expect(p).toHaveLength(1)
+    expect(p[0].message).toContain('Alien Number')
+    expect(p[0].message).toContain('cannot be confirmed')
   })
 
-  it('does not spin: at most one corrective prompt is emitted across many failed confirms', async () => {
+  it('detects a field whose value entry exists but is EMPTY (the case confirmField would wrongly confirm)', async () => {
     const ws = await connected()
 
-    for (let i = 0; i < 6; i++) {
+    // An entry exists but the value is empty -- confirmField() would set confirmed:true
+    // on it, hiding the loop. The value-based guard must still treat it as unconfirmable.
+    fireFieldUpdate(ws, '')
+    fireConfirm(ws, 'p1_line1_aliennumber')
+    fireConfirm(ws, 'p1_line1_aliennumber')
+
+    expect(prompts(ws)).toHaveLength(1)
+  })
+
+  it('stops re-prompting after the hard cap -- does not spin forever even at the reduced rate', async () => {
+    const ws = await connected()
+
+    // CONFIRM_LIMIT=2, REPROMPT_CAP=3 -> a re-prompt every 2 failed confirms, capped
+    // at 3 total. 100 failed confirms must still yield exactly 3 prompts, then silence.
+    for (let i = 0; i < 100; i++) {
       fireConfirm(ws, 'p1_line1_aliennumber')
     }
 
-    const prompts = sentMessages(ws).filter(m => m.type === 'completion_message')
-    // The counter resets after firing, so a long run produces at most a couple of
-    // prompts -- never one-per-request. Pin it well below the request count.
-    expect(prompts.length).toBeGreaterThanOrEqual(1)
-    expect(prompts.length).toBeLessThanOrEqual(3)
+    expect(prompts(ws)).toHaveLength(3)
+  })
+
+  it('a successful confirm (field has a value) does NOT re-prompt and clears tracking', async () => {
+    const ws = await connected()
+
+    // One failed confirm arms the counter...
+    fireConfirm(ws, 'p1_line1_aliennumber')
+    // ...then the value lands and the confirm takes.
+    fireFieldUpdate(ws, 'A123456789')
+    fireConfirm(ws, 'p1_line1_aliennumber')
+    // A later confirm of the now-filled field still must not re-prompt.
+    fireConfirm(ws, 'p1_line1_aliennumber')
+
+    expect(prompts(ws)).toHaveLength(0)
   })
 })

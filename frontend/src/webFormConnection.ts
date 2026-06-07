@@ -81,15 +81,19 @@ export class WebFormConnection {
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
 
   // Loop-breaker for unconfirmable fields (bd polyglot-pdf-0y7). When the backend
-  // asks to confirm_field a field that has no value, confirmField() no-ops and the
-  // field stays unconfirmed, so computeNextField() keeps returning the SAME field
-  // and the backend re-requests it forever (a tight confirm/next-field-hint loop
-  // that strands the session). We count consecutive failed confirms of the same
-  // field and, past a small threshold, break the spin by prompting Gemini to
-  // re-ask the user for the value instead of silently re-emitting the same hint.
+  // asks to confirm_field a field that has no usable value, the confirm cannot make
+  // progress, so computeNextField() keeps returning the SAME field and the backend
+  // re-requests it forever (a tight confirm/next-field-hint loop that strands the
+  // session). We count consecutive failed confirms of the same field and, every
+  // CONFIRM_LIMIT attempts, re-prompt Gemini to collect the value -- up to a hard
+  // REPROMPT_CAP, after which we stop entirely so a genuinely unfillable field does
+  // not spin forever even at the reduced re-prompt rate (fresh-eyes PR #113). All
+  // three counters reset on a successful confirm and on (re)connect.
   private lastUnconfirmableFieldId: string | null = null;
   private unconfirmableConfirmCount = 0;
+  private unconfirmableRepromptCount = 0;
   private static readonly UNCONFIRMABLE_CONFIRM_LIMIT = 2;
+  private static readonly UNCONFIRMABLE_REPROMPT_CAP = 3;
 
   // Auth token plumbing (bd polyglot-pdf-wq0). The backend /ws/fill gate rejects
   // tokenless connections with HTTP 403. Reconnect paths (startSection,
@@ -243,6 +247,13 @@ export class WebFormConnection {
   private handleOpen(): void {
     this.reconnectAttempts = 0;
     this.reconnectDelay = 1000;
+
+    // Reset the unconfirmable-field loop-breaker on every (re)connect so a counter
+    // left mid-window before a drop does not false-trip on the first confirm of the
+    // new session (bd polyglot-pdf-0y7, fresh-eyes PR #113).
+    this.lastUnconfirmableFieldId = null;
+    this.unconfirmableConfirmCount = 0;
+    this.unconfirmableRepromptCount = 0;
 
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
@@ -958,47 +969,58 @@ export class WebFormConnection {
 
     console.log('[WebFormConnection] Confirming field:', field_id, 'method:', confirmation_method);
 
-    // Update field confirmation status in state
-    this.state = SchemaFormStateManager.confirmField(
-      this.state,
-      field_id,
-      confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
-    );
-    SchemaFormStateManager.save(this.state);
+    // Loop-breaker (bd polyglot-pdf-0y7): a field is only meaningfully confirmable
+    // when it has a usable value. confirmField() no-ops when there is no fieldValues
+    // entry at all, but it would ALSO "succeed" (set confirmed:true) on an entry that
+    // exists with an empty/null value -- which both lets an empty field count as done
+    // AND hides the very loop we are guarding against. So we gate on the VALUE, not on
+    // confirmField()'s confirmed flag: if the field has no usable value, the confirm
+    // cannot make progress, computeNextField() keeps returning the SAME field, and the
+    // backend re-requests it forever (a tight confirm/next-field-hint spin that strands
+    // the session and silences Gemini). Detect that, do not record a bogus confirmation,
+    // and re-prompt Gemini to collect the value.
+    const fieldValue = this.state.fieldValues[field_id]?.value;
+    const hasUsableValue =
+      fieldValue !== null && fieldValue !== undefined && fieldValue !== '';
 
-    // Loop-breaker (bd polyglot-pdf-0y7): confirmField() is a no-op when the field
-    // has no value, so the field stays unconfirmed and computeNextField() returns
-    // the SAME field on every request -- a tight confirm/next-field-hint loop that
-    // strands the session and silences Gemini. If the confirm did not actually take,
-    // count consecutive failed attempts on this same field and, past the limit,
-    // prompt Gemini to re-ask the user for the value instead of spinning.
-    if (!SchemaFormStateManager.isFieldConfirmed(this.state, field_id)) {
+    if (!hasUsableValue) {
       if (field_id === this.lastUnconfirmableFieldId) {
         this.unconfirmableConfirmCount += 1;
       } else {
         this.lastUnconfirmableFieldId = field_id;
         this.unconfirmableConfirmCount = 1;
+        this.unconfirmableRepromptCount = 0;
       }
 
       console.warn(
-        '[WebFormConnection] confirm_field did not take (no value to confirm):',
+        '[WebFormConnection] confirm_field cannot take (no usable value):',
         field_id,
         'consecutive attempts:',
         this.unconfirmableConfirmCount
       );
 
-      if (this.unconfirmableConfirmCount >= WebFormConnection.UNCONFIRMABLE_CONFIRM_LIMIT) {
+      // Re-prompt Gemini each time the per-reprompt window fills, but only up to a
+      // hard cap. Resetting the per-window counter (not the field id) means the
+      // re-prompt is rate-limited rather than fired on every request; capping the
+      // total re-prompts means a field Gemini simply cannot fill stops spinning
+      // entirely instead of re-prompting forever at half speed (fresh-eyes PR #113).
+      if (
+        this.unconfirmableConfirmCount >= WebFormConnection.UNCONFIRMABLE_CONFIRM_LIMIT &&
+        this.unconfirmableRepromptCount < WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP
+      ) {
         const field = this.state.schema.fields.find(f => f.id === field_id);
         const spokenName = field?.spoken_name || field?.name || field_id;
+        this.unconfirmableConfirmCount = 0;
+        this.unconfirmableRepromptCount += 1;
+        const capped =
+          this.unconfirmableRepromptCount >= WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP;
         console.error(
           '[WebFormConnection] Breaking confirm/next-field loop for unconfirmable field:',
-          field_id
+          field_id,
+          capped ? '(final re-prompt -- giving up after this)' : ''
         );
         // Re-prompt Gemini (via send_prompt) to collect the value rather than
-        // confirming an empty field. Reset the counter so a later genuine attempt
-        // is not immediately treated as another failure.
-        this.unconfirmableConfirmCount = 0;
-        this.lastUnconfirmableFieldId = null;
+        // confirming an empty field.
         this.send({
           type: 'completion_message',
           message:
@@ -1010,10 +1032,19 @@ export class WebFormConnection {
       return;
     }
 
+    // Field has a usable value -- record the confirmation in state.
+    this.state = SchemaFormStateManager.confirmField(
+      this.state,
+      field_id,
+      confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
+    );
+    SchemaFormStateManager.save(this.state);
+
     // Confirm took -- clear any pending unconfirmable tracking for this field.
     if (field_id === this.lastUnconfirmableFieldId) {
       this.lastUnconfirmableFieldId = null;
       this.unconfirmableConfirmCount = 0;
+      this.unconfirmableRepromptCount = 0;
     }
 
     // 🆕 AUTO-DETECT SECTION COMPLETION
