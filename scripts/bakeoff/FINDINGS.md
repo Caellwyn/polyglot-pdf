@@ -1,5 +1,26 @@
 # Extractor Bake-off Findings (bd polyglot-pdf-7a9.4)
 
+> **UPDATE (2026-06-07, bd polyglot-pdf-7a9.9).** A follow-up research bead built
+> an **LLM-native** arm (generic structural enrichment + a strong LLM, no USCIS
+> heuristics) and **corrected two claims below**:
+> 1. **Headline conclusion #3 ("the old extractor owns schema-conformant
+>    section_id") does NOT generalize.** On I-90 EVERY arm including the
+>    deterministic extractor scores section_id 0.0%. The 88.3% it posts is
+>    **I-589-only**, an artifact of the I-589 gold having been authored by editing
+>    that extractor's output. section_id exact-match is a **seeding artifact**, not a
+>    quality signal -- resolved under bd polyglot-pdf-7a9.13.
+> 2. **The recommended pipeline below ("deterministic skeleton -> LLM (b) pass")
+>    shifts:** the deterministic *interpretation* layer (section_id/field-semantics)
+>    is not worth keeping -- a generic-enrichment LLM pass matches/beats it on (a)
+>    with zero form-specific code, and the chosen model is **claude-opus-4-8** (free
+>    in the maintainer's environment; Gemini kept as fallback). See
+>    `docs/research/2026-06-07-7a9.9-llm-native-extractor-prototype-findings.md` and
+>    bd polyglot-pdf-7a9.12 (adoption). `acroform_dump.py` (the exact-name anchor)
+>    stays.
+>
+> The numbers and analysis below are the original 7a9.4/7a9.7 record and remain
+> accurate for the arms they scored.
+
 **Throwaway research output.** Compares PDF -> JSON FormSchema extractor arms,
 scoring the two halves of the problem SEPARATELY via `scripts/schema_score.py`:
 
