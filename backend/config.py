@@ -46,12 +46,18 @@ class Settings(BaseModel):
 	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
-	# Default TRUE -> 3.1 (gemini-3.1-flash-live-preview). The 2.5 native-audio
-	# preview is intermittently silent on the AUDIO path (no-audio turns / 1011 —
-	# bd polyglot-pdf-daa), so 3.1 is the reliable default; 2.5 is the cheaper
-	# opt-in via USE_PREMIUM_MODEL=false. (3.1 is only modestly pricier — text-out
-	# 4.50 vs 2.00/1M; audio in/out identical — see GEMINI_PRICING_BY_FAMILY.)
-	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "true").lower() == "true"
+	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). 2.5 RELIABLY
+	# emits the update_form_fields tool call; 3.1 does NOT -- in audio mode it
+	# calls the tool only ~50% of the time and often confabulates a "trouble
+	# saving" message without calling it at all, so fields silently fail to save
+	# (bd polyglot-pdf-5oq, reproduced via backend/scripts/probe_tool_call.py
+	# 2026-06-07; TEXT modality can't help -- native-audio 3.1 1007s on TEXT).
+	# So 2.5 is the working default. Its known tradeoff is intermittent silence
+	# on the AUDIO path (no-audio turns / 1011 -- bd polyglot-pdf-daa), mitigated
+	# separately. Set USE_PREMIUM_MODEL=true to opt back into 3.1 once a revision
+	# fixes audio-mode tool-calling. (3.1 is modestly pricier -- text-out 4.50 vs
+	# 2.00/1M; audio in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
+	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
