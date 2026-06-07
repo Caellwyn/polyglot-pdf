@@ -28,6 +28,12 @@ def configure_logging() -> None:
 		processors=[
 			structlog.processors.add_log_level,
 			structlog.processors.TimeStamper(fmt="iso"),
+			# Render exc_info (set by .exception() or exc_info=True) into a
+			# JSON-serializable "exception" string. Without this, JSONRenderer
+			# emits only "exc_info": true and DROPS the traceback, making caught
+			# errors (e.g. event_handling_error in live_ai_gemini) undebuggable
+			# in Cloud Run logs (bd polyglot-pdf-0uu).
+			structlog.processors.format_exc_info,
 			structlog.processors.JSONRenderer(),
 		],
 		logger_factory=structlog.stdlib.LoggerFactory(),
