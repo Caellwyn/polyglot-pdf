@@ -68,8 +68,15 @@ def _norm_pfn(name: Optional[str]) -> Optional[str]:
     return name.strip().lower() or None
 
 
-def _field_pfns(f: dict[str, Any]) -> set[str]:
-    """All normalized (full-path) pdf_field_names a field is associated with."""
+def _field_pfns(f: dict[str, Any]) -> list[str]:
+    """All normalized (full-path) pdf_field_names a field is associated with.
+
+    Returns a SORTED, de-duplicated list, not a set: the matcher iterates this in
+    Pass 1a/1b, and Python randomizes set iteration order per process (the
+    PYTHONHASHSEED), which made field pairing -- and therefore the scores --
+    non-deterministic run-to-run (observed +-1 on I-90 controls_fields). A stable
+    order makes the bake-off reproducible (bd polyglot-pdf-7a9.4 fresh-eyes/Copilot).
+    """
     out: set[str] = set()
     n = _norm_pfn(f.get("pdf_field_name"))
     if n:
@@ -78,7 +85,7 @@ def _field_pfns(f: dict[str, Any]) -> set[str]:
         n = _norm_pfn(opt.get("pdf_field_name"))
         if n:
             out.add(n)
-    return out
+    return sorted(out)
 
 
 def _pfn_equiv(a: str, b: str) -> bool:

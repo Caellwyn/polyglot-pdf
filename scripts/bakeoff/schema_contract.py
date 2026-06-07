@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""The FormSchema output contract handed to every extractor arm.
+
+Throwaway research helper for the extractor bake-off (bd polyglot-pdf-7a9.4). This
+is a COMPACT restatement of docs/schema_format.md -- enough for an LLM to emit a
+schema the scorer (scripts/schema_score.py) can grade, WITHOUT handing the model a
+real ground-truth schema (that would be circular for a bake-off). It deliberately
+names exactly the keys the scorer reads, so a faithful extraction is graded on its
+merits and not penalized for a key-name mismatch.
+
+ASCII-only (cp1252 safe).
+"""
+from __future__ import annotations
+
+# Keys the scorer (schema_score.py) actually grades. Spelled out so the model
+# emits the right shape and the bake-off measures extraction quality, not format
+# guessing.
+SCHEMA_CONTRACT = """\
+You are extracting a fillable PDF form into a FormSchema JSON object. Emit ONE
+JSON object and NOTHING else (no prose, no markdown fences).
+
+TOP-LEVEL SHAPE:
+{
+  "source": "pdf",
+  "form_metadata": {"title": str, "form_number": str, "page_count": int,
+                    "edition_date": str},
+  "parts":    [ {"id": str, "label": str, "order": int, "section_ids": [str]} ],
+  "sections": [ {"id": str, "label": str, "order": int, "fields": [str(field id)],
+                 "page_numbers": [int], "show_if": {...optional...}} ],
+  "fields":   [ FIELD, ... ],
+  "supplements": [ {"id": str, "label": str} ]   // only if the form has overflow
+                                                 // supplement pages
+}
+
+FIELD SHAPE (the unit the scorer grades hardest):
+{
+  "id": str,                 // your own stable id; matching never trusts it
+  "name": str,               // human label / question text
+  "spoken_name": str,        // short voice label
+  "type": one of: "text","textarea","date","number","radio","checkbox",
+                  "select","signature","table",
+  "section_id": str,         // which section.id this field is in
+  "pdf_field_name": str,     // EXACT AcroForm widget name -- the join key the
+                             // scorer matches on; copy it verbatim, do not invent
+  "pdf_position": {"page": int, "x": num, "y": num, "width": num, "height": num},
+  "validation": {"required": bool, "pattern": str(optional regex)},
+  "options": [ {"value": str, "label": str, "pdf_field_name": str(optional)} ],
+                             // radio/checkbox/select choices. For a radio/checkbox
+                             // SET whose widgets share a name, put each widget's
+                             // name on its option.pdf_field_name.
+  "max_length": int, "read_only": bool, "multiline": bool,
+
+  // RELATIONSHIP / LOGIC keys (the hard half -- recover these from printed
+  // conditional text like "Yes (Proceed to Item 5)" and form structure):
+  "show_if": {"field": str(other field id), "operator": str, "value": any},
+  "controls_fields": [str(field id)],     // fields this one gates
+  "conditional_fields": [str],            // fields shown based on this one
+  "conditional_logic": {...}, "conditional_behavior": {...},
+  "copy_to": [str(field id)],             // value mirrored to these fields
+  "overflow_to_supplement": str(supplement id),  // long lists overflow here
+  "multi_entry": {...}                    // repeating-row config (or type=table)
+}
+
+RULES:
+- Use the EXACT pdf_field_name from the provided AcroForm field list when given;
+  never invent or normalize it. It is the only reliable cross-reference.
+- Consolidate split widgets: a group of checkbox/radio widgets sharing one logical
+  question is ONE field with an options[] array, each option carrying its widget
+  name in option.pdf_field_name.
+- Recover conditional logic (show_if / controls_fields / overflow) from the
+  PRINTED instructions on the page, not guesses.
+- Output MUST be a single valid JSON object, UTF-8, ASCII-safe, no trailing commas.
+"""
+
+
+def acroform_field_list(dump: dict, max_fields: int | None = None) -> str:
+    """Render the AcroForm dump as a compact text field list for the prompt.
+
+    One line per logical field: name, type, flags, /TU, page, and choices. This is
+    the deterministic ground-truth structure the LLM cannot see from pixels.
+    """
+    lines = []
+    fields = dump.get("fields", [])
+    if max_fields:
+        fields = fields[:max_fields]
+    for f in fields:
+        w0 = f["widgets"][0]
+        bits = [f"name={f['name']}", f"type={f['logical_type']}"]
+        if f["widget_count"] > 1:
+            bits.append(f"widgets={f['widget_count']}")
+        flags = []
+        for w in f["widgets"]:
+            for k in ("read_only", "required", "multiline", "comb"):
+                if w.get(k) and k not in flags:
+                    flags.append(k)
+        if flags:
+            bits.append("flags=" + ",".join(flags))
+        if w0.get("max_length"):
+            bits.append(f"maxlen={w0['max_length']}")
+        bits.append(f"page={w0['rect']['page']}")
+        if w0.get("tu"):
+            bits.append(f"tu={w0['tu']!r}")
+        if w0.get("choices"):
+            vals = ",".join(c["value"] for c in w0["choices"][:12])
+            bits.append(f"choices=[{vals}]")
+        if any("on_value" in w for w in f["widgets"]):
+            ons = [w["on_value"] for w in f["widgets"] if w.get("on_value")]
+            bits.append("on=" + ",".join(ons[:8]))
+        lines.append("  " + " | ".join(bits))
+    header = (f"ACROFORM FIELD LIST ({dump.get('field_count')} fields, "
+              f"{dump.get('widget_count')} widgets, "
+              f"{dump.get('page_count')} pages):")
+    return header + "\n" + "\n".join(lines)

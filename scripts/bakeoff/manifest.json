@@ -1,0 +1,29 @@
+{
+  "_comment": "Bake-off manifest (bd polyglot-pdf-7a9.4). Maps each form to its ground-truth schema and the draft schema each extractor arm produced. Arms with a null/missing path are reported 'not run'. Document AI was DROPPED by maintainer decision (2026-06-06): too expensive for negligible benefit over a raw strong-LLM pass -- it only supplies the (a) OCR label/box layer the hybrid arms already get from the PyMuPDF AcroForm dump. arm_documentai.py is kept for reference but excluded from the scored comparison.",
+  "forms": {
+    "i-90": {
+      "pdf": "form-kits/i-90/form.pdf",
+      "truth": "form-kits/i-90/schema.json",
+      "arms": {
+        "old-extractor-heuristic": "scripts/bakeoff/outputs/i90_oldextractor_heuristic.json",
+        "old-extractor-enhanced": "scripts/bakeoff/outputs/i90_oldextractor_enhanced.json",
+        "gemini-multimodal": "scripts/bakeoff/outputs/i90_gemini_multimodal.json",
+        "gemini-hybrid": "scripts/bakeoff/outputs/i90_gemini_hybrid.json",
+        "claude-multimodal": "scripts/bakeoff/outputs/i90_claude_multimodal.json",
+        "claude-hybrid": "scripts/bakeoff/outputs/i90_claude_hybrid.json"
+      }
+    },
+    "i-589": {
+      "pdf": "example_pdfs/i-589/i-589-asylum-application.pdf",
+      "truth": "example_pdfs/i-589/i589_schema.json",
+      "arms": {
+        "old-extractor-heuristic": "scripts/bakeoff/outputs/i589_oldextractor_heuristic.json",
+        "old-extractor-enhanced": "scripts/bakeoff/outputs/i589_oldextractor_enhanced.json",
+        "gemini-multimodal": "scripts/bakeoff/outputs/i589_gemini_multimodal.json",
+        "gemini-hybrid": "scripts/bakeoff/outputs/i589_gemini_hybrid.json",
+        "claude-multimodal": "scripts/bakeoff/outputs/i589_claude_multimodal.json",
+        "claude-hybrid": "scripts/bakeoff/outputs/i589_claude_hybrid.json"
+      }
+    }
+  }
+}

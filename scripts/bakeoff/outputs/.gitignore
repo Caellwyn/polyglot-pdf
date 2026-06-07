@@ -1,0 +1,9 @@
+# Bake-off generated artifacts (bd polyglot-pdf-7a9.4) -- throwaway research data.
+# The CODE that produces these is committed (../*.py, ../prior_extractor/); the
+# bulky per-arm drafts, AcroForm dumps, and run logs are regenerable and kept out
+# of git to keep the PR reviewable. The scored SUMMARY (_scores.json) and the
+# human-readable FINDINGS.md (one level up) ARE committed as the deliverable.
+*.json
+*.txt
+*.log
+!_scores.json
