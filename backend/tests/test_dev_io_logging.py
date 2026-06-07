@@ -107,10 +107,19 @@ def test_dev_io_never_raises(tmp_path, monkeypatch):
     swallows all exceptions."""
 
     class _Boom:
+        # MUST be enabled, or _dev_log_io short-circuits before ever calling
+        # log_gemini_message and the except-path is never exercised (Copilot
+        # review of PR #104). With enabled=True the helper proceeds and we prove
+        # it swallows the raised error.
+        enabled = True
+
         def log_gemini_message(self, **kwargs):
             raise RuntimeError("disk full")
 
     monkeypatch.setattr("backend.adapters.live_ai_gemini.get_dev_logger", lambda: _Boom())
     stub = _Stub()
-    # Must not raise despite the logger blowing up.
+    # Must not raise despite the logger blowing up...
     stub._dev_log_io("send", "tool_response", {"tool_name": "x", "response": {}})
+    # ...and we must have actually reached the failing call (seq advanced past
+    # the short-circuit), so the except-path was genuinely exercised.
+    assert stub._dev_io_seq == 1
