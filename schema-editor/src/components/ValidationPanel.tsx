@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FormSchema, ValidationError } from '../types/schema';
+import type { FormSchema } from '../types/schema';
 import { validateSchema, getCompletionStats } from '../utils/validation';
 
 interface ValidationPanelProps {

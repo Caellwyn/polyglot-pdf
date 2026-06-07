@@ -23,18 +23,43 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const pageDimensions = React.useRef<Map<number, { width: number; height: number }>>(new Map());
   const [scale, setScale] = React.useState(1.0);
   const [currentPage, setCurrentPage] = React.useState(1);
+  // Bumped whenever a page's dimensions are first stored. pageDimensions is a
+  // ref (so the auto-scroll effect can read it synchronously), but the field
+  // overlays are gated on pageDimensions.current.has(pageNum) -- a ref write
+  // does NOT re-render, so without this counter the overlays never appear on
+  // first load. Bumping state on first store forces the overlay pass to run.
+  const [, setDimensionsVersion] = React.useState(0);
 
   // Load PDF document
   const { document, numPages, isLoading, error } = usePDFDocument(pdfPath);
 
-  // Callback to store page dimensions when pages load
-  const handlePageLoad = React.useCallback((pageNum: number) => (page: PDFPageProxy) => {
+  // Store a page's unscaled dimensions when it loads. Kept stable (useCallback,
+  // no deps) so PDFPage's effect does not re-run every render.
+  const storePageDimensions = React.useCallback((pageNum: number, page: PDFPageProxy) => {
     const viewport = page.getViewport({ scale: 1.0 }); // Get unscaled dimensions
+    const alreadyStored = pageDimensions.current.has(pageNum);
     pageDimensions.current.set(pageNum, {
       width: viewport.width,
       height: viewport.height,
     });
+    // Re-render so the field overlays for this page can mount (see counter above).
+    if (!alreadyStored) {
+      setDimensionsVersion(v => v + 1);
+    }
   }, []);
+
+  // Memoize the per-page onPageLoad closures so each PDFPage receives a STABLE
+  // callback identity (a fresh `(page) => ...` per render would thrash PDFPage's
+  // render effect, which lists onPageLoad in its deps -- the root of the
+  // "same canvas during multiple render()" race). Rebuilt only when numPages
+  // changes.
+  const pageLoadHandlers = React.useMemo(() => {
+    const handlers = new Map<number, (page: PDFPageProxy) => void>();
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      handlers.set(pageNum, (page: PDFPageProxy) => storePageDimensions(pageNum, page));
+    }
+    return handlers;
+  }, [numPages, storePageDimensions]);
 
   // Zoom controls
   const handleZoomIn = () => setScale(s => Math.min(2.0, s + 0.25));
@@ -327,7 +352,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                   document={document}
                   pageNumber={pageNum}
                   scale={scale}
-                  onPageLoad={handlePageLoad(pageNum)}
+                  onPageLoad={pageLoadHandlers.get(pageNum)}
                   className="mb-4"
                 />
 

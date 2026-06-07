@@ -124,4 +124,12 @@ specifically so it could be unit-tested — `polyglot-pdf-p1t`). New pure logic 
 unit test; new multi-component flows get an integration test. The suite must be
 **green before a PR opens** — `/closeout` will not open a PR on a red suite.
 
-*Last updated: 2026-06-05. See [../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md](../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md) for closeout details.*
+**A green vitest run does not prove a canvas/PDF UI works.** jsdom has no canvas
+backend, so `getContext` returns null and the real `pdfjs-dist` render path — and
+the bugs that live in it (render races under StrictMode, ref-vs-rerender gaps,
+worker teardown) — never executes under vitest. For such surfaces the suite pins
+the logic, but a **real-browser visual check** (the preview tools) is the
+load-bearing verification: `polyglot-pdf-7a9.6` shipped a green 113/113 suite while
+three runtime bugs blocked the actual PDF render, all invisible to jsdom.
+
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-7a9.6-revive-schema-editor.md](../journal/entries/2026-06-07-bd-7a9.6-revive-schema-editor.md) for closeout details.*

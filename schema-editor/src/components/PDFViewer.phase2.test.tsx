@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { PDFViewer } from './PDFViewer';
 import type { FormSchema } from '../types/schema';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -86,14 +86,22 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // jsdom has no canvas backend, so HTMLCanvasElement.getContext returns null,
+    // which makes PDFPage bail before rendering (and before onPageLoad, which
+    // populates pageDimensions). Stub a minimal 2d context so the render path --
+    // and the auto-scroll effect that depends on pageDimensions -- can run.
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({})) as any;
+
     // Mock PDF.js to return a 3-page document
     vi.mocked(pdfjsLib.getDocument).mockReturnValue({
       promise: Promise.resolve({
         numPages: 3,
-        getPage: vi.fn((pageNum) =>
+        getPage: vi.fn(() =>
           Promise.resolve({
             getViewport: vi.fn(() => ({ width: 612, height: 792, scale: 1 })),
-            render: vi.fn(() => ({ promise: Promise.resolve() })),
+            // render task exposes both promise and cancel (PDFPage's cleanup
+            // calls renderTaskRef.current.cancel() on rerender/unmount).
+            render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
           })
         ),
         destroy: vi.fn(),
@@ -301,9 +309,16 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       await waitFor(() => {
         expect(document.querySelectorAll('canvas').length).toBe(3);
       });
+      // Flush the page-render promises so PDFPage's onPageLoad fires and
+      // populates pageDimensions (a ref, set in a microtask after render). The
+      // auto-scroll effect depends on it; in a real browser this completes before
+      // a user can select a field, in jsdom we flush it explicitly.
+      await act(async () => { await Promise.resolve(); });
 
-      // Mock scrollIntoView
-      Element.prototype.scrollIntoView = vi.fn();
+      // The auto-scroll effect centers the field via the scroll container's
+      // scrollTo (jsdom does not implement it, so it must be mocked).
+      const scrollToSpy = vi.fn();
+      Element.prototype.scrollTo = scrollToSpy;
 
       // Select field on page 1
       rerender(
@@ -316,8 +331,8 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       );
 
       await waitFor(() => {
-        // scrollIntoView should have been called
-        expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+        // scrollTo should have been called to center the selected field
+        expect(scrollToSpy).toHaveBeenCalled();
       });
     });
 
@@ -334,9 +349,14 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       await waitFor(() => {
         expect(document.querySelectorAll('canvas').length).toBe(3);
       });
+      // Flush page-render promises so pageDimensions is populated before select
+      // (see page-1 test for the full explanation).
+      await act(async () => { await Promise.resolve(); });
 
-      // Mock scrollIntoView
-      Element.prototype.scrollIntoView = vi.fn();
+      // The auto-scroll effect centers the field via the scroll container's
+      // scrollTo (jsdom does not implement it, so it must be mocked).
+      const scrollToSpy = vi.fn();
+      Element.prototype.scrollTo = scrollToSpy;
 
       // Select field on page 2
       rerender(
@@ -349,7 +369,7 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       );
 
       await waitFor(() => {
-        expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+        expect(scrollToSpy).toHaveBeenCalled();
       });
     });
 

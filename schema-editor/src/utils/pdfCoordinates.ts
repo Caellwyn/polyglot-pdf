@@ -1,17 +1,19 @@
 /**
  * PDF Coordinate Transformation Utilities
  *
- * Converts between PDF coordinate system and screen coordinate system.
+ * Scales between the schema's stored field rects and on-screen pixels.
  *
- * PDF Coordinates (from schema):
- * - Origin: bottom-left corner
- * - Y-axis: increases upward
- * - Units: points (72 points = 1 inch)
+ * IMPORTANT -- both are TOP-LEFT origin, so there is NO Y-axis flip here.
+ * Although PDF's NATIVE coordinate system is bottom-left origin (y up), the
+ * schema's pdf_position rects are NOT in that native space: they are emitted by
+ * the producer (scripts/bakeoff/acroform_dump.py) from PyMuPDF widget.rect.y0,
+ * and PyMuPDF normalizes to TOP-LEFT origin (y increases downward, like the
+ * screen). So converting schema rect -> screen is a pure scale, and the inverse
+ * is a pure unscale. Do NOT reintroduce a `pageHeight - y - height` flip -- it
+ * would mirror every overlay vertically (verified visually in bd 7a9.6).
  *
- * Screen Coordinates (browser/DOM):
- * - Origin: top-left corner
- * - Y-axis: increases downward
- * - Units: pixels
+ * Schema field rects (pdf_position): top-left origin, y down, points.
+ * Screen coordinates (browser/DOM):   top-left origin, y down, pixels.
  */
 
 import type { PDFPosition } from '../types/schema';
@@ -83,25 +85,29 @@ export function pdfToScreenCoords(
 
 /**
  * Convert screen coordinates back to PDF coordinates
- * (Inverse of pdfToScreenCoords)
+ * (Exact inverse of pdfToScreenCoords)
  *
  * @param screenPos - Screen position (top-left origin, scaled)
- * @param pageHeight - Height of the PDF page in points
+ * @param _pageHeight - Height of the PDF page in points (unused - kept for API compatibility)
  * @param scale - Current zoom scale (1.0 = 100%)
- * @returns PDF position (bottom-left origin, unscaled)
+ * @returns PDF position (top-left origin, unscaled)
+ *
+ * Note: Our schema coordinates are PDF.js / PyMuPDF rects, which are already in
+ * top-left/screen format (the producer scripts/bakeoff/acroform_dump.py emits
+ * widget rect.y0 from PyMuPDF, whose y increases downward from the top). So this
+ * inverse only UNSCALES -- it does not flip the Y-axis -- to stay a true inverse
+ * of pdfToScreenCoords (which also does not flip).
  */
 export function screenToPdfCoords(
   screenPos: ScreenPosition,
-  pageHeight: number,
+  _pageHeight: number,  // Kept for API compatibility; unused since coords are already top-left format
   scale: number = 1.0
 ): PDFPosition {
-  // Unscale first
+  // Just unscale; coordinates are already in top-left origin format (no Y-flip).
   const x = screenPos.x / scale;
+  const y = screenPos.y / scale;
   const width = screenPos.width / scale;
   const height = screenPos.height / scale;
-
-  // Flip Y axis back to PDF coordinates
-  const y = pageHeight - (screenPos.y / scale) - height;
 
   return {
     page: 0, // Page number not tracked in this conversion
