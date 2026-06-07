@@ -85,12 +85,22 @@ def configure_logging() -> None:
 	# (bd polyglot-pdf-h79). Fall back to a root-logger filter if no handler is
 	# present (basicConfig should always create one, but be defensive).
 	filter_inst = _BinarySuppressFilter()
+
+	def _has_binary_filter(target) -> bool:
+		# Idempotency: configure_logging() may run more than once (import-time
+		# call + a test re-invoking it). Don't stack a duplicate filter on a
+		# handler/logger that already carries one of this type.
+		return any(isinstance(f, _BinarySuppressFilter) for f in target.filters)
+
 	root_handlers = logging.getLogger().handlers
 	if root_handlers:
 		for handler in root_handlers:
-			handler.addFilter(filter_inst)
+			if not _has_binary_filter(handler):
+				handler.addFilter(filter_inst)
 	else:
-		logging.getLogger().addFilter(filter_inst)
+		root = logging.getLogger()
+		if not _has_binary_filter(root):
+			root.addFilter(filter_inst)
 
 	# Reduce noisy logging from websocket and other libraries. The level cap is
 	# per-logger; the binary-suppress filter now lives on the root handler above,

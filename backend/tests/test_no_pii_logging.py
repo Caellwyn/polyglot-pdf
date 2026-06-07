@@ -63,7 +63,12 @@ _SENSITIVE_KWARGS = (
 # leak. So `fields` is not in _SENSITIVE_KWARGS (which would flag the safe
 # keys() form); instead it has its own pattern that flags ONLY a .values()/
 # values-bearing RHS (bd polyglot-pdf-t1c).
-_FIELDS_VALUES_LEAK = re.compile(r"\bfields\s*=\s*[^,)\n#]*\.values\s*\(")
+# Matched against the ACCUMULATED text of a single _log.* call (comments already
+# stripped, lines joined with spaces), so a `fields=` / `.values(` split across
+# source lines is still caught. The negated class excludes `,` and `)` so it
+# stops at the kwarg boundary, but NOT `\n` (the buffer has none) -- the join is
+# what lets it span lines.
+_FIELDS_VALUES_LEAK = re.compile(r"\bfields\s*=\s*[^,)#]*\.values\s*\(")
 # Right-hand sides that ARE safe: a metadata wrapper (len/type/bool/...), a
 # metadata-named var (*_length / *_count / *_type / *_id), OR a literal constant
 # (a quoted string or a number) -- a constant can't carry runtime PII, so e.g.
@@ -104,6 +109,8 @@ def _scan_leaks(text: str):
     """
     offenders = []
     depth = 0  # open-paren depth of the current _log.* call, 0 = not in one
+    call_buf = ""       # accumulated in-call text for the current _log.* call
+    call_start_line = 0  # where the current call opened (for fields-leak reporting)
     for lineno, raw in enumerate(text.splitlines(), 1):
         code = raw.split("#", 1)[0]
         if depth == 0:
@@ -112,6 +119,8 @@ def _scan_leaks(text: str):
                 continue
             depth = 1  # entered a log call on this line
             code_after = code[m.end():]
+            call_buf = ""
+            call_start_line = lineno
         else:
             code_after = code
         # Scan the in-call portion for sensitive kwargs that aren't safe metadata.
@@ -120,14 +129,19 @@ def _scan_leaks(text: str):
                 if _is_leak(mm):
                     offenders.append((lineno, raw.strip()))
                     break
-        # `fields=...values()` is a leak even though `fields` is otherwise safe
-        # (it carries field IDs/keys); flag only the values-bearing form.
-        if _FIELDS_VALUES_LEAK.search(code_after):
-            offenders.append((lineno, raw.strip()))
+        # Accumulate the call text so a `fields=` / `.values(` split across lines
+        # is still caught (the single-line check would miss it).
+        call_buf += " " + code_after
         # Update paren depth; when it returns to 0 the call has closed.
         depth += code_after.count("(") - code_after.count(")")
-        if depth < 0:
+        if depth <= 0:
+            # `fields=...values()` is a leak even though `fields` is otherwise
+            # safe (it carries field IDs/keys); flag only the values-bearing form,
+            # checked against the whole (possibly multi-line) call.
+            if _FIELDS_VALUES_LEAK.search(call_buf):
+                offenders.append((call_start_line, text.splitlines()[call_start_line - 1].strip()))
             depth = 0
+            call_buf = ""
     return offenders
 
 
@@ -231,6 +245,10 @@ def test_guard_catches_known_leaks():
     # fields: keys() (field IDs) are safe; values() is a leak (bd t1c).
     assert not _scan_leaks('_log.warning("X", fields=list(updates.keys()), n=c)')
     assert _scan_leaks('_log.warning("X", fields=list(updates.values()), n=c)')
+    # fields=...values() SPLIT across lines is still caught (multi-line call).
+    assert _scan_leaks('_log.warning(\n    "X",\n    fields=list(\n        updates.values()\n    ),\n)')
+    # The safe multi-line keys() form must still NOT flag.
+    assert not _scan_leaks('_log.warning(\n    "X",\n    fields=list(\n        updates.keys()\n    ),\n)')
 
 
 def test_guard_catches_print_leaks():

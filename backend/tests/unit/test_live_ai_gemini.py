@@ -588,7 +588,11 @@ async def _capture_session_config(monkeypatch, **settings_overrides):
     from backend.adapters.live_ai_gemini import LiveAIGemini
     from backend import config as _config
 
-    base = _config.get_settings()
+    # Build a FRESH Settings to mutate -- get_settings() is lru_cached, so mutating
+    # its result would poison the shared singleton for later tests (the cache
+    # outlives monkeypatch's function-reference restore). Settings() is the
+    # un-cached constructor the cache wraps.
+    base = _config.Settings()
     for key, value in settings_overrides.items():
         setattr(base, key, value)
     # The adapter imports get_settings locally inside _run_session_loop, so patch the
@@ -725,7 +729,9 @@ def _adapter_with_session_and_vad(monkeypatch, *, disable_gemini_vad):
     from backend.adapters.live_ai_gemini import LiveAIGemini
     from backend import config as _config
 
-    base = _config.get_settings()
+    # Fresh Settings, not the lru_cached get_settings() result -- mutating the
+    # cached singleton would leak into later tests (see _capture_session_config).
+    base = _config.Settings()
     base.DISABLE_GEMINI_VAD = disable_gemini_vad
     # send_activity_start/end import get_settings locally, so patch the module attr.
     monkeypatch.setattr(_config, "get_settings", lambda: base)
