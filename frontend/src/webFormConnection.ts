@@ -79,6 +79,14 @@ export class WebFormConnection {
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
+  // bd polyglot-pdf-0y7: loop-breaker for the confirm_field / next_field_hint spin.
+  // confirmField no-ops when a field has no value, so the backend can re-request
+  // confirm_field for the SAME unconfirmable field forever. Track consecutive
+  // failed confirms (field requested but not actually confirmed) per field id; at
+  // the threshold, break the loop with a recovery prompt instead of spinning.
+  private confirmFailField: string | null = null;
+  private confirmFailCount = 0;
+  private static readonly CONFIRM_FAIL_LIMIT = 2;
 
   // Auth token plumbing (bd polyglot-pdf-wq0). The backend /ws/fill gate rejects
   // tokenless connections with HTTP 403. Reconnect paths (startSection,
@@ -955,6 +963,46 @@ export class WebFormConnection {
     );
     SchemaFormStateManager.save(this.state);
 
+    // bd polyglot-pdf-0y7: loop-breaker. confirmField no-ops when the field has no
+    // value (it can't be confirmed), so computeNextField keeps returning the SAME
+    // field and the backend can re-request confirm_field for it forever while
+    // Gemini stalls. Detect a confirm_field that did NOT actually confirm the field
+    // and, after CONFIRM_FAIL_LIMIT consecutive failures on the same field, break
+    // the spin by sending a level-1 recovery prompt (re-asks the user for the
+    // value via the existing recovery channel) instead of silently falling through
+    // to another no-op cycle. A successful confirm (or a different field) resets.
+    if (!SchemaFormStateManager.isFieldConfirmed(this.state, field_id)) {
+      this.confirmFailCount = (this.confirmFailField === field_id) ? this.confirmFailCount + 1 : 1;
+      this.confirmFailField = field_id;
+      if (this.confirmFailCount >= WebFormConnection.CONFIRM_FAIL_LIMIT) {
+        console.warn(
+          `[WebFormConnection] confirm_field for '${field_id}' failed ${this.confirmFailCount}x ` +
+          `(no value to confirm) -- breaking confirm/next-field loop`
+        );
+        // Surface the stall to the UI via onError -- this works TODAY regardless of
+        // the backend recovery channel, which is currently broken
+        // (RECOVERY_PROMPT_LEVEL_* missing from Settings -> AttributeError, bd
+        // polyglot-pdf-zy3). Without this, the break would only rate-limit the
+        // spin without telling anyone.
+        this.callbacks.onError?.(new Error(
+          `Could not confirm field '${field_id}' -- no value was entered. Please provide the value before confirming.`
+        ));
+        // ALSO attempt the level-1 recovery prompt (re-asks the user via Gemini).
+        // It is a no-op until zy3 restores the prompt settings, but becomes the
+        // nicer spoken re-prompt once that lands -- belt and suspenders.
+        const hint = this.computeNextFieldHintString() || undefined;
+        this.sendRecoveryPrompt(1, hint);
+        // Reset so we re-arm rather than firing every cycle.
+        this.confirmFailField = null;
+        this.confirmFailCount = 0;
+        return;
+      }
+    } else {
+      // Field actually confirmed -- clear any failure streak.
+      this.confirmFailField = null;
+      this.confirmFailCount = 0;
+    }
+
     // 🆕 AUTO-DETECT SECTION COMPLETION
     // Check if all fields in current section are now confirmed
     const nextField = computeNextField(this.state, { skipConfirmed: true });
@@ -1497,6 +1545,12 @@ export class WebFormConnection {
    * @param sectionId - Section ID (e.g., "part_1_2_addresses")
    */
   async startSection(sectionId: string, wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
+    // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on this section
+    // transition too (the other path besides switchToSection -- called by
+    // completeSection), so a stale count can't carry into the new section and trip
+    // the breaker a cycle early on a same field_id. Copilot review of PR #111.
+    this.confirmFailField = null;
+    this.confirmFailCount = 0;
     try {
       // Set switching status
       this.isSectionSwitching = true;
@@ -1580,6 +1634,13 @@ export class WebFormConnection {
    * @param wsUrl - Backend WebSocket URL (kept for API compatibility but not used)
    */
   async switchToSection(sectionId: string, wsUrl: string): Promise<void> {
+    // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on a section
+    // switch so a stale count can't carry into the new section (e.g. a same
+    // field_id in the next section would otherwise trip the breaker one cycle
+    // early). Fresh-eyes finding on PR #111.
+    this.confirmFailField = null;
+    this.confirmFailCount = 0;
+
     const currentState = SchemaFormStateManager.load();
     if (!currentState || !currentState.schema.sections) {
       throw new Error('Sections not initialized');

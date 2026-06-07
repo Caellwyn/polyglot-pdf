@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for closeout details.*
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the Gemini I/O logging.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -79,6 +79,19 @@ Both parse `function_call.arguments` (JSON string or dict) into
    and the message says "All fields confirmed" -- which can make Gemini think the
    form is done. dev-log: `tool_callback_result` shows the exact response,
    including whether `next_field_hint` was null.
+
+**Frontend loop-breaker (bd polyglot-pdf-0y7).** A `confirm_field` for a field
+with no value is a no-op (`SchemaFormStateManager.confirmField` can't confirm what
+isn't filled), so `computeNextField` keeps returning the SAME field and the
+backend can re-request `confirm_field` for it indefinitely while Gemini stalls.
+`webFormConnection.handleConfirmFieldRequest` guards this: it checks whether the
+field actually became confirmed and, after 2 consecutive failed confirms of the
+same field, breaks the spin. It surfaces the stall via `onError` (works today) and
+also attempts a level-1 `recovery_prompt` -- the latter is currently inert because
+`RECOVERY_PROMPT_LEVEL_*` are missing from `Settings` (`polyglot-pdf-zy3`) and
+becomes the spoken Gemini re-prompt once that is fixed. The streak resets on a
+successful confirm, a different field, or a section switch. The no-op also logs a
+console warning so the stall is diagnosable.
 
 ## Wire reality vs. expectation -- what to check
 
