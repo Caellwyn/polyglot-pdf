@@ -12,15 +12,22 @@ from backend.models.form_models import FormField, FieldType
 
 # The frontend's formatNextFieldHint (frontend/src/navigation.ts) appends a
 # technical parenthetical to the SPOKEN hint, e.g.
-#   "Next field to fill is #1: 'Alien Registration Number' (field_id: 'p1_line1_aliennumber', type: text, required)"
+#   "Next field to fill is #1: 'Alien Registration Number' (field_id: 'p1_line1_aliennumber', type: text, required, options: [Brown, Blue])"
 # Gemini reads that parenthetical aloud, so the user hears the raw field_id
 # (bd polyglot-pdf-dx7). The field_id is NOT needed in the spoken hint: Gemini
 # already gets every field_id from the FIELDS block of the system instruction
 # (ai_context.fields_text -> "ID: <field_id>"), which is what it passes to
 # update_form_fields. So we strip the parenthetical before any hint reaches the
-# SPOKEN path. Matches a trailing " (field_id: ...)" parenthetical (the whole
-# group the frontend emits) but leaves the rest of the hint intact.
-_SPOKEN_HINT_FIELD_ID_RE = re.compile(r"\s*\(field_id:\s*'[^']*'[^)]*\)")
+# SPOKEN path.
+#
+# The parenthetical is the frontend's LAST appended group and always begins with
+# "(field_id:". Its options list can itself contain ")" (e.g. an option value
+# "Other (specify)"), so we must NOT stop at the first ")". We anchor to the END
+# of the string ($): from " (field_id: '<id>'" run to the final ")" at end of
+# line. The field_id value can't contain "'", so '[^']*' bounds the id safely;
+# the remainder (.*) is greedy to the closing ")$". This leaves the spoken name's
+# own parens (e.g. "(A-Number)") -- which come BEFORE the field_id group -- intact.
+_SPOKEN_HINT_FIELD_ID_RE = re.compile(r"\s*\(field_id:\s*'[^']*'.*\)\s*$")
 
 
 def strip_field_id_from_hint(hint: Optional[str]) -> Optional[str]:
@@ -29,6 +36,9 @@ def strip_field_id_from_hint(hint: Optional[str]) -> Optional[str]:
     Safe to call on any hint (returns None/empty unchanged). Only affects the
     SPOKEN path -- the field_id Gemini needs for the tool call comes from the
     system instruction's FIELDS block, not the hint (bd polyglot-pdf-dx7).
+
+    Anchored to end-of-string so an options list containing ")" (e.g.
+    "options: [Other (specify)]") is removed whole rather than half-stripped.
     """
     if not hint:
         return hint

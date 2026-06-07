@@ -28,6 +28,29 @@ def test_strips_with_required_and_options_suffixes():
     assert "field_id" not in out and "options" not in out
 
 
+def test_strips_when_an_option_value_contains_parens():
+    # An option value can itself contain ")" (e.g. "Other (specify)"). The strip
+    # must remove the WHOLE trailing group, not stop at the first ")" -- otherwise
+    # a fragment like "]" or ")" is left dangling in the spoken text (fresh-eyes
+    # + Copilot review of PR #112).
+    hint = ("Next field to fill is #2: 'Employment Status' "
+            "(field_id: 'p1_employment', type: select, required, options: [Other (specify), None])")
+    out = strip_field_id_from_hint(hint)
+    assert out == "Next field to fill is #2: 'Employment Status'"
+    assert "field_id" not in out and "options" not in out and ")" not in out.split("'")[-1]
+
+
+def test_strips_when_an_option_value_contains_an_apostrophe():
+    # An option value can contain "'" (e.g. "O'Brien"). The field_id VALUE itself
+    # never contains "'", but a later option might -- the end-anchored match still
+    # removes the whole group.
+    hint = ("Next field to fill is #5: 'Surname' "
+            "(field_id: 'p1_surname', type: text, options: [O'Brien, Smith])")
+    out = strip_field_id_from_hint(hint)
+    assert out == "Next field to fill is #5: 'Surname'"
+    assert "field_id" not in out
+
+
 def test_keeps_the_spoken_name_even_when_it_contains_parens():
     # The spoken NAME itself may contain parentheses (e.g. "(A-Number)"). Only the
     # trailing "(field_id: ...)" group is removed, not the name's own parens.

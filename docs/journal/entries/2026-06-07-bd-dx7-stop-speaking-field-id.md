@@ -36,30 +36,45 @@ does not affect tool-calling.
 - `backend/services/field_utils.py`: new `strip_field_id_from_hint()` -- removes
   the trailing `(field_id: '...', ...)` parenthetical (leaving the spoken name,
   including any parens the name itself contains, intact).
-- `backend/services/request_coordinator.py`: apply it in
-  `handle_next_field_hint_response` -- the SINGLE point where the frontend's
-  spoken hint enters the backend, so EVERY consumer that forwards it to Gemini
-  (the steady-state `confirm_field` next-field hint, etc.) gets a field_id-free
-  hint.
-- `backend/services/form_filling_service.py`: apply it in
-  `send_initiating_message` too (the greeting / language-change / section-switch
-  path, which formats the hint into `INITIATING_MESSAGE` directly rather than via
-  the coordinator).
+There are FOUR distinct spoken-hint paths (fresh-eyes + Copilot review of PR #112
+found that the first cut covered only two). All four are now stripped:
+- `backend/services/request_coordinator.py` (`handle_next_field_hint_response`) --
+  the steady-state per-field hint returned in the `confirm_field` tool response.
+- `backend/services/form_filling_service.py` (`send_initiating_message`) -- the
+  language-change / section-switch greeting that formats the hint into
+  `INITIATING_MESSAGE` directly.
+- `backend/services/form_filling_service.py` (`send_manual_field_update`) -- when
+  the user types a value manually, the next hint is appended to the message sent
+  to Gemini (via AudioHandler). MISSED in the first cut.
+- `backend/services/form_filling_service.py` (`build_form_context_message`) -- the
+  SESSION-START path: the `initial_field_hint` from the handshake is interpolated
+  into the system instruction's "ask for: {next_field_hint}" directive, which is
+  what Gemini speaks in its very first greeting. MISSED in the first cut, and the
+  most user-visible (it's the field_id you hear immediately on load).
 - `backend/config.py`: add the "Never read field IDs aloud (use spoken names
   only)" + "natural phrasing, no IDs" constraints to the legacy
-  `SYSTEM_INSTRUCTION` (belt-and-suspenders; matches the JIT template).
+  `SYSTEM_INSTRUCTION` (belt-and-suspenders; matches the JIT template's wording).
 
 `send_recovery_prompt` and `restart_gemini_session` take a `next_field_hint`
 param but do NOT interpolate it into spoken text (recovery uses static
-`RECOVERY_PROMPT_LEVEL_*`; restart rebuilds the SI without threading the hint), so
-they needed no change.
+`RECOVERY_PROMPT_LEVEL_*`; restart rebuilds the SI via `build_form_context_message`
+without threading the hint), so they needed no extra change.
+
+**Regex (review):** the strip is END-ANCHORED (`\s*\(field_id:\s*'[^']*'.*\)\s*$`)
+rather than stopping at the first `)`. An options list can contain `)` (e.g. an
+option value "Other (specify)") or `'` (e.g. "O'Brien"); a first-`)` match would
+half-strip and leave a dangling fragment Gemini might read. Anchoring to the final
+`)` removes the whole trailing group while preserving the spoken name's own parens
+(e.g. "(A-Number)") that come before the field_id group.
 
 ## Tests
 
-`backend/tests/unit/test_strip_field_id_from_hint.py` (5): the exact frontend
-hint shape; required/options suffixes; a spoken name that itself contains parens
-(e.g. "(A-Number)") is preserved while the field_id group is removed; no-op when
-absent; None/empty pass through. Full suite: 215 passed.
+`backend/tests/unit/test_strip_field_id_from_hint.py` (7): the exact frontend
+hint shape; required/options suffixes; an option value containing `)` ("Other
+(specify)") and one containing `'` ("O'Brien") -- the cases the first-`)` regex
+would have half-stripped; a spoken name that itself contains parens (e.g.
+"(A-Number)") is preserved while the field_id group is removed; no-op when absent;
+None/empty pass through. Full suite: 217 passed.
 
 ## Scope note
 
@@ -84,8 +99,11 @@ drift from other PRs.
 
 ## Files touched
 
-- `backend/services/field_utils.py` -- `strip_field_id_from_hint` helper.
-- `backend/services/request_coordinator.py` -- strip at the hint-entry chokepoint.
-- `backend/services/form_filling_service.py` -- strip in `send_initiating_message`.
+- `backend/services/field_utils.py` -- `strip_field_id_from_hint` helper
+  (end-anchored regex).
+- `backend/services/request_coordinator.py` -- strip the runtime confirm-field hint.
+- `backend/services/form_filling_service.py` -- strip in `send_initiating_message`,
+  `send_manual_field_update`, AND `build_form_context_message` (the session-start
+  system-instruction path).
 - `backend/config.py` -- "never read field IDs aloud" constraint in the legacy SI.
-- `backend/tests/unit/test_strip_field_id_from_hint.py` -- new (5 tests).
+- `backend/tests/unit/test_strip_field_id_from_hint.py` -- new (7 tests).
