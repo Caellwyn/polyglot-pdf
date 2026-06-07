@@ -86,16 +86,29 @@ switch as-is; reopen with the daa 1011-probe if silence ever appears live.
 
 ## Doc freshness
 
-Updated the two docs whose CURRENT-STATE prose this change actually contradicts:
-- `docs/standards/ai-models.md` -- flipped the tier table + the "why 3.1/2.5 is
-  the default" callout + the `USE_PREMIUM_MODEL` default to 2.5/this bead.
-- `docs/components/config-deployment.md` -- the `USE_PREMIUM_MODEL` row (default
-  `true`->`false`) and the demo `BACKEND_EXTRA_ENV` example (`...=true`->`false`).
+A fresh-eyes pass found the switch was initially HALF-APPLIED -- several spots
+still said "3.1 is the default" / `USE_PREMIUM_MODEL=true`. Fixed every one so the
+new default is consistent across code, scripts, and docs:
+- `docs/standards/ai-models.md` -- tier table, the "why default" callout, the
+  `USE_PREMIUM_MODEL` env line, AND the demo `VERTEXAI/USE_PREMIUM_MODEL` example.
+- `docs/components/config-deployment.md` -- the `USE_PREMIUM_MODEL` row + the demo
+  `BACKEND_EXTRA_ENV` example.
+- `docs/technical_guide.md` -- the env-var default table cell (was `true`/3.1).
+- `backend/config.py` -- the module constants comment ("DEFAULT 3.1", "2.5
+  intermittently silent"), the dev-runner usage comment, and the
+  `DEFAULT_PRICING_FAMILY` "active default is 3.1" note.
+- `deploy-all.sh` -- the demo `USE_PREMIUM_MODEL` example comment.
+- `scripts/dev-local.ps1` + `.claude/skills/run-local/SKILL.md` -- flipped the
+  `-Model` DEFAULT to `standard` (2.5) so local dev MIRRORS the deployed default
+  (a dev reproducing a live issue should be on the same model by default).
+- `backend/tests/contract/test_live_ai_gemini_integration.py` -- a comment that
+  said "default is now 3.1" (the test pin itself was already correct).
 
-Other freshness-flagged docs (logging-and-cost, risk-rating, voice-and-vad,
-technical_guide, etc.) track `config.py`/`deploy-demo.sh` broadly but a one-line
-model-default flip does not contradict their content; they are pre-existing drift
-from other PRs' 06-04/06-05 work and are left as-is.
+Remaining freshness-flagged docs (logging-and-cost, risk-rating, voice-and-vad)
+track `config.py` broadly but are about logging/risk/VAD, not model default, so
+the flip does not contradict them; left as pre-existing drift from other PRs.
+`deploy-production.sh` intentionally gets NO override: prod is on Vertex where
+3.1 isn't available, so it already resolves to 2.5 via the config default.
 
 ## Files touched
 

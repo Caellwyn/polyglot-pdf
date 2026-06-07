@@ -28,14 +28,18 @@ import os
 import sys
 
 from google import genai
-from google.genai import types
 
-from backend.config import Settings
+from backend.config import (
+    MODEL_NATIVE_PREMIUM,
+    MODEL_NATIVE_STANDARD,
+    Settings,
+)
 
-# Two A/B-able native-audio Live models.
+# Two A/B-able native-audio Live models -- reuse the canonical config constants
+# so this probe never drifts from the real model ids (Copilot review of PR #108).
 MODELS = [
-    "gemini-3.1-flash-live-preview",
-    "gemini-2.5-flash-native-audio-preview-12-2025",
+    MODEL_NATIVE_PREMIUM,
+    MODEL_NATIVE_STANDARD,
 ]
 
 

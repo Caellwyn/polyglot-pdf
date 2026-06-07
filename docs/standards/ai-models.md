@@ -56,9 +56,10 @@ constants):
   Studio accepts (no ADC/SA path). This matters because **model availability
   differs by service**: as of 2026-06 `gemini-3.1-flash-live-preview` is NOT on
   Vertex (it `1008`s -- "policy violation"), but IS on AI Studio. The **demo**
-  runs `VERTEXAI=false,USE_PREMIUM_MODEL=true` to get 3.1 (its key is injected via
-  Secret Manager); switch demo back to Vertex once 3.1 ships there. Surfaced on
-  `/health` as `vertexai`.
+  runs `VERTEXAI=false` (AI Studio, key injected via Secret Manager) with
+  `USE_PREMIUM_MODEL=false` -- i.e. the 2.5 default (`bd polyglot-pdf-5oq`); the
+  AI-Studio path is kept so 3.1 stays reachable for A/B (`USE_PREMIUM_MODEL=true`)
+  without a Vertex round-trip. Surfaced on `/health` as `vertexai`.
 
 `backend/dependencies.py` is the **one** place the model reaches the adapter:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,

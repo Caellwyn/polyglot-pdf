@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the USE_PREMIUM_MODEL default flip (2.5), and [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for the prior canonicalization.*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -26,7 +26,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `USE_PREMIUM_MODEL` | `true` | Picks the native audio-to-audio tier: `true` (default) -> `gemini-3.1-flash-live-preview` (premium, reliable on audio), `false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard, cheaper). |
+| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard; reliably emits tool calls), `true` -> `gemini-3.1-flash-live-preview` (premium; unreliable tool-calling in audio mode, bd polyglot-pdf-5oq). |
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
