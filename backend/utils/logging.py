@@ -89,8 +89,12 @@ def configure_logging() -> None:
 	def _has_binary_filter(target) -> bool:
 		# Idempotency: configure_logging() may run more than once (import-time
 		# call + a test re-invoking it). Don't stack a duplicate filter on a
-		# handler/logger that already carries one of this type.
-		return any(isinstance(f, _BinarySuppressFilter) for f in target.filters)
+		# handler/logger that already carries one. Match by class NAME, not
+		# isinstance: _BinarySuppressFilter is defined fresh inside each
+		# configure_logging() call, so a second call's class object differs from
+		# the first's -- an isinstance check would miss the first call's instances
+		# and stack a duplicate anyway (Copilot review of PR #106).
+		return any(type(f).__name__ == "_BinarySuppressFilter" for f in target.filters)
 
 	root_handlers = logging.getLogger().handlers
 	if root_handlers:

@@ -389,7 +389,7 @@ class CallbackHandler:
         # policy (docs/standards/hipaa-pii-policy.md) we log its length, never the
         # value, since it reaches stdout -> Cloud Run logs (bd polyglot-pdf-t1c).
         _log.info("GEMINI TOOL RESPONSE", tool="get_field_value",
-                 spoken_name_length=len(spoken_name), found=response.get("found"))
+                 spoken_name_length=len(spoken_name or ""), found=response.get("found"))
         _log.info("-" * 80)
         return response
 

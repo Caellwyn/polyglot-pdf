@@ -84,3 +84,21 @@ def test_short_record_passes(configured_root):
     logger = logging.getLogger("backend.services.callback_handler")
     rec = logger.makeRecord(logger.name, logging.INFO, __file__, 0, "ok", (), None)
     assert filt.filter(rec) is True
+
+
+def test_configure_logging_is_idempotent(configured_root):
+    """A second configure_logging() must NOT stack a duplicate _BinarySuppressFilter
+    on the root handler. The guard matches by class NAME (the class is redefined
+    each call, so isinstance would miss the prior instance) -- Copilot review of
+    PR #106."""
+    handler, _ = _binary_suppress_handler(configured_root)
+    assert handler is not None
+    before = sum(
+        1 for f in handler.filters if type(f).__name__ == "_BinarySuppressFilter"
+    )
+    configure_logging()  # second call
+    after = sum(
+        1 for f in handler.filters if type(f).__name__ == "_BinarySuppressFilter"
+    )
+    assert before == 1
+    assert after == 1, f"duplicate filter stacked: {before} -> {after}"
