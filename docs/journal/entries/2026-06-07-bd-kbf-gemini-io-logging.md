@@ -88,11 +88,19 @@ Full backend/tests suite: 204 passed, 2 skipped.
 
 ## Doc freshness
 
-New `docs/components/tool-call-flow.md` (dated today) + INDEX entry. The ~17
-docs the freshness checker flags as stale are pre-existing drift from
-2026-06-03..06-05 work by other PRs; none track files made stale by THIS change
-beyond `voice-ai.md` (which already documents the adapter generally and is
-covered by the new dedicated flow doc). Not re-dating them here -- out of scope.
+New `docs/components/tool-call-flow.md` (dated today) + INDEX entry. Updated
+`voice-ai.md` -- the one doc whose CURRENT-STATE prose this change actually
+touches: its barge-in section said `GEMINI_INTERRUPTED` logs "canceled tool-call
+ids" (now ids AND names), and its Tool-calling section now points at the flow map
++ the `_dev_log_io` capture. Bumped its date stamp.
+
+The other ~14 docs the freshness checker flags are pre-existing drift from
+2026-06-03..06-06 work by OTHER PRs (the config.py / live_ai_gemini.py timestamps
+are an earlier PR today, plus 06-05 frontend work). This change is purely additive
+dev tooling and does not contradict their current-state prose -- e.g. the config
+edit is a comment-only DEV-FEATURE block, and `ai-models.md` already documents the
+A/B toggle correctly. Re-dating 14 docs whose described behavior is unchanged would
+balloon a debug PR; left as-is, owned by the PRs that actually made them stale.
 
 ## Files touched
 
