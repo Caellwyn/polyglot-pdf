@@ -1725,14 +1725,6 @@ export class WebFormConnection {
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
     this.state = updatedState;
 
-    // Reset the unconfirmable-field loop-breaker on a section switch (bd
-    // polyglot-pdf-0y7). The in-session auto-switch keeps the SAME WebSocket open
-    // (no reconnect, so handleOpen's reset does not fire), and a same-id field in
-    // the next section must not inherit a stale failure streak.
-    this.lastUnconfirmableFieldId = null;
-    this.unconfirmableConfirmCount = 0;
-    this.unconfirmableRepromptCount = 0;
-
     // Build section info to send to backend (avoid round-trip delay)
     const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
     const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
