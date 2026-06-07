@@ -1,5 +1,5 @@
 {
-  "_comment": "Bake-off manifest (bd polyglot-pdf-7a9.4). Maps each form to its ground-truth schema and the draft schema each extractor arm produced. Arms with a null/missing path are reported 'not run'. Document AI was DROPPED by maintainer decision (2026-06-06): too expensive for negligible benefit over a raw strong-LLM pass -- it only supplies the (a) OCR label/box layer the hybrid arms already get from the PyMuPDF AcroForm dump. arm_documentai.py is kept for reference but excluded from the scored comparison.",
+  "_comment": "Bake-off manifest (bd polyglot-pdf-7a9.4). Maps each form to its ground-truth schema and the draft schema each extractor arm produced. Arms with a null/missing path are reported 'not run'. Gemini arms are labeled by model: gemini31pro (gemini-3.1-pro-preview) and gemini35flash (gemini-3.5-flash, the newer stable release). Document AI was DROPPED by maintainer decision (2026-06-06): too expensive for negligible benefit over a raw strong-LLM pass -- it only supplies the (a) OCR label/box layer the hybrid arms already get from the PyMuPDF AcroForm dump. arm_documentai.py is kept for reference but excluded from the scored comparison.",
   "forms": {
     "i-90": {
       "pdf": "form-kits/i-90/form.pdf",
@@ -7,8 +7,10 @@
       "arms": {
         "old-extractor-heuristic": "scripts/bakeoff/outputs/i90_oldextractor_heuristic.json",
         "old-extractor-enhanced": "scripts/bakeoff/outputs/i90_oldextractor_enhanced.json",
-        "gemini-multimodal": "scripts/bakeoff/outputs/i90_gemini_multimodal.json",
-        "gemini-hybrid": "scripts/bakeoff/outputs/i90_gemini_hybrid.json",
+        "gemini31pro-multimodal": "scripts/bakeoff/outputs/i90_gemini_multimodal.json",
+        "gemini31pro-hybrid": "scripts/bakeoff/outputs/i90_gemini_hybrid.json",
+        "gemini35flash-multimodal": "scripts/bakeoff/outputs/i90_gemini35_multimodal.json",
+        "gemini35flash-hybrid": "scripts/bakeoff/outputs/i90_gemini35_hybrid.json",
         "claude-multimodal": "scripts/bakeoff/outputs/i90_claude_multimodal.json",
         "claude-hybrid": "scripts/bakeoff/outputs/i90_claude_hybrid.json"
       }
@@ -19,8 +21,10 @@
       "arms": {
         "old-extractor-heuristic": "scripts/bakeoff/outputs/i589_oldextractor_heuristic.json",
         "old-extractor-enhanced": "scripts/bakeoff/outputs/i589_oldextractor_enhanced.json",
-        "gemini-multimodal": "scripts/bakeoff/outputs/i589_gemini_multimodal.json",
-        "gemini-hybrid": "scripts/bakeoff/outputs/i589_gemini_hybrid.json",
+        "gemini31pro-multimodal": "scripts/bakeoff/outputs/i589_gemini_multimodal.json",
+        "gemini31pro-hybrid": "scripts/bakeoff/outputs/i589_gemini_hybrid.json",
+        "gemini35flash-multimodal": "scripts/bakeoff/outputs/i589_gemini35_multimodal.json",
+        "gemini35flash-hybrid": "scripts/bakeoff/outputs/i589_gemini35_hybrid.json",
         "claude-multimodal": "scripts/bakeoff/outputs/i589_claude_multimodal.json",
         "claude-hybrid": "scripts/bakeoff/outputs/i589_claude_hybrid.json"
       }
