@@ -52,7 +52,18 @@ _SENSITIVE_KWARGS = (
     "value", "values", "selected_value", "selected_values", "target_value",
     "original_value", "message", "text", "text_preview", "transcript",
     "sample", "available_options", "system_instruction",
+    # spoken_name is a user-speech-derived label (get_field_value); it is now
+    # logged as spoken_name_length=len(...) and must never carry the raw value
+    # again (bd polyglot-pdf-t1c). spoken_name_length matches the *_length
+    # safe-RHS, so the redacted form passes while spoken_name=spoken_name fails.
+    "spoken_name",
 )
+# `fields` is a SPECIAL case: logging the field IDs (dict KEYS) is always-safe
+# per the PII policy, but the same kwarg carrying field .values() would be a
+# leak. So `fields` is not in _SENSITIVE_KWARGS (which would flag the safe
+# keys() form); instead it has its own pattern that flags ONLY a .values()/
+# values-bearing RHS (bd polyglot-pdf-t1c).
+_FIELDS_VALUES_LEAK = re.compile(r"\bfields\s*=\s*[^,)\n#]*\.values\s*\(")
 # Right-hand sides that ARE safe: a metadata wrapper (len/type/bool/...), a
 # metadata-named var (*_length / *_count / *_type / *_id), OR a literal constant
 # (a quoted string or a number) -- a constant can't carry runtime PII, so e.g.
@@ -109,6 +120,10 @@ def _scan_leaks(text: str):
                 if _is_leak(mm):
                     offenders.append((lineno, raw.strip()))
                     break
+        # `fields=...values()` is a leak even though `fields` is otherwise safe
+        # (it carries field IDs/keys); flag only the values-bearing form.
+        if _FIELDS_VALUES_LEAK.search(code_after):
+            offenders.append((lineno, raw.strip()))
         # Update paren depth; when it returns to 0 the call has closed.
         depth += code_after.count("(") - code_after.count(")")
         if depth < 0:
@@ -210,6 +225,12 @@ def test_guard_catches_known_leaks():
     assert not _scan_leaks('_log.error("X", message="Session closed and cleaned up")')
     # A value assignment OUTSIDE a log call must NOT flag.
     assert not _scan_leaks('value_str = str(value)\nmessage = f"...{value_str}"')
+    # spoken_name: the raw value is a leak; the redacted length form is safe (bd t1c).
+    assert _scan_leaks('_log.info("X", spoken_name=spoken_name, found=f)')
+    assert not _scan_leaks('_log.info("X", spoken_name_length=len(spoken_name), found=f)')
+    # fields: keys() (field IDs) are safe; values() is a leak (bd t1c).
+    assert not _scan_leaks('_log.warning("X", fields=list(updates.keys()), n=c)')
+    assert _scan_leaks('_log.warning("X", fields=list(updates.values()), n=c)')
 
 
 def test_guard_catches_print_leaks():
