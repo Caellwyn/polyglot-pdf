@@ -16,6 +16,14 @@ field ... forever, while Gemini went silent. Blocked-on bead `polyglot-pdf-0zr`
 so a field that genuinely cannot be confirmed does not spin even if a future bug
 re-creates the no-value condition.
 
+> **Collision note.** A parallel session shipped a *different* 0y7 loop-breaker as
+> PR #111, which merged into `dev` while this PR (#113) was in review. Rather than
+> abandon either, this PR was **rebased onto #111 and reworked to be a strict
+> superset** of it -- it keeps both of #111's user-facing behaviors (the `onError`
+> toast and the section-switch streak resets in `switchToSection` *and*
+> `startSection`) and adds three improvements #111 lacked. See "Superset over PR
+> #111" below.
+
 ## What shipped
 
 **Mechanism.** `SchemaFormStateManager.confirmField()` is a no-op when the target
@@ -72,6 +80,23 @@ re-prompt needs.
 already-documented `completion_message` message type -- no new client->backend
 contract, no wire-format change, no backend edit. That keeps it inside the bead
 and out of step-2 escalation territory.
+
+## Superset over PR #111
+
+PR #111 (merged into `dev` first) and this PR fix the same bead with different
+implementations. This PR was rebased onto #111 and reworked so it is unambiguously
+better -- it KEEPS everything #111 does and ADDS three fixes for gaps #111 has:
+
+| Behavior | PR #111 (merged) | This PR (#113, after rework) |
+|---|---|---|
+| Unconfirmable detection | `isFieldConfirmed` after `confirmField` -- only catches a **missing** `fieldValues` entry | gates on the **value** -- also catches an entry that exists with an empty/null value (which `confirmField` would otherwise *confirm*, letting an empty field count as done and the section auto-complete with unfilled data) |
+| Spin bound | re-arms forever (rate-limit only) | hard `REPROMPT_CAP` (3) -- a genuinely unfillable field stops entirely |
+| Break signal to Gemini | `recovery_prompt` -- **broken backend-side** (`RECOVERY_PROMPT_LEVEL_*` missing, bd `polyglot-pdf-zy3`), so today only the `onError` toast fires | `completion_message` -> `send_prompt`, which is wired and works today |
+| `onError` UI toast | yes | yes (kept) |
+| Section-switch reset | `switchToSection` + `startSection` | `switchToSection` + `startSection` + `handleOpen` (reconnect) |
+
+Net: this PR's break signal works now, it cannot be fooled by an empty-valued entry,
+and it cannot spin forever -- while preserving #111's toast and section-switch resets.
 
 ## Lessons
 
@@ -139,5 +164,5 @@ in_progress; unrelated to this bead and owned by another active track -- left as
 
 ## Files touched
 
-- `frontend/src/webFormConnection.ts` -- loop-breaker in `handleConfirmFieldRequest`: count consecutive failed confirms of the same unconfirmable field and re-prompt Gemini past the limit.
-- `frontend/src/webFormConnection.confirmloop.test.ts` -- new regression test for the loop-breaker.
+- `frontend/src/webFormConnection.ts` -- value-gated loop-breaker in `handleConfirmFieldRequest` (re-prompt via `completion_message` + `onError`, hard re-prompt cap); counter resets in `handleOpen` (reconnect), `startSection`, and `switchToSection`.
+- `frontend/src/webFormConnection.confirmloop.test.ts` -- new regression test (5 cases: first-fail tolerance, threshold prompt, empty-value-entry detection, hard cap, successful-confirm clears tracking).
