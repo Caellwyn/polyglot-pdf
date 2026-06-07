@@ -214,7 +214,14 @@ try {
     Write-Host "Shutting down..." -ForegroundColor Cyan
     foreach ($p in @($BackendProc, $FrontendProc)) {
         if ($p -and -not $p.HasExited) {
-            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+            # taskkill /T kills the WHOLE process tree. uvicorn --reload spawns a
+            # reloader child and npm spawns vite as a child; Stop-Process on the
+            # top-level PID alone would orphan those and leave port 8000/5173
+            # bound for the next run. /F forces, /T includes descendants.
+            try { & taskkill.exe /F /T /PID $p.Id 2>$null | Out-Null } catch {}
+            if (-not $p.HasExited) {
+                try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+            }
         }
     }
     Write-Host "Stopped." -ForegroundColor Cyan

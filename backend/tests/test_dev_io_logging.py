@@ -97,6 +97,9 @@ def test_dev_io_is_noop_when_disabled(tmp_path, monkeypatch):
     # Disabled logger writes NOTHING -- no file, no PII anywhere.
     log_file = logger._get_log_file_path()
     assert not log_file.exists(), "disabled dev logger must not write any file"
+    # And it short-circuits BEFORE doing any work: the seq counter must not even
+    # advance in the hot path when logging is off (fresh-eyes / Copilot review).
+    assert stub._dev_io_seq == 0, "disabled path must not increment the seq counter"
 
 
 def test_dev_io_never_raises(tmp_path, monkeypatch):

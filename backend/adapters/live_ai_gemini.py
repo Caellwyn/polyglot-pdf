@@ -231,10 +231,16 @@ class LiveAIGemini(ILiveAI):
         Wrapped in a broad guard: debug logging must never break the session.
         """
         try:
+            dev_logger = get_dev_logger()
+            # Short-circuit BEFORE any work when disabled (the common/production
+            # case): this runs in the hot receive loop ~6x per tool-call turn, so
+            # skip the seq increment + dict build when nothing will be written.
+            if not getattr(dev_logger, "enabled", False):
+                return
             self._dev_io_seq += 1
             enriched = {"seq": self._dev_io_seq, "model": self._model_name}
             enriched.update(content)
-            get_dev_logger().log_gemini_message(
+            dev_logger.log_gemini_message(
                 direction=direction,
                 message_type=message_type,
                 content=enriched,
@@ -1066,11 +1072,16 @@ class LiveAIGemini(ILiveAI):
                                             model_turn = getattr(server_content, "model_turn", None)
                                             canceled_ids = []
                                             canceled_tool_names = []
+                                            canceled_call_count = 0
                                             if model_turn:
                                                 parts = getattr(model_turn, "parts", [])
                                                 for part in parts:
                                                     function_call = getattr(part, "function_call", None)
                                                     if function_call:
+                                                        # Count EVERY canceled function call, so the count is
+                                                        # consistent with canceled_tool_names even when the SDK
+                                                        # omits an id or a name on some calls (bd polyglot-pdf-kbf).
+                                                        canceled_call_count += 1
                                                         call_id = getattr(function_call, "id", None)
                                                         if call_id:
                                                             canceled_ids.append(call_id)
@@ -1086,7 +1097,7 @@ class LiveAIGemini(ILiveAI):
 
                                             self._log.info(
                                                 "🚨 GEMINI_INTERRUPTED",
-                                                canceled_tool_calls=len(canceled_ids),
+                                                canceled_tool_calls=canceled_call_count,
                                                 call_ids=[cid[:8] for cid in canceled_ids],
                                                 # tool NAMES are safe to log (not values) and tell us if a
                                                 # form-fill call was the casualty of the barge-in.
@@ -1099,7 +1110,7 @@ class LiveAIGemini(ILiveAI):
                                             # the I/O log, so a barge-in that killed a tool call is visible
                                             # in the captured timeline (bd polyglot-pdf-kbf).
                                             self._dev_log_io("receive", "interrupted", {
-                                                "canceled_tool_calls": len(canceled_ids),
+                                                "canceled_tool_calls": canceled_call_count,
                                                 "canceled_tool_names": canceled_tool_names,
                                                 "audio_chunks_before_interrupt": getattr(self, '_audio_chunk_count', 0),
                                                 "elapsed_since_audio_start_ms": elapsed_since_audio_start,
@@ -1244,7 +1255,11 @@ class LiveAIGemini(ILiveAI):
                                                                     # tool -- i.e. the body Gemini will receive (validation errors,
                                                                     # next_field_hint, "field confirmed", etc). This is what she
                                                                     # reacts to when she says "trouble saving" (bd polyglot-pdf-kbf).
-                                                                    self._dev_log_io("receive", "tool_callback_result", {
+                                                                    # direction="local": this is the backend's OWN output, not data
+                                                                    # received from Gemini -- the on-wire send is the "tool_response"
+                                                                    # entry below. Keeps a log reader from misreading it as inbound.
+                                                                    self._dev_log_io("local", "tool_callback_result", {
+                                                                        "path": "model_turn.parts",
                                                                         "tool_name": tool_name,
                                                                         "call_id": call_id,
                                                                         "response": response_payload,
@@ -1351,7 +1366,8 @@ class LiveAIGemini(ILiveAI):
                                                 try:
                                                     response_payload = await self._on_tool_call(tool_name, parsed_arguments)
                                                     self._log.info("tool_callback_returned", tool_name=tool_name, has_response=response_payload is not None, response_keys=list(response_payload.keys()) if isinstance(response_payload, dict) else None)
-                                                    self._dev_log_io("receive", "tool_callback_result", {
+                                                    # direction="local": backend's own callback output, not inbound.
+                                                    self._dev_log_io("local", "tool_callback_result", {
                                                         "path": "event.tool_call",
                                                         "tool_name": tool_name,
                                                         "call_id": call_id,
