@@ -1020,7 +1020,10 @@ export class WebFormConnection {
           capped ? '(final re-prompt -- giving up after this)' : ''
         );
         // Re-prompt Gemini (via send_prompt) to collect the value rather than
-        // confirming an empty field.
+        // confirming an empty field. completion_message -> send_prompt is wired and
+        // works today (unlike recovery_prompt, which is broken backend-side until
+        // bd polyglot-pdf-zy3 lands), so this is the channel that actually redirects
+        // Gemini.
         this.send({
           type: 'completion_message',
           message:
@@ -1028,6 +1031,12 @@ export class WebFormConnection {
             `Do not call confirm_field for it again. Ask the user for the value, ` +
             `then call update_form_fields to fill it before confirming.`,
         });
+        // Also surface the stall to the UI directly -- a belt-and-suspenders signal
+        // that does not depend on Gemini acting on the prompt.
+        this.callbacks.onError?.(new Error(
+          `Could not confirm '${spokenName}' -- no value was entered. ` +
+          `Please provide the value before confirming.`
+        ));
       }
       return;
     }
@@ -1715,6 +1724,14 @@ export class WebFormConnection {
     // Switch to target section in local state
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
     this.state = updatedState;
+
+    // Reset the unconfirmable-field loop-breaker on a section switch (bd
+    // polyglot-pdf-0y7). The in-session auto-switch keeps the SAME WebSocket open
+    // (no reconnect, so handleOpen's reset does not fire), and a same-id field in
+    // the next section must not inherit a stale failure streak.
+    this.lastUnconfirmableFieldId = null;
+    this.unconfirmableConfirmCount = 0;
+    this.unconfirmableRepromptCount = 0;
 
     // Build section info to send to backend (avoid round-trip delay)
     const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
