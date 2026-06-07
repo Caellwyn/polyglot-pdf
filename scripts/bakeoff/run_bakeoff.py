@@ -120,7 +120,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--json", dest="json_out", default=None)
     args = ap.parse_args(argv)
 
-    manifest = json.load(open(args.manifest, encoding="utf-8"))
+    with open(args.manifest, encoding="utf-8") as fh:
+        manifest = json.load(fh)
     results = run(manifest)
     print(render_table(results))
     if args.json_out:

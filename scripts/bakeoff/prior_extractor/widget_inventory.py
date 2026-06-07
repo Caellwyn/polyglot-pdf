@@ -19,8 +19,8 @@ NO_EXPORT = 1 << 2       # bit 2  - exclude from submit
 MULTILINE = 1 << 12      # bit 12 - multiline text field
 PASSWORD = 1 << 13       # bit 13 - password field (mask input)
 FILE_SELECT = 1 << 20    # bit 20 - file selection field
-COMB = 1 << 23           # bit 23 - fixed-width character cells (e.g., SSN)
-RICH_TEXT = 1 << 24      # bit 24 - rich text formatting
+COMB = 1 << 24           # PDF 32000-1 Table 228 bit 25 (1-indexed) - fixed-width cells (e.g., SSN)
+RICH_TEXT = 1 << 25      # PDF 32000-1 Table 228 bit 26 (1-indexed) - rich text formatting
 
 # Button field flags (checkbox, radio):
 NO_TOGGLE_TO_OFF = 1 << 14  # bit 14 - radio button can't be toggled off once selected

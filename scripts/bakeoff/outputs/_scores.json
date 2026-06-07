@@ -6,7 +6,7 @@
         "old-extractor-heuristic": {
           "status": "scored",
           "a_detection_f1": 81.87500000000001,
-          "a_attr_avg": 48.09617525445293,
+          "a_attr_avg": 48.356591921119595,
           "b_conditional_recall": 0.0,
           "b_structure_recall": 25.0,
           "full": {
@@ -49,9 +49,9 @@
                   "pct": 0.0
                 },
                 "pdf_position": {
-                  "correct": 121,
+                  "correct": 123,
                   "applicable": 128,
-                  "pct": 94.53125
+                  "pct": 96.09375
                 }
               }
             },
@@ -121,7 +121,7 @@
         "old-extractor-enhanced": {
           "status": "scored",
           "a_detection_f1": 81.87500000000001,
-          "a_attr_avg": 48.09617525445293,
+          "a_attr_avg": 48.356591921119595,
           "b_conditional_recall": 5.0,
           "b_structure_recall": 25.0,
           "full": {
@@ -164,9 +164,9 @@
                   "pct": 0.0
                 },
                 "pdf_position": {
-                  "correct": 121,
+                  "correct": 123,
                   "applicable": 128,
-                  "pct": 94.53125
+                  "pct": 96.09375
                 }
               }
             },

@@ -98,9 +98,13 @@ def _docai_field_list(dump: dict) -> str:
 
 
 def run(pdf_path: str, project: str, location: str, processor_id: str,
-        acroform_path: str, model: str) -> dict:
-    docai_dump = docai_form_fields(pdf_path, project, location, processor_id)
-    acro = json.load(open(acroform_path, encoding="utf-8"))
+        acroform_path: str, model: str, docai_dump: Optional[dict] = None) -> dict:
+    # Accept a pre-computed DocAI dump so --dump-docai does not bill a second
+    # process_document call (fresh-eyes PR #101).
+    if docai_dump is None:
+        docai_dump = docai_form_fields(pdf_path, project, location, processor_id)
+    with open(acroform_path, encoding="utf-8") as fh:
+        acro = json.load(fh)
 
     client = genai.Client(
         api_key=os.environ["GEMINI_API_KEY"],
@@ -173,6 +177,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                          "DOCAI_PROCESSOR_ID). Create a Form Parser processor "
                          "first.")
 
+    dump = None
     if args.dump_docai:
         dump = docai_form_fields(args.pdf, args.project, args.location,
                                  args.processor)
@@ -180,8 +185,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             json.dump(dump, fh, indent=2)
         print(f"[wrote {args.dump_docai}] {dump['form_field_count']} docai fields")
 
+    # Reuse the dump if --dump-docai already fetched it (avoid a 2nd billed call).
     schema = run(args.pdf, args.project, args.location, args.processor,
-                 args.acroform, args.model)
+                 args.acroform, args.model, docai_dump=dump)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))

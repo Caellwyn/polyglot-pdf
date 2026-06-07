@@ -46,10 +46,18 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(t)
     except json.JSONDecodeError:
-        # Last resort: grab the outermost {...}.
-        start, end = t.find("{"), t.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            return json.loads(t[start:end + 1])
+        # Last resort: grab the outermost JSON value, object {...} OR array [...].
+        candidates = []
+        for o, c in (("{", "}"), ("[", "]")):
+            start, end = t.find(o), t.rfind(c)
+            if start != -1 and end != -1 and end > start:
+                candidates.append((start, t[start:end + 1]))
+        # Prefer whichever delimiter appears first in the text.
+        for _, frag in sorted(candidates):
+            try:
+                return json.loads(frag)
+            except json.JSONDecodeError:
+                continue
         raise
 
 
@@ -76,7 +84,8 @@ def run(pdf_path: str, mode: str, model: str,
     if mode == "hybrid":
         if not acroform_path:
             raise SystemExit("--mode hybrid requires --acroform DUMP.json")
-        dump = json.load(open(acroform_path, encoding="utf-8"))
+        with open(acroform_path, encoding="utf-8") as fh:
+            dump = json.load(fh)
         prompt.append(
             "The PDF is attached AND below is the deterministic AcroForm field "
             "list extracted from the PDF's machine-readable structure (exact "

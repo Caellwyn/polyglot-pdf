@@ -26,11 +26,14 @@ def render(path: str, outdir: str, dpi: int = 150) -> list[str]:
     zoom = dpi / 72.0
     mat = fitz.Matrix(zoom, zoom)
     paths = []
-    for pno in range(doc.page_count):
-        pix = doc[pno].get_pixmap(matrix=mat)
-        out = os.path.join(outdir, f"page_{pno:02d}.png")
-        pix.save(out)
-        paths.append(out)
+    try:
+        for pno in range(doc.page_count):
+            pix = doc[pno].get_pixmap(matrix=mat)
+            out = os.path.join(outdir, f"page_{pno:02d}.png")
+            pix.save(out)
+            paths.append(out)
+    finally:
+        doc.close()  # release PyMuPDF native resources (mmap'd pages)
     return paths
 
 

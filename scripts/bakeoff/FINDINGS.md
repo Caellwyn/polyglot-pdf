@@ -37,16 +37,22 @@ Regenerate with
 Percentages. a.F1 = field-detection F1; a.attr = mean per-attribute accuracy;
 b.cond = conditional-relationship recall; b.strc = structural recall.
 
+Scores are reproducible: the scorer's field matcher was made deterministic during
+this bake-off (it iterated a `set` of pdf_field_names, which Python orders by the
+per-process hash seed, so pairings -- and scores -- drifted +-1 run-to-run;
+`schema_score._field_pfns` now returns a sorted list). The numbers below are
+stable across hash seeds.
+
 ### I-90 (stresses field extraction)
 
 | arm | a.F1 | a.attr | b.cond | b.strc |
 |-----|-----:|-------:|-------:|-------:|
-| old-extractor-heuristic | 81.9 | 48.0 | 0.0 | 25.0 |
-| old-extractor-enhanced  | 81.9 | 48.0 | 5.0 | 25.0 |
+| old-extractor-heuristic | 81.9 | 48.4 | 0.0 | 25.0 |
+| old-extractor-enhanced  | 81.9 | 48.4 | 5.0 | 25.0 |
 | gemini-multimodal       | 17.4 | 20.0 | 0.0 | 100.0 |
 | **gemini-hybrid**       | **98.5** | 33.3 | 18.8 | 100.0 |
 | claude-multimodal       | 3.0 | 20.0 | 0.0 | 100.0 |
-| **claude-hybrid**       | 96.0 | **52.6** | **40.0** | 100.0 |
+| **claude-hybrid**       | 96.0 | **52.7** | **38.8** | 100.0 |
 
 ### I-589 (stresses relationships/tables/supplements)
 
@@ -90,7 +96,7 @@ up but no billable Form Parser processor was ever created.
    AcroForm dump is required input.**
 
 2. **A strong LLM wins (b).** `claude-hybrid` recovered the most conditional logic
-   (I-90: show_if 78.9%, controls_fields 100%, copy_to 100%; I-589: show_if 50.9%,
+   (I-90: show_if 78.9%, controls_fields 92.3%, copy_to 100%; I-589: show_if 50.9%,
    tables 77.8%, structure 100%). Pure-deterministic (old-heuristic) recovers
    essentially none of (b); the old Gemini-2.5-Flash enhancer adds little to the
    SCORED metrics (see failure modes).
