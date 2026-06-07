@@ -81,6 +81,22 @@ def test_dev_io_captures_full_body_when_enabled(tmp_path, monkeypatch):
     assert first["ws_session_id"] == "fss_test_123"
 
 
+def test_dev_io_enrichment_wins_over_content_keys(tmp_path, monkeypatch):
+    """A caller that passes a colliding 'seq'/'model' key in content must NOT
+    clobber the enrichment fields (Copilot review of PR #104) -- seq/model are
+    applied last and always win, so timeline reconstruction stays reliable."""
+    logger = _fresh_logger(tmp_path, enabled=True)
+    monkeypatch.setattr("backend.adapters.live_ai_gemini.get_dev_logger", lambda: logger)
+
+    stub = _Stub()
+    stub._dev_log_io("send", "tool_response", {"seq": 999, "model": "bogus", "ok": True})
+
+    rec = json.loads(logger._get_log_file_path().read_text(encoding="utf-8").splitlines()[-1])
+    assert rec["content"]["seq"] == 1, "real seq must win over a colliding content key"
+    assert rec["content"]["model"] == "gemini-3.1-flash-live-preview"
+    assert rec["content"]["ok"] is True  # non-colliding content is preserved
+
+
 def test_dev_io_is_noop_when_disabled(tmp_path, monkeypatch):
     logger = _fresh_logger(tmp_path, enabled=False)
     # Patch the name as imported INTO the adapter module (that is the reference

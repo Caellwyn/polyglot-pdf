@@ -238,8 +238,13 @@ class LiveAIGemini(ILiveAI):
             if not getattr(dev_logger, "enabled", False):
                 return
             self._dev_io_seq += 1
-            enriched = {"seq": self._dev_io_seq, "model": self._model_name}
-            enriched.update(content)
+            # Apply caller content FIRST, then stamp seq/model LAST so the
+            # enrichment fields always win -- a caller that happens to pass a
+            # "seq" or "model" key in content can't silently clobber the timeline
+            # /A-B fields (Copilot review of PR #104).
+            enriched = dict(content)
+            enriched["seq"] = self._dev_io_seq
+            enriched["model"] = self._model_name
             dev_logger.log_gemini_message(
                 direction=direction,
                 message_type=message_type,
