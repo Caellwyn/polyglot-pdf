@@ -31,21 +31,26 @@ def test_premium_tier_resolves_to_3_1_live():
     assert s.MODEL_NATIVE == "gemini-3.1-flash-live-preview"
 
 
-def test_default_resolves_to_3_1_premium():
-    """Regression: with NO flag supplied, the default tier is premium/3.1.
+def test_default_resolves_to_2_5_standard():
+    """Regression: with NO flag supplied, the default tier is standard/2.5.
 
-    bd polyglot-pdf-4p0 flipped the `USE_PREMIUM_MODEL` field default to true
-    because the 2.5 native-audio preview is flaky on the audio path
-    (bd polyglot-pdf-daa). Pin the no-arg default so a future accidental flip
-    back to 2.5 is caught here. The field default is read from os.getenv at
-    class-definition time, so an explicit `USE_PREMIUM_MODEL` env override would
-    invalidate this assertion — skip in that case rather than report a false fail.
+    bd polyglot-pdf-4p0 had set the default to 3.1 (premium) because the 2.5
+    native-audio preview was *believed* flaky on the audio path. bd
+    polyglot-pdf-5oq REVERSED that: 3.1 unreliably emits the update_form_fields
+    tool call in audio mode (~50%, often confabulating "trouble saving" without
+    calling it -- reproduced via backend/scripts/probe_tool_call.py), while 2.5
+    calls it reliably AND measured clean on audio (bd polyglot-pdf-daa: 30/30
+    turns, zero 1011). So the working default is now 2.5. Pin it so a future
+    accidental flip back to 3.1 is caught here. The field default is read from
+    os.getenv at class-definition time, so an explicit `USE_PREMIUM_MODEL` env
+    override would invalidate this assertion -- skip in that case rather than
+    report a false fail.
     """
     if os.getenv("USE_PREMIUM_MODEL") is not None:
         pytest.skip("USE_PREMIUM_MODEL is set in the env; can't assert the code default")
     s = Settings(MODEL_NATIVE="")  # USE_PREMIUM_MODEL left at its field default
-    assert s.USE_PREMIUM_MODEL is True
-    assert s.MODEL_NATIVE == MODEL_NATIVE_PREMIUM == "gemini-3.1-flash-live-preview"
+    assert s.USE_PREMIUM_MODEL is False
+    assert s.MODEL_NATIVE == MODEL_NATIVE_STANDARD == "gemini-2.5-flash-native-audio-preview-12-2025"
 
 
 def test_explicit_model_native_overrides_flag():
