@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for closeout details.*
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -42,7 +42,7 @@ which bypasses the cache).
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `USE_PREMIUM_MODEL` | `true` | Flips the active native-audio model tier — `true` → 3.1 premium (the reliable default), `false` → 2.5 standard (cheaper). See [ai-models.md](../standards/ai-models.md). |
+| `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 2.5 standard (the working default: 3.1 unreliably emits tool calls, `bd polyglot-pdf-5oq`), `true` → 3.1 premium (opt-in). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
 | `USE_JIT_SCHEMA` | `false` | Send a field **manifest** + load each full field schema just-in-time (token reduction), using `JIT_SYSTEM_INSTRUCTION` instead of `SYSTEM_INSTRUCTION`. See [schema-forms.md](schema-forms.md). |
 | `DISABLE_GEMINI_VAD` | `True` (code constant, CRITICAL) | Turns off Gemini auto-VAD; the client drives turn-taking with manual `activity_start/end`. See [voice-and-vad.md](../standards/voice-and-vad.md). |
@@ -111,7 +111,7 @@ stages):
   `gcloud run deploy ... --allow-unauthenticated --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
-  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=false,USE_PREMIUM_MODEL=true`). The
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=false,USE_PREMIUM_MODEL=false`). The
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
   backend.main:app` on `$PORT` (8080).
 - **Form-kits** — uploads the local `form-kits/` tree to
@@ -147,4 +147,4 @@ when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for closeout details.*
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*

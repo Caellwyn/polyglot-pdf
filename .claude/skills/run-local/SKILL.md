@@ -1,6 +1,6 @@
 ---
 name: run-local
-description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.ps1. Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "standard" to run the 2.5 model instead of 3.1, or "backend" for backend-only.
+description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.ps1. Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "premium" to run the 3.1 model instead of the default 2.5, or "backend" for backend-only.
 ---
 
 # Run the local dev stack
@@ -35,11 +35,11 @@ It does NOT deploy. Deployment stays manual via `deploy-*.sh` (maintainer only).
 Run the script with the backend venv's environment. From the repo root:
 
 ```powershell
-# Default: both servers, 3.1 (premium) model, full dev logging ON
+# Default: both servers, 2.5 (standard) model -- the deployed default -- full dev logging ON
 ./scripts/dev-local.ps1
 
-# A/B on the 2.5 model
-./scripts/dev-local.ps1 -Model standard
+# A/B on the 3.1 model
+./scripts/dev-local.ps1 -Model premium
 
 # Backend only (e.g. when driving an already-running frontend, or pure log capture)
 ./scripts/dev-local.ps1 -BackendOnly

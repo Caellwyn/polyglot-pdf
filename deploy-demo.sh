@@ -62,12 +62,18 @@ if [ "$DEPLOY_GCP" = true ]; then
     done
     [ ${#GCP_ARGS[@]} -eq 0 ] && GCP_ARGS=("--backend" "--form-kits")
 
-    # Demo runs on AI Studio (Gemini Developer API) so it can use 3.1
-    # (gemini-3.1-flash-live-preview), which is NOT yet on Vertex. VERTEXAI=false
-    # selects the API-key path; USE_PREMIUM_MODEL=true selects 3.1. The
-    # GEMINI_API_KEY itself is injected via Secret Manager (--set-secrets),
-    # configured out-of-band -- not set here. Prod stays on Vertex (no override).
-    BACKEND_EXTRA_ENV="VERTEXAI=false,USE_PREMIUM_MODEL=true" ./deploy-all.sh "${GCP_ARGS[@]}"
+    # Demo runs on AI Studio (Gemini Developer API): VERTEXAI=false selects the
+    # API-key path. USE_PREMIUM_MODEL=false selects 2.5
+    # (gemini-2.5-flash-native-audio-preview), which RELIABLY emits the
+    # update_form_fields tool call. The 3.1 model (USE_PREMIUM_MODEL=true) does
+    # NOT: in audio mode it emits the tool call only ~50% of the time and often
+    # confabulates a "trouble saving" message without ever calling the tool, so
+    # fields silently fail to save (bd polyglot-pdf-5oq, reproduced via
+    # backend/scripts/probe_tool_call.py 2026-06-07). 2.5 is the working default
+    # until a 3.1 revision fixes audio-mode tool-calling. The GEMINI_API_KEY is
+    # injected via Secret Manager (--set-secrets), out-of-band. Prod stays on
+    # Vertex (no override) -- note 2.5 is on both Vertex and AI Studio.
+    BACKEND_EXTRA_ENV="VERTEXAI=false,USE_PREMIUM_MODEL=false" ./deploy-all.sh "${GCP_ARGS[@]}"
 
     # Update Cloud Run to use the custom Service Account
     echo -e "${GREEN}[INFO]${NC} 🔑 Ensuring Cloud Run uses service account $SA_NAME..."
