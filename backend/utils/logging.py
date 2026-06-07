@@ -60,10 +60,20 @@ def configure_logging() -> None:
 			# traceback (format_exc_info -> JSON "exception" field) -- legitimate
 			# multi-line content that routinely exceeds 2000 chars -- is never
 			# dropped; error logs are exactly when we need the traceback. Binary
-			# dumps log at INFO/DEBUG, so the guard still catches them. (Today this
-			# filter only runs on records logged via the stdlib loggers it is
-			# attached to, not structlog's JSON records, so this guard is
-			# defense-in-depth for the traceback fix, bd polyglot-pdf-0uu.)
+			# dumps log at INFO/DEBUG, so the guard still catches them.
+			#
+			# Filter scope (bd polyglot-pdf-0uu / -h79): a logging.Filter runs on
+			# the EMITTING logger only, not on parent loggers reached via
+			# propagation. This filter is attached to the root logger and the
+			# named "noisy" loggers below, so it runs on records emitted DIRECTLY
+			# through those (incl. structlog calls whose underlying stdlib logger
+			# is root or a noisy one) -- but NOT on a record emitted through some
+			# other logger that merely propagates UP to root. The error path this
+			# fix targets (backend.adapters.* / .services.* via bare
+			# structlog.get_logger(), named after the calling module) is not root
+			# and not in the noisy list, so this guard does not gate its
+			# tracebacks; the ERROR exemption keeps the filter correct for any
+			# error that IS emitted through a filtered logger.
 			if len(msg) > 2000 and record.levelno < logging.ERROR:
 				return False
 			return True
