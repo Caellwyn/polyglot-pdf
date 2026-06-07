@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pydantic import BaseModel, model_validator
 import os
 import re
@@ -389,8 +390,18 @@ class Settings(BaseModel):
 		"Speak {spoken_language}. Read this disclaimer aloud verbatim: '{disclaimer_text}'. After reading, tell user to click 'I Agree' button to continue."
 	)
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
 	"""Load and return validated settings.
+
+	Cached: Settings is static process-config built from os.environ, and several
+	hot-ish paths read it per call (e.g. the native-VAD guard fires get_settings()
+	per manual activity signal -- bd polyglot-pdf-efd), each previously
+	constructing a fresh Settings model. lru_cache returns one shared instance.
+	Tests that need a different config monkeypatch the module attribute
+	(monkeypatch.setattr(config, "get_settings", lambda: ...)), which replaces the
+	function and so bypasses the cache; a test that mutates os.environ and expects
+	a fresh read should call get_settings.cache_clear() first.
 
 	In later phases we can load .env via python-dotenv and add validation.
 	"""

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/log_schemas.py backend/utils/confirmation_logger.py backend/utils/token_file_logger.py backend/utils/dev_file_logger.py backend/routes/pdf_fill_routes.py backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/tests/test_no_pii_logging.py frontend/src/shared/metrics.ts
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-07*
 
 This is an immigration-form app: it handles A-numbers, names, addresses, and dates
 of birth. Those are PII/PHI. Anything emitted at INFO/WARNING reaches stdout →
@@ -31,7 +31,7 @@ When you need to prove "data is flowing," log a length or a type — never the v
 | Event schemas | `backend/utils/log_schemas.py` + `structured_logger.py` | **Safe by shape** — `TypedDict`s with no value field (`field_id` carries the comment "NEVER include field values!"). `StructuredLogger` consumes them but emits nothing yet (its one non-test reference is a dead import). See [logging-and-cost.md](logging-and-cost.md). |
 | Frontend metrics | `frontend/src/shared/metrics.ts` | **Safe** — barge-in / VAD timing metrics held in memory and exposed only on `window.__VFF_METRICS__` for the local tuning UI; never transmitted to the backend or any third party. Header: "NO PII - Only timing and operational metrics." |
 | Dev file logger | `backend/utils/dev_file_logger.py` | **Gated.** MAY write field values / Gemini messages / tool args, but is a no-op unless `backend/.env.DEV` exists. `.env*` files are gitignored + dockerignored, so production containers never enable it. Acceptable for local debugging; NEVER ship a container with `.env.DEV`. |
-| Tool-call console | `backend/services/callback_handler.py` | **Safe.** `on_tool_call` logs the tool name + argument **keys** + count via `_log.info("tool_call_received", …)` — never the argument values. Full-arg capture for debugging is the `.env.DEV`-gated `_dev_log.log_tool_call`. (A prior bare `print(f"Arguments: {arguments}")` leaked the full args to stdout; removed under `polyglot-pdf-oeq`, and the guard below now covers this file + `print()` sinks.) |
+| Tool-call console | `backend/services/callback_handler.py` | **Safe.** `on_tool_call` logs the tool name + argument **keys** + count via `_log.info("tool_call_received", …)` — never the argument values. The `get_field_value` response logs `spoken_name_length` (not the user-speech-derived `spoken_name` label) and `multiple_fields_sent` logs `fields=` as the field-ID **keys** only — both are guarded below (`spoken_name` is a sensitive kwarg; `fields=…values()` is flagged) so a regression to the raw value fails the build (`polyglot-pdf-t1c`). Full-arg capture for debugging is the `.env.DEV`-gated `_dev_log.log_tool_call`. (A prior bare `print(f"Arguments: {arguments}")` leaked the full args to stdout; removed under `polyglot-pdf-oeq`, and the guard below now covers this file + `print()` sinks.) |
 
 ## Enforcement
 
@@ -59,4 +59,4 @@ The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed i
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-07*
