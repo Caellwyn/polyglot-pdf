@@ -29,11 +29,20 @@ could re-create the spin.
 `confirmField`, check whether the field ACTUALLY became confirmed
 (`isFieldConfirmed`). If not, it was a no-op -- count consecutive failed confirms
 per field id (`confirmFailField` / `confirmFailCount`). At `CONFIRM_FAIL_LIMIT`
-(2) consecutive failures on the same field, break the spin: send a **level-1
-`recovery_prompt`** with the next-field hint (re-asks the user for the value via
-the existing recovery channel that `websocket_routes.py` already relays to Gemini
--- no backend change needed), then reset so it re-arms rather than firing every
-cycle. A successful confirm, or a switch to a different field, resets the streak.
+(2) consecutive failures on the same field, break the spin and reset (re-arm
+rather than fire every cycle). A successful confirm, or a switch to a different
+field, resets the streak; `switchToSection` also clears it so a stale count can't
+carry into a new section with a same-named field.
+
+**How the break is surfaced (revised after fresh-eyes -- see triage).** The break
+calls `onError` with a clear message ("no value was entered, please provide it")
+-- this works TODAY and is what actually informs the user. It ALSO attempts a
+level-1 `recovery_prompt` (the nicer spoken Gemini re-prompt), but that backend
+channel is currently broken (`RECOVERY_PROMPT_LEVEL_*` are missing from `Settings`
+-> `AttributeError`, filed as `polyglot-pdf-zy3`), so it is belt-and-suspenders
+that activates once zy3 lands. The original draft relied on `recovery_prompt`
+ALONE, which fresh-eyes correctly flagged would have only rate-limited the spin
+without ever telling anyone.
 
 **Diagnosability.** The `confirmField` no-op was previously SILENT, which is why
 the spin was hard to diagnose. Added a `console.warn` there so the no-op (and thus
@@ -71,12 +80,31 @@ here + the tool-call-flow doc.
   no-op -- the documented behavior (the no-op itself) is unchanged, so no prose
   edit was warranted.
 
+## Fresh-eyes triage (PR #111)
+
+Round 1, sonnet reviewer, 4 findings, all addressed:
+- **#1 (critical, ADOPTED):** `recovery_prompt` is broken backend-side
+  (`RECOVERY_PROMPT_LEVEL_*` missing from `Settings`), so the original
+  recovery-prompt-only break would silently fail. Fixed: surface via `onError`
+  (works now) + keep the recovery_prompt as belt-and-suspenders; filed the backend
+  regression as `polyglot-pdf-zy3`.
+- **#4 (medium, ADOPTED):** counters not reset on section switch -> a same field_id
+  in the next section could trip the breaker a cycle early. Fixed: reset in
+  `switchToSection` + a test.
+- **#2 (medium, ADOPTED):** test gap for A-B-A interleaving. Added the third
+  `confirm('f1')` assertion.
+- **#3 (low, ADOPTED):** comment said "no value" but the guard is "no entry".
+  Tightened the wording.
+
+Copilot round 1: prose-only overview, no inline findings (effectively CLEAN).
+
 ## Verification
 
-- New `frontend/src/webFormConnection.confirmloop.test.ts` (5 cases: no prompt
-  under the limit; break with a level-1 recovery prompt at the limit; re-arm
-  without spamming; reset-on-successful-confirm; per-field-id tracking) -- all pass.
-- Full frontend suite: 120/123 (the 3 failures are the pre-existing
+- New `frontend/src/webFormConnection.confirmloop.test.ts` (7 cases: no break
+  under the limit; break at the limit; re-arm without spamming;
+  reset-on-successful-confirm; per-field-id A-B-A tracking; `onError` surfaced on
+  break; streak reset on section switch) -- all pass.
+- Full frontend suite: 122/125 (the 3 failures are the pre-existing
   `DisclaimerModal` regex bug, bd polyglot-pdf-pwt).
 - Typecheck: 0 new errors (24 pre-existing, identical count with/without).
 - NOT browser-verifiable: the loop only arises in a live WS voice session

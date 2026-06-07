@@ -977,11 +977,22 @@ export class WebFormConnection {
       if (this.confirmFailCount >= WebFormConnection.CONFIRM_FAIL_LIMIT) {
         console.warn(
           `[WebFormConnection] confirm_field for '${field_id}' failed ${this.confirmFailCount}x ` +
-          `(no value to confirm) -- breaking confirm/next-field loop with a recovery prompt`
+          `(no value to confirm) -- breaking confirm/next-field loop`
         );
+        // Surface the stall to the UI via onError -- this works TODAY regardless of
+        // the backend recovery channel, which is currently broken
+        // (RECOVERY_PROMPT_LEVEL_* missing from Settings -> AttributeError, bd
+        // polyglot-pdf-zy3). Without this, the break would only rate-limit the
+        // spin without telling anyone.
+        this.callbacks.onError?.(new Error(
+          `Could not confirm field '${field_id}' -- no value was entered. Please provide the value before confirming.`
+        ));
+        // ALSO attempt the level-1 recovery prompt (re-asks the user via Gemini).
+        // It is a no-op until zy3 restores the prompt settings, but becomes the
+        // nicer spoken re-prompt once that lands -- belt and suspenders.
         const hint = this.computeNextFieldHintString() || undefined;
         this.sendRecoveryPrompt(1, hint);
-        // Reset so we re-arm rather than firing a recovery prompt every cycle.
+        // Reset so we re-arm rather than firing every cycle.
         this.confirmFailField = null;
         this.confirmFailCount = 0;
         return;
@@ -1617,6 +1628,13 @@ export class WebFormConnection {
    * @param wsUrl - Backend WebSocket URL (kept for API compatibility but not used)
    */
   async switchToSection(sectionId: string, wsUrl: string): Promise<void> {
+    // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on a section
+    // switch so a stale count can't carry into the new section (e.g. a same
+    // field_id in the next section would otherwise trip the breaker one cycle
+    // early). Fresh-eyes finding on PR #111.
+    this.confirmFailField = null;
+    this.confirmFailCount = 0;
+
     const currentState = SchemaFormStateManager.load();
     if (!currentState || !currentState.schema.sections) {
       throw new Error('Sections not initialized');

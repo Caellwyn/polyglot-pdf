@@ -800,11 +800,12 @@ export class SchemaFormStateManager {
   ): SchemaFormState {
     const fieldValue = state.fieldValues[fieldId];
     if (!fieldValue) {
-      // bd polyglot-pdf-0y7: a confirm with no value is a no-op (the field can't
-      // be confirmed until a value lands). This was previously SILENT, which made
-      // the confirm/next-field spin invisible -- log it so the failure is
-      // diagnosable. The WebFormConnection loop-breaker counts these and re-prompts.
-      console.warn(`[SchemaFormState] confirmField('${fieldId}') no-op: field has no value to confirm`);
+      // bd polyglot-pdf-0y7: a confirm for a field with no entry in fieldValues is
+      // a no-op (nothing to confirm until a value lands). This was previously
+      // SILENT, which made the confirm/next-field spin invisible -- log it so the
+      // failure is diagnosable. The WebFormConnection loop-breaker counts these
+      // (it re-checks isFieldConfirmed) and surfaces/re-prompts at the threshold.
+      console.warn(`[SchemaFormState] confirmField('${fieldId}') no-op: field has no entry to confirm`);
       return state; // Field doesn't exist / has no value
     }
 

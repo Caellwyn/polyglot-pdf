@@ -86,9 +86,12 @@ isn't filled), so `computeNextField` keeps returning the SAME field and the
 backend can re-request `confirm_field` for it indefinitely while Gemini stalls.
 `webFormConnection.handleConfirmFieldRequest` guards this: it checks whether the
 field actually became confirmed and, after 2 consecutive failed confirms of the
-same field, breaks the spin by sending a level-1 `recovery_prompt` (re-asks the
-user for the value) instead of cycling again. The no-op also logs a console
-warning so the stall is diagnosable.
+same field, breaks the spin. It surfaces the stall via `onError` (works today) and
+also attempts a level-1 `recovery_prompt` -- the latter is currently inert because
+`RECOVERY_PROMPT_LEVEL_*` are missing from `Settings` (`polyglot-pdf-zy3`) and
+becomes the spoken Gemini re-prompt once that is fixed. The streak resets on a
+successful confirm, a different field, or a section switch. The no-op also logs a
+console warning so the stall is diagnosable.
 
 ## Wire reality vs. expectation -- what to check
 

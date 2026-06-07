@@ -117,10 +117,37 @@ describe('WebFormConnection confirm-loop breaker (bd polyglot-pdf-0y7)', () => {
     expect(sentMessages(ws).filter(m => m?.type === 'recovery_prompt').length).toBe(0)
   })
 
-  it('tracks failures per field id (switching fields resets the streak)', async () => {
+  it('tracks failures per field id (an intervening field resets the streak; A-B-A does not accumulate)', async () => {
     await confirm('f1') // fail 1 on f1
-    await confirm('fX') // fail 1 on a different field -> streak resets to that field
+    await confirm('fX') // fail 1 on a different field -> f1's streak is gone
+    await confirm('f1') // back to f1: this is fail 1 again (NOT fail 2), so no break
     const recovery = sentMessages(ws).filter(m => m?.type === 'recovery_prompt')
     expect(recovery.length).toBe(0)
+  })
+
+  it('surfaces the stall via onError when the loop is broken (works even though the backend recovery channel is currently broken, bd zy3)', async () => {
+    // Inject an onError spy onto the existing connection's callbacks (the
+    // beforeEach already set up a clean sessionStorage + connection).
+    const onError = vi.fn()
+    ;(conn as any).callbacks.onError = onError
+    await confirm('f1') // fail 1
+    await confirm('f1') // fail 2 -> break -> onError fires
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error)
+    expect(String(onError.mock.calls[0][0].message)).toContain('f1')
+  })
+
+  it('resets the streak on a section switch (no stale count carried into the next section)', async () => {
+    ;(conn as any).confirmFailField = 'f1'
+    ;(conn as any).confirmFailCount = 1
+    // switchToSection clears the streak before doing its work; stub out the parts
+    // that need a live socket so we only exercise the reset.
+    try {
+      await (conn as any).switchToSection('s1', '')
+    } catch {
+      // switchToSection may throw later (no real session) -- the reset happens first.
+    }
+    expect((conn as any).confirmFailField).toBeNull()
+    expect((conn as any).confirmFailCount).toBe(0)
   })
 })
