@@ -45,9 +45,10 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "pdf_position": {"page": int, "x": num, "y": num, "width": num, "height": num},
   "validation": {"required": bool, "pattern": str(optional regex)},
   "options": [ {"value": str, "label": str, "pdf_field_name": str(optional)} ],
-                             // radio/checkbox/select choices. For a radio/checkbox
-                             // SET whose widgets share a name, put each widget's
-                             // name on its option.pdf_field_name.
+                             // radio/checkbox/select choices. Each option carries
+                             // its OWN widget name in option.pdf_field_name, and
+                             // option.value MUST be that widget's leaf name (see
+                             // CHOICE-FIELD RULES below) -- NOT a semantic label.
   "max_length": int, "read_only": bool, "multiline": bool,
 
   // RELATIONSHIP / LOGIC keys (the hard half -- recover these from printed
@@ -70,6 +71,45 @@ RULES:
 - Recover conditional logic (show_if / controls_fields / overflow) from the
   PRINTED instructions on the page, not guesses.
 - Output MUST be a single valid JSON object, UTF-8, ASCII-safe, no trailing commas.
+
+CHOICE-FIELD RULES (checkbox / radio -- these MUST round-trip into the PDF):
+- A "radio" field has pdf_field_name=null at field level; the widget names live
+  ONLY on each option.pdf_field_name. A logical radio may span DIFFERENT widget
+  names presented as one choice (e.g. a Male widget + a Female widget) -- group by
+  MEANING, putting each widget's exact name on its option.
+- option.value MUST be the WIDGET LEAF identifier (the last dotted segment of that
+  option's pdf_field_name, INCLUDING its [n] index) -- e.g. for widget
+  "form1[0].#subform[0].P1_checkbox4[0]" the option.value is "P1_checkbox4[0]".
+  Do NOT use a semantic value ("Yes"/"No"/"Male"). The filler selects the widget
+  by matching the app-sent value against option.value, and any controls_fields /
+  show_if that references this option MUST use the SAME widget-leaf string -- a
+  semantic value breaks BOTH selection and conditional logic.
+- A single standalone checkbox (no choice set) keeps a field-level pdf_field_name
+  AND a one-element options[] carrying that same widget's leaf as option.value.
+- READ-ONLY choice widgets that the form unlocks on selection carry BOTH:
+  conditional_behavior.unlock_method="flip_readonly_bit" AND
+  conditional_logic.pdf_field_flag_change={"bit":int,"current_value":int,
+  "required_value":int}. The filler reads the latter to clear the read-only bit.
+- Do NOT depend on on/off appearance values: the filler derives a checkbox's "on"
+  state live from the widget; you only need the correct option.value + name.
+
+CHOICE-FIELD EXAMPLE (the exact shape a radio must take -- note value==leaf):
+{
+  "id": "name_changed", "name": "Has your name legally changed?",
+  "type": "radio", "section_id": "...", "pdf_field_name": null,
+  "options": [
+    {"value": "P1_checkbox4[0]", "label": "Yes (Proceed to Item 5)",
+     "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[0]"},
+    {"value": "P1_checkbox4[1]", "label": "No (Proceed to Item 6)",
+     "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[1]"}
+  ],
+  "controls_fields": [
+    {"operator": "equals", "value": "P1_checkbox4[0]", "unlocks": ["..."]}
+  ]
+}
+Note: controls_fields[].value reuses the SAME widget-leaf string "P1_checkbox4[0]"
+as option.value. This illustration is canonical -- imitate it even if a few-shot
+example schema happens to use a different (non-conforming) value style.
 """
 
 
