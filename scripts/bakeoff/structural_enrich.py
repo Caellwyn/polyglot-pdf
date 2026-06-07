@@ -41,9 +41,6 @@ from typing import Any, Optional
 # 1. name-token decomposition (generic, no USCIS mapping)
 # --------------------------------------------------------------------------- #
 
-_TOKEN_SPLIT = re.compile(r"[._\[\]]+")
-
-
 def decompose_name(full_name: str) -> dict[str, Any]:
     """Split an XFA dotted widget name into structural tokens, no interpretation.
 
