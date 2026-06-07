@@ -233,14 +233,14 @@
             }
           }
         },
-        "gemini-multimodal": {
+        "gemini31pro-multimodal": {
           "status": "scored",
           "a_detection_f1": 17.358490566037737,
           "a_attr_avg": 20.0,
           "b_conditional_recall": 0.0,
           "b_structure_recall": 100.0,
           "full": {
-            "label": "i-90:gemini-multimodal",
+            "label": "i-90:gemini31pro-multimodal",
             "draft": "scripts/bakeoff/outputs/i90_gemini_multimodal.json",
             "truth": "form-kits/i-90/schema.json",
             "field_extraction": {
@@ -348,14 +348,14 @@
             }
           }
         },
-        "gemini-hybrid": {
+        "gemini31pro-hybrid": {
           "status": "scored",
           "a_detection_f1": 98.49624060150377,
           "a_attr_avg": 33.267175572519086,
           "b_conditional_recall": 18.75,
           "b_structure_recall": 100.0,
           "full": {
-            "label": "i-90:gemini-hybrid",
+            "label": "i-90:gemini31pro-hybrid",
             "draft": "scripts/bakeoff/outputs/i90_gemini_hybrid.json",
             "truth": "form-kits/i-90/schema.json",
             "field_extraction": {
@@ -446,6 +446,236 @@
                 },
                 "sections": {
                   "draft": 26,
+                  "truth": 16,
+                  "pct": 100.0
+                },
+                "supplements": {
+                  "draft": 0,
+                  "truth": 0,
+                  "pct": NaN
+                },
+                "tables/multi_entry": {
+                  "draft": 0,
+                  "truth": 0,
+                  "pct": NaN
+                }
+              }
+            }
+          }
+        },
+        "gemini35flash-multimodal": {
+          "status": "scored",
+          "a_detection_f1": 2.469135802469136,
+          "a_attr_avg": 25.0,
+          "b_conditional_recall": 0.0,
+          "b_structure_recall": 100.0,
+          "full": {
+            "label": "i-90:gemini35flash-multimodal",
+            "draft": "scripts/bakeoff/outputs/i90_gemini35_multimodal.json",
+            "truth": "form-kits/i-90/schema.json",
+            "field_extraction": {
+              "detection": {
+                "true_positive": 3,
+                "false_negative": 129,
+                "false_positive": 108,
+                "precision": 2.7027027027027026,
+                "recall": 2.272727272727273,
+                "f1": 2.469135802469136
+              },
+              "attributes": {
+                "type": {
+                  "correct": 3,
+                  "applicable": 3,
+                  "pct": 100.0
+                },
+                "pdf_field_name": {
+                  "correct": 0,
+                  "applicable": 3,
+                  "pct": 0.0
+                },
+                "options": {
+                  "correct": 0,
+                  "applicable": 0,
+                  "pct": NaN
+                },
+                "validation": {
+                  "correct": 0,
+                  "applicable": 0,
+                  "pct": NaN
+                },
+                "section_id": {
+                  "correct": 0,
+                  "applicable": 3,
+                  "pct": 0.0
+                },
+                "pdf_position": {
+                  "correct": 0,
+                  "applicable": 3,
+                  "pct": 0.0
+                }
+              }
+            },
+            "relationships": {
+              "conditionals": {
+                "show_if": {
+                  "recovered": 0,
+                  "total": 19,
+                  "pct": 0.0
+                },
+                "controls_fields": {
+                  "recovered": 0,
+                  "total": 13,
+                  "pct": 0.0
+                },
+                "conditional_fields": {
+                  "recovered": 0,
+                  "total": 12,
+                  "pct": 0.0
+                },
+                "conditional_logic": {
+                  "recovered": 0,
+                  "total": 16,
+                  "pct": 0.0
+                },
+                "conditional_behavior": {
+                  "recovered": 0,
+                  "total": 16,
+                  "pct": 0.0
+                },
+                "copy_to": {
+                  "recovered": 0,
+                  "total": 4,
+                  "pct": 0.0
+                },
+                "overflow_to_supplement": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                }
+              },
+              "structure": {
+                "parts": {
+                  "draft": 8,
+                  "truth": 8,
+                  "pct": 100.0
+                },
+                "sections": {
+                  "draft": 24,
+                  "truth": 16,
+                  "pct": 100.0
+                },
+                "supplements": {
+                  "draft": 0,
+                  "truth": 0,
+                  "pct": NaN
+                },
+                "tables/multi_entry": {
+                  "draft": 1,
+                  "truth": 0,
+                  "pct": NaN
+                }
+              }
+            }
+          }
+        },
+        "gemini35flash-hybrid": {
+          "status": "scored",
+          "a_detection_f1": 97.03703703703704,
+          "a_attr_avg": 30.78880407124682,
+          "b_conditional_recall": 17.5,
+          "b_structure_recall": 100.0,
+          "full": {
+            "label": "i-90:gemini35flash-hybrid",
+            "draft": "scripts/bakeoff/outputs/i90_gemini35_hybrid.json",
+            "truth": "form-kits/i-90/schema.json",
+            "field_extraction": {
+              "detection": {
+                "true_positive": 131,
+                "false_negative": 1,
+                "false_positive": 7,
+                "precision": 94.92753623188406,
+                "recall": 99.24242424242425,
+                "f1": 97.03703703703704
+              },
+              "attributes": {
+                "type": {
+                  "correct": 111,
+                  "applicable": 131,
+                  "pct": 84.73282442748092
+                },
+                "pdf_field_name": {
+                  "correct": 131,
+                  "applicable": 131,
+                  "pct": 100.0
+                },
+                "options": {
+                  "correct": 0,
+                  "applicable": 25,
+                  "pct": 0.0
+                },
+                "validation": {
+                  "correct": 0,
+                  "applicable": 25,
+                  "pct": 0.0
+                },
+                "section_id": {
+                  "correct": 0,
+                  "applicable": 131,
+                  "pct": 0.0
+                },
+                "pdf_position": {
+                  "correct": 0,
+                  "applicable": 128,
+                  "pct": 0.0
+                }
+              }
+            },
+            "relationships": {
+              "conditionals": {
+                "show_if": {
+                  "recovered": 13,
+                  "total": 19,
+                  "pct": 68.42105263157895
+                },
+                "controls_fields": {
+                  "recovered": 1,
+                  "total": 13,
+                  "pct": 7.6923076923076925
+                },
+                "conditional_fields": {
+                  "recovered": 0,
+                  "total": 12,
+                  "pct": 0.0
+                },
+                "conditional_logic": {
+                  "recovered": 0,
+                  "total": 16,
+                  "pct": 0.0
+                },
+                "conditional_behavior": {
+                  "recovered": 0,
+                  "total": 16,
+                  "pct": 0.0
+                },
+                "copy_to": {
+                  "recovered": 0,
+                  "total": 4,
+                  "pct": 0.0
+                },
+                "overflow_to_supplement": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                }
+              },
+              "structure": {
+                "parts": {
+                  "draft": 8,
+                  "truth": 8,
+                  "pct": 100.0
+                },
+                "sections": {
+                  "draft": 24,
                   "truth": 16,
                   "pct": 100.0
                 },
@@ -928,14 +1158,14 @@
             }
           }
         },
-        "gemini-multimodal": {
+        "gemini31pro-multimodal": {
           "status": "scored",
           "a_detection_f1": 17.460317460317462,
           "a_attr_avg": 35.497835497835496,
           "b_conditional_recall": 6.153846153846154,
           "b_structure_recall": 94.44444444444444,
           "full": {
-            "label": "i-589:gemini-multimodal",
+            "label": "i-589:gemini31pro-multimodal",
             "draft": "scripts/bakeoff/outputs/i589_gemini_multimodal.json",
             "truth": "example_pdfs/i-589/i589_schema.json",
             "field_extraction": {
@@ -1043,9 +1273,239 @@
             }
           }
         },
-        "gemini-hybrid": {
+        "gemini31pro-hybrid": {
           "status": "not run",
           "reason": "draft file missing"
+        },
+        "gemini35flash-multimodal": {
+          "status": "scored",
+          "a_detection_f1": 13.026819923371649,
+          "a_attr_avg": 36.666666666666664,
+          "b_conditional_recall": 6.153846153846154,
+          "b_structure_recall": 41.66666666666667,
+          "full": {
+            "label": "i-589:gemini35flash-multimodal",
+            "draft": "scripts/bakeoff/outputs/i589_gemini35_multimodal.json",
+            "truth": "example_pdfs/i-589/i589_schema.json",
+            "field_extraction": {
+              "detection": {
+                "true_positive": 17,
+                "false_negative": 139,
+                "false_positive": 88,
+                "precision": 16.19047619047619,
+                "recall": 10.897435897435898,
+                "f1": 13.026819923371649
+              },
+              "attributes": {
+                "type": {
+                  "correct": 17,
+                  "applicable": 17,
+                  "pct": 100.0
+                },
+                "pdf_field_name": {
+                  "correct": 0,
+                  "applicable": 17,
+                  "pct": 0.0
+                },
+                "options": {
+                  "correct": 5,
+                  "applicable": 6,
+                  "pct": 83.33333333333333
+                },
+                "validation": {
+                  "correct": 0,
+                  "applicable": 12,
+                  "pct": 0.0
+                },
+                "section_id": {
+                  "correct": 0,
+                  "applicable": 17,
+                  "pct": 0.0
+                },
+                "pdf_position": {
+                  "correct": 0,
+                  "applicable": 0,
+                  "pct": NaN
+                }
+              }
+            },
+            "relationships": {
+              "conditionals": {
+                "show_if": {
+                  "recovered": 4,
+                  "total": 53,
+                  "pct": 7.547169811320755
+                },
+                "controls_fields": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_fields": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_logic": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_behavior": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "copy_to": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "overflow_to_supplement": {
+                  "recovered": 0,
+                  "total": 12,
+                  "pct": 0.0
+                }
+              },
+              "structure": {
+                "parts": {
+                  "draft": 7,
+                  "truth": 7,
+                  "pct": 100.0
+                },
+                "sections": {
+                  "draft": 6,
+                  "truth": 9,
+                  "pct": 66.66666666666667
+                },
+                "supplements": {
+                  "draft": 0,
+                  "truth": 2,
+                  "pct": 0.0
+                },
+                "tables/multi_entry": {
+                  "draft": 0,
+                  "truth": 9,
+                  "pct": 0.0
+                }
+              }
+            }
+          }
+        },
+        "gemini35flash-hybrid": {
+          "status": "scored",
+          "a_detection_f1": 33.06122448979591,
+          "a_attr_avg": 46.93121693121693,
+          "b_conditional_recall": 44.61538461538461,
+          "b_structure_recall": 75.0,
+          "full": {
+            "label": "i-589:gemini35flash-hybrid",
+            "draft": "scripts/bakeoff/outputs/i589_gemini35_hybrid.json",
+            "truth": "example_pdfs/i-589/i589_schema.json",
+            "field_extraction": {
+              "detection": {
+                "true_positive": 81,
+                "false_negative": 75,
+                "false_positive": 253,
+                "precision": 24.251497005988025,
+                "recall": 51.92307692307692,
+                "f1": 33.06122448979591
+              },
+              "attributes": {
+                "type": {
+                  "correct": 58,
+                  "applicable": 81,
+                  "pct": 71.60493827160494
+                },
+                "pdf_field_name": {
+                  "correct": 80,
+                  "applicable": 81,
+                  "pct": 98.76543209876543
+                },
+                "options": {
+                  "correct": 9,
+                  "applicable": 14,
+                  "pct": 64.28571428571429
+                },
+                "validation": {
+                  "correct": 0,
+                  "applicable": 41,
+                  "pct": 0.0
+                },
+                "section_id": {
+                  "correct": 0,
+                  "applicable": 81,
+                  "pct": 0.0
+                },
+                "pdf_position": {
+                  "correct": 0,
+                  "applicable": 0,
+                  "pct": NaN
+                }
+              }
+            },
+            "relationships": {
+              "conditionals": {
+                "show_if": {
+                  "recovered": 29,
+                  "total": 53,
+                  "pct": 54.716981132075475
+                },
+                "controls_fields": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_fields": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_logic": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "conditional_behavior": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "copy_to": {
+                  "recovered": 0,
+                  "total": 0,
+                  "pct": NaN
+                },
+                "overflow_to_supplement": {
+                  "recovered": 0,
+                  "total": 12,
+                  "pct": 0.0
+                }
+              },
+              "structure": {
+                "parts": {
+                  "draft": 9,
+                  "truth": 7,
+                  "pct": 100.0
+                },
+                "sections": {
+                  "draft": 10,
+                  "truth": 9,
+                  "pct": 100.0
+                },
+                "supplements": {
+                  "draft": 2,
+                  "truth": 2,
+                  "pct": 100.0
+                },
+                "tables/multi_entry": {
+                  "draft": 0,
+                  "truth": 9,
+                  "pct": 0.0
+                }
+              }
+            }
+          }
         },
         "claude-multimodal": {
           "status": "scored",
