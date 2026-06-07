@@ -50,7 +50,7 @@ describe('FieldOverlay', () => {
       // Check positioning (PDF coords converted to screen coords)
       const style = (overlay as HTMLElement).style;
       expect(style.left).toBe('100px'); // x * scale
-      expect(style.top).toBe('62px');  // (792 - 700 - 30) * scale
+      expect(style.top).toBe('700px');  // y * scale (top-left origin, no Y-flip)
       expect(style.width).toBe('150px');
       expect(style.height).toBe('30px');
     });
@@ -82,7 +82,7 @@ describe('FieldOverlay', () => {
 
       const overlay = container.querySelector('.field-overlay') as HTMLElement;
       expect(overlay.style.left).toBe('150px');   // 100 * 1.5
-      expect(overlay.style.top).toBe('93px');     // 62 * 1.5
+      expect(overlay.style.top).toBe('1050px');   // 700 * 1.5 (top-left origin, no Y-flip)
       expect(overlay.style.width).toBe('225px');  // 150 * 1.5
       expect(overlay.style.height).toBe('45px');  // 30 * 1.5
     });
@@ -169,7 +169,7 @@ describe('FieldOverlay', () => {
       );
 
       overlay = container.querySelector('.field-overlay') as HTMLElement;
-      expect(overlay.style.border).toContain('3px'); // Thicker when selected
+      expect(overlay.style.border).toContain('4px'); // Thicker when selected
     });
   });
 

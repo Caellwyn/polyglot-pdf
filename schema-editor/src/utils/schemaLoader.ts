@@ -1,5 +1,8 @@
 import type { FormSchema, FormConfig } from '../types/schema';
 
+// Re-export so consumers (e.g. FormSelector) can import FormConfig from here.
+export type { FormConfig };
+
 /**
  * Available forms for editing
  */

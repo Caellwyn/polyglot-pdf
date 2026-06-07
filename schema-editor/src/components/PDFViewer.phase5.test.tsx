@@ -17,20 +17,35 @@ vi.mock('pdfjs-dist', () => ({
 }));
 
 const mockSchema: FormSchema = {
-  form_name: 'Test Form',
-  form_number: 'TEST-001',
-  form_title: 'Test PDF Form',
+  source: 'pdf',
+  form_metadata: {
+    title: 'Test PDF Form',
+    form_number: 'TEST-001',
+    total_widgets: 2,
+    total_fields: 2,
+    version: '1.0',
+    language: 'en',
+  },
+  parts: [],
   sections: [],
   fields: [
     {
       id: 'field1',
+      name: 'Test Field 1',
       type: 'text',
+      pdf_field_name: 'field1',
+      read_only: false,
+      required: false,
       spoken_name: 'Test Field 1',
       pdf_position: { page: 1, x: 100, y: 500, width: 200, height: 20 },
     },
     {
       id: 'field2',
+      name: 'Test Field 2',
       type: 'text',
+      pdf_field_name: 'field2',
+      read_only: false,
+      required: false,
       spoken_name: 'Test Field 2',
       pdf_position: { page: 1, x: 100, y: 400, width: 200, height: 20 },
     },
