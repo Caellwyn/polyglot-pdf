@@ -51,15 +51,28 @@ export const PDFPage: React.FC<PDFPageProps> = ({
     setIsRendering(true);
     setError(null);
 
-    // Cancel any existing render task
+    // Per-run cancellation flag. React 18 StrictMode invokes effects twice in
+    // dev, and getPage()/render() are async -- without this guard a stale run
+    // can call render() on the same canvas while a newer run is mid-render
+    // ("Cannot use the same canvas during multiple render() operations").
+    let cancelled = false;
+
+    // Cancel any in-flight render task before starting a new one.
     if (renderTaskRef.current) {
       renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
     }
 
     // Load and render the page
     document
       .getPage(pageNumber)
       .then((page) => {
+        // A newer effect run (or unmount) superseded this one while getPage was
+        // resolving -- do not touch the canvas.
+        if (cancelled) {
+          return;
+        }
+
         const viewport = page.getViewport({ scale });
 
         // Set canvas dimensions to match viewport
@@ -77,6 +90,9 @@ export const PDFPage: React.FC<PDFPageProps> = ({
         renderTaskRef.current = renderTask;
 
         return renderTask.promise.then(() => {
+          if (cancelled) {
+            return;
+          }
           setIsRendering(false);
           if (onPageLoad) {
             onPageLoad(page);
@@ -96,8 +112,14 @@ export const PDFPage: React.FC<PDFPageProps> = ({
 
     // Cleanup
     return () => {
+      cancelled = true;
+      // The cancelled run skips its own setIsRendering(false) (it must not set
+      // state after cleanup); clear it here so a superseded-but-still-mounted
+      // page cannot be left stuck showing the rendering spinner.
+      setIsRendering(false);
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
       }
     };
   }, [document, pageNumber, scale, onPageLoad]);

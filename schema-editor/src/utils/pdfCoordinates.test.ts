@@ -16,13 +16,13 @@ describe('pdfCoordinates', () => {
     it('should convert PDF coords to screen coords at scale 1.0', () => {
       const result = pdfToScreenCoords(
         { page: 1, x: 100, y: 700, width: 150, height: 30 },
-        792, // US Letter height
+        792, // US Letter height (unused; coords already top-left)
         1.0
       );
 
       expect(result).toEqual({
         x: 100,
-        y: 62,  // 792 - 700 - 30 = 62
+        y: 700,  // already top-left; just scaled (no Y-flip)
         width: 150,
         height: 30,
       });
@@ -37,7 +37,7 @@ describe('pdfCoordinates', () => {
 
       expect(result).toEqual({
         x: 150,   // 100 * 1.5
-        y: 93,    // (792 - 700 - 30) * 1.5 = 62 * 1.5
+        y: 1050,  // 700 * 1.5 (no Y-flip)
         width: 225,  // 150 * 1.5
         height: 45,  // 30 * 1.5
       });
@@ -52,37 +52,37 @@ describe('pdfCoordinates', () => {
 
       expect(result).toEqual({
         x: 50,    // 100 * 0.5
-        y: 31,    // 62 * 0.5
+        y: 350,   // 700 * 0.5 (no Y-flip)
         width: 75,   // 150 * 0.5
         height: 15,  // 30 * 0.5
       });
     });
 
-    it('should handle field at top of page (y near pageHeight)', () => {
+    it('should handle field at top of page (y near 0)', () => {
       const result = pdfToScreenCoords(
-        { page: 1, x: 50, y: 762, width: 100, height: 20 },
+        { page: 1, x: 50, y: 10, width: 100, height: 20 },
         792,
         1.0
       );
 
       expect(result).toEqual({
         x: 50,
-        y: 10,  // 792 - 762 - 20 = 10 (near top)
+        y: 10,  // small y = near top (top-left origin)
         width: 100,
         height: 20,
       });
     });
 
-    it('should handle field at bottom of page (y near 0)', () => {
+    it('should handle field at bottom of page (y near pageHeight)', () => {
       const result = pdfToScreenCoords(
-        { page: 1, x: 50, y: 20, width: 100, height: 20 },
+        { page: 1, x: 50, y: 752, width: 100, height: 20 },
         792,
         1.0
       );
 
       expect(result).toEqual({
         x: 50,
-        y: 752,  // 792 - 20 - 20 = 752 (near bottom)
+        y: 752,  // large y = near bottom (top-left origin)
         width: 100,
         height: 20,
       });
@@ -97,7 +97,7 @@ describe('pdfCoordinates', () => {
 
       expect(result).toEqual({
         x: 0,
-        y: 792,  // 792 - 0 - 0
+        y: 0,  // defaults to 0 (no Y-flip)
         width: 0,
         height: 0,
       });
@@ -118,7 +118,7 @@ describe('pdfCoordinates', () => {
   describe('screenToPdfCoords', () => {
     it('should convert screen coords back to PDF coords', () => {
       const result = screenToPdfCoords(
-        { x: 100, y: 62, width: 150, height: 30 },
+        { x: 100, y: 700, width: 150, height: 30 },
         792,
         1.0
       );
@@ -126,7 +126,7 @@ describe('pdfCoordinates', () => {
       expect(result).toEqual({
         page: 0, // Not tracked
         x: 100,
-        y: 700,  // 792 - 62 - 30 = 700
+        y: 700,  // just unscaled (no Y-flip)
         width: 150,
         height: 30,
       });
@@ -134,7 +134,7 @@ describe('pdfCoordinates', () => {
 
     it('should unscale coordinates at 1.5x zoom', () => {
       const result = screenToPdfCoords(
-        { x: 150, y: 93, width: 225, height: 45 },
+        { x: 150, y: 1050, width: 225, height: 45 },
         792,
         1.5
       );
@@ -142,7 +142,7 @@ describe('pdfCoordinates', () => {
       expect(result).toEqual({
         page: 0,
         x: 100,   // 150 / 1.5
-        y: 700,   // 792 - (93 / 1.5) - (45 / 1.5) = 792 - 62 - 30
+        y: 700,   // 1050 / 1.5 (no Y-flip)
         width: 150,  // 225 / 1.5
         height: 30,  // 45 / 1.5
       });
