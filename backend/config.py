@@ -13,7 +13,7 @@ from pathlib import Path
 #   premium  -> gemini-3.1-flash-live-preview            (DEFAULT; reliable on audio; family 3.1)
 #   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper opt-in; family 2.5;
 #               intermittently silent on the audio path -- bd polyglot-pdf-daa)
-# NOTE: Gemini model naming is inconsistent across Google's sources — the 2.5
+# NOTE: Gemini model naming is inconsistent across Google's sources -- the 2.5
 # native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
 # default), and that exact string 1008'd ("not found for bidiGenerateContent") in
 # the contract test. We pin the explicit `-preview-12-2025` string above, which is
@@ -48,10 +48,10 @@ class Settings(BaseModel):
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
 	# Default TRUE -> 3.1 (gemini-3.1-flash-live-preview). The 2.5 native-audio
-	# preview is intermittently silent on the AUDIO path (no-audio turns / 1011 —
+	# preview is intermittently silent on the AUDIO path (no-audio turns / 1011 --
 	# bd polyglot-pdf-daa), so 3.1 is the reliable default; 2.5 is the cheaper
-	# opt-in via USE_PREMIUM_MODEL=false. (3.1 is only modestly pricier — text-out
-	# 4.50 vs 2.00/1M; audio in/out identical — see GEMINI_PRICING_BY_FAMILY.)
+	# opt-in via USE_PREMIUM_MODEL=false. (3.1 is only modestly pricier -- text-out
+	# 4.50 vs 2.00/1M; audio in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
 	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "true").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
@@ -280,7 +280,7 @@ class Settings(BaseModel):
 
     "WORKFLOW:\n"
     "1. Ask for ONE field (skip Filled=True)\n"
-    "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
+    "2. User answers -> IMMEDIATELY call update_form_fields with ONE field\n"
     "3. Always read back user provided value and ask 'Is that correct?'\n"
     "4. Wait for verbal confirmation (yes/correct/that's right)\n"
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
@@ -291,24 +291,24 @@ class Settings(BaseModel):
     "Only manual edits by user are auto-confirmed.\n\n"
 
     "TOOLS:\n"
-    "• update_form_fields: Fill ONE field. Returns success or validation error.\n"
-    "• confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint.\n"
-    "• get_form_status: Returns 'field_id:value:confirmed|field_id:value:unconfirmed'. Only filled fields included. Omitted = empty. Use when user asks 'what have I filled?'\n"
-    "• get_field_value: Retrieve value from previous section by EXACT spoken name\n"
-    "• switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
-    "• Current section only - for previous sections tell user to switch first\n\n"
+    "- update_form_fields: Fill ONE field. Returns success or validation error.\n"
+    "- confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint.\n"
+    "- get_form_status: Returns 'field_id:value:confirmed|field_id:value:unconfirmed'. Only filled fields included. Omitted = empty. Use when user asks 'what have I filled?'\n"
+    "- get_field_value: Retrieve value from previous section by EXACT spoken name\n"
+    "- switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
+    "- Current section only - for previous sections tell user to switch first\n\n"
 
     "MATCHING:\n"
-    "• Options must match EXACTLY from schema (punctuation matters)\n"
-    "• Translate user response to {fill_language} options\n"
-    "• Multiple checkboxes: comma-separated exact values\n"
-    "• Validation error → retry with correct option or ask user to clarify\n"
-    "• Never proceed until field updates successfully\n\n"
+    "- Options must match EXACTLY from schema (punctuation matters)\n"
+    "- Translate user response to {fill_language} options\n"
+    "- Multiple checkboxes: comma-separated exact values\n"
+    "- Validation error -> retry with correct option or ask user to clarify\n"
+    "- Never proceed until field updates successfully\n\n"
 
     "CONSTRAINTS:\n"
-    "• Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
-    "• Sanity check dates/phones/ZIP codes\n"
-    "• Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
+    "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
+    "- Sanity check dates/phones/ZIP codes\n"
+    "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
 
     "CONFIRMATION:\n{confirmation_policy}"
 )
@@ -333,8 +333,8 @@ class Settings(BaseModel):
 
     "WORKFLOW:\n"
     "1. Ask for: {next_field_hint}\n"
-    "2. User answers → IMMEDIATELY call update_form_fields with ONE field\n"
-    "3. Read back value → Ask 'Is that correct?'\n"
+    "2. User answers -> IMMEDIATELY call update_form_fields with ONE field\n"
+    "3. Read back value -> Ask 'Is that correct?'\n"
     "4. Wait for verbal confirmation (yes/correct/that's right)\n"
     "5. Call confirm_field tool with confirmation_method='verbal'\n"
     "6. Next field schema loaded automatically (use next_field_hint from confirm_field response)\n"
@@ -344,26 +344,26 @@ class Settings(BaseModel):
     "Only manual edits by user are auto-confirmed.\n\n"
 
     "TOOLS:\n"
-    "• update_form_fields: Fill ONE field. Returns success or validation error.\n"
-    "• confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint and loads next field schema.\n"
-    "• get_form_status: Returns compact format 'field_id:value:status|...' where status: ✓=confirmed, ✗=unconfirmed, −=empty. Use when user asks 'what have I filled?'\n"
-    "• get_field_value: Retrieve value from previous section by EXACT spoken name\n"
-    "• switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
-    "• Current section only - for previous sections tell user to switch first\n\n"
+    "- update_form_fields: Fill ONE field. Returns success or validation error.\n"
+    "- confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint and loads next field schema.\n"
+    "- get_form_status: Returns compact format 'field_id:value:status|...' where status is 'confirmed' or 'unconfirmed' (empty fields are omitted). Use when user asks 'what have I filled?'\n"
+    "- get_field_value: Retrieve value from previous section by EXACT spoken name\n"
+    "- switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
+    "- Current section only - for previous sections tell user to switch first\n\n"
 
     "MATCHING:\n"
-    "• Options must match EXACTLY from schema (punctuation matters)\n"
-    "• Translate user response to {fill_language} options\n"
-    "• Multiple checkboxes: comma-separated exact values\n"
-    "• Validation error → retry with correct option or ask user to clarify\n"
-    "• Never proceed until field updates successfully\n\n"
+    "- Options must match EXACTLY from schema (punctuation matters)\n"
+    "- Translate user response to {fill_language} options\n"
+    "- Multiple checkboxes: comma-separated exact values\n"
+    "- Validation error -> retry with correct option or ask user to clarify\n"
+    "- Never proceed until field updates successfully\n\n"
 
     "CONSTRAINTS:\n"
-    "• Never read field IDs aloud (use spoken names only)\n"
-    "• Never abbreviate spoken names (use full name from schema)\n"
-    "• When asking for a field, use natural phrasing without mentioning 'field' or IDs\n"
-    "• For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
-    "• Keep interactions conversational and empathetic - this is a medical form\n\n"
+    "- Never read field IDs aloud (use spoken names only)\n"
+    "- Never abbreviate spoken names (use full name from schema)\n"
+    "- When asking for a field, use natural phrasing without mentioning 'field' or IDs\n"
+    "- For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
+    "- Keep interactions conversational and empathetic - this is a medical form\n\n"
 
     "END-OF-SECTION CONFIRMATION:\n"
     "{confirmation_policy}"
@@ -407,7 +407,7 @@ def get_settings() -> Settings:
 # Rates are per-1M list prices from https://ai.google.dev/gemini-api/docs/pricing,
 # divided to per-token here. Output rates include thinking tokens. Keyed by model
 # FAMILY so the active model (MODEL_NATIVE, set by USE_PREMIUM_MODEL) selects the
-# right row — this is what makes a 2.5 -> 3.1 A/B comparable on cost.
+# right row -- this is what makes a 2.5 -> 3.1 A/B comparable on cost.
 # Verified against ai.google.dev/gemini-api/docs/pricing on 2026-05-30 for
 # gemini-2.5-flash-native-audio-preview-12-2025 and gemini-3.1-flash-live-preview.
 # Updated: 2026-05-30.
@@ -435,10 +435,10 @@ GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
 	},
 }
 
-# Family used when a model name doesn't match any known family — a safe
+# Family used when a model name doesn't match any known family -- a safe
 # fall-back for unrecognized/unspecified model strings (bills at the cheaper
 # 2.5 rate). NOTE: this is the pricing fallback for UNKNOWN names, NOT the
-# runtime default model — the active default is 3.1 (USE_PREMIUM_MODEL=true).
+# runtime default model -- the active default is 3.1 (USE_PREMIUM_MODEL=true).
 DEFAULT_PRICING_FAMILY = "2.5"
 
 
@@ -448,10 +448,10 @@ def model_family(model_name: str | None) -> str:
 	Matches the version number as a whole token, NOT a bare substring, so
 	'gemini-3.10-flash' does not match family '3.1' and 'gemini-12.5-...' does
 	not match '2.5'. The version must be bounded by a non-version character (or
-	the start/end of the string) on each side — i.e. not preceded by a digit/dot
+	the start/end of the string) on each side -- i.e. not preceded by a digit/dot
 	and not followed by a digit/dot. Falls back to DEFAULT_PRICING_FAMILY for
 	empty/unrecognized names so cost tracking never crashes on a new preview
-	model — it just bills at the default until a row is added here.
+	model -- it just bills at the default until a row is added here.
 	"""
 	name = (model_name or "").lower()
 	for family in GEMINI_PRICING_BY_FAMILY:
@@ -469,7 +469,7 @@ def get_pricing_for_model(model_name: str | None) -> dict[str, float]:
 
 # Backward-compatible alias: the old flat dict was the 2.5 rates. Anything still
 # importing GEMINI_PRICING keeps working (it gets the default family's rates).
-# A COPY, not the live inner dict — a stray mutation of GEMINI_PRICING must not
+# A COPY, not the live inner dict -- a stray mutation of GEMINI_PRICING must not
 # corrupt GEMINI_PRICING_BY_FAMILY for everyone else in the process.
 GEMINI_PRICING = dict(GEMINI_PRICING_BY_FAMILY[DEFAULT_PRICING_FAMILY])
 
