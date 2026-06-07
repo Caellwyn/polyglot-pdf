@@ -9,10 +9,11 @@ from pathlib import Path
 
 # === Native audio-to-audio model tiers (A/B-able) ===
 # Both are full native audio-to-audio Live API models (bidiGenerateContent).
-# USE_PREMIUM_MODEL flips between these (defaults TRUE -> premium/3.1):
-#   premium  -> gemini-3.1-flash-live-preview            (DEFAULT; reliable on audio; family 3.1)
-#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (cheaper opt-in; family 2.5;
-#               intermittently silent on the audio path -- bd polyglot-pdf-daa)
+# USE_PREMIUM_MODEL flips between these (defaults FALSE -> standard/2.5):
+#   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (DEFAULT; reliably
+#               emits the update_form_fields tool call; family 2.5)
+#   premium  -> gemini-3.1-flash-live-preview            (opt-in; family 3.1;
+#               UNRELIABLE tool-calling in audio mode ~50% -- bd polyglot-pdf-5oq)
 # NOTE: Gemini model naming is inconsistent across Google's sources — the 2.5
 # native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
 # default), and that exact string 1008'd ("not found for bidiGenerateContent") in
@@ -27,8 +28,8 @@ MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
 # update_form_fields less reliably than 2.5?"), flip USE_PREMIUM_MODEL and
 # restart the backend -- each run is one clean sample. Locally, the dev runner
 # does this for you:
-#     ./scripts/dev-local.ps1                 # premium / 3.1 (default)
-#     ./scripts/dev-local.ps1 -Model standard # standard / 2.5
+#     ./scripts/dev-local.ps1                 # standard / 2.5 (default, mirrors prod)
+#     ./scripts/dev-local.ps1 -Model premium  # premium / 3.1
 # The active model is recorded on every structlog line (bound `model=...`) and on
 # every dev I/O capture entry (`model` field in gemini_<date>.jsonl), so a
 # captured session is unambiguously attributable to one model. Pricing is
@@ -47,12 +48,18 @@ class Settings(BaseModel):
 	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
-	# Default TRUE -> 3.1 (gemini-3.1-flash-live-preview). The 2.5 native-audio
-	# preview is intermittently silent on the AUDIO path (no-audio turns / 1011 —
-	# bd polyglot-pdf-daa), so 3.1 is the reliable default; 2.5 is the cheaper
-	# opt-in via USE_PREMIUM_MODEL=false. (3.1 is only modestly pricier — text-out
-	# 4.50 vs 2.00/1M; audio in/out identical — see GEMINI_PRICING_BY_FAMILY.)
-	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "true").lower() == "true"
+	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). 2.5 RELIABLY
+	# emits the update_form_fields tool call; 3.1 does NOT -- in audio mode it
+	# calls the tool only ~50% of the time and often confabulates a "trouble
+	# saving" message without calling it at all, so fields silently fail to save
+	# (bd polyglot-pdf-5oq, reproduced via backend/scripts/probe_tool_call.py
+	# 2026-06-07; TEXT modality can't help -- native-audio 3.1 1007s on TEXT).
+	# So 2.5 is the working default. Its known tradeoff is intermittent silence
+	# on the AUDIO path (no-audio turns / 1011 -- bd polyglot-pdf-daa), mitigated
+	# separately. Set USE_PREMIUM_MODEL=true to opt back into 3.1 once a revision
+	# fixes audio-mode tool-calling. (3.1 is modestly pricier -- text-out 4.50 vs
+	# 2.00/1M; audio in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
+	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
@@ -435,10 +442,11 @@ GEMINI_PRICING_BY_FAMILY: dict[str, dict[str, float]] = {
 	},
 }
 
-# Family used when a model name doesn't match any known family — a safe
+# Family used when a model name doesn't match any known family -- a safe
 # fall-back for unrecognized/unspecified model strings (bills at the cheaper
-# 2.5 rate). NOTE: this is the pricing fallback for UNKNOWN names, NOT the
-# runtime default model — the active default is 3.1 (USE_PREMIUM_MODEL=true).
+# 2.5 rate). NOTE: this is the pricing fallback for UNKNOWN names. It happens to
+# coincide with the runtime default model family (2.5, USE_PREMIUM_MODEL=false --
+# bd polyglot-pdf-5oq), but the two are independent knobs.
 DEFAULT_PRICING_FAMILY = "2.5"
 
 

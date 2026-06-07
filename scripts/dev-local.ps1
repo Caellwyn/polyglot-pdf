@@ -22,8 +22,10 @@
 
 .PARAMETER Model
   Which native-audio Live model to run, for A/B testing tool-call reliability:
-    premium  -> gemini-3.1-flash-live-preview            (default)
-    standard -> gemini-2.5-flash-native-audio-preview-12-2025
+    standard -> gemini-2.5-flash-native-audio-preview-12-2025 (default; mirrors
+                the deployed demo/prod default since bd polyglot-pdf-5oq)
+    premium  -> gemini-3.1-flash-live-preview            (opt-in; unreliable
+                tool-calling in audio mode)
   Maps to USE_PREMIUM_MODEL. To pin an exact id instead, set $env:MODEL_NATIVE
   before launching (non-empty MODEL_NATIVE wins over this flag).
 
@@ -36,11 +38,11 @@
 
 .EXAMPLE
   ./scripts/dev-local.ps1
-  Start both servers on the 3.1 model with full dev logging.
+  Start both servers on the 2.5 model (the deployed default) with full dev logging.
 
 .EXAMPLE
-  ./scripts/dev-local.ps1 -Model standard
-  Same, but on the 2.5 model (A/B comparison).
+  ./scripts/dev-local.ps1 -Model premium
+  Same, but on the 3.1 model (A/B comparison).
 
 .NOTES
   Stop everything with Ctrl-C in this window; the script tears down both child
@@ -49,7 +51,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('premium', 'standard')]
-    [string]$Model = 'premium',
+    [string]$Model = 'standard',
     [switch]$BackendOnly,
     [switch]$NoDevLog
 )
