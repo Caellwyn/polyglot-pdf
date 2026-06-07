@@ -66,7 +66,47 @@ Also left untouched: the stale in_progress bead `polyglot-pdf-hrn` (Harness
 tuning / bounded autonomy, P1) flagged by closeout -- a separate long-running
 epic, unrelated to this PR.
 
+## Review round (fresh-eyes)
+
+Fresh-eyes flagged a high-confidence blocker: the `_BinarySuppressFilter`
+suppresses any record whose message exceeds 2000 chars, and a rendered
+traceback (now in the JSON line) would routinely cross that -- silently dropping
+the very error logs this fix exists to surface.
+
+Investigating it produced a sharper finding: `_BinarySuppressFilter` is attached
+to the **loggers** (root + named noisy ones), never to the **StreamHandler**.
+structlog logs through its own loggers via `LoggerFactory()`; those records reach
+root by **handler propagation**, which does NOT run the originating logger's
+filters. Proven empirically: a 2595-char structlog INFO line passes through
+unfiltered and the filter's `.filter()` is never invoked for structlog records.
+So the 2000-char guard never actually sees a traceback -- the blocker as
+described does not fire in this configuration, and the `format_exc_info` fix
+alone is sufficient (verified: a 2091-char traceback renders into `exception`
+and reaches output).
+
+Resolution:
+- Kept a small **defense-in-depth** edit: exempt ERROR-and-above from the
+  2000-char guard (`record.levelno < logging.ERROR`), so the filter is correct
+  *if* it is ever moved onto the handler. Comment states plainly that the filter
+  is currently inert for structlog records.
+- Filed `polyglot-pdf-h79` (P3) for the real latent issue: the binary-suppress
+  filter does not run on structlog (JSON) output at all. Out of scope for this
+  one-line logging fix.
+
+## Lessons (review round)
+
+Running backend tests from the **main-repo cwd** silently imports main's
+unedited copy of `backend/utils/*`, not the worktree edit (the venv lives in
+main, which tempts `cd`-ing there). The fix "looked broken" until `m.__file__`
+revealed the wrong import path. Captured to local memory
+(`run-backend-tests-from-worktree-not-main`); sibling of the
+closeout-scripts-audit-main trap. Also: `closeout_prep.py` runs only
+`backend/tests/`, so the pre-existing `manifest_wrapper`-fixture collection
+errors in top-level `backend/test_jit_system_e2e.py` are outside its scope (and
+unrelated to this change).
+
 ## Files touched
 
 - `backend/utils/logging.py` -- added `structlog.processors.format_exc_info`
-  before `JSONRenderer` (+6 incl. comment).
+  before `JSONRenderer`; exempted ERROR-and-above from the `_BinarySuppressFilter`
+  2000-char guard (defense-in-depth) with an explanatory comment.

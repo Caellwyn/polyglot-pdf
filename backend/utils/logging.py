@@ -55,9 +55,16 @@ def configure_logging() -> None:
 			# If the message looks like a binary/frame dump, suppress it.
 			if self._pattern.search(msg):
 				return False
-			# Also suppress extremely long single-line messages which commonly
-			# indicate byte dumps (defensive). Allow normal logs.
-			if len(msg) > 2000:
+			# Also suppress extremely long messages which commonly indicate byte
+			# dumps (defensive). EXEMPT ERROR-and-above so a rendered exception
+			# traceback (format_exc_info -> JSON "exception" field) -- legitimate
+			# multi-line content that routinely exceeds 2000 chars -- is never
+			# dropped; error logs are exactly when we need the traceback. Binary
+			# dumps log at INFO/DEBUG, so the guard still catches them. (Today this
+			# filter only runs on records logged via the stdlib loggers it is
+			# attached to, not structlog's JSON records, so this guard is
+			# defense-in-depth for the traceback fix, bd polyglot-pdf-0uu.)
+			if len(msg) > 2000 and record.levelno < logging.ERROR:
 				return False
 			return True
 
