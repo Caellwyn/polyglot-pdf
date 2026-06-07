@@ -76,8 +76,9 @@ stable across hash seeds.
 that 3.1 Pro could not, and posted the best conditional recall of any arm (show_if
 54.7%, b.cond 44.6% -- edging claude-hybrid's 41.5%) with full
 parts/sections/supplements structure. Its one I-589 weakness is tables (0/9 vs
-claude's 7/9), dragging b.strc to 75.0. On I-90 it ties 3.1 Pro / claude on field
-detection (97.0 F1). It is also much faster + cheaper than 3.1 Pro.
+claude's 7/9), dragging b.strc to 75.0. On I-90 it is within ~2 pp of 3.1 Pro and
+claude on field detection (97.0 F1 vs 98.5 / 96.0). It is also much faster +
+cheaper than 3.1 Pro.
 
 `gemini31pro-hybrid` on I-589 stays SKIPPED: the call (460 widgets, ~129KB field
 list, 64K output budget) exceeded both an 8-min and a 20-min HTTP deadline on
