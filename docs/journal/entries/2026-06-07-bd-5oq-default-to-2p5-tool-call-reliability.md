@@ -86,10 +86,16 @@ switch as-is; reopen with the daa 1011-probe if silence ever appears live.
 
 ## Doc freshness
 
-`docs/standards/ai-models.md` documents the model tiers + which is default; its
-"3.1 is the reliable default" framing is now stale. Updated its default + the
-"why" to 2.5/this bead and bumped the date. Other freshness-flagged docs are
-pre-existing drift from other PRs and untouched by this change.
+Updated the two docs whose CURRENT-STATE prose this change actually contradicts:
+- `docs/standards/ai-models.md` -- flipped the tier table + the "why 3.1/2.5 is
+  the default" callout + the `USE_PREMIUM_MODEL` default to 2.5/this bead.
+- `docs/components/config-deployment.md` -- the `USE_PREMIUM_MODEL` row (default
+  `true`->`false`) and the demo `BACKEND_EXTRA_ENV` example (`...=true`->`false`).
+
+Other freshness-flagged docs (logging-and-cost, risk-rating, voice-and-vad,
+technical_guide, etc.) track `config.py`/`deploy-demo.sh` broadly but a one-line
+model-default flip does not contradict their content; they are pre-existing drift
+from other PRs' 06-04/06-05 work and are left as-is.
 
 ## Files touched
 
