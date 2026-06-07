@@ -26,12 +26,27 @@ was already in native VAD.
 
 **Fix (both `VoiceOverlay.tsx` and `VoiceOverlayMobile.tsx`).** Added reactive
 `nativeVad` state, synced from `connectionManager.isNativeVad()` in an effect that
-runs once connected (the handshake fires `onNativeVadMode` BEFORE flipping status
-to `connected`, so the read is reliable). When native VAD is on: force the
-displayed mode off PTT (`setPushToTalkMode(false)` -- so the PTT button hides and
-the label is truthful), disable the toggle input, label it **"Native"**, and add a
-tooltip explaining the mode is backend-controlled. Updated the desktop mode label
-to `nativeVad ? 'Native' : (pushToTalkMode ? 'PTT' : 'Auto')`.
+runs when connected (the handshake fires `onNativeVadMode` before flipping status
+to `connected` on the initial connect; the value is the last-`session_ready`
+closure on a restart, which is correct since the mode can't change mid-session). It
+is reset to `false` whenever not connected, so a disconnect/reconnect into manual
+mode shows the normal enabled toggle. When native VAD is on: disable the toggle
+input, label it **"Native"** (`nativeVad ? 'Native' : (pushToTalkMode ? 'PTT' :
+'Auto')`), and add a tooltip explaining the mode is backend-controlled. The
+PTT-button render and the "Listening" badge are also gated on `!nativeVad`, and
+the Silero VAD-run effect's `shouldRunVAD` now includes `!nativeVad`.
+
+**Critical: do NOT force `pushToTalkMode=false` in native mode** (caught by
+fresh-eyes on PR #110, round 1). An earlier draft forced it false to hide the PTT
+UI, but `pushToTalkMode=false` satisfies `shouldRunVAD = isConnected &&
+!pushToTalkMode`, which **starts client-side Silero VAD** -- and in native mode
+Silero's `onSpeechStart` calls `flushAudioQueue()` (sets `playbackBlocked=true`)
+while `onSpeechEnd -> onVADSpeechEnd` no-ops on `nativeVad`, so `resumePlayback()`
+never fires and Gemini's audio is permanently blocked. Native mode is a THIRD
+state where neither PTT nor client Silero VAD runs; the guards therefore key on
+`nativeVad` directly and `pushToTalkMode` keeps its real user value (its existing
+PTT-sync effect already early-returns on `isNativeVad()`, so leaving it true does
+not mute input in native mode).
 
 **Why disable rather than make the toggle "work".** Native-vs-manual VAD is set by
 the backend `DISABLE_GEMINI_VAD` flag at `session_ready` and there is no
@@ -56,6 +71,31 @@ must be SURFACED (disabled + relabeled), not silent -- a guard that early-return
 without touching the UI leaves the control lying about state. Generalizes to any
 mode-gated UI; captured here and in the voice-and-vad doc rather than a standards
 one-liner (it is a UX principle, not a codebase rule).
+
+Second lesson (the fresh-eyes catch): there were THREE input modes, not two. PTT
+and client-Silero-VAD are the two `pushToTalkMode` values, but native VAD is a
+distinct third mode where *neither* runs. Collapsing native into "not PTT" by
+forcing `pushToTalkMode=false` silently turned on Silero, whose half-guarded
+callbacks (`flushAudioQueue` with no matching `resumePlayback` in native mode) would
+have permanently muted Gemini. Gate mode-specific behavior on the mode's OWN flag,
+never by overloading a sibling mode's flag.
+
+## Fresh-eyes triage (PR #110)
+
+Round 1, sonnet reviewer, 5 findings, all triaged:
+- **#1 (critical, ADOPTED):** forcing `pushToTalkMode=false` started Silero VAD in
+  native mode -> permanent audio block. Fixed by removing the force and gating
+  `shouldRunVAD` / PTT-button / Listening-badge on `nativeVad`.
+- **#2 (medium, ADOPTED):** `nativeVad` not reset on disconnect -> toggle stuck
+  disabled. Fixed: the effect now sets `nativeVad=false` whenever not connected.
+- **#3 (medium, RESOLVED by #1's fix):** `pushToTalkMode` not restored after a
+  native session. No longer mutated, so the user's value is preserved.
+- **#4 (low, RESOLVED by #1's fix):** "Listening" badge in native mode -- now gated
+  on `!nativeVad`.
+- **#5 (low, ADOPTED):** journal timing claim imprecise for session-restart; the
+  "What shipped" wording above now notes the restart path uses the closure value.
+
+Copilot round 1: prose-only overview, no inline findings (effectively CLEAN).
 
 ## Doc freshness
 

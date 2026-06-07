@@ -131,20 +131,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected (mirror of
 	// the desktop overlay). onNativeVadMode fires before status flips to
-	// "connected", so isNativeVad() is reliable here. In native-VAD mode force the
-	// displayed mode off PTT and disable the toggle -- the mode is
-	// backend-controlled (DISABLE_GEMINI_VAD), not client-switchable mid-session.
+	// "connected", so isNativeVad() is reliable on connect. In native-VAD mode
+	// neither PTT nor client Silero VAD applies, so the toggle is disabled and the
+	// shouldRunVAD / PTT-button / Listening-badge guards key on `nativeVad`. We do
+	// NOT force pushToTalkMode false -- that would start Silero in native mode and
+	// block Gemini audio (fresh-eyes on PR #110). Reset on disconnect.
 	useEffect(() => {
-		if (!connectionManager) return
+		if (!connectionManager) {
+			setNativeVad(false)
+			return
+		}
 		const isConn = status.toLowerCase() === 'connected' ||
 			status.toLowerCase().startsWith('connected ')
-		if (!isConn) return
-		const nv = connectionManager.isNativeVad()
-		setNativeVad(nv)
-		if (nv && pushToTalkMode) {
-			setPushToTalkMode(false)
-		}
-	}, [connectionManager, status, pushToTalkMode])
+		setNativeVad(isConn ? connectionManager.isNativeVad() : false)
+	}, [connectionManager, status])
 
 	// Keep isHoldingPushToTalk ref updated
 	useEffect(() => {
@@ -464,7 +464,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// 2. NOT in push-to-talk mode
 		// 3. VAD library finished loading
 		// 4. No VAD errors occurred
-		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
+		// bd polyglot-pdf-tlc: never run client Silero VAD in native mode (Gemini's
+		// VAD drives turns; Silero would block playback without a matching resume).
+		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
 			console.log('[VoiceOverlayMobile] 🎙️ Starting VAD (conditions met)')
@@ -481,7 +483,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// NOTE: vad.start and vad.pause intentionally excluded from deps
 		// They are stable callbacks that shouldn't trigger re-renders
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
+	}, [status, pushToTalkMode, nativeVad, vad.loading, vad.errored, vad.userSpeaking])
 
 
 	// Handle initial language selection from modal (fallback when initialLanguage not provided)
@@ -992,7 +994,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 			<div className="vff-fab" onClick={() => setIsExpanded(!isExpanded)}>
 				<div className="vff-fab-pulse" style={{ borderColor: statusColor }}></div>
 				{/* VAD speech detection indicator - small green dot badge */}
-				{vad.userSpeaking && !pushToTalkMode && (
+				{vad.userSpeaking && !pushToTalkMode && !nativeVad && (
 					<div className="vff-fab-vad-badge">
 						<div className="vff-fab-vad-dot"></div>
 					</div>
@@ -1047,8 +1049,8 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</label>
 					</div>
 
-					{/* Push-to-Talk Bar Button (only visible in PTT mode and when connected) */}
-					{pushToTalkMode && isConnected && (
+					{/* Push-to-Talk Bar Button (only visible in PTT mode and when connected; never in native VAD) */}
+					{pushToTalkMode && isConnected && !nativeVad && (
 						<div className="vff-ptt-bar-container">
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
