@@ -52,6 +52,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
+	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD is driving turns. Set
+	// by the backend at session_ready (mirror of DISABLE_GEMINI_VAD) and reported
+	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
+	// continuous audio and the manual PTT control does not apply -- the toggle is
+	// disabled and the displayed mode reflects native VAD (not a stale "PTT").
+	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
@@ -158,6 +164,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			audioManager?.unmuteInput()
 		}
 	}, [connectionManager, pushToTalkMode])
+
+	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected. The
+	// session_ready handshake fires onNativeVadMode BEFORE flipping status to
+	// "connected", so isNativeVad() is reliable on connect. In native-VAD mode
+	// Gemini drives turns on a continuous stream -- NEITHER PTT nor client-side
+	// Silero VAD applies -- so the Input-Mode toggle is disabled and the displayed
+	// mode reads "Native" (see the JSX + the shouldRunVAD / PTT-button /
+	// Listening-badge guards, all keyed on `nativeVad`). We deliberately do NOT
+	// mutate pushToTalkMode: forcing it false would satisfy `!pushToTalkMode` and
+	// start Silero VAD in native mode, whose callbacks would block Gemini's audio
+	// (fresh-eyes on PR #110). Reset to false when not connected so a
+	// disconnect/reconnect into manual mode shows the normal enabled toggle.
+	useEffect(() => {
+		if (!connectionManager) {
+			setNativeVad(false)
+			return
+		}
+		const isConnected = status.toLowerCase() === 'connected' ||
+			status.toLowerCase().startsWith('connected ')
+		setNativeVad(isConnected ? connectionManager.isNativeVad() : false)
+	}, [connectionManager, status])
 
 	// Keep status ref updated
 	useEffect(() => {
@@ -489,7 +516,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// 2. NOT in push-to-talk mode
 		// 3. VAD library finished loading
 		// 4. No VAD errors occurred
-		const shouldRunVAD = isConnected && !pushToTalkMode && !vad.loading && !vad.errored
+		// bd polyglot-pdf-tlc: never run client Silero VAD in native mode -- Gemini's
+		// own VAD drives turns there, and Silero's onSpeechStart/End would block
+		// playback (flushAudioQueue) without a matching resume (onVADSpeechEnd
+		// no-ops on nativeVad).
+		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
 			console.log('[VoiceOverlay] 🎙️ Starting VAD (conditions met)')
@@ -506,7 +537,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// NOTE: vad.start and vad.pause intentionally excluded from deps
 		// They are stable callbacks that shouldn't trigger re-renders
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [status, pushToTalkMode, vad.loading, vad.errored, vad.userSpeaking])
+	}, [status, pushToTalkMode, nativeVad, vad.loading, vad.errored, vad.userSpeaking])
 
 	// Handle connect button
 	const handleConnect = async () => {
@@ -1208,7 +1239,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 							{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
 						</span>
 						{/* VAD speech detection indicator */}
-						{vad.userSpeaking && !pushToTalkMode && (
+						{vad.userSpeaking && !pushToTalkMode && !nativeVad && (
 							<span className="vff-vad-indicator" title="Voice detected">
 								<span className="vff-vad-light"></span>
 								<span className="vff-vad-label">Listening</span>
@@ -1289,14 +1320,24 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						)}
 					</div>
 					{/* Push-to-Talk Toggle */}
+					{/* bd polyglot-pdf-tlc: in native-VAD mode the toggle is disabled
+					    (the mode is backend-controlled via DISABLE_GEMINI_VAD and cannot
+					    be switched mid-session) and the label shows "Native"; otherwise
+					    it switches between PTT and client-VAD ("Auto"). */}
 					<div className="vff-ptt-toggle-container">
-						<label className="vff-ptt-toggle-label">
+						<label
+							className="vff-ptt-toggle-label"
+							title={nativeVad
+								? 'Gemini native VAD is active (set by the backend); push-to-talk does not apply in this mode.'
+								: undefined}
+						>
 							<span className="vff-ptt-label-text">Input Mode:</span>
 							<div className="vff-ptt-toggle-switch">
 								<input
 									type="checkbox"
 									checked={pushToTalkMode}
 									onChange={handlePushToTalkToggle}
+									disabled={nativeVad}
 									className="vff-ptt-toggle-input"
 									onKeyDown={(e) => {
 										if (e.code === 'Space') {
@@ -1309,12 +1350,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
 								</span>
 							</div>
-							<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+							<span className="vff-ptt-mode-label">{nativeVad ? 'Native' : (pushToTalkMode ? 'PTT' : 'Auto')}</span>
 						</label>
 					</div>
 
-					{/* Push-to-Talk Button (only visible in PTT mode) */}
-					{pushToTalkMode && isConnected && (
+					{/* Push-to-Talk Button (only visible in PTT mode; never in native VAD) */}
+					{pushToTalkMode && isConnected && !nativeVad && (
 						<div className="vff-ptt-button-container">
 							<button
 								className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}

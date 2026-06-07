@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for closeout details.*
+*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the PTT-toggle native-VAD fix, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -90,9 +90,16 @@ frontend must get out of the way on **both** axes:
   zero sub-threshold audio before JS ever sees it). The bypass is re-applied
   whenever the worklet node is (re)created, so a reconnect can't silently re-arm
   the gate.
-- **PTT button is inert.** In native mode the PTT effects in `VoiceOverlay.tsx` /
-  `VoiceOverlayMobile.tsx` early-return on `connectionManager.isNativeVad()`, so a
-  PTT toggle can't re-arm the noise gate or mute the (now continuous) stream.
+- **PTT is disabled and shown as such.** In native mode the PTT effects in
+  `VoiceOverlay.tsx` / `VoiceOverlayMobile.tsx` early-return on
+  `connectionManager.isNativeVad()`, so a PTT toggle can't re-arm the noise gate or
+  mute the (now continuous) stream. The overlays read `isNativeVad()` into reactive
+  state once connected (`session_ready` fires `onNativeVadMode` before status flips
+  to `connected`) and, when native VAD is on, **force the displayed mode off PTT,
+  disable the Input-Mode toggle, and label it "Native"** (with a tooltip) -- so the
+  control reflects reality instead of a stale, unresponsive "PTT" (bd
+  polyglot-pdf-tlc). The VAD mode is backend-controlled (`DISABLE_GEMINI_VAD`) and
+  is not client-switchable mid-session.
 
 Revert is the single flag: set `DISABLE_GEMINI_VAD=true` and every gate falls back
 to the manual-VAD behavior described above — the non-native code paths are
