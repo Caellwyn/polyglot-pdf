@@ -79,6 +79,14 @@ export class WebFormConnection {
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
+  // bd polyglot-pdf-0y7: loop-breaker for the confirm_field / next_field_hint spin.
+  // confirmField no-ops when a field has no value, so the backend can re-request
+  // confirm_field for the SAME unconfirmable field forever. Track consecutive
+  // failed confirms (field requested but not actually confirmed) per field id; at
+  // the threshold, break the loop with a recovery prompt instead of spinning.
+  private confirmFailField: string | null = null;
+  private confirmFailCount = 0;
+  private static readonly CONFIRM_FAIL_LIMIT = 2;
 
   // Auth token plumbing (bd polyglot-pdf-wq0). The backend /ws/fill gate rejects
   // tokenless connections with HTTP 403. Reconnect paths (startSection,
@@ -954,6 +962,35 @@ export class WebFormConnection {
       confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
     );
     SchemaFormStateManager.save(this.state);
+
+    // bd polyglot-pdf-0y7: loop-breaker. confirmField no-ops when the field has no
+    // value (it can't be confirmed), so computeNextField keeps returning the SAME
+    // field and the backend can re-request confirm_field for it forever while
+    // Gemini stalls. Detect a confirm_field that did NOT actually confirm the field
+    // and, after CONFIRM_FAIL_LIMIT consecutive failures on the same field, break
+    // the spin by sending a level-1 recovery prompt (re-asks the user for the
+    // value via the existing recovery channel) instead of silently falling through
+    // to another no-op cycle. A successful confirm (or a different field) resets.
+    if (!SchemaFormStateManager.isFieldConfirmed(this.state, field_id)) {
+      this.confirmFailCount = (this.confirmFailField === field_id) ? this.confirmFailCount + 1 : 1;
+      this.confirmFailField = field_id;
+      if (this.confirmFailCount >= WebFormConnection.CONFIRM_FAIL_LIMIT) {
+        console.warn(
+          `[WebFormConnection] confirm_field for '${field_id}' failed ${this.confirmFailCount}x ` +
+          `(no value to confirm) -- breaking confirm/next-field loop with a recovery prompt`
+        );
+        const hint = this.computeNextFieldHintString() || undefined;
+        this.sendRecoveryPrompt(1, hint);
+        // Reset so we re-arm rather than firing a recovery prompt every cycle.
+        this.confirmFailField = null;
+        this.confirmFailCount = 0;
+        return;
+      }
+    } else {
+      // Field actually confirmed -- clear any failure streak.
+      this.confirmFailField = null;
+      this.confirmFailCount = 0;
+    }
 
     // 🆕 AUTO-DETECT SECTION COMPLETION
     // Check if all fields in current section are now confirmed
