@@ -90,9 +90,16 @@ frontend must get out of the way on **both** axes:
   zero sub-threshold audio before JS ever sees it). The bypass is re-applied
   whenever the worklet node is (re)created, so a reconnect can't silently re-arm
   the gate.
-- **PTT button is inert.** In native mode the PTT effects in `VoiceOverlay.tsx` /
-  `VoiceOverlayMobile.tsx` early-return on `connectionManager.isNativeVad()`, so a
-  PTT toggle can't re-arm the noise gate or mute the (now continuous) stream.
+- **PTT is disabled and shown as such.** In native mode the PTT effects in
+  `VoiceOverlay.tsx` / `VoiceOverlayMobile.tsx` early-return on
+  `connectionManager.isNativeVad()`, so a PTT toggle can't re-arm the noise gate or
+  mute the (now continuous) stream. The overlays read `isNativeVad()` into reactive
+  state once connected (`session_ready` fires `onNativeVadMode` before status flips
+  to `connected`) and, when native VAD is on, **force the displayed mode off PTT,
+  disable the Input-Mode toggle, and label it "Native"** (with a tooltip) -- so the
+  control reflects reality instead of a stale, unresponsive "PTT" (bd
+  polyglot-pdf-tlc). The VAD mode is backend-controlled (`DISABLE_GEMINI_VAD`) and
+  is not client-switchable mid-session.
 
 Revert is the single flag: set `DISABLE_GEMINI_VAD=true` and every gate falls back
 to the manual-VAD behavior described above — the non-native code paths are

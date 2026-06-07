@@ -43,6 +43,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
+	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD drives turns. Set by
+	// the backend at session_ready (mirror of DISABLE_GEMINI_VAD). When true the
+	// manual PTT toggle does not apply, so it is disabled and the displayed mode
+	// reflects native VAD instead of a stale "PTT".
+	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
@@ -123,6 +128,23 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		statusRef.current = status
 	}, [status])
+
+	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected (mirror of
+	// the desktop overlay). onNativeVadMode fires before status flips to
+	// "connected", so isNativeVad() is reliable here. In native-VAD mode force the
+	// displayed mode off PTT and disable the toggle -- the mode is
+	// backend-controlled (DISABLE_GEMINI_VAD), not client-switchable mid-session.
+	useEffect(() => {
+		if (!connectionManager) return
+		const isConn = status.toLowerCase() === 'connected' ||
+			status.toLowerCase().startsWith('connected ')
+		if (!isConn) return
+		const nv = connectionManager.isNativeVad()
+		setNativeVad(nv)
+		if (nv && pushToTalkMode) {
+			setPushToTalkMode(false)
+		}
+	}, [connectionManager, status, pushToTalkMode])
 
 	// Keep isHoldingPushToTalk ref updated
 	useEffect(() => {
@@ -1001,14 +1023,22 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 
 					{/* Push-to-Talk Toggle */}
+					{/* bd polyglot-pdf-tlc: disabled in native-VAD mode (backend-controlled,
+					    not switchable mid-session). */}
 					<div className="vff-ptt-toggle-container-mobile">
-						<label className="vff-ptt-toggle-label-mobile">
+						<label
+							className="vff-ptt-toggle-label-mobile"
+							title={nativeVad
+								? 'Gemini native VAD is active (set by the backend); push-to-talk does not apply in this mode.'
+								: undefined}
+						>
 							<span className="vff-ptt-icon-left">🎤</span>
 							<div className="vff-ptt-toggle-switch-mobile">
 								<input
 									type="checkbox"
 									checked={pushToTalkMode}
 									onChange={handlePushToTalkToggle}
+									disabled={nativeVad}
 									className="vff-ptt-toggle-input-mobile"
 								/>
 								<span className="vff-ptt-toggle-slider-mobile"></span>
