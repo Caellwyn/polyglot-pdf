@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-04. See [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -71,7 +71,8 @@ single-toggle revert, and the frontend continuous-audio requirement are in
 ## Barge-in
 
 In `_run_session_loop`, the adapter checks `server_content.interrupted`. On a true
-interrupt it logs `GEMINI_INTERRUPTED` (with the canceled tool-call ids), resets its
+interrupt it logs `GEMINI_INTERRUPTED` (with the canceled tool-call ids AND names,
+so a barge-in that kills an in-flight `update_form_fields` is visible), resets its
 audio-chunk tracking (`_audio_chunk_count = 0`, `_first_audio_time = None`), and
 `continue`s — skipping the rest of that event so no stale audio/tool-calls are
 processed. The backend does **not** push a flush signal to the client; the actual
@@ -83,7 +84,11 @@ sub-perceptual latency (see [../standards/voice-and-vad.md](../standards/voice-a
 
 Tool calls are routed to `CallbackHandler.on_tool_call`
 (`backend/services/callback_handler.py`), which dispatches the five tools declared
-in `backend/config.py`:
+in `backend/config.py`. The full call/response sequence (code expectation vs. the
+actual wire payload) is mapped in [tool-call-flow.md](tool-call-flow.md); when
+debugging tool reliability, the adapter captures FULL message bodies locally via
+`_dev_log_io` (`.env.DEV`-gated, never in production) to
+`backend/logs/gemini_<date>.jsonl`. The five tools:
 
 - `update_form_fields` — single field per call (hallucination mitigation).
 - `confirm_field` — enum `verbal`/`manual`; see
