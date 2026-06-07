@@ -84,16 +84,17 @@ def _extract_json(text: str) -> dict:
         raise
 
 
-def build_fewshot(truth_path: str, max_fields: int = 8) -> str:
+def build_fewshot(truth_path: str) -> str:
     """Distill a few-shot convention exemplar from a DIFFERENT form's gold schema.
 
     Shows the model the TARGET conventions it should imitate: how sections are
     id'd/labeled, and a couple of fully-formed fields (a plain text field, a
     consolidated radio/checkbox set with options, and a field carrying a
     relationship key). We deliberately keep it small -- it teaches STYLE, not the
-    target form's content.
+    target form's content (exactly 3 exemplar fields).
     """
-    truth = json.load(open(truth_path, encoding="utf-8"))
+    with open(truth_path, encoding="utf-8") as fh:
+        truth = json.load(fh)
     parts = truth.get("parts") or []
     sections = truth.get("sections") or []
     fields = truth.get("fields") or []
@@ -257,6 +258,10 @@ def run(pdf_path: str, acroform_path: str, model: str,
     pdf_for_prompt = pdf_path if send_pdf else None
     prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt)
 
+    # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
+    # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
+    # will itself reject a name it doesn't recognize. So an unknown model surfaces
+    # as a CLI error, not a silent wrong backend.
     is_gemini = model.lower().startswith("gemini")
     backend = "gemini" if is_gemini else "claude-cli"
     if is_gemini:

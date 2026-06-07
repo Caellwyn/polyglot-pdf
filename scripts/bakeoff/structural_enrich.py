@@ -51,7 +51,8 @@ def decompose_name(full_name: str) -> dict[str, Any]:
       {
         "path": ["form1", "#subform"],     # container subforms (everything but leaf)
         "leaf": "P1_Line3a_FamilyName",    # the meaningful local name
-        "leaf_tokens": ["P1", "Line3a", "FamilyName"],  # leaf split on _ and case
+        "leaf_tokens": ["P", "1", "Line", "3a", "Family", "Name"],  # leaf split
+                                           # on _ AND case/digit boundaries
         "index": 0,                        # trailing [n] on the leaf, if any
       }
     We do NOT map P1->Part 1 or Line3a->question 3a; that interpretation is the
@@ -143,7 +144,8 @@ def enrich(dump: dict) -> dict:
     # 1. name decomposition: per logical field, from its name.
     for f in dump.get("fields", []):
         f["_name_decomp"] = decompose_name(f["name"])
-        # Field-level tab order = min of its widgets' (the field's first widget).
+        # Field-level tab order = the EARLIEST reading-order rank among its
+        # widgets (a multi-widget group is reached when its first widget is).
         f["_tab_order"] = min(w.get("_tab_order", 1 << 30) for w in f["widgets"])
         f["_row_cluster"] = f["widgets"][0].get("_row_cluster")
 
