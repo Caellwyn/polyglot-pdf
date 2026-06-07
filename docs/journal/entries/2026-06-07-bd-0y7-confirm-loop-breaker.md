@@ -125,5 +125,5 @@ prompts -- distinct from this bead.
 
 - `frontend/src/webFormConnection.ts` -- loop-breaker in `handleConfirmFieldRequest` + the `confirmFailField`/`confirmFailCount`/`CONFIRM_FAIL_LIMIT` tracking fields.
 - `frontend/src/schema-forms/state/schemaFormState.ts` -- `console.warn` on the `confirmField` no-op (was silent).
-- `frontend/src/webFormConnection.confirmloop.test.ts` -- NEW: 5 regression tests for the loop-breaker.
+- `frontend/src/webFormConnection.confirmloop.test.ts` -- NEW: 7 regression tests for the loop-breaker.
 - `docs/components/tool-call-flow.md` -- "Frontend loop-breaker" note + stamp.

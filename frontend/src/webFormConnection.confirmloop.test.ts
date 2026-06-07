@@ -150,4 +150,17 @@ describe('WebFormConnection confirm-loop breaker (bd polyglot-pdf-0y7)', () => {
     expect((conn as any).confirmFailField).toBeNull()
     expect((conn as any).confirmFailCount).toBe(0)
   })
+
+  it('resets the streak on startSection too (the completeSection transition path, Copilot PR #111)', async () => {
+    ;(conn as any).confirmFailField = 'f1'
+    ;(conn as any).confirmFailCount = 1
+    try {
+      await (conn as any).startSection('s1', 'wss://x/ws/fill')
+    } catch {
+      // startSection drives a reconnect that the mock can't complete; the reset
+      // runs first (before any awaited work).
+    }
+    expect((conn as any).confirmFailField).toBeNull()
+    expect((conn as any).confirmFailCount).toBe(0)
+  })
 })

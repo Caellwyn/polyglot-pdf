@@ -1545,6 +1545,12 @@ export class WebFormConnection {
    * @param sectionId - Section ID (e.g., "part_1_2_addresses")
    */
   async startSection(sectionId: string, wsUrl: string = "ws://localhost:8000/ws/fill"): Promise<void> {
+    // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on this section
+    // transition too (the other path besides switchToSection -- called by
+    // completeSection), so a stale count can't carry into the new section and trip
+    // the breaker a cycle early on a same field_id. Copilot review of PR #111.
+    this.confirmFailField = null;
+    this.confirmFailCount = 0;
     try {
       // Set switching status
       this.isSectionSwitching = true;
