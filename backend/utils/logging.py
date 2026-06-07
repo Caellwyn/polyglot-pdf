@@ -28,6 +28,12 @@ def configure_logging() -> None:
 		processors=[
 			structlog.processors.add_log_level,
 			structlog.processors.TimeStamper(fmt="iso"),
+			# Render exc_info (set by .exception() or exc_info=True) into a
+			# JSON-serializable "exception" string. Without this, JSONRenderer
+			# emits only "exc_info": true and DROPS the traceback, making caught
+			# errors (e.g. event_handling_error in live_ai_gemini) undebuggable
+			# in Cloud Run logs (bd polyglot-pdf-0uu).
+			structlog.processors.format_exc_info,
 			structlog.processors.JSONRenderer(),
 		],
 		logger_factory=structlog.stdlib.LoggerFactory(),
@@ -49,9 +55,26 @@ def configure_logging() -> None:
 			# If the message looks like a binary/frame dump, suppress it.
 			if self._pattern.search(msg):
 				return False
-			# Also suppress extremely long single-line messages which commonly
-			# indicate byte dumps (defensive). Allow normal logs.
-			if len(msg) > 2000:
+			# Also suppress extremely long messages which commonly indicate byte
+			# dumps (defensive). EXEMPT ERROR-and-above so a rendered exception
+			# traceback (format_exc_info -> JSON "exception" field) -- legitimate
+			# multi-line content that routinely exceeds 2000 chars -- is never
+			# dropped; error logs are exactly when we need the traceback. Binary
+			# dumps log at INFO/DEBUG, so the guard still catches them.
+			#
+			# Filter scope (bd polyglot-pdf-0uu / -h79): a logging.Filter runs on
+			# the EMITTING logger only, not on parent loggers reached via
+			# propagation. This filter is attached to the root logger and the
+			# named "noisy" loggers below, so it runs on records emitted DIRECTLY
+			# through those (incl. structlog calls whose underlying stdlib logger
+			# is root or a noisy one) -- but NOT on a record emitted through some
+			# other logger that merely propagates UP to root. The error path this
+			# fix targets (backend.adapters.* / .services.* via bare
+			# structlog.get_logger(), named after the calling module) is not root
+			# and not in the noisy list, so this guard does not gate its
+			# tracebacks; the ERROR exemption keeps the filter correct for any
+			# error that IS emitted through a filtered logger.
+			if len(msg) > 2000 and record.levelno < logging.ERROR:
 				return False
 			return True
 
