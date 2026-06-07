@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for closeout details.*
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -13,11 +13,16 @@ explained in [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
 ## Settings & how env vars reach them
 
-`Settings` is instantiated per-call by `get_settings()`. **`.env` is auto-loaded:**
-`backend/main.py` calls `load_dotenv()` *before* importing config, so any
-`backend/.env` populates `os.environ`, and the `Settings` fields that call
-`os.getenv(...)` pick it up. (The `get_settings` docstring still says ".env in
-later phases" — that's stale; `main.py:7` already does it.)
+`Settings` is built once by `get_settings()`, which is `@lru_cache(maxsize=1)`
+so all callers share a single instance (it was rebuilt per call before
+`polyglot-pdf-efd`). **`.env` is auto-loaded:** `backend/main.py` calls
+`load_dotenv()` *before* importing config, so any `backend/.env` populates
+`os.environ` ahead of that first cached build, and the `Settings` fields that
+call `os.getenv(...)` pick it up. (The `get_settings` docstring still says ".env
+in later phases" — that's stale; `main.py:7` already does it.) Because the result
+is cached, a test that mutates `os.environ` and wants a fresh read must call
+`get_settings.cache_clear()` (most tests instead monkeypatch the module attribute,
+which bypasses the cache).
 
 **Two classes of setting — only one is env-overridable:**
 
@@ -142,4 +147,4 @@ when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for closeout details.*
+*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for closeout details.*
