@@ -1156,9 +1156,13 @@ def main(argv: list[str] | None = None) -> int:
         "CLEAN -- the deterministic, zero-model-token bead-close (bd hrn.14). "
         "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
         "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/MERGED. "
-        "On a close FAILURE the watcher exits {} so the orchestrator is woken to "
-        "triage rather than handed a false 'ready to merge'.".format(
-            EXIT_CLOSE_FAILED),
+        "FRESH-EYES RACE: do NOT pass this on the ROUND-1 watch while fresh-eyes "
+        "is still running -- a fast clean Codex verdict would close the bead before "
+        "fresh-eyes fixes are triaged. Pass it on the RE-WATCH instead (after all "
+        "round-1 fixes are pushed), or on round 1 only once fresh-eyes is known "
+        "clean (SKILL Step 7). On a close FAILURE the watcher exits {} so the "
+        "orchestrator is woken to triage rather than handed a false 'ready to "
+        "merge'.".format(EXIT_CLOSE_FAILED),
     )
     args = parser.parse_args(argv)
 

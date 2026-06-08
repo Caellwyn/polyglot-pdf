@@ -15,9 +15,11 @@ DO differ per project live here, resolved in this precedence order:
 suffix from the FULL id at runtime, so this is only used for help text and
 validation hints.
 
-(The PR reviewer is OpenAI Codex, triggered by an "@codex review" comment that
-`closeout_finish.py` posts directly -- there is no reviewer-slug config to set;
-the Copilot reviewer-API slug was removed at the Codex cutover, bd hrn.9.)
+(The PR reviewer is OpenAI Codex. It AUTO-REVIEWS on PR open -- round 1 needs no
+trigger (the "@codex review" nudge rides in the PR body); round 2+ re-reviews use
+an "@codex review" comment posted by the closeout Step-7 loop, NOT by
+`closeout_finish.py`. There is no reviewer-slug config to set; the Copilot
+reviewer-API slug was removed at the Codex cutover, bd hrn.9.)
 
 The kit's init script (`scripts/swarm_init.py`) writes swarm.config.json for
 you; you normally never edit this file.

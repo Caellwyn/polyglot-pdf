@@ -282,14 +282,17 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 
 1. **Open a NORMAL (NOT draft) PR with `@codex review` in the body, then (if review-worthy) capture the watch floor -- all in ONE Bash call.** The body is a **brief what-shipped summary + bead id(s)**, plus an `@codex review` line for review-worthy PRs. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Codex outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, omit the `@codex review` line and the `TS`:
    ```bash
+   # review-worthy ONLY -- capture the floor BEFORE `gh pr create`. Codex
+   # auto-reviews the instant the PR opens, so a verdict can land inside the
+   # create round-trip; a floor stamped AFTER create could exclude it and TIMEOUT
+   # the watch (Codex review, PR #118). Skip this line for a review-skipped PR.
+   TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
    PR=$(gh pr create --base dev \
         --title "<scope>(<context>): <summary> (bd <full-id>)" \
         --body "<brief what-shipped summary + bead id(s)>
 
    @codex review" \
         | grep -oE '[0-9]+$')
-   # review-worthy ONLY -- the floor is the PR-open time (auto-review lands after it):
-   TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
    echo "PR=$PR TS=$TS"
    ```
    (For a review-SKIPPED PR, drop the `@codex review` line from the body and skip the `TS`.) Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
