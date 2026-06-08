@@ -292,17 +292,19 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
             attempts.append(rec)
 
     # NamedTemporaryFile (not mktemp) avoids the TOCTOU race, matching the
-    # production filler; close doc in a finally so a save error can't leak it.
+    # production filler. ONE outer try/finally guards os.remove(tmp) across BOTH
+    # the save and the re-open, so the temp file is cleaned up even if doc.save()
+    # raises; an inner finally guarantees doc.close().
+    verified: dict[str, bool] = {}
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tf:
         tmp = tf.name
     try:
-        doc.save(tmp, garbage=3, deflate=True)
-    finally:
-        doc.close()
+        try:
+            doc.save(tmp, garbage=3, deflate=True)
+        finally:
+            doc.close()
 
-    # Re-open and verify each expected widget actually holds its value.
-    verified: dict[str, bool] = {}
-    try:
+        # Re-open and verify each expected widget actually holds its value.
         d2 = fitz.open(tmp)
         # Index widgets by exact name for read-back.
         by_name: dict[str, Any] = {}
