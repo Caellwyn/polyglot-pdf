@@ -35,6 +35,16 @@ import os
 import sys
 from collections import OrderedDict, defaultdict
 
+# The captured frontend console lines are full of emoji; Windows' default cp1252
+# stdout raises UnicodeEncodeError on them. Force UTF-8 so this explorer never
+# crashes on the very logs it exists to read (scar #6, but here we must DISPLAY
+# non-ASCII we don't control, not avoid emitting it).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 def _repo_root():
     # scripts/ lives at the repo root; logs are under backend/logs.
@@ -94,7 +104,7 @@ def cmd_sessions(rows, args):
             "ws": r.get("ws_session_id"),
             "first": _ts(r), "last": _ts(r),
             "events": 0, "text_turns": 0, "tool_calls": 0,
-            "audio_in": 0, "audio_out": 0, "errors": 0,
+            "audio_in": 0, "gemini_send": 0, "audio_out": 0, "errors": 0,
             "model": None,
         })
         s["events"] += 1
@@ -110,10 +120,12 @@ def cmd_sessions(rows, args):
         elif mt[1] == "audio_summary":
             # keep the LATEST frame count seen (rollups are cumulative)
             if mt[0] == "send":
-                s["audio_in"] = max(s["audio_in"], c.get("frames", 0))
+                s["audio_in"] = max(s["audio_in"], c.get("frames", 0))  # reached queue
             else:
                 s["audio_out"] = max(s["audio_out"], c.get("frames", 0))
-        elif mt[1] in ("error", "invalid_tool_call", "field_update_rejected"):
+        elif mt[1] == "gemini_send":
+            s["gemini_send"] = max(s["gemini_send"], c.get("frames", 0))  # crossed to Gemini
+        elif mt[1] in ("error", "invalid_tool_call", "field_update_rejected", "gemini_send_failed"):
             s["errors"] += 1
 
     sessions = list(by_sess.values())
@@ -124,23 +136,30 @@ def cmd_sessions(rows, args):
     if not sessions:
         print("(no sessions)")
         return
-    hdr = f"{'session':12} {'start':8} {'end':8} {'evt':>4} {'txt':>3} {'tool':>4} {'aIn':>5} {'aOut':>5} {'err':>3}  model"
+    # aIn = frames that reached the backend audio queue; gSnd = frames actually
+    # handed to Gemini via send_realtime_input; aOut = Gemini audio frames back.
+    hdr = (f"{'session':12} {'start':8} {'end':8} {'evt':>4} {'txt':>3} {'tool':>4} "
+           f"{'aIn':>5} {'gSnd':>5} {'aOut':>5} {'err':>3}  model")
     print(hdr)
     print("-" * len(hdr))
     for s in sessions:
         print(f"{_short(s['session_id'],12):12} "
               f"{s['first'][11:19]:8} {s['last'][11:19]:8} "
               f"{s['events']:>4} {s['text_turns']:>3} {s['tool_calls']:>4} "
-              f"{s['audio_in']:>5} {s['audio_out']:>5} {s['errors']:>3}  "
+              f"{s['audio_in']:>5} {s['gemini_send']:>5} {s['audio_out']:>5} {s['errors']:>3}  "
               f"{_short(s['model'],28)}")
-    # The one-line health read the agent wants first:
+    # The one-line health read the agent wants first -- pinpoints WHICH layer broke:
     print()
     for s in sessions:
         flow = []
         if s["audio_in"] == 0:
-            flow.append("NO mic audio reached Gemini")
-        if s["audio_out"] == 0:
-            flow.append("NO audio response from Gemini")
+            flow.append("NO mic audio reached the backend queue")
+        elif s["gemini_send"] == 0:
+            flow.append("audio queued but NOT sent to Gemini (sender starved/erroring)")
+        elif s["gemini_send"] < s["audio_in"] * 0.5:
+            flow.append(f"audio LAGS into Gemini (queued {s['audio_in']} vs sent {s['gemini_send']})")
+        if s["audio_in"] and s["audio_out"] == 0:
+            flow.append("audio reached Gemini but NO audio response")
         if flow:
             print(f"  ! {_short(s['session_id'],12)}: " + "; ".join(flow))
 

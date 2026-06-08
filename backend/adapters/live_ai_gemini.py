@@ -962,12 +962,29 @@ class LiveAIGemini(ILiveAI):
                             # Log first chunk only (verify sender is working)
                             if chunk_count == 1:
                                 self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
-                            
+
                             await session.send_realtime_input(
                                 audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
                             )
+
+                            # ACTUAL send-to-Gemini rollup (bd polyglot-pdf-2m9): this fires
+                            # AFTER send_realtime_input returns, so it proves audio crossed
+                            # the backend->Gemini boundary -- distinct from stream_audio's
+                            # "audio_summary" which only proves it reached the queue. If
+                            # "gemini_send" frames lag the queued frames, audio is stuck in
+                            # the queue / the sender is starved; if they match but Gemini
+                            # stays silent, the problem is on Gemini's side.
+                            self._gemini_sent_bytes = getattr(self, "_gemini_sent_bytes", 0) + len(chunk)
+                            if chunk_count == 1 or chunk_count % 100 == 0:
+                                self._dev_log_io("send", "gemini_send", {
+                                    "frames": chunk_count,
+                                    "bytes": self._gemini_sent_bytes,
+                                })
                         except Exception as e:
                             self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
+                            self._dev_log_io("send", "gemini_send_failed", {
+                                "chunk_number": chunk_count, "error": str(e),
+                            })
                             # swallow for robustness
                             pass
                 
