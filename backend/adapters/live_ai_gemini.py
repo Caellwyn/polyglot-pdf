@@ -27,19 +27,19 @@ from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
 
 # ============================================================================
-# LOGGING EMOJI GUIDE (for easier log scanning)
+# LOGGING TAG GUIDE (ASCII tags for easy log scanning; was emoji -- bd polyglot-pdf-bw8)
 # ============================================================================
-# 📤 Initial message/prompt sent to Gemini
-# ✅ Operation completed successfully  
-# 🏁 Activity signal sent (turn control)
-# 💬 Text message sent (hints, prompts)
-# 🔊 Gemini started speaking (first audio chunk)
-# 📝 Gemini finished speaking (transcript received)
-# 🚨 Gemini interrupted by user (barge-in)
-# 🎤 User started speaking (activity_start from frontend)
-# 🤐 User stopped speaking (activity_end from frontend)
-# ⚠️ Warning (non-fatal issue)
-# ❌ Error (operation failed)
+# [send] Initial message/prompt sent to Gemini
+# [ok] Operation completed successfully  
+# [activity] Activity signal sent (turn control)
+# [text] Text message sent (hints, prompts)
+# [audio-start] Gemini started speaking (first audio chunk)
+# [transcript] Gemini finished speaking (transcript received)
+# [interrupt] Gemini interrupted by user (barge-in)
+# [mic] User started speaking (activity_start from frontend)
+# [mic-off] User stopped speaking (activity_end from frontend)
+# [warn] Warning (non-fatal issue)
+# [error] Error (operation failed)
 # ============================================================================
 
 
@@ -318,7 +318,7 @@ class LiveAIGemini(ILiveAI):
             form_session_id: Overall form filling session ID (persists across Gemini sessions)
             form_id: Form identifier (e.g., "I-90")
             current_section_id: Current section ID (the user-facing navigation unit;
-                see docs/standards/terminology.md — this was historically mis-named
+                see docs/standards/terminology.md -- this was historically mis-named
                 "part", a section-state naming bug, bd polyglot-pdf-gfb.4)
         """
         self._form_session_id = form_session_id
@@ -383,12 +383,12 @@ class LiveAIGemini(ILiveAI):
         if self._audio_queue is None:
             # If the queue isn't started, drop audio (no-op) to keep behavior
             # safe for unit tests where live AI is not configured.
-            self._log.warn("⚠️ AUDIO_QUEUE_NOT_STARTED", message="Audio dropped - queue not initialized")
+            self._log.warn("[warn] AUDIO_QUEUE_NOT_STARTED", message="Audio dropped - queue not initialized")
             return
         try:
             # Log first audio chunk to verify queueing
             if not hasattr(self, '_first_adapter_audio_logged'):
-                self._log.info("🎤 [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
+                self._log.info("[mic] [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
                 self._first_adapter_audio_logged = True
             # Non-blocking put - drops frame if queue is full instead of blocking
             self._audio_queue.put_nowait(audio_chunk)
@@ -399,7 +399,7 @@ class LiveAIGemini(ILiveAI):
             import time
             current_time = time.time()
             if current_time - self._last_audio_queue_warning >= self._audio_queue_warning_interval:
-                self._log.warn("⚠️ AUDIO_QUEUE_FULL", message="Dropping audio frames - queue backed up (suppressing similar warnings for 5s)")
+                self._log.warn("[warn] AUDIO_QUEUE_FULL", message="Dropping audio frames - queue backed up (suppressing similar warnings for 5s)")
                 self._last_audio_queue_warning = current_time
             pass
 
@@ -467,14 +467,14 @@ class LiveAIGemini(ILiveAI):
         """
         # Check if session is ready - if not, queue the message
         if not self._session_ready:
-            self._log.info("📋 CLIENT_CONTENT_QUEUED (session not ready yet)",
+            self._log.info("[config] CLIENT_CONTENT_QUEUED (session not ready yet)",
                           message_length=len(text),  # never log message text (may carry field content) -- bd hjo
                           queue_size=len(self._pending_client_content) + 1)
             self._pending_client_content.append(text)
             return
 
         if self._current_session is None:
-            self._log.warning("⚠️ SEND_CLIENT_CONTENT_NO_SESSION")
+            self._log.warning("[warn] SEND_CLIENT_CONTENT_NO_SESSION")
             return
 
         try:
@@ -522,14 +522,14 @@ class LiveAIGemini(ILiveAI):
 
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
-            self._log.warning("⚠️ ACTIVITY_START called but session is None")
+            self._log.warning("[warn] ACTIVITY_START called but session is None")
             return
 
         try:
             await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
             # Success - no logging (noisy, system works)
         except Exception as e:
-            self._log.error("❌ ACTIVITY_START_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_START_FAILED", error=str(e))
 
     async def send_activity_end(self):
         """Send activity_end signal to Gemini (user stopped speaking).
@@ -546,14 +546,14 @@ class LiveAIGemini(ILiveAI):
 
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
-            self._log.warning("⚠️ ACTIVITY_END called but session is None")
+            self._log.warning("[warn] ACTIVITY_END called but session is None")
             return
 
         try:
             await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
             # Success - no logging (noisy, system works)
         except Exception as e:
-            self._log.error("❌ ACTIVITY_END_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e))
 
     async def finalize(self):
         """Stop the background task and clear resources."""
@@ -706,7 +706,7 @@ class LiveAIGemini(ILiveAI):
 
         - VAD disabled (``DISABLE_GEMINI_VAD=True``, the default): return ONLY
           ``{'disabled': True}``. We drive turn-taking with manual
-          ``activity_start`` / ``activity_end`` signals instead — see
+          ``activity_start`` / ``activity_end`` signals instead -- see
           ``docs/standards/voice-and-vad.md``.
         - VAD enabled: omit ``disabled`` and pass through whichever
           sensitivity/padding knobs (``VAD_*``) are configured.
@@ -719,7 +719,7 @@ class LiveAIGemini(ILiveAI):
         unrecognized enum lookup used to ``KeyError`` out of here and the broad
         ``except`` in the caller dropped the ENTIRE ``realtime_input_config``,
         silently reverting to Gemini's default VAD while the adapter still sent
-        manual ``activity_start/end`` — a conflicting turn-taking state.
+        manual ``activity_start/end`` -- a conflicting turn-taking state.
         bd polyglot-pdf-u01
         """
         if settings.DISABLE_GEMINI_VAD:
@@ -792,7 +792,7 @@ class LiveAIGemini(ILiveAI):
             tools_config = [{"function_declarations": deepcopy(self._function_declarations)}]
             # Log tool declarations being sent to Gemini
             tool_names = [decl.get("name") for decl in self._function_declarations]
-            self._log.info("🔧 Sending tool declarations to Gemini",
+            self._log.info("[tools] Sending tool declarations to Gemini",
                           tool_count=len(tool_names),
                           tool_names=tool_names)
         else:
@@ -802,7 +802,7 @@ class LiveAIGemini(ILiveAI):
                     {"name": "get_form_status"},
                 ]
             }]
-            self._log.warning("⚠️ No function_declarations provided - using fallback tools only")
+            self._log.warning("[warn] No function_declarations provided - using fallback tools only")
 
         config = {
             "response_modalities": response_modalities,
@@ -906,7 +906,7 @@ class LiveAIGemini(ILiveAI):
                 pass
 
             # Log session configuration before connecting
-            self._log.info("📋 Gemini session config",
+            self._log.info("[config] Gemini session config",
                           model=self._model_name,
                           has_system_instruction=bool(self._system_instruction),
                           system_instruction_length=len(self._system_instruction) if self._system_instruction else 0,
@@ -944,19 +944,19 @@ class LiveAIGemini(ILiveAI):
                         chunk = await self._audio_queue.get()
                         if chunk is None:
                             # Sentinel received: exit the send loop cleanly
-                            self._log.info("🛑 [Sender] Audio sender stopping", total_chunks_sent=chunk_count)
+                            self._log.info("[stop] [Sender] Audio sender stopping", total_chunks_sent=chunk_count)
                             break
                         try:
                             chunk_count += 1
                             # Log first chunk only (verify sender is working)
                             if chunk_count == 1:
-                                self._log.info("🎤 [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
+                                self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
                             
                             await session.send_realtime_input(
                                 audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
                             )
                         except Exception as e:
-                            self._log.error("❌ AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
+                            self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
                             # swallow for robustness
                             pass
                 
@@ -988,10 +988,10 @@ class LiveAIGemini(ILiveAI):
                             # await session.send_realtime_input(activity_end=types.ActivityEnd())
                             
                             # Log successful text send for debugging
-                            self._log.debug("💬 TEXT_MESSAGE_SENT",
+                            self._log.debug("[text] TEXT_MESSAGE_SENT",
                                           text_length=len(text))  # never log message text (user-turn content) -- bd hjo
                         except Exception as e:
-                            self._log.error("❌ TEXT_SEND_FAILED", error=str(e))
+                            self._log.error("[error] TEXT_SEND_FAILED", error=str(e))
                             # swallow for robustness
                             pass
 
@@ -1005,13 +1005,13 @@ class LiveAIGemini(ILiveAI):
 
                 # Clear console output for focused logging
                 print(f"\n{'='*80}")
-                print(f"✅ GEMINI SESSION READY")
+                print(f"[ok] GEMINI SESSION READY")
                 print(f"Instance: {self._instance_id}")
                 print(f"Model: {self._model_name}")
                 print(f"Waiting for user to speak...")
                 print(f"{'='*80}\n")
                 if self._pending_client_content:
-                    self._log.info("📤 SENDING_QUEUED_CLIENT_CONTENT",
+                    self._log.info("[send] SENDING_QUEUED_CLIENT_CONTENT",
                                   queued_count=len(self._pending_client_content))
                     for queued_msg in self._pending_client_content:
                         try:
@@ -1023,7 +1023,7 @@ class LiveAIGemini(ILiveAI):
                                           message_length=len(queued_msg))  # never log message text -- bd hjo
                     # Clear the queue after sending
                     self._pending_client_content.clear()
-                    self._log.info("✅ QUEUED_CLIENT_CONTENT_SENT")
+                    self._log.info("[ok] QUEUED_CLIENT_CONTENT_SENT")
 
                 try:
                     event_count = 0
@@ -1055,7 +1055,7 @@ class LiveAIGemini(ILiveAI):
                                             if self._audio_chunk_count == 1:
                                                 import time
                                                 self._first_audio_time = time.time()
-                                                self._log.info("🎵 [Gemini Audio] First audio chunk received", 
+                                                self._log.info("[audio] [Gemini Audio] First audio chunk received", 
                                                              bytes=len(audio_bytes),
                                                              chunk_number=1)
                                                 # Mark that Gemini has responded (cancel fallback resend)
@@ -1101,7 +1101,7 @@ class LiveAIGemini(ILiveAI):
                                                 elapsed_since_audio_start = int((now - self._first_audio_time) * 1000)
 
                                             self._log.info(
-                                                "🚨 GEMINI_INTERRUPTED",
+                                                "[interrupt] GEMINI_INTERRUPTED",
                                                 canceled_tool_calls=canceled_call_count,
                                                 call_ids=[cid[:8] for cid in canceled_ids],
                                                 # tool NAMES are safe to log (not values) and tell us if a
@@ -1145,7 +1145,7 @@ class LiveAIGemini(ILiveAI):
                                             if hasattr(self, '_first_audio_time') and self._first_audio_time:
                                                 elapsed_since_first_audio = int((now - self._first_audio_time) * 1000)
                                             
-                                            self._log.info("📝 GEMINI_TRANSCRIPT_RECEIVED",
+                                            self._log.info("[transcript] GEMINI_TRANSCRIPT_RECEIVED",
                                                          text_length=len(transcription.text),
                                                          # never log transcript text -- it's user speech / field content (PHI). bd hjo
                                                          audio_chunks_received=getattr(self, '_audio_chunk_count', 0),
@@ -1166,7 +1166,7 @@ class LiveAIGemini(ILiveAI):
                                                     # Log what we're receiving from Gemini
                                                     part_types = [type(p).__name__ for p in parts]
                                                     has_function_calls = any(hasattr(p, 'function_call') and getattr(p, 'function_call', None) for p in parts)
-                                                    self._log.info("📦 Gemini model_turn received",
+                                                    self._log.info("[model-turn] Gemini model_turn received",
                                                                   part_count=len(parts),
                                                                   part_types=part_types,
                                                                   has_function_calls=has_function_calls)
@@ -1188,7 +1188,7 @@ class LiveAIGemini(ILiveAI):
                                                             payload = getattr(function_call, "arguments", None) or getattr(function_call, "response", None) or getattr(function_call, "args", None)
 
                                                             # PROMINENT logging for debugging
-                                                            self._log.info("🔧🔧🔧 GEMINI SENT TOOL CALL",
+                                                            self._log.info("[tools] GEMINI SENT TOOL CALL",
                                                                           tool_name=tool_name,
                                                                           call_id=call_id[:8] if call_id else None,
                                                                           has_payload=bool(payload),
@@ -1412,7 +1412,7 @@ class LiveAIGemini(ILiveAI):
                                         # SIZE (char/estimated-token count), never the body.
                                         for resp in responses:
                                             response_str = str(resp.response)
-                                            estimated_tokens = len(response_str) // 4  # rough: 1 token ≈ 4 chars
+                                            estimated_tokens = len(response_str) // 4  # rough: 1 token ~ 4 chars
                                             self._log.info(
                                                 "tool_response_sent",
                                                 tool=resp.name,
@@ -1518,7 +1518,7 @@ class LiveAIGemini(ILiveAI):
 
                                             # Clear console logging for token usage
                                             print(f"\n{'='*80}")
-                                            print(f"💰 TOKEN USAGE")
+                                            print(f"[tokens] TOKEN USAGE")
                                             print(f"{'='*80}")
                                             print(f"Prompt: {prompt_tokens:,} tokens (text: {text_input_tokens:,}, audio: {audio_input_tokens:,})")
                                             print(f"Response: {response_tokens:,} tokens (text: {text_output_tokens:,}, audio: {audio_output_tokens:,})")
@@ -1582,7 +1582,7 @@ class LiveAIGemini(ILiveAI):
                                     continue
                         except ConnectionClosed as exc:
                             print(f"\n{'='*80}")
-                            print(f"❌ GEMINI CONNECTION DROPPED")
+                            print(f"[error] GEMINI CONNECTION DROPPED")
                             print(f"{'='*80}")
                             print(f"Reason: {str(exc)}")
                             print(f"Events received before disconnect: {event_count}")
@@ -1714,7 +1714,7 @@ class LiveAIGemini(ILiveAI):
             websocket_base_override = os.environ.get('GENAI_WEBSOCKET_BASE')
 
             print(f"\n{'='*80}")
-            print(f"🔄 GEMINI SESSION STARTING")
+            print(f"[session] GEMINI SESSION STARTING")
             print(f"{'='*80}")
             print(f"Max connection attempts: {max_attempts}")
             print(f"Model: {self._model_name}")
@@ -1725,7 +1725,7 @@ class LiveAIGemini(ILiveAI):
                 # If so, don't retry - just exit cleanly
                 if self._intentional_shutdown:
                     print(f"\n{'='*80}")
-                    print(f"⏹️  SESSION INTENTIONALLY CLOSED - NO RETRY")
+                    print(f"[closed] SESSION INTENTIONALLY CLOSED - NO RETRY")
                     print(f"{'='*80}\n")
 
                     self._log.info("session_intentionally_closed_no_retry")
@@ -1735,7 +1735,7 @@ class LiveAIGemini(ILiveAI):
 
                 if attempt > 1:
                     print(f"\n{'='*80}")
-                    print(f"🔁 RETRY ATTEMPT {attempt}/{max_attempts}")
+                    print(f"[retry] RETRY ATTEMPT {attempt}/{max_attempts}")
                     print(f"{'='*80}")
                     print(f"Previous error: {str(last_exc) if last_exc else 'Unknown'}")
                     print(f"{'='*80}\n")
@@ -1764,7 +1764,7 @@ class LiveAIGemini(ILiveAI):
                     # success, break out
                     if attempt > 1:
                         print(f"\n{'='*80}")
-                        print(f"✅ RETRY SUCCESSFUL - CONNECTION RESTORED")
+                        print(f"[ok] RETRY SUCCESSFUL - CONNECTION RESTORED")
                         print(f"{'='*80}")
                         print(f"Successful attempt: {attempt}/{max_attempts}")
                         print(f"{'='*80}\n")
@@ -1816,7 +1816,7 @@ class LiveAIGemini(ILiveAI):
 
                     try:
                         print(f"\n{'='*80}")
-                        print(f"⚠️  CONNECTION ATTEMPT FAILED")
+                        print(f"[warn] CONNECTION ATTEMPT FAILED")
                         print(f"{'='*80}")
                         print(f"Attempt: {attempt}/{max_attempts}")
                         print(f"Error: {str(e)}")
@@ -1837,7 +1837,7 @@ class LiveAIGemini(ILiveAI):
 
                     if attempt >= max_attempts or not is_name_err:
                         print(f"\n{'='*80}")
-                        print(f"💥 ALL RETRY ATTEMPTS EXHAUSTED")
+                        print(f"[fatal] ALL RETRY ATTEMPTS EXHAUSTED")
                         print(f"{'='*80}")
                         print(f"Failed after {attempt} attempts")
                         print(f"Final error: {str(e)}")
@@ -1852,7 +1852,7 @@ class LiveAIGemini(ILiveAI):
 
                     # Backoff before retrying
                     backoff_seconds = 0.5 * (2 ** (attempt - 1))
-                    print(f"⏳ Waiting {backoff_seconds}s before retry...")
+                    print(f"[wait] Waiting {backoff_seconds}s before retry...")
 
                     try:
                         await asyncio.sleep(backoff_seconds)

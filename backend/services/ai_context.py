@@ -20,7 +20,7 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
     Returns:
         Confirmation policy text for system instruction
     """
-    # NOTE: there is no complete_section tool — section completion is auto-
+    # NOTE: there is no complete_section tool -- section completion is auto-
     # detected by the frontend once all fields in a section are confirmed. The
     # model's job is to confirm each field (confirm_field); it must NOT be told
     # to call complete_section.

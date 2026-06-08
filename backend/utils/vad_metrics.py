@@ -204,7 +204,7 @@ class VADMetrics:
         self.log.info(f"  Avg Ack Latency: {stats['avg_ack_latency_ms']:.1f}ms")
         self.log.info(f"  P95 Ack Latency: {stats['p95_ack_latency_ms']:.1f}ms")
         if stats['ack_latency_target_met'] is not None:
-            status = "✅ TARGET MET" if stats['ack_latency_target_met'] else "❌ EXCEEDS TARGET"
+            status = "[ok] TARGET MET" if stats['ack_latency_target_met'] else "[error] EXCEEDS TARGET"
             self.log.info(f"  Target (<150ms): {status}")
         self.log.info(f"  Audio Frames Discarded: {stats['total_audio_frames_discarded']}")
         self.log.info("")
