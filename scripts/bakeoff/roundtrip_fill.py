@@ -252,7 +252,9 @@ def score_value_convention(schema: dict) -> dict:
             else:
                 violations.append({"field_id": f.get("id"), "value": val_s,
                                    "widget_leaf": leaf})
-    pct = (100.0 * conforming / total) if total else float("nan")
+    # pct is None (not NaN) when nothing applies -- NaN serializes to the invalid
+    # JSON token "NaN" that strict parsers (e.g. JS JSON.parse) reject.
+    pct = (100.0 * conforming / total) if total else None
     return {"total": total, "conforming": conforming, "pct": pct,
             "violations": violations}
 
@@ -344,7 +346,7 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
             if rw and verified.get(rw):
                 filled += 1
         return {"attempted": attempted, "filled": filled,
-                "pct": (100.0 * filled / attempted) if attempted else float("nan")}
+                "pct": (100.0 * filled / attempted) if attempted else None}
 
     choice = tally("choice")
     text = tally("text")
@@ -377,13 +379,13 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
 
 def _fmt(t: dict) -> str:
     p = t["pct"]
-    ps = "  n/a" if p != p else f"{p:5.1f}%"
+    ps = "  n/a" if p is None else f"{p:5.1f}%"
     return f"{ps}  ({t['filled']}/{t['attempted']})"
 
 
 def _fmt_conv(c: dict) -> str:
     p = c["pct"]
-    ps = "  n/a" if p != p else f"{p:5.1f}%"
+    ps = "  n/a" if p is None else f"{p:5.1f}%"
     return f"{ps}  ({c['conforming']}/{c['total']})"
 
 
