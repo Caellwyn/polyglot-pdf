@@ -548,7 +548,7 @@ class CallbackHandler:
             # Add warning for multiple fields if any were rejected
             if rejected_count > 0:
                 error_lines.append(
-                    f"[warn] IMPORTANT: You sent {rejected_count + len(applied_fields)} fields but can only update ONE field per call. "
+                    f"IMPORTANT: You sent {rejected_count + len(applied_fields)} fields but can only update ONE field per call. "
                     f"First field was processed, others rejected. Call update_form_fields separately for each field."
                 )
             
