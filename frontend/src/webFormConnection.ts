@@ -814,6 +814,17 @@ export class WebFormConnection {
       const updatedState = SchemaFormStateManager.switchToSection(currentState, targetSectionId);
       this.state = updatedState;
 
+      // Reset the unconfirmable-field loop-breaker on this backend-initiated section
+      // switch too (bd polyglot-pdf-0y7), for consistency with the other section
+      // transitions (this path keeps the SAME WebSocket open, so handleOpen's reset
+      // does not fire). Defense-in-depth: the streak is already keyed on field_id and
+      // field ids are globally unique per schema, so a cross-section carry-over can't
+      // currently false-trip -- resetting here keeps that from resting on the
+      // id-uniqueness invariant alone.
+      this.lastUnconfirmableFieldId = null;
+      this.unconfirmableConfirmCount = 0;
+      this.unconfirmableRepromptCount = 0;
+
       // Get section schema and values
       console.log('[WebFormConnection] Building section schema and values');
       const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, targetSectionId);
