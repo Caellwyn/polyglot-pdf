@@ -390,6 +390,17 @@ class LiveAIGemini(ILiveAI):
             if not hasattr(self, '_first_adapter_audio_logged'):
                 self._log.info("[mic] [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
                 self._first_adapter_audio_logged = True
+            # Inbound-audio rollup (bd polyglot-pdf-2m9): count user->Gemini frames and
+            # emit a dev-log summary on the FIRST frame and every 100 thereafter, so the
+            # log shows whether mic audio actually reaches Gemini (and at what rate)
+            # without a per-frame flood. The receive loop does the same for Gemini->user.
+            self._audio_in_frames = getattr(self, "_audio_in_frames", 0) + 1
+            self._audio_in_bytes = getattr(self, "_audio_in_bytes", 0) + len(audio_chunk)
+            if self._audio_in_frames == 1 or self._audio_in_frames % 100 == 0:
+                self._dev_log_io("send", "audio_summary", {
+                    "frames": self._audio_in_frames,
+                    "bytes": self._audio_in_bytes,
+                })
             # Non-blocking put - drops frame if queue is full instead of blocking
             self._audio_queue.put_nowait(audio_chunk)
         except asyncio.QueueFull:
@@ -1000,6 +1011,12 @@ class LiveAIGemini(ILiveAI):
                 # Store session reference for potential direct sends
                 self._current_session = session
 
+                # Session lifecycle marker (bd polyglot-pdf-2m9): makes the session
+                # boundary explicit in the dev log, so churn (e.g. the disclaimer ->
+                # first-section restart, or an unexpected reconnect) is visible at a
+                # glance instead of inferred from repeated text_turns.
+                self._dev_log_io("local", "session_open", {})
+
                 # Mark session as ready and send any queued client content messages
                 self._session_ready = True
 
@@ -1048,19 +1065,30 @@ class LiveAIGemini(ILiveAI):
                                             if not hasattr(self, '_audio_chunk_count'):
                                                 self._audio_chunk_count = 0
                                                 self._first_audio_time = None
-                                            
+                                                self._audio_out_bytes = 0
+
                                             self._audio_chunk_count += 1
-                                            
+                                            self._audio_out_bytes = getattr(self, "_audio_out_bytes", 0) + len(audio_bytes)
+
                                             # Track first audio chunk timing (for transcript correlation)
                                             if self._audio_chunk_count == 1:
                                                 import time
                                                 self._first_audio_time = time.time()
-                                                self._log.info("[audio] [Gemini Audio] First audio chunk received", 
+                                                self._log.info("[audio] [Gemini Audio] First audio chunk received",
                                                              bytes=len(audio_bytes),
                                                              chunk_number=1)
                                                 # Mark that Gemini has responded (cancel fallback resend)
                                                 gemini_has_responded = True
-                                            
+
+                                            # Outbound-audio rollup (bd polyglot-pdf-2m9): dev-log a summary on
+                                            # the first chunk + every 100, so the log shows whether Gemini
+                                            # actually responded with audio (and how much) without per-frame noise.
+                                            if self._audio_chunk_count == 1 or self._audio_chunk_count % 100 == 0:
+                                                self._dev_log_io("receive", "audio_summary", {
+                                                    "frames": self._audio_chunk_count,
+                                                    "bytes": self._audio_out_bytes,
+                                                })
+
                                             await self._on_audio(audio_bytes)
                                             continue
 
@@ -1697,6 +1725,14 @@ class LiveAIGemini(ILiveAI):
                     try:
                         self._current_text_sender_task = None
                         self._current_session = None
+                        # Session lifecycle marker (bd polyglot-pdf-2m9): pair to
+                        # session_open; records the final audio-in/out rollup so a
+                        # closed session shows at a glance whether any audio flowed.
+                        self._dev_log_io("local", "session_close", {
+                            "events": event_count if 'event_count' in locals() else 0,
+                            "audio_in_frames": getattr(self, "_audio_in_frames", 0),
+                            "audio_out_frames": getattr(self, "_audio_chunk_count", 0),
+                        })
                         self._log.info("gemini_session_cleaned_up",
                                      instance_id=self._instance_id,
                                      event_count=event_count if 'event_count' in locals() else 0,

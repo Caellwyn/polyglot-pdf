@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""
+logs.py -- explorer for the dev Gemini I/O logs (bd polyglot-pdf-2m9).
+
+The dev logger (backend/utils/dev_file_logger.py) writes one JSON object per line
+to backend/logs/gemini_<date>.jsonl. This CLI is the navigation layer so debugging
+does not mean eyeballing raw JSONL or grepping: it indexes by session, renders
+ordered per-session timelines, and surfaces errors / audio flow / turn boundaries.
+
+Pure stdlib (no pandas/duckdb required) so it always runs from the backend venv or
+plain python. The optional `sql` subcommand uses DuckDB if installed (it reads the
+.jsonl natively) and otherwise prints an install hint.
+
+Event schema (per line): timestamp, direction, message_type, session_id,
+ws_session_id, content{...} (content may carry seq, model, frames, bytes, ...).
+
+Usage (from repo root):
+  python scripts/logs.py sessions                  # index: one row per Gemini session
+  python scripts/logs.py session <id|prefix>       # ordered timeline of one session
+  python scripts/logs.py errors                    # error / invalid / rejected events
+  python scripts/logs.py tail [-n N]               # last N events across all sessions
+  python scripts/logs.py types                     # message_type histogram
+  python scripts/logs.py sql "<query>"             # DuckDB SQL over the jsonl (optional)
+
+Options:
+  --file PATH     explicit jsonl (default: newest backend/logs/gemini_*.jsonl)
+  --date YYYY-MM-DD   pick a specific daily file
+  --json          machine-readable output (for the agent to parse)
+"""
+
+import argparse
+import glob
+import json
+import os
+import sys
+from collections import OrderedDict, defaultdict
+
+
+def _repo_root():
+    # scripts/ lives at the repo root; logs are under backend/logs.
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _default_log_file(date=None):
+    logs_dir = os.path.join(_repo_root(), "backend", "logs")
+    if date:
+        p = os.path.join(logs_dir, f"gemini_{date}.jsonl")
+        return p if os.path.exists(p) else None
+    candidates = sorted(glob.glob(os.path.join(logs_dir, "gemini_*.jsonl")))
+    return candidates[-1] if candidates else None
+
+
+def _load(path):
+    """Yield parsed events; tolerate trailing/partial lines."""
+    rows = []
+    with open(path, "r", encoding="utf-8") as f:
+        for ln, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception as e:
+                print(f"[logs] skipping unparseable line {ln}: {e}", file=sys.stderr)
+    return rows
+
+
+def _short(s, n=10):
+    s = str(s or "")
+    return s[:n]
+
+
+def _ts(row):
+    return str(row.get("timestamp", ""))
+
+
+def _hhmmss(row):
+    t = _ts(row)
+    # ISO -> HH:MM:SS
+    return t[11:19] if len(t) >= 19 else t
+
+
+# ----------------------------------------------------------------------------
+# Commands
+# ----------------------------------------------------------------------------
+
+def cmd_sessions(rows, args):
+    """Top-level index: one row per Gemini session, ordered by first event."""
+    by_sess = OrderedDict()
+    for r in rows:
+        sid = r.get("session_id") or "(none)"
+        s = by_sess.setdefault(sid, {
+            "session_id": sid,
+            "ws": r.get("ws_session_id"),
+            "first": _ts(r), "last": _ts(r),
+            "events": 0, "text_turns": 0, "tool_calls": 0,
+            "audio_in": 0, "audio_out": 0, "errors": 0,
+            "model": None,
+        })
+        s["events"] += 1
+        s["last"] = _ts(r)
+        mt = r.get("direction"), r.get("message_type")
+        c = r.get("content") or {}
+        if c.get("model"):
+            s["model"] = c["model"]
+        if mt[1] == "text_turn":
+            s["text_turns"] += 1
+        elif mt[1] == "tool_call":
+            s["tool_calls"] += 1
+        elif mt[1] == "audio_summary":
+            # keep the LATEST frame count seen (rollups are cumulative)
+            if mt[0] == "send":
+                s["audio_in"] = max(s["audio_in"], c.get("frames", 0))
+            else:
+                s["audio_out"] = max(s["audio_out"], c.get("frames", 0))
+        elif mt[1] in ("error", "invalid_tool_call", "field_update_rejected"):
+            s["errors"] += 1
+
+    sessions = list(by_sess.values())
+    if args.json:
+        print(json.dumps(sessions, indent=2, default=str))
+        return
+
+    if not sessions:
+        print("(no sessions)")
+        return
+    hdr = f"{'session':12} {'start':8} {'end':8} {'evt':>4} {'txt':>3} {'tool':>4} {'aIn':>5} {'aOut':>5} {'err':>3}  model"
+    print(hdr)
+    print("-" * len(hdr))
+    for s in sessions:
+        print(f"{_short(s['session_id'],12):12} "
+              f"{s['first'][11:19]:8} {s['last'][11:19]:8} "
+              f"{s['events']:>4} {s['text_turns']:>3} {s['tool_calls']:>4} "
+              f"{s['audio_in']:>5} {s['audio_out']:>5} {s['errors']:>3}  "
+              f"{_short(s['model'],28)}")
+    # The one-line health read the agent wants first:
+    print()
+    for s in sessions:
+        flow = []
+        if s["audio_in"] == 0:
+            flow.append("NO mic audio reached Gemini")
+        if s["audio_out"] == 0:
+            flow.append("NO audio response from Gemini")
+        if flow:
+            print(f"  ! {_short(s['session_id'],12)}: " + "; ".join(flow))
+
+
+def _match_session(rows, key):
+    """Resolve a session id by exact match or unique prefix."""
+    ids = []
+    for r in rows:
+        sid = r.get("session_id")
+        if sid and sid not in ids:
+            ids.append(sid)
+    exact = [i for i in ids if i == key]
+    if exact:
+        return exact[0]
+    pref = [i for i in ids if i.startswith(key) or key in i]
+    if len(pref) == 1:
+        return pref[0]
+    if len(pref) > 1:
+        print(f"[logs] ambiguous session '{key}': {pref}", file=sys.stderr)
+        return None
+    print(f"[logs] no session matching '{key}' (have: {ids})", file=sys.stderr)
+    return None
+
+
+def cmd_session(rows, args):
+    """Ordered timeline of a single session."""
+    sid = _match_session(rows, args.id)
+    if not sid:
+        sys.exit(1)
+    events = [r for r in rows if r.get("session_id") == sid]
+    if args.json:
+        print(json.dumps(events, indent=2, default=str))
+        return
+    print(f"session {sid}  ({len(events)} events)")
+    print("-" * 72)
+    for r in events:
+        c = r.get("content") or {}
+        d, mt = r.get("direction"), r.get("message_type")
+        extra = ""
+        if mt == "text_turn":
+            extra = " " + repr(str(c.get("text", ""))[:80])
+        elif mt == "audio_summary":
+            extra = f" frames={c.get('frames')} bytes={c.get('bytes')}"
+        elif mt == "tool_call":
+            extra = f" {c.get('tool_name')} {json.dumps(c.get('arguments', {}), default=str)[:80]}"
+        elif mt in ("activity_start", "activity_end"):
+            extra = f" source={c.get('source')}"
+        elif mt in ("session_open", "session_close"):
+            extra = " " + json.dumps({k: v for k, v in c.items() if k not in ("seq", "model")}, default=str)[:80]
+        elif mt in ("error", "invalid_tool_call"):
+            extra = " " + json.dumps(c, default=str)[:120]
+        elif mt == "model_response":
+            extra = " " + repr(str(c.get("text") or c.get("transcript") or "")[:80])
+        seq = c.get("seq")
+        print(f"  {_hhmmss(r)} #{str(seq or '').rjust(3)} {str(d):7} {str(mt):16}{extra}")
+
+
+def cmd_errors(rows, args):
+    errs = [r for r in rows
+            if r.get("message_type") in ("error", "invalid_tool_call", "field_update_rejected")]
+    if args.json:
+        print(json.dumps(errs, indent=2, default=str))
+        return
+    if not errs:
+        print("(no errors)")
+        return
+    for r in errs:
+        print(f"{_hhmmss(r)} {_short(r.get('session_id'),12):12} {r.get('message_type'):22} "
+              f"{json.dumps(r.get('content', {}), default=str)[:120]}")
+
+
+def cmd_tail(rows, args):
+    n = args.n or 40
+    tail = rows[-n:]
+    if args.json:
+        print(json.dumps(tail, indent=2, default=str))
+        return
+    for r in tail:
+        c = r.get("content") or {}
+        print(f"{_hhmmss(r)} {_short(r.get('session_id'),12):12} {str(r.get('direction')):7} "
+              f"{str(r.get('message_type')):16} {json.dumps({k:v for k,v in c.items() if k!='seq'}, default=str)[:90]}")
+
+
+def cmd_types(rows, args):
+    hist = defaultdict(int)
+    for r in rows:
+        hist[(r.get("direction"), r.get("message_type"))] += 1
+    items = sorted(hist.items(), key=lambda kv: -kv[1])
+    if args.json:
+        print(json.dumps([{"direction": k[0], "message_type": k[1], "count": v} for k, v in items], indent=2))
+        return
+    for (d, mt), v in items:
+        print(f"{v:5}  {str(d):8} {mt}")
+
+
+def cmd_sql(rows, args):
+    """Arbitrary SQL over the jsonl via DuckDB (optional dependency)."""
+    try:
+        import duckdb  # type: ignore
+    except Exception:
+        print("[logs] DuckDB not installed. Install it in the backend venv:", file=sys.stderr)
+        print("       backend/.venv/Scripts/pip install duckdb", file=sys.stderr)
+        print("       Then: python scripts/logs.py sql \"SELECT message_type, count(*) "
+              "FROM logs GROUP BY 1\"", file=sys.stderr)
+        sys.exit(2)
+    con = duckdb.connect()
+    # read_json_auto handles the nested 'content' as a struct/json column.
+    con.execute(f"CREATE VIEW logs AS SELECT * FROM read_json_auto('{args.file}')")
+    res = con.execute(args.query).fetchall()
+    cols = [d[0] for d in con.description]
+    if args.json:
+        print(json.dumps([dict(zip(cols, row)) for row in res], indent=2, default=str))
+        return
+    print("  ".join(cols))
+    for row in res:
+        print("  ".join(str(x) for x in row))
+
+
+def main():
+    p = argparse.ArgumentParser(description="Explore dev Gemini I/O logs (bd polyglot-pdf-2m9).")
+    p.add_argument("--file", help="explicit jsonl file (default: newest backend/logs/gemini_*.jsonl)")
+    p.add_argument("--date", help="pick backend/logs/gemini_<date>.jsonl")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("sessions", help="index: one row per session")
+    sp = sub.add_parser("session", help="timeline of one session")
+    sp.add_argument("id", help="session id or unique prefix")
+    sub.add_parser("errors", help="error / invalid / rejected events")
+    tp = sub.add_parser("tail", help="last N events")
+    tp.add_argument("-n", type=int, default=40)
+    sub.add_parser("types", help="message_type histogram")
+    qp = sub.add_parser("sql", help="DuckDB SQL over the jsonl (view name: logs)")
+    qp.add_argument("query")
+
+    args = p.parse_args()
+
+    path = args.file or _default_log_file(args.date)
+    if not path or not os.path.exists(path):
+        print(f"[logs] no log file found (looked in backend/logs/). "
+              f"Run the local stack with backend/.env.DEV present to generate one.", file=sys.stderr)
+        sys.exit(1)
+    args.file = path
+
+    if args.cmd == "sql":
+        cmd_sql(None, args)
+        return
+
+    rows = _load(path)
+    print(f"[logs] {os.path.relpath(path, _repo_root())}  ({len(rows)} events)\n", file=sys.stderr)
+    {
+        "sessions": cmd_sessions,
+        "session": cmd_session,
+        "errors": cmd_errors,
+        "tail": cmd_tail,
+        "types": cmd_types,
+    }[args.cmd](rows, args)
+
+
+if __name__ == "__main__":
+    main()
