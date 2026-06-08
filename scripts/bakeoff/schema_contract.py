@@ -54,7 +54,10 @@ FIELD SHAPE (the unit the scorer grades hardest):
   // RELATIONSHIP / LOGIC keys (the hard half -- recover these from printed
   // conditional text like "Yes (Proceed to Item 5)" and form structure):
   "show_if": {"field": str(other field id), "operator": str, "value": any},
-  "controls_fields": [str(field id)],     // fields this one gates
+  "controls_fields": [ {"operator": str, "value": any,   // a chosen option.value
+                        "unlocks": [str(field id)], "shows": [str(field id)],
+                        "makes_required": [str(field id)]} ],  // what selecting
+                                                  // this field's option triggers
   "conditional_fields": [str],            // fields shown based on this one
   "conditional_logic": {...}, "conditional_behavior": {...},
   "copy_to": [str(field id)],             // value mirrored to these fields
@@ -86,10 +89,15 @@ CHOICE-FIELD RULES (checkbox / radio -- these MUST round-trip into the PDF):
   semantic value breaks BOTH selection and conditional logic.
 - A single standalone checkbox (no choice set) keeps a field-level pdf_field_name
   AND a one-element options[] carrying that same widget's leaf as option.value.
-- READ-ONLY choice widgets that the form unlocks on selection carry BOTH:
-  conditional_behavior.unlock_method="flip_readonly_bit" AND
-  conditional_logic.pdf_field_flag_change={"bit":int,"current_value":int,
-  "required_value":int}. The filler reads the latter to clear the read-only bit.
+- READ-ONLY choice widgets that the form unlocks on selection carry BOTH keys, to
+  match the I-90 gold shape exactly:
+  conditional_behavior={"unlock_method":"flip_readonly_bit"} AND
+  conditional_logic={"unlock_method":"flip_readonly_bit","pdf_field_flag_change":
+  {"bit":int,"current_value":int,"required_value":int}}.
+  (NOTE: the production filler currently reads pdf_field_flag_change from
+  conditional_behavior, but the gold puts it under conditional_logic -- so the
+  unlock does NOT actually fire today; that is a known production bug, tracked
+  separately. Emit the gold shape regardless so the extracted schema matches.)
 - Do NOT depend on on/off appearance values: the filler derives a checkbox's "on"
   state live from the widget; you only need the correct option.value + name.
 

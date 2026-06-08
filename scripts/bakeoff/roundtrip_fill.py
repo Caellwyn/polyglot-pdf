@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import tempfile
 from typing import Any, Optional
 
@@ -49,6 +50,18 @@ import fitz  # PyMuPDF
 # --------------------------------------------------------------------------- #
 # Production-faithful widget write helpers (mirrors pdf_fill_routes.py)
 # --------------------------------------------------------------------------- #
+
+def _pdf_name_unescape(s: Optional[str]) -> str:
+    """Decode PDF name #XX hex escapes (e.g. '#20APT#20' -> ' APT ').
+
+    PyMuPDF returns a written /AS on-state with #XX escapes decoded, while
+    button_states() reports the raw escaped form -- so the two must be normalized
+    to the same (decoded) space before an equality check.
+    """
+    if not s:
+        return ""
+    return re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), s)
+
 
 def _get_button_on_state(widget) -> str:
     """First non-Off 'normal' appearance state, else 'Yes' (route line ~83)."""
@@ -229,10 +242,12 @@ def score_value_convention(schema: dict) -> dict:
             total += 1
             leaf = _widget_leaf(pfn)
             val_s = str(val)
-            # Conforms if value IS the widget leaf, or the leaf stripped of its
-            # [n] index (some schemas drop the index on the value).
+            # Conforms ONLY if value IS the widget leaf, or the leaf stripped of
+            # its trailing [n] index (some schemas drop the index on the value).
+            # A bare suffix match (e.g. value "[0]") must NOT count -- that would
+            # falsely inflate the metric the check exists to protect.
             leaf_noidx = leaf.rsplit("[", 1)[0] if leaf and "[" in leaf else leaf
-            if val_s == leaf or val_s == leaf_noidx or (leaf and leaf.endswith(val_s)):
+            if val_s and (val_s == leaf or val_s == leaf_noidx):
                 conforming += 1
             else:
                 violations.append({"field_id": f.get("id"), "value": val_s,
@@ -243,7 +258,8 @@ def score_value_convention(schema: dict) -> dict:
 
 
 def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
-    schema = json.load(open(schema_path, encoding="utf-8"))
+    with open(schema_path, encoding="utf-8") as fh:
+        schema = json.load(fh)
     fields = schema.get("fields", [])
 
     doc = fitz.open(pdf_path)
@@ -275,9 +291,14 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
             rec["resolved_widget"] = widget.field_name
             attempts.append(rec)
 
-    tmp = tempfile.mktemp(suffix=".pdf")
-    doc.save(tmp, garbage=3, deflate=True)
-    doc.close()
+    # NamedTemporaryFile (not mktemp) avoids the TOCTOU race, matching the
+    # production filler; close doc in a finally so a save error can't leak it.
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tf:
+        tmp = tf.name
+    try:
+        doc.save(tmp, garbage=3, deflate=True)
+    finally:
+        doc.close()
 
     # Re-open and verify each expected widget actually holds its value.
     verified: dict[str, bool] = {}
@@ -295,9 +316,15 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
                 continue
             if kind == "choice":
                 # Checkbox/radio state persists in /AS, not field_value (probed).
+                # Assert the EXACT expected on-state ("want"), not merely non-Off,
+                # so a wrong appearance state is caught. Compare UNESCAPED: a PDF
+                # name escapes special chars as #XX (e.g. on-state "#20APT#20"
+                # reads back as "/ APT "), so decode both sides before comparing.
                 as_key = d2.xref_get_key(w.xref, "AS")
                 as_val = as_key[1] if isinstance(as_key, (list, tuple)) and len(as_key) > 1 else None
-                verified[wname] = bool(as_val) and as_val not in ("/Off", "Off", "null")
+                norm = as_val[1:] if isinstance(as_val, str) and as_val.startswith("/") else as_val
+                verified[wname] = (bool(norm) and norm not in ("Off", "null")
+                                   and _pdf_name_unescape(norm) == _pdf_name_unescape(want))
             else:
                 verified[wname] = (w.field_value or "") == want
         d2.close()
