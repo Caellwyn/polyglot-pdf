@@ -12,12 +12,12 @@ body invariants that, if broken, would silently change how the skill runs:
   - It must reference the deterministic scripts it wraps (the three step-2
     scripts + check_doc_freshness), so a rename without a skill update is caught.
   - It must encode the NORMAL-PR parallel-review flow: open a non-draft PR
-    (Copilot round 1 fires on open, in parallel with fresh-eyes), fix the
-    combined issues, loop Copilot until no comments, then close the bead +
-    ping Josh to merge. NO drafts and NO ready-flip -- the draft->ready flip
-    is itself a Copilot trigger and would cost a redundant review (Copilot
-    tokens are scarce). Regression guards assert both the old "hard stop
-    before `gh pr create`" wording AND the draft/ready-flip wording are gone.
+    (Codex AUTO-REVIEWS on open -- round 1 needs no comment, just an `@codex
+    review` nudge in the PR body -- in parallel with fresh-eyes), fix the combined
+    issues, loop Codex until CLEAN via an `@codex review` comment per re-review
+    round, then close the bead + ping Josh to merge. NO drafts and NO ready-flip.
+    Regression guards assert both the old "hard stop before `gh pr create`" wording
+    AND the draft/ready-flip wording are gone. (Codex replaced Copilot at bd hrn.9.)
 """
 
 import pathlib
@@ -112,7 +112,7 @@ def test_covers_doc_freshness_step(skill_text):
 
 
 def test_opens_normal_pr_and_parallel_reviews(body):
-    # The flow opens a NORMAL PR (Copilot round 1 fires on open) and runs
+    # The flow opens a NORMAL PR (Codex auto-reviews on open) and runs
     # fresh-eyes in parallel. Pin against the BODY so the operative
     # instruction is checked, not a description mention.
     lo = body.lower()
@@ -135,24 +135,25 @@ def test_no_draft_pr(body):
         "skill should explicitly forbid --draft"
 
 
-def test_copilot_loops_until_clean(body):
-    # The Copilot round is not one-shot: adopt -> push -> re-review until it
-    # reports no comments. Assert against the BODY (not the description) so the
-    # operative loop instruction is what's pinned. The re-review is REQUESTED by
-    # re-requesting the reviewer (NOT an @-mention comment -- that invokes the
-    # coding agent, bd polyglot-pdf-1pr), and all four watch states (incl.
-    # TIMEOUT) must be handled -- a TIMEOUT must never be treated as clean.
+def test_codex_loops_until_clean(body):
+    # The Codex round is not one-shot: adopt -> push -> re-review until it reports
+    # CLEAN (a thumbs-up reaction / no findings). Assert against the BODY (not the
+    # description) so the operative loop instruction is what's pinned. The
+    # re-review is triggered by a fresh `@codex review` COMMENT (Codex's trigger
+    # mechanism -- bd hrn.9), and all four watch states (incl. TIMEOUT) must be
+    # handled -- a TIMEOUT must never be treated as clean.
     lo = body.lower()
     assert re.search(r"(until|loop)[^\n]*(clean|no comment)", lo), \
-        "skill body must loop Copilot until it has no comments"
-    assert "requested_reviewers" in lo, \
-        "skill must re-request the reviewer (the reviewer API) to re-trigger review"
-    # Regression guard: the @-mention must NOT be POSTED as a comment body -- that
-    # invokes the Copilot coding agent, not code review (bd polyglot-pdf-1pr). The
-    # skill may NAME the pattern to forbid it (it does), so guard the active
-    # trigger shape (`-f body=...@copilot please review`), not the mere mention.
-    assert not re.search(r"body=['\"]?@copilot please review", body), \
-        "skill must NOT POST @copilot please review as a comment (invokes the coding agent)"
+        "skill body must loop Codex until it reports CLEAN"
+    assert "@codex review" in lo, \
+        "skill must re-trigger Codex via an `@codex review` comment"
+    # Regression guard: the Codex cutover (bd hrn.9) dropped the Copilot
+    # reviewer-API trigger. `requested_reviewers` may appear ONLY inside an
+    # explicit "do NOT use it" warning, never as the active trigger.
+    for line in body.splitlines():
+        if "requested_reviewers" in line.lower():
+            assert "never use" in line.lower() or "do not use" in line.lower(), \
+                "requested_reviewers may appear only in a do-not-use warning: {}".format(line)
     assert "timeout" in lo, "skill must handle pr_review_watcher's TIMEOUT state"
 
 

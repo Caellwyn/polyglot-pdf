@@ -960,6 +960,33 @@ def test_codex_timeout_note_is_not_never_started(capsys, monkeypatch):
     assert "did not complete" in out
 
 
+def test_default_reviewer_is_codex(monkeypatch):
+    # The Copilot->Codex cutover (bd hrn.9) flips the --reviewer DEFAULT to codex,
+    # so a watch launched without --reviewer drives the Codex profile. Stub watch()
+    # to capture the profile main() selected from the default.
+    seen = {}
+
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+        seen["profile"] = profile
+        return cw._emit("CLEAN", "stub")
+    monkeypatch.setattr(cw, "watch", fake_watch)
+    cw.main(["1"])  # no --reviewer -> default
+    assert seen["profile"].key == "codex"
+
+
+def test_reviewer_copilot_still_selectable(monkeypatch):
+    # The legacy copilot profile is still reachable via an explicit --reviewer
+    # (kept for the generic watcher; the cutover only changed the default).
+    seen = {}
+
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+        seen["profile"] = profile
+        return cw._emit("CLEAN", "stub")
+    monkeypatch.setattr(cw, "watch", fake_watch)
+    cw.main(["1", "--reviewer", "copilot"])
+    assert seen["profile"].key == "copilot"
+
+
 def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
     # Guard: the finding-2 fix must NOT regress Copilot. A closed-not-merged PR
     # with no Copilot timeline activity (state is None) still reaches CLEAN.
@@ -1081,6 +1108,61 @@ def test_genuine_review_clean_sets_verdict_flag(monkeypatch, capsys):
         capsys, monkeypatch, reviews=[review], timeline=[_reviewed_event()])
     assert cw._LAST_STATE == "CLEAN"
     assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
+def test_codex_thumbs_up_issue_comment_clean_sets_verdict_flag(capsys, monkeypatch):
+    # Codex's clean re-review arrives as an ISSUE COMMENT + a +1 reaction, NOT a
+    # formal review -- so the issue-comment CLEAN path MUST set the verdict flag,
+    # or --close-on-clean silently never fires on the common Codex path and a
+    # review-worthy PR stalls after a clean re-review (Codex review, PR #118).
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Didn't find any major issues.",
+        "reactions": {"+1": 1},
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True  # the close gate is now satisfied
+
+
+def test_codex_clean_sentinel_issue_comment_sets_verdict_flag(capsys, monkeypatch):
+    # The EXPLICIT prose-approval path (a clean sentinel / LGTM, no reaction) is a
+    # genuine sign-off, so it sets the flag -- a clean re-review with the text
+    # sentinel only still closes the bead.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "no major issues",  # a clean sentinel, no reaction
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
+def test_codex_neutral_comment_clean_does_NOT_set_verdict_flag(capsys, monkeypatch):
+    # The "approval by ABSENCE" path (a neutral comment with no change-ask AND no
+    # approval reaction/sentinel) reports CLEAN but must NOT set the verdict flag,
+    # so --close-on-clean does NOT close the bead on a mere progress/ack note --
+    # only an explicit approval may close (Codex review, PR #118, round 3). Without
+    # this gate a neutral "looking into it" comment could mark work done.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Acknowledged, taking a look at this now.",  # neutral, no sign-off
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out          # the loop still ends CLEAN
+    assert cw._LAST_CLEAN_WAS_REVIEW is False          # but the close gate stays shut
 
 
 def test_close_beads_on_clean_invokes_close_only(monkeypatch):

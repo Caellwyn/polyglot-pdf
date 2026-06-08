@@ -112,7 +112,7 @@ Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
   coverage config. Coverage is not measured or enforced.
 - **No CI test run.** Tests are a **local** gate, enforced per-PR by
   [`/closeout`](../doctrine/review-flow.md) (which runs the full backend suite before
-  opening the PR). GitHub can enforce a unit-test status check + Copilot review, but
+  opening the PR). GitHub can enforce a unit-test status check + Codex review, but
   that wiring is separate (see the deploy/CI direction notes); deploys stay manual
   ([config-deployment.md](../components/config-deployment.md)).
 

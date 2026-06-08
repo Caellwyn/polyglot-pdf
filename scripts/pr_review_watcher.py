@@ -1,6 +1,8 @@
 """Watch a GitHub PR for a bot code-review COMPLETION, then exit.
 
-Supports two reviewers behind `--reviewer copilot|codex` (default: copilot).
+Supports two reviewers behind `--reviewer copilot|codex` (default: codex since
+the Copilot->Codex cutover, bd polyglot-pdf-hrn.9; pass `copilot` for the legacy
+reviewer-API path).
 The CLASSIFICATION logic (approval-phrase / change-ask / inline-findings-first
 heuristics) is shared and reviewer-agnostic -- it is the product of many past
 false-positive/false-negative fixes (each cited `bd <id>`), so it is preserved
@@ -854,23 +856,29 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
 
     # 3. Canonical approval REACTION (Codex's 👍). The documented, language-
     # independent sign-off. Ranks above prose but below inline findings (checked
-    # above), so a 👍 can never override a real inline ask.
+    # above), so a +1 reaction can never override a real inline ask. This IS a
+    # genuine passed-review verdict (the bot reviewed and approved), so
+    # review_verdict=True lets --close-on-clean fire -- Codex's clean re-reviews
+    # arrive on THIS path (issue comment + reaction), not as a formal review
+    # (Codex review, PR #118).
     if _has_clean_reaction(latest, profile):
         return _emit(
             "CLEAN",
             "{} approved via {} reaction (no inline findings):\n\n{}".format(
                 profile.label, profile.clean_reaction, body or "(empty comment)"
             ),
+            review_verdict=True,
         )
 
     # 4. No reaction. An explicit prose approval (exact LGTM / known phrase /
-    # reviewer clean sentinel) is the fallback CLEAN.
+    # reviewer clean sentinel) is the fallback CLEAN -- also a genuine verdict.
     if _is_approval_comment(prose, profile):
         return _emit(
             "CLEAN",
             "{} approved via issue comment (no inline findings):\n\n{}".format(
                 profile.label, body
             ),
+            review_verdict=True,
         )
 
     # 5. Change-ask prose (quote-stripped) -> COMMENTS. Ungated by design: a real
@@ -883,7 +891,13 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
         )
 
     # 6. No new inline finding, no approval reaction, not an explicit approval, no
-    # prose-only ask -> the round is clean (approval by absence of any finding).
+    # prose-only ask -> the round is clean (approval by ABSENCE of any finding).
+    # Deliberately NOT review_verdict=True: a neutral progress/acknowledgement
+    # comment ("working on it") lands here, and --close-on-clean must NOT close the
+    # bead on mere absence-of-change-ask -- only an EXPLICIT approval (the +1
+    # reaction in path 3 or a clean-sentinel/LGTM in path 4) is a closeable verdict
+    # (Codex review, PR #118). This still reports CLEAN (the loop ends), but the
+    # close gate stays shut until an explicit sign-off arrives.
     return _emit(
         "CLEAN",
         "{} commented with no new inline finding this round -> treating as "
@@ -1119,9 +1133,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--reviewer",
         choices=sorted(PROFILES),
-        default="copilot",
-        help="Which review bot to watch (default: copilot). Switch to 'codex' "
-        "at the Copilot->Codex cutover (bd polyglot-pdf-hrn.9).",
+        default="codex",
+        help="Which review bot to watch (default: codex, the active reviewer "
+        "since the Copilot->Codex cutover -- bd polyglot-pdf-hrn.9). Pass "
+        "'copilot' for the legacy reviewer-API path (credits exhausted -- hrn.8).",
     )
     parser.add_argument(
         "--repo", default=swarm_config.repo(), help="OWNER/REPO"
@@ -1145,9 +1160,13 @@ def main(argv: list[str] | None = None) -> int:
         "CLEAN -- the deterministic, zero-model-token bead-close (bd hrn.14). "
         "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
         "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/MERGED. "
-        "On a close FAILURE the watcher exits {} so the orchestrator is woken to "
-        "triage rather than handed a false 'ready to merge'.".format(
-            EXIT_CLOSE_FAILED),
+        "FRESH-EYES RACE: do NOT pass this on the ROUND-1 watch while fresh-eyes "
+        "is still running -- a fast clean Codex verdict would close the bead before "
+        "fresh-eyes fixes are triaged. Pass it on the RE-WATCH instead (after all "
+        "round-1 fixes are pushed), or on round 1 only once fresh-eyes is known "
+        "clean (SKILL Step 7). On a close FAILURE the watcher exits {} so the "
+        "orchestrator is woken to triage rather than handed a false 'ready to "
+        "merge'.".format(EXIT_CLOSE_FAILED),
     )
     args = parser.parse_args(argv)
 

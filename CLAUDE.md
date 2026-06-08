@@ -63,17 +63,21 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
 2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
-   PR and runs fresh-eyes, **requesting Copilot in parallel only when the PR is
-   review-worthy.** Copilot review is OPT-IN since 2026-06-01 (metered per-token,
-   finite monthly credits) -- auto-review is OFF, so a review fires only when you
-   **REQUEST the review bot as a reviewer** via the reviewer API
-   (`gh api repos/<owner>/<repo>/pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
-   chained into the create call). **NEVER @-mention `@copilot please review` in a
-   comment** -- that invokes the Copilot *coding agent*, which commits to the PR
-   instead of reviewing (bd polyglot-pdf-1pr, confirmed on PR #74);
-   docs/beads/journal-only PRs skip the request. Then closeout loops Copilot to
-   clean (re-requesting the reviewer each round) and the maintainer merges. No
-   draft PRs; never hand-poll Copilot. See the "Closeout" section below and
+   PR and runs fresh-eyes, **with OpenAI Codex reviewing in parallel only when the
+   PR is review-worthy.** Codex (`chatgpt-codex-connector[bot]`) replaced GitHub
+   Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). **Codex auto-reviews
+   on PR open**, so round 1 needs no trigger -- just include an `@codex review`
+   line in the PR BODY as a nudge. **Round 2+ re-reviews** need an explicit
+   `@codex review` COMMENT
+   (`gh api repos/<owner>/<repo>/issues/$PR/comments -f 'body=@codex review'`; the
+   comment's `created_at` is that round's watch `--since` floor). The trigger
+   string is EXACTLY `@codex review` -- `@codex please commit ...` would invoke
+   Codex's commit path instead. **Do NOT use the `requested_reviewers` reviewer
+   API** -- that fires Copilot (retired here). Docs/beads/journal-only PRs skip the
+   review. Codex's CLEAN signal is a 👍 (`+1`) reaction on its summary comment;
+   closeout loops Codex to clean (re-commenting `@codex review` each round) and the
+   maintainer merges. No draft
+   PRs; never hand-poll Codex. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
@@ -298,24 +302,29 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   parallel-review setup and tempts hand-polling).
-- **Copilot review is OPT-IN -- request it only for review-worthy PRs.** Auto-review
-  on open is OFF (metered credits). The orchestrator judges per-PR whether the diff
-  can regress runtime behavior; if so, it **requests the review bot as a reviewer**
-  (`gh api .../pulls/$PR/requested_reviewers -X POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`,
-  chained into the create call). **Never @-mention `@copilot please review` in a
-  comment -- that invokes the coding agent, which commits to the PR** (bd
-  polyglot-pdf-1pr). Docs-only / `.beads`-only / journal-only / trivial PRs get NO
-  request and skip the watch loop. Each re-review is requested the same way --
-  re-POST `requested_reviewers` after the fix-push.
-- **Copilot is watched by a script, never by hand.** For a review-worthy PR,
-  `/closeout` launches `scripts/pr_review_watcher.py <pr#>` via `run_in_background`; the
-  harness wakes you once with the classified verdict -- one of `CLEAN`/`COMMENTS`
-  (both exit 0), `ERROR` (exit 1), or `TIMEOUT` (exit 2). Never treat
-  `ERROR`/`TIMEOUT` as clean. **Never poll `gh api .../comments` yourself** -- that's
-  the expensive manual loop the watcher exists to replace, and hand-polling silently
-  misses feedback.
-- **Fresh-eyes runs in parallel** with Copilot round 1 (and runs even when Copilot is
-  skipped); you fix the COMBINED findings, push once, and **loop Copilot until it
+- **Codex reviews review-worthy PRs -- auto on open, `@codex review` comment for
+  re-reviews.** The reviewer is OpenAI Codex (`chatgpt-codex-connector[bot]`), which
+  replaced Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). The
+  orchestrator judges per-PR whether the diff can regress runtime behavior; if so,
+  it includes an `@codex review` line in the PR BODY -- **Codex auto-reviews on
+  open**, so round 1 needs no comment. **Round 2+** post an explicit `@codex
+  review` COMMENT (`gh api .../issues/$PR/comments -f 'body=@codex review'`; the
+  comment's `created_at` is that round's watch `--since` floor). The trigger string
+  is EXACTLY `@codex review` -- `@codex please commit ...` invokes Codex's commit
+  path instead. **Do NOT use the `requested_reviewers` reviewer API** -- that fires
+  Copilot (retired here). Docs-only / `.beads`-only / journal-only / trivial PRs
+  get NO review. Each re-review is triggered by posting a fresh `@codex review` comment after
+  the fix-push.
+- **Codex is watched by a script, never by hand.** For a review-worthy PR,
+  `/closeout` launches `scripts/pr_review_watcher.py <pr#> --reviewer codex` (the
+  default) via `run_in_background`; the harness wakes you once with the classified
+  verdict -- one of `CLEAN`/`COMMENTS` (both exit 0), `ERROR` (exit 1), or
+  `TIMEOUT` (exit 2). Codex's CLEAN is a 👍 (`+1`) reaction on its summary comment.
+  Never treat `ERROR`/`TIMEOUT` as clean. **Never poll `gh api .../comments`
+  yourself** -- that's the expensive manual loop the watcher exists to replace, and
+  hand-polling silently misses feedback.
+- **Fresh-eyes runs in parallel** with Codex round 1 (and runs even when Codex is
+  skipped); you fix the COMBINED findings, push once, and **loop Codex until it
   reports `CLEAN`.**
 - Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
   to merge** -- it never merges (that's the maintainer's).

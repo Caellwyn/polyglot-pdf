@@ -17,7 +17,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | [`technical_guide.md`](technical_guide.md) | System-wide routes / endpoints / cross-surface gotchas. |
 | [`schema_format.md`](schema_format.md) | The `FormSchema` JSON spec (Form > Parts > Sections > Fields). Owned by [`standards/terminology.md`](standards/terminology.md). |
 | [`doctrine/workflow.md`](doctrine/workflow.md) | Beads cadence, session start/end, the agent-swarm tooling. |
-| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The parallel Copilot + fresh-eyes review procedure. |
+| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The parallel Codex + fresh-eyes review procedure. |
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | feature -> dev (staging) -> main (prod) promotion. |
 | [`beads-setup.md`](beads-setup.md) | One-time beads install + sync wiring (prerequisite for the swarm tooling). |
 | [`doctrine/branch-protection-setup.md`](doctrine/branch-protection-setup.md) | This repo's actual `main`/`dev` GitHub rulesets. The generic agent-executable template lives at [`branch-protection-setup.md`](branch-protection-setup.md). |
