@@ -891,15 +891,19 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
         )
 
     # 6. No new inline finding, no approval reaction, not an explicit approval, no
-    # prose-only ask -> the round is clean (approval by absence of any finding).
-    # Still a genuine reviewed-and-nothing-to-say verdict, so review_verdict=True.
+    # prose-only ask -> the round is clean (approval by ABSENCE of any finding).
+    # Deliberately NOT review_verdict=True: a neutral progress/acknowledgement
+    # comment ("working on it") lands here, and --close-on-clean must NOT close the
+    # bead on mere absence-of-change-ask -- only an EXPLICIT approval (the +1
+    # reaction in path 3 or a clean-sentinel/LGTM in path 4) is a closeable verdict
+    # (Codex review, PR #118). This still reports CLEAN (the loop ends), but the
+    # close gate stays shut until an explicit sign-off arrives.
     return _emit(
         "CLEAN",
         "{} commented with no new inline finding this round -> treating as "
         "approval (verdict is by inline findings, not prose):\n\n{}".format(
             profile.label, body
         ),
-        review_verdict=True,
     )
 
 

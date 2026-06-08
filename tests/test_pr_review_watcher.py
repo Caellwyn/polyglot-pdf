@@ -1129,11 +1129,10 @@ def test_codex_thumbs_up_issue_comment_clean_sets_verdict_flag(capsys, monkeypat
     assert cw._LAST_CLEAN_WAS_REVIEW is True  # the close gate is now satisfied
 
 
-def test_codex_prose_approval_issue_comment_sets_verdict_flag(capsys, monkeypatch):
-    # The prose-approval and approval-by-absence issue-comment CLEAN paths are
-    # also genuine verdicts (Codex reviewed and approved), so they too must set the
-    # flag -- otherwise a clean re-review with no +1 (text sentinel only) wouldn't
-    # close the bead.
+def test_codex_clean_sentinel_issue_comment_sets_verdict_flag(capsys, monkeypatch):
+    # The EXPLICIT prose-approval path (a clean sentinel / LGTM, no reaction) is a
+    # genuine sign-off, so it sets the flag -- a clean re-review with the text
+    # sentinel only still closes the bead.
     issue = [{
         "user": {"login": _CODEX_LOGIN},
         "created_at": "2026-06-01T12:00:00Z",
@@ -1145,6 +1144,25 @@ def test_codex_prose_approval_issue_comment_sets_verdict_flag(capsys, monkeypatc
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out
     assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
+def test_codex_neutral_comment_clean_does_NOT_set_verdict_flag(capsys, monkeypatch):
+    # The "approval by ABSENCE" path (a neutral comment with no change-ask AND no
+    # approval reaction/sentinel) reports CLEAN but must NOT set the verdict flag,
+    # so --close-on-clean does NOT close the bead on a mere progress/ack note --
+    # only an explicit approval may close (Codex review, PR #118, round 3). Without
+    # this gate a neutral "looking into it" comment could mark work done.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Acknowledged, taking a look at this now.",  # neutral, no sign-off
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out          # the loop still ends CLEAN
+    assert cw._LAST_CLEAN_WAS_REVIEW is False          # but the close gate stays shut
 
 
 def test_close_beads_on_clean_invokes_close_only(monkeypatch):
