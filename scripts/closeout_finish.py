@@ -241,7 +241,7 @@ class Closeout:
             "--title", self.args.pr_title,
             "--body-file", self.args.pr_body_file,
         ])
-        # `gh pr create` prints the PR URL (…/pull/<n>); pick the line that looks
+        # `gh pr create` prints the PR URL (.../pull/<n>); pick the line that looks
         # like one rather than blindly taking the last line (gh may print a
         # trailing notice). Fall back to the last non-empty line.
         lines = [ln.strip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
@@ -497,8 +497,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "multi-line body).")
     gate = p.add_mutually_exclusive_group(required=False)
     gate.add_argument("--review-worthy", action="store_true",
-                      help="Trigger a Codex review (post an `@codex review` "
-                           "comment on the PR).")
+                      help="This PR gets a Codex review (Codex auto-reviews on "
+                           "open; the @codex review nudge rides in the PR body). "
+                           "Captures the PR-open watch floor + prints the watch "
+                           "cmd; posts NO round-1 comment.")
     gate.add_argument("--skip-review", action="store_true",
                       help="Docs/beads/journal-only PR -- no Codex review.")
     p.add_argument("--commit-message", default=None,

@@ -68,8 +68,11 @@ def test_severity_enumerates_repo_invariants(text):
         assert term in lo, "severity list lost the '{}' invariant".format(term)
 
 
-def test_codex_trigger_string_is_exact(text):
-    # "@codex review" is the EXACT review trigger; "@codex please commit ..." is the
-    # commit path. The file must reference the review trigger and the commit
-    # caveat so Codex doesn't mis-route (bd hrn.9).
-    assert "@codex review" in text or "@codex please commit" in text
+def test_codex_commit_caveat_present(text):
+    # AGENTS.md is read by Codex WHEN IT REVIEWS. It must carry the commit caveat
+    # so Codex distinguishes "review me" from a direct "@codex please commit ..."
+    # instruction and does not mis-route a commit request as a review (bd hrn.9).
+    # (The "@codex review" trigger itself is the AUTHOR's tool -- it lives in the
+    # closeout SKILL + glue, not in AGENTS.md -- so it is NOT asserted here; that
+    # was a vacuous OR that passed on the wrong disjunct. Fresh-eyes PR #118 #2.)
+    assert "@codex please commit" in text

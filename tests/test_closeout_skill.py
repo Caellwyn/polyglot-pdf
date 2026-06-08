@@ -12,11 +12,12 @@ body invariants that, if broken, would silently change how the skill runs:
   - It must reference the deterministic scripts it wraps (the three step-2
     scripts + check_doc_freshness), so a rename without a skill update is caught.
   - It must encode the NORMAL-PR parallel-review flow: open a non-draft PR
-    (Codex round 1 triggered by an `@codex review` comment, in parallel with
-    fresh-eyes), fix the combined issues, loop Codex until CLEAN, then close the
-    bead + ping Josh to merge. NO drafts and NO ready-flip. Regression guards
-    assert both the old "hard stop before `gh pr create`" wording AND the
-    draft/ready-flip wording are gone. (Codex replaced Copilot at bd hrn.9.)
+    (Codex AUTO-REVIEWS on open -- round 1 needs no comment, just an `@codex
+    review` nudge in the PR body -- in parallel with fresh-eyes), fix the combined
+    issues, loop Codex until CLEAN via an `@codex review` comment per re-review
+    round, then close the bead + ping Josh to merge. NO drafts and NO ready-flip.
+    Regression guards assert both the old "hard stop before `gh pr create`" wording
+    AND the draft/ready-flip wording are gone. (Codex replaced Copilot at bd hrn.9.)
 """
 
 import pathlib
@@ -111,7 +112,7 @@ def test_covers_doc_freshness_step(skill_text):
 
 
 def test_opens_normal_pr_and_parallel_reviews(body):
-    # The flow opens a NORMAL PR (Copilot round 1 fires on open) and runs
+    # The flow opens a NORMAL PR (Codex auto-reviews on open) and runs
     # fresh-eyes in parallel. Pin against the BODY so the operative
     # instruction is checked, not a description mention.
     lo = body.lower()
