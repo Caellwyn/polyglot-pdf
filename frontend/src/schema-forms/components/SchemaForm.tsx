@@ -72,18 +72,29 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   //      only above DESKTOP_MIN. Inside the band, keep the current mode (no flip).
   //   2. Debounce: only act on a width that has held steady, so a transient bounce
   //      cannot trigger a remount.
+  // The INITIAL classification is exempt from the dead zone (Codex review PR #119):
+  // hysteresis is only meaningful once there is a prior state to preserve. On first
+  // load it would otherwise leave a dead-zone width (e.g. 720px, which historically
+  // rendered mobile) on desktop. So the first evaluate() uses the plain BREAKPOINT;
+  // subsequent resizes use the dead zone.
   useEffect(() => {
-    const MOBILE_MAX = 700;   // <= this -> mobile
+    const BREAKPOINT = 768;   // classic single threshold, used for INITIAL classify
+    const MOBILE_MAX = 700;   // <= this -> mobile (resize)
     const DESKTOP_MIN = 820;  // >= this -> desktop; (700, 820) is the dead zone
     let timer: number | undefined;
 
-    const evaluate = () => {
+    const evaluate = (initial = false) => {
       const w = window.innerWidth;
       setIsMobile(prev => {
         let next = prev;
-        if (w <= MOBILE_MAX) next = true;
-        else if (w >= DESKTOP_MIN) next = false;
-        // else: within the dead zone -> keep `prev` (no flip)
+        if (initial) {
+          next = w <= BREAKPOINT;          // first load: definitive, no dead zone
+        } else if (w <= MOBILE_MAX) {
+          next = true;
+        } else if (w >= DESKTOP_MIN) {
+          next = false;
+        }
+        // else (resize, within dead zone) -> keep `prev` (no flip)
         if (prev !== next) {
           console.log('[SchemaForm] 📱 Mobile mode changed:', next, 'width:', w);
         }
@@ -93,10 +104,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
     const onResize = () => {
       if (timer !== undefined) clearTimeout(timer);
-      timer = window.setTimeout(evaluate, 250);
+      timer = window.setTimeout(() => evaluate(false), 250);
     };
 
-    evaluate(); // initial (immediate, no debounce)
+    evaluate(true); // initial (immediate, no debounce, plain breakpoint)
     window.addEventListener('resize', onResize);
     return () => {
       if (timer !== undefined) clearTimeout(timer);

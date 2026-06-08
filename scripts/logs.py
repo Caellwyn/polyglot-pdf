@@ -138,12 +138,13 @@ def cmd_sessions(rows, args):
         return
     # aIn = frames that reached the backend audio queue; gSnd = frames actually
     # handed to Gemini via send_realtime_input; aOut = Gemini audio frames back.
-    hdr = (f"{'session':12} {'start':8} {'end':8} {'evt':>4} {'txt':>3} {'tool':>4} "
+    # session col is 18 wide so the "#<attempt>" restart suffix stays visible.
+    hdr = (f"{'session':18} {'start':8} {'end':8} {'evt':>4} {'txt':>3} {'tool':>4} "
            f"{'aIn':>5} {'gSnd':>5} {'aOut':>5} {'err':>3}  model")
     print(hdr)
     print("-" * len(hdr))
     for s in sessions:
-        print(f"{_short(s['session_id'],12):12} "
+        print(f"{_short(s['session_id'],18):18} "
               f"{s['first'][11:19]:8} {s['last'][11:19]:8} "
               f"{s['events']:>4} {s['text_turns']:>3} {s['tool_calls']:>4} "
               f"{s['audio_in']:>5} {s['gemini_send']:>5} {s['audio_out']:>5} {s['errors']:>3}  "
@@ -161,7 +162,7 @@ def cmd_sessions(rows, args):
         if s["audio_in"] and s["audio_out"] == 0:
             flow.append("audio reached Gemini but NO audio response")
         if flow:
-            print(f"  ! {_short(s['session_id'],12)}: " + "; ".join(flow))
+            print(f"  ! {_short(s['session_id'],18)}: " + "; ".join(flow))
 
 
 def _match_session(rows, key):
@@ -242,8 +243,12 @@ def cmd_session(rows, args):
 
 
 def cmd_errors(rows, args):
+    # Keep in sync with cmd_sessions' error tally -- gemini_send_failed is a real
+    # send-to-Gemini failure and must surface here too (Codex review PR #119),
+    # else the errors view says "(no errors)" while a send failure sits in the log.
     errs = [r for r in rows
-            if r.get("message_type") in ("error", "invalid_tool_call", "field_update_rejected")]
+            if r.get("message_type") in ("error", "invalid_tool_call",
+                                          "field_update_rejected", "gemini_send_failed")]
     if args.json:
         print(json.dumps(errs, indent=2, default=str))
         return

@@ -86,7 +86,15 @@ class LiveAIGemini(ILiveAI):
         # Generate unique instance ID for debugging multi-tab scenarios
         import uuid
         self._instance_id = f"LiveAI-{str(uuid.uuid4())[:8]}"
-        
+        # Per-live-session attempt counter (bd polyglot-pdf-2m9, Codex review PR #119).
+        # The SAME adapter instance is reused across a Gemini restart (disclaimer ->
+        # first-section). Without a per-attempt suffix every restart shares one
+        # session_id and scripts/logs.py collapses the separate open/close pairs +
+        # frame totals into one row, hiding the very churn the markers expose. The
+        # dev-log session_id is "<instance_id>#<attempt>"; ws_session_id still groups
+        # all attempts of one form session. Bumped at each session_open.
+        self._live_attempt = 0
+
         # Store these as instance variables for later use
         self._vertexai = vertexai
         self._project = project
@@ -245,11 +253,16 @@ class LiveAIGemini(ILiveAI):
             enriched = dict(content)
             enriched["seq"] = self._dev_io_seq
             enriched["model"] = self._model_name
+            # Suffix the session_id with the live-session attempt so each Gemini
+            # restart is a DISTINCT row in scripts/logs.py (Codex review PR #119);
+            # ws_session_id still groups all attempts of one form session.
+            attempt = getattr(self, "_live_attempt", 0)
+            session_id = f"{self._instance_id}#{attempt}" if attempt else self._instance_id
             dev_logger.log_gemini_message(
                 direction=direction,
                 message_type=message_type,
                 content=enriched,
-                session_id=self._instance_id,
+                session_id=session_id,
                 ws_session_id=self._form_session_id,
             )
         except Exception:
@@ -1041,11 +1054,16 @@ class LiveAIGemini(ILiveAI):
                 self._audio_out_bytes = 0
                 self._first_audio_time = None
 
+                # New live-session attempt -> distinct session_id in the dev log so
+                # logs.py does not collapse restarts (Codex review PR #119). Bump
+                # BEFORE the session_open marker so that marker carries the new id.
+                self._live_attempt = getattr(self, "_live_attempt", 0) + 1
+
                 # Session lifecycle marker (bd polyglot-pdf-2m9): makes the session
                 # boundary explicit in the dev log, so churn (e.g. the disclaimer ->
                 # first-section restart, or an unexpected reconnect) is visible at a
                 # glance instead of inferred from repeated text_turns.
-                self._dev_log_io("local", "session_open", {})
+                self._dev_log_io("local", "session_open", {"attempt": self._live_attempt})
 
                 # Mark session as ready and send any queued client content messages
                 self._session_ready = True
