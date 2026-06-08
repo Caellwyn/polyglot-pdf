@@ -563,21 +563,31 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
-        # Native-VAD guard (bd polyglot-pdf-333): see send_activity_start above.
         from backend.config import get_settings
-        if not get_settings().DISABLE_GEMINI_VAD:
-            return
+        native_vad = not get_settings().DISABLE_GEMINI_VAD
 
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("[warn] ACTIVITY_END called but session is None")
             return
 
+        # Native-VAD turn boundary for PTT (bd polyglot-pdf-6vo, Codex review PR #119).
+        # In native mode the manual activity_start/end are suppressed (interleaving
+        # them with automatic VAD is the conflicting state bd-333 warns about). But
+        # PTT-as-a-gate then withholds all audio after release, so Gemini would get
+        # NEITHER an activity_end NOR trailing silence and its VAD may never close the
+        # turn -> session goes silent after PTT release. audio_stream_end is the
+        # documented realtime signal to finalize the audio segment and is compatible
+        # with automatic VAD (it is not the conflicting activity_end), so we send THAT
+        # in native mode and the real activity_end only in manual mode.
         try:
-            await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
+            if native_vad:
+                await self._current_session.send_realtime_input(audio_stream_end=True)
+            else:
+                await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
             # Success - no logging (noisy, system works)
         except Exception as e:
-            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e), native_vad=native_vad)
 
     async def finalize(self):
         """Stop the background task and clear resources."""

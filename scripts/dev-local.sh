@@ -61,9 +61,14 @@ cleanup() {
       kill "$pid" 2>/dev/null || true
     fi
   done
-  # Remove the node_modules junction we created (worktrees have no own install).
+  # Remove the node_modules link we created (worktrees have no own install).
+  # Windows junction -> rmdir via cmd.exe; POSIX symlink -> rm.
   if [ "$NM_JUNCTION_CREATED" = "1" ]; then
-    cmd.exe //c rmdir "$(cygpath -w "$REPO_ROOT/frontend/node_modules")" >/dev/null 2>&1 || true
+    if command -v cmd.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+      cmd.exe //c rmdir "$(cygpath -w "$REPO_ROOT/frontend/node_modules")" >/dev/null 2>&1 || true
+    else
+      rm -f "$REPO_ROOT/frontend/node_modules" || true
+    fi
   fi
 }
 trap cleanup EXIT INT TERM
@@ -82,13 +87,18 @@ ensure_frontend_deps() {
     exit 1
   fi
   echo "Linking frontend/node_modules -> main repo install (worktree has none)..."
-  local link_win target_win
-  link_win="$(cygpath -w "$REPO_ROOT/frontend/node_modules")"
-  target_win="$(cygpath -w "$main_nm")"
-  # NB: under MSYS/Git-Bash the cmd switches must be //c //J (double slash) and the
-  # Windows paths passed as separate quoted args -- NOT one quoted string.
-  cmd.exe //c mklink //J "$link_win" "$target_win" >/dev/null 2>&1 \
-    || { echo "ERROR: failed to create node_modules junction." >&2; exit 1; }
+  # Windows/MSYS (Git-Bash): a directory JUNCTION via cmd.exe mklink. The cmd
+  # switches must be //c //J (double slash) and the Windows paths passed as separate
+  # quoted args -- NOT one quoted string. POSIX (WSL/macOS/Linux): a plain symlink
+  # (Codex review PR #119 -- the advertised POSIX case must not call cygpath/cmd.exe).
+  if command -v cmd.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    cmd.exe //c mklink //J "$(cygpath -w "$REPO_ROOT/frontend/node_modules")" \
+                          "$(cygpath -w "$main_nm")" >/dev/null 2>&1 \
+      || { echo "ERROR: failed to create node_modules junction." >&2; exit 1; }
+  else
+    ln -s "$main_nm" "$REPO_ROOT/frontend/node_modules" \
+      || { echo "ERROR: failed to symlink node_modules." >&2; exit 1; }
+  fi
   NM_JUNCTION_CREATED=1
 }
 

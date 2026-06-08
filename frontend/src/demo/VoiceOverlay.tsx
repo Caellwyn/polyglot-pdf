@@ -51,7 +51,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
-	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
+	// PTT default is true (HALLUCINATION_REDUCTION, Oct 30 2025), BUT when this
+	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
+	// breakpoint cross) restore the user's actual choice from the connection rather
+	// than resetting to true (Codex review PR #119).
+	const [pushToTalkMode, setPushToTalkMode] = useState(
+		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
+	)
 	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD is driving turns. Set
 	// by the backend at session_ready (mirror of DISABLE_GEMINI_VAD) and reported
 	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
@@ -129,7 +135,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
 				st === 'connecting' || st === 'switching_section' || st.startsWith('reconnecting')
 			if (alreadyLive) {
-				console.log('[VoiceOverlay] Mounted onto a live session - skipping connect/disclaimer')
+				// Skip the re-CONNECT but do NOT drop the disclaimer step (Codex review
+				// PR #119): a flip during the initial connect loses the old overlay's
+				// pending setShowDisclaimerModal(true). Surface it here if not yet
+				// accepted, so the user still gets the agree step.
+				const accepted = SchemaFormStateManager.load()?.disclaimerAccepted
+				if (!accepted) {
+					console.log('[VoiceOverlay] Live session, disclaimer not yet accepted - showing modal (no reconnect)')
+					setPendingDisclaimerRead(true)
+					setShowDisclaimerModal(true)
+				} else {
+					console.log('[VoiceOverlay] Mounted onto a live session (disclaimer accepted) - skipping connect/disclaimer')
+				}
 				return
 			}
 			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)

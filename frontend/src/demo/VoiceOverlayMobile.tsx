@@ -42,7 +42,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [currentSectionId, setCurrentSectionId] = useState<string>('')
 	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
-	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
+	// PTT default is true (HALLUCINATION_REDUCTION, Oct 30 2025), BUT when this
+	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
+	// breakpoint cross) restore the user's actual choice from the connection rather
+	// than resetting to true (Codex review PR #119) -- otherwise a flip silently
+	// reverts Auto back to PTT and stops streaming.
+	const [pushToTalkMode, setPushToTalkMode] = useState(
+		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
+	)
 	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD drives turns. Set by
 	// the backend at session_ready (mirror of DISABLE_GEMINI_VAD). When true the
 	// manual PTT toggle does not apply, so it is disabled and the displayed mode
@@ -112,7 +119,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
 				st === 'connecting' || st === 'switching_section' || st.startsWith('reconnecting')
 			if (alreadyLive) {
-				console.log('[VoiceOverlayMobile] Mounted onto a live session - skipping connect/disclaimer')
+				// Skip the re-CONNECT, but do NOT drop the disclaimer step (Codex review
+				// PR #119): a flip during the initial connect unmounts the old overlay
+				// mid-flow, so its pending setShowDisclaimerModal(true) is lost. If the
+				// user has not yet accepted, surface the modal here so they still get the
+				// agree step instead of ending up connected but never prompted. (A
+				// returning user with disclaimerAccepted is handled by the effect below.)
+				const accepted = SchemaFormStateManager.load()?.disclaimerAccepted
+				if (!accepted) {
+					console.log('[VoiceOverlayMobile] Live session, disclaimer not yet accepted - showing modal (no reconnect)')
+					setPendingDisclaimerRead(true)
+					setShowDisclaimerModal(true)
+				} else {
+					console.log('[VoiceOverlayMobile] Mounted onto a live session (disclaimer accepted) - skipping connect/disclaimer')
+				}
 				return
 			}
 			console.log('[VoiceOverlayMobile] Language pre-selected from onboarding:', initialLanguage)

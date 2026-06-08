@@ -36,6 +36,7 @@ export interface ConnectionManager {
 	sendRecoveryPrompt: (level: number, nextFieldHint?: string) => void  // Send recovery prompt (activity watchdog)
 	endGeminiSession: () => void  // End Gemini session only (keep WebSocket alive)
 	setPushToTalkMode: (enabled: boolean) => void  // Enable/disable PTT mode
+	getPushToTalkMode: () => boolean  // Current PTT mode (so a remounted overlay restores the user's choice; bd polyglot-pdf-6vo)
 	isNativeVad: () => boolean  // bd polyglot-pdf-333: true when Gemini's own VAD drives turns
 	getFieldManager: () => FieldManager | null
 	getAudioManager: () => AudioManager | null
@@ -533,7 +534,13 @@ export function createConnectionManager(
 		},
 
 		async sendActivityEnd() {
-			if (nativeVad) return  // bd polyglot-pdf-333: see sendActivityStart
+			// PTT-release turn boundary under native VAD (bd polyglot-pdf-6vo, Codex
+			// review PR #119): this wrapper is the PTT path (Silero uses onVADSpeechEnd
+			// directly, still suppressed below). In native mode we DO forward the end
+			// signal -- the backend converts it to audio_stream_end (NOT the conflicting
+			// activity_end) so Gemini's VAD can close the turn after the PTT gate shuts;
+			// without it the session goes silent after release. (sendActivityStart stays
+			// suppressed: Gemini's VAD opens the turn; we only need to close it.)
 			if (connection) {
 				await connection.sendActivityEnd()
 			}
@@ -560,6 +567,14 @@ export function createConnectionManager(
 		setPushToTalkMode(enabled: boolean) {
 			console.log(`[VFF Connection] Setting push-to-talk mode: ${enabled}`)
 			pushToTalkMode = enabled
+		},
+
+		// Current PTT mode, so an overlay remounted onto a LIVE session (a
+		// desktop<->mobile breakpoint cross) can restore the user's actual choice
+		// instead of resetting its local state to the default (bd polyglot-pdf-6vo,
+		// Codex review PR #119).
+		getPushToTalkMode() {
+			return pushToTalkMode
 		},
 
 		// bd polyglot-pdf-333: lets the UI (VoiceOverlay PTT effect) skip its own
