@@ -5,7 +5,12 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from services.request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
+# Import via the SAME package path the runtime uses (backend.services.*) so the
+# HINT_REQUEST_TIMEOUT singleton is the identical object the production code
+# compares against. The bare `services.request_coordinator` path resolves to a
+# DIFFERENT module object under pytest's pythonpath, which would make every
+# `is HINT_REQUEST_TIMEOUT` identity check silently false (fresh-eyes, PR #121).
+from backend.services.request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
 
 
 class TestRequestCoordinatorInit:
