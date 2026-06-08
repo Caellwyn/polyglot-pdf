@@ -115,7 +115,13 @@ start_backend() {
     echo "Created backend/.env.DEV (enables Gemini I/O logging to backend/logs/)."
   fi
 
-  echo "Starting backend (uvicorn :8000, VERTEXAI=false, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed)..."
+  # VAD mode (bd polyglot-pdf-6vo debugging): DISABLE_GEMINI_VAD chooses who detects
+  # turn boundaries. Default here is NATIVE (false) to match prod, but you can flip to
+  # MANUAL mode -- where the client sends explicit activity_start/end (PTT or Silero)
+  # and Gemini does NOT rely on detecting silence in a continuous stream -- with:
+  #   DISABLE_GEMINI_VAD=true ./scripts/dev-local.sh
+  local vad_mode="${DISABLE_GEMINI_VAD:-false}"
+  echo "Starting backend (uvicorn :8000, VERTEXAI=false, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
   # Run from the SOURCE repo root so backend.main imports THIS checkout's code.
   # VFF_DISABLE_AUTH=true bypasses Firebase token verification on /ws/fill: locally,
   # firebase_admin uses ADC and verify_id_token() validates the token against the
@@ -126,6 +132,7 @@ start_backend() {
   ( cd "$REPO_ROOT" && \
     VERTEXAI=false USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
+    DISABLE_GEMINI_VAD="$vad_mode" \
     "$VENV_PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload ) &
   PIDS+=("$!")
 }
