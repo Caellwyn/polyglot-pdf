@@ -166,11 +166,21 @@ def _match_session(rows, key):
 
 
 def cmd_session(rows, args):
-    """Ordered timeline of a single session."""
+    """Ordered timeline of a single session, interleaving frontend console lines.
+
+    Gemini events key on session_id (LiveAI-*); frontend console events
+    (direction='frontend') only have ws_session_id (the fss_* form session). We
+    include console lines whose ws_session_id matches this Gemini session's
+    ws_session_id, so the timeline shows e.g. a "[PTT] press" line right next to the
+    audio_summary frames it produced. Sorted by timestamp."""
     sid = _match_session(rows, args.id)
     if not sid:
         sys.exit(1)
-    events = [r for r in rows if r.get("session_id") == sid]
+    gemini = [r for r in rows if r.get("session_id") == sid]
+    ws_ids = {r.get("ws_session_id") for r in gemini if r.get("ws_session_id")}
+    console = [r for r in rows
+               if r.get("direction") == "frontend" and r.get("ws_session_id") in ws_ids]
+    events = sorted(gemini + console, key=lambda r: _ts(r))
     if args.json:
         print(json.dumps(events, indent=2, default=str))
         return
@@ -194,6 +204,8 @@ def cmd_session(rows, args):
             extra = " " + json.dumps(c, default=str)[:120]
         elif mt == "model_response":
             extra = " " + repr(str(c.get("text") or c.get("transcript") or "")[:80])
+        elif mt and mt.startswith("console_"):
+            extra = " " + str(c.get("text", ""))[:110]
         seq = c.get("seq")
         print(f"  {_hhmmss(r)} #{str(seq or '').rjust(3)} {str(d):7} {str(mt):16}{extra}")
 
@@ -222,6 +234,31 @@ def cmd_tail(rows, args):
         c = r.get("content") or {}
         print(f"{_hhmmss(r)} {_short(r.get('session_id'),12):12} {str(r.get('direction')):7} "
               f"{str(r.get('message_type')):16} {json.dumps({k:v for k,v in c.items() if k!='seq'}, default=str)[:90]}")
+
+
+def cmd_console(rows, args):
+    """Frontend console lines (direction='frontend'), optionally level-filtered."""
+    want = (args.level or "all")
+    out = []
+    for r in rows:
+        if r.get("direction") != "frontend":
+            continue
+        lvl = (r.get("message_type") or "").replace("console_", "")
+        if want == "error" and lvl != "error":
+            continue
+        if want == "warn" and lvl not in ("warn", "error"):
+            continue
+        out.append(r)
+    if args.json:
+        print(json.dumps(out, indent=2, default=str))
+        return
+    if not out:
+        print("(no frontend console events -- is devConsoleCapture installed + backend local?)")
+        return
+    for r in out:
+        c = r.get("content") or {}
+        lvl = (r.get("message_type") or "").replace("console_", "")
+        print(f"{_hhmmss(r)} {_short(r.get('ws_session_id'),14):14} {lvl:5} {str(c.get('text',''))[:140]}")
 
 
 def cmd_types(rows, args):
@@ -270,6 +307,8 @@ def main():
     sp = sub.add_parser("session", help="timeline of one session")
     sp.add_argument("id", help="session id or unique prefix")
     sub.add_parser("errors", help="error / invalid / rejected events")
+    cp = sub.add_parser("console", help="frontend console lines (devConsoleCapture)")
+    cp.add_argument("--level", choices=["all", "warn", "error"], default="all")
     tp = sub.add_parser("tail", help="last N events")
     tp.add_argument("-n", type=int, default=40)
     sub.add_parser("types", help="message_type histogram")
@@ -295,6 +334,7 @@ def main():
         "sessions": cmd_sessions,
         "session": cmd_session,
         "errors": cmd_errors,
+        "console": cmd_console,
         "tail": cmd_tail,
         "types": cmd_types,
     }[args.cmd](rows, args)

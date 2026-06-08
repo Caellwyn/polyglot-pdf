@@ -12,6 +12,7 @@ from .routes.vad_config_routes import vad_config_websocket
 from .routes import pdf_fill_routes
 from .routes import disclaimer_routes
 from .routes import form_kit_routes
+from .routes import dev_console_routes
 from .utils.logging import configure_logging
 
 
@@ -43,6 +44,7 @@ app.include_router(websocket_routes.router, prefix="/api")  # Handle Firebase re
 app.include_router(pdf_fill_routes.router)
 app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
+app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)
 
 
 @app.websocket("/ws/vad-config")
