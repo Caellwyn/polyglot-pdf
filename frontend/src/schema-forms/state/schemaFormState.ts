@@ -803,10 +803,13 @@ export class SchemaFormStateManager {
       // bd polyglot-pdf-0y7: a confirm for a field with no entry in fieldValues is
       // a no-op (nothing to confirm until a value lands). This was previously
       // SILENT, which made the confirm/next-field spin invisible -- log it so the
-      // failure is diagnosable. The WebFormConnection loop-breaker now gates on the
-      // field VALUE *before* calling confirmField (see handleConfirmFieldRequest), so
-      // this branch is a defensive backstop -- a no-value confirm is detected upstream
-      // and never reaches here from that path.
+      // failure is diagnosable. NOTE this guard only catches a MISSING entry (it does
+      // NOT catch an entry that exists with value null/empty -- such an object is
+      // truthy and would be confirmed here). The real no-value protection lives in
+      // handleConfirmFieldRequest, whose loop-breaker gates on the field VALUE before
+      // calling confirmField at all; this branch only backstops the missing-entry case
+      // for that path (a direct caller passing a null/empty-valued entry would bypass
+      // both this guard and the upstream gate).
       console.warn(`[SchemaFormState] confirmField('${fieldId}') no-op: field has no entry to confirm`);
       return state; // Field doesn't exist / has no value
     }

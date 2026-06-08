@@ -815,12 +815,15 @@ export class WebFormConnection {
       this.state = updatedState;
 
       // Reset the unconfirmable-field loop-breaker on this backend-initiated section
-      // switch too (bd polyglot-pdf-0y7), for consistency with the other section
-      // transitions (this path keeps the SAME WebSocket open, so handleOpen's reset
-      // does not fire). Defense-in-depth: the streak is already keyed on field_id and
-      // field ids are globally unique per schema, so a cross-section carry-over can't
-      // currently false-trip -- resetting here keeps that from resting on the
-      // id-uniqueness invariant alone.
+      // switch too (bd polyglot-pdf-0y7) -- the other section transitions
+      // (startSection/switchToSection) also clear it. This path keeps the SAME
+      // WebSocket open, so handleOpen's reset does not fire. NOTE the reset sits HERE
+      // (after the early-return guards, once the switch has actually been applied to
+      // this.state) rather than at function entry like startSection/switchToSection:
+      // a section switch that fails validation must not clear a still-valid in-progress
+      // streak. Defense-in-depth: the streak is keyed on field_id and field ids are
+      // globally unique per schema, so a cross-section carry-over can't currently
+      // false-trip -- this just removes the reliance on the id-uniqueness invariant.
       this.lastUnconfirmableFieldId = null;
       this.unconfirmableConfirmCount = 0;
       this.unconfirmableRepromptCount = 0;
