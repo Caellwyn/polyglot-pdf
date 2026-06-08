@@ -51,7 +51,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
 	const [showSectionDropdown, setShowSectionDropdown] = useState(false)
-	const [pushToTalkMode, setPushToTalkMode] = useState(true) // HALLUCINATION_REDUCTION: PTT mode is now default (Oct 30, 2025)
+	// PTT default is true (HALLUCINATION_REDUCTION, Oct 30 2025), BUT when this
+	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
+	// breakpoint cross) restore the user's actual choice from the connection rather
+	// than resetting to true (Codex review PR #119).
+	const [pushToTalkMode, setPushToTalkMode] = useState(
+		() => sharedConnectionManager?.getPushToTalkMode?.() ?? true
+	)
 	// bd polyglot-pdf-tlc: whether Gemini's own (native) VAD is driving turns. Set
 	// by the backend at session_ready (mirror of DISABLE_GEMINI_VAD) and reported
 	// via connectionManager.isNativeVad(). When true, Gemini's VAD streams
@@ -118,6 +124,31 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
 	useEffect(() => {
 		if (initialLanguage && !showLanguageModal) {
+			// Guard against a remount re-running connect+disclaimer on an ALREADY-LIVE
+			// session (bd polyglot-pdf-6vo): a desktop<->mobile switch remounts this
+			// overlay while connectionManager stays alive; reconnecting + re-showing
+			// the disclaimer would restart the Gemini session and repeat the
+			// disclaimer. Skip if already connected.
+			const st = (connectionManager?.getStatus?.() || '').toLowerCase()
+			// Include 'connecting' so a desktop<->mobile flip DURING the first connect
+			// does not kick off a second concurrent connect (fresh-eyes PR #119).
+			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
+				st === 'connecting' || st === 'switching_section' || st.startsWith('reconnecting')
+			if (alreadyLive) {
+				// Skip the re-CONNECT but do NOT drop the disclaimer step (Codex review
+				// PR #119): a flip during the initial connect loses the old overlay's
+				// pending setShowDisclaimerModal(true). Surface it here if not yet
+				// accepted, so the user still gets the agree step.
+				const accepted = SchemaFormStateManager.load()?.disclaimerAccepted
+				if (!accepted) {
+					console.log('[VoiceOverlay] Live session, disclaimer not yet accepted - showing modal (no reconnect)')
+					setPendingDisclaimerRead(true)
+					setShowDisclaimerModal(true)
+				} else {
+					console.log('[VoiceOverlay] Mounted onto a live session (disclaimer accepted) - skipping connect/disclaimer')
+				}
+				return
+			}
 			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
@@ -141,16 +172,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		pushToTalkModeRef.current = pushToTalkMode
 	}, [pushToTalkMode])
 
-	// Ensure connection manager + audio pipeline reflect current PTT mode
+	// Ensure connection manager + audio pipeline reflect current PTT mode.
+	// PTT is a client-side audio gate that works EVEN under native VAD (noisy-room
+	// support): we always apply the mute/unmute so PTT gates which client bytes
+	// reach Gemini. The worklet noise gate stays bypassed in native mode regardless
+	// of PTT (audioManager.setPTTMode honors nativeVad), so toggling PTT off does
+	// not re-arm the RMS gate and starve Gemini's VAD of its silence stream.
 	useEffect(() => {
 		if (!connectionManager) return
-
-		// bd polyglot-pdf-333: in native-VAD mode Gemini's own VAD drives turns and
-		// the audio layer streams continuous ungated audio. Skip the PTT mute +
-		// worklet reconfiguration here -- otherwise this effect (which re-fires when
-		// the user toggles PTT) would re-arm the worklet noise gate and mute input,
-		// starving Gemini's VAD of the silence stream it needs.
-		if (connectionManager.isNativeVad()) return
 
 		connectionManager.setPushToTalkMode(pushToTalkMode)
 		const audioManager = connectionManager.getAudioManager()
@@ -613,13 +642,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Handle push-to-talk mode toggle
 	const handlePushToTalkToggle = async () => {
-		// bd polyglot-pdf-333: in native-VAD mode Gemini's own VAD drives turns and
-		// the audio layer streams continuous ungated audio. Don't let a PTT toggle
-		// pause VAD / mute input / re-arm the worklet noise gate (matches the
-		// VoiceOverlayMobile guard). Without this the toggle leaves inputMuted dirty
-		// and relies on the audioManager short-circuit ordering to keep streaming.
-		if (connectionManager?.isNativeVad()) return
-
+		// PTT is a CLIENT-SIDE AUDIO GATE layered on top of native VAD (user request,
+		// noisy-room support): native Gemini VAD always runs on the backend, but PTT
+		// can still gate which client audio bytes reach Gemini. So we run the full
+		// mute/unmute + worklet reconfig regardless of native-VAD mode. (We still
+		// never send manual activity_start/end in native mode -- those stay
+		// suppressed in connection.ts; PTT only decides which bytes are sent.)
 		const newMode = !pushToTalkMode
 		setPushToTalkMode(newMode)
 
@@ -1319,17 +1347,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 							</div>
 						)}
 					</div>
-					{/* Push-to-Talk Toggle */}
-					{/* bd polyglot-pdf-tlc: in native-VAD mode the toggle is disabled
-					    (the mode is backend-controlled via DISABLE_GEMINI_VAD and cannot
-					    be switched mid-session) and the label shows "Native"; otherwise
-					    it switches between PTT and client-VAD ("Auto"). */}
+					{/* Input-mode toggle. PTT is a CLIENT-SIDE AUDIO GATE that works in
+					    BOTH modes: native Gemini VAD always runs on the backend, and PTT
+					    (when on) gates which client audio bytes reach Gemini -- useful in
+					    noisy rooms so background noise doesn't trip Gemini's VAD. PTT on =
+					    "PTT" (send only while held); PTT off = "Auto" (stream
+					    continuously). The toggle is always enabled. */}
 					<div className="vff-ptt-toggle-container">
 						<label
 							className="vff-ptt-toggle-label"
-							title={nativeVad
-								? 'Gemini native VAD is active (set by the backend); push-to-talk does not apply in this mode.'
-								: undefined}
+							title={pushToTalkMode
+								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
+								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
 						>
 							<span className="vff-ptt-label-text">Input Mode:</span>
 							<div className="vff-ptt-toggle-switch">
@@ -1337,7 +1366,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 									type="checkbox"
 									checked={pushToTalkMode}
 									onChange={handlePushToTalkToggle}
-									disabled={nativeVad}
 									className="vff-ptt-toggle-input"
 									onKeyDown={(e) => {
 										if (e.code === 'Space') {
@@ -1350,12 +1378,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
 								</span>
 							</div>
-							<span className="vff-ptt-mode-label">{nativeVad ? 'Native' : (pushToTalkMode ? 'PTT' : 'Auto')}</span>
+							<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
 						</label>
 					</div>
 
-					{/* Push-to-Talk Button (only visible in PTT mode; never in native VAD) */}
-					{pushToTalkMode && isConnected && !nativeVad && (
+					{/* Push-to-Talk button: visible whenever PTT gating is on (works in
+					    native VAD too -- it gates the client audio bytes). */}
+					{pushToTalkMode && isConnected && (
 						<div className="vff-ptt-button-container">
 							<button
 								className={`vff-button vff-ptt-button ${isHoldingPushToTalk ? 'active' : ''}`}

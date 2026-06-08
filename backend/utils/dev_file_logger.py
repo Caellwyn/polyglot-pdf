@@ -149,6 +149,121 @@ class DevFileLogger:
 
         self._write_to_file(entry)
 
+    # ------------------------------------------------------------------
+    # Turn / audio / session lifecycle (bd polyglot-pdf-2m9)
+    #
+    # These fill the debugging blind spots that plain text_turn/tool_call logging
+    # left: whether user mic audio reaches Gemini, whether Gemini responds with
+    # audio, where turn boundaries fall, and when sessions open/close. Audio is
+    # logged as PER-TURN ROLLUPS (frames/bytes/ms), never per-frame, so the log
+    # stays navigable. All events use the same schema (timestamp/direction/
+    # message_type/session_id/ws_session_id/content), so the explorer + any
+    # analytics consumer keep working.
+    # ------------------------------------------------------------------
+
+    def log_event(
+        self,
+        direction: str,        # "send" | "receive" | "local" | "ws"
+        message_type: str,
+        content: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+        terminal: bool = False,
+        severity: str = "INFO",
+    ) -> None:
+        """Generic structured event. The single funnel for the lifecycle helpers
+        below; use it directly for ad-hoc events. Optionally mirrors to terminal."""
+        self.log_gemini_message(
+            direction=direction,
+            message_type=message_type,
+            content=content or {},
+            session_id=session_id,
+            ws_session_id=ws_session_id,
+        )
+        if terminal:
+            self._write_to_terminal(f"[{message_type}] {content or {}}", severity=severity)
+
+    def log_session_lifecycle(
+        self,
+        phase: str,            # "open" | "close"
+        reason: Optional[str] = None,
+        model: Optional[str] = None,
+        session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+    ) -> None:
+        """A Gemini Live session opened or closed. Makes session churn (e.g. the
+        disclaimer -> first-section restart, or any unexpected reconnect) explicit."""
+        self.log_event(
+            direction="local",
+            message_type=f"session_{phase}",
+            content={"reason": reason, "model": model},
+            session_id=session_id,
+            ws_session_id=ws_session_id,
+        )
+
+    def log_turn_event(
+        self,
+        phase: str,            # "activity_start" | "activity_end"
+        source: Optional[str] = None,   # "ptt" | "silero" | "native" | "manual"
+        session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+    ) -> None:
+        """A user turn boundary. `source` records who decided it (PTT button,
+        client Silero VAD, native Gemini VAD, or a manual prompt)."""
+        self.log_event(
+            direction="send",
+            message_type=phase,
+            content={"source": source},
+            session_id=session_id,
+            ws_session_id=ws_session_id,
+        )
+
+    def log_audio_summary(
+        self,
+        direction: str,        # "send" (user->Gemini) | "receive" (Gemini->user)
+        frames: int,
+        total_bytes: int,
+        duration_ms: Optional[float] = None,
+        session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+    ) -> None:
+        """Per-turn audio rollup -- the answer to 'did audio actually flow this
+        direction, and how much'. Emitted at turn/response end, NOT per frame."""
+        self.log_event(
+            direction=direction,
+            message_type="audio_summary",
+            content={
+                "frames": frames,
+                "bytes": total_bytes,
+                "duration_ms": duration_ms,
+            },
+            session_id=session_id,
+            ws_session_id=ws_session_id,
+        )
+
+    # NOTE: a log_model_response(text=, transcript=) helper was intentionally NOT
+    # added (fresh-eyes PR #119): it would commit raw transcript TEXT (PHI) to the
+    # dev log, inconsistent with the lengths-only discipline elsewhere. Callers that
+    # need to confirm a model response log a LENGTH (see event_shape's
+    # output_transcription_len), never the text.
+
+    def log_ws_event(
+        self,
+        event: str,            # "connect" | "close" | "error" | custom
+        detail: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        ws_session_id: Optional[str] = None,
+    ) -> None:
+        """WebSocket-layer event (connect/close/error) -- separates transport
+        problems from Gemini-session problems when triaging 'nothing happened'."""
+        self.log_event(
+            direction="ws",
+            message_type=f"ws_{event}",
+            content=detail or {},
+            session_id=session_id,
+            ws_session_id=ws_session_id,
+        )
+
     def log_tool_call(
         self,
         tool_name: str,

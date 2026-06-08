@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the PTT-toggle native-VAD fix, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-08. See [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the prior PTT-toggle native-VAD work, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -71,39 +71,44 @@ chunks for that utterance; `activity_end` flushes Gemini's buffer after.
 
 ## Native VAD mode (default, bd polyglot-pdf-333)
 
-When `DISABLE_GEMINI_VAD = False`, Gemini's own VAD drives turn-taking and the
-frontend must get out of the way on **both** axes:
+When `DISABLE_GEMINI_VAD = False`, Gemini's own VAD drives **turn-taking**, so the
+frontend stops sending manual turn signals -- but **PTT survives as a client-side
+audio gate** layered on top (bd polyglot-pdf-6vo), so the two concerns are
+separated: Gemini owns *when a turn starts/ends*; PTT owns *which client bytes are
+sent at all* (noisy-room support).
 
-- **No manual activity signals.** The backend advertises `native_vad: true` in the
-  `session_ready` handshake. `WebFormConnection.handleSessionReady` relays it to a
-  new `ConnectionCallbacks.onNativeVadMode`, which sets a `nativeVad` flag in the
+- **No manual activity signals (unchanged).** The backend advertises
+  `native_vad: true` in the `session_ready` handshake.
+  `WebFormConnection.handleSessionReady` relays it to
+  `ConnectionCallbacks.onNativeVadMode`, which sets a `nativeVad` flag in the
   `connection.ts` closure. That flag short-circuits all five activity-signal sites
-  (the `sendActivityStart/End` wrappers used by the PTT button, and
-  `onVADSpeechStart/End` used by Silero). Belt-and-suspenders: the adapter's
-  `send_activity_start/end` also no-op server-side when native VAD is on, so a
-  stray signal can't create the conflicting turn-taking state.
-- **Continuous, ungated audio.** Gemini's VAD needs the full stream — including
-  silence — to find turn boundaries. `audioManager.setNativeVad(true)` makes the
-  worklet `onmessage` handler bypass the `inputMuted/vadActive` privacy gate AND
-  the all-zero silence skip, and it reuses the `setPTTMode` worklet message to put
-  the **audio worklet's RMS noise gate** into bypass (otherwise the worklet would
-  zero sub-threshold audio before JS ever sees it). The bypass is re-applied
-  whenever the worklet node is (re)created, so a reconnect can't silently re-arm
-  the gate.
-- **PTT is disabled and shown as such.** In native mode the PTT effects in
-  `VoiceOverlay.tsx` / `VoiceOverlayMobile.tsx` early-return on
-  `connectionManager.isNativeVad()`, so a PTT toggle can't re-arm the noise gate or
-  mute the (now continuous) stream. The overlays read `isNativeVad()` into reactive
-  state once connected (`session_ready` fires `onNativeVadMode` before status flips
-  to `connected`) and, when native VAD is on, **force the displayed mode off PTT,
-  disable the Input-Mode toggle, and label it "Native"** (with a tooltip) -- so the
-  control reflects reality instead of a stale, unresponsive "PTT" (bd
-  polyglot-pdf-tlc). The VAD mode is backend-controlled (`DISABLE_GEMINI_VAD`) and
-  is not client-switchable mid-session.
+  (the `sendActivityStart/End` wrappers and `onVADSpeechStart/End` used by Silero),
+  and `shouldRunVAD` keeps client Silero VAD off in native mode. Belt-and-suspenders:
+  the adapter's `send_activity_start/end` also no-op server-side when native VAD is
+  on. **PTT does not change this** -- a PTT press still calls `sendActivityStart`,
+  which is a no-op in native mode; PTT only gates the audio bytes.
+- **Continuous stream by default, PTT-gatable.** Gemini's VAD needs the full stream
+  -- including silence -- to find turn boundaries. The audio routing decision lives
+  in the pure `shouldSendAudioChunk()` (`audioManager.ts`): in native mode it streams
+  continuously **unless PTT is on**, in which case it sends only while the button is
+  held (`inputMuted=false`). `setNativeVad(true)` still puts the **worklet RMS noise
+  gate** into bypass, and `setPTTMode` keeps that bypass active under native VAD
+  regardless of PTT (`enabled || nativeVadEnabled`) -- so toggling PTT off does not
+  re-arm the RMS gate and starve the stream. The bypass is re-applied whenever the
+  worklet node is (re)created.
+- **PTT is a live, always-available gate.** In native mode the Input-Mode toggle is
+  **enabled** and the Hold-to-Talk button **renders** (the old `!nativeVad` /
+  `isNativeVad()` early-returns were removed). Toggling drives `muteInput`/
+  `unmuteInput`; the PTT press/release handlers own their own
+  `flushAudioQueue`/`resumePlayback` pair, so they are safe under native VAD (the
+  #110 hazard only applied to *forcing* `pushToTalkMode=false`, which would start
+  Silero -- still prevented by `shouldRunVAD`). The label reads **PTT** (gated) or
+  **Auto** (continuous); there is no longer a disabled "Native" state. The *backend*
+  VAD mode is still set by `DISABLE_GEMINI_VAD` and is not client-switchable
+  mid-session -- but PTT no longer needs to switch it.
 
-Revert is the single flag: set `DISABLE_GEMINI_VAD=true` and every gate falls back
-to the manual-VAD behavior described above — the non-native code paths are
-unchanged.
+Revert is the single flag: set `DISABLE_GEMINI_VAD=true` and turn-taking falls back
+to client Silero VAD; PTT behaves the same in both backend modes.
 
 ## The client VAD thresholds (Silero)
 

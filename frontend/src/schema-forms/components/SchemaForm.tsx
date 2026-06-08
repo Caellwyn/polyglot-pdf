@@ -59,20 +59,60 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamReady, setStreamReady] = useState(false);
 
-  // Detect mobile on mount and on resize
+  // Detect mobile on mount and on resize.
+  //
+  // HYSTERESIS + DEBOUNCE (bd polyglot-pdf-6vo): switching the overlay remounts it,
+  // which re-runs the overlay's mount-time connect and restarts the Gemini session.
+  // A single 768px threshold thrashes when window.innerWidth oscillates near it --
+  // and the desktop vs mobile overlays have different footprints, so mounting one
+  // can change innerWidth and bounce it back (a layout feedback loop observed live:
+  // innerWidth flipping 647<->1202 with no real window resize, restarting Gemini
+  // every ~second and repeating the disclaimer forever). Two guards break it:
+  //   1. A dead-zone band: flip to mobile only below MOBILE_MAX, back to desktop
+  //      only above DESKTOP_MIN. Inside the band, keep the current mode (no flip).
+  //   2. Debounce: only act on a width that has held steady, so a transient bounce
+  //      cannot trigger a remount.
+  // The INITIAL classification is exempt from the dead zone (Codex review PR #119):
+  // hysteresis is only meaningful once there is a prior state to preserve. On first
+  // load it would otherwise leave a dead-zone width (e.g. 720px, which historically
+  // rendered mobile) on desktop. So the first evaluate() uses the plain BREAKPOINT;
+  // subsequent resizes use the dead zone.
   useEffect(() => {
-    const checkMobile = () => {
-      const nowMobile = window.innerWidth <= 768;
+    const BREAKPOINT = 768;   // classic single threshold, used for INITIAL classify
+    const MOBILE_MAX = 700;   // <= this -> mobile (resize)
+    const DESKTOP_MIN = 820;  // >= this -> desktop; (700, 820) is the dead zone
+    let timer: number | undefined;
+
+    const evaluate = (initial = false) => {
+      const w = window.innerWidth;
       setIsMobile(prev => {
-        if (prev !== nowMobile) {
-          console.log('[SchemaForm] 📱 Mobile mode changed:', nowMobile, 'width:', window.innerWidth);
+        let next = prev;
+        if (initial) {
+          next = w <= BREAKPOINT;          // first load: definitive, no dead zone
+        } else if (w <= MOBILE_MAX) {
+          next = true;
+        } else if (w >= DESKTOP_MIN) {
+          next = false;
         }
-        return nowMobile;
+        // else (resize, within dead zone) -> keep `prev` (no flip)
+        if (prev !== next) {
+          console.log('[SchemaForm] 📱 Mobile mode changed:', next, 'width:', w);
+        }
+        return next;
       });
     };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+
+    const onResize = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = window.setTimeout(() => evaluate(false), 250);
+    };
+
+    evaluate(true); // initial (immediate, no debounce, plain breakpoint)
+    window.addEventListener('resize', onResize);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
   // Create shared audio stream EARLY (before overlays render)

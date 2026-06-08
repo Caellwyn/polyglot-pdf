@@ -86,7 +86,15 @@ class LiveAIGemini(ILiveAI):
         # Generate unique instance ID for debugging multi-tab scenarios
         import uuid
         self._instance_id = f"LiveAI-{str(uuid.uuid4())[:8]}"
-        
+        # Per-live-session attempt counter (bd polyglot-pdf-2m9, Codex review PR #119).
+        # The SAME adapter instance is reused across a Gemini restart (disclaimer ->
+        # first-section). Without a per-attempt suffix every restart shares one
+        # session_id and scripts/logs.py collapses the separate open/close pairs +
+        # frame totals into one row, hiding the very churn the markers expose. The
+        # dev-log session_id is "<instance_id>#<attempt>"; ws_session_id still groups
+        # all attempts of one form session. Bumped at each session_open.
+        self._live_attempt = 0
+
         # Store these as instance variables for later use
         self._vertexai = vertexai
         self._project = project
@@ -245,11 +253,16 @@ class LiveAIGemini(ILiveAI):
             enriched = dict(content)
             enriched["seq"] = self._dev_io_seq
             enriched["model"] = self._model_name
+            # Suffix the session_id with the live-session attempt so each Gemini
+            # restart is a DISTINCT row in scripts/logs.py (Codex review PR #119);
+            # ws_session_id still groups all attempts of one form session.
+            attempt = getattr(self, "_live_attempt", 0)
+            session_id = f"{self._instance_id}#{attempt}" if attempt else self._instance_id
             dev_logger.log_gemini_message(
                 direction=direction,
                 message_type=message_type,
                 content=enriched,
-                session_id=self._instance_id,
+                session_id=session_id,
                 ws_session_id=self._form_session_id,
             )
         except Exception:
@@ -390,6 +403,17 @@ class LiveAIGemini(ILiveAI):
             if not hasattr(self, '_first_adapter_audio_logged'):
                 self._log.info("[mic] [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
                 self._first_adapter_audio_logged = True
+            # Inbound-audio rollup (bd polyglot-pdf-2m9): count user->Gemini frames and
+            # emit a dev-log summary on the FIRST frame and every 100 thereafter, so the
+            # log shows whether mic audio actually reaches Gemini (and at what rate)
+            # without a per-frame flood. The receive loop does the same for Gemini->user.
+            self._audio_in_frames = getattr(self, "_audio_in_frames", 0) + 1
+            self._audio_in_bytes = getattr(self, "_audio_in_bytes", 0) + len(audio_chunk)
+            if self._audio_in_frames == 1 or self._audio_in_frames % 100 == 0:
+                self._dev_log_io("send", "audio_summary", {
+                    "frames": self._audio_in_frames,
+                    "bytes": self._audio_in_bytes,
+                })
             # Non-blocking put - drops frame if queue is full instead of blocking
             self._audio_queue.put_nowait(audio_chunk)
         except asyncio.QueueFull:
@@ -539,21 +563,31 @@ class LiveAIGemini(ILiveAI):
 
         Reference: Gemini Live API docs lines 419-435
         """
-        # Native-VAD guard (bd polyglot-pdf-333): see send_activity_start above.
         from backend.config import get_settings
-        if not get_settings().DISABLE_GEMINI_VAD:
-            return
+        native_vad = not get_settings().DISABLE_GEMINI_VAD
 
         if self._current_session is None:
             # Session not active - silently ignore (session loss already logged elsewhere)
             self._log.warning("[warn] ACTIVITY_END called but session is None")
             return
 
+        # Native-VAD turn boundary for PTT (bd polyglot-pdf-6vo, Codex review PR #119).
+        # In native mode the manual activity_start/end are suppressed (interleaving
+        # them with automatic VAD is the conflicting state bd-333 warns about). But
+        # PTT-as-a-gate then withholds all audio after release, so Gemini would get
+        # NEITHER an activity_end NOR trailing silence and its VAD may never close the
+        # turn -> session goes silent after PTT release. audio_stream_end is the
+        # documented realtime signal to finalize the audio segment and is compatible
+        # with automatic VAD (it is not the conflicting activity_end), so we send THAT
+        # in native mode and the real activity_end only in manual mode.
         try:
-            await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
+            if native_vad:
+                await self._current_session.send_realtime_input(audio_stream_end=True)
+            else:
+                await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
             # Success - no logging (noisy, system works)
         except Exception as e:
-            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e))
+            self._log.error("[error] ACTIVITY_END_FAILED", error=str(e), native_vad=native_vad)
 
     async def finalize(self):
         """Stop the background task and clear resources."""
@@ -951,12 +985,29 @@ class LiveAIGemini(ILiveAI):
                             # Log first chunk only (verify sender is working)
                             if chunk_count == 1:
                                 self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
-                            
+
                             await session.send_realtime_input(
                                 audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
                             )
+
+                            # ACTUAL send-to-Gemini rollup (bd polyglot-pdf-2m9): this fires
+                            # AFTER send_realtime_input returns, so it proves audio crossed
+                            # the backend->Gemini boundary -- distinct from stream_audio's
+                            # "audio_summary" which only proves it reached the queue. If
+                            # "gemini_send" frames lag the queued frames, audio is stuck in
+                            # the queue / the sender is starved; if they match but Gemini
+                            # stays silent, the problem is on Gemini's side.
+                            self._gemini_sent_bytes = getattr(self, "_gemini_sent_bytes", 0) + len(chunk)
+                            if chunk_count == 1 or chunk_count % 100 == 0:
+                                self._dev_log_io("send", "gemini_send", {
+                                    "frames": chunk_count,
+                                    "bytes": self._gemini_sent_bytes,
+                                })
                         except Exception as e:
                             self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
+                            self._dev_log_io("send", "gemini_send_failed", {
+                                "chunk_number": chunk_count, "error": str(e),
+                            })
                             # swallow for robustness
                             pass
                 
@@ -1000,6 +1051,30 @@ class LiveAIGemini(ILiveAI):
                 # Store session reference for potential direct sends
                 self._current_session = session
 
+                # Reset per-session audio rollup counters (bd polyglot-pdf-2m9,
+                # Codex review PR #119): this same adapter instance is reused across a
+                # Gemini restart (e.g. disclaimer -> first-section), so without this
+                # the audio_summary / gemini_send / session_close totals would carry
+                # frames+bytes from the PRIOR session and misattribute audio flow to
+                # the wrong restart in scripts/logs.py.
+                self._audio_in_frames = 0
+                self._audio_in_bytes = 0
+                self._gemini_sent_bytes = 0
+                self._audio_chunk_count = 0
+                self._audio_out_bytes = 0
+                self._first_audio_time = None
+
+                # New live-session attempt -> distinct session_id in the dev log so
+                # logs.py does not collapse restarts (Codex review PR #119). Bump
+                # BEFORE the session_open marker so that marker carries the new id.
+                self._live_attempt = getattr(self, "_live_attempt", 0) + 1
+
+                # Session lifecycle marker (bd polyglot-pdf-2m9): makes the session
+                # boundary explicit in the dev log, so churn (e.g. the disclaimer ->
+                # first-section restart, or an unexpected reconnect) is visible at a
+                # glance instead of inferred from repeated text_turns.
+                self._dev_log_io("local", "session_open", {"attempt": self._live_attempt})
+
                 # Mark session as ready and send any queued client content messages
                 self._session_ready = True
 
@@ -1033,7 +1108,43 @@ class LiveAIGemini(ILiveAI):
                             async for event in session.receive():
                                 event_count += 1
                                 received_any = True
-                                
+
+                                # Catch-all event-shape probe (bd polyglot-pdf-2m9):
+                                # the audio_summary only fires on audio bytes, so a
+                                # response that comes back as text / transcript /
+                                # turn_complete with NO audio is currently invisible --
+                                # exactly the "Gemini went silent" blind spot. Log a
+                                # compact shape of EVERY received event (which fields are
+                                # present + flags), with NO content (PHI-safe: lengths /
+                                # booleans only). This tells us whether Gemini sends
+                                # anything at all after the user's audio, and whether it
+                                # shows it HEARD the user (input_transcription present).
+                                # DEV_LOGGING_ENABLED gate FIRST (fresh-eyes PR #119): this
+                                # probe runs on every received event in the hot loop, so skip
+                                # the ~10 getattr calls + dict build entirely in prod (where
+                                # the marker is absent) -- _dev_log_io's own short-circuit
+                                # would otherwise only save the write, not this caller-side work.
+                                if DEV_LOGGING_ENABLED:
+                                    try:
+                                        _sc = getattr(event, "server_content", None)
+                                        _it = getattr(_sc, "input_transcription", None) if _sc else None
+                                        _ot = getattr(_sc, "output_transcription", None) if _sc else None
+                                        _mt = getattr(_sc, "model_turn", None) if _sc else None
+                                        self._dev_log_io("receive", "event_shape", {
+                                            "n": event_count,
+                                            "has_audio": getattr(event, "data", None) is not None,
+                                            "has_server_content": _sc is not None,
+                                            "interrupted": bool(getattr(_sc, "interrupted", False)) if _sc else False,
+                                            "turn_complete": bool(getattr(_sc, "turn_complete", False)) if _sc else False,
+                                            "generation_complete": bool(getattr(_sc, "generation_complete", False)) if _sc else False,
+                                            "input_transcription_len": len(getattr(_it, "text", "") or "") if _it else 0,
+                                            "output_transcription_len": len(getattr(_ot, "text", "") or "") if _ot else 0,
+                                            "model_turn_parts": len(getattr(_mt, "parts", []) or []) if _mt else 0,
+                                            "tool_call": getattr(event, "tool_call", None) is not None,
+                                        })
+                                    except Exception:
+                                        pass
+
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []
                                 try:
@@ -1048,19 +1159,30 @@ class LiveAIGemini(ILiveAI):
                                             if not hasattr(self, '_audio_chunk_count'):
                                                 self._audio_chunk_count = 0
                                                 self._first_audio_time = None
-                                            
+                                                self._audio_out_bytes = 0
+
                                             self._audio_chunk_count += 1
-                                            
+                                            self._audio_out_bytes = getattr(self, "_audio_out_bytes", 0) + len(audio_bytes)
+
                                             # Track first audio chunk timing (for transcript correlation)
                                             if self._audio_chunk_count == 1:
                                                 import time
                                                 self._first_audio_time = time.time()
-                                                self._log.info("[audio] [Gemini Audio] First audio chunk received", 
+                                                self._log.info("[audio] [Gemini Audio] First audio chunk received",
                                                              bytes=len(audio_bytes),
                                                              chunk_number=1)
                                                 # Mark that Gemini has responded (cancel fallback resend)
                                                 gemini_has_responded = True
-                                            
+
+                                            # Outbound-audio rollup (bd polyglot-pdf-2m9): dev-log a summary on
+                                            # the first chunk + every 100, so the log shows whether Gemini
+                                            # actually responded with audio (and how much) without per-frame noise.
+                                            if self._audio_chunk_count == 1 or self._audio_chunk_count % 100 == 0:
+                                                self._dev_log_io("receive", "audio_summary", {
+                                                    "frames": self._audio_chunk_count,
+                                                    "bytes": self._audio_out_bytes,
+                                                })
+
                                             await self._on_audio(audio_bytes)
                                             continue
 
@@ -1697,6 +1819,14 @@ class LiveAIGemini(ILiveAI):
                     try:
                         self._current_text_sender_task = None
                         self._current_session = None
+                        # Session lifecycle marker (bd polyglot-pdf-2m9): pair to
+                        # session_open; records the final audio-in/out rollup so a
+                        # closed session shows at a glance whether any audio flowed.
+                        self._dev_log_io("local", "session_close", {
+                            "events": event_count if 'event_count' in locals() else 0,
+                            "audio_in_frames": getattr(self, "_audio_in_frames", 0),
+                            "audio_out_frames": getattr(self, "_audio_chunk_count", 0),
+                        })
                         self._log.info("gemini_session_cleaned_up",
                                      instance_id=self._instance_id,
                                      event_count=event_count if 'event_count' in locals() else 0,
