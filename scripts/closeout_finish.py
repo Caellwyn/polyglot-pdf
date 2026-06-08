@@ -5,8 +5,10 @@ What this is
 The /closeout skill's Steps 5-8.5 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
 command: commit the staged closeout work, pre-push rebase, push, open the PR
-(optionally requesting the Copilot review bot as a REVIEWER + capturing a UTC
-watch floor), record the telemetry row, **commit + push that telemetry row**, and
+(and, for a review-worthy PR, capturing the PR-open time as the watch floor --
+Codex auto-reviews on open, so the PR BODY carries the ``@codex review`` line and
+no round-1 comment is posted), record the telemetry row, **commit + push that
+telemetry row**, and
 close the bead(s). Every one of those is **deterministic mechanics** -- no
 judgment -- so this script collapses the mechanical subset into ONE process where
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
@@ -30,22 +32,22 @@ staged file set. This script executes those decisions; it never makes them.
 What it does NOT do (the judgment boundary)
 -------------------------------------------
 - decide review-worthiness (the verdict is a REQUIRED flag the caller passes);
-- triage fresh-eyes / Copilot findings or run the review loop;
+- triage fresh-eyes / Codex findings or run the review loop;
 - resolve a merge conflict (it aborts the rebase and exits REBASE-CONFLICT so
   the orchestrator decides mechanical-vs-structural -- SKILL Step 7);
 - pick the fresh-eyes model, write journal prose, or ``git add`` (staging is the
   orchestrator's content decision);
 - ``gh pr merge`` (never -- the maintainer's alone);
-- start the Copilot watcher (it PRINTS the command; the orchestrator launches it
+- start the Codex watcher (it PRINTS the command; the orchestrator launches it
   as a ``run_in_background`` task so the harness wake-up wiring works).
 
 Two-call bead-close pattern
 ---------------------------
-Bead close must happen AFTER Copilot is CLEAN (SKILL Step 8). For a
+Bead close must happen AFTER the Codex review is CLEAN (SKILL Step 8). For a
 **review-skipped** PR (docs/beads/journal-only) there is no review loop, so the
 single call can carry ``--close-beads`` and close immediately. For a
 **review-worthy** PR, the first call opens the PR WITHOUT ``--close-beads``; the
-orchestrator drives the review loop to CLEAN, then runs a tiny second call with
+orchestrator drives the Codex review loop to CLEAN, then runs a tiny second call with
 **``--close-only``** -- which closes the bead(s) and does NOTHING else (no commit,
 rebase, push, PR, or telemetry). The telemetry row was already written by the
 first call, so ``--close-only`` is what prevents a DUPLICATE ledger row that would
@@ -123,13 +125,18 @@ EXIT_REBASE_CONFLICT = 4
 
 SUBPROCESS_TIMEOUT_SEC = 600
 
-# The review bot is REQUESTED via the GitHub reviewer API (POST
-# .../requested_reviewers), NOT @-mentioned in a comment: an "@copilot please
-# review" comment invokes the Copilot CODING AGENT (clones the repo, runs MCP
-# servers, commits) instead of Copilot CODE REVIEW (bd polyglot-pdf-1pr,
-# confirmed on throwaway PR #74). The slug is reviewer-agnostic config so a later
-# Codex switch (bd hrn.9) is a one-line change.
-REVIEW_REVIEWER_SLUG = swarm_config.review_reviewer_slug()
+# The review bot is OpenAI Codex (chatgpt-codex-connector[bot]). It AUTO-REVIEWS
+# on PR open, so ROUND 1 needs no explicit trigger -- the orchestrator just
+# includes an "@codex review" line in the PR BODY (belt-and-suspenders) and lets
+# the auto-review fire. ROUND 2+ (re-reviews after a fix-push) DO need an explicit
+# "@codex review" issue COMMENT, which the SKILL's Step-7 loop posts. Never use the
+# GitHub reviewer API (requested_reviewers) -- that fires Copilot, whose prepaid
+# credits are exhausted (bd hrn.8/hrn.9). Codex's clean verdict is a thumbs-up
+# ("+1") reaction on its summary comment; the watcher (pr_review_watcher.py
+# --reviewer codex, now the default) classifies that. The "@codex review" string
+# is the EXACT trigger -- "@codex please commit ..." would instead invoke its
+# commit path (see AGENTS.md "If you are reviewing a PR").
+CODEX_REVIEW_TRIGGER = "@codex review"
 
 
 class CloseoutError(Exception):
@@ -245,30 +252,32 @@ class Closeout:
         self.out["PR"] = num
 
     def request_review(self) -> None:
-        """Request the review bot as a REVIEWER and capture the watch floor.
+        """Capture the round-1 watch floor + emit the watch command (NO comment).
 
-        Requests the bot via POST .../requested_reviewers (which fires Copilot
-        CODE REVIEW); a comment mention would invoke the coding agent instead (bd
-        polyglot-pdf-1pr). The review lands as a formal review with a later
-        ``submitted_at``, so the ``--since`` floor is a UTC timestamp captured
-        just BEFORE the request -- there is no comment ``created_at`` to read.
+        Codex (chatgpt-codex-connector[bot]) AUTO-REVIEWS on PR open, so ROUND 1
+        needs no explicit trigger -- the orchestrator includes an ``@codex
+        review`` line in the PR BODY (see SKILL Step 6) and the auto-review fires
+        on its own. This method therefore posts NO comment; it only captures the
+        ``--since`` floor and prints the watch command. The floor is ``_utcnow()``
+        captured at PR-open time: the auto-review's verdict (and its surfaces)
+        always land AFTER the PR is created, so a stamp taken right after
+        ``gh pr create`` is a safe lower bound. Never use the GitHub reviewer API
+        (requested_reviewers) -- that fires Copilot (credits exhausted, bd
+        hrn.8/hrn.9). ROUND 2+ re-reviews ARE triggered by an explicit ``@codex
+        review`` comment, which the SKILL Step-7 loop posts (not this script). The
+        watch command carries ``--reviewer codex`` explicitly even though it is now
+        the watcher default (self-documenting + revert-safe).
         """
         if not self.args.review_worthy:
             return
         pr = self.out["PR"]
-        # Capture the floor BEFORE the request so the review's submitted_at is
-        # always >= it (no comment created_at exists for a reviewer request).
+        # No trigger comment: Codex auto-reviews on open. The floor is the PR-open
+        # time -- the auto-review verdict always lands after it.
         ts = _utcnow()
-        _run([
-            "gh", "api",
-            "repos/{}/pulls/{}/requested_reviewers".format(self.repo, pr),
-            "-X", "POST",
-            "-f", "reviewers[]={}".format(REVIEW_REVIEWER_SLUG),
-        ])
         self.out["TS"] = ts
         # PRINT the watch command; the orchestrator launches it run_in_background.
         watcher = self.WT / "scripts" / "pr_review_watcher.py"
-        self.out["WATCH_CMD"] = '"{}" "{}" {} --since "{}"'.format(
+        self.out["WATCH_CMD"] = '"{}" "{}" {} --reviewer codex --since "{}"'.format(
             self.PY, watcher, pr, ts
         )
 
@@ -399,10 +408,9 @@ class Closeout:
             self.open_pr))
         if self.args.review_worthy:
             plan.append((
-                "gh api repos/{}/pulls/<PR>/requested_reviewers -X POST "
-                "-f 'reviewers[]={}' (request the review bot; capture a UTC "
-                "--since floor; then PRINT the run_in_background watch "
-                "command)".format(self.repo, REVIEW_REVIEWER_SLUG),
+                "(Codex auto-reviews on open; the PR body carries '{}' -- no "
+                "round-1 comment) capture the PR-open --since floor + PRINT the "
+                "run_in_background watch command".format(CODEX_REVIEW_TRIGGER),
                 self.request_review))
         plan.append((
             '"{}" "{}/scripts/harness_ledger.py" --bead {} --arm {} ... '
@@ -489,10 +497,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "multi-line body).")
     gate = p.add_mutually_exclusive_group(required=False)
     gate.add_argument("--review-worthy", action="store_true",
-                      help="Request a Copilot review (request the review bot as a "
-                           "PR reviewer).")
+                      help="Trigger a Codex review (post an `@codex review` "
+                           "comment on the PR).")
     gate.add_argument("--skip-review", action="store_true",
-                      help="Docs/beads/journal-only PR -- no Copilot review.")
+                      help="Docs/beads/journal-only PR -- no Codex review.")
     p.add_argument("--commit-message", default=None,
                    help="Commit the ALREADY-STAGED closeout work (no git add).")
     p.add_argument("--arm", choices=["A", "B", "C", "BC"], default=None)

@@ -960,6 +960,33 @@ def test_codex_timeout_note_is_not_never_started(capsys, monkeypatch):
     assert "did not complete" in out
 
 
+def test_default_reviewer_is_codex(monkeypatch):
+    # The Copilot->Codex cutover (bd hrn.9) flips the --reviewer DEFAULT to codex,
+    # so a watch launched without --reviewer drives the Codex profile. Stub watch()
+    # to capture the profile main() selected from the default.
+    seen = {}
+
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+        seen["profile"] = profile
+        return cw._emit("CLEAN", "stub")
+    monkeypatch.setattr(cw, "watch", fake_watch)
+    cw.main(["1"])  # no --reviewer -> default
+    assert seen["profile"].key == "codex"
+
+
+def test_reviewer_copilot_still_selectable(monkeypatch):
+    # The legacy copilot profile is still reachable via an explicit --reviewer
+    # (kept for the generic watcher; the cutover only changed the default).
+    seen = {}
+
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+        seen["profile"] = profile
+        return cw._emit("CLEAN", "stub")
+    monkeypatch.setattr(cw, "watch", fake_watch)
+    cw.main(["1", "--reviewer", "copilot"])
+    assert seen["profile"].key == "copilot"
+
+
 def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
     # Guard: the finding-2 fix must NOT regress Copilot. A closed-not-merged PR
     # with no Copilot timeline activity (state is None) still reaches CLEAN.

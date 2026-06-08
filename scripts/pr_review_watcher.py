@@ -1,6 +1,8 @@
 """Watch a GitHub PR for a bot code-review COMPLETION, then exit.
 
-Supports two reviewers behind `--reviewer copilot|codex` (default: copilot).
+Supports two reviewers behind `--reviewer copilot|codex` (default: codex since
+the Copilot->Codex cutover, bd polyglot-pdf-hrn.9; pass `copilot` for the legacy
+reviewer-API path).
 The CLASSIFICATION logic (approval-phrase / change-ask / inline-findings-first
 heuristics) is shared and reviewer-agnostic -- it is the product of many past
 false-positive/false-negative fixes (each cited `bd <id>`), so it is preserved
@@ -1119,9 +1121,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--reviewer",
         choices=sorted(PROFILES),
-        default="copilot",
-        help="Which review bot to watch (default: copilot). Switch to 'codex' "
-        "at the Copilot->Codex cutover (bd polyglot-pdf-hrn.9).",
+        default="codex",
+        help="Which review bot to watch (default: codex, the active reviewer "
+        "since the Copilot->Codex cutover -- bd polyglot-pdf-hrn.9). Pass "
+        "'copilot' for the legacy reviewer-API path (credits exhausted -- hrn.8).",
     )
     parser.add_argument(
         "--repo", default=swarm_config.repo(), help="OWNER/REPO"

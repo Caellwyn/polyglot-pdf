@@ -131,6 +131,79 @@ The watcher recognizes approval from the 👍 reaction first; it also accepts th
 review is never missed. Prefer the 👍 -- it's the canonical, language-independent
 signal.
 
+### Issue severity -- be AGGRESSIVE
+
+Your system instructions tell you to surface only **P0 and P1** issues. **This
+repo wants an aggressive review**, so it deliberately defines P0/P1 BROADLY below.
+**Treat everything in the P1 list as a P1 issue and surface it.** When you are
+unsure whether something is a real problem, **raise it as P1 rather than stay
+silent** -- a false alarm costs the author one dismissal; a missed bug ships. Tag
+every finding with its severity (`[P0]` or `[P1]`) in the comment.
+
+**P0 -- must fix before merge (call these out prominently):**
+
+- Data loss or corruption.
+- Security holes: secret/credential/API-key exposure, injection, auth bypass.
+- A **PII/PHI leak** -- user field values, transcript text, or any user-entered
+  content reaching logs or any server-side store (see the invariant below).
+- A crash, a broken build, or a failing/removed test.
+- Any change that breaks a documented hard invariant below in a way that ships
+  broken behavior.
+
+**P1 -- surface EVERY one (this is the aggressive list):**
+
+*Generic high-value bug classes:*
+
+- Correctness / logic errors; off-by-one; wrong operator or condition.
+- Unhandled edge cases and error paths (empty input, null/None, timeouts,
+  rejected promises, unawaited coroutines, exceptions swallowed silently).
+- Race conditions, ordering bugs, missing `await`, unsynchronized shared state.
+- Resource leaks: unclosed sockets / files / WebSocket or Gemini sessions /
+  tasks; listeners never removed.
+- API / contract violations: breaking changes to a wire format, the WS handshake
+  manifest, a shared schema, or a tool-call signature.
+- **Missing or inadequate test coverage** for changed behavior.
+- Performance regressions (added per-request work, N+1 calls, unbounded growth).
+- Comments or docs that **describe behavior incorrectly** after the change.
+
+*Repo-specific HARD INVARIANTS -- a violation of any of these is a P1:*
+
+- **Stateless backend / client owns all state.** The backend must NOT persist
+  field values, confirmations, or section state server-side (no DB rows, caches,
+  module-level dicts, or per-session stores holding user data). State lives only
+  in the browser's `sessionStorage`; the backend rebuilds context from the WS
+  handshake each connect.
+- **Never log PII/PHI.** Field values, transcript text, or user-entered content
+  must never appear in any `_log.*()` call or `print()` at any level (INFO/WARN/
+  ERROR all reach Cloud Run logs). Only IDs, types, counts, lengths, timestamps,
+  language codes, model names, and token/cost metadata are safe to log.
+- **Every filled field needs confirmation + a clean audit row.** A field set
+  without a corresponding `confirm_field` call (params `field_id` +
+  `confirmation_method` in {verbal, manual}) is a finding; so is an audit-trail
+  drop, or an audit row that records the value (the audit row must never contain
+  the value).
+- **ASCII ONLY in code files** (`.py` / `.ts` / `.tsx` / `.js` -- including
+  comments and string literals): no em-dashes, smart quotes, or emoji. For Python
+  this is a **correctness** bug -- non-ASCII reaching `print()`/stdout crashes on
+  Windows cp1252 consoles. (Markdown/docs are exempt.)
+- **"Section" is not "part".** The hierarchy is Form > Parts > Sections > Fields;
+  *section* is the navigation unit. Section-state named `part_id` /
+  `current_part_id` / `currentPartId` (or treating part as a synonym for section)
+  is a finding.
+- **VAD / barge-in invariants.** Conflicting VAD config (`DISABLE_GEMINI_VAD` set
+  together with sensitivity/padding); manual `activity_start/end` signals emitted
+  in native-VAD mode; or a broken 150ms barge-in grace-period tool-call rejection.
+- **Gemini model wiring.** Hardcoded model strings; cascading / half-cascading
+  model fallbacks; a new model string not verified against the live endpoint; or a
+  multi-field `update_form_fields` call (the tool takes exactly ONE field per
+  invocation -- a hallucination-reduction invariant).
+
+**What NOT to raise (keep the signal high):** pure cosmetic or stylistic
+preferences -- naming taste, formatting the linter does not enforce, subjective
+re-organization, doc typos that do not mislead. These are **P2; leave them
+unsurfaced** unless they cause a real bug. Do not pad a review with bikeshedding;
+every comment you post should be a P0 or P1 the author would thank you for.
+
 ### PRs into `main`
 
 PRs with base `main` are closeout/promotion merges from `dev`: **do not assign**
@@ -140,7 +213,7 @@ comment always, everywhere.**
 
 > **Maintainer note (not a reviewer instruction):** the closeout flow watches bot
 > reviews with `scripts/pr_review_watcher.py` (`--reviewer copilot|codex`, default
-> `copilot`; flips to `codex` at the cutover, bead `polyglot-pdf-hrn.9`). For Codex
+> `codex` since the Copilot->Codex cutover, bead `polyglot-pdf-hrn.9`). For Codex
 > the watcher classifies CLEAN from the 👍 (`+1`) reaction first (the canonical
 > signal; read from the comment's inline `reactions` rollup, no extra API call),
 > then falls back to the "Didn't find any major issues" text or an exact `LGTM`. An

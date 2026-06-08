@@ -6,9 +6,11 @@ Pins the safety-critical contract of the closeout glue script:
   - --dry-run performs ZERO mutating subprocess calls (the highest-value test --
     it pins the "preview has no side effects" promise);
   - worktree safety: every git call is `git -C <WT>`; no `git add` ever;
-  - review-worthy opens the PR, REQUESTS the review bot as a reviewer (never an
-    @-mention comment -- bd polyglot-pdf-1pr), captures a UTC --since floor, and
-    prints the watch command; skip-review does none of that;
+  - review-worthy opens the PR (Codex AUTO-REVIEWS on open; the @codex review
+    line rides in the PR BODY, so round 1 posts NO comment and NEVER the reviewer
+    API -- that fires Copilot, credits exhausted, bd hrn.8/hrn.9), captures the
+    PR-open time as the --since floor, and prints the watch command (with
+    --reviewer codex); skip-review does none of that;
   - a rebase conflict aborts the rebase and exits REBASE-CONFLICT (4);
   - telemetry is warn-only (a ledger failure does not change the exit code);
   - --close-beads gates the bd close calls (0 without, N with).
@@ -187,66 +189,48 @@ class TestWorktreeSafety:
 # Review-worthy vs skip-review
 # --------------------------------------------------------------------------- #
 class TestReviewWorthy:
-    def test_opens_requests_reviewer_and_captures_ts(self, monkeypatch):
-        # TS is the UTC floor captured BEFORE the reviewer-request POST (no comment
-        # created_at to read). The order matters: the review's submitted_at must be
-        # >= the floor, so _utcnow() MUST be read before the gh api call. Use a
-        # call-order log shared by both _utcnow and _run to PIN that ordering, not
-        # just the value (a reordered floor-after-POST would otherwise pass).
-        order = []
-        monkeypatch.setattr(
-            cf, "_utcnow",
-            lambda: (order.append("utcnow"), "2026-06-04T12:00:00Z")[1])
+    def test_round1_posts_no_comment_and_floor_is_pr_open_time(self, monkeypatch):
+        # Codex AUTO-REVIEWS on PR open, so round 1 posts NO trigger comment -- the
+        # @codex review line rides in the PR BODY (the orchestrator writes the body
+        # file). request_review() only captures the floor (= _utcnow() at PR-open)
+        # and prints the watch command.
+        monkeypatch.setattr(cf, "_utcnow", lambda: "2026-06-07T09:30:00Z")
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False)
-
-        # Wrap the recorder seam to log when the reviewer-request POST happens, so
-        # we can assert _utcnow() (the floor) was read BEFORE it. _job sets cf._run
-        # = rec, so install the wrapper AFTER _job.
-        def _ordered_run(cmd, **kw):
-            if "requested_reviewers" in " ".join(cmd):
-                order.append("request")
-            return rec(cmd, **kw)
-        cf._run = _ordered_run  # restored by the _restore_run autouse fixture
         assert job.run() == cf.EXIT_OK
         assert job.out["PR"] == "42"
-        assert job.out["TS"] == "2026-06-04T12:00:00Z"
-        # the floor was read BEFORE the reviewer request was POSTed.
-        assert order.index("utcnow") < order.index("request"), order
-        # the review is REQUESTED via the reviewer API, not @-mentioned in a
-        # comment (a comment routes to the coding agent -- bd polyglot-pdf-1pr).
-        api = [j for j in rec.joined() if "gh api" in j]
-        assert any("pulls/42/requested_reviewers" in j for j in api)
-        assert any(cf.REVIEW_REVIEWER_SLUG in j for j in api)
-        # never the old comment-trigger endpoint or the @-mention string, on ANY
-        # call (not just the first -- the regression guard against reverting).
-        assert not any("issues/42/comments" in j for j in api)
-        assert not any("@copilot please review" in j for j in rec.joined())
-        # watch command printed (in the output block), referencing the PR + since
+        # the floor is the PR-open time (_utcnow()).
+        assert job.out["TS"] == "2026-06-07T09:30:00Z"
+        # NO gh api call at all in round 1 -- no comment, and NEVER the reviewer API
+        # (that fires Copilot, credits exhausted -- bd hrn.8/hrn.9).
+        assert not any("gh api" in j for j in rec.joined())
+        assert not any("requested_reviewers" in j for j in rec.joined())
+        assert not any("@copilot" in j for j in rec.joined())
+        # watch command printed, referencing the PR, --reviewer codex, and --since
         assert "pr_review_watcher.py" in job.out["WATCH_CMD"]
+        assert "--reviewer codex" in job.out["WATCH_CMD"]
         assert "--since" in job.out["WATCH_CMD"] and "42" in job.out["WATCH_CMD"]
         assert job.out["RESULT"] == "OPENED-REVIEW"
 
-    def test_request_is_reviewer_api_not_a_comment(self):
+    def test_round1_never_uses_reviewer_api(self):
+        # Regression guard against reverting to the Copilot reviewer-API trigger.
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
         job = _job(rec, review_worthy=True, skip_review=False)
         job.run()
-        # the create call uses --body-file (a path); the @-mention trigger string
-        # must appear NOWHERE in any mutating call (it invokes the coding agent).
-        create = [j for j in rec.joined() if "pr create" in j][0]
-        assert "--body-file" in create
-        assert not any("@copilot please review" in j for j in rec.joined())
+        assert not any("requested_reviewers" in j for j in rec.joined())
+        # The trigger string constant is the EXACT "@codex review" (used in the PR
+        # body by the orchestrator + the SKILL Step-7 re-review comment), never the
+        # commit-invoking "@codex please commit ...".
+        assert cf.CODEX_REVIEW_TRIGGER == "@codex review"
 
     def test_pr_create_uses_bare_base_name(self):
         # gh pr create --base wants the branch NAME ('dev'), not 'origin/dev'.
-        # (No "gh api" response is stubbed: the reviewer-request POST returns
-        # success-empty by default and its body is ignored -- TS comes from
-        # _utcnow(), not the gh api response, since this flow has no comment
-        # created_at to read.)
+        # (Round 1 posts no comment -- Codex auto-reviews on open -- so TS is just
+        # _utcnow(); this test only checks --base.)
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
