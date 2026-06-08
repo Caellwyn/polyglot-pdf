@@ -234,6 +234,18 @@ class Closeout:
         _run(["git", "-C", self.wt, "push", "-u", "origin", self.args.branch])
 
     def open_pr(self) -> None:
+        # Capture the round-1 watch floor BEFORE `gh pr create` -- Codex
+        # AUTO-REVIEWS the instant the PR opens, so a fast auto-review verdict can
+        # land within the create-call's network round-trip. A floor stamped AFTER
+        # create returns could exclude that verdict, making the watcher filter out
+        # the real round-1 review and TIMEOUT (Codex review, PR #118). Stamping
+        # before create guarantees the floor is <= any review surface. The PR's own
+        # creation is necessarily at/after this stamp too, so the floor never
+        # excludes a legitimately newer round. request_review() reads this stash.
+        # Only for review-worthy PRs -- a skip-review PR has no watch, so TS stays
+        # the "-" sentinel (the skip-review contract).
+        if self.args.review_worthy:
+            self.out["TS"] = _utcnow()
         # gh wants the bare branch NAME for --base ('dev'), not the remote-
         # qualified ref ('origin/dev') the rebase step uses.
         proc = _run([
@@ -252,29 +264,28 @@ class Closeout:
         self.out["PR"] = num
 
     def request_review(self) -> None:
-        """Capture the round-1 watch floor + emit the watch command (NO comment).
+        """Emit the round-1 watch command (NO comment; floor stamped in open_pr).
 
         Codex (chatgpt-codex-connector[bot]) AUTO-REVIEWS on PR open, so ROUND 1
         needs no explicit trigger -- the orchestrator includes an ``@codex
         review`` line in the PR BODY (see SKILL Step 6) and the auto-review fires
-        on its own. This method therefore posts NO comment; it only captures the
-        ``--since`` floor and prints the watch command. The floor is ``_utcnow()``
-        captured at PR-open time: the auto-review's verdict (and its surfaces)
-        always land AFTER the PR is created, so a stamp taken right after
-        ``gh pr create`` is a safe lower bound. Never use the GitHub reviewer API
-        (requested_reviewers) -- that fires Copilot (credits exhausted, bd
-        hrn.8/hrn.9). ROUND 2+ re-reviews ARE triggered by an explicit ``@codex
-        review`` comment, which the SKILL Step-7 loop posts (not this script). The
-        watch command carries ``--reviewer codex`` explicitly even though it is now
-        the watcher default (self-documenting + revert-safe).
+        on its own. This method therefore posts NO comment; it only prints the
+        watch command. The ``--since`` floor was captured in ``open_pr()`` BEFORE
+        ``gh pr create`` (stashed in ``self.out["TS"]``): Codex auto-reviews
+        instantly on open, so a floor stamped AFTER create could exclude a fast
+        auto-review verdict and TIMEOUT the watch (Codex review, PR #118). Never
+        use the GitHub reviewer API (requested_reviewers) -- that fires Copilot
+        (credits exhausted, bd hrn.8/hrn.9). ROUND 2+ re-reviews ARE triggered by
+        an explicit ``@codex review`` comment, which the SKILL Step-7 loop posts
+        (not this script). The watch command carries ``--reviewer codex``
+        explicitly even though it is now the watcher default (self-documenting +
+        revert-safe).
         """
         if not self.args.review_worthy:
             return
         pr = self.out["PR"]
-        # No trigger comment: Codex auto-reviews on open. The floor is the PR-open
-        # time -- the auto-review verdict always lands after it.
-        ts = _utcnow()
-        self.out["TS"] = ts
+        # The floor was stamped in open_pr() BEFORE `gh pr create` (see there).
+        ts = self.out["TS"]
         # PRINT the watch command; the orchestrator launches it run_in_background.
         watcher = self.WT / "scripts" / "pr_review_watcher.py"
         self.out["WATCH_CMD"] = '"{}" "{}" {} --reviewer codex --since "{}"'.format(

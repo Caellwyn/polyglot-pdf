@@ -262,11 +262,11 @@ The journal entry and any doc bumps must ship in THIS PR, on THIS branch. Stage 
 makes this call -- there is no script gate). A review of a PR that can't contain a
 code regression is wasted effort. Decision rule:
 
-- **Skip Codex** (do NOT post the `@codex review` comment; do NOT start `pr_review_watcher.py`) when the
+- **Skip Codex** (omit the `@codex review` line from the PR body; do NOT start `pr_review_watcher.py`) when the
   diff cannot introduce a runtime/logic regression -- e.g. it touches ONLY docs
   (`docs/`, `*.md`), `.beads/`, journal entries, or other non-executed prose/config.
   A pure doc bump, a beads sync, or a journal-only PR is in this bucket.
-- **Trigger Codex** (post the `@codex review` comment, chained into the create call; run
+- **Review with Codex** (include the `@codex review` line in the PR body so the auto-review fires; run
   the watch loop) when the diff touches executable source (`backend/`,
   `frontend/src/`, scripts, CI, config that changes runtime behavior) in any
   non-trivial way.

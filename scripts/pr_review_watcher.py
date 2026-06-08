@@ -856,23 +856,29 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
 
     # 3. Canonical approval REACTION (Codex's 👍). The documented, language-
     # independent sign-off. Ranks above prose but below inline findings (checked
-    # above), so a 👍 can never override a real inline ask.
+    # above), so a +1 reaction can never override a real inline ask. This IS a
+    # genuine passed-review verdict (the bot reviewed and approved), so
+    # review_verdict=True lets --close-on-clean fire -- Codex's clean re-reviews
+    # arrive on THIS path (issue comment + reaction), not as a formal review
+    # (Codex review, PR #118).
     if _has_clean_reaction(latest, profile):
         return _emit(
             "CLEAN",
             "{} approved via {} reaction (no inline findings):\n\n{}".format(
                 profile.label, profile.clean_reaction, body or "(empty comment)"
             ),
+            review_verdict=True,
         )
 
     # 4. No reaction. An explicit prose approval (exact LGTM / known phrase /
-    # reviewer clean sentinel) is the fallback CLEAN.
+    # reviewer clean sentinel) is the fallback CLEAN -- also a genuine verdict.
     if _is_approval_comment(prose, profile):
         return _emit(
             "CLEAN",
             "{} approved via issue comment (no inline findings):\n\n{}".format(
                 profile.label, body
             ),
+            review_verdict=True,
         )
 
     # 5. Change-ask prose (quote-stripped) -> COMMENTS. Ungated by design: a real
@@ -886,12 +892,14 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
 
     # 6. No new inline finding, no approval reaction, not an explicit approval, no
     # prose-only ask -> the round is clean (approval by absence of any finding).
+    # Still a genuine reviewed-and-nothing-to-say verdict, so review_verdict=True.
     return _emit(
         "CLEAN",
         "{} commented with no new inline finding this round -> treating as "
         "approval (verdict is by inline findings, not prose):\n\n{}".format(
             profile.label, body
         ),
+        review_verdict=True,
     )
 
 

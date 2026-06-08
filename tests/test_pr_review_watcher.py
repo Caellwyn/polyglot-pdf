@@ -1110,6 +1110,43 @@ def test_genuine_review_clean_sets_verdict_flag(monkeypatch, capsys):
     assert cw._LAST_CLEAN_WAS_REVIEW is True
 
 
+def test_codex_thumbs_up_issue_comment_clean_sets_verdict_flag(capsys, monkeypatch):
+    # Codex's clean re-review arrives as an ISSUE COMMENT + a +1 reaction, NOT a
+    # formal review -- so the issue-comment CLEAN path MUST set the verdict flag,
+    # or --close-on-clean silently never fires on the common Codex path and a
+    # review-worthy PR stalls after a clean re-review (Codex review, PR #118).
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "Didn't find any major issues.",
+        "reactions": {"+1": 1},
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True  # the close gate is now satisfied
+
+
+def test_codex_prose_approval_issue_comment_sets_verdict_flag(capsys, monkeypatch):
+    # The prose-approval and approval-by-absence issue-comment CLEAN paths are
+    # also genuine verdicts (Codex reviewed and approved), so they too must set the
+    # flag -- otherwise a clean re-review with no +1 (text sentinel only) wouldn't
+    # close the bead.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-01T12:00:00Z",
+        "body": "no major issues",  # a clean sentinel, no reaction
+    }]
+    monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
 def test_close_beads_on_clean_invokes_close_only(monkeypatch):
     # The close shells out to closeout_finish.py --close-only with one --bead per
     # id (the verified bd_safe close path); assert the command shape, no real run.
