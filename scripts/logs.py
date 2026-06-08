@@ -223,6 +223,18 @@ def cmd_session(rows, args):
             extra = " " + json.dumps(c, default=str)[:120]
         elif mt == "model_response":
             extra = " " + repr(str(c.get("text") or c.get("transcript") or "")[:80])
+        elif mt == "event_shape":
+            # Compact: only show the TRUE flags / non-zero lens, so the signal
+            # (did Gemini hear us? send anything?) is not buried.
+            flags = []
+            for k in ("has_audio", "has_server_content", "interrupted",
+                      "turn_complete", "generation_complete", "tool_call"):
+                if c.get(k):
+                    flags.append(k)
+            for k in ("input_transcription_len", "output_transcription_len", "model_turn_parts"):
+                if c.get(k):
+                    flags.append(f"{k}={c.get(k)}")
+            extra = " " + (", ".join(flags) if flags else "(empty)")
         elif mt and mt.startswith("console_"):
             extra = " " + str(c.get("text", ""))[:110]
         seq = c.get("seq")

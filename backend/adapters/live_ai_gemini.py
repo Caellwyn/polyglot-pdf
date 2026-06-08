@@ -1067,7 +1067,37 @@ class LiveAIGemini(ILiveAI):
                             async for event in session.receive():
                                 event_count += 1
                                 received_any = True
-                                
+
+                                # Catch-all event-shape probe (bd polyglot-pdf-2m9):
+                                # the audio_summary only fires on audio bytes, so a
+                                # response that comes back as text / transcript /
+                                # turn_complete with NO audio is currently invisible --
+                                # exactly the "Gemini went silent" blind spot. Log a
+                                # compact shape of EVERY received event (which fields are
+                                # present + flags), with NO content (PHI-safe: lengths /
+                                # booleans only). This tells us whether Gemini sends
+                                # anything at all after the user's audio, and whether it
+                                # shows it HEARD the user (input_transcription present).
+                                try:
+                                    _sc = getattr(event, "server_content", None)
+                                    _it = getattr(_sc, "input_transcription", None) if _sc else None
+                                    _ot = getattr(_sc, "output_transcription", None) if _sc else None
+                                    _mt = getattr(_sc, "model_turn", None) if _sc else None
+                                    self._dev_log_io("receive", "event_shape", {
+                                        "n": event_count,
+                                        "has_audio": getattr(event, "data", None) is not None,
+                                        "has_server_content": _sc is not None,
+                                        "interrupted": bool(getattr(_sc, "interrupted", False)) if _sc else False,
+                                        "turn_complete": bool(getattr(_sc, "turn_complete", False)) if _sc else False,
+                                        "generation_complete": bool(getattr(_sc, "generation_complete", False)) if _sc else False,
+                                        "input_transcription_len": len(getattr(_it, "text", "") or "") if _it else 0,
+                                        "output_transcription_len": len(getattr(_ot, "text", "") or "") if _ot else 0,
+                                        "model_turn_parts": len(getattr(_mt, "parts", []) or []) if _mt else 0,
+                                        "tool_call": getattr(event, "tool_call", None) is not None,
+                                    })
+                                except Exception:
+                                    pass
+
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []
                                 try:

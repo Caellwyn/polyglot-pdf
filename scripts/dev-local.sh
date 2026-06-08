@@ -129,10 +129,15 @@ start_backend() {
   # demo project's token, so the WS handshake silently times out and the SPA falls
   # back to Cloud Run (your local backend never sees the session). The bypass is the
   # documented dev path (backend/services/auth.py). Override per run: VFF_DISABLE_AUTH=false ./dev-local.sh
+  # SEND_TRANSCRIPT=true (default in local dev) turns on input/output audio
+  # transcription so the dev log captures what Gemini HEARD from the mic -- the
+  # decisive datapoint for "audio reaches Gemini but it stays silent". Safe for
+  # native-audio (adds only *_audio_transcription config, not TEXT modality).
   ( cd "$REPO_ROOT" && \
     VERTEXAI=false USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
     DISABLE_GEMINI_VAD="$vad_mode" \
+    SEND_TRANSCRIPT="${SEND_TRANSCRIPT:-true}" \
     "$VENV_PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload ) &
   PIDS+=("$!")
 }

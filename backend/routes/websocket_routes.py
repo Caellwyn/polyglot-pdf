@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
 import json
 import asyncio
+import os
 import time
 from ..config import get_settings
 from ..dependencies import get_form_filling_service
@@ -562,6 +563,13 @@ async def fill_form_from_schema(
 	send_transcript: bool = Query(default=False),
 	service = Depends(get_form_filling_service),
 ):
+	# Debug aid (bd polyglot-pdf-2m9): allow forcing input/output transcription on
+	# via env without a frontend change, so the dev log captures what Gemini HEARD
+	# from the user's audio. Only RAISES the flag (never lowers a query=true), and
+	# is a no-op in prod (env unset). Safe for native-audio: enable_transcripts only
+	# adds *_audio_transcription config, never response_modalities=TEXT (which 1007s).
+	if not send_transcript and os.getenv("SEND_TRANSCRIPT", "false").lower() == "true":
+		send_transcript = True
 	"""
 	Stateless web form filling endpoint.
     ...
