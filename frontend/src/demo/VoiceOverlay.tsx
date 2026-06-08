@@ -118,6 +118,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
 	useEffect(() => {
 		if (initialLanguage && !showLanguageModal) {
+			// Guard against a remount re-running connect+disclaimer on an ALREADY-LIVE
+			// session (bd polyglot-pdf-6vo): a desktop<->mobile switch remounts this
+			// overlay while connectionManager stays alive; reconnecting + re-showing
+			// the disclaimer would restart the Gemini session and repeat the
+			// disclaimer. Skip if already connected.
+			const st = (connectionManager?.getStatus?.() || '').toLowerCase()
+			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
+				st === 'switching_section' || st.startsWith('reconnecting')
+			if (alreadyLive) {
+				console.log('[VoiceOverlay] Mounted onto a live session - skipping connect/disclaimer')
+				return
+			}
 			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
