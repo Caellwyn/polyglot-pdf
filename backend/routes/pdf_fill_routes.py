@@ -2,7 +2,7 @@
 PDF Filling Routes - Backend endpoint for filling PDFs with form data
 
 Uses PyMuPDF to fill PDF forms (supports XFA and AcroForm).
-Stateless: receives data → fills PDF → returns bytes (no storage).
+Stateless: receives data -> fills PDF -> returns bytes (no storage).
 """
 from typing import Any, Dict, Optional
 import os
@@ -30,7 +30,7 @@ class PDFFillRequest(BaseModel):
 
 	kit_id: str = Field(..., description="Form kit identifier (matches manifest entry)")
 	pdf_filename: str = Field(..., description="PDF filename (e.g., 'i-90.pdf')")
-	field_values: Dict[str, Any] = Field(..., description="Field ID → value mapping from schema")
+	field_values: Dict[str, Any] = Field(..., description="Field ID -> value mapping from schema")
 	form_schema: Dict[str, Any] = Field(..., description="Full schema with pdf_field_name mappings")
 
 
@@ -173,17 +173,27 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 			return (None, None)
 
-		def apply_field_flag_changes(widget, conditional_behavior: Optional[Dict[str, Any]]) -> None:
-			"""Apply PDF field flag changes if specified in conditional_behavior.
+		def apply_field_flag_changes(widget, field_obj: Optional[Dict[str, Any]]) -> None:
+			"""Apply PDF field flag changes for a read-only field that unlocks on fill.
 
-			This handles read-only fields that need to be unlocked for filling.
-			The schema specifies which bit to flip in the field flags.
+			The schema specifies which bit to flip in the field flags. The unlock
+			descriptor (pdf_field_flag_change) is read from conditional_logic FIRST
+			-- that is where the I-90 gold actually stores it -- then from
+			conditional_behavior as a fallback (bd polyglot-pdf-7a9.16). Previously
+			only conditional_behavior was read, where the gold carries just
+			unlock_method, so the unlock never fired and read-only fields silently
+			stayed locked.
 			"""
-			if not conditional_behavior:
+			if not field_obj:
 				return
 
-			# Check if there are PDF field flag changes to apply
-			pdf_field_flag_change = conditional_behavior.get("pdf_field_flag_change")
+			# Check both relationship keys for the flag-change descriptor.
+			pdf_field_flag_change = None
+			for key in ("conditional_logic", "conditional_behavior"):
+				container = field_obj.get(key)
+				if isinstance(container, dict) and container.get("pdf_field_flag_change"):
+					pdf_field_flag_change = container["pdf_field_flag_change"]
+					break
 			if not pdf_field_flag_change:
 				return
 
@@ -263,8 +273,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					is_selected = option.get("value") == value
 					try:
 						# Apply field flag changes if needed (e.g., unlock read-only fields)
-						conditional_behavior = field_obj.get("conditional_behavior")
-						apply_field_flag_changes(widget, conditional_behavior)
+						apply_field_flag_changes(widget, field_obj)
 
 						fill_widget(widget, page, is_selected, field_type="radio")
 						if is_selected:
@@ -308,8 +317,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					try:
 						# Apply field flag changes if needed (e.g., unlock read-only fields)
-						conditional_behavior = field_obj.get("conditional_behavior")
-						apply_field_flag_changes(widget, conditional_behavior)
+						apply_field_flag_changes(widget, field_obj)
 
 						fill_widget(widget, page, value, field_type="checkbox")
 						filled_count += 1
@@ -361,8 +369,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 						try:
 							# Apply field flag changes if needed (e.g., unlock read-only fields)
-							conditional_behavior = field_obj.get("conditional_behavior")
-							apply_field_flag_changes(widget, conditional_behavior)
+							apply_field_flag_changes(widget, field_obj)
 
 							fill_widget(widget, page, True, field_type="checkbox")
 							filled_count += 1
@@ -401,8 +408,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 				try:
 					# Apply field flag changes if needed (e.g., unlock read-only fields)
-					conditional_behavior = field_obj.get("conditional_behavior")
-					apply_field_flag_changes(widget, conditional_behavior)
+					apply_field_flag_changes(widget, field_obj)
 
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
