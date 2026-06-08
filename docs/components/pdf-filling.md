@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-08. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -58,10 +58,15 @@ builds a `field_id → pdf_field_name` map + a `field_id → field` lookup from
 - **`need_appearances` is intentionally NOT set** — commented out, because for these
   XFA forms the viewer generates appearances and forcing it blanked the checkboxes.
 - **Dynamic flag manipulation for conditional fields.** `apply_field_flag_changes`
-  honors a field's `conditional_behavior.pdf_field_flag_change` (`{bit, current_value,
-  required_value}`) to flip a read-only bit and unlock a locked widget before
-  filling — the PDF-side counterpart of the frontend `flip_readonly_bit` unlock (see
-  [schema-forms.md](schema-forms.md)).
+  honors a field's `pdf_field_flag_change` (`{bit, current_value, required_value}`)
+  to flip a read-only bit and unlock a locked widget before filling — the PDF-side
+  counterpart of the frontend `flip_readonly_bit` unlock (see
+  [schema-forms.md](schema-forms.md)). The descriptor is read from
+  `conditional_logic` first, then `conditional_behavior` as a fallback: the gold
+  schemas store it under `conditional_logic` while `conditional_behavior` carries
+  only `unlock_method`, so reading only the latter (the prior behavior) meant the
+  unlock never fired and read-only fields silently stayed locked
+  (bd `polyglot-pdf-7a9.16`).
 
 Output is saved to a `NamedTemporaryFile` with `garbage=3, deflate=True`, read back,
 and that temp file is always removed in `finally`. Counts (`filled`/`skipped`/
@@ -87,4 +92,4 @@ backend = unwrap failed), `field_count=0` (frontend not sending), `filled=0`
 (pdf_field_name mismatch — dump real widget names with a `fitz` one-liner), and a
 curl recipe against `/api/fill-pdf`.
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-08. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
