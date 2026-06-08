@@ -748,14 +748,15 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// FIX #2: Removed pendingVADStart useEffect - consolidated into single VAD control useEffect below
 
-	// Handle push-to-talk mode toggle
+	// Handle push-to-talk mode toggle.
+	// PTT is a CLIENT-SIDE AUDIO GATE layered on top of native VAD (noisy-room
+	// support): native Gemini VAD always runs on the backend, but PTT (when on)
+	// gates which client audio bytes reach Gemini. We run the full mute/unmute +
+	// worklet reconfig regardless of native VAD -- audioManager.setPTTMode keeps the
+	// worklet noise gate bypassed under native VAD, so toggling PTT off does not
+	// re-arm the RMS gate. Manual activity_start/end stay suppressed in native mode
+	// (connection.ts); PTT only decides which bytes are sent.
 	const handlePushToTalkToggle = async () => {
-		// bd polyglot-pdf-333: in native-VAD mode Gemini's own VAD drives turns and
-		// the audio layer streams continuous ungated audio. Don't let a PTT toggle
-		// reconfigure the worklet/mute -- it would re-arm the noise gate and starve
-		// Gemini's VAD of silence.
-		if (connectionManager?.isNativeVad()) return
-
 		const newMode = !pushToTalkMode
 		setPushToTalkMode(newMode)
 
@@ -1024,15 +1025,16 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</div>
 
 
-					{/* Push-to-Talk Toggle */}
-					{/* bd polyglot-pdf-tlc: disabled in native-VAD mode (backend-controlled,
-					    not switchable mid-session). */}
+					{/* Input-mode toggle. PTT is a client-side audio gate that works in
+					    BOTH modes: native Gemini VAD always runs on the backend; PTT (on)
+					    sends audio only while held (noisy-room support), PTT (off) streams
+					    continuously. Always enabled. Left icon = continuous, right = PTT. */}
 					<div className="vff-ptt-toggle-container-mobile">
 						<label
 							className="vff-ptt-toggle-label-mobile"
-							title={nativeVad
-								? 'Gemini native VAD is active (set by the backend); push-to-talk does not apply in this mode.'
-								: undefined}
+							title={pushToTalkMode
+								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
+								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
 						>
 							<span className="vff-ptt-icon-left">🎤</span>
 							<div className="vff-ptt-toggle-switch-mobile">
@@ -1040,7 +1042,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 									type="checkbox"
 									checked={pushToTalkMode}
 									onChange={handlePushToTalkToggle}
-									disabled={nativeVad}
 									className="vff-ptt-toggle-input-mobile"
 								/>
 								<span className="vff-ptt-toggle-slider-mobile"></span>
@@ -1049,8 +1050,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</label>
 					</div>
 
-					{/* Push-to-Talk Bar Button (only visible in PTT mode and when connected; never in native VAD) */}
-					{pushToTalkMode && isConnected && !nativeVad && (
+					{/* Push-to-Talk bar: visible whenever PTT gating is on (works in
+					    native VAD too -- it gates the client audio bytes). */}
+					{pushToTalkMode && isConnected && (
 						<div className="vff-ptt-bar-container">
 							<button
 								className={`vff-ptt-bar-button ${isHoldingPushToTalk ? 'active' : ''}`}
