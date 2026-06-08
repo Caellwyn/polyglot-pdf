@@ -71,16 +71,27 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(t)
     except json.JSONDecodeError:
-        candidates = []
-        for o, c in (("{", "}"), ("[", "]")):
-            start, end = t.find(o), t.rfind(c)
-            if start != -1 and end != -1 and end > start:
-                candidates.append((start, t[start:end + 1]))
-        for _, frag in sorted(candidates):
+        # The CLI model can wrap the schema in PROSE -- narration before the JSON
+        # ("Let me build the schema directly.\n{...}") and/or a trailing remark
+        # after it. A naive "first { or [" grabs a bracket inside the prose and
+        # parses a tiny fragment. So scan EVERY { and [ position, raw_decode each,
+        # and keep the BEST parse: a dict carrying "fields" wins; otherwise the
+        # one spanning the most characters (the real schema, not a stray fragment).
+        dec = json.JSONDecoder()
+        best = None  # (priority, length, obj): priority 1 = has "fields"
+        for i, ch in enumerate(t):
+            if ch not in "{[":
+                continue
             try:
-                return json.loads(frag)
+                obj, end = dec.raw_decode(t[i:])
             except json.JSONDecodeError:
                 continue
+            has_fields = isinstance(obj, dict) and "fields" in obj
+            cand = (1 if has_fields else 0, end, obj)
+            if best is None or cand[:2] > best[:2]:
+                best = cand
+        if best is not None:
+            return best[2]
         raise
 
 
@@ -228,10 +239,13 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
     if pdf_path:
         cmd += ["--add-dir", os.path.dirname(os.path.abspath(pdf_path))]
     # Wrap the prompt so the CLI emits ONLY the schema JSON as its result text.
+    # (The CLI model tends to narrate before the JSON; _extract_json tolerates
+    # leading/trailing prose, but ask for clean output anyway.)
     wrapped = (
         prompt
         + "\n\nIMPORTANT: Your FINAL message must be ONLY the FormSchema JSON "
-        "object -- no prose, no markdown fences, no tool-call narration after it."
+        "object -- it must START with '{' and END with '}', with NO prose, NO "
+        "reasoning, NO markdown fences, and NO narration before or after it."
     )
     timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "1200"))
     proc = subprocess.run(
