@@ -563,6 +563,10 @@ async def fill_form_from_schema(
 	send_transcript: bool = Query(default=False),
 	service = Depends(get_form_filling_service),
 ):
+	"""
+	Stateless web form filling endpoint.
+    ...
+	"""
 	# Debug aid (bd polyglot-pdf-2m9): allow forcing input/output transcription on
 	# via env without a frontend change, so the dev log captures what Gemini HEARD
 	# from the user's audio. Only RAISES the flag (never lowers a query=true), and
@@ -570,10 +574,7 @@ async def fill_form_from_schema(
 	# adds *_audio_transcription config, never response_modalities=TEXT (which 1007s).
 	if not send_transcript and os.getenv("SEND_TRANSCRIPT", "false").lower() == "true":
 		send_transcript = True
-	"""
-	Stateless web form filling endpoint.
-    ...
-	"""
+
 	log = _log.bind(endpoint="fill_from_schema")
 	
 	try:

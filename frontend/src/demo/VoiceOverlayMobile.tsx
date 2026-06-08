@@ -107,8 +107,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// it is already connected, re-connecting + re-showing the disclaimer would
 			// restart the Gemini session and repeat the disclaimer. Skip in that case.
 			const st = (connectionManager?.getStatus?.() || '').toLowerCase()
+			// Include 'connecting' so a desktop<->mobile flip DURING the first connect
+			// does not kick off a second concurrent connect (fresh-eyes PR #119).
 			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
-				st === 'switching_section' || st.startsWith('reconnecting')
+				st === 'connecting' || st === 'switching_section' || st.startsWith('reconnecting')
 			if (alreadyLive) {
 				console.log('[VoiceOverlayMobile] Mounted onto a live session - skipping connect/disclaimer')
 				return
@@ -135,6 +137,26 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		pushToTalkModeRef.current = pushToTalkMode
 	}, [pushToTalkMode])
+
+	// Sync the audio pipeline to the current PTT mode (Codex review PR #119).
+	// The desktop overlay has this; mobile previously synced only inside the toggle
+	// HANDLER, so with the default pushToTalkMode=true the PTT bar showed but the
+	// audio layer kept pttModeEnabled=false / inputMuted=false -> under native VAD
+	// shouldSendAudioChunk streamed continuously while the UI claimed press-to-talk.
+	// Run the same mute/unmute + worklet config on connect and on every mode change.
+	// (setPTTMode keeps the worklet RMS gate bypassed under native VAD, so toggling
+	// PTT off does not re-arm it.)
+	useEffect(() => {
+		if (!connectionManager) return
+		connectionManager.setPushToTalkMode(pushToTalkMode)
+		const audioManager = connectionManager.getAudioManager()
+		audioManager?.setPTTMode(pushToTalkMode)
+		if (pushToTalkMode) {
+			audioManager?.muteInput()
+		} else {
+			audioManager?.unmuteInput()
+		}
+	}, [connectionManager, pushToTalkMode])
 
 	// Keep status ref updated
 	useEffect(() => {

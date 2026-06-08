@@ -241,21 +241,11 @@ class DevFileLogger:
             ws_session_id=ws_session_id,
         )
 
-    def log_model_response(
-        self,
-        text: Optional[str] = None,
-        transcript: Optional[str] = None,
-        session_id: Optional[str] = None,
-        ws_session_id: Optional[str] = None,
-    ) -> None:
-        """Gemini produced a text/transcript response (when transcripts are on)."""
-        self.log_event(
-            direction="receive",
-            message_type="model_response",
-            content={"text": text, "transcript": transcript},
-            session_id=session_id,
-            ws_session_id=ws_session_id,
-        )
+    # NOTE: a log_model_response(text=, transcript=) helper was intentionally NOT
+    # added (fresh-eyes PR #119): it would commit raw transcript TEXT (PHI) to the
+    # dev log, inconsistent with the lengths-only discipline elsewhere. Callers that
+    # need to confirm a model response log a LENGTH (see event_shape's
+    # output_transcription_len), never the text.
 
     def log_ws_event(
         self,

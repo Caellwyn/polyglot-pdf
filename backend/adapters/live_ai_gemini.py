@@ -1028,6 +1028,19 @@ class LiveAIGemini(ILiveAI):
                 # Store session reference for potential direct sends
                 self._current_session = session
 
+                # Reset per-session audio rollup counters (bd polyglot-pdf-2m9,
+                # Codex review PR #119): this same adapter instance is reused across a
+                # Gemini restart (e.g. disclaimer -> first-section), so without this
+                # the audio_summary / gemini_send / session_close totals would carry
+                # frames+bytes from the PRIOR session and misattribute audio flow to
+                # the wrong restart in scripts/logs.py.
+                self._audio_in_frames = 0
+                self._audio_in_bytes = 0
+                self._gemini_sent_bytes = 0
+                self._audio_chunk_count = 0
+                self._audio_out_bytes = 0
+                self._first_audio_time = None
+
                 # Session lifecycle marker (bd polyglot-pdf-2m9): makes the session
                 # boundary explicit in the dev log, so churn (e.g. the disclaimer ->
                 # first-section restart, or an unexpected reconnect) is visible at a
@@ -1078,25 +1091,31 @@ class LiveAIGemini(ILiveAI):
                                 # booleans only). This tells us whether Gemini sends
                                 # anything at all after the user's audio, and whether it
                                 # shows it HEARD the user (input_transcription present).
-                                try:
-                                    _sc = getattr(event, "server_content", None)
-                                    _it = getattr(_sc, "input_transcription", None) if _sc else None
-                                    _ot = getattr(_sc, "output_transcription", None) if _sc else None
-                                    _mt = getattr(_sc, "model_turn", None) if _sc else None
-                                    self._dev_log_io("receive", "event_shape", {
-                                        "n": event_count,
-                                        "has_audio": getattr(event, "data", None) is not None,
-                                        "has_server_content": _sc is not None,
-                                        "interrupted": bool(getattr(_sc, "interrupted", False)) if _sc else False,
-                                        "turn_complete": bool(getattr(_sc, "turn_complete", False)) if _sc else False,
-                                        "generation_complete": bool(getattr(_sc, "generation_complete", False)) if _sc else False,
-                                        "input_transcription_len": len(getattr(_it, "text", "") or "") if _it else 0,
-                                        "output_transcription_len": len(getattr(_ot, "text", "") or "") if _ot else 0,
-                                        "model_turn_parts": len(getattr(_mt, "parts", []) or []) if _mt else 0,
-                                        "tool_call": getattr(event, "tool_call", None) is not None,
-                                    })
-                                except Exception:
-                                    pass
+                                # DEV_LOGGING_ENABLED gate FIRST (fresh-eyes PR #119): this
+                                # probe runs on every received event in the hot loop, so skip
+                                # the ~10 getattr calls + dict build entirely in prod (where
+                                # the marker is absent) -- _dev_log_io's own short-circuit
+                                # would otherwise only save the write, not this caller-side work.
+                                if DEV_LOGGING_ENABLED:
+                                    try:
+                                        _sc = getattr(event, "server_content", None)
+                                        _it = getattr(_sc, "input_transcription", None) if _sc else None
+                                        _ot = getattr(_sc, "output_transcription", None) if _sc else None
+                                        _mt = getattr(_sc, "model_turn", None) if _sc else None
+                                        self._dev_log_io("receive", "event_shape", {
+                                            "n": event_count,
+                                            "has_audio": getattr(event, "data", None) is not None,
+                                            "has_server_content": _sc is not None,
+                                            "interrupted": bool(getattr(_sc, "interrupted", False)) if _sc else False,
+                                            "turn_complete": bool(getattr(_sc, "turn_complete", False)) if _sc else False,
+                                            "generation_complete": bool(getattr(_sc, "generation_complete", False)) if _sc else False,
+                                            "input_transcription_len": len(getattr(_it, "text", "") or "") if _it else 0,
+                                            "output_transcription_len": len(getattr(_ot, "text", "") or "") if _ot else 0,
+                                            "model_turn_parts": len(getattr(_mt, "parts", []) or []) if _mt else 0,
+                                            "tool_call": getattr(event, "tool_call", None) is not None,
+                                        })
+                                    except Exception:
+                                        pass
 
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []

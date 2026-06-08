@@ -124,8 +124,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// the disclaimer would restart the Gemini session and repeat the
 			// disclaimer. Skip if already connected.
 			const st = (connectionManager?.getStatus?.() || '').toLowerCase()
+			// Include 'connecting' so a desktop<->mobile flip DURING the first connect
+			// does not kick off a second concurrent connect (fresh-eyes PR #119).
 			const alreadyLive = st === 'connected' || st.startsWith('connected ') ||
-				st === 'switching_section' || st.startsWith('reconnecting')
+				st === 'connecting' || st === 'switching_section' || st.startsWith('reconnecting')
 			if (alreadyLive) {
 				console.log('[VoiceOverlay] Mounted onto a live session - skipping connect/disclaimer')
 				return
