@@ -2557,29 +2557,29 @@
       "section_id": "Part 3 - Biographic Information",
       "options": [
         {
-          "value": "white",
+          "value": "P3_checkbox7_White[0]",
           "label": "White",
-          "pdf_field_name": "P3_checkbox7_White"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_White[0]"
         },
         {
-          "value": "asian",
+          "value": "P3_checkbox7_Asian[0]",
           "label": "Asian",
-          "pdf_field_name": "P3_checkbox7_Asian"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Asian[0]"
         },
         {
-          "value": "black",
+          "value": "P3_checkbox7_Black[0]",
           "label": "Black or African American",
-          "pdf_field_name": "P3_checkbox7_Black"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Black[0]"
         },
         {
-          "value": "native_american",
+          "value": "P3_checkbox7_Indian[0]",
           "label": "American Indian or Alaska Native",
-          "pdf_field_name": "P3_checkbox7_Indian"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Indian[0]"
         },
         {
-          "value": "pacific_islander",
+          "value": "P3_checkbox7_Hawaiian[0]",
           "label": "Native Hawaiian or Other Pacific Islander",
-          "pdf_field_name": "P3_checkbox7_Hawaiian"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Hawaiian[0]"
         }
       ],
       "help": {
