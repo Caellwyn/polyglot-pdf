@@ -50,7 +50,7 @@ class AudioHandler:
         # Log first audio chunk to verify flow
         if not self._first_audio_logged:
             _log.info(
-                "🎤 [AudioHandler] First audio chunk forwarding to LiveAI",
+                "[mic] [AudioHandler] First audio chunk forwarding to LiveAI",
                 bytes=len(audio_chunk),
                 session_id=self._session_id
             )
@@ -70,7 +70,7 @@ class AudioHandler:
             return
         
         _log.info(
-            "🎤 [AudioHandler] Sending activity_start to Gemini",
+            "[mic] [AudioHandler] Sending activity_start to Gemini",
             session_id=self._session_id
         )
         await self._live_ai.send_activity_start()
@@ -87,7 +87,7 @@ class AudioHandler:
             return
         
         _log.info(
-            "🤐 [AudioHandler] Sending activity_end to Gemini",
+            "[mic-off] [AudioHandler] Sending activity_end to Gemini",
             session_id=self._session_id
         )
         await self._live_ai.send_activity_end()

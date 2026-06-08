@@ -1,7 +1,7 @@
 """
 Structured logger for production logging.
 
-Outputs JSON-formatted logs to stdout for Cloud Run → BigQuery pipeline.
+Outputs JSON-formatted logs to stdout for Cloud Run -> BigQuery pipeline.
 Enforces HIPAA compliance - NEVER logs field values, PHI, or PII.
 """
 

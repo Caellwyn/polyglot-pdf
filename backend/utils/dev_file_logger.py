@@ -5,8 +5,8 @@ Writes detailed logs to daily .jsonl files in backend/logs/ for analysis.
 Only active in DEVELOPMENT mode (automatic detection).
 
 ENVIRONMENT DETECTION (AUTOMATIC - NO MANUAL FLAGS):
-- Development: If backend/.env.DEV file exists → Enable detailed logging (includes PHI)
-- Production: If backend/.env.DEV does NOT exist → Disable detailed logging (HIPAA safe)
+- Development: If backend/.env.DEV file exists -> Enable detailed logging (includes PHI)
+- Production: If backend/.env.DEV does NOT exist -> Disable detailed logging (HIPAA safe)
 
 This approach prevents human error:
 - .env* files are gitignored and dockerignored
@@ -106,7 +106,7 @@ class DevFileLogger:
                 f.write("\n")
         except Exception as e:
             # If file logging fails, output to terminal
-            print(f"⚠️  Dev file logger error: {e}", file=sys.stderr)
+            print(f"[warn] Dev file logger error: {e}", file=sys.stderr)
 
     def _write_to_terminal(self, message: str, severity: str = "INFO") -> None:
         """Write a message to terminal (always, regardless of file logging)."""
@@ -240,7 +240,7 @@ class DevFileLogger:
 
         # Also output to terminal
         self._write_to_terminal(
-            f"⚠️  INVALID TOOL CALL: {tool_name} - {error}",
+            f"[warn] INVALID TOOL CALL: {tool_name} - {error}",
             severity="WARNING"
         )
 
@@ -277,7 +277,7 @@ class DevFileLogger:
 
         # Also output to terminal
         self._write_to_terminal(
-            f"⚠️  FIELD UPDATE REJECTED: {field_id} - {reason}",
+            f"[warn] FIELD UPDATE REJECTED: {field_id} - {reason}",
             severity="WARNING"
         )
 
@@ -317,7 +317,7 @@ class DevFileLogger:
 
         # Always output errors to terminal
         self._write_to_terminal(
-            f"❌ ERROR [{error_type}]: {error_message}",
+            f"[error] ERROR [{error_type}]: {error_message}",
             severity="ERROR"
         )
 

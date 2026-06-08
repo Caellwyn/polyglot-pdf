@@ -262,7 +262,7 @@ async def _handle_fill_session(
 				audio_bytes = msg["bytes"]
 				# Log first audio frame to verify flow (throttle to avoid spam)
 				if 'first_audio_logged' not in locals():
-					_log.info("🎤 [WebSocket] First audio frame received", bytes=len(audio_bytes))
+					_log.info("[mic] [WebSocket] First audio frame received", bytes=len(audio_bytes))
 					first_audio_logged = True
 				asyncio.create_task(service.stream_audio(audio_bytes))
 				continue
@@ -403,14 +403,14 @@ async def _handle_fill_session(
 				elif mtype == "vad_activity_start":
 					# Frontend VAD detected user started speaking
 					# Send activity_start signal before audio chunks
-					_log.info("🎤 [WebSocket] Received vad_activity_start from frontend", session_id=session_id)
+					_log.info("[mic] [WebSocket] Received vad_activity_start from frontend", session_id=session_id)
 					await service.send_activity_start()
 					# No acknowledgment needed - fire-and-forget signal
 					continue
 				elif mtype == "vad_activity_end":
 					# Frontend VAD detected user stopped speaking
 					# Send activity_end signal to flush Gemini's audio buffer
-					_log.info("🤐 [WebSocket] Received vad_activity_end from frontend", session_id=session_id)
+					_log.info("[mic-off] [WebSocket] Received vad_activity_end from frontend", session_id=session_id)
 					await service.send_activity_end()
 					# No acknowledgment needed - fire-and-forget signal
 					continue
@@ -688,7 +688,7 @@ async def fill_form_from_schema(
 	         form_session_id=form_session_id)
 
 	print(f"\n{'='*80}")
-	print(f"🎯 NEW FORM SESSION")
+	print(f"[session] NEW FORM SESSION")
 	print(f"{'='*80}")
 	print(f"Form Session ID: {form_session_id}")
 	print(f"Ephemeral ID: {ephemeral_id}")

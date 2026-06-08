@@ -156,7 +156,7 @@ class CallbackHandler:
                 self._ws_audio_chunk_count += 1
                 
                 if self._ws_audio_chunk_count == 1:
-                    _log.info("📡 [WebSocket Audio] Sending first audio chunk to client", 
+                    _log.info("[audio] [WebSocket Audio] Sending first audio chunk to client", 
                              session_id=self._session_id, bytes=len(data))
                 
                 await self._websocket.send_bytes(data)
@@ -235,7 +235,7 @@ class CallbackHandler:
         if normalized == "get_field_value":
             return await self._handle_get_field_value_tool(arguments)
 
-        # NOTE: no complete_section route — that tool was removed; section
+        # NOTE: no complete_section route -- that tool was removed; section
         # completion is auto-detected by the frontend when all fields confirm.
 
         if normalized == "confirm_field":
@@ -548,7 +548,7 @@ class CallbackHandler:
             # Add warning for multiple fields if any were rejected
             if rejected_count > 0:
                 error_lines.append(
-                    f"⚠️ IMPORTANT: You sent {rejected_count + len(applied_fields)} fields but can only update ONE field per call. "
+                    f"[warn] IMPORTANT: You sent {rejected_count + len(applied_fields)} fields but can only update ONE field per call. "
                     f"First field was processed, others rejected. Call update_form_fields separately for each field."
                 )
             
