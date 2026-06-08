@@ -184,7 +184,13 @@ export function createConnectionManager(
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
-	let pushToTalkMode: boolean = false  // Track if PTT mode is enabled (disables energy-based barge-in)
+	// PTT is the DEFAULT (HALLUCINATION_REDUCTION, Oct 30 2025), and this must match
+	// the overlays' default so a fresh session starts gated. The overlays now lazy-init
+	// their pushToTalkMode FROM this value via getPushToTalkMode() (so a remount onto a
+	// live session restores the user's choice); since `false ?? true === false`, a
+	// `false` here would have wrongly started every NEW session in Auto with the mic
+	// open (fresh-eyes PR #119). Default true keeps PTT-as-default intact.
+	let pushToTalkMode: boolean = true  // Track if PTT mode is enabled (disables energy-based barge-in)
 	// Native-VAD mode (bd polyglot-pdf-333): when true, Gemini's own VAD drives
 	// turns -- we suppress all manual activity signals (PTT + Silero) and stream
 	// continuous audio. Set from the backend session_ready handshake.
