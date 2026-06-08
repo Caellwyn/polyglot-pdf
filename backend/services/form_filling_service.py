@@ -12,6 +12,7 @@ from .field_utils import (
     build_fields_from_schema,
     get_available_spoken_names,
     find_similar_field_names,
+    strip_field_id_from_hint,
 )
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
@@ -201,8 +202,10 @@ class FormFillingService:
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
         if self._audio_handler:
+            # AudioHandler appends next_field_hint to the spoken message, so strip
+            # the "(field_id: ...)" parenthetical here too (bd polyglot-pdf-dx7).
             await self._audio_handler.send_manual_field_update(
-                field_id, field_name, value, next_field_hint
+                field_id, field_name, value, strip_field_id_from_hint(next_field_hint)
             )
 
     async def send_activity_start(self):
@@ -251,10 +254,15 @@ class FormFillingService:
         # Store spoken language for section switching (persists across sections)
         self._spoken_language = spoken_language
 
+        # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
+        # read the raw field_id aloud (bd polyglot-pdf-dx7). The field_id is still
+        # available to Gemini via the system instruction's FIELDS block.
+        spoken_hint = strip_field_id_from_hint(next_field_hint)
+
         # Format initiating message template
         message = self._settings.INITIATING_MESSAGE.format(
             spoken_language=spoken_language,
-            next_field_hint=next_field_hint
+            next_field_hint=spoken_hint
         )
 
         _log.info("send_initiating_message",
@@ -499,16 +507,22 @@ class FormFillingService:
         Phase 3: Accepts section metadata for section-based flow.
         """
         from backend.services.ai_context import build_form_context
-        
+
+        # The system instruction's "ask for: {next_field_hint}" directive is what
+        # Gemini speaks at session start (the initial_field_hint from the
+        # handshake) and after a section switch. Strip the "(field_id: ...)"
+        # parenthetical here so that directive never carries the raw field_id into
+        # Gemini's spoken greeting (bd polyglot-pdf-dx7). This is the system-
+        # instruction sibling of the runtime-hint strip in request_coordinator.
         return build_form_context(
-            schema, 
-            current_values, 
+            schema,
+            current_values,
             self._fill_language,
             section_number=section_number,
             total_sections=total_sections,
             section_label=section_label,
             previous_spoken_names=previous_spoken_names,
-            next_field_hint=next_field_hint
+            next_field_hint=strip_field_id_from_hint(next_field_hint)
         )
 
     def update_schema(self, schema: dict, current_values: dict, fill_language: str = "English"):

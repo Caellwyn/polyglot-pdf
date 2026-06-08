@@ -313,6 +313,8 @@ class Settings(BaseModel):
     "- Never proceed until field updates successfully\n\n"
 
     "CONSTRAINTS:\n"
+    "- Never read field IDs aloud (use spoken names only)\n"
+    "- When asking for a field, use natural phrasing without saying 'field' or IDs\n"
     "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
     "- Sanity check dates/phones/ZIP codes\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
