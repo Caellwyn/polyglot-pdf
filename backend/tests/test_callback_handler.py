@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 from fastapi import WebSocket
 
 from backend.services.callback_handler import CallbackHandler
-from backend.services.request_coordinator import RequestCoordinator
+from backend.services.request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
 
 
 @pytest.fixture
@@ -257,7 +257,61 @@ class TestErrorHandling:
 
 class TestFormUpdateCoordination:
     """Test send_form_update method and coordinator integration."""
-    
+
     # Note: send_form_update is integration-tested via full service tests
     # as it requires complex async coordination between WebSocket and coordinator.
     pass
+
+
+class TestConfirmFieldNextHint:
+    """confirm_field must distinguish timeout from genuine completion.
+
+    bd polyglot-pdf-tks: request_next_field_hint() returns a hint string,
+    None (form genuinely complete), or HINT_REQUEST_TIMEOUT (frontend did not
+    answer in 2s). A timeout previously collapsed to None and made the tool
+    response say "All fields confirmed.", so a slow round-trip made Gemini wrap
+    the form up early. These tests pin all three outcomes.
+    """
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_with_next_hint(self, callback_handler, mock_coordinator):
+        mock_coordinator.request_next_field_hint.return_value = "Next field: email"
+
+        response = await callback_handler.on_tool_call(
+            "confirm_field", {"field_id": "name", "confirmation_method": "verbal"}
+        )
+
+        assert response["success"] is True
+        assert response["next_field_hint"] == "Next field: email"
+        assert "All fields confirmed" not in response["message"]
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_form_complete(self, callback_handler, mock_coordinator):
+        # Genuine completion: frontend answered with None.
+        mock_coordinator.request_next_field_hint.return_value = None
+
+        response = await callback_handler.on_tool_call(
+            "confirm_field", {"field_id": "name", "confirmation_method": "verbal"}
+        )
+
+        assert response["next_field_hint"] is None
+        assert "All fields confirmed" in response["message"]
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_hint_timeout_does_not_claim_complete(
+        self, callback_handler, mock_coordinator
+    ):
+        # Frontend did not answer in time.
+        mock_coordinator.request_next_field_hint.return_value = HINT_REQUEST_TIMEOUT
+
+        response = await callback_handler.on_tool_call(
+            "confirm_field", {"field_id": "name", "confirmation_method": "verbal"}
+        )
+
+        # The sentinel must never reach the wire (it is not JSON-serializable
+        # in a meaningful way); it collapses to None for next_field_hint.
+        assert response["next_field_hint"] is None
+        # ...but the message must NOT claim completion, and must steer Gemini to
+        # keep going rather than wrap up.
+        assert "All fields confirmed" not in response["message"]
+        assert "do NOT assume the form is complete" in response["message"]

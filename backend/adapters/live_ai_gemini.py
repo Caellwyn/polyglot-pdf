@@ -1415,13 +1415,29 @@ class LiveAIGemini(ILiveAI):
                                                             if response_payload is None:
                                                                 response_payload = {}
 
-                                                            if tool_name and call_id:
+                                                            # ALWAYS emit a FunctionResponse for a named tool call
+                                                            # (bd polyglot-pdf-tks). Gemini Live BLOCKS until every
+                                                            # function call it issued gets a response; a call with no
+                                                            # response leaves her waiting forever -- which breaks the
+                                                            # very first tool-call/response loop. Two ways this used to
+                                                            # silently drop the response on THIS (model_turn.parts) path:
+                                                            #   1. the gate required call_id, so a function_call with no
+                                                            #      'id' produced no response at all; and
+                                                            #   2. a callback exception (caught above) left response_payload
+                                                            #      None -> coerced to {} here, but the call_id gate could
+                                                            #      still skip the append.
+                                                            # The sibling event.tool_call path gates on tool_name alone and
+                                                            # omits id (the SDK matches responses to calls by order), so
+                                                            # match that: append on tool_name, include id only when present.
+                                                            if tool_name:
+                                                                fr_kwargs = {
+                                                                    "name": tool_name,
+                                                                    "response": response_payload,
+                                                                }
+                                                                if call_id:
+                                                                    fr_kwargs["id"] = call_id
                                                                 responses.append(
-                                                                    types.FunctionResponse(
-                                                                        id=call_id,
-                                                                        name=tool_name,
-                                                                        response=response_payload,
-                                                                    )
+                                                                    types.FunctionResponse(**fr_kwargs)
                                                                 )
 
                                                     # Handle text transcription (only from first part for backwards compatibility)

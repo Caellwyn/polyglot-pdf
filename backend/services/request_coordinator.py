@@ -16,6 +16,15 @@ from .field_utils import strip_field_id_from_hint
 _log = structlog.get_logger().bind(module="request_coordinator")
 
 
+# Sentinel distinguishing "the frontend did not answer the next-field-hint
+# request in time" from a genuine None ("no fields left -- form complete").
+# Both used to collapse to None, which let a slow round-trip masquerade as
+# completion and make Gemini wrap the form up early (bd polyglot-pdf-tks).
+# Callers that forward the hint to Gemini MUST treat this sentinel as "unknown,
+# do NOT claim the form is done" rather than as a real hint.
+HINT_REQUEST_TIMEOUT = object()
+
+
 class RequestCoordinator:
     """Coordinates async request/response cycles with the frontend."""
     
@@ -94,20 +103,24 @@ class RequestCoordinator:
             self._pending_form_state_request = None
             return {}
     
-    async def request_next_field_hint(self) -> Optional[str]:
+    async def request_next_field_hint(self) -> Any:
         """
         Request next field hint from the frontend client.
-        
+
         This implements the async request/response pattern for getting navigation hints.
         The frontend computes the next unfilled field and formats a hint for Gemini.
-        
+
         Returns:
-            Formatted hint string (e.g., "Next field to fill is #3: 'email' (type: text, required)")
-            or None if request fails or no unfilled fields remain
+            - Formatted hint string (e.g., "Next field to fill is #3: 'email' ...")
+              when the frontend has a next field.
+            - None when the frontend answered and the form is genuinely complete.
+            - HINT_REQUEST_TIMEOUT (the module sentinel) when the frontend did NOT
+              answer in time / the request could not be sent. Callers must NOT treat
+              this as completion (bd polyglot-pdf-tks).
         """
         if not self._websocket:
             _log.warning("request_next_field_hint_no_websocket", session_id=self._session_id)
-            return None
+            return HINT_REQUEST_TIMEOUT
         
         # Generate request ID for matching response
         request_id = str(uuid.uuid4())
@@ -128,8 +141,8 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_next_field_request", session_id=self._session_id, error=str(exc))
             self._pending_next_field_request = None
-            return None
-        
+            return HINT_REQUEST_TIMEOUT
+
         # Wait for response with timeout
         try:
             result = await asyncio.wait_for(future, timeout=2.0)
@@ -137,11 +150,11 @@ class RequestCoordinator:
         except asyncio.TimeoutError:
             _log.error("next_field_request_timeout", session_id=self._session_id, request_id=request_id)
             self._pending_next_field_request = None
-            return None
+            return HINT_REQUEST_TIMEOUT
         except Exception as exc:
             _log.error("next_field_request_error", session_id=self._session_id, error=str(exc))
             self._pending_next_field_request = None
-            return None
+            return HINT_REQUEST_TIMEOUT
     
     async def request_field_value(self, spoken_name: str) -> Dict[str, Any]:
         """

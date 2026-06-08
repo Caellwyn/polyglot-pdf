@@ -366,6 +366,151 @@ async def test_run_session_loop_dispatches_tool_calls():
 
 
 @pytest.mark.asyncio
+async def test_model_turn_parts_tool_call_without_id_still_responds():
+    """A model_turn.parts function_call with NO id must still get a response.
+
+    Regression guard (bd polyglot-pdf-tks): Gemini Live blocks until every
+    function call it issues gets a FunctionResponse. The model_turn.parts receive
+    path previously gated the response append on `call_id`, so a function_call
+    that arrived without an 'id' produced no response at all and Gemini hung on
+    the first tool-call/response loop. The append now gates on tool_name only
+    (id is included only when present; the SDK matches by order otherwise).
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    tool_calls_seen = []
+
+    async def on_tool_call(name, args):
+        tool_calls_seen.append((name, args))
+        return {"state": "ok"}
+
+    adapter._on_tool_call = on_tool_call
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _PartsToolCallSession:
+        def __init__(self):
+            self.sent_responses = []
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, *, function_responses):
+            self.sent_responses.append(function_responses)
+
+        async def send_client_content(self, **kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    # function_call on the model_turn.parts path, deliberately
+                    # WITHOUT an `id` (the SDK does not always populate it here).
+                    fc = SimpleNamespace(
+                        name="get_form_status",
+                        arguments='{"field_ids": []}',
+                    )
+                    part = SimpleNamespace(function_call=fc)
+                    model_turn = SimpleNamespace(parts=[part])
+                    server_content = SimpleNamespace(model_turn=model_turn)
+                    yield SimpleNamespace(server_content=server_content)
+                self._generator = gen()
+            return self._generator
+
+    session = _PartsToolCallSession()
+    ctx = _DummyContextManager(session)
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    # The callback fired AND a response was sent despite the missing id.
+    assert tool_calls_seen == [("get_form_status", {"field_ids": []})]
+    assert len(session.sent_responses) == 1
+    responses = session.sent_responses[0]
+    assert len(responses) == 1
+    assert responses[0].name == "get_form_status"
+    assert responses[0].response == {"state": "ok"}
+
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_model_turn_parts_tool_call_exception_still_responds():
+    """A callback exception on the model_turn.parts path must still respond.
+
+    Regression guard (bd polyglot-pdf-tks): if the tool callback raises, the
+    exception is caught and logged, response_payload stays None -> coerced to {},
+    and a FunctionResponse must STILL be sent (an empty ack) so Gemini is not left
+    blocking on an unanswered call.
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    async def on_tool_call(name, args):
+        raise RuntimeError("boom")
+
+    adapter._on_tool_call = on_tool_call
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _RaisingPartsSession:
+        def __init__(self):
+            self.sent_responses = []
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, *, function_responses):
+            self.sent_responses.append(function_responses)
+
+        async def send_client_content(self, **kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    fc = SimpleNamespace(
+                        name="get_form_status",
+                        id="call-xyz",
+                        arguments='{"field_ids": []}',
+                    )
+                    part = SimpleNamespace(function_call=fc)
+                    model_turn = SimpleNamespace(parts=[part])
+                    server_content = SimpleNamespace(model_turn=model_turn)
+                    yield SimpleNamespace(server_content=server_content)
+                self._generator = gen()
+            return self._generator
+
+    session = _RaisingPartsSession()
+    ctx = _DummyContextManager(session)
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    # Even though the callback raised, an (empty) response was still sent.
+    assert len(session.sent_responses) == 1
+    responses = session.sent_responses[0]
+    assert len(responses) == 1
+    assert responses[0].name == "get_form_status"
+    assert responses[0].response == {}
+
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
 async def test_send_text_turn_uses_realtime_input_for_3p1():
     """3.1 family text turns must go via send_realtime_input(text=), not
     send_client_content -- the latter 1007s on gemini-3.1-flash-live-preview

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the Gemini I/O logging.*
+*Last updated: 2026-06-08. See [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the Gemini I/O logging.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -42,6 +42,17 @@ Both parse `function_call.arguments` (JSON string or dict) into
 (`backend/services/callback_handler.py`). The callback's return value becomes the
 **tool response** sent back to Gemini.
 
+**Response invariant (every call gets a response).** Gemini Live BLOCKS until
+each function call it issues receives a `FunctionResponse`; an unanswered call
+hangs the session -- including the very first tool-call/response loop. Both
+receive paths therefore append a response for any named call: gated on
+`tool_name` only (the `id` is included when present, omitted otherwise -- the SDK
+matches responses to calls by order), and a callback that returns `None` or
+*raises* still produces an empty `{}` ack rather than no response
+(bd polyglot-pdf-tks). The one tool that can still orphan its response is
+`switch_section`, because its handler tears down the receive task before the
+response is flushed -- tracked separately in `polyglot-pdf-y4a`.
+
 **Failure points visible in the dev log:**
 - An **empty** `parsed_arguments` after parsing -> `invalid_tool_call` (the model
   emitted the call name but no/blank args). Hypothesis: tool-def/example mismatch.
@@ -75,10 +86,20 @@ Both parse `function_call.arguments` (JSON string or dict) into
    (`request_coordinator.py`), which asks the FRONTEND for the next field
    (`get_next_field_hint` -> `next_field_hint_response`).
 3. The tool response returns `{success, field_confirmed, next_field_hint,
-   message}`. If the frontend does not answer in 2s, `next_field_hint` is `None`
-   and the message says "All fields confirmed" -- which can make Gemini think the
-   form is done. dev-log: `tool_callback_result` shows the exact response,
-   including whether `next_field_hint` was null.
+   message}`. `request_next_field_hint()` returns one of three things, and the
+   tool response distinguishes all three (bd polyglot-pdf-tks):
+   - a **hint string** -> there is a next field; `message` is just
+     "Field confirmed."
+   - **`None`** -> the frontend answered and the form is genuinely complete;
+     `message` says "All fields confirmed."
+   - **`HINT_REQUEST_TIMEOUT`** (the coordinator sentinel) -> the frontend did
+     NOT answer within 2s. `next_field_hint` is sent as `None` (the sentinel
+     never reaches the wire) but `message` explicitly tells Gemini NOT to assume
+     completion and to ask for the next field / call `get_form_status`.
+     Previously a timeout collapsed to `None` and read as "All fields confirmed",
+     letting a slow round-trip make Gemini wrap the form up early.
+   dev-log: `tool_callback_result` shows the exact response, including whether
+   `next_field_hint` was null.
 
 **Frontend loop-breaker (bd polyglot-pdf-0y7).** A `confirm_field` for a field
 with no value is a no-op (`SchemaFormStateManager.confirmField` can't confirm what

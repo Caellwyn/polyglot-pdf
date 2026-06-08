@@ -5,7 +5,12 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from services.request_coordinator import RequestCoordinator
+# Import via the SAME package path the runtime uses (backend.services.*) so the
+# HINT_REQUEST_TIMEOUT singleton is the identical object the production code
+# compares against. The bare `services.request_coordinator` path resolves to a
+# DIFFERENT module object under pytest's pythonpath, which would make every
+# `is HINT_REQUEST_TIMEOUT` identity check silently false (fresh-eyes, PR #121).
+from backend.services.request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
 
 
 class TestRequestCoordinatorInit:
@@ -130,12 +135,17 @@ class TestRequestNextFieldHint:
     
     @pytest.mark.asyncio
     async def test_request_next_field_hint_no_websocket(self):
-        """Should return None when no websocket."""
+        """No websocket -> timeout sentinel, not None.
+
+        None means "form genuinely complete"; an unanswerable request must be
+        distinguishable so confirm_field never reports the form done by mistake
+        (bd polyglot-pdf-tks).
+        """
         coordinator = RequestCoordinator()
-        
+
         result = await coordinator.request_next_field_hint()
-        
-        assert result is None
+
+        assert result is HINT_REQUEST_TIMEOUT
     
     @pytest.mark.asyncio
     async def test_request_next_field_hint_sends_message(self):
@@ -179,13 +189,17 @@ class TestRequestNextFieldHint:
     
     @pytest.mark.asyncio
     async def test_request_next_field_hint_timeout(self):
-        """Should return None on timeout."""
+        """Timeout -> sentinel, NOT None (a None would read as 'form complete').
+
+        bd polyglot-pdf-tks: the frontend not answering in 2s must not masquerade
+        as completion.
+        """
         mock_ws = AsyncMock()
         coordinator = RequestCoordinator(websocket=mock_ws)
-        
+
         result = await coordinator.request_next_field_hint()
-        
-        assert result is None
+
+        assert result is HINT_REQUEST_TIMEOUT
         assert coordinator._pending_next_field_request is None
 
 

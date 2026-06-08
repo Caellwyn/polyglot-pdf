@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import WebSocket
 import structlog
 
-from .request_coordinator import RequestCoordinator
+from .request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
 
@@ -100,10 +100,13 @@ class CallbackHandler:
 
             await self._websocket.send_json({"type": "form_updated", "data": payload})
 
-            # Request next field hint via coordinator
+            # Request next field hint via coordinator. A timeout sentinel is not a
+            # usable hint here (this path's callers ignore the return today); collapse
+            # it to None so this method honors its "string or None" contract and never
+            # leaks the sentinel object (bd polyglot-pdf-tks).
             if self._request_coordinator:
                 hint = await self._request_coordinator.request_next_field_hint()
-                return hint
+                return None if hint is HINT_REQUEST_TIMEOUT else hint
         return None
     
     async def on_form_update(self, data: dict) -> None:
@@ -423,20 +426,45 @@ class CallbackHandler:
                 confirmation_method=confirmation_method
             )
 
-        # Get next unconfirmed field hint
-        next_hint = await self._request_coordinator.request_next_field_hint()
+        # Get next unconfirmed field hint.
+        # request_next_field_hint() returns one of three things (bd polyglot-pdf-tks):
+        #   - a hint string -> there is a next field
+        #   - None          -> frontend answered: form is genuinely complete
+        #   - HINT_REQUEST_TIMEOUT (sentinel) -> frontend did NOT answer in time
+        # A timeout must NOT be reported to Gemini as "All fields confirmed" -- doing
+        # so made a slow round-trip masquerade as completion and Gemini wrapped the
+        # form up early. On timeout we tell Gemini the hint is temporarily unavailable
+        # and to keep going, never that the form is done.
+        next_hint_result = await self._request_coordinator.request_next_field_hint()
+        hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
+        # The value forwarded to Gemini must be JSON-serializable: collapse the
+        # sentinel to None for the wire, but keep the timeout distinction in the
+        # message text below.
+        next_hint = None if hint_timed_out else next_hint_result
 
-        # Get next field schema for JIT mode (consolidated here to save tokens)
+        # Get next field schema for JIT mode (consolidated here to save tokens).
+        # Skip on timeout: we don't know what the next field is.
         next_field_schema = None
         if self._get_next_field_schema_for_jit and next_hint:
             next_field_schema = self._get_next_field_schema_for_jit(field_id)
+
+        if hint_timed_out:
+            message = (
+                f"Field '{field_id}' confirmed. (Could not determine the next field "
+                f"right now -- do NOT assume the form is complete; ask the user for "
+                f"the next piece of information or call get_form_status.)"
+            )
+        elif not next_hint:
+            message = f"Field '{field_id}' confirmed. All fields confirmed."
+        else:
+            # Don't duplicate hint in message - Gemini sees next_field_hint separately
+            message = f"Field '{field_id}' confirmed."
 
         response = {
             "success": True,
             "field_confirmed": field_id,
             "next_field_hint": next_hint,
-            # Don't duplicate hint in message - Gemini sees next_field_hint separately
-            "message": f"Field '{field_id}' confirmed." + (" All fields confirmed." if not next_hint else "")
+            "message": message,
         }
 
         # Add next field schema if available (JIT mode)
