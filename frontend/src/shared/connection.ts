@@ -627,6 +627,17 @@ export function createConnectionManager(
 		async startRecording() {
 			console.log('[VFF Connection] startRecording called')
 
+			// TEST harness (bd polyglot-pdf-g8w): the E2E voice harness feeds audio
+			// through window.__VFF_TEST_INJECT.sendAudio, so it needs NO microphone.
+			// Skip getUserMedia/worklet setup entirely under the harness gate -- in a
+			// headless/no-mic browser getUserMedia would reject and drop the session
+			// into the connection-failed path even though injection would work fine
+			// (Codex review, PR #123). Gated identically to the inject hook.
+			if (isTestHarnessEnabled()) {
+				console.log('[VFF Connection] TEST harness active -- skipping microphone capture (audio is injected)')
+				return
+			}
+
 			if (!audioManager) {
 				console.error('[VFF Connection] Audio manager not initialized')
 				return
@@ -753,8 +764,9 @@ export function createConnectionManager(
 
 			await connection.startSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before
-			if (!paused && audioManager) {
+			// Restart recording if we were recording before. Skip the mic under the
+			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
+			if (!paused && audioManager && !isTestHarnessEnabled()) {
 				await audioManager.startRecording((data) => {
 					if (connection) {
 						connection.sendAudio(data)
@@ -775,8 +787,9 @@ export function createConnectionManager(
 
 			await connection.switchToSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before
-			if (!paused && audioManager) {
+			// Restart recording if we were recording before. Skip the mic under the
+			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
+			if (!paused && audioManager && !isTestHarnessEnabled()) {
 				await audioManager.startRecording((data) => {
 					if (connection) {
 						connection.sendAudio(data)

@@ -185,23 +185,53 @@
   }
 
   /*
-   * Wait until `fieldId` is confirmed OR Gemini advanced off it (lastNextField
-   * moved to a different id). This is the gate for the verify->confirm->advance
-   * step. Returns the readField snapshot (+ a `_lastNextField` tag) when met.
+   * Wait until `fieldId` is genuinely CONFIRMED. The authoritative signal is the
+   * sessionStorage `confirmed` flag (`ssConfirmed`): `update_form_fields` fills the
+   * field as UNCONFIRMED, and only the `confirm_field` round-trip
+   * (WebFormConnection.handleConfirmFieldRequest) flips sessionStorage to confirmed.
+   * We deliberately do NOT accept `domConfirmed` -- `fieldManager.applyUpdates` sets
+   * `data-vff-confirmed="true"` at FILL time (a decoration), so it is true before
+   * any "yes" is processed and would false-pass (Codex review, PR #123). Advance is
+   * recorded for corroboration only. Returns the snapshot (+ `_advanced`) when met.
    */
-  function waitForConfirmOrAdvance(fieldId, opts) {
+  function waitForConfirmed(fieldId, opts) {
     return waitForCondition(function () {
       var f = readField(fieldId);
-      var nf = null;
-      try { nf = lastNextField(); } catch (e) {}
-      var advanced = nf != null && nf !== fieldId;
-      if (f.domConfirmed || f.ssConfirmed || advanced) {
+      if (f.ssConfirmed === true) {
+        var nf = null;
+        try { nf = lastNextField(); } catch (e) {}
         f._lastNextField = nf;
-        f._advanced = advanced;
+        f._advanced = nf != null && nf !== fieldId;
         return f;
       }
       return false;
     }, opts);
+  }
+
+  /*
+   * Clear the target field's state (DOM value + the sessionStorage entry) so a
+   * RERUN cannot read a STALE filled/confirmed value from a previous attempt and
+   * false-pass before any new audio is processed -- sessionStorage survives the
+   * reload the RUNBOOK's retry does (Codex review, PR #123). Call before a cycle.
+   */
+  function clearFieldState(fieldId) {
+    try {
+      var el = document.getElementById(fieldId);
+      if (el && 'value' in el) {
+        el.value = '';
+        el.removeAttribute('data-vff-confirmed');
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      var raw = sessionStorage.getItem('schema_form_state');
+      if (raw) {
+        var st = JSON.parse(raw);
+        if (st && st.fieldValues && st.fieldValues[fieldId]) {
+          delete st.fieldValues[fieldId];
+          sessionStorage.setItem('schema_form_state', JSON.stringify(st));
+        }
+      }
+    } catch (e) { /* ignore */ }
   }
 
   /*
@@ -303,6 +333,12 @@
     var turnTimeoutMs = opts.turnTimeoutMs || 35000;
     var report = { fieldId: fieldId, steps: [], verdict: 'FLAKY' };
 
+    // Clear any stale value/confirm from a previous attempt FIRST -- sessionStorage
+    // survives the reload a retry does, so without this a rerun could read the old
+    // filled+confirmed value and false-pass before any new audio (Codex, PR #123).
+    clearFieldState(fieldId);
+    report.steps.push({ step: 'clear-state', cleared: readField(fieldId).digits === '' });
+
     // Let Gemini ask the first question (pacing only; do not gate correctness).
     var q1 = await waitForGeminiQuestion({ timeoutMs: 18000 });
     report.steps.push({ step: 'wait-first-question', sawAudio: q1.sawAudio, timedOut: q1.timedOut });
@@ -321,19 +357,15 @@
     report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut });
 
     await injectUtterance(yesBuf);
-    // waitForConfirmOrAdvance stops waiting on EITHER signal, but the cycle's
-    // invariant is CONFIRMATION -- every filled field must be verified before moving
-    // on. So PASS REQUIRES `confirmed`; advance is only corroboration. A field that
-    // advanced WITHOUT being confirmed is a FAIL (the confirmation step was skipped),
-    // not a PASS -- Codex review, PR #123.
-    var done = await waitForConfirmOrAdvance(fieldId, { timeoutMs: turnTimeoutMs });
+    // PASS REQUIRES a real confirmation: the authoritative sessionStorage `confirmed`
+    // flag, which only the confirm_field round-trip sets. We do NOT accept the
+    // fill-time DOM decoration (`domConfirmed`), which would false-pass (Codex, PR #123).
+    var done = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
     var endSnap = readField(fieldId);
-    var confirmed = endSnap.domConfirmed || endSnap.ssConfirmed;
     var advanced = !!(done.value && done.value._advanced);
-    report.steps.push({ step: 'confirm-advance', met: done.met, elapsedMs: done.elapsedMs, confirmed: confirmed, advanced: advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
+    report.steps.push({ step: 'confirm', met: done.met, elapsedMs: done.elapsedMs, ssConfirmed: endSnap.ssConfirmed, domConfirmed: endSnap.domConfirmed, advanced: advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
 
-    if (!done.met) { report.verdict = 'FLAKY'; report.reason = 'never confirmed or advanced'; return report; }
-    if (!confirmed) { report.verdict = 'FAIL'; report.reason = 'advanced without confirming the field (confirmation invariant violated)'; return report; }
+    if (!done.met) { report.verdict = 'FLAKY'; report.reason = 'field never confirmed (sessionStorage confirmed flag never set within timeout)'; return report; }
     report.verdict = 'PASS';
     return report;
   }
@@ -345,7 +377,8 @@
     waitForGeminiQuestion: waitForGeminiQuestion,
     waitForCondition: waitForCondition,
     waitForFieldValue: waitForFieldValue,
-    waitForConfirmOrAdvance: waitForConfirmOrAdvance,
+    waitForConfirmed: waitForConfirmed,
+    clearFieldState: clearFieldState,
     readField: readField,
     lastNextField: lastNextField,
     runCycle: runCycle,
