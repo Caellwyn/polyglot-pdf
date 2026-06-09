@@ -12,18 +12,36 @@ export interface DevConfig {
 }
 
 /**
+ * True only on a localhost / 127.0.0.1 origin. The persistent (localStorage)
+ * dev/test overrides are gated on this so a flag that somehow ends up in a
+ * PRODUCTION origin's localStorage can never activate dev behavior (fresh-eyes,
+ * PR #123). The non-persistent window.* overrides need no such guard -- they
+ * don't survive a reload, so they can't silently linger in a real user's session.
+ */
+function isLocalhostOrigin(): boolean {
+	try {
+		const h = window.location.hostname
+		return h === 'localhost' || h === '127.0.0.1' || h === '[::1]'
+	} catch {
+		return false
+	}
+}
+
+/**
  * TEST-ONLY gate for the E2E voice harness (bd polyglot-pdf-g8w). True only when
  * BOTH the dev override and the explicit harness opt-in are set. Each flag is read
- * from window OR localStorage so the gate survives a page reload (a preview_eval
- * can only set window.* AFTER boot; localStorage persists across the reload the
- * harness does so the flags are present when the app next boots). NEVER true in
- * production or in normal local dev (both flags must be deliberately set).
+ * from window OR (on a localhost origin only) localStorage so the gate survives a
+ * page reload (a preview_eval can only set window.* AFTER boot; localStorage
+ * persists across the reload the harness does). NEVER true in production (the
+ * localStorage path is localhost-gated) or in normal local dev (both flags must be
+ * deliberately set).
  */
 export function isTestHarnessEnabled(): boolean {
+	const localhost = isLocalhostOrigin()
 	const flag = (name: string): boolean => {
 		try {
 			if ((window as any)[name] === true) return true
-			return window.localStorage.getItem(name) === 'true'
+			return localhost && window.localStorage.getItem(name) === 'true'
 		} catch {
 			return false
 		}
@@ -35,14 +53,19 @@ export function isTestHarnessEnabled(): boolean {
  * Get development configuration from window or defaults
  */
 export function getDevConfig(): DevConfig {
-	// Check for local dev override. Each override is read from window OR
-	// localStorage so it survives a page reload (the E2E harness sets these in
-	// localStorage and reloads -- bd polyglot-pdf-g8w). localStorage is a no-op
-	// fallback in normal use where only window.* is set.
+	// Check for local dev override. Each override is read from window OR -- on a
+	// localhost origin ONLY -- localStorage, so it survives a page reload (the E2E
+	// harness sets these in localStorage and reloads -- bd polyglot-pdf-g8w). The
+	// localhost gate means a stray flag in a PRODUCTION origin's localStorage can
+	// never reroute a real user's session (fresh-eyes, PR #123); the window.*
+	// reads are non-persistent and need no guard.
+	const localhost = isLocalhostOrigin()
 	const lsBool = (name: string): boolean | undefined => {
+		if (!localhost) return undefined
 		try { return window.localStorage.getItem(name) === 'true' ? true : undefined } catch { return undefined }
 	}
 	const lsStr = (name: string): string | undefined => {
+		if (!localhost) return undefined
 		try { return window.localStorage.getItem(name) || undefined } catch { return undefined }
 	}
 	const localDev = (window as any).__VFF_LOCAL_DEV ?? lsBool('__VFF_LOCAL_DEV')

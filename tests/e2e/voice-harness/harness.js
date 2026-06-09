@@ -68,6 +68,13 @@
       var size = dv.getUint32(off + 4, true);
       var body = off + 8;
       if (id === 'fmt ') {
+        // A PCM (WAVEFORMATEX) fmt chunk is >= 16 bytes; bitsPerSample lives at
+        // byte 14. Guard the size so a malformed/short fmt chunk can't read a
+        // garbage bitsPerSample out of the following chunk's bytes (fresh-eyes,
+        // PR #123).
+        if (size < 16) {
+          throw new Error('loadFixture: fmt chunk too short (' + size + ' bytes) in ' + url);
+        }
         fmt = {
           audioFormat: dv.getUint16(body, true),
           channels: dv.getUint16(body + 2, true),
