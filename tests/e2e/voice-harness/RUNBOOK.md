@@ -201,10 +201,15 @@ sound. The **AI-initiated** switch -- where Gemini calls the `switch_section` to
 mid-section -- is still broken by the receive-loop teardown race **bd
 polyglot-pdf-0c1 (y4a)**: the handler cancels the receive task before the
 `switch_section` FunctionResponse is delivered, so that path stalls intermittently.
-That defect is gated by the `@pytest.mark.external` sequence regression
-(`backend/tests/contract/test_tool_contracts.py`) and the y4a unit work in 0c1, NOT
-by this browser scenario. Until 0c1 lands, do not drive an AI-initiated
-`switch_section` here and expect green.
+**That AI-switch path is NOT gated by any test here.** The
+`@pytest.mark.external` sequence regression
+(`backend/tests/contract/test_tool_contracts.py`) only drives
+`update_form_fields` -> `confirm_field` for one field -- it never invokes the
+`switch_section` tool, so it does NOT cover the y4a teardown race. The y4a defect
+is covered by the unit work in **bd polyglot-pdf-0c1** (a fake-LiveAI test
+asserting the switch_section response is sent before the receive task is
+cancelled); until that lands the AI-initiated switch is ungated. Do not drive an
+AI-initiated `switch_section` in this browser scenario and expect green.
 
 ### 7. Report
 

@@ -627,8 +627,21 @@
       return result;
     }
 
-    // --- Setup: seed the non-target section-1 fields confirmed. ---
-    var seed = seedFields(s1Seed);
+    // --- Setup: seed the non-target fields confirmed UP FRONT -- BOTH the
+    // section-1 fields AND the section-2 prefix fields (those before the leg-2
+    // voice target). The section-2 prefix MUST be seeded BEFORE leg 1 triggers the
+    // switch: switchToSection builds the new section's handshake (current_values +
+    // initial_field_hint) from sessionStorage AT SWITCH TIME, so a section-2 field
+    // seeded AFTER the switch is too late -- Gemini was already prompted for the
+    // first address field, and seedFieldConfirmed only updates browser state, it
+    // does not re-handshake the live Gemini session (Codex PR #133 round 2).
+    // Seeding the prefix now means the switch's initial_field_hint resolves to the
+    // ZIP target. The fields are in two different sections, but sessionStorage
+    // fieldValues is flat (keyed by field id), so a single seed pass sets them all.
+    var seedAll = {};
+    Object.keys(s1Seed).forEach(function (k) { seedAll[k] = s1Seed[k]; });
+    Object.keys(s2Seed).forEach(function (k) { seedAll[k] = s2Seed[k]; });
+    var seed = seedFields(seedAll);
     result.legs.push({ leg: 'seed', seeded: seed.seeded, failed: seed.failed });
     if (seed.failed.length > 0) {
       result.verdict = 'FLAKY';
@@ -652,45 +665,66 @@
       return result;
     }
 
-    // The crossing: current section order reaches the target, the old section is
-    // finalized, and Gemini greets + points at the new section's first field.
+    // The crossing. Gate on the REAL switch signals, not just currentSectionId:
+    // the frontend writes currentSectionId BEFORE the backend acknowledges the
+    // switch, so waitForSection alone could pass on a backend switch that never
+    // completed (Codex PR #133 round 2). A genuine cross requires ALL of:
+    //   (a) currentSectionId order reached the target (waitForSection),
+    //   (b) the OLD section moved into completedSections (FE finalized it),
+    //   (c) vffOnSectionChanged fired (the backend sent section_switched),
+    //   (d) lastNextField points at the expected NEXT field in the new section
+    //       -- the leg-2 target, since its section-2 prefix is seeded confirmed.
     // Install the section-changed watcher BEFORE awaiting the section state so a
     // fast switch (vffOnSectionChanged firing during waitForSection) is still
     // captured -- otherwise the hook installs after the event and reports a
-    // spurious sawSectionChanged:false (Codex/fresh-eyes PR #133). Both waits run
-    // concurrently; both resolve once the switch lands (or on timeout).
+    // spurious sawSectionChanged:false.
+    var s1SectionId = getCurrentSection().id; // the section we are leaving
     var greetP = waitForSectionGreeting();
     var sectionW = await waitForSection(targetSectionOrder);
     var greet = await greetP;
+    // Give lastNextField a moment to settle to the new section's hint, then read.
+    var nextHintW = await waitForCondition(function () {
+      var nf = null; try { nf = lastNextField(); } catch (e) {}
+      return nf === s2FieldId ? nf : false;
+    }, { timeoutMs: 10000 });
     var completed = getCompletedSections();
+    var oldSectionFinalized = completed.indexOf(s1SectionId) !== -1;
     var nextAfterCross = (function () { try { return lastNextField(); } catch (e) { return null; } })();
     result.legs.push({
       leg: 'section-cross',
-      met: sectionW.met,
+      orderReached: sectionW.met,
       currentSection: getCurrentSection(),
-      completedCount: completed.length,
+      oldSectionFinalized: oldSectionFinalized,
       sawSectionChanged: greet.sawSectionChanged,
-      nextField: nextAfterCross
+      nextField: nextAfterCross,
+      nextIsTarget: nextHintW.met
     });
     if (!sectionW.met) {
       result.verdict = 'FLAKY';
-      result.reason = 'confirmed section-1 field but never crossed to section ' + targetSectionOrder + ' (auto-advance/switch_section did not complete)';
+      result.reason = 'confirmed section-1 field but currentSectionId never reached section ' + targetSectionOrder;
+      return result;
+    }
+    if (!greet.sawSectionChanged) {
+      result.verdict = 'FLAKY';
+      result.reason = 'currentSectionId advanced but the backend section_switched (vffOnSectionChanged) never fired -- switch not acknowledged';
+      return result;
+    }
+    if (!oldSectionFinalized) {
+      result.verdict = 'FLAKY';
+      result.reason = 'crossed sections but the old section (' + s1SectionId + ') was never moved into completedSections';
+      return result;
+    }
+    if (!nextHintW.met) {
+      result.verdict = 'FLAKY';
+      result.reason = 'crossed into section ' + targetSectionOrder + ' but Gemini was pointed at ' + nextAfterCross + ', not the seeded leg-2 target ' + s2FieldId;
       return result;
     }
     result.crossedToSection = true;
 
-    // --- Leg 2: voice-fill a field in the new section -- proves multi-field across
-    // the boundary. Seed the section-2 fields BEFORE the voice target confirmed so
-    // computeNextField points Gemini at the target (the ZIP), not the first
-    // mailing-address field. The target is not last in its section, so the cycle's
-    // normal advance check applies. ---
-    var s2seedResult = seedFields(s2Seed);
-    result.legs.push({ leg: 'section2-seed', seeded: s2seedResult.seeded, failed: s2seedResult.failed });
-    if (s2seedResult.failed.length > 0) {
-      result.verdict = 'FLAKY';
-      result.reason = 'section2-seed-failed: ' + s2seedResult.failed.join(',') + ' did not read back confirmed';
-      return result;
-    }
+    // --- Leg 2: voice-fill the section-2 target -- proves multi-field across the
+    // boundary. Its section-2 prefix was seeded confirmed UP FRONT (above), so the
+    // switch handshake already pointed Gemini at this field. The target is not last
+    // in its section, so the cycle's normal advance check applies. ---
     clearFieldState(s2FieldId);
     var leg2 = await runCycle({
       fieldId: s2FieldId, expectDigits: s2ExpectDigits,
