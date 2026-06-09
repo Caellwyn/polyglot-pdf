@@ -192,6 +192,15 @@ handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
 otherwise -- with the per-run breakdown and the model (2.5 vs 3.1). The harness
 reports the rate, not a brittle boolean.
 
+> **Same-page rerun (no reload).** The reload path above is still the recommended
+> retry. If you DO rerun on the same page, `clearFieldState` now prefers the app's
+> `__VFF_TEST_INJECT.resetFieldState(FIELD)` hook (bd polyglot-pdf-o1c), which clears
+> the field through `SchemaFormStateManager` (save + `schemaFormStateChange`
+> dispatch) and refreshes the live `WebFormConnection` state -- so SchemaForm's React
+> state and the connection's in-memory copy are reset too, not just sessionStorage.
+> It still cannot undo a stale value already sent in an EARLIER handshake, so a fresh
+> connect is needed if one was already established with the old value.
+
 ## Notes / gotchas
 
 - **Gate on OUTCOMES, not audio.** `runCycle` uses `waitForFieldValue` (fill) and

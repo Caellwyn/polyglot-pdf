@@ -1593,6 +1593,23 @@ export class WebFormConnection {
   }
 
   /**
+   * Reload this connection's in-memory state from sessionStorage.
+   *
+   * TEST-SUPPORT (bd polyglot-pdf-o1c): the E2E voice harness clears a field's
+   * state between same-page reruns by routing through SchemaFormStateManager
+   * (save + dispatch), which refreshes SchemaForm's React state but NOT this
+   * connection's own `this.state` copy. Calling this after such a clear pulls the
+   * updated state back in so a same-page rerun does not drive Gemini off a stale
+   * filled/confirmed value. No-op if storage is empty.
+   */
+  reloadState(): void {
+    const loaded = SchemaFormStateManager.load();
+    if (loaded) {
+      this.state = loaded;
+    }
+  }
+
+  /**
    * Get completion percentage
    */
   getCompletionPercentage(): number {

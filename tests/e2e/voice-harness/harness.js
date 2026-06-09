@@ -213,6 +213,14 @@
    * RERUN cannot read a STALE filled/confirmed value from a previous attempt and
    * false-pass before any new audio is processed -- sessionStorage survives the
    * reload the RUNBOOK's retry does (Codex review, PR #123). Call before a cycle.
+   *
+   * SAME-PAGE rerun (no reload): the app exposes resetFieldState on the inject
+   * hook (bd polyglot-pdf-o1c), which routes the clear through SchemaFormStateManager
+   * (save + schemaFormStateChange dispatch) AND refreshes the live
+   * WebFormConnection.state -- so SchemaForm's React state and the connection's
+   * in-memory copy are also reset, not just sessionStorage. Prefer it when present;
+   * fall back to the direct DOM + storage clear (still correct for the documented
+   * reload-between-attempts path, and for an app build predating the hook).
    */
   function clearFieldState(fieldId) {
     try {
@@ -222,6 +230,13 @@
         el.removeAttribute('data-vff-confirmed');
       }
     } catch (e) { /* ignore */ }
+    var h = window.__VFF_TEST_INJECT;
+    if (h && typeof h.resetFieldState === 'function') {
+      try {
+        h.resetFieldState(fieldId);
+        return;
+      } catch (e) { /* fall through to the direct clear below */ }
+    }
     try {
       var raw = sessionStorage.getItem('schema_form_state');
       if (raw) {
