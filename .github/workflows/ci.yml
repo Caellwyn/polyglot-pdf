@@ -1,0 +1,63 @@
+# Informational CI -- runs the three test suites on every PR.
+#
+# NON-BLOCKING BY DESIGN (bd polyglot-pdf-uov.3): this workflow reports status
+# but is NOT a required check. The manual-merge gate (the maintainer clicks
+# every merge) and the inert required_deployments ruleset stay the only merge
+# controls; do NOT add this job to branch-protection required checks without a
+# separate decision. Its job is fast signal on a PR, not a gate.
+#
+# xfail/xpass policy: a spec-test that documents a known defect is marked xfail
+# (pytest) or test.fails (vitest) and counts as PASS -- neither runner sets a
+# non-zero exit for an expected failure, so this CI goes green on an
+# intentionally-red spec, exactly as the spec-driven-test epic requires. A real
+# regression (an unexpected failure) still exits non-zero and shows red here.
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    name: backend pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Run backend + harness suites (excluding flaky live-Gemini externals)
+        # -m "not external" matches the project's flaky live-Gemini exclusion
+        # (the `external` marker needs real Gemini creds CI does not have).
+        run: pytest backend/tests tests -q -m "not external"
+
+  frontend-tests:
+    name: frontend vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install + test (frontend)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test -- run
+
+  schema-editor-tests:
+    name: schema-editor vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install + test (schema-editor)
+        working-directory: schema-editor
+        run: |
+          npm ci
+          npm run test:run

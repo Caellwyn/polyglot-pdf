@@ -2,13 +2,14 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md](../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md) for closeout details.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
-Python/FastAPI backend, **vitest** for the React/TS frontend. There is **no CI
-test run and no coverage tooling** (both absent by design today — see below); the
-suite is run locally and is the gate for every PR via [`/closeout`](../doctrine/review-flow.md).
+Python/FastAPI backend, **vitest** for the React/TS frontend. An **informational
+(non-blocking) CI run** and **opt-in coverage tooling** exist on both stacks (see
+below); the local suite remains the gate for every PR via
+[`/closeout`](../doctrine/review-flow.md).
 
 For the PII/PHI rules the logging tests enforce, see
 [hipaa-pii-policy.md](hipaa-pii-policy.md).
@@ -31,7 +32,21 @@ addopts = --import-mode=importlib
 norecursedirs = scripts .venv node_modules .git build dist .claude
 markers =
     external: marks tests requiring real Gemini access
+
+[coverage:run]
+source = backend
+omit =
+    backend/tests/*
+    backend/.venv/*
+    backend/test_*.py
+[coverage:report]
+show_missing = True
 ```
+
+`--cov` is **not** in `addopts` — coverage is opt-in via the flag so a bare
+`pytest` (and the closeout gate) stays fast. The `[coverage:*]` sections only
+take effect when `--cov` is passed; `source = backend` with the `omit` keeps
+test files out of the denominator.
 
 `--import-mode=importlib` lets duplicate test basenames coexist without
 `__init__.py` packaging (e.g. a `test_section_switching.py` under both `scripts/`
@@ -130,15 +145,36 @@ Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
 `filled=0`, a curl recipe against `/api/fill-pdf`); see also
 [pdf-filling.md](../components/pdf-filling.md#debugging).
 
-## Coverage & CI — intentionally absent today
+## Coverage & CI
 
-- **No coverage tooling** on either stack: no `.coveragerc` / `--cov`, no vitest
-  coverage config. Coverage is not measured or enforced.
-- **No CI test run.** Tests are a **local** gate, enforced per-PR by
-  [`/closeout`](../doctrine/review-flow.md) (which runs the full backend suite before
-  opening the PR). GitHub can enforce a unit-test status check + Codex review, but
-  that wiring is separate (see the deploy/CI direction notes); deploys stay manual
-  ([config-deployment.md](../components/config-deployment.md)).
+**Coverage tooling is wired on all three stacks but opt-in (a secondary signal,
+not enforced).** Run it explicitly:
+
+- **Backend:** `pytest backend/tests -m "not external" --cov --cov-report=term-missing`
+  (`pytest-cov`; config in the root `pytest.ini` `[coverage:*]` sections).
+- **Frontend:** `npm run test:coverage` from `frontend/` (`@vitest/coverage-v8`).
+- **Schema-editor:** `npm run test:coverage` from `schema-editor/`.
+
+Baseline statement coverage (recorded 2026-06-09): **backend 71%**, **frontend
+12%**, **schema-editor 33%**. These are instruments, not gates — no threshold is
+enforced and a low number is not a closeout blocker. Coverage artifacts
+(`.coverage`, `coverage/`) are gitignored.
+
+**CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
+backend pytest suite (`-m "not external"`) plus both vitest suites on every PR.
+It is **not** a required status check: the manual-merge gate (the maintainer
+clicks every merge) stays the only merge control, and deploys stay manual
+([config-deployment.md](../components/config-deployment.md)). The **local**
+suite, enforced per-PR by [`/closeout`](../doctrine/review-flow.md) (which runs
+the backend suite before opening the PR), remains the real gate.
+
+**xfail counts as pass everywhere.** A spec-test that documents a known defect is
+marked `@pytest.mark.xfail` (pytest) or `test.fails` (vitest); neither runner
+sets a non-zero exit for an expected failure, so CI stays green and the closeout
+gate (which keys off the pytest exit code) treats it as a pass. This is what lets
+the spec-driven-test epic land intentionally-red specs without breaking every
+closeout. An *unexpected* failure (a real regression, or an `xpass` under
+`strict`) still exits non-zero and shows red.
 
 ## TDD cadence
 
@@ -156,4 +192,4 @@ the logic, but a **real-browser visual check** (the preview tools) is the
 load-bearing verification: `polyglot-pdf-7a9.6` shipped a green 113/113 suite while
 three runtime bugs blocked the actual PDF render, all invisible to jsdom.
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-7a9.6-revive-schema-editor.md](../journal/entries/2026-06-07-bd-7a9.6-revive-schema-editor.md) for closeout details.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md) for closeout details.*

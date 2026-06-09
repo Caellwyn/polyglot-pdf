@@ -25,6 +25,12 @@ example_webforms/
 
 # Test artifacts
 .pytest_cache/
+# Coverage data + reports (pytest-cov / coverage.py + vitest coverage-v8)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+**/coverage/
 
 # Logs (generated files)
 .logs/
