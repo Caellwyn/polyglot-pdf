@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-08. See [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the Gemini I/O logging.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the Gemini I/O logging.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -45,11 +45,14 @@ Both parse `function_call.arguments` (JSON string or dict) into
 **Response invariant (every call gets a response).** Gemini Live BLOCKS until
 each function call it issues receives a `FunctionResponse`; an unanswered call
 hangs the session -- including the very first tool-call/response loop. Both
-receive paths therefore append a response for any named call: gated on
-`tool_name` only (the `id` is included when present, omitted otherwise -- the SDK
-matches responses to calls by order), and a callback that returns `None` or
-*raises* still produces an empty `{}` ack rather than no response
-(bd polyglot-pdf-tks). The one tool that can still orphan its response is
+receive paths therefore append a response for any named call (gated on
+`tool_name` only), and a callback that returns `None` or *raises* still produces
+an empty `{}` ack rather than no response (bd polyglot-pdf-tks). Every response
+**echoes the call's `id`** back (`_build_function_response`): the SDK's AI-Studio
+(`VERTEXAI=false`) path REQUIRES the id and crashes the receive loop without it
+(bd polyglot-pdf-0ux) -- the model does send one (it is NOT matched by order); the
+id is omitted only for a rare genuinely-id-less call (the Vertex path tolerates
+that). The one tool that can still orphan its response is
 `switch_section`, because its handler tears down the receive task before the
 response is flushed -- tracked separately in `polyglot-pdf-y4a`.
 

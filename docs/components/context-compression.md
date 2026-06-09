@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-04 (l3a.1 root cause: compression is a no-op on native-audio).*
+*Last updated: 2026-06-09 (l3a.1 root cause: compression is a no-op on native-audio). The bd polyglot-pdf-0ux `live_ai_gemini.py` change is a tool-response id fix and does not touch the compression config -- unaffected.*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 

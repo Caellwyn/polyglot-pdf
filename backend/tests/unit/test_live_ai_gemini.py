@@ -358,9 +358,14 @@ async def test_run_session_loop_dispatches_tool_calls():
     responses = session.sent_responses[0]
     assert len(responses) == 1
     response_obj = responses[0]
-    # FunctionResponse doesn't include 'id' - SDK matches internally
     assert response_obj.name == "update_form_fields"
     assert response_obj.response == {"Full Name": "Alice"}
+    # bd polyglot-pdf-0ux: the FunctionResponse MUST echo the tool call's id back.
+    # The SDK's AI-Studio (mldev) path raises _FUNCTION_RESPONSE_REQUIRES_ID without
+    # it, crashing the receive loop after the first fill. The earlier code dropped
+    # the id here (on a wrong "SDK matches by order" assumption); this asserts it is
+    # carried through.
+    assert response_obj.id == "call-1"
     # ensure background tasks are cleaned up to avoid pending tasks
     await adapter.finalize()
 
@@ -373,8 +378,11 @@ async def test_model_turn_parts_tool_call_without_id_still_responds():
     function call it issues gets a FunctionResponse. The model_turn.parts receive
     path previously gated the response append on `call_id`, so a function_call
     that arrived without an 'id' produced no response at all and Gemini hung on
-    the first tool-call/response loop. The append now gates on tool_name only
-    (id is included only when present; the SDK matches by order otherwise).
+    the first tool-call/response loop. The append now gates on tool_name only;
+    the id is echoed back when present (the normal case -- bd polyglot-pdf-0ux)
+    and omitted only for this rare id-less call, so Gemini still gets SOME response
+    instead of hanging (the Vertex path tolerates a missing id; AI Studio does not,
+    but a real id-less call is the exception, not the rule).
     """
     from backend.adapters.live_ai_gemini import LiveAIGemini
 

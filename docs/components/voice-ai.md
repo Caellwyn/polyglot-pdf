@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -104,6 +104,11 @@ debugging tool reliability, the adapter captures FULL message bodies locally via
 
 The `complete_section` tool was **removed** — section completion is frontend-driven
 (see [websocket-routing.md](websocket-routing.md)).
+
+Every tool call gets a `FunctionResponse` that **echoes the call's `id`** back
+(`_build_function_response`). The SDK's AI-Studio (`VERTEXAI=false`) path requires
+the id and crashes the receive loop without it (bd polyglot-pdf-0ux); the Vertex
+path tolerates a missing id.
 
 ## Cost tracking
 
