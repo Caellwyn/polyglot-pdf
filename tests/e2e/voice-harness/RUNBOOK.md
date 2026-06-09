@@ -131,9 +131,12 @@ window.__VFF_HARNESS.runCycle({
 }).then(r => { window.__vffReport = r; });
 ```
 Then poll `window.__vffReport` every few seconds until non-null. `runCycle` gates
-on CONCRETE OUTCOMES, not audio: it injects the digits, waits for the field to
-hold a value (`waitForFieldValue`), checks `digits === '1234567'`, injects "yes",
-and waits for confirmed-or-advanced (`waitForConfirmOrAdvance`). It returns
+on CONCRETE OUTCOMES, not audio: it clears stale state, injects the digits, waits
+for the field to hold a value (`waitForFieldValue`), checks `digits === '1234567'`,
+injects "yes", waits for the authoritative sessionStorage confirm
+(`waitForConfirmed` -- the `ssConfirmed` flag, NOT the fill-time `domConfirmed`
+decoration), and then waits for the ADVANCE (`lastNextField` moving to a NEW field
+id). PASS requires fill AND confirm AND advance. It returns
 `{ verdict: 'PASS'|'FAIL'|'FLAKY', steps:[...], reason? }`.
 
 **Why outcome-gated:** audio-end (`vffOnAudioPlaybackEnd`) is an unreliable turn

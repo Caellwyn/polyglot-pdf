@@ -352,9 +352,17 @@
     if (!filled.met) { report.verdict = 'FLAKY'; report.reason = 'field never filled'; return report; }
     if (fillSnap.digits !== expectDigits) { report.verdict = 'FAIL'; report.reason = 'wrong value: got ' + JSON.stringify(fillSnap.domValue); return report; }
 
+    // Snapshot the next-field BASELINE before injecting "yes". The advance check
+    // below requires lastNextField to CHANGE from this baseline, not merely to
+    // differ from `fieldId` -- otherwise a stale next-field value left by an earlier
+    // transition in the same page would make the advance wait resolve instantly,
+    // false-passing the exact confirm-without-navigation failure we mean to catch
+    // (Codex, PR #123).
+    var baselineNext = (function(){ try { return lastNextField(); } catch (e) { return null; } })();
+
     // Let Gemini ask the verify question (pacing), then confirm.
     var q2 = await waitForGeminiQuestion({ timeoutMs: 18000 });
-    report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut });
+    report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut, baselineNext: baselineNext });
 
     await injectUtterance(yesBuf);
     // PASS REQUIRES a real confirmation: the authoritative sessionStorage `confirmed`
@@ -368,14 +376,15 @@
     // PASS also REQUIRES the ADVANCE: the RUNBOOK proves fill -> confirm -> ADVANCE,
     // so confirmation alone is not enough. A bug where confirm succeeds but
     // navigation never happens (e.g. the 0ux receive-loop crash after the first
-    // fill) must NOT report a successful cycle (Codex, PR #123). Wait for
-    // lastNextField to move off the field.
+    // fill) must NOT report a successful cycle (Codex, PR #123). Require
+    // lastNextField to CHANGE from the pre-"yes" baseline AND land on a field other
+    // than the one just confirmed.
     var advanceW = await waitForCondition(function () {
       var nf = null; try { nf = lastNextField(); } catch (e) {}
-      return (nf != null && nf !== fieldId) ? nf : false;
+      return (nf != null && nf !== fieldId && nf !== baselineNext) ? nf : false;
     }, { timeoutMs: turnTimeoutMs });
-    report.steps.push({ step: 'advance', met: advanceW.met, elapsedMs: advanceW.elapsedMs, lastNextField: advanceW.value || (function(){try{return lastNextField();}catch(e){return null;}})() });
-    if (!advanceW.met) { report.verdict = 'FLAKY'; report.reason = 'confirmed but never advanced to the next field (navigation/onNextField never fired)'; return report; }
+    report.steps.push({ step: 'advance', met: advanceW.met, elapsedMs: advanceW.elapsedMs, baselineNext: baselineNext, lastNextField: advanceW.value || (function(){try{return lastNextField();}catch(e){return null;}})() });
+    if (!advanceW.met) { report.verdict = 'FLAKY'; report.reason = 'confirmed but never advanced to a NEW next field (navigation/onNextField never fired)'; return report; }
 
     report.verdict = 'PASS';
     return report;
