@@ -906,14 +906,27 @@ export function createConnectionManager(
 				// live WebFormConnection.state so neither holds the prior attempt's value.
 				resetFieldState: (fieldId: string) => {
 					const current = SchemaFormStateManager.load()
-					if (current && current.fieldValues[fieldId]) {
-						const { [fieldId]: _removed, ...rest } = current.fieldValues
-						const cleared: SchemaFormState = { ...current, fieldValues: rest }
-						SchemaFormStateManager.save(cleared)
-						state = cleared
+					if (current) {
+						// Always save + dispatch -- even if this field key is already
+						// absent (e.g. a prior legacy-fallback clear removed it). The
+						// dispatch is what refreshes SchemaForm's React state and re-paints
+						// the DOM from the CLEARED state, so we must not skip it on the
+						// already-absent path (Codex/fresh-eyes PR #126). The `field in`
+						// check is only to avoid a no-op churn when nothing changed.
+						if (fieldId in current.fieldValues) {
+							const { [fieldId]: _removed, ...rest } = current.fieldValues
+							const cleared: SchemaFormState = { ...current, fieldValues: rest }
+							SchemaFormStateManager.save(cleared)
+							state = cleared
+						} else {
+							// Key already gone: re-save the current state to re-dispatch
+							// schemaFormStateChange so React/DOM resync to the cleared value.
+							SchemaFormStateManager.save(current)
+							state = current
+						}
 					}
-					// Pull the cleared state into the connection even if storage had no
-					// entry (keeps the in-memory copy authoritative for the rerun).
+					// Pull the (cleared) state into the connection even if storage had no
+					// entry at all (keeps the in-memory copy authoritative for the rerun).
 					connection?.reloadState()
 				},
 			}

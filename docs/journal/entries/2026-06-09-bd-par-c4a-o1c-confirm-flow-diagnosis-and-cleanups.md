@@ -35,19 +35,27 @@ to the confirm turn. It drives the flow deterministically from the backend side
 (greeting -> answer -> `update_form_fields` -> tool_response -> verify question ->
 "yes" -> observe `confirm_field`), which removes the live-harness timing variable.
 
-**Finding (3/3 runs, 2.5 native-audio, AI Studio):** H1 (model skips the tool
-call) is REJECTED. `confirm_field` fires RELIABLY (3/3). The twist: it fires on
-the VERIFY-QUESTION turn -- immediately after Gemini speaks "Is A123456789
-correct?", BEFORE the "yes" is injected. 2.5 confirms the value
-PROACTIVELY/optimistically rather than strictly waiting for user assent. So the
-live g8w FLAKY is a HARNESS observation/timing issue: the harness only watches
-`ssConfirmed` AFTER injecting "yes" and can miss (or race) the confirm that
-already landed during the verify question. The fix belongs in the harness, not
-the prompt/model. Filed follow-up **polyglot-pdf-tfz** (watch `ssConfirmed`
-across the verify turn). Recorded in bd memory
+**Finding (5/5 runs total, 2.5 native-audio, AI Studio):** H1 (model skips the
+tool call) is REJECTED. `confirm_field` fires RELIABLY (5/5). The twist is in the
+TIMING, and it VARIES run to run: sometimes EARLY, on the verify-question turn --
+right after Gemini speaks "Is <value> correct?", BEFORE the "yes" is injected
+(2.5 confirming proactively/optimistically) -- and other runs on the post-"yes"
+turn (the textbook flow). Either way it fires. So the live g8w FLAKY is a HARNESS
+observation/timing issue: the harness only watches `ssConfirmed` AFTER injecting
+"yes", so on an early-confirm run it can miss (or race) the confirm that already
+landed during the verify question. The fix belongs in the harness, not the
+prompt/model. Filed follow-up **polyglot-pdf-tfz** (watch `ssConfirmed` from the
+verify turn onward). Recorded in bd memory
 `gemini-2p5-confirms-field-proactively-on-verify-turn` -- contrast
 `gemini-3p1-skips-update-form-fields` (3.1 genuinely skips a call; this is the
-opposite -- 2.5 fires it, just early).
+opposite -- 2.5 fires it, just sometimes early).
+
+The probe detects `confirm_field` on BOTH turns and records WHEN (early vs
+post-yes); an earlier post-yes-only tally would undercount the early-confirm runs
+(Codex PR #126). It REDACTS tool-call args (the field `value` is PII) and output
+transcripts (they echo the value) in its logs, and its deadline-bounded `_drain`
+now CLOSES its per-turn iterator (a leaked receive iterator can eat the next
+turn's messages -- fresh-eyes/Codex PR #126).
 
 Secondary finding: native-audio turns after a tool response do NOT deliver a
 clean `turn_complete` here -- every drained turn hits the wall-clock timeout.
@@ -72,7 +80,36 @@ React state reloads) and refreshes both the connection-manager closure's `state`
 and the live `WebFormConnection.state`. The harness `clearFieldState` prefers the
 hook, falling back to the direct DOM + storage clear (still correct for the
 documented reload-between-attempts path and for an app build predating the hook).
-RUNBOOK noted.
+RUNBOOK noted. Added `webFormConnection.reloadstate.test.ts` (3 cases) covering
+the reload contract (Codex + fresh-eyes both asked for coverage of the new path).
+
+## Review triage (fresh-eyes + Codex round 1)
+
+Both reviewers converged on real bugs in the probe's detection logic -- a strong
+signal, not nits. Adopted ALL of them inline (no deferrals):
+
+- **Probe confirm tally counted only the post-"yes" turn** (Codex P1) -- but 2.5
+  often confirms on the verify turn, so the tally could report 0 and contradict
+  the finding. Fixed: detect `confirm_field` on BOTH turns, label early vs
+  post-yes, respond to whichever fired.
+- **Probe logged raw tool-call args + output transcripts** (Codex P1 x2) -- both
+  carry the user's field value (PII). Redacted to field_id + value length and a
+  transcript char-count; the in-process tally still keeps args.
+- **Leaked async iterator in `_drain`** (fresh-eyes blocker) -- on the
+  every-turn timeout path the abandoned `session.receive()` iterator was never
+  closed and could buffer/eat the next turn's messages. Added
+  `finally: await it.aclose()`.
+- **`resetFieldState` skipped the save+dispatch when the field key was already
+  absent** (fresh-eyes + Codex) -- so React/DOM didn't resync on a second
+  same-page clear. Fixed: always re-save + dispatch when storage exists.
+- **No verdict when `update_form_fields` never fires** (fresh-eyes) -- the
+  summary was silent, which could read as "model clean". Added an explicit
+  NO VERDICT branch distinguishing a setup failure from an H1 signal.
+- **No test for the new reset/reload path** (Codex) -- added
+  `webFormConnection.reloadstate.test.ts`.
+
+Re-ran the probe live after the fixes (5/5 confirm across all runs) and the
+backend + new FE tests green.
 
 ## Doc-freshness review (timestamp-stale, content-current)
 

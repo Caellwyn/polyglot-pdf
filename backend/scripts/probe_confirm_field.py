@@ -28,23 +28,24 @@ It reuses the I-90 first-field scenario, system instruction, tool declarations,
 and 2.5 native-audio model from probe_tool_call_id.py, and additionally:
   - sends a realistic update_form_fields tool RESPONSE (with the echoed id, per
     bd polyglot-pdf-0ux) so Gemini proceeds to the verify question, and
-  - reports, for the post-"yes" turn, whether confirm_field was called at all,
-    on which path, and with what field_id.
+  - detects confirm_field on BOTH the verify-question turn AND the post-"yes"
+    turn, recording WHEN it fired (early vs post_yes) and with what field_id.
 
-FINDING (3/3 runs, 2.5 native-audio): H1 is REJECTED, H2 is supported -- with a
-twist. confirm_field fires reliably (3/3), so the model is NOT skipping the tool
-call. BUT it fires on the VERIFY-QUESTION turn, immediately after Gemini speaks
-"Is A123456789 correct?" -- i.e. BEFORE the "yes" is even injected. 2.5 confirms
-the value PROACTIVELY/optimistically rather than strictly waiting for user
-assent. So the live g8w harness reports FLAKY not because confirm_field never
-fires, but because it fires EARLY (during/just after the verify question), and
-the harness only watches for ssConfirmed AFTER injecting "yes" -- it can miss the
-confirm that already happened, OR the early confirm races the harness's
-fill/verify waits. The fix is in the HARNESS observation/timing (watch for
-ssConfirmed across the verify turn, not only after "yes"), not in the prompt or
-model. SECONDARY FINDING: native-audio turns after a tool response do NOT deliver
-a clean turn_complete here -- every drained turn hits the wall-clock timeout;
-that is expected and why _drain is deadline-bounded (an unbounded receive hangs).
+FINDING (5/5 runs total, 2.5 native-audio): H1 is REJECTED, H2 is supported.
+confirm_field fires RELIABLY (5/5) -- the model is NOT skipping the tool call.
+WHEN it fires VARIES run to run: sometimes EARLY, on the verify-question turn,
+right after Gemini speaks "Is <value> correct?" and BEFORE the "yes" is injected
+(2.5 confirming the value proactively/optimistically); other runs it fires on the
+post-"yes" turn (the textbook flow). Either way it DOES fire. So the live g8w
+harness reports FLAKY not because confirm_field never fires, but because its
+observation window is too narrow: it only watches ssConfirmed AFTER injecting
+"yes", so on an EARLY-confirm run it can miss the confirm that already landed (or
+the early confirm races its fill/verify waits). The fix is in the HARNESS
+observation/timing (watch ssConfirmed from the verify turn onward, not only after
+"yes"), NOT in the prompt or model -- filed as bd polyglot-pdf-tfz. SECONDARY
+FINDING: native-audio turns after a tool response do NOT reliably deliver a clean
+turn_complete here -- drained turns hit the wall-clock timeout; that is why
+_drain is deadline-bounded (an unbounded receive hangs) and closes its iterator.
 
 Run it a few times (model output is non-deterministic) and read the
 CONFIRM_FIELD_CALLED tallies, e.g.:
@@ -109,17 +110,30 @@ def _config() -> dict:
 
 
 def _report_fc(path: str, fc) -> dict:
-    """Pull the id/name/args off a function_call object (mirrors probe_tool_call_id)."""
+    """Pull the id/name/args off a function_call object (mirrors probe_tool_call_id).
+
+    PII: tool-call args carry the user's field VALUE (e.g. update_form_fields
+    {value: ...}). Backend print() reaches stdout -> logs, so the no-PII rule
+    applies (Codex PR #126; same class as bd polyglot-pdf-oeq). We KEEP args in
+    the returned dict (the in-process tally needs field_id), but the PRINTED line
+    logs only the safe shape: tool name, id, field_id, and the VALUE's length --
+    never the value itself.
+    """
     args = getattr(fc, "args", None)
+    args_dict = dict(args) if args else {}
     info = {
         "path": path,
         "name": getattr(fc, "name", None),
         "id": getattr(fc, "id", None),
-        "args": dict(args) if args else {},
+        "args": args_dict,
     }
+    value = args_dict.get("value")
+    value_len = len(str(value)) if value is not None else 0
     print(
-        "  [tool_call] path={path} name={name!r} id={id!r} args={args}".format(
-            path=path, name=info["name"], id=info["id"], args=info["args"]
+        "  [tool_call] path={path} name={name!r} id={id!r} field_id={fid!r} "
+        "value_len={vlen}".format(
+            path=path, name=info["name"], id=info["id"],
+            fid=args_dict.get("field_id"), vlen=value_len
         ),
         flush=True,
     )
@@ -143,7 +157,12 @@ async def _drain(session, label: str, max_msgs: int = 400, turn_timeout: float =
     found = []
     transcript = []
     count = 0
+    char_count = 0
     timed_out = False
+    # Close the per-turn iterator in a finally (Codex/fresh-eyes PR #126): on a
+    # timeout we break out with `it` still open, and a leaked receive iterator can
+    # buffer/eat messages destined for the NEXT _drain's fresh iterator -- which,
+    # since every turn here times out, is the COMMON path, not an edge case.
     it = session.receive().__aiter__()
     try:
         while True:
@@ -171,7 +190,11 @@ async def _drain(session, label: str, max_msgs: int = 400, turn_timeout: float =
                             found.append(_report_fc("model_turn.parts", pfc))
                 ot = getattr(sc, "output_transcription", None)
                 if ot is not None and getattr(ot, "text", None):
-                    transcript.append(ot.text)
+                    # PII: the output transcript repeats the user's field value
+                    # (e.g. "Is A123456789 correct?"). Count chars for the
+                    # spoke/length signal -- NEVER store or print the text itself
+                    # (Codex PR #126; no-transcript-logging rule).
+                    char_count += len(ot.text)
                 if getattr(sc, "turn_complete", False):
                     break
             if count >= max_msgs:
@@ -179,10 +202,15 @@ async def _drain(session, label: str, max_msgs: int = 400, turn_timeout: float =
                 break
     except Exception as e:
         print(f"  [{label}] RECEIVE ERROR: {type(e).__name__}: {e}", flush=True)
-    spoken = "".join(transcript).strip()
-    if spoken:
-        print(f"  [{label}] said: {spoken!r}", flush=True)
-    return {"calls": found, "timed_out": timed_out, "spoke": bool(spoken)}
+    finally:
+        try:
+            await it.aclose()
+        except Exception:
+            pass
+    spoke = char_count > 0
+    if spoke:
+        print(f"  [{label}] spoke a turn ({char_count} transcript chars, redacted)", flush=True)
+    return {"calls": found, "timed_out": timed_out, "spoke": spoke}
 
 
 async def _send_tool_responses(session, calls, payload_for):
@@ -230,26 +258,49 @@ async def _one_run(client, model, run_idx: int) -> dict:
         update_calls = [c for c in answer["calls"] if c["name"] == "update_form_fields"]
         if not update_calls:
             print("  >>> no update_form_fields on the answer turn -- skipping confirm probe", flush=True)
-            return {"update_called": False, "confirm_called": False, "verify_spoken": False}
+            return {"update_called": False, "confirm_called": False,
+                    "confirm_when": None, "verify_spoken": False}
 
         # Reply to the fill so Gemini proceeds to the verify question.
         await _send_tool_responses(session, update_calls, _update_payload)
-        # Gemini's verify-question turn ("Is that correct?").
-        verify = await _drain(session, "verify-question")
 
-        # The user confirms -- the turn under test.
+        # Gemini's verify-question turn ("Is that correct?"). 2.5 PROACTIVELY
+        # calls confirm_field HERE -- during/just after the verify question,
+        # BEFORE the "yes" is sent (the whole par finding). So we must look for
+        # confirm_field on THIS turn, not only after "yes" (Codex PR #126: a
+        # post-yes-only tally reports 0 and contradicts the finding).
+        verify = await _drain(session, "verify-question")
+        verify_confirm = [c for c in verify["calls"] if c["name"] == "confirm_field"]
+        if verify_confirm:
+            await _send_tool_responses(session, verify_confirm, _confirm_payload)
+
+        # The user confirms. If 2.5 did NOT confirm early, a well-behaved model
+        # confirms HERE; if it already confirmed early, this turn usually just
+        # acknowledges/advances. We still drain it and detect any confirm_field.
         await session.send_realtime_input(text="Yes, that is correct.")
         post_yes = await _drain(session, "post-yes")
-        confirm_calls = [c for c in post_yes["calls"] if c["name"] == "confirm_field"]
-        if confirm_calls:
-            await _send_tool_responses(session, confirm_calls, _confirm_payload)
+        post_yes_confirm = [c for c in post_yes["calls"] if c["name"] == "confirm_field"]
+        if post_yes_confirm:
+            await _send_tool_responses(session, post_yes_confirm, _confirm_payload)
+
+        # Confirm fired if it landed on EITHER turn; record WHEN (early vs post-yes)
+        # so the summary can describe the proactive-confirm behavior, not just a
+        # boolean. "early" is the par finding; "post_yes" is the textbook flow.
+        if verify_confirm:
+            confirm_when = "early"
+        elif post_yes_confirm:
+            confirm_when = "post_yes"
+        else:
+            confirm_when = None
+        first_confirm = (verify_confirm or post_yes_confirm or [None])[0]
 
         return {
             "update_called": True,
-            "confirm_called": bool(confirm_calls),
-            "confirm_field_id": confirm_calls[0]["args"].get("field_id") if confirm_calls else None,
+            "confirm_called": confirm_when is not None,
+            "confirm_when": confirm_when,
+            "confirm_field_id": first_confirm["args"].get("field_id") if first_confirm else None,
             # Did Gemini actually ASK the verify question? If she spoke a verify
-            # turn and STILL did not call confirm_field after "yes", that is the
+            # turn and STILL did not call confirm_field on either turn, that is the
             # cleanest H1 (model-skips-the-tool-call) evidence.
             "verify_spoken": verify["spoke"],
             "post_yes_spoken": post_yes["spoke"],
@@ -262,8 +313,11 @@ async def main():
     print(f"\n=== MODEL: {model} (AI Studio) -- {runs} run(s) ===", flush=True)
     client = _client()
 
+    completed = 0  # runs that did not raise
     update_hits = 0
     confirm_hits = 0
+    early_hits = 0  # confirm fired on the verify turn (the par finding)
+    post_yes_hits = 0  # confirm fired only after "yes" (textbook flow)
     verify_spoken_hits = 0
     for i in range(1, runs + 1):
         try:
@@ -271,25 +325,45 @@ async def main():
         except Exception as e:
             print(f"  run {i} ERROR: {type(e).__name__}: {e}", flush=True)
             continue
+        completed += 1
         if r["update_called"]:
             update_hits += 1
         if r["confirm_called"]:
             confirm_hits += 1
+            if r.get("confirm_when") == "early":
+                early_hits += 1
+            elif r.get("confirm_when") == "post_yes":
+                post_yes_hits += 1
         if r.get("verify_spoken"):
             verify_spoken_hits += 1
 
     print("\n=== SUMMARY ===", flush=True)
+    print(f"  runs completed (no error):   {completed}/{runs}", flush=True)
     print(f"  update_form_fields fired:    {update_hits}/{runs}", flush=True)
     print(f"  verify question spoken:      {verify_spoken_hits}/{runs}", flush=True)
     print(f"  CONFIRM_FIELD_CALLED:        {confirm_hits}/{runs}", flush=True)
-    if update_hits and confirm_hits == 0:
-        print("  >>> Fill works but confirm_field NEVER fired even with clean "
-              "sequencing -- supports H1 (model skips the confirm tool call). Same "
-              "class as gemini-3p1-skips-update-form-fields.", flush=True)
-    elif confirm_hits == update_hits and update_hits > 0:
+    print(f"    - early (verify turn):     {early_hits}/{runs}", flush=True)
+    print(f"    - post-yes:                {post_yes_hits}/{runs}", flush=True)
+    if update_hits == 0:
+        # F5 (fresh-eyes PR #126): distinguish a SETUP failure (fill never fires,
+        # so there is nothing to confirm) from a real H1 signal. No verdict is
+        # possible here -- do not let silence read as "model is clean".
+        print("  >>> update_form_fields NEVER fired -- NO VERDICT. The fill path is "
+              "the precondition for the confirm probe; check the model name, system "
+              "instruction, and key before reading anything into the confirm tally.", flush=True)
+    elif confirm_hits == 0:
+        print("  >>> Fill works but confirm_field NEVER fired (on EITHER the verify "
+              "turn or post-yes) even with clean sequencing -- supports H1 (model "
+              "skips the confirm tool call). Same class as "
+              "gemini-3p1-skips-update-form-fields.", flush=True)
+    elif confirm_hits == update_hits:
+        extra = (" -- and it fires EARLY (on the verify turn, before the 'yes'), "
+                 "which is the par finding: the live harness only watches AFTER "
+                 "injecting 'yes' and misses the early confirm." if early_hits else "")
         print("  >>> confirm_field fires reliably when the turn is cleanly sequenced "
               "-- so the model CAN do it; the live-harness FLAKY points at H2 (the "
-              "'yes' injection mis-times the verify turn). Fix lives in the harness.", flush=True)
+              "'yes' injection mis-times the verify turn). Fix lives in the harness."
+              + extra, flush=True)
     else:
         print("  >>> mixed/partial -- confirm_field is flaky even with clean "
               "sequencing; capture more runs.", flush=True)
