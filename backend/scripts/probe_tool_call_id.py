@@ -1,16 +1,21 @@
 """Probe: does the native-audio tool_call carry an `id`, and on which path?
 
-bd polyglot-pdf-0ux. The backend crashes on AI Studio with
-'FunctionResponse request must have an id field' because the model_turn.parts
-function_call path builds a FunctionResponse WITHOUT an id when call_id is missing
-(live_ai_gemini.py:1437-1438), and the SDK's mldev path REQUIRES id (live.py:416).
+bd polyglot-pdf-0ux. The backend crashes on AI Studio with 'FunctionResponse
+request must have an id field': the SDK's mldev path REQUIRES the id (live.py),
+but our receive loop built an id-less FunctionResponse.
 
-This isolates the ground truth: for the SAME I-90 first-field scenario as the real
-session, on the SAME 2.5 native-audio model, it reports for EVERY tool call:
-  - which path delivered it (event.tool_call vs model_turn.parts)
-  - whether `.id` is present (and its value)
-so we know whether the fix is "echo the id we already have" (we're reading the
-wrong attr / wrong path) or "synthesize an id" (the model genuinely omits it).
+This probe isolates the ground truth -- for the SAME I-90 first-field scenario as
+the real session, on the SAME 2.5 native-audio model, it reports for EVERY tool
+call which path delivered it (event.tool_call vs model_turn.parts) and whether
+`.id` is present -- so we know whether the fix is "echo the id we already have" or
+"synthesize an id the model never sent".
+
+FINDING (this probe's result): the call arrives via the **event.tool_call** path
+WITH a valid id (e.g. id='function-call-...'), and our code DROPPED it -- the
+event.tool_call build site omitted the id entirely on a wrong "SDK matches by
+order" comment. (The model_turn.parts build site already included the id when it
+had one.) So the fix is "echo the id we already have", not "synthesize one". See
+_build_function_response in live_ai_gemini.py.
 
 Usage:
     GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_tool_call_id.py
