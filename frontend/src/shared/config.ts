@@ -12,13 +12,42 @@ export interface DevConfig {
 }
 
 /**
+ * TEST-ONLY gate for the E2E voice harness (bd polyglot-pdf-g8w). True only when
+ * BOTH the dev override and the explicit harness opt-in are set. Each flag is read
+ * from window OR localStorage so the gate survives a page reload (a preview_eval
+ * can only set window.* AFTER boot; localStorage persists across the reload the
+ * harness does so the flags are present when the app next boots). NEVER true in
+ * production or in normal local dev (both flags must be deliberately set).
+ */
+export function isTestHarnessEnabled(): boolean {
+	const flag = (name: string): boolean => {
+		try {
+			if ((window as any)[name] === true) return true
+			return window.localStorage.getItem(name) === 'true'
+		} catch {
+			return false
+		}
+	}
+	return flag('__VFF_LOCAL_DEV') && flag('__VFF_TEST_HARNESS')
+}
+
+/**
  * Get development configuration from window or defaults
  */
 export function getDevConfig(): DevConfig {
-	// Check for local dev override
-	const localDev = (window as any).__VFF_LOCAL_DEV
-	const customBackendUrl = (window as any).__VFF_BACKEND_URL
-	const debugMetrics = (window as any).__VFF_DEBUG_METRICS
+	// Check for local dev override. Each override is read from window OR
+	// localStorage so it survives a page reload (the E2E harness sets these in
+	// localStorage and reloads -- bd polyglot-pdf-g8w). localStorage is a no-op
+	// fallback in normal use where only window.* is set.
+	const lsBool = (name: string): boolean | undefined => {
+		try { return window.localStorage.getItem(name) === 'true' ? true : undefined } catch { return undefined }
+	}
+	const lsStr = (name: string): string | undefined => {
+		try { return window.localStorage.getItem(name) || undefined } catch { return undefined }
+	}
+	const localDev = (window as any).__VFF_LOCAL_DEV ?? lsBool('__VFF_LOCAL_DEV')
+	const customBackendUrl = (window as any).__VFF_BACKEND_URL ?? lsStr('__VFF_BACKEND_URL')
+	const debugMetrics = (window as any).__VFF_DEBUG_METRICS ?? lsBool('__VFF_DEBUG_METRICS')
 
 	return {
 		enabled: Boolean(localDev),

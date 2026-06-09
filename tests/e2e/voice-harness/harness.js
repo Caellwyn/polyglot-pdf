@@ -1,0 +1,342 @@
+/*
+ * Voice form-fill E2E test harness (bd polyglot-pdf-g8w).
+ *
+ * Runs IN THE BROWSER. The agent injects this file's source via preview_eval so
+ * that window.__VFF_HARNESS exists, then drives the cycle turn by turn (see
+ * RUNBOOK.md). It loads committed 16 kHz mono PCM16 WAV fixtures, streams them
+ * into the live WebSocket through window.__VFF_TEST_INJECT (the dev-gated hook in
+ * connection.ts), waits for Gemini to finish each spoken turn, and reads back the
+ * field state for assertions.
+ *
+ * Depends on the app hook window.__VFF_TEST_INJECT being installed -- that needs
+ * window.__VFF_LOCAL_DEV === true AND window.__VFF_TEST_HARNESS === true set
+ * BEFORE the connection manager is created (set them, then reload).
+ *
+ * ASCII-only (repo rule). No build step; plain browser JS.
+ */
+(function () {
+  'use strict';
+
+  // Wire format the backend forwards to Gemini: PCM16 LE, 16 kHz, mono.
+  var SAMPLE_RATE = 16000;
+  var BYTES_PER_SAMPLE = 2;
+  var CHUNK_MS = 20; // 20 ms => 320 samples => 640 bytes per chunk.
+
+  function inject() {
+    var h = window.__VFF_TEST_INJECT;
+    if (!h) {
+      throw new Error(
+        'window.__VFF_TEST_INJECT is missing. Set window.__VFF_LOCAL_DEV=true and ' +
+        'window.__VFF_TEST_HARNESS=true, then reload so the hook installs.'
+      );
+    }
+    return h;
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /*
+   * Fetch a WAV fixture and return its raw PCM16 data as an ArrayBuffer.
+   * Parses the RIFF/WAVE header (does NOT assume a fixed 44-byte offset -- it
+   * walks chunks to find 'fmt ' and 'data'), and HARD-FAILS on a format mismatch
+   * so a wrong-rate fixture can never silently feed Gemini garbage.
+   */
+  async function loadFixture(url) {
+    var resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error('loadFixture: fetch failed ' + resp.status + ' for ' + url);
+    }
+    var buf = await resp.arrayBuffer();
+    var dv = new DataView(buf);
+
+    function tag(off) {
+      return String.fromCharCode(dv.getUint8(off), dv.getUint8(off + 1),
+        dv.getUint8(off + 2), dv.getUint8(off + 3));
+    }
+    if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') {
+      throw new Error('loadFixture: not a RIFF/WAVE file: ' + url);
+    }
+
+    var fmt = null;
+    var dataOff = -1;
+    var dataLen = 0;
+    var off = 12; // first chunk after 'RIFF'<size>'WAVE'
+    while (off + 8 <= buf.byteLength) {
+      var id = tag(off);
+      var size = dv.getUint32(off + 4, true);
+      var body = off + 8;
+      if (id === 'fmt ') {
+        fmt = {
+          audioFormat: dv.getUint16(body, true),
+          channels: dv.getUint16(body + 2, true),
+          sampleRate: dv.getUint32(body + 4, true),
+          bitsPerSample: dv.getUint16(body + 14, true)
+        };
+      } else if (id === 'data') {
+        dataOff = body;
+        dataLen = size;
+      }
+      off = body + size + (size % 2); // chunks are word-aligned
+    }
+
+    if (!fmt) throw new Error('loadFixture: no fmt chunk in ' + url);
+    if (dataOff < 0) throw new Error('loadFixture: no data chunk in ' + url);
+    if (fmt.audioFormat !== 1) throw new Error('loadFixture: not PCM (fmt ' + fmt.audioFormat + ')');
+    if (fmt.sampleRate !== SAMPLE_RATE) {
+      throw new Error('loadFixture: sample rate ' + fmt.sampleRate + ' != ' + SAMPLE_RATE);
+    }
+    if (fmt.channels !== 1) throw new Error('loadFixture: channels ' + fmt.channels + ' != 1');
+    if (fmt.bitsPerSample !== 16) throw new Error('loadFixture: bits ' + fmt.bitsPerSample + ' != 16');
+
+    return buf.slice(dataOff, dataOff + dataLen);
+  }
+
+  /*
+   * Stream a PCM16 ArrayBuffer into the WS as ~20 ms chunks, pacing in real time
+   * so Gemini's VAD/turn logic behaves like a live mic. VAD-mode aware, mirroring
+   * the real client: manual VAD brackets the burst with activity_start/end;
+   * native VAD streams continuously and appends a short trailing silence to let
+   * Gemini's own VAD detect end-of-speech.
+   */
+  async function injectUtterance(pcmBuffer, opts) {
+    opts = opts || {};
+    var chunkMs = opts.chunkMs || CHUNK_MS;
+    var h = inject();
+    var native = h.isNativeVad();
+
+    var bytesPerChunk = Math.round((SAMPLE_RATE * BYTES_PER_SAMPLE * chunkMs) / 1000);
+
+    if (!native) {
+      h.sendActivityStart();
+    }
+
+    for (var pos = 0; pos < pcmBuffer.byteLength; pos += bytesPerChunk) {
+      var end = Math.min(pos + bytesPerChunk, pcmBuffer.byteLength);
+      h.sendAudio(pcmBuffer.slice(pos, end));
+      await sleep(chunkMs); // pace at ~real time
+    }
+
+    if (native) {
+      // ~500 ms of trailing silence so Gemini's VAD closes the turn.
+      var silence = new ArrayBuffer(bytesPerChunk);
+      var silenceMs = 500;
+      var frames = Math.ceil(silenceMs / chunkMs);
+      for (var i = 0; i < frames; i++) {
+        h.sendAudio(silence.slice(0));
+        await sleep(chunkMs);
+      }
+    } else {
+      await h.sendActivityEnd();
+    }
+  }
+
+  /*
+   * Generic poller: resolve as soon as fn() returns truthy, else time out.
+   * Returns { met, value, timedOut, elapsedMs }. This is the load-bearing wait
+   * primitive -- the harness gates on CONCRETE OUTCOMES (a field got a value, a
+   * field got confirmed, Gemini advanced) rather than on audio playback, because
+   * audio-end is an unreliable turn signal: Gemini streams many tiny chunks, and
+   * in an automated/headless tab playback may not fire onended at all. (The first
+   * live run, bd polyglot-pdf-g8w, timed out on vffOnAudioPlaybackEnd every turn
+   * even though the fill SUCCEEDED -- the outcome was the only trustworthy signal.)
+   */
+  function waitForCondition(fn, opts) {
+    opts = opts || {};
+    var timeoutMs = opts.timeoutMs || 30000;
+    var pollMs = opts.pollMs || 200;
+    var startedAt = Date.now();
+    return new Promise(function (resolve) {
+      function tick() {
+        var value;
+        try { value = fn(); } catch (e) { value = false; }
+        if (value) {
+          resolve({ met: true, value: value, timedOut: false, elapsedMs: Date.now() - startedAt });
+          return;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve({ met: false, value: value, timedOut: true, elapsedMs: Date.now() - startedAt });
+          return;
+        }
+        setTimeout(tick, pollMs);
+      }
+      tick();
+    });
+  }
+
+  /*
+   * Wait until `fieldId` holds a non-empty value (i.e. Gemini's update_form_fields
+   * landed). This is the reliable "the field got filled" gate for the answer step.
+   */
+  function waitForFieldValue(fieldId, opts) {
+    return waitForCondition(function () {
+      var f = readField(fieldId);
+      var v = f.domValue != null ? f.domValue : f.ssValue;
+      return (v != null && String(v).length > 0) ? f : false;
+    }, opts);
+  }
+
+  /*
+   * Wait until `fieldId` is confirmed OR Gemini advanced off it (lastNextField
+   * moved to a different id). This is the gate for the verify->confirm->advance
+   * step. Returns the readField snapshot (+ a `_lastNextField` tag) when met.
+   */
+  function waitForConfirmOrAdvance(fieldId, opts) {
+    return waitForCondition(function () {
+      var f = readField(fieldId);
+      var nf = null;
+      try { nf = lastNextField(); } catch (e) {}
+      var advanced = nf != null && nf !== fieldId;
+      if (f.domConfirmed || f.ssConfirmed || advanced) {
+        f._lastNextField = nf;
+        f._advanced = advanced;
+        return f;
+      }
+      return false;
+    }, opts);
+  }
+
+  /*
+   * Best-effort "Gemini finished speaking" wait, kept for PACING only (never for
+   * correctness -- use the outcome waiters above for that). Resolves on a quiet
+   * window after vffOnAudioPlaybackEnd, OR after timeoutMs. settleMs is generous
+   * because Gemini streams chunky audio. Always resolves (timedOut flag tells you
+   * which path); callers should treat a timeout as "proceed anyway", not failure.
+   */
+  function waitForGeminiQuestion(opts) {
+    opts = opts || {};
+    var settleMs = opts.settleMs || 1200;
+    var timeoutMs = opts.timeoutMs || 20000;
+
+    return new Promise(function (resolve) {
+      var prev = window.vffOnAudioPlaybackEnd;
+      var settleTimer = null;
+      var hardTimer = null;
+      var done = false;
+      var sawAudio = false;
+
+      function finish(timedOut) {
+        if (done) return;
+        done = true;
+        if (settleTimer) clearTimeout(settleTimer);
+        if (hardTimer) clearTimeout(hardTimer);
+        window.vffOnAudioPlaybackEnd = prev; // restore
+        resolve({ timedOut: !!timedOut, sawAudio: sawAudio });
+      }
+
+      window.vffOnAudioPlaybackEnd = function () {
+        if (typeof prev === 'function') {
+          try { prev(); } catch (e) { /* ignore app handler error */ }
+        }
+        sawAudio = true;
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(function () { finish(false); }, settleMs);
+      };
+
+      hardTimer = setTimeout(function () { finish(true); }, timeoutMs);
+    });
+  }
+
+  /*
+   * Read a field's current value + confirmed state from BOTH the DOM (the
+   * load-bearing surface: fieldManager writes here) and sessionStorage (the app's
+   * mirror). Returns raw + digit-normalized value so the caller can compare
+   * robustly against an LLM-produced value (strips spaces, commas, punctuation).
+   */
+  function readField(fieldId) {
+    var el = document.getElementById(fieldId);
+    var domValue = el ? (el.value !== undefined ? el.value : null) : null;
+    var domConfirmed = el ? el.getAttribute('data-vff-confirmed') === 'true' : false;
+
+    var ssValue = null;
+    var ssConfirmed = null;
+    try {
+      var raw = sessionStorage.getItem('schema_form_state');
+      if (raw) {
+        var st = JSON.parse(raw);
+        var fv = st && st.fieldValues && st.fieldValues[fieldId];
+        if (fv) {
+          ssValue = fv.value !== undefined ? fv.value : null;
+          ssConfirmed = !!fv.confirmed;
+        }
+      }
+    } catch (e) { /* ignore parse error */ }
+
+    var src = domValue != null ? domValue : (ssValue != null ? ssValue : '');
+    var digits = String(src).replace(/[^0-9]/g, '');
+
+    return {
+      fieldId: fieldId,
+      domValue: domValue,
+      domConfirmed: domConfirmed,
+      ssValue: ssValue,
+      ssConfirmed: ssConfirmed,
+      digits: digits
+    };
+  }
+
+  function lastNextField() {
+    return inject().getLastNextField();
+  }
+
+  /*
+   * Run the full answer -> fill -> confirm -> advance cycle for one numeric field,
+   * gating on concrete OUTCOMES (not audio). Returns a PASS/FAIL/FLAKY report the
+   * agent reads back. Non-deterministic-LLM tolerant: normalizes digits, and
+   * classifies a stuck/timeout as FLAKY (not FAIL). Pre-load the two fixtures and
+   * pass them in (digitsBuf, yesBuf) so this function never awaits the network.
+   */
+  async function runCycle(opts) {
+    opts = opts || {};
+    var fieldId = opts.fieldId;
+    var expectDigits = opts.expectDigits || '1234567';
+    var digitsBuf = opts.digitsBuf;
+    var yesBuf = opts.yesBuf;
+    var turnTimeoutMs = opts.turnTimeoutMs || 35000;
+    var report = { fieldId: fieldId, steps: [], verdict: 'FLAKY' };
+
+    // Let Gemini ask the first question (pacing only; do not gate correctness).
+    var q1 = await waitForGeminiQuestion({ timeoutMs: 18000 });
+    report.steps.push({ step: 'wait-first-question', sawAudio: q1.sawAudio, timedOut: q1.timedOut });
+
+    // Answer: inject the digits, then wait for the field to actually fill.
+    await injectUtterance(digitsBuf);
+    var filled = await waitForFieldValue(fieldId, { timeoutMs: turnTimeoutMs });
+    var fillSnap = readField(fieldId);
+    report.steps.push({ step: 'fill', met: filled.met, elapsedMs: filled.elapsedMs, raw: fillSnap.domValue, digits: fillSnap.digits });
+
+    if (!filled.met) { report.verdict = 'FLAKY'; report.reason = 'field never filled'; return report; }
+    if (fillSnap.digits !== expectDigits) { report.verdict = 'FAIL'; report.reason = 'wrong value: got ' + JSON.stringify(fillSnap.domValue); return report; }
+
+    // Let Gemini ask the verify question (pacing), then confirm.
+    var q2 = await waitForGeminiQuestion({ timeoutMs: 18000 });
+    report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut });
+
+    await injectUtterance(yesBuf);
+    var done = await waitForConfirmOrAdvance(fieldId, { timeoutMs: turnTimeoutMs });
+    var endSnap = readField(fieldId);
+    report.steps.push({ step: 'confirm-advance', met: done.met, elapsedMs: done.elapsedMs, confirmed: (endSnap.domConfirmed || endSnap.ssConfirmed), advanced: done.value && done.value._advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
+
+    if (!done.met) { report.verdict = 'FLAKY'; report.reason = 'never confirmed or advanced'; return report; }
+    report.verdict = 'PASS';
+    return report;
+  }
+
+  window.__VFF_HARNESS = {
+    SAMPLE_RATE: SAMPLE_RATE,
+    loadFixture: loadFixture,
+    injectUtterance: injectUtterance,
+    waitForGeminiQuestion: waitForGeminiQuestion,
+    waitForCondition: waitForCondition,
+    waitForFieldValue: waitForFieldValue,
+    waitForConfirmOrAdvance: waitForConfirmOrAdvance,
+    readField: readField,
+    lastNextField: lastNextField,
+    runCycle: runCycle,
+    isNativeVad: function () { return inject().isNativeVad(); }
+  };
+
+  console.log('[VFF Harness] installed window.__VFF_HARNESS');
+  return window.__VFF_HARNESS;
+})();
