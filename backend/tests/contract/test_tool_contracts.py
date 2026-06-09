@@ -167,25 +167,32 @@ async def _drive_fill_then_confirm(model: str) -> dict:
     genai, types = _require_genai()
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-    stream = []  # global ordered list of tool-call names across all turns
+    # Ordered (name, field_id) across all turns. Keeping field_id lets the
+    # assertions verify the call was for the RIGHT field, not just that SOME
+    # update/confirm fired (Codex/fresh-eyes PR #133: a tool call for the wrong
+    # field must not satisfy the contract).
+    stream = []
     update_calls = []
     confirm_early = []
     confirm_post_yes = []
+
+    def _is(name, c):
+        return c["name"] == name and c["field_id"] == FIELD_ID
 
     async with client.aio.live.connect(model=model, config=_config()) as session:
         await session.send_realtime_input(
             text="Speak English. Greet the user and ask for the first field."
         )
         for c in await _drain(session):
-            stream.append(c["name"])
+            stream.append((c["name"], c["field_id"]))
 
         await session.send_realtime_input(
             text="My Alien Registration Number is A123456789."
         )
         answer = await _drain(session)
         for c in answer:
-            stream.append(c["name"])
-        update_calls = [c for c in answer if c["name"] == "update_form_fields"]
+            stream.append((c["name"], c["field_id"]))
+        update_calls = [c for c in answer if _is("update_form_fields", c)]
         if update_calls:
             await _send_tool_responses(
                 session, types, update_calls,
@@ -197,8 +204,8 @@ async def _drive_fill_then_confirm(model: str) -> dict:
         # look for confirm_field here AND post-yes (order-tolerant, the par finding).
         verify = await _drain(session)
         for c in verify:
-            stream.append(c["name"])
-        confirm_early = [c for c in verify if c["name"] == "confirm_field"]
+            stream.append((c["name"], c["field_id"]))
+        confirm_early = [c for c in verify if _is("confirm_field", c)]
         if confirm_early:
             await _send_tool_responses(
                 session, types, confirm_early,
@@ -208,8 +215,8 @@ async def _drive_fill_then_confirm(model: str) -> dict:
         await session.send_realtime_input(text="Yes, that is correct.")
         post_yes = await _drain(session)
         for c in post_yes:
-            stream.append(c["name"])
-        confirm_post_yes = [c for c in post_yes if c["name"] == "confirm_field"]
+            stream.append((c["name"], c["field_id"]))
+        confirm_post_yes = [c for c in post_yes if _is("confirm_field", c)]
         if confirm_post_yes:
             await _send_tool_responses(
                 session, types, confirm_post_yes,
@@ -246,28 +253,33 @@ async def _drive_fill_then_confirm(model: str) -> dict:
 )
 async def test_update_then_confirm_sequence(model):
     """The demo invariant: the model fills (update_form_fields) and THEN confirms
-    (confirm_field), in that order, for a single field. Asserts the SEQUENCE the
-    probes only tallied: update_form_fields must appear, confirm_field must appear,
-    and the first update_form_fields must precede the first confirm_field in the
-    tool-call stream."""
+    (confirm_field) FOR THE SAME FIELD, in that order. Asserts the SEQUENCE the
+    probes only tallied: a update_form_fields for FIELD_ID must appear, a
+    confirm_field for FIELD_ID must appear, and the first such update must precede
+    the first such confirm in the tool-call stream. Filtering on FIELD_ID means a
+    tool call for the wrong field cannot satisfy the contract (PR #133)."""
     if not os.getenv("GEMINI_API_KEY"):
         pytest.skip("GEMINI_API_KEY is not configured")
 
     result = await _drive_fill_then_confirm(model)
-    stream = result["stream"]
+    stream = result["stream"]  # list of (name, field_id)
 
     assert result["update_called"], (
-        f"model {model} never emitted update_form_fields on the answer turn "
-        f"(tool stream: {stream})"
+        f"model {model} never emitted update_form_fields for {FIELD_ID} on the "
+        f"answer turn (tool stream: {stream})"
     )
     assert result["confirm_called"], (
-        f"model {model} never emitted confirm_field on the verify or post-yes turn "
-        f"(tool stream: {stream})"
+        f"model {model} never emitted confirm_field for {FIELD_ID} on the verify "
+        f"or post-yes turn (tool stream: {stream})"
     )
 
-    first_update = stream.index("update_form_fields")
-    first_confirm = stream.index("confirm_field")
+    # Index on the (name, field_id) pair so an update/confirm for ANOTHER field
+    # cannot be mistaken for the target's. The guard asserts above guarantee both
+    # are present, so .index never raises here.
+    first_update = stream.index(("update_form_fields", FIELD_ID))
+    first_confirm = stream.index(("confirm_field", FIELD_ID))
     assert first_update < first_confirm, (
-        "update_form_fields must precede confirm_field (fill before verify); got "
-        f"stream {stream} (update@{first_update}, confirm@{first_confirm})"
+        f"update_form_fields must precede confirm_field for {FIELD_ID} (fill "
+        f"before verify); got stream {stream} "
+        f"(update@{first_update}, confirm@{first_confirm})"
     )

@@ -568,8 +568,13 @@
    *   s1FieldId, s1ExpectDigits,          // default p1_line1_aliennumber / '1234567'
    *   s1Seed,                             // { fieldId: value } confirmed before leg 1
    *   s2FieldId, s2ExpectDigits, s2DigitsBuf, // section-2 voice field + its fixture
+   *   s2Seed,                             // { fieldId: value } confirmed before leg 2
+   *                                       //   (the section-2 fields BEFORE the voice
+   *                                       //   target, so the target is the next field)
    *   targetSectionOrder                  // default 2
    * }
+   * s2DigitsBuf is REQUIRED -- the scenario's whole point is the second voice fill
+   * across the boundary; omitting it is a setup error, not an optional skip.
    * Returns { verdict, crossedToSection: bool, legs: [...] }.
    */
   async function runMultiSectionScenario(opts) {
@@ -592,9 +597,35 @@
     var s2FieldId = opts.s2FieldId || 'p1_line6f_zipcode';
     var s2ExpectDigits = opts.s2ExpectDigits || '12345';
     var s2DigitsBuf = opts.s2DigitsBuf;
+    // Seed the section-2 fields that come BEFORE the voice target so the target
+    // is the NEXT field computeNextField returns -- otherwise Gemini is asked for
+    // the first mailing-address field (p1_line6a_incareofname), not the ZIP, and
+    // leg 2 times out on the wrong field (Codex/fresh-eyes PR #133). The unit
+    // radio (p1_unit_type6c_unit) is seeded non-empty, which SHOWS the apt field
+    // (show_if is_not_empty), so the apt field is seeded too -- verified against
+    // form-kits/i-90/schema.json. Only fields strictly before p1_line6f_zipcode.
+    var s2Seed = opts.s2Seed || {
+      p1_line6a_incareofname: 'Acme Corp',
+      p1_line6b_streetnumbername: '100 Main St',
+      p1_unit_type6c_unit: 'P1_checkbox6c_Unit[1]',
+      p1_line6c_aptsteflrnumber: '4B',
+      p1_line6d_cityortown: 'Springfield',
+      p1_line6e_state: 'IL'
+    };
     var targetSectionOrder = opts.targetSectionOrder || 2;
 
     var result = { verdict: 'FLAKY', crossedToSection: false, legs: [] };
+
+    // s2DigitsBuf is mandatory: leg 2 (the second voice fill across the boundary)
+    // is the scenario's reason to exist. A missing fixture is a SETUP error -- it
+    // must NOT silently downgrade to a section-cross-only PASS (Codex/fresh-eyes
+    // PR #133: a demo rehearsal that "passes" without proving the second fill is a
+    // false green).
+    if (!s2DigitsBuf) {
+      result.verdict = 'FLAKY';
+      result.reason = 'setup-error: s2DigitsBuf (the section-2 voice fixture) is required; leg 2 is not optional';
+      return result;
+    }
 
     // --- Setup: seed the non-target section-1 fields confirmed. ---
     var seed = seedFields(s1Seed);
@@ -623,8 +654,14 @@
 
     // The crossing: current section order reaches the target, the old section is
     // finalized, and Gemini greets + points at the new section's first field.
+    // Install the section-changed watcher BEFORE awaiting the section state so a
+    // fast switch (vffOnSectionChanged firing during waitForSection) is still
+    // captured -- otherwise the hook installs after the event and reports a
+    // spurious sawSectionChanged:false (Codex/fresh-eyes PR #133). Both waits run
+    // concurrently; both resolve once the switch lands (or on timeout).
+    var greetP = waitForSectionGreeting();
     var sectionW = await waitForSection(targetSectionOrder);
-    var greet = await waitForSectionGreeting();
+    var greet = await greetP;
     var completed = getCompletedSections();
     var nextAfterCross = (function () { try { return lastNextField(); } catch (e) { return null; } })();
     result.legs.push({
@@ -643,23 +680,28 @@
     result.crossedToSection = true;
 
     // --- Leg 2: voice-fill a field in the new section -- proves multi-field across
-    // the boundary. Requires the second numeric fixture. The field is not last in
-    // its section, so the cycle's normal advance check applies. ---
-    if (s2DigitsBuf) {
-      clearFieldState(s2FieldId);
-      var leg2 = await runCycle({
-        fieldId: s2FieldId, expectDigits: s2ExpectDigits,
-        digitsBuf: s2DigitsBuf, yesBuf: yesBuf
-      });
-      leg2.leg = 'section2-fill';
-      result.legs.push(leg2);
-      if (leg2.verdict !== 'PASS') {
-        result.verdict = leg2.verdict;
-        result.reason = 'leg2 ' + leg2.verdict + ': ' + (leg2.reason || 'see steps');
-        return result;
-      }
-    } else {
-      result.legs.push({ leg: 'section2-fill', skipped: true, reason: 's2DigitsBuf not provided' });
+    // the boundary. Seed the section-2 fields BEFORE the voice target confirmed so
+    // computeNextField points Gemini at the target (the ZIP), not the first
+    // mailing-address field. The target is not last in its section, so the cycle's
+    // normal advance check applies. ---
+    var s2seedResult = seedFields(s2Seed);
+    result.legs.push({ leg: 'section2-seed', seeded: s2seedResult.seeded, failed: s2seedResult.failed });
+    if (s2seedResult.failed.length > 0) {
+      result.verdict = 'FLAKY';
+      result.reason = 'section2-seed-failed: ' + s2seedResult.failed.join(',') + ' did not read back confirmed';
+      return result;
+    }
+    clearFieldState(s2FieldId);
+    var leg2 = await runCycle({
+      fieldId: s2FieldId, expectDigits: s2ExpectDigits,
+      digitsBuf: s2DigitsBuf, yesBuf: yesBuf
+    });
+    leg2.leg = 'section2-fill';
+    result.legs.push(leg2);
+    if (leg2.verdict !== 'PASS') {
+      result.verdict = leg2.verdict;
+      result.reason = 'leg2 ' + leg2.verdict + ': ' + (leg2.reason || 'see steps');
+      return result;
     }
 
     result.verdict = 'PASS';

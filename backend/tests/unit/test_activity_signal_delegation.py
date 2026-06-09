@@ -91,22 +91,23 @@ def test_section_switch_surface_is_wired_route_to_service():
     """Guard the section-switch route<->service surface the multi-section voice
     scenario (bd polyglot-pdf-8k8 / epic wpw WS-A) depends on -- the akn-class bug
     applied to switching. The /ws/fill handler dispatches the manual_section_switch
-    and section_info_response branches into the service; if the method those
-    branches call is ever renamed without updating the route (or vice versa), a
-    section switch crashes the receive loop mid-form. Pin the contract by NAME so a
-    rename is caught here, not only live."""
-    import re
+    branch into service.switch_to_section and the AI-initiated section_info_response
+    branch into service.handle_section_info_response; if either method is renamed
+    without updating the route (or vice versa), a section switch crashes the receive
+    loop mid-form. Pin BOTH methods by NAME so a rename is caught here, not only
+    live."""
     from backend.routes import websocket_routes
 
     source = inspect.getsource(websocket_routes)
 
-    # The backend-side switch entry point the route invokes for both the manual
-    # switch and the AI-initiated section_info_response path must exist.
-    assert hasattr(FormFillingService, "switch_to_section"), (
-        "FormFillingService lost switch_to_section -- the manual_section_switch "
-        "route branch and the AI switch_section path both call it; a section "
-        "switch would crash the WS loop (akn-class)."
-    )
+    # Both backend-side entry points the section-switch branches invoke must exist.
+    # manual_section_switch -> switch_to_section; section_info_response (the FE's
+    # reply on the AI-initiated path) -> handle_section_info_response.
+    for method in ("switch_to_section", "handle_section_info_response"):
+        assert hasattr(FormFillingService, method), (
+            f"FormFillingService lost {method} -- a section-switch route branch "
+            "calls it; losing it would crash the WS loop mid-switch (akn-class)."
+        )
 
     # The route must still handle the section-switch message types the frontend
     # sends. These string literals are the wire contract; their disappearance means
