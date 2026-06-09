@@ -440,9 +440,10 @@ def _is_own_current_branch(branch_line: str, current_branch: str | None) -> bool
 # the same as, or nested under, a surface of the other. Reads don't collide --
 # only declared writes do. A bead with no DECLARED surfaces is not immediately
 # UNKNOWN: _bead_surfaces first tries to DERIVE its real footprint from its open
-# PR's changed files (bd polyglot-pdf-8y7); only a bead with neither a declaration
-# nor an open PR is treated as UNKNOWN (see _surfaces_overlap) and conservatively
-# collides with everything.
+# PR's changed files (bd polyglot-pdf-8y7); a bead with neither a declaration nor
+# an open PR is UNKNOWN ([]). Post-6hr an UNKNOWN set is PERMISSIVE -- it has no
+# concrete surface to collide on and does NOT block (see _surfaces_overlap); only
+# two positively-stated, overlapping surfaces block.
 
 
 def _normalize_surface(surface: str) -> str:
@@ -540,16 +541,18 @@ def _bead_surfaces(bead_id: str, *, derive_from_prs: bool = True,
     Source order (bd polyglot-pdf-8y7):
       1. The bead's DECLARED `metadata.surfaces` -- authoritative when present.
       2. If it declared none AND `derive_from_prs`, the files its open PR(s)
-         actually change (the real mid-flight footprint). This is what stops an
-         undeclared-surface claim from locking the whole next-bead board by
-         colliding with everything under the UNKNOWN policy.
-      3. [] -- UNKNOWN: the conservative collide-with-everything fallback in
-         _surfaces_overlap applies. This covers the genuinely-unknown case (no
-         declaration AND no open PR) AND every UNCERTAINTY: a `bd show` failure
-         (we could NOT read the declaration, so we must not trust a narrower PR
-         diff over an unreadable authoritative list), or a PR lookup that failed
-         / was truncated (Codex review). Uncertainty always collapses to UNKNOWN,
-         never to a partial footprint.
+         actually change (the real mid-flight footprint). This gives the guard a
+         CONCRETE footprint to match an under-declared active claim on, so a
+         genuine overlap is still caught even when the bead never annotated.
+      3. [] -- UNKNOWN. Post-6hr an UNKNOWN set is PERMISSIVE in _surfaces_overlap
+         (no concrete surface to collide on -> does not block); it is no longer a
+         collide-with-everything fallback. This covers the genuinely-unknown case
+         (no declaration AND no open PR) AND every UNCERTAINTY: a `bd show`
+         failure (we could NOT read the declaration, so we must not trust a
+         narrower PR diff over an unreadable authoritative list), or a PR lookup
+         that failed / was truncated (Codex review). Uncertainty always collapses
+         to UNKNOWN, never to a partial footprint -- the value now is avoiding a
+         WRONG partial overlap, not forcing a block.
 
     Set `derive_from_prs=False` for a pure read of the DECLARED surfaces with no
     network/gh lookup (e.g. unit tests of the declaration path, or callers that
