@@ -900,12 +900,17 @@ async def test_activity_signals_suppressed_in_native_vad(monkeypatch):
     carrying audio_stream_end, and never activity_start or activity_end.
     """
     adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=False)
-
-    await adapter.send_activity_start()
-    await adapter.send_activity_end()
-
     send = adapter._current_session.send_realtime_input
-    assert send.await_count == 1
+
+    # start and end are asserted INDEPENDENTLY (Codex review, PR #122): an
+    # aggregate "exactly one call" check would still pass if native mode regressed
+    # to emit the realtime input on START and suppress END -- which would silently
+    # break the PTT-release turn-close. So pin each half on its own.
+    await adapter.send_activity_start()
+    assert send.await_count == 0  # start is fully suppressed in native mode
+
+    await adapter.send_activity_end()
+    assert send.await_count == 1  # end is the ONLY emitter here
     only_kwargs = send.await_args_list[0].kwargs
     assert only_kwargs.get("audio_stream_end") is True
     assert "activity_start" not in only_kwargs
