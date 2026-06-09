@@ -1,19 +1,24 @@
 /**
- * Unit tests for SchemaFormStateManager - Phase 1 WebSocket Integration
+ * Unit tests for SchemaFormStateManager.
  *
- * Tests WebSocket-related functionality added in Phase 1:
- * - FieldValue wrapping/unwrapping
- * - Backwards compatibility migration
- * - WebSocket handshake payload generation
- * - Part extraction and spoken name collection
- * - State persistence (save/load)
+ * Spec-derived (bd polyglot-pdf-uov.4): asserts the DOCUMENTED section-based
+ * behavior of the state manager, not whatever the old part-based test happened
+ * to assert. Navigation is by SECTION (the old "part" API was renamed); the
+ * back-compat migration runs currentPartId -> currentSectionId (NOT the reverse,
+ * which the pre-refactor test wrongly asserted). See
+ * docs/components/schema-forms.md for the contract this pins.
+ *
+ * Covered: FieldValue wrapping, the real legacy-key migration on load(),
+ * getCurrentSectionNumber, getHandshakePayload (section-scoped), section
+ * extraction, previous-spoken-name collection over completed sections,
+ * switchToSection, setSessionId, save/load round-trip, JIT tracking, edges.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { SchemaFormStateManager } from './schemaFormState'
 import type { FormSchema, FieldValue } from '../types/schema'
 
-describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
+describe('SchemaFormStateManager', () => {
   let sessionStorageMock: { [key: string]: string }
 
   beforeEach(() => {
@@ -49,6 +54,8 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       edition_date: '01/20/25',
       page_count: 5
     },
+    // parts[] is optional/legacy grouping metadata. Navigation is section-based;
+    // it is kept here only to prove the manager ignores it for nav + handshake.
     parts: [
       {
         id: 'part-1',
@@ -190,7 +197,24 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
   })
 
   // ============================================================================
-  // Test: FieldValue Wrapping in updateField()
+  // init() seeds the first section
+  // ============================================================================
+
+  describe('init()', () => {
+    it('seeds currentSectionId to the lowest-order section', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      // getFirstSection sorts by order; section-1a has order 1.
+      expect(state.currentSectionId).toBe('section-1a')
+      expect(state.completedSections).toBeInstanceOf(Set)
+      expect(state.completedSections.size).toBe(0)
+      expect(state.fieldValues).toEqual({})
+      // formSessionId is the persistent fss_ id (durability boundary).
+      expect(state.formSessionId).toMatch(/^fss_/)
+    })
+  })
+
+  // ============================================================================
+  // FieldValue wrapping in updateField()
   // ============================================================================
 
   describe('FieldValue Wrapping', () => {
@@ -268,19 +292,24 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
   })
 
   // ============================================================================
-  // Test: Backwards Compatibility Migration
+  // Backwards-compatibility migration on load()
+  //
+  // The REAL migration direction (source load()): the old part-keyed state
+  // (currentPartId / completedParts) is migrated FORWARD to the section keys
+  // (currentSectionId / completedSections). The pre-refactor test asserted the
+  // reverse and was wrong.
   // ============================================================================
 
   describe('Backwards Compatibility Migration', () => {
-    it('should migrate currentSectionId to currentPartId on load', () => {
+    it('migrates currentPartId -> currentSectionId on load', () => {
       const schema = createTestSchema()
 
-      // Create old-style state
+      // Old-style state keyed on the legacy part fields.
       const oldState = {
         schema,
         fieldValues: {},
-        currentSectionId: 'part-2', // Old property name
-        completedSections: ['part-1'], // Old property name (as array for JSON)
+        currentPartId: 'section-2a',     // legacy key
+        completedParts: ['section-1a'],  // legacy key (array form in JSON)
         validationErrors: {},
         lastUpdated: Date.now()
       }
@@ -290,23 +319,24 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       const loadedState = SchemaFormStateManager.load()
 
       expect(loadedState).not.toBeNull()
-      expect(loadedState!.currentPartId).toBe('part-2')
-      expect(loadedState!.currentSectionId).toBeUndefined()
-      expect(loadedState!.completedParts).toBeInstanceOf(Set)
-      expect(loadedState!.completedParts.has('part-1')).toBe(true)
+      expect(loadedState!.currentSectionId).toBe('section-2a')
+      // currentPartId is consumed and removed.
+      expect((loadedState as any).currentPartId).toBeUndefined()
+      expect(loadedState!.completedSections).toBeInstanceOf(Set)
+      expect(loadedState!.completedSections.has('section-1a')).toBe(true)
     })
 
-    it('should prefer currentPartId if both properties exist', () => {
+    it('prefers an existing currentSectionId over the legacy currentPartId', () => {
       const schema = createTestSchema()
 
-      // State with both old and new properties
+      // Both keys present: the new key wins; the migration only fills a MISSING
+      // currentSectionId (source: `if (parsed.currentPartId && !parsed.currentSectionId)`).
       const mixedState = {
         schema,
         fieldValues: {},
-        currentSectionId: 'part-1',
-        currentPartId: 'part-2', // Should take precedence
-        completedSections: ['part-1'],
-        completedParts: ['part-2'],
+        currentSectionId: 'section-1a',
+        currentPartId: 'section-2a',
+        completedSections: ['section-1a'],
         validationErrors: {},
         lastUpdated: Date.now()
       }
@@ -315,17 +345,17 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
 
       const loadedState = SchemaFormStateManager.load()
 
-      expect(loadedState!.currentPartId).toBe('part-2')
+      expect(loadedState!.currentSectionId).toBe('section-1a')
     })
 
-    it('should convert completedSections array to completedParts Set', () => {
+    it('converts a legacy completedParts array to a completedSections Set', () => {
       const schema = createTestSchema()
 
       const oldState = {
         schema,
         fieldValues: {},
-        currentPartId: 'part-2',
-        completedSections: ['part-1'], // Old array format
+        currentPartId: 'section-2a',
+        completedParts: ['section-1a'],  // legacy array, no completedSections
         validationErrors: {},
         lastUpdated: Date.now()
       }
@@ -334,55 +364,53 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
 
       const loadedState = SchemaFormStateManager.load()
 
-      expect(loadedState!.completedParts).toBeInstanceOf(Set)
-      expect(loadedState!.completedParts.has('part-1')).toBe(true)
-      expect(Array.from(loadedState!.completedParts)).toEqual(['part-1'])
+      expect(loadedState!.completedSections).toBeInstanceOf(Set)
+      expect(loadedState!.completedSections.has('section-1a')).toBe(true)
+      expect(Array.from(loadedState!.completedSections)).toEqual(['section-1a'])
     })
   })
 
   // ============================================================================
-  // Test: getCurrentPartNumber()
+  // getCurrentSectionNumber()
   // ============================================================================
 
-  describe('getCurrentPartNumber()', () => {
-    it('should return the correct order value for current part', () => {
+  describe('getCurrentSectionNumber()', () => {
+    it('returns the current section order value', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      // Should start with part-1 (order: 1)
-      expect(SchemaFormStateManager.getCurrentPartNumber(state)).toBe(1)
+      // Seeded on section-1a (order 1).
+      expect(SchemaFormStateManager.getCurrentSectionNumber(state)).toBe(1)
 
-      // Switch to part-2 (order: 2)
-      const state2 = { ...state, currentPartId: 'part-2' }
-      expect(SchemaFormStateManager.getCurrentPartNumber(state2)).toBe(2)
+      const onB = { ...state, currentSectionId: 'section-1b' } // order 2
+      expect(SchemaFormStateManager.getCurrentSectionNumber(onB)).toBe(2)
 
-      // Switch to part-3 (order: 3)
-      const state3 = { ...state, currentPartId: 'part-3' }
-      expect(SchemaFormStateManager.getCurrentPartNumber(state3)).toBe(3)
+      const on2a = { ...state, currentSectionId: 'section-2a' } // order 3
+      expect(SchemaFormStateManager.getCurrentSectionNumber(on2a)).toBe(3)
     })
 
-    it('should return 1 for schemas without parts', () => {
+    it('returns 1 for a single-section legacy schema', () => {
       const schema = createLegacySchema()
       const state = SchemaFormStateManager.init(schema)
 
-      expect(SchemaFormStateManager.getCurrentPartNumber(state)).toBe(1)
+      expect(SchemaFormStateManager.getCurrentSectionNumber(state)).toBe(1)
     })
 
-    it('should return 1 if current part not found', () => {
+    it('returns 1 when the current section is not found', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
-      const invalidState = { ...state, currentPartId: 'non-existent-part' }
+      const invalidState = { ...state, currentSectionId: 'non-existent-section' }
 
-      expect(SchemaFormStateManager.getCurrentPartNumber(invalidState)).toBe(1)
+      expect(SchemaFormStateManager.getCurrentSectionNumber(invalidState)).toBe(1)
     })
   })
 
   // ============================================================================
-  // Test: getHandshakePayload()
+  // getHandshakePayload() -- section-scoped (NOT parts)
   // ============================================================================
 
   describe('getHandshakePayload()', () => {
-    it('should generate correct handshake payload structure', () => {
+    it('generates the expected payload shape', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
@@ -395,55 +423,48 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(payload).toHaveProperty('total_sections')
       expect(payload).toHaveProperty('previous_spoken_names')
       expect(payload).toHaveProperty('fill_language')
+      expect(payload).toHaveProperty('form_session_id')
     })
 
-    it('should use parts[].order as section_number', () => {
+    it('uses the current SECTION order as section_number', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      // Part-1 has order: 1
-      const payload1 = SchemaFormStateManager.getHandshakePayload(state)
-      expect(payload1.section_number).toBe(1)
+      // Seeded on section-1a (order 1).
+      expect(SchemaFormStateManager.getHandshakePayload(state).section_number).toBe(1)
 
-      // Switch to part-2 (order: 2)
-      const state2 = { ...state, currentPartId: 'part-2' }
-      const payload2 = SchemaFormStateManager.getHandshakePayload(state2)
-      expect(payload2.section_number).toBe(2)
+      const on1b = { ...state, currentSectionId: 'section-1b' } // order 2
+      expect(SchemaFormStateManager.getHandshakePayload(on1b).section_number).toBe(2)
 
-      // Switch to part-3 (order: 3)
-      const state3 = { ...state, currentPartId: 'part-3' }
-      const payload3 = SchemaFormStateManager.getHandshakePayload(state3)
-      expect(payload3.section_number).toBe(3)
+      const on2a = { ...state, currentSectionId: 'section-2a' } // order 3
+      expect(SchemaFormStateManager.getHandshakePayload(on2a).section_number).toBe(3)
     })
 
-    it('should include section_label from current part', () => {
+    it('uses the current SECTION label as section_label', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      const payload = SchemaFormStateManager.getHandshakePayload(state)
-      expect(payload.section_label).toBe('Personal Information')
+      // section-1a label is 'Name' (NOT the part-1 label 'Personal Information').
+      expect(SchemaFormStateManager.getHandshakePayload(state).section_label).toBe('Name')
     })
 
-    it('should include total_sections from parts.length', () => {
+    it('uses sections.length as total_sections', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      const payload = SchemaFormStateManager.getHandshakePayload(state)
-      expect(payload.total_sections).toBe(3) // 3 parts in test schema
+      // 4 sections in the fixture (NOT 3 parts).
+      expect(SchemaFormStateManager.getHandshakePayload(state).total_sections).toBe(4)
     })
 
-    it('should include fill_language parameter', () => {
+    it('passes fill_language through', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      const payloadEnglish = SchemaFormStateManager.getHandshakePayload(state, 'English')
-      expect(payloadEnglish.fill_language).toBe('English')
-
-      const payloadSpanish = SchemaFormStateManager.getHandshakePayload(state, 'Spanish')
-      expect(payloadSpanish.fill_language).toBe('Spanish')
+      expect(SchemaFormStateManager.getHandshakePayload(state, 'English').fill_language).toBe('English')
+      expect(SchemaFormStateManager.getHandshakePayload(state, 'Spanish').fill_language).toBe('Spanish')
     })
 
-    it('should include current field values', () => {
+    it('includes the current field values', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
@@ -457,179 +478,167 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
   })
 
   // ============================================================================
-  // Test: extractPartFields()
+  // extractSectionFields()
   // ============================================================================
 
-  describe('extractPartFields()', () => {
-    it('should extract schema with only fields from specified part', () => {
+  describe('extractSectionFields()', () => {
+    it('extracts only the fields belonging to the section', () => {
       const schema = createTestSchema()
 
-      const partSchema = SchemaFormStateManager.extractPartFields(schema, 'part-1')
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(schema, 'section-1a')
 
-      // Part-1 has section-1a and section-1b with fields 1, 2, 3
-      expect(partSchema.fields.length).toBe(3)
-      expect(partSchema.fields.map(f => f.id)).toEqual(['field-1', 'field-2', 'field-3'])
+      // section-1a holds field-1, field-2.
+      expect(sectionSchema.fields.map(f => f.id)).toEqual(['field-1', 'field-2'])
     })
 
-    it('should include only sections belonging to the part', () => {
+    it('returns just the one requested section', () => {
       const schema = createTestSchema()
 
-      const partSchema = SchemaFormStateManager.extractPartFields(schema, 'part-1')
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(schema, 'section-1a')
 
-      expect(partSchema.sections.length).toBe(2)
-      expect(partSchema.sections.map(s => s.id)).toEqual(['section-1a', 'section-1b'])
+      expect(sectionSchema.sections.length).toBe(1)
+      expect(sectionSchema.sections[0].id).toBe('section-1a')
     })
 
-    it('should preserve form metadata', () => {
+    it('preserves form metadata', () => {
       const schema = createTestSchema()
 
-      const partSchema = SchemaFormStateManager.extractPartFields(schema, 'part-2')
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(schema, 'section-2a')
 
-      expect(partSchema.form_metadata).toEqual(schema.form_metadata)
+      expect(sectionSchema.form_metadata).toEqual(schema.form_metadata)
     })
 
-    it('should handle part with single section', () => {
+    it('extracts a multi-field section', () => {
       const schema = createTestSchema()
 
-      const partSchema = SchemaFormStateManager.extractPartFields(schema, 'part-2')
+      // section-2a holds field-4, field-5.
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(schema, 'section-2a')
 
-      // Part-2 has only section-2a with fields 4, 5
-      expect(partSchema.sections.length).toBe(1)
-      expect(partSchema.sections[0].id).toBe('section-2a')
-      expect(partSchema.fields.length).toBe(2)
-      expect(partSchema.fields.map(f => f.id)).toEqual(['field-4', 'field-5'])
+      expect(sectionSchema.sections.length).toBe(1)
+      expect(sectionSchema.sections[0].id).toBe('section-2a')
+      expect(sectionSchema.fields.map(f => f.id)).toEqual(['field-4', 'field-5'])
     })
 
-    it('should return empty fields/sections for non-existent part', () => {
+    it('returns empty fields/sections for a non-existent section', () => {
       const schema = createTestSchema()
 
-      const partSchema = SchemaFormStateManager.extractPartFields(schema, 'non-existent')
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(schema, 'non-existent')
 
-      expect(partSchema.fields.length).toBe(0)
-      expect(partSchema.sections.length).toBe(0)
+      expect(sectionSchema.fields.length).toBe(0)
+      expect(sectionSchema.sections.length).toBe(0)
     })
   })
 
   // ============================================================================
-  // Test: getPreviousSpokenNames()
+  // getPreviousSpokenNames() -- over completed SECTIONS
   // ============================================================================
 
   describe('getPreviousSpokenNames()', () => {
-    it('should collect spoken names from completed parts only', () => {
+    it('collects spoken names from completed sections only', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
-      // Complete part-1 and move to part-2
-      state = { ...state, completedParts: new Set(['part-1']), currentPartId: 'part-2' }
+      // Completed section-1a (fields 1,2); now on section-1b.
+      state = { ...state, completedSections: new Set(['section-1a']), currentSectionId: 'section-1b' }
 
       const spokenNames = SchemaFormStateManager.getPreviousSpokenNames(state)
 
-      // Part-1 has fields 1, 2, 3 with spoken names
       expect(spokenNames).toContain('family name')
       expect(spokenNames).toContain('given name')
-      expect(spokenNames).toContain('date of birth')
 
-      // Should NOT contain fields from part-2 or part-3
+      // Nothing from sections not yet completed.
+      expect(spokenNames).not.toContain('date of birth')
       expect(spokenNames).not.toContain('street address')
-      expect(spokenNames).not.toContain('city')
       expect(spokenNames).not.toContain('notes')
     })
 
-    it('should include spoken aliases', () => {
+    it('includes spoken aliases', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
-      state = { ...state, completedParts: new Set(['part-1']), currentPartId: 'part-2' }
+      state = { ...state, completedSections: new Set(['section-1a']), currentSectionId: 'section-1b' }
 
       const spokenNames = SchemaFormStateManager.getPreviousSpokenNames(state)
 
-      // Field-1 has aliases
+      // field-1 aliases
       expect(spokenNames).toContain('last name')
       expect(spokenNames).toContain('surname')
-
-      // Field-2 has alias
+      // field-2 alias
       expect(spokenNames).toContain('first name')
-
-      // Field-3 has alias
-      expect(spokenNames).toContain('birthday')
     })
 
-    it('should return empty array when no parts completed', () => {
+    it('returns an empty array when no section is completed', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
-      const spokenNames = SchemaFormStateManager.getPreviousSpokenNames(state)
-
-      expect(spokenNames).toEqual([])
+      expect(SchemaFormStateManager.getPreviousSpokenNames(state)).toEqual([])
     })
 
-    it('should handle multiple completed parts', () => {
+    it('handles multiple completed sections', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
-      // Complete part-1 and part-2, now on part-3
+      // Completed section-1a (1,2) and section-2a (4,5); now on section-3a.
       state = {
         ...state,
-        completedParts: new Set(['part-1', 'part-2']),
-        currentPartId: 'part-3'
+        completedSections: new Set(['section-1a', 'section-2a']),
+        currentSectionId: 'section-3a'
       }
 
       const spokenNames = SchemaFormStateManager.getPreviousSpokenNames(state)
 
-      // Should have all fields from part-1 and part-2
       expect(spokenNames).toContain('family name')
       expect(spokenNames).toContain('given name')
-      expect(spokenNames).toContain('date of birth')
       expect(spokenNames).toContain('street address')
       expect(spokenNames).toContain('city')
 
-      // Should NOT contain part-3 fields
+      // section-3a (field-6 'notes') is current, not completed.
       expect(spokenNames).not.toContain('notes')
     })
   })
 
   // ============================================================================
-  // Test: switchToPart()
+  // switchToSection()
   // ============================================================================
 
-  describe('switchToPart()', () => {
-    it('should mark current part as completed and switch to next part', () => {
+  describe('switchToSection()', () => {
+    it('marks the current section completed and switches to the target', () => {
       const schema = createTestSchema()
-      const state = SchemaFormStateManager.init(schema)
+      const state = SchemaFormStateManager.init(schema) // on section-1a
 
-      const newState = SchemaFormStateManager.switchToPart(state, 'part-2')
+      const newState = SchemaFormStateManager.switchToSection(state, 'section-2a')
 
-      expect(newState.currentPartId).toBe('part-2')
-      expect(newState.completedParts.has('part-1')).toBe(true)
+      expect(newState.currentSectionId).toBe('section-2a')
+      expect(newState.completedSections.has('section-1a')).toBe(true)
     })
 
-    it('should allow switching to any part by ID', () => {
+    it('switches to any section by id, completing the one left behind', () => {
       const schema = createTestSchema()
-      const state = SchemaFormStateManager.init(schema)
+      const state = SchemaFormStateManager.init(schema) // on section-1a
 
-      const newState = SchemaFormStateManager.switchToPart(state, 'part-3')
+      const newState = SchemaFormStateManager.switchToSection(state, 'section-3a')
 
-      expect(newState.currentPartId).toBe('part-3')
-      expect(newState.completedParts.has('part-1')).toBe(true)
+      expect(newState.currentSectionId).toBe('section-3a')
+      expect(newState.completedSections.has('section-1a')).toBe(true)
     })
 
-    it('should not mark part as completed if switching to same part', () => {
+    it('does not mark complete when switching to the same section', () => {
       const schema = createTestSchema()
-      const state = SchemaFormStateManager.init(schema)
+      const state = SchemaFormStateManager.init(schema) // on section-1a
 
-      const newState = SchemaFormStateManager.switchToPart(state, 'part-1')
+      const newState = SchemaFormStateManager.switchToSection(state, 'section-1a')
 
-      expect(newState.currentPartId).toBe('part-1')
-      expect(newState.completedParts.has('part-1')).toBe(false)
+      expect(newState.currentSectionId).toBe('section-1a')
+      expect(newState.completedSections.has('section-1a')).toBe(false)
     })
   })
 
   // ============================================================================
-  // Test: setSessionId()
+  // setSessionId()
   // ============================================================================
 
   describe('setSessionId()', () => {
-    it('should set sessionId in state', () => {
+    it('sets sessionId in state', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
@@ -638,7 +647,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(newState.sessionId).toBe('session-123')
     })
 
-    it('should preserve other state properties', () => {
+    it('preserves other state properties', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
       state = SchemaFormStateManager.updateField(state, 'field-1', 'Test')
@@ -647,16 +656,16 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
 
       expect(newState.sessionId).toBe('session-456')
       expect(newState.fieldValues['field-1']).toBeDefined()
-      expect(newState.currentPartId).toBe(state.currentPartId)
+      expect(newState.currentSectionId).toBe(state.currentSectionId)
     })
   })
 
   // ============================================================================
-  // Test: Save/Load Round-trip with FieldValue Objects
+  // Save/Load round-trip
   // ============================================================================
 
   describe('Save/Load Persistence', () => {
-    it('should persist FieldValue objects correctly', () => {
+    it('persists FieldValue objects correctly', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
@@ -676,24 +685,24 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(field2.value).toBe('John')
     })
 
-    it('should preserve completedParts Set across save/load', () => {
+    it('preserves the completedSections Set across save/load', () => {
       const schema = createTestSchema()
-      let state = SchemaFormStateManager.init(schema)
+      let state = SchemaFormStateManager.init(schema) // on section-1a
 
-      state = SchemaFormStateManager.switchToPart(state, 'part-2')
-      state = SchemaFormStateManager.switchToPart(state, 'part-3')
+      state = SchemaFormStateManager.switchToSection(state, 'section-1b') // completes 1a
+      state = SchemaFormStateManager.switchToSection(state, 'section-2a') // completes 1b
 
       SchemaFormStateManager.save(state)
 
       const loadedState = SchemaFormStateManager.load()
 
       expect(loadedState).not.toBeNull()
-      expect(loadedState!.completedParts).toBeInstanceOf(Set)
-      expect(loadedState!.completedParts.has('part-1')).toBe(true)
-      expect(loadedState!.completedParts.has('part-2')).toBe(true)
+      expect(loadedState!.completedSections).toBeInstanceOf(Set)
+      expect(loadedState!.completedSections.has('section-1a')).toBe(true)
+      expect(loadedState!.completedSections.has('section-1b')).toBe(true)
     })
 
-    it('should preserve sessionId across save/load', () => {
+    it('preserves sessionId across save/load', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
 
@@ -709,19 +718,19 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
   })
 
   // ============================================================================
-  // Test: Schemas Without Parts (Fallback Behavior)
+  // Single-section (legacy) schema behavior
   // ============================================================================
 
-  describe('Schemas Without Parts (Legacy Support)', () => {
-    it('should handle schemas without parts array', () => {
+  describe('Single-section schema', () => {
+    it('seeds currentSectionId to the only section', () => {
       const schema = createLegacySchema()
       const state = SchemaFormStateManager.init(schema)
 
-      expect(state.currentPartId).toBe('section-1')
+      expect(state.currentSectionId).toBe('section-1')
       expect(state.schema).toBeDefined()
     })
 
-    it('should return section_number=1 for schemas without parts', () => {
+    it('reports section_number=1 and total_sections=1', () => {
       const schema = createLegacySchema()
       const state = SchemaFormStateManager.init(schema)
 
@@ -731,10 +740,10 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(payload.total_sections).toBe(1)
     })
 
-    it('should extract all fields for schemas without parts', () => {
+    it('extracts all fields of the lone section', () => {
       const schema = createLegacySchema()
 
-      const extracted = SchemaFormStateManager.extractPartFields(schema, 'section-1')
+      const extracted = SchemaFormStateManager.extractSectionFields(schema, 'section-1')
 
       expect(extracted.fields.length).toBe(2)
       expect(extracted.sections.length).toBe(1)
@@ -742,11 +751,11 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
   })
 
   // ============================================================================
-  // Test: Edge Cases and Error Handling
+  // Edge cases
   // ============================================================================
 
   describe('Edge Cases', () => {
-    it('should handle empty schema gracefully', () => {
+    it('handles an empty schema gracefully', () => {
       const emptySchema: FormSchema = {
         source: 'pdf',
         form_metadata: {
@@ -760,11 +769,12 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
 
       const state = SchemaFormStateManager.init(emptySchema)
 
-      expect(state.currentPartId).toBe('')
+      // No section to seed -> empty currentSectionId.
+      expect(state.currentSectionId).toBe('')
       expect(state.fieldValues).toEqual({})
     })
 
-    it('should handle field update for non-existent field', () => {
+    it('stores an update for a non-existent field id (no schema gate)', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
@@ -778,42 +788,38 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect((newState.fieldValues['non-existent-field'] as FieldValue).value).toBe('value')
     })
 
-    it('should return null when loading from empty sessionStorage', () => {
-      const loaded = SchemaFormStateManager.load()
-
-      expect(loaded).toBeNull()
+    it('returns null when loading from empty sessionStorage', () => {
+      expect(SchemaFormStateManager.load()).toBeNull()
     })
 
-    it('should handle corrupted sessionStorage data', () => {
+    it('returns null on corrupted sessionStorage data', () => {
       sessionStorageMock['schema_form_state'] = 'invalid json{'
 
-      const loaded = SchemaFormStateManager.load()
-
-      expect(loaded).toBeNull()
+      expect(SchemaFormStateManager.load()).toBeNull()
     })
   })
 
   // ============================================================================
-  // Phase 3: JIT Schema Loading Tests
+  // JIT schema-loading state tracking (Phase 3)
   // ============================================================================
 
   describe('JIT Schema Loading - State Tracking', () => {
     const testSchema = createTestSchema()
 
-    it('should initialize with empty loadedFieldIds Set', () => {
+    it('initializes with an empty loadedFieldIds Set', () => {
       const state = SchemaFormStateManager.init(testSchema)
 
       expect(state.loadedFieldIds).toBeInstanceOf(Set)
       expect(state.loadedFieldIds.size).toBe(0)
     })
 
-    it('should initialize with jitModeEnabled false', () => {
+    it('initializes with jitModeEnabled false', () => {
       const state = SchemaFormStateManager.init(testSchema)
 
       expect(state.jitModeEnabled).toBe(false)
     })
 
-    it('should mark field schema as loaded', () => {
+    it('marks a field schema as loaded', () => {
       let state = SchemaFormStateManager.init(testSchema)
 
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
@@ -822,7 +828,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.loadedFieldIds.size).toBe(1)
     })
 
-    it('should track multiple loaded fields', () => {
+    it('tracks multiple loaded fields', () => {
       let state = SchemaFormStateManager.init(testSchema)
 
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
@@ -835,7 +841,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.loadedFieldIds.has('email')).toBe(true)
     })
 
-    it('should not duplicate field IDs in loadedFieldIds', () => {
+    it('does not duplicate field ids in loadedFieldIds', () => {
       let state = SchemaFormStateManager.init(testSchema)
 
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
@@ -845,7 +851,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.loadedFieldIds.size).toBe(1)
     })
 
-    it('should check if field schema is loaded', () => {
+    it('checks whether a field schema is loaded', () => {
       let state = SchemaFormStateManager.init(testSchema)
 
       expect(SchemaFormStateManager.isFieldSchemaLoaded(state, 'firstName')).toBe(false)
@@ -856,7 +862,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(SchemaFormStateManager.isFieldSchemaLoaded(state, 'lastName')).toBe(false)
     })
 
-    it('should enable JIT mode', () => {
+    it('enables JIT mode', () => {
       let state = SchemaFormStateManager.init(testSchema)
 
       state = SchemaFormStateManager.setJitMode(state, true)
@@ -864,7 +870,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.jitModeEnabled).toBe(true)
     })
 
-    it('should disable JIT mode', () => {
+    it('disables JIT mode', () => {
       let state = SchemaFormStateManager.init(testSchema)
       state = SchemaFormStateManager.setJitMode(state, true)
 
@@ -873,7 +879,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.jitModeEnabled).toBe(false)
     })
 
-    it('should clear loaded field IDs', () => {
+    it('clears loaded field ids', () => {
       let state = SchemaFormStateManager.init(testSchema)
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
@@ -883,7 +889,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(state.loadedFieldIds.size).toBe(0)
     })
 
-    it('should serialize loadedFieldIds to array for storage', () => {
+    it('serializes loadedFieldIds to an array for storage', () => {
       let state = SchemaFormStateManager.init(testSchema)
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
@@ -896,7 +902,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(stored.loadedFieldIds).toContain('lastName')
     })
 
-    it('should deserialize loadedFieldIds array to Set on load', () => {
+    it('deserializes a loadedFieldIds array back to a Set on load', () => {
       let state = SchemaFormStateManager.init(testSchema)
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'firstName')
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'lastName')
@@ -911,12 +917,12 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(loaded!.loadedFieldIds.has('lastName')).toBe(true)
     })
 
-    it('should handle old state without loadedFieldIds', () => {
-      // Simulate old state saved before JIT feature
+    it('initializes JIT fields when loading pre-JIT state', () => {
+      // Old state saved before the JIT feature, keyed on the legacy part fields.
       const oldState = {
         schema: testSchema,
         fieldValues: {},
-        currentPartId: 'part-1',
+        currentPartId: 'section-1a',
         completedParts: [],
         validationErrors: {},
         lastUpdated: Date.now()
@@ -931,7 +937,7 @@ describe('SchemaFormStateManager - Phase 1 WebSocket Integration', () => {
       expect(loaded!.jitModeEnabled).toBe(false)
     })
 
-    it('should preserve loadedFieldIds across save/load cycles', () => {
+    it('preserves loadedFieldIds + jitModeEnabled across save/load', () => {
       let state = SchemaFormStateManager.init(testSchema)
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'field1')
       state = SchemaFormStateManager.markFieldSchemaLoaded(state, 'field2')
