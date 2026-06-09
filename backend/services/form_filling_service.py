@@ -213,6 +213,11 @@ class FormFillingService:
         if self._audio_handler:
             await self._audio_handler.send_activity_start()
 
+    async def send_activity_end(self):
+        """Send activity_end signal. Delegates to AudioHandler."""
+        if self._audio_handler:
+            await self._audio_handler.send_activity_end()
+
     async def send_disclaimer_message(self, spoken_language: str, disclaimer_text: str):
         """
         Send disclaimer initiating message to Gemini.
