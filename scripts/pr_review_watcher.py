@@ -470,7 +470,10 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, 
     # caller still flips to COMMENTS on a CHANGES_REQUESTED state or any inline
     # finding below, so a genuine verdict is never lost.
     body = (review.get("body") or "").strip()
-    if body and _has_change_ask(body) and not _is_approval_comment(body, profile):
+    # Footer-robust change-ask: strips the boilerplate footer but still catches an
+    # ask hidden inside a non-boilerplate <details> (bd polyglot-pdf-pjd1 +
+    # fresh-eyes PR #134); _is_approval_comment applies the same guards internally.
+    if body and _body_has_change_ask(body) and not _is_approval_comment(body, profile):
         findings.append("[review:{}] {}".format(review.get("state", "?"), body))
 
     # Surface 1: inline review comments, matched to THIS review by id.
@@ -506,11 +509,15 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, 
         login = (c.get("user") or {}).get("login", "")
         created = c.get("created_at", "")
         body = (c.get("body") or "").strip()
+        # Footer-robust change-ask (bd polyglot-pdf-pjd1 + fresh-eyes PR #134): the
+        # auto-appended "<details> About Codex" footer ("If Codex has
+        # suggestions...") must not be miscounted as a finding, but an ask hidden
+        # inside a non-boilerplate <details> must still be caught.
         if (
             _is_reviewer(login, profile)
             and _after(created, floor)
             and not _is_approval_comment(body, profile)
-            and _has_change_ask(body)
+            and _body_has_change_ask(body)
         ):
             findings.append("[issue-comment] {}".format(body))
 
@@ -650,6 +657,22 @@ def _is_exact_lgtm(body: str) -> bool:
     return stripped.lower() == "lgtm"
 
 
+def _has_leading_lgtm(body: str) -> bool:
+    """True if the FIRST non-empty line is the LGTM token (allowing a summary to
+    follow). AGENTS.md instructs Codex to LEAD its clean summary with `LGTM` so the
+    verdict is deterministic even alongside a human-readable summary and the
+    auto-appended <details> footer (bd polyglot-pdf-pjd1). Unlike _is_exact_lgtm
+    (whole-body == LGTM), this only checks the lead line; the CALLER still gates it
+    on the absence of a change-ask in the rest of the body, so `LGTM, but fix X`
+    cannot ride to CLEAN. Tolerates the same markdown wrappers as _is_exact_lgtm."""
+    for line in (body or "").splitlines():
+        if not line.strip():
+            continue  # skip leading blank lines
+        lead = line.strip().strip("`*_>#\"' \t\r\n.!").strip()
+        return lead.lower() == "lgtm"
+    return False
+
+
 def _has_change_ask(body: str) -> bool:
     """True if the comment asks for any change (so it must stay COMMENTS)."""
     return any(sig in (body or "").lower() for sig in _CHANGE_ASK_SIGNALS)
@@ -687,8 +710,25 @@ def _is_approval_shaped(body: str) -> bool:
 
 
 def _is_approval_comment(body: str, profile: ReviewerProfile) -> bool:
+    # FALSE-CLEAN guard FIRST (fresh-eyes PR #134): if a NON-boilerplate <details>
+    # block carries a real change-ask, this is never an approval -- even an exact
+    # LGTM lead line cannot override a "please fix X" hidden in a collapsible
+    # section. Checked on the RAW body, before the footer strip removes the block.
+    if _details_blocks_have_change_ask(body):
+        return False
+    # Strip the auto-appended <details> footer so it can neither defeat the
+    # approval-SHAPE gate (it is long + multi-paragraph) nor leak a change-ask word
+    # into the sentinel/shape checks below (bd polyglot-pdf-pjd1). The verdict prose
+    # the reviewer actually wrote survives.
+    body = _strip_details_footer(body)
     # Fast path: the exact canonical signal is always an approval, no heuristics.
     if _is_exact_lgtm(body):
+        return True
+    # Leading-LGTM: AGENTS.md instructs Codex to begin a clean summary with the
+    # `LGTM` token so the verdict stays deterministic even with a summary line and
+    # the auto-appended footer. Honor it ONLY when the rest of the body carries no
+    # change-ask, so `LGTM, but please fix X` can't ride to CLEAN (bd pjd1).
+    if _has_leading_lgtm(body) and not _has_change_ask(body):
         return True
     lo = (body or "").lower()
     # The reviewer's own clean sentinels (e.g. Codex's "didn't find any major
@@ -788,6 +828,82 @@ def _strip_quotes(body: str) -> str:
     )
 
 
+# A <details>...</details> block, non-greedy, across newlines, case-insensitive.
+# GitHub apps append a collapsible boilerplate footer in this shape.
+_DETAILS_BLOCK_RE = re.compile(r"<details\b.*?</details>", re.IGNORECASE | re.DOTALL)
+# A residual standalone <details ...> or </details> tag. A NESTED block's
+# non-greedy match leaves the outer close tag behind; this sweeps any leftover
+# open/close tag so no dangling markup reaches the prose heuristics (PR #134).
+_DETAILS_TAG_RE = re.compile(r"</?details\b[^>]*>", re.IGNORECASE)
+
+
+def _strip_details_footer(body: str) -> str:
+    """Drop <details>...</details> blocks from a comment body before prose analysis.
+
+    Codex's clean re-review comment carries an auto-appended "<details> About
+    Codex in GitHub </details>" footer (NOT something the reviewer agent controls).
+    That footer broke clean detection two ways (bd polyglot-pdf-pjd1, observed live
+    on PR #133 round 3): it is multi-paragraph and >200 chars, so it defeated the
+    approval-SHAPE gate and the bot's "didn't find any major issues" clean sentinel
+    never rode to CLEAN; AND its prose ("If Codex has suggestions...") contains a
+    change-ask trigger word, so it tripped _has_change_ask and the genuinely-clean
+    round read as COMMENTS. The footer is boilerplate, never the verdict, so strip
+    it before any prose heuristic -- mirroring _strip_quotes. The full body is still
+    shown in the emitted detail for the human reader. Reviewer-agnostic and cheap.
+
+    Applied repeatedly until stable so a NESTED <details> (whose non-greedy match
+    stops at the first </details>, leaving the outer close tag behind) is fully
+    cleared rather than leaking a dangling tag (fresh-eyes PR #134). A body with no
+    block converges on the first pass.
+    """
+    prev = body or ""
+    for _ in range(8):  # bounded: real footers are flat; 8 covers any sane nesting
+        stripped = _DETAILS_BLOCK_RE.sub("", prev)
+        if stripped == prev:
+            break
+        prev = stripped
+    # Sweep any residual standalone <details>/</details> tag a nested block left
+    # behind, so no dangling markup reaches the prose heuristics.
+    return _DETAILS_TAG_RE.sub("", prev)
+
+
+def _details_blocks_have_change_ask(body: str) -> bool:
+    """True if ANY <details> block in the body itself contains a change-ask.
+
+    FALSE-CLEAN guard (fresh-eyes PR #134, the cardinal-sin direction): the footer
+    strip removes <details> blocks before the change-ask gate, so a reviewer that
+    put a real "please fix X" INSIDE a collapsible <details> would have it silently
+    stripped and the round would read CLEAN. The auto-appended Codex footer is
+    boilerplate (no genuine ask), but we must never assume a <details> is benign:
+    if the block's own text trips _has_change_ask, treat it as a finding. The Codex
+    footer's "If Codex has suggestions..." DOES contain "suggest" -- but that is the
+    one known-boilerplate phrasing, so we exclude a block that is ONLY the Codex
+    "About Codex" footer (identified by its stable marker) from this check.
+    """
+    for m in _DETAILS_BLOCK_RE.finditer(body or ""):
+        block = m.group(0)
+        # The Codex "About Codex in GitHub" boilerplate footer is the one block we
+        # KNOW carries no verdict -- its "suggestions" mention is template text, not
+        # an ask. Identify it by a stable marker and skip it; any OTHER <details>
+        # whose text trips the change-ask gate is treated as a real finding.
+        if "about codex" in block.lower():
+            continue
+        if _has_change_ask(block):
+            return True
+    return False
+
+
+def _body_has_change_ask(body: str) -> bool:
+    """Change-ask detection that is robust to the <details> footer in BOTH
+    directions (bd polyglot-pdf-pjd1 + fresh-eyes PR #134): the boilerplate footer
+    must not be COUNTED as a change-ask (strip it, then check), but a real ask
+    HIDDEN inside a non-boilerplate <details> block must still be caught (the
+    stripped body wouldn't show it). Use this -- not bare _has_change_ask -- at the
+    finding-DETECTION sites so neither failure mode slips through.
+    """
+    return _has_change_ask(_strip_details_footer(body)) or _details_blocks_have_change_ask(body)
+
+
 def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
     """Classify a round whose verdict arrives as a bot ISSUE COMMENT (no review).
 
@@ -833,10 +949,13 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
     if latest is None:
         return None
     body = (latest.get("body") or "").strip()
-    # Analyze prose on the quote-stripped body so an echoed trigger ("> @codex
-    # review") can't trip change-ask/approval heuristics. The full body is
-    # still shown in the emitted detail for the human reader.
-    prose = _strip_quotes(body)
+    # Steps 4/5 below analyze the QUOTE-stripped body via the footer-robust helpers
+    # (_is_approval_comment / _body_has_change_ask), which handle the <details>
+    # footer themselves -- so an echoed trigger ("> @codex review") or the
+    # auto-appended "About Codex" footer can't trip the change-ask/approval
+    # heuristics, while an ask hidden inside a non-boilerplate <details> is still
+    # caught (bd polyglot-pdf-x8o; bd polyglot-pdf-pjd1; fresh-eyes PR #134). The
+    # full body is still shown in the emitted detail for the human reader.
 
     # 1. Bot-failed sentinel.
     if body.startswith(profile.error_body_prefix):
@@ -871,8 +990,12 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
         )
 
     # 4. No reaction. An explicit prose approval (exact LGTM / known phrase /
-    # reviewer clean sentinel) is the fallback CLEAN -- also a genuine verdict.
-    if _is_approval_comment(prose, profile):
+    # reviewer clean sentinel) is the fallback CLEAN -- also a genuine verdict. Pass
+    # the QUOTE-stripped body (not the also-footer-stripped `prose`): _is_approval_-
+    # comment strips the footer itself AND runs the <details>-ask guard on what it
+    # receives, so it must see the original <details> blocks to veto a hidden ask
+    # (fresh-eyes PR #134). Quote-stripping first keeps an echoed trigger out.
+    if _is_approval_comment(_strip_quotes(body), profile):
         return _emit(
             "CLEAN",
             "{} approved via issue comment (no inline findings):\n\n{}".format(
@@ -881,10 +1004,12 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
             review_verdict=True,
         )
 
-    # 5. Change-ask prose (quote-stripped) -> COMMENTS. Ungated by design: a real
-    # prose-only "please fix Y" must be caught even when the PR has prior-round
-    # inline comments (gating this on inline-history caused a false-CLEAN).
-    if _has_change_ask(prose):
+    # 5. Change-ask prose -> COMMENTS. Ungated by design: a real prose-only "please
+    # fix Y" must be caught even when the PR has prior-round inline comments (gating
+    # this on inline-history caused a false-CLEAN). Footer-robust + quote-stripped:
+    # catches an ask in the visible prose OR inside a non-boilerplate <details>,
+    # without counting the boilerplate footer (bd pjd1 + fresh-eyes PR #134).
+    if _body_has_change_ask(_strip_quotes(body)):
         return _emit(
             "COMMENTS",
             "{}'s comment prose asks for a change:\n\n{}".format(profile.label, body),
@@ -955,8 +1080,12 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: Revi
         # (Using a plain `or body` here would flip every clean review to COMMENTS
         # whenever the inline fetch hiccups, since the overview body is always
         # present -- the exact false-COMMENTS this redesign removes.)
+        # Footer-robust change-ask here too (fresh-eyes PR #134): the raw body
+        # carries the <details> footer, so a bare _has_change_ask would trip on its
+        # "suggestions" text. _body_has_change_ask strips the boilerplate but still
+        # catches an ask hidden in a non-boilerplate <details>.
         body_is_finding = (
-            bool(body) and _has_change_ask(body) and not _is_approval_comment(body, profile)
+            bool(body) and _body_has_change_ask(body) and not _is_approval_comment(body, profile)
         )
         if state in NON_CLEAN_STATES or body_is_finding:
             return _emit(

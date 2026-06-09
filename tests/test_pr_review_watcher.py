@@ -391,6 +391,134 @@ def test_strip_quotes_removes_blockquote_lines():
     assert cw._strip_quotes("no quotes at all") == "no quotes at all"
 
 
+# The exact body Codex posts for a clean re-review (live, PR #133 round 3): a
+# one-line verdict followed by the boilerplate "<details> About Codex in GitHub"
+# footer the GitHub app auto-appends. The footer is multi-paragraph + >200 chars
+# AND contains "suggest" ("If Codex has suggestions..."), so before the
+# footer-strip it (a) failed _is_approval_shaped -> the "no major issues" sentinel
+# never reached CLEAN, and (b) tripped _has_change_ask -> false COMMENTS. (bd pjd1)
+_CODEX_CLEAN_BODY_WITH_FOOTER = (
+    "Codex Review: Didn't find any major issues. Hooray!\n\n"
+    "<details> <summary>About Codex in GitHub</summary>\n"
+    "<br/>\n\n"
+    "[Your team has set up Codex to review pull requests in this repo](https://example).\n"
+    "Reviews are triggered when you\n"
+    "- Open a pull request for review\n"
+    "- Comment \"@codex review\".\n\n"
+    "If Codex has suggestions, it will comment; otherwise it will react with a thumbs up.\n\n"
+    "Codex can also answer questions or update the PR. Try commenting \"@codex address that feedback\".\n"
+    "</details>"
+)
+
+
+def test_strip_details_footer_removes_boilerplate():
+    # The footer block is dropped; the verdict line survives.
+    stripped = cw._strip_details_footer(_CODEX_CLEAN_BODY_WITH_FOOTER)
+    assert "Didn't find any major issues" in stripped
+    assert "<details>" not in stripped
+    assert "suggestions" not in stripped  # the "suggest" change-ask trigger is gone
+    assert "</details>" not in stripped
+    # A body with no footer is returned unchanged (modulo trailing whitespace).
+    assert cw._strip_details_footer("plain body, no footer").strip() == "plain body, no footer"
+    # Multiple footers / a footer mid-body are both removed.
+    multi = "verdict\n<details>a</details>\nmore\n<details>b</details>"
+    out = cw._strip_details_footer(multi)
+    assert "<details>" not in out and "verdict" in out and "more" in out
+
+
+def test_codex_clean_with_details_footer_classifies_clean():
+    # The headline regression (bd pjd1): the real PR #133 round-3 clean comment,
+    # footer and all, must be recognized as an approval -- NOT misread as a
+    # change-ask because the footer mentions "suggestions".
+    assert cw._is_approval_comment(_CODEX_CLEAN_BODY_WITH_FOOTER, cw.CODEX_PROFILE)
+    # And it must NOT trip the change-ask gate once the footer is stripped.
+    assert not cw._has_change_ask(cw._strip_details_footer(_CODEX_CLEAN_BODY_WITH_FOOTER))
+
+
+def test_details_footer_strip_does_not_hide_a_real_change_ask():
+    # FALSE-CLEAN guard: a genuine change-ask in the VISIBLE prose (outside any
+    # footer) is still caught -- the strip only removes <details> blocks.
+    body = (
+        "Codex Review: One issue. Please fix the null check at line 42 before merge.\n\n"
+        "<details> <summary>About Codex</summary>\nboilerplate\n</details>"
+    )
+    assert cw._has_change_ask(cw._strip_details_footer(body))
+    assert not cw._is_approval_comment(body, cw.CODEX_PROFILE)
+
+
+def test_leading_lgtm_is_approval_even_with_summary_and_footer():
+    # AGENTS.md instructs Codex to LEAD a clean summary with `LGTM` (bd pjd1). A
+    # leading LGTM followed by a human-readable summary + the footer must be an
+    # approval -- the whole-body _is_exact_lgtm would reject this (summary present),
+    # so _has_leading_lgtm is what makes the instructed token work.
+    body = (
+        "LGTM\n\nRe-reviewed the round-2 fixes; all addressed.\n\n"
+        "<details> <summary>About Codex</summary>\nIf Codex has suggestions...\n</details>"
+    )
+    assert cw._has_leading_lgtm(body)
+    assert cw._is_approval_comment(body, cw.CODEX_PROFILE)
+    # Markdown-wrapped lead line still counts (**LGTM**, `LGTM`, "LGTM.").
+    assert cw._has_leading_lgtm("**LGTM**\n\nnice work")
+    assert cw._has_leading_lgtm("`LGTM`")
+    # Not a lead-LGTM: the token is not first, or it's a different word.
+    assert not cw._has_leading_lgtm("Looks good. LGTM follows below.\n\nLGTM")
+    assert not cw._has_leading_lgtm("almost LGTM")
+
+
+def test_leading_lgtm_with_change_ask_is_not_clean():
+    # FALSE-CLEAN guard: `LGTM` leading a comment that ALSO asks for a change must
+    # NOT be an approval -- the leading-LGTM path is gated on no change-ask.
+    body = "LGTM\n\nbut please fix the off-by-one at line 42 before merge."
+    assert cw._has_leading_lgtm(body)          # the lead line IS lgtm
+    assert not cw._is_approval_comment(body, cw.CODEX_PROFILE)  # ...but the ask vetoes it
+
+
+def test_nested_details_fully_stripped():
+    # fresh-eyes PR #134: a NESTED <details> must not leak a dangling </details>.
+    nested = "verdict\n<details outer><details inner>x</details>rest</details>\nmore"
+    out = cw._strip_details_footer(nested)
+    assert "<details>" not in out and "</details>" not in out
+    assert "verdict" in out and "more" in out
+
+
+def test_change_ask_hidden_in_details_is_not_clean():
+    # CARDINAL-SIN GUARD (fresh-eyes PR #134): a real change-ask placed INSIDE a
+    # non-boilerplate <details> block must NOT be stripped to a false CLEAN. Even
+    # an LGTM lead line cannot override it.
+    body = (
+        "LGTM\n\n"
+        "<details> <summary>Issue 1</summary>\n"
+        "Please fix the null check at line 42 before merge.\n"
+        "</details>"
+    )
+    assert cw._details_blocks_have_change_ask(body)
+    assert cw._body_has_change_ask(body)
+    assert not cw._is_approval_comment(body, cw.CODEX_PROFILE)
+
+
+def test_about_codex_boilerplate_details_is_not_a_change_ask():
+    # The complement: the KNOWN "About Codex" footer (which mentions "suggestions")
+    # is boilerplate, NOT a hidden ask -- it must not be counted as a finding.
+    assert not cw._details_blocks_have_change_ask(_CODEX_CLEAN_BODY_WITH_FOOTER)
+    assert not cw._body_has_change_ask(_CODEX_CLEAN_BODY_WITH_FOOTER)
+
+
+def test_codex_leading_lgtm_sets_review_verdict_for_close_on_clean(capsys, monkeypatch):
+    # fresh-eyes PR #134: the leading-LGTM CLEAN path must set the review_verdict
+    # flag so --close-on-clean can fire (the other CLEAN paths have this pinned;
+    # the new LGTM path needs its own pin against a future refactor).
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-09T23:50:00Z",
+        "body": "LGTM\n\nRe-reviewed; all round-2 fixes addressed.",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
 def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
     # If a NEW actionable inline finding exists this round, it's COMMENTS even when
     # the issue-comment prose reads like an approval -- inline leads.
@@ -795,6 +923,23 @@ def test_codex_clean_sentinel_is_clean(capsys, monkeypatch):
         "user": {"login": _CODEX_LOGIN},
         "created_at": "2026-06-01T12:00:00Z",
         "body": "Codex Review: Didn't find any major issues. \U0001f44d",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_codex_clean_with_footer_and_no_reaction_is_clean_end_to_end(capsys, monkeypatch):
+    # The PR #133 round-3 regression END TO END (bd polyglot-pdf-pjd1): Codex's
+    # clean comment carries the auto-appended <details> footer AND has NO thumbs-up
+    # reaction (reactions absent). Pre-fix the footer defeated the shape gate and
+    # tripped change-ask, so watch() emitted COMMENTS and the bead had to be closed
+    # by hand. It must now classify CLEAN through the real watch() path.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-09T23:21:48Z",
+        "body": _CODEX_CLEAN_BODY_WITH_FOOTER,  # no "reactions" key -> no thumbs-up
     }]
     _patch_api(monkeypatch, issue=issue)
     rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
