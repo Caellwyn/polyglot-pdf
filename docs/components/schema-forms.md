@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -118,4 +118,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code.*
