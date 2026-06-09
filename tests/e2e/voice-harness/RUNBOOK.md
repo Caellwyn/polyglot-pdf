@@ -160,11 +160,14 @@ Real Gemini is non-deterministic; 2.5 and 3.1 differ in tool-call reliability
 (see bd `gemini-3p1-skips-update-form-fields`). Do NOT treat one run as ground
 truth. `runCycle` already classifies:
 
-- **PASS** -- field filled with normalized `digits === '1234567'` AND
-  (confirmed OR advanced off the field).
-- **FAIL** -- field filled but with the WRONG value (`reason: wrong value`).
-- **FLAKY** -- field never filled, or never confirmed/advanced within the timeout
-  (`reason: field never filled` / `never confirmed or advanced`). The model
+- **PASS** -- field filled with normalized `digits === '1234567'` AND the field is
+  **confirmed**. Confirmation is the invariant under test, so PASS requires it;
+  advance is corroboration, not a substitute.
+- **FAIL** -- field filled with the WRONG value (`reason: wrong value`), OR the
+  field advanced WITHOUT being confirmed (`reason: advanced without confirming` --
+  the confirmation step was skipped).
+- **FLAKY** -- field never filled, or neither confirmed nor advanced within the
+  timeout (`reason: field never filled` / `never confirmed or advanced`). The model
   behaved unexpectedly but not provably wrong.
 
 **Retry:** rerun the WHOLE cycle (reload to a clean state, redo steps 5-6) up to 3

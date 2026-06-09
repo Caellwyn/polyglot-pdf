@@ -321,11 +321,19 @@
     report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut });
 
     await injectUtterance(yesBuf);
+    // waitForConfirmOrAdvance stops waiting on EITHER signal, but the cycle's
+    // invariant is CONFIRMATION -- every filled field must be verified before moving
+    // on. So PASS REQUIRES `confirmed`; advance is only corroboration. A field that
+    // advanced WITHOUT being confirmed is a FAIL (the confirmation step was skipped),
+    // not a PASS -- Codex review, PR #123.
     var done = await waitForConfirmOrAdvance(fieldId, { timeoutMs: turnTimeoutMs });
     var endSnap = readField(fieldId);
-    report.steps.push({ step: 'confirm-advance', met: done.met, elapsedMs: done.elapsedMs, confirmed: (endSnap.domConfirmed || endSnap.ssConfirmed), advanced: done.value && done.value._advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
+    var confirmed = endSnap.domConfirmed || endSnap.ssConfirmed;
+    var advanced = !!(done.value && done.value._advanced);
+    report.steps.push({ step: 'confirm-advance', met: done.met, elapsedMs: done.elapsedMs, confirmed: confirmed, advanced: advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
 
     if (!done.met) { report.verdict = 'FLAKY'; report.reason = 'never confirmed or advanced'; return report; }
+    if (!confirmed) { report.verdict = 'FAIL'; report.reason = 'advanced without confirming the field (confirmation invariant violated)'; return report; }
     report.verdict = 'PASS';
     return report;
   }
