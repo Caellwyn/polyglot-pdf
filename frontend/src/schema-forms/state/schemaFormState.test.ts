@@ -159,6 +159,18 @@ describe('SchemaFormStateManager', () => {
         type: 'textarea',
         section_id: 'section-3a',
         validation: { required: false }
+      },
+      {
+        // An a_number field: the ONE preset normalizeFieldValue actually
+        // transforms (strips the "A" prefix + non-digits). Used to pin that
+        // updateField normalizes the stored value rather than passing it through
+        // raw -- a plain text field would make that assertion vacuous.
+        id: 'field-anum',
+        name: 'Alien Registration Number',
+        spoken_name: 'a number',
+        type: 'text',
+        section_id: 'section-3a',
+        validation: { required: false, format_preset: 'a_number' }
       }
     ]
   })
@@ -251,7 +263,7 @@ describe('SchemaFormStateManager', () => {
       expect(fieldValue.value).toBe('Smith')
     })
 
-    it('should accept FieldValue objects directly', () => {
+    it('should accept FieldValue objects directly (metadata preserved)', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
 
@@ -267,8 +279,30 @@ describe('SchemaFormStateManager', () => {
         customFieldValue
       )
 
+      // field-1 is a plain text field, so normalizeFieldValue is a no-op on the
+      // value and the wrapper's metadata (confirmed/lastModified) passes through.
       const fieldValue = updatedState.fieldValues['field-1'] as FieldValue
       expect(fieldValue).toEqual(customFieldValue)
+    })
+
+    it('normalizes the .value of a FieldValue object through the field preset', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      // field-anum has format_preset 'a_number': normalizeFieldValue strips the
+      // leading "A" and any non-digits. The wrapper goes in raw; the STORED value
+      // is normalized -- this pins that updateField does NOT pass .value through
+      // untouched (the assertion the plain-text case above can't make).
+      const updatedState = SchemaFormStateManager.updateField(
+        state,
+        'field-anum',
+        { value: 'A 123-456-789', confirmed: true } as FieldValue
+      )
+
+      const fieldValue = updatedState.fieldValues['field-anum'] as FieldValue
+      expect(fieldValue.value).toBe('123456789')
+      // metadata on the wrapper is still preserved alongside the normalized value
+      expect(fieldValue.confirmed).toBe(true)
     })
 
     it('should handle null and undefined values', () => {
@@ -631,6 +665,24 @@ describe('SchemaFormStateManager', () => {
       expect(newState.currentSectionId).toBe('section-1a')
       expect(newState.completedSections.has('section-1a')).toBe(false)
     })
+
+    it('keeps an already-completed section completed on same-section switch', () => {
+      const schema = createTestSchema()
+      // section-1a is current AND already in completedSections.
+      const state = {
+        ...SchemaFormStateManager.init(schema),
+        currentSectionId: 'section-1a',
+        completedSections: new Set(['section-1a'])
+      }
+
+      const newState = SchemaFormStateManager.switchToSection(state, 'section-1a')
+
+      // Same-section switch reuses the existing set; the prior completion stands
+      // and nothing new is added.
+      expect(newState.currentSectionId).toBe('section-1a')
+      expect(newState.completedSections.has('section-1a')).toBe(true)
+      expect(newState.completedSections.size).toBe(1)
+    })
   })
 
   // ============================================================================
@@ -935,6 +987,9 @@ describe('SchemaFormStateManager', () => {
       expect(loaded!.loadedFieldIds).toBeInstanceOf(Set)
       expect(loaded!.loadedFieldIds.size).toBe(0)
       expect(loaded!.jitModeEnabled).toBe(false)
+      // The legacy part keys in this old state are also migrated forward.
+      expect(loaded!.currentSectionId).toBe('section-1a')
+      expect((loaded as any).currentPartId).toBeUndefined()
     })
 
     it('preserves loadedFieldIds + jitModeEnabled across save/load', () => {
