@@ -473,6 +473,52 @@ def test_leading_lgtm_with_change_ask_is_not_clean():
     assert not cw._is_approval_comment(body, cw.CODEX_PROFILE)  # ...but the ask vetoes it
 
 
+def test_nested_details_fully_stripped():
+    # fresh-eyes PR #134: a NESTED <details> must not leak a dangling </details>.
+    nested = "verdict\n<details outer><details inner>x</details>rest</details>\nmore"
+    out = cw._strip_details_footer(nested)
+    assert "<details>" not in out and "</details>" not in out
+    assert "verdict" in out and "more" in out
+
+
+def test_change_ask_hidden_in_details_is_not_clean():
+    # CARDINAL-SIN GUARD (fresh-eyes PR #134): a real change-ask placed INSIDE a
+    # non-boilerplate <details> block must NOT be stripped to a false CLEAN. Even
+    # an LGTM lead line cannot override it.
+    body = (
+        "LGTM\n\n"
+        "<details> <summary>Issue 1</summary>\n"
+        "Please fix the null check at line 42 before merge.\n"
+        "</details>"
+    )
+    assert cw._details_blocks_have_change_ask(body)
+    assert cw._body_has_change_ask(body)
+    assert not cw._is_approval_comment(body, cw.CODEX_PROFILE)
+
+
+def test_about_codex_boilerplate_details_is_not_a_change_ask():
+    # The complement: the KNOWN "About Codex" footer (which mentions "suggestions")
+    # is boilerplate, NOT a hidden ask -- it must not be counted as a finding.
+    assert not cw._details_blocks_have_change_ask(_CODEX_CLEAN_BODY_WITH_FOOTER)
+    assert not cw._body_has_change_ask(_CODEX_CLEAN_BODY_WITH_FOOTER)
+
+
+def test_codex_leading_lgtm_sets_review_verdict_for_close_on_clean(capsys, monkeypatch):
+    # fresh-eyes PR #134: the leading-LGTM CLEAN path must set the review_verdict
+    # flag so --close-on-clean can fire (the other CLEAN paths have this pinned;
+    # the new LGTM path needs its own pin against a future refactor).
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-09T23:50:00Z",
+        "body": "LGTM\n\nRe-reviewed; all round-2 fixes addressed.",
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+    assert cw._LAST_CLEAN_WAS_REVIEW is True
+
+
 def test_new_inline_finding_beats_acknowledgment_prose(capsys, monkeypatch):
     # If a NEW actionable inline finding exists this round, it's COMMENTS even when
     # the issue-comment prose reads like an approval -- inline leads.
