@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
 
-*Last updated: 2026-06-08. See [../journal/entries/2026-06-08-bd-uov.1-green-test-baseline.md](../journal/entries/2026-06-08-bd-uov.1-green-test-baseline.md) for closeout details.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md](../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
