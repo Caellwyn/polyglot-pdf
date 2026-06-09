@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch (3.1 tool-call unreliability), and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for the prior AI-Studio/3.1 setup.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch (3.1 tool-call unreliability), and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for the prior AI-Studio/3.1 setup.*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -89,4 +89,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch (3.1 tool-call unreliability), and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for the prior AI-Studio/3.1 setup.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch (3.1 tool-call unreliability), and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md) for the prior AI-Studio/3.1 setup.*

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-06-02*
+*Last updated: 2026-06-09*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
@@ -70,7 +70,7 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 | `backend/config.py` | Model/config selection, including which Gemini model and VAD env are read; imported by ~7 source modules (criteria 1 + 2). |
 | `backend/services/callback_handler.py` | The PII/PHI logging path (field IDs, spoken-name labels) -- the policy surface (criterion 3). |
 | `backend/services/form_kits.py` | The form-kit definitions PDF filling and schema forms both build on (criterion 2 + 3). |
-| `backend/models/` (`tool_models.py`, `websocket_models.py`, `form_models.py`) | Shared schemas / tool declarations crossing the adapter, routes, and client wire (criteria 1 + 2). |
+| `backend/models/form_models.py` | The shared form/field schema crossing the adapter, routes, and client wire (criterion 2); imported by the matcher/validation/field-utils path. (The sibling `tool_models.py` and `websocket_models.py` are currently unused -- `websocket_models.py` is empty and `tool_models.py` has no importers; tool declarations now live in `config.py#TOOL_DECLARATIONS`. They stay `low` until wired up.) |
 
 ### Med
 

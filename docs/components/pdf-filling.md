@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-06-08. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
+*Last updated: 2026-06-09. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -92,4 +92,4 @@ backend = unwrap failed), `field_count=0` (frontend not sending), `filled=0`
 (pdf_field_name mismatch — dump real widget names with a `fitz` one-liner), and a
 curl recipe against `/api/fill-pdf`.
 
-*Last updated: 2026-06-08. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
+*Last updated: 2026-06-09. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*

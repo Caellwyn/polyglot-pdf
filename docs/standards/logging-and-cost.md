@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -94,4 +94,4 @@ beads; this doc is their canonical home (migrated out of
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
 
-*Last updated: 2026-06-01. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*

@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-04. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for the internal-rename closeout; the wire-format renames (token-log + handshake manifest) landed under bd polyglot-pdf-zun / tb7.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for the internal-rename closeout; the wire-format renames (token-log + handshake manifest) landed under bd polyglot-pdf-zun / tb7.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
