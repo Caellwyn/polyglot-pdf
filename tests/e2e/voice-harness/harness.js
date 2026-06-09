@@ -360,12 +360,23 @@
     // PASS REQUIRES a real confirmation: the authoritative sessionStorage `confirmed`
     // flag, which only the confirm_field round-trip sets. We do NOT accept the
     // fill-time DOM decoration (`domConfirmed`), which would false-pass (Codex, PR #123).
-    var done = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
-    var endSnap = readField(fieldId);
-    var advanced = !!(done.value && done.value._advanced);
-    report.steps.push({ step: 'confirm', met: done.met, elapsedMs: done.elapsedMs, ssConfirmed: endSnap.ssConfirmed, domConfirmed: endSnap.domConfirmed, advanced: advanced, lastNextField: (function(){try{return lastNextField();}catch(e){return null;}})() });
+    var confirmW = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
+    var confSnap = readField(fieldId);
+    report.steps.push({ step: 'confirm', met: confirmW.met, elapsedMs: confirmW.elapsedMs, ssConfirmed: confSnap.ssConfirmed, domConfirmed: confSnap.domConfirmed });
+    if (!confirmW.met) { report.verdict = 'FLAKY'; report.reason = 'field never confirmed (sessionStorage confirmed flag never set within timeout)'; return report; }
 
-    if (!done.met) { report.verdict = 'FLAKY'; report.reason = 'field never confirmed (sessionStorage confirmed flag never set within timeout)'; return report; }
+    // PASS also REQUIRES the ADVANCE: the RUNBOOK proves fill -> confirm -> ADVANCE,
+    // so confirmation alone is not enough. A bug where confirm succeeds but
+    // navigation never happens (e.g. the 0ux receive-loop crash after the first
+    // fill) must NOT report a successful cycle (Codex, PR #123). Wait for
+    // lastNextField to move off the field.
+    var advanceW = await waitForCondition(function () {
+      var nf = null; try { nf = lastNextField(); } catch (e) {}
+      return (nf != null && nf !== fieldId) ? nf : false;
+    }, { timeoutMs: turnTimeoutMs });
+    report.steps.push({ step: 'advance', met: advanceW.met, elapsedMs: advanceW.elapsedMs, lastNextField: advanceW.value || (function(){try{return lastNextField();}catch(e){return null;}})() });
+    if (!advanceW.met) { report.verdict = 'FLAKY'; report.reason = 'confirmed but never advanced to the next field (navigation/onNextField never fired)'; return report; }
+
     report.verdict = 'PASS';
     return report;
   }

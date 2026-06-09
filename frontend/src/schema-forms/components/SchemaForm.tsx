@@ -24,6 +24,7 @@ import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
+import { isTestHarnessEnabled } from "../../shared/config";
 
 export interface SchemaFormProps {
   schema: FormSchema;
@@ -118,6 +119,20 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   // Create shared audio stream EARLY (before overlays render)
   useEffect(() => {
     let mounted = true;
+
+    // TEST harness (bd polyglot-pdf-g8w): skip the eager getUserMedia entirely.
+    // The E2E voice harness injects audio via window.__VFF_TEST_INJECT, so it needs
+    // no microphone -- and this mount-time request is the FIRST mic touch, BEFORE
+    // the connection manager + injection hook exist. In a headless/no-permission
+    // browser the prompt can hang (never resolve OR reject), so streamReady would
+    // never flip and the manager/hook would never be created -- the no-mic flow
+    // would hang before reaching connection.ts's guarded startRecording (Codex
+    // review, PR #123). Mark ready immediately with no shared stream.
+    if (isTestHarnessEnabled()) {
+      console.log('[SchemaForm] TEST harness active -- skipping shared mic stream (audio is injected)');
+      setStreamReady(true);
+      return () => { mounted = false; };
+    }
 
     async function initSharedStream() {
       try {

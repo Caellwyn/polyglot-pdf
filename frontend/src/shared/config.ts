@@ -28,20 +28,23 @@ function isLocalhostOrigin(): boolean {
 }
 
 /**
- * TEST-ONLY gate for the E2E voice harness (bd polyglot-pdf-g8w). True only when
- * BOTH the dev override and the explicit harness opt-in are set. Each flag is read
- * from window OR (on a localhost origin only) localStorage so the gate survives a
- * page reload (a preview_eval can only set window.* AFTER boot; localStorage
- * persists across the reload the harness does). NEVER true in production (the
- * localStorage path is localhost-gated) or in normal local dev (both flags must be
- * deliberately set).
+ * TEST-ONLY gate for the E2E voice harness (bd polyglot-pdf-g8w). This gate
+ * controls security-sensitive paths -- the auth-bypass (mock user), the audio
+ * injection hook, and the mic skip -- so it is FULLY LOCALHOST-GATED: it can NEVER
+ * be true off a localhost/127.0.0.1 origin, no matter how a flag was set (window OR
+ * localStorage). Without the origin gate, any script that runs before app init on
+ * the PRODUCTION origin could set both window flags and activate the auth bypass
+ * (Codex review, PR #123). On localhost, it requires BOTH the dev override and the
+ * explicit harness opt-in, each read from window OR localStorage (so the gate
+ * survives the reload the harness does). NEVER true in normal local dev either
+ * (both flags must be deliberately set).
  */
 export function isTestHarnessEnabled(): boolean {
-	const localhost = isLocalhostOrigin()
+	if (!isLocalhostOrigin()) return false
 	const flag = (name: string): boolean => {
 		try {
 			if ((window as any)[name] === true) return true
-			return localhost && window.localStorage.getItem(name) === 'true'
+			return window.localStorage.getItem(name) === 'true'
 		} catch {
 			return false
 		}

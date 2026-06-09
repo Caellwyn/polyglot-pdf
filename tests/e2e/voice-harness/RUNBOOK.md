@@ -166,22 +166,41 @@ truth. `runCycle` already classifies:
 - **FAIL** -- field filled with the WRONG value (`reason: wrong value`), OR the
   field advanced WITHOUT being confirmed (`reason: advanced without confirming` --
   the confirmation step was skipped).
-- **FLAKY** -- field never filled, or neither confirmed nor advanced within the
-  timeout (`reason: field never filled` / `never confirmed or advanced`). The model
-  behaved unexpectedly but not provably wrong.
+- **FLAKY** -- field never filled, confirmed but never advanced, or never
+  confirmed within the timeout (`reason: field never filled` /
+  `field never confirmed` / `confirmed but never advanced`). The model behaved
+  unexpectedly but not provably wrong. (PASS requires fill AND confirm AND advance
+  -- the full fill -> confirm -> advance invariant; confirm-without-advance is the
+  signature of the bd polyglot-pdf-0ux receive-loop crash and is correctly FLAKY,
+  not PASS.)
 
-**Retry:** rerun the WHOLE cycle (reload to a clean state, redo steps 5-6) up to 3
-times. Report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY otherwise -- with the
-per-run breakdown and the model (2.5 vs 3.1). The harness reports the rate, not a
-brittle boolean.
+**Retry -- clear state BEFORE the reload.** `sessionStorage["schema_form_state"]`
+survives a reload, and on the next boot the app RESTORES the old DOM value,
+auto-connects, and `capturePreFilledValues()` sends the stale (already-confirmed)
+value in the WS handshake -- BEFORE `runCycle` can clear it. So a naive "reload and
+redo" can have Gemini start on the NEXT field or with stale context, and is not a
+clean rerun of the first-field cycle. **Before each retry's reload, clear the
+field state explicitly:** `preview`/`javascript_tool`-eval
+`sessionStorage.removeItem('schema_form_state')` (or
+`window.__VFF_HARNESS.clearFieldState(FIELD)` then also clear the rest), THEN
+reload and redo steps 5-6. (`runCycle`'s own `clearFieldState` at cycle start is a
+same-session backstop; it cannot undo a stale value already sent in a prior
+handshake.) Run up to 3 times; report PASS if >= 2/3 pass; FAIL if 0/3; FLAKY
+otherwise -- with the per-run breakdown and the model (2.5 vs 3.1). The harness
+reports the rate, not a brittle boolean.
 
 ## Notes / gotchas
 
-- **Gate on OUTCOMES, not audio.** `runCycle` uses `waitForFieldValue` /
-  `waitForConfirmOrAdvance` (concrete state changes). `waitForGeminiQuestion`
-  (`vffOnAudioPlaybackEnd`) is PACING-only and routinely times out in an automated
-  tab -- never gate correctness on it. (`vffOnTurnComplete` was removed from this
-  surface and is not used.)
+- **Gate on OUTCOMES, not audio.** `runCycle` uses `waitForFieldValue` (fill) and
+  `waitForConfirmed` (the authoritative sessionStorage `confirmed` flag), plus an
+  advance wait. `waitForGeminiQuestion` (`vffOnAudioPlaybackEnd`) is PACING-only and
+  routinely times out in an automated tab -- never gate correctness on it.
+  (`vffOnTurnComplete` was removed from this surface and is not used.)
+- **`domConfirmed` is NOT a confirm signal.** `fieldManager.applyUpdates` sets
+  `data-vff-confirmed="true"` at FILL time, so it is true before any "yes" is
+  processed. The real confirm signal is `ssConfirmed` (sessionStorage), set only by
+  the `confirm_field` round-trip. `readField` returns both; `runCycle` gates on
+  `ssConfirmed`.
 - **Inject only after the field/connection settles.** Injecting during a section
   switch can be dropped by the backend's `drop_audio` guard; the disclaimer-agree
   -> first-question pacing wait covers this.
