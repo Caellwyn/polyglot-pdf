@@ -1,8 +1,8 @@
 # Testing
 
-**Tracks:** backend/pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json
+**Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
 
-*Last updated: 2026-06-05. See [../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md](../journal/entries/2026-06-05-bd-ajx-vite6-vitest3-security-upgrade.md) for closeout details.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md](../journal/entries/2026-06-09-bd-uov.1-green-test-baseline.md) for closeout details.*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -15,17 +15,39 @@ For the PII/PHI rules the logging tests enforce, see
 
 ## Backend (pytest)
 
-Config is `backend/pytest.ini` (the only pytest config — no `pyproject.toml` /
-`setup.cfg` / `tox.ini`):
+Config is a single **root `pytest.ini`** (no `pyproject.toml` / `setup.cfg` /
+`tox.ini`). It lives at the repo root — not under `backend/` — so a bare `pytest`
+invoked from the root (or CI) discovers it; a backend-only config was previously
+missed on a root invocation, which made pytest scan dev probe scripts and error on
+collection:
 
 ```ini
 [pytest]
 pythonpath = .
-testpaths = backend/tests
-markers = external: marks tests requiring real Gemini access
+testpaths =
+    backend/tests
+    tests
+addopts = --import-mode=importlib
+norecursedirs = scripts .venv node_modules .git build dist .claude
+markers =
+    external: marks tests requiring real Gemini access
 ```
 
-Tests are organized **by directory**, not by marker:
+`--import-mode=importlib` lets duplicate test basenames coexist without
+`__init__.py` packaging (e.g. a `test_section_switching.py` under both `scripts/`
+and `backend/tests/unit/`). `norecursedirs` plus the scoped `testpaths` keep the
+**probe scripts** out: files named `test_*.py` under `scripts/` and the two
+`backend/test_*.py` modules are standalone `python <file>` scripts (`__main__` /
+required CLI args), **not** pytest suites — do not let them get collected.
+
+There are **two collected suites** under `testpaths`:
+
+- `backend/tests` — the product backend suite (below).
+- `tests` (repo root) — the **harness-tooling** suite (closeout, `bd_safe`,
+  `next_bead`, doc-freshness, `pr_review_watcher`, pricing). It runs from the repo
+  root on defaults and is now part of the same `pytest` run.
+
+The backend suite is organized **by directory**, not by marker:
 
 | Dir | What | Notes |
 |-----|------|-------|
@@ -77,9 +99,11 @@ PYTHONPATH="$PWD" "$PY" -m pytest backend/tests/ -m "not external" -q  # skip li
 `frontend/package.json` script: **`"test": "vitest --environment jsdom"`** (run
 `npm run test` from `frontend/`; a `pretest` hook runs `form-kits:prepare` first).
 Stack: `vitest ^3.2.6` (on `vite ^6.4.3`), `@testing-library/react`,
-`@testing-library/user-event`, `jsdom`. There is **no separate `vitest.config.ts`**
-and **no `test` block in `vite.config.ts`** — vitest runs on defaults plus the
-`--environment jsdom` CLI flag.
+`@testing-library/user-event`, `jsdom`. There is **no separate `vitest.config.ts`**;
+the test config is a `test` block in **`frontend/vite.config.ts`** that sets
+`environment: 'jsdom'`, so a bare `vitest run` (CI, no CLI flag) uses jsdom — tests
+touch `sessionStorage`/DOM and fail under vitest's default node environment. The
+`--environment jsdom` flag on the npm script is now redundant but harmless.
 
 Test files are colocated next to the code as `*.test.ts(x)` (the `.spec.` suffix is
 not used). **Five are active** and run: schema-form utilities (`fieldValue`,
