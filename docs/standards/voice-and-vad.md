@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-08. See [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the prior PTT-toggle native-VAD work, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the prior PTT-toggle native-VAD work, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -54,11 +54,16 @@ The return value is placed at
 The frontend VAD (`useDemoVAD.ts`) detects speech boundaries and fires
 `connection.ts` `onVADSpeechStart` / `onVADSpeechEnd`, which relay
 `vad_activity_start` / `vad_activity_end` over the WebSocket; the backend in turn
-calls `LiveAIGemini.send_activity_start()` /
-`send_activity_end()` →
-`session.send_realtime_input(activity_start=types.ActivityStart())` (and
-`ActivityEnd()`). **Ordering matters:** `activity_start` is sent *before* the audio
-chunks for that utterance; `activity_end` flushes Gemini's buffer after.
+calls `LiveAIGemini.send_activity_start()` / `send_activity_end()`. The signal
+`send_activity_end()` emits is **mode-dependent**: in **native** mode (the default,
+`DISABLE_GEMINI_VAD=False`) it sends `session.send_realtime_input(audio_stream_end=True)`
+— the realtime signal compatible with automatic VAD; sending a raw `ActivityEnd()`
+there conflicts with Gemini's own VAD and can leave the turn open (bd
+`polyglot-pdf-6vo`). Only in **manual** mode does it send
+`activity_end=types.ActivityEnd()`. `send_activity_start()` sends
+`activity_start=types.ActivityStart()` in manual mode and is a no-op in native
+mode. **Ordering matters (manual mode):** `activity_start` is sent *before* the
+audio chunks for that utterance; the end signal flushes Gemini's buffer after.
 
 > The Gemini-side VAD sensitivity knobs (`VAD_START_SENSITIVITY`,
 > `VAD_END_SENSITIVITY`, `VAD_PREFIX_PADDING_MS`, `VAD_SILENCE_DURATION_MS` in

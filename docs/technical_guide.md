@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the USE_PREMIUM_MODEL default flip (2.5), and [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for the prior canonicalization.*
+*Last updated: 2026-06-09. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the USE_PREMIUM_MODEL default flip (2.5), and [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for the prior canonicalization.*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -33,11 +33,11 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `USE_JIT_SCHEMA` | `false` | Feature flag: JIT (manifest-only) system instruction vs. full schema. |
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
+| `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. |
+| `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
-them in source, not via environment): `VERTEXAI=True` (route LLM/embedding calls
-through Vertex AI vs. the Gemini API key path -- a behavioral switch worth
-knowing when deploying), `DISABLE_GEMINI_VAD=True`,
+them in source, not via environment):
 `PROACTIVE_AUDIO=False` (deprecated), `AUDIO_IN_RATE=16000`,
 `AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
 `VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
@@ -79,10 +79,11 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
   server-side per-session field persistence, and never log field values/PII/PHI
   server-side. (Formalized in `standards/stateless-architecture.md` +
   `standards/hipaa-pii-policy.md`.)
-- **Manual VAD.** `DISABLE_GEMINI_VAD=True` -- the frontend drives turn-taking
-  with explicit `activity_start`/`activity_end` messages instead of Gemini's
-  built-in VAD. Don't re-enable Gemini VAD without revisiting the client signals.
-  (See `standards/voice-and-vad.md`.)
+- **VAD mode.** The default is `DISABLE_GEMINI_VAD=False` -- **native** mode, where
+  Gemini's built-in VAD detects turn boundaries. Setting it `True` switches to
+  **manual** mode, where the frontend drives turn-taking with explicit
+  `activity_start`/`activity_end` messages instead; don't switch modes without
+  revisiting the client signals. (See `standards/voice-and-vad.md`.)
 - **Idle watchdog** closes a form-fill socket after `WS_IDLE_TIMEOUT_SEC` of no
   inbound traffic, sending a graceful `{"type":"idle_timeout"}` first.
 - **"Sections" is canon; "parts" is legacy drift.** The internal section-state vars

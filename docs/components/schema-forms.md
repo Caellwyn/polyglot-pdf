@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-09*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -90,9 +90,10 @@ fields (also auto-confirmed). Validation runs on blur (`validateField`).
 
 `utils/validation.ts#shouldShowField` evaluates `field.show_if` (a
 `{field, operator, value}` `ConditionalDisplay`); a hidden field renders `null`.
-A field with `unlock_method === "flip_readonly_bit"` becomes **editable when its
-`show_if` condition is met** even if `read_only` — the same flag the PDF filler
-honors to unlock locked widgets (see [pdf-filling.md](pdf-filling.md)).
+A field with `unlock_method === "flip_readonly_bit"` becomes **editable even when
+`read_only`** — the unlock is driven by that flag alone (visibility is a separate
+`show_if` decision), the same flag the PDF filler honors to unlock locked widgets
+(see [pdf-filling.md](pdf-filling.md)).
 `FieldRenderer` reads the unlock flag from **either** `conditional_behavior`
 (canonical) **or** `conditional_logic` (a legacy alias of the same
 `ConditionalBehavior` type, still emitted by some generated form-kit schemas,
@@ -117,4 +118,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-09*

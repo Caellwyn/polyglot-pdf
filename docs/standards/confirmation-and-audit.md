@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-09*
 
 Every field value that lands on the form is confirmed by the user, and every
 confirmation is recorded — by `field_id` and *method*, never by value — for
@@ -103,4 +103,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-09*
