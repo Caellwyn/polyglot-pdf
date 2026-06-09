@@ -470,7 +470,9 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, 
     # caller still flips to COMMENTS on a CHANGES_REQUESTED state or any inline
     # finding below, so a genuine verdict is never lost.
     body = (review.get("body") or "").strip()
-    if body and _has_change_ask(body) and not _is_approval_comment(body, profile):
+    # Strip the auto-appended <details> footer before the change-ask gate (bd
+    # polyglot-pdf-pjd1); _is_approval_comment strips it internally.
+    if body and _has_change_ask(_strip_details_footer(body)) and not _is_approval_comment(body, profile):
         findings.append("[review:{}] {}".format(review.get("state", "?"), body))
 
     # Surface 1: inline review comments, matched to THIS review by id.
@@ -506,11 +508,15 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, 
         login = (c.get("user") or {}).get("login", "")
         created = c.get("created_at", "")
         body = (c.get("body") or "").strip()
+        # Run the change-ask gate on the details-footer-stripped body so the
+        # auto-appended "<details> About Codex" footer ("If Codex has
+        # suggestions...") can't be miscounted as a finding on an otherwise-clean
+        # round (bd polyglot-pdf-pjd1). _is_approval_comment strips it internally.
         if (
             _is_reviewer(login, profile)
             and _after(created, floor)
             and not _is_approval_comment(body, profile)
-            and _has_change_ask(body)
+            and _has_change_ask(_strip_details_footer(body))
         ):
             findings.append("[issue-comment] {}".format(body))
 
@@ -650,6 +656,22 @@ def _is_exact_lgtm(body: str) -> bool:
     return stripped.lower() == "lgtm"
 
 
+def _has_leading_lgtm(body: str) -> bool:
+    """True if the FIRST non-empty line is the LGTM token (allowing a summary to
+    follow). AGENTS.md instructs Codex to LEAD its clean summary with `LGTM` so the
+    verdict is deterministic even alongside a human-readable summary and the
+    auto-appended <details> footer (bd polyglot-pdf-pjd1). Unlike _is_exact_lgtm
+    (whole-body == LGTM), this only checks the lead line; the CALLER still gates it
+    on the absence of a change-ask in the rest of the body, so `LGTM, but fix X`
+    cannot ride to CLEAN. Tolerates the same markdown wrappers as _is_exact_lgtm."""
+    for line in (body or "").splitlines():
+        if not line.strip():
+            continue  # skip leading blank lines
+        lead = line.strip().strip("`*_>#\"' \t\r\n.!").strip()
+        return lead.lower() == "lgtm"
+    return False
+
+
 def _has_change_ask(body: str) -> bool:
     """True if the comment asks for any change (so it must stay COMMENTS)."""
     return any(sig in (body or "").lower() for sig in _CHANGE_ASK_SIGNALS)
@@ -687,8 +709,19 @@ def _is_approval_shaped(body: str) -> bool:
 
 
 def _is_approval_comment(body: str, profile: ReviewerProfile) -> bool:
+    # Strip the auto-appended <details> footer first so it can neither defeat the
+    # approval-SHAPE gate (it is long + multi-paragraph) nor leak a change-ask word
+    # into the sentinel/shape checks below (bd polyglot-pdf-pjd1). The verdict prose
+    # the reviewer actually wrote survives.
+    body = _strip_details_footer(body)
     # Fast path: the exact canonical signal is always an approval, no heuristics.
     if _is_exact_lgtm(body):
+        return True
+    # Leading-LGTM: AGENTS.md instructs Codex to begin a clean summary with the
+    # `LGTM` token so the verdict stays deterministic even with a summary line and
+    # the auto-appended footer. Honor it ONLY when the rest of the body carries no
+    # change-ask, so `LGTM, but please fix X` can't ride to CLEAN (bd pjd1).
+    if _has_leading_lgtm(body) and not _has_change_ask(body):
         return True
     lo = (body or "").lower()
     # The reviewer's own clean sentinels (e.g. Codex's "didn't find any major
@@ -788,6 +821,28 @@ def _strip_quotes(body: str) -> str:
     )
 
 
+# A <details>...</details> block, non-greedy, across newlines, case-insensitive.
+# GitHub apps append a collapsible boilerplate footer in this shape.
+_DETAILS_BLOCK_RE = re.compile(r"<details\b.*?</details>", re.IGNORECASE | re.DOTALL)
+
+
+def _strip_details_footer(body: str) -> str:
+    """Drop <details>...</details> blocks from a comment body before prose analysis.
+
+    Codex's clean re-review comment carries an auto-appended "<details> About
+    Codex in GitHub </details>" footer (NOT something the reviewer agent controls).
+    That footer broke clean detection two ways (bd polyglot-pdf-pjd1, observed live
+    on PR #133 round 3): it is multi-paragraph and >200 chars, so it defeated the
+    approval-SHAPE gate and the bot's "didn't find any major issues" clean sentinel
+    never rode to CLEAN; AND its prose ("If Codex has suggestions...") contains a
+    change-ask trigger word, so it tripped _has_change_ask and the genuinely-clean
+    round read as COMMENTS. The footer is boilerplate, never the verdict, so strip
+    it before any prose heuristic -- mirroring _strip_quotes. The full body is still
+    shown in the emitted detail for the human reader. Reviewer-agnostic and cheap.
+    """
+    return _DETAILS_BLOCK_RE.sub("", body or "")
+
+
 def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, profile: ReviewerProfile):
     """Classify a round whose verdict arrives as a bot ISSUE COMMENT (no review).
 
@@ -833,10 +888,12 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
     if latest is None:
         return None
     body = (latest.get("body") or "").strip()
-    # Analyze prose on the quote-stripped body so an echoed trigger ("> @codex
-    # review") can't trip change-ask/approval heuristics. The full body is
-    # still shown in the emitted detail for the human reader.
-    prose = _strip_quotes(body)
+    # Analyze prose on the quote-stripped AND details-footer-stripped body: an
+    # echoed trigger ("> @codex review") or the auto-appended "<details> About
+    # Codex" footer must not trip the change-ask/approval heuristics (bd
+    # polyglot-pdf-x8o; bd polyglot-pdf-pjd1). The full body is still shown in the
+    # emitted detail for the human reader.
+    prose = _strip_details_footer(_strip_quotes(body))
 
     # 1. Bot-failed sentinel.
     if body.startswith(profile.error_body_prefix):

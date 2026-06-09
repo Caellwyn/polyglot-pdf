@@ -118,18 +118,25 @@ the agent waits forever. Your top-level comment IS the "review finished" signal.
 - **One or more findings:** post your file-level comments **AND** a top-level
   summary, then **assign the PR to `@caellwynai-josh`** so the follow-up agent
   picks it up.
-- **Zero findings (satisfactory):** **Approve** and add the 👍 (`+1`) reaction to
-  your top-level summary comment -- the 👍 is the **canonical approval signal** the
-  author's polling agent reads. Your usual "Didn't find any major issues" summary
-  is fine as the comment body. Do **not** assign -- there's nothing to follow up.
+- **Zero findings (satisfactory):** **Approve**, add the 👍 (`+1`) reaction to your
+  top-level summary comment, AND **begin the comment body with the exact token
+  `LGTM` on its own first line** (the rest of your summary can follow). The 👍 is
+  the **canonical approval signal** the author's polling agent reads; the leading
+  `LGTM` is a deterministic text fallback the watcher also recognizes. Do **not**
+  assign -- there's nothing to follow up.
 - **Round 2+ with all prior findings addressed:** same as zero-findings -- approve
-  with the 👍 reaction. Do **not** instead write a sentence like "the prior findings
-  are now resolved" *without* the 👍; the reaction is what the matcher keys on.
+  with the 👍 reaction AND a leading `LGTM` line. Do **not** instead write a
+  sentence like "the prior findings are now resolved" *without* either signal; the
+  reaction and the `LGTM` token are what the matcher keys on.
 
-The watcher recognizes approval from the 👍 reaction first; it also accepts the
-"Didn't find any major issues" text or an exact `LGTM` as fallbacks, so a clean
-review is never missed. Prefer the 👍 -- it's the canonical, language-independent
-signal.
+The watcher recognizes approval from the 👍 reaction first; it also accepts a
+leading `LGTM`, the "didn't find any major issues" / "no major issues" text, or an
+exact `LGTM` body as fallbacks, so a clean review is never missed. **Why a leading
+token helps:** the GitHub app auto-appends an "About Codex" `<details>` footer to
+every comment -- the watcher strips that footer before reading your verdict (bd
+polyglot-pdf-pjd1), but leading with `LGTM`/the clean sentence keeps the approval
+unambiguous even if the footer ever changes shape. Prefer the 👍 -- it's the
+canonical, language-independent signal.
 
 ### Issue severity -- be AGGRESSIVE
 
