@@ -45,8 +45,8 @@ Verified end-to-end: with the live `g8w` claim (PR #123, undeclared surfaces),
 `next_bead.py` went from **0 AVAILABLE -> 4 AVAILABLE** (`uov.2`, `uov.3`, `o1s`,
 `h2r.2`), all of whose declared surfaces are disjoint from #123's diff; beads that
 genuinely overlap #123, or that declared no surfaces on their OWN side, stay
-correctly blocked. 7 new tests in `tests/test_bd_safe.py`; harness suite
-387 passed.
+correctly blocked. 16 tests in `tests/test_bd_safe.py` cover the derivation paths
+(after the review-driven hardening below); harness suite 396 passed.
 
 Decisions (for the merge report): used the **PR-diff derivation** approach
 (option 1 of the four in the bead) over requiring surfaces at claim time (option
@@ -56,6 +56,35 @@ UNKNOWN policy (option 3, weakens the guard). Claimed `8y7` with
 and I had verified from #123's diff there was zero real overlap with this bead's
 surfaces (`scripts/next_bead.py`, `scripts/bd_safe.py`) -- a maintainer-directed,
 verified-safe use of the override, not a routine bypass.
+
+### Review (3 Codex rounds + fresh-eyes; all findings adopted)
+
+The first cut of the derivation was too OPTIMISTIC -- it trusted partial/uncertain
+data instead of blocking. Codex + fresh-eyes converged hard on one principle, which
+the final code now follows everywhere: **any uncertainty in deriving a footprint
+collapses to UNKNOWN (conservative block), never a partial footprint.**
+
+- **Round 1 (Codex 4 P1s + fresh-eyes 2 SHOULD-FIX/3 NIT, all adopted):** a
+  `bd show` failure must stay UNKNOWN (don't let a narrower PR diff override an
+  unreadable-but-declared list); `gh pr view --json files` caps at 100 files -> a
+  >=cap list may be truncated -> UNKNOWN; a failed lookup in a multi-PR union ->
+  UNKNOWN, not a partial union; the helpers return `None` (couldn't-determine)
+  vs `[]` (confident empty). Nits: claim-path skips derivation; comment wording;
+  the now-misleading missing-metadata test asserts no gh call.
+- **Round 2 (Codex 1 P1, adopted):** my round-1 "include the renamed old path" fix
+  was WRONG -- `gh pr view --json files` exposes no previous filename (verified
+  against the live API; the GraphQL `PullRequestChangedFile` schema has only
+  `path`/`changeType`/counts). So a `changeType == RENAMED` entry -> UNKNOWN for
+  that PR, since the old path it also writes is invisible.
+- **Round 3 (Codex 2 P1s, adopted):** a MISSING/empty `changeType` also -> UNKNOWN
+  (can't confirm it isn't a rename); and `gh pr list` defaults to `--limit 30`, so
+  a >30-match search could page off the real PR -> scope the search to `in:title`
+  (collapses matches to ~1) AND raise `--limit` to 200.
+- **Ceiling note:** each round found a NEW, distinct, fully-fixed issue (not
+  re-litigation), so the 3 rounds were convergence, not a loop. Past the
+  `MAX_REVIEW_ROUNDS=2` ceiling the maintainer chose to merge rather than run a
+  4th verification round -- the remaining theoretical edges (>30 matching PRs, an
+  absent `changeType`) are now handled conservatively.
 
 ## Lessons
 
