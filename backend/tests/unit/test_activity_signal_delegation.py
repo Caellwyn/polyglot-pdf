@@ -85,3 +85,35 @@ def test_websocket_route_only_calls_methods_the_service_defines():
     )
     # Sanity: the method this regression is about must be in the call set.
     assert "send_activity_end" in called
+
+
+def test_section_switch_surface_is_wired_route_to_service():
+    """Guard the section-switch route<->service surface the multi-section voice
+    scenario (bd polyglot-pdf-8k8 / epic wpw WS-A) depends on -- the akn-class bug
+    applied to switching. The /ws/fill handler dispatches the manual_section_switch
+    branch into service.switch_to_section and the AI-initiated section_info_response
+    branch into service.handle_section_info_response; if either method is renamed
+    without updating the route (or vice versa), a section switch crashes the receive
+    loop mid-form. Pin BOTH methods by NAME so a rename is caught here, not only
+    live."""
+    from backend.routes import websocket_routes
+
+    source = inspect.getsource(websocket_routes)
+
+    # Both backend-side entry points the section-switch branches invoke must exist.
+    # manual_section_switch -> switch_to_section; section_info_response (the FE's
+    # reply on the AI-initiated path) -> handle_section_info_response.
+    for method in ("switch_to_section", "handle_section_info_response"):
+        assert hasattr(FormFillingService, method), (
+            f"FormFillingService lost {method} -- a section-switch route branch "
+            "calls it; losing it would crash the WS loop mid-switch (akn-class)."
+        )
+
+    # The route must still handle the section-switch message types the frontend
+    # sends. These string literals are the wire contract; their disappearance means
+    # the FE can request a switch the backend silently ignores.
+    for mtype in ("manual_section_switch", "section_info_response"):
+        assert mtype in source, (
+            f"websocket_routes.py no longer handles the '{mtype}' message -- the "
+            "section-switch wire contract regressed."
+        )

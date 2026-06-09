@@ -15,15 +15,21 @@ state for assertions.
 - **App hook** (`frontend/src/shared/connection.ts`): `window.__VFF_TEST_INJECT`,
   installed only when `window.__VFF_LOCAL_DEV === true` **and**
   `window.__VFF_TEST_HARNESS === true`. Exposes `sendAudio`, `sendActivityStart`,
-  `sendActivityEnd`, `isNativeVad`, `getLastNextField`.
+  `sendActivityEnd`, `isNativeVad`, `getLastNextField`, `resetFieldState`, and
+  `seedFieldConfirmed` (bd polyglot-pdf-8k8 -- seeds a field filled+confirmed via
+  the real `SchemaFormStateManager` write path, for the multi-section scenario).
 - **Fixtures** (`frontend/public/test-fixtures/`): committed 16 kHz mono PCM16
-  WAVs -- `digits_1234567.wav` ("one two three four five six seven") and
-  `confirm_yes.wav` ("yes that's correct"). Vite serves them at
+  WAVs -- `digits_1234567.wav` ("one two three four five six seven"),
+  `confirm_yes.wav` ("yes that's correct"), and `digits_12345.wav` ("one two three
+  four five", the 5-digit section-2 ZIP). Vite serves them at
   `http://localhost:5173/test-fixtures/<name>.wav`. Regenerate with
   `gen_fixtures.py` (one-time; output is committed).
 - **Harness** (`tests/e2e/voice-harness/harness.js`): browser module installed as
   `window.__VFF_HARNESS` via `preview_eval`. Provides `loadFixture`,
-  `injectUtterance`, `waitForGeminiQuestion`, `readField`, `lastNextField`.
+  `injectUtterance`, `waitForGeminiQuestion`, `readField`, `lastNextField`,
+  `runCycle` (single field), and -- for the multi-section demo rehearsal --
+  `runMultiSectionScenario`, `seedFields`, `getCurrentSection`,
+  `getCompletedSections`, `waitForSection`, `waitForSectionGreeting`.
 
 ## Environment (the part that bites you)
 
@@ -103,13 +109,16 @@ appears. Confirm status is `connected` and `typeof window.__VFF_TEST_INJECT === 
 ### 4. Install the harness + pre-load fixtures
 
 Inject the FULL body of `tests/e2e/voice-harness/harness.js` (it self-installs
-`window.__VFF_HARNESS`). Then pre-load both fixtures into window vars (so the cycle
-never awaits the network mid-turn):
+`window.__VFF_HARNESS`). Then pre-load the fixtures into window vars (so the cycle
+never awaits the network mid-turn). The third fixture (`digits_12345.wav`) is only
+needed for the multi-section scenario (step 6b); the single-field cycle needs only
+the first two:
 ```js
 Promise.all([
   window.__VFF_HARNESS.loadFixture('/test-fixtures/digits_1234567.wav'),
-  window.__VFF_HARNESS.loadFixture('/test-fixtures/confirm_yes.wav')
-]).then(([d,y]) => { window.__vffDigits = d; window.__vffYes = y; window.__vffReady = true; });
+  window.__VFF_HARNESS.loadFixture('/test-fixtures/confirm_yes.wav'),
+  window.__VFF_HARNESS.loadFixture('/test-fixtures/digits_12345.wav')
+]).then(([d,y,d2]) => { window.__vffDigits = d; window.__vffYes = y; window.__vffDigits2 = d2; window.__vffReady = true; });
 ```
 
 ### 5. Agree to the disclaimer
@@ -148,6 +157,59 @@ the only trustworthy signals; `waitForGeminiQuestion` is kept for pacing only.
 **Assert (advanced):** `preview_eval`: `window.__VFF_HARNESS.lastNextField()`.
 PASS if it is a DIFFERENT, expected field id (not `FIELD`). Corroborate with
 `preview_network` (a `next_field_hint` message should have gone out).
+
+### 6b. Run the MULTI-SECTION scenario (the demo rehearsal -- bd polyglot-pdf-8k8)
+
+The single-field cycle (step 6) proves one field round-trips. The **demo** the epic
+(`polyglot-pdf-wpw`) is judged by is a multi-field run that crosses a SECTION
+boundary. `runMultiSectionScenario` is that rehearsal. Launch it the same async-poll
+way:
+```js
+window.__vffMultiReport = null;
+window.__VFF_HARNESS.runMultiSectionScenario({
+  digitsBuf: window.__vffDigits, yesBuf: window.__vffYes,
+  s2DigitsBuf: window.__vffDigits2
+}).then(r => { window.__vffMultiReport = r; });
+```
+Poll `window.__vffMultiReport` until non-null.
+
+**What it does (Strategy A -- seed-and-confirm):** Section 1 of the I-90 has 9
+fields, but only the numeric `p1_line1_aliennumber` is fillable by the canned
+digit/yes audio. So the scenario **seeds the other section-1 fields confirmed**
+through the dev hook (`__VFF_TEST_INJECT.seedFieldConfirmed`, which routes through
+the SAME `SchemaFormStateManager` write path a real confirm uses), leaving the
+alien-number as the LAST unconfirmed field. It sets `p1_checkbox4` to a non-"[0]"
+option so the three `show_if`-gated `p1_line5*` name fields stay HIDDEN and don't
+block completion. Then:
+- **Leg 1 (section 1):** voice-fill + confirm `p1_line1_aliennumber`. Because it is
+  now the last unconfirmed VISIBLE field, the FE's REAL auto-advance fires
+  (`handleConfirmFieldRequest` -> `computeNextField` null -> `switchToSection`).
+- **section-cross:** assert `getCurrentSection().order === 2`, the old section is in
+  `completedSections`, `vffOnSectionChanged` fired, and `lastNextField` points at
+  the first section-2 field.
+- **Leg 2 (section 2):** voice-fill + confirm `p1_line6f_zipcode` (the 5-digit
+  `digits_12345.wav` fixture) -- proves a SECOND field fills in a DIFFERENT section
+  after the switch.
+
+Returns `{ verdict: 'PASS'|'FAIL'|'FLAKY', crossedToSection: bool, legs: [...] }`.
+Confirm is **order-tolerant** (the `runCycle` change for bd par/tfz): a proactive
+2.5 confirm that lands on the verify turn BEFORE "yes" counts as success.
+
+**Known-RED path (do NOT confuse with a harness regression):** the scenario above
+crosses sections via the FE auto-advance / `manual_section_switch` path, which is
+sound. The **AI-initiated** switch -- where Gemini calls the `switch_section` tool
+mid-section -- is still broken by the receive-loop teardown race **bd
+polyglot-pdf-0c1 (y4a)**: the handler cancels the receive task before the
+`switch_section` FunctionResponse is delivered, so that path stalls intermittently.
+**That AI-switch path is NOT gated by any test here.** The
+`@pytest.mark.external` sequence regression
+(`backend/tests/contract/test_tool_contracts.py`) only drives
+`update_form_fields` -> `confirm_field` for one field -- it never invokes the
+`switch_section` tool, so it does NOT cover the y4a teardown race. The y4a defect
+is covered by the unit work in **bd polyglot-pdf-0c1** (a fake-LiveAI test
+asserting the switch_section response is sent before the receive task is
+cancelled); until that lands the AI-initiated switch is ungated. Do not drive an
+AI-initiated `switch_section` in this browser scenario and expect green.
 
 ### 7. Report
 

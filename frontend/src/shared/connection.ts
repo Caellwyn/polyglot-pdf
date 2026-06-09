@@ -27,6 +27,11 @@ declare global {
 			// refresh the live connection's in-memory state, so a SAME-PAGE harness
 			// rerun (no reload) does not read a stale filled/confirmed value.
 			resetFieldState: (fieldId: string) => void
+			// bd polyglot-pdf-8k8: seed a field as filled-AND-confirmed via the same
+			// SchemaFormStateManager write path the real confirm uses, so the
+			// multi-section scenario can confirm one VOICE field and trigger the real
+			// section auto-advance. Returns false if no form state is loaded yet.
+			seedFieldConfirmed: (fieldId: string, value: string) => boolean
 		}
 	}
 }
@@ -928,6 +933,33 @@ export function createConnectionManager(
 					// Pull the (cleared) state into the connection even if storage had no
 					// entry at all (keeps the in-memory copy authoritative for the rerun).
 					connection?.reloadState()
+				},
+				// bd polyglot-pdf-8k8 (WS-A multi-section scenario): seed a field as
+				// already-filled-AND-confirmed, so the harness can drive ONE numeric
+				// field by voice and let the REAL section auto-advance fire when that
+				// last unconfirmed field in the section is confirmed. Routes through
+				// SchemaFormStateManager.updateField with confirmed:true -- the SAME
+				// write path the confirm_field round-trip uses (confirmField ->
+				// save) -- so the seeded confirmed flag is indistinguishable from a
+				// genuine confirm to readField/computeNextField. Then refresh BOTH this
+				// closure's `state` and the live WebFormConnection.state (the same
+				// dual-copy discipline resetFieldState uses) so computeNextField, which
+				// runs against the connection's in-memory state, sees the seed and can
+				// reach the all-confirmed -> switch transition.
+				seedFieldConfirmed: (fieldId: string, value: string) => {
+					const current = SchemaFormStateManager.load()
+					if (!current) {
+						return false
+					}
+					const updated = SchemaFormStateManager.updateField(
+						current,
+						fieldId,
+						value,
+						{ confirmed: true, confirmationMethod: 'manual_edit' },
+					)
+					state = updated
+					connection?.reloadState()
+					return true
 				},
 			}
 			console.log('[VFF Connection] TEST harness inject hook installed (__VFF_TEST_INJECT)')

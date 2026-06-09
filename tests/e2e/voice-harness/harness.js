@@ -346,6 +346,12 @@
     var digitsBuf = opts.digitsBuf;
     var yesBuf = opts.yesBuf;
     var turnTimeoutMs = opts.turnTimeoutMs || 35000;
+    // requireAdvance: PASS also requires Gemini to move to a NEW next field after
+    // confirm (the default -- proves fill -> confirm -> ADVANCE). Set false only
+    // for a field where the advance is not expected (e.g. the last field before
+    // a section boundary is handled by the multi-section scenario's own
+    // section-cross assertion instead). bd polyglot-pdf-8k8.
+    var requireAdvance = opts.requireAdvance !== false;
     var report = { fieldId: fieldId, steps: [], verdict: 'FLAKY' };
 
     // Clear any stale value/confirm from a previous attempt FIRST -- sessionStorage
@@ -379,13 +385,30 @@
     var q2 = await waitForGeminiQuestion({ timeoutMs: 18000 });
     report.steps.push({ step: 'wait-verify-question', sawAudio: q2.sawAudio, timedOut: q2.timedOut, baselineNext: baselineNext });
 
-    await injectUtterance(yesBuf);
-    // PASS REQUIRES a real confirmation: the authoritative sessionStorage `confirmed`
-    // flag, which only the confirm_field round-trip sets. We do NOT accept the
-    // fill-time DOM decoration (`domConfirmed`), which would false-pass (Codex, PR #123).
-    var confirmW = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
+    // ORDER-TOLERANT CONFIRM (bd polyglot-pdf-par / tfz): 2.5 native-audio calls
+    // confirm_field RELIABLY but often PROACTIVELY -- right after speaking the
+    // verify question, BEFORE we inject "yes". A confirm that already landed must
+    // count as success, not a FLAKY "never confirmed". So check the authoritative
+    // sessionStorage `confirmed` flag BEFORE injecting "yes": if it is already
+    // true, the field is confirmed (record it, still inject "yes" because a real
+    // user answers, then proceed). Otherwise inject "yes" and wait for it. We do
+    // NOT accept the fill-time DOM decoration (`domConfirmed`), which would
+    // false-pass (Codex, PR #123).
+    var preYes = readField(fieldId);
+    var confirmedEarly = preYes.ssConfirmed === true;
+    var confirmW;
+    if (confirmedEarly) {
+      // Confirm already landed on the verify turn. Still inject "yes" (the real
+      // demo flow speaks it), but do not gate on a post-yes flip -- the field is
+      // already confirmed, and re-confirming an already-confirmed field is a no-op.
+      await injectUtterance(yesBuf);
+      confirmW = { met: true, elapsedMs: 0 };
+    } else {
+      await injectUtterance(yesBuf);
+      confirmW = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
+    }
     var confSnap = readField(fieldId);
-    report.steps.push({ step: 'confirm', met: confirmW.met, elapsedMs: confirmW.elapsedMs, ssConfirmed: confSnap.ssConfirmed, domConfirmed: confSnap.domConfirmed });
+    report.steps.push({ step: 'confirm', met: confirmW.met, when: confirmedEarly ? 'early' : 'post-yes', elapsedMs: confirmW.elapsedMs, ssConfirmed: confSnap.ssConfirmed, domConfirmed: confSnap.domConfirmed });
     if (!confirmW.met) { report.verdict = 'FLAKY'; report.reason = 'field never confirmed (sessionStorage confirmed flag never set within timeout)'; return report; }
 
     // PASS also REQUIRES the ADVANCE: the RUNBOOK proves fill -> confirm -> ADVANCE,
@@ -393,16 +416,330 @@
     // navigation never happens (e.g. the 0ux receive-loop crash after the first
     // fill) must NOT report a successful cycle (Codex, PR #123). Require
     // lastNextField to CHANGE from the pre-"yes" baseline AND land on a field other
-    // than the one just confirmed.
-    var advanceW = await waitForCondition(function () {
-      var nf = null; try { nf = lastNextField(); } catch (e) {}
-      return (nf != null && nf !== fieldId && nf !== baselineNext) ? nf : false;
-    }, { timeoutMs: turnTimeoutMs });
-    report.steps.push({ step: 'advance', met: advanceW.met, elapsedMs: advanceW.elapsedMs, baselineNext: baselineNext, lastNextField: advanceW.value || (function(){try{return lastNextField();}catch(e){return null;}})() });
-    if (!advanceW.met) { report.verdict = 'FLAKY'; report.reason = 'confirmed but never advanced to a NEW next field (navigation/onNextField never fired)'; return report; }
+    // than the one just confirmed. Skipped when requireAdvance is false (the
+    // multi-section scenario asserts the section CROSS itself for the last field
+    // in a section -- bd polyglot-pdf-8k8).
+    if (requireAdvance) {
+      var advanceW = await waitForCondition(function () {
+        var nf = null; try { nf = lastNextField(); } catch (e) {}
+        return (nf != null && nf !== fieldId && nf !== baselineNext) ? nf : false;
+      }, { timeoutMs: turnTimeoutMs });
+      report.steps.push({ step: 'advance', met: advanceW.met, elapsedMs: advanceW.elapsedMs, baselineNext: baselineNext, lastNextField: advanceW.value || (function(){try{return lastNextField();}catch(e){return null;}})() });
+      if (!advanceW.met) { report.verdict = 'FLAKY'; report.reason = 'confirmed but never advanced to a NEW next field (navigation/onNextField never fired)'; return report; }
+    } else {
+      report.steps.push({ step: 'advance', skipped: true, reason: 'requireAdvance=false (section-cross asserted by scenario)' });
+    }
 
     report.verdict = 'PASS';
     return report;
+  }
+
+  /*
+   * Seed one or more fields as filled-AND-confirmed via the dev hook
+   * (__VFF_TEST_INJECT.seedFieldConfirmed), which routes through the SAME
+   * SchemaFormStateManager write path a genuine confirm uses. This lets the
+   * multi-section scenario drive ONE numeric field by voice and have the REAL
+   * section auto-advance fire when that last unconfirmed VISIBLE field in the
+   * section is confirmed. seedMap is { fieldId: value }. Returns
+   * { seeded: [...], failed: [...] } -- "failed" entries did not read back as
+   * confirmed (a setup failure, not a signal about the code under test).
+   */
+  function seedFields(seedMap) {
+    var h = inject();
+    if (typeof h.seedFieldConfirmed !== 'function') {
+      throw new Error('seedFields: __VFF_TEST_INJECT.seedFieldConfirmed is missing (app build predates bd polyglot-pdf-8k8).');
+    }
+    var seeded = [];
+    var failed = [];
+    Object.keys(seedMap).forEach(function (fieldId) {
+      var ok = false;
+      try { ok = h.seedFieldConfirmed(fieldId, seedMap[fieldId]); } catch (e) { ok = false; }
+      // Verify the seed actually took: the confirmed flag must read back true via
+      // the SAME authoritative path the assertions use (sessionStorage ssConfirmed).
+      var f = readField(fieldId);
+      if (ok && f.ssConfirmed === true) {
+        seeded.push(fieldId);
+      } else {
+        failed.push(fieldId);
+      }
+    });
+    return { seeded: seeded, failed: failed };
+  }
+
+  /*
+   * Read the CURRENT section from sessionStorage: { id, order }. order is the
+   * 1-based section number (schema.sections[*].order). Returns { id:null,
+   * order:null } when unreadable. This is the authoritative "which section are we
+   * in" signal -- SchemaFormStateManager.switchToSection writes currentSectionId
+   * and moves the old id into completedSections.
+   */
+  function getCurrentSection() {
+    try {
+      var raw = sessionStorage.getItem('schema_form_state');
+      if (!raw) return { id: null, order: null };
+      var st = JSON.parse(raw);
+      var id = st && st.currentSectionId != null ? st.currentSectionId : null;
+      var order = null;
+      if (id != null && st.schema && Array.isArray(st.schema.sections)) {
+        var sec = st.schema.sections.filter(function (s) { return s.id === id; })[0];
+        if (sec && sec.order != null) order = sec.order;
+      }
+      return { id: id, order: order };
+    } catch (e) {
+      return { id: null, order: null };
+    }
+  }
+
+  /*
+   * Read the completed-section ids from sessionStorage (serialized as an array on
+   * save). Used to corroborate that the OLD section was finalized, not just that a
+   * new one was entered.
+   */
+  function getCompletedSections() {
+    try {
+      var raw = sessionStorage.getItem('schema_form_state');
+      if (!raw) return [];
+      var st = JSON.parse(raw);
+      return Array.isArray(st && st.completedSections) ? st.completedSections : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /*
+   * Wait until the current section's order reaches targetOrder. A section switch
+   * tears down + restarts the Gemini session, so the default timeout is generous.
+   * Returns the waitForCondition result ({ met, value:{id,order}, ... }).
+   */
+  function waitForSection(targetOrder, opts) {
+    opts = opts || {};
+    var timeoutMs = opts.timeoutMs || 40000;
+    return waitForCondition(function () {
+      var s = getCurrentSection();
+      return s.order === targetOrder ? s : false;
+    }, { timeoutMs: timeoutMs });
+  }
+
+  /*
+   * Best-effort "Gemini greeted the new section" wait. Hooks window.vffOnSectionChanged
+   * (fired on the backend section_switched message) the same overridable way
+   * waitForGeminiQuestion hooks vffOnAudioPlaybackEnd. PACING-style: always resolves
+   * (timedOut flag tells you which path), so a timeout means "proceed", not failure --
+   * the authoritative section-cross proof is waitForSection + lastNextField, not this.
+   */
+  function waitForSectionGreeting(opts) {
+    opts = opts || {};
+    var timeoutMs = opts.timeoutMs || 20000;
+    return new Promise(function (resolve) {
+      var prev = window.vffOnSectionChanged;
+      var hardTimer = null;
+      var done = false;
+      function finish(timedOut, sawSwitch) {
+        if (done) return;
+        done = true;
+        if (hardTimer) clearTimeout(hardTimer);
+        window.vffOnSectionChanged = prev; // restore
+        resolve({ timedOut: !!timedOut, sawSectionChanged: !!sawSwitch });
+      }
+      window.vffOnSectionChanged = function () {
+        if (typeof prev === 'function') {
+          try { prev(); } catch (e) { /* ignore app handler error */ }
+        }
+        finish(false, true);
+      };
+      hardTimer = setTimeout(function () { finish(true, false); }, timeoutMs);
+    });
+  }
+
+  /*
+   * The DEMO REHEARSAL: drive a multi-field, multi-section voice session and gate
+   * on fill -> confirm -> advance ... -> SECTION CROSS -> continue. This is the
+   * scenario bd polyglot-pdf-wpw is judged by.
+   *
+   * Strategy (bd polyglot-pdf-8k8): seed the non-target section-1 fields confirmed
+   * so the ONLY field Gemini fills+confirms by voice in section 1 is the numeric
+   * target; confirming it is the last unconfirmed VISIBLE field, so the REAL FE
+   * auto-advance (handleConfirmFieldRequest -> computeNextField null ->
+   * switchToSection) fires. Then a SECOND voice field is filled in section 2 to
+   * prove multi-field-across-the-boundary.
+   *
+   * opts: {
+   *   digitsBuf, yesBuf,                  // section-1 fixtures (reused from runCycle)
+   *   s1FieldId, s1ExpectDigits,          // default p1_line1_aliennumber / '1234567'
+   *   s1Seed,                             // { fieldId: value } confirmed before leg 1
+   *   s2FieldId, s2ExpectDigits, s2DigitsBuf, // section-2 voice field + its fixture
+   *   s2Seed,                             // { fieldId: value } confirmed before leg 2
+   *                                       //   (the section-2 fields BEFORE the voice
+   *                                       //   target, so the target is the next field)
+   *   targetSectionOrder                  // default 2
+   * }
+   * s2DigitsBuf is REQUIRED -- the scenario's whole point is the second voice fill
+   * across the boundary; omitting it is a setup error, not an optional skip.
+   * Returns { verdict, crossedToSection: bool, legs: [...] }.
+   */
+  async function runMultiSectionScenario(opts) {
+    opts = opts || {};
+    var digitsBuf = opts.digitsBuf;
+    var yesBuf = opts.yesBuf;
+    var s1FieldId = opts.s1FieldId || 'p1_line1_aliennumber';
+    var s1ExpectDigits = opts.s1ExpectDigits || '1234567';
+    // Seed the non-target section-1 fields confirmed. checkbox4 is set to a
+    // NON-"[0]" option so the show_if-gated p1_line5a/b/c name fields stay hidden
+    // (shouldShowField equals-check) and do not block the section-complete ->
+    // switch transition -- verified against form-kits/i-90/schema.json.
+    var s1Seed = opts.s1Seed || {
+      p1_checkbox4: 'P1_checkbox4[1]',
+      p1_line2_acctidentifier: '123456789012',
+      p1_line3a_familyname: 'Smith',
+      p1_line3b_givenname: 'Jane',
+      p1_line3c_middlename: 'A'
+    };
+    var s2FieldId = opts.s2FieldId || 'p1_line6f_zipcode';
+    var s2ExpectDigits = opts.s2ExpectDigits || '12345';
+    var s2DigitsBuf = opts.s2DigitsBuf;
+    // Seed the section-2 fields that come BEFORE the voice target so the target
+    // is the NEXT field computeNextField returns -- otherwise Gemini is asked for
+    // the first mailing-address field (p1_line6a_incareofname), not the ZIP, and
+    // leg 2 times out on the wrong field (Codex/fresh-eyes PR #133). The unit
+    // radio (p1_unit_type6c_unit) is seeded non-empty, which SHOWS the apt field
+    // (show_if is_not_empty), so the apt field is seeded too -- verified against
+    // form-kits/i-90/schema.json. Only fields strictly before p1_line6f_zipcode.
+    var s2Seed = opts.s2Seed || {
+      p1_line6a_incareofname: 'Acme Corp',
+      p1_line6b_streetnumbername: '100 Main St',
+      p1_unit_type6c_unit: 'P1_checkbox6c_Unit[1]',
+      p1_line6c_aptsteflrnumber: '4B',
+      p1_line6d_cityortown: 'Springfield',
+      p1_line6e_state: 'IL'
+    };
+    var targetSectionOrder = opts.targetSectionOrder || 2;
+
+    var result = { verdict: 'FLAKY', crossedToSection: false, legs: [] };
+
+    // s2DigitsBuf is mandatory: leg 2 (the second voice fill across the boundary)
+    // is the scenario's reason to exist. A missing fixture is a SETUP error -- it
+    // must NOT silently downgrade to a section-cross-only PASS (Codex/fresh-eyes
+    // PR #133: a demo rehearsal that "passes" without proving the second fill is a
+    // false green).
+    if (!s2DigitsBuf) {
+      result.verdict = 'FLAKY';
+      result.reason = 'setup-error: s2DigitsBuf (the section-2 voice fixture) is required; leg 2 is not optional';
+      return result;
+    }
+
+    // --- Setup: seed the non-target fields confirmed UP FRONT -- BOTH the
+    // section-1 fields AND the section-2 prefix fields (those before the leg-2
+    // voice target). The section-2 prefix MUST be seeded BEFORE leg 1 triggers the
+    // switch: switchToSection builds the new section's handshake (current_values +
+    // initial_field_hint) from sessionStorage AT SWITCH TIME, so a section-2 field
+    // seeded AFTER the switch is too late -- Gemini was already prompted for the
+    // first address field, and seedFieldConfirmed only updates browser state, it
+    // does not re-handshake the live Gemini session (Codex PR #133 round 2).
+    // Seeding the prefix now means the switch's initial_field_hint resolves to the
+    // ZIP target. The fields are in two different sections, but sessionStorage
+    // fieldValues is flat (keyed by field id), so a single seed pass sets them all.
+    var seedAll = {};
+    Object.keys(s1Seed).forEach(function (k) { seedAll[k] = s1Seed[k]; });
+    Object.keys(s2Seed).forEach(function (k) { seedAll[k] = s2Seed[k]; });
+    var seed = seedFields(seedAll);
+    result.legs.push({ leg: 'seed', seeded: seed.seeded, failed: seed.failed });
+    if (seed.failed.length > 0) {
+      result.verdict = 'FLAKY';
+      result.reason = 'seed-setup-failed: ' + seed.failed.join(',') + ' did not read back confirmed';
+      return result;
+    }
+
+    // --- Leg 1: voice-fill + confirm the last unconfirmed section-1 field, then
+    // assert the REAL section auto-advance crosses into the target section. The
+    // cycle's own advance check is skipped (requireAdvance:false) because we assert
+    // the SECTION CROSS here, not an in-section advance. ---
+    var leg1 = await runCycle({
+      fieldId: s1FieldId, expectDigits: s1ExpectDigits,
+      digitsBuf: digitsBuf, yesBuf: yesBuf, requireAdvance: false
+    });
+    leg1.leg = 'section1-fill';
+    result.legs.push(leg1);
+    if (leg1.verdict !== 'PASS') {
+      result.verdict = leg1.verdict; // FAIL (wrong value) or FLAKY (never filled/confirmed)
+      result.reason = 'leg1 ' + leg1.verdict + ': ' + (leg1.reason || 'see steps');
+      return result;
+    }
+
+    // The crossing. Gate on the REAL switch signals, not just currentSectionId:
+    // the frontend writes currentSectionId BEFORE the backend acknowledges the
+    // switch, so waitForSection alone could pass on a backend switch that never
+    // completed (Codex PR #133 round 2). A genuine cross requires ALL of:
+    //   (a) currentSectionId order reached the target (waitForSection),
+    //   (b) the OLD section moved into completedSections (FE finalized it),
+    //   (c) vffOnSectionChanged fired (the backend sent section_switched),
+    //   (d) lastNextField points at the expected NEXT field in the new section
+    //       -- the leg-2 target, since its section-2 prefix is seeded confirmed.
+    // Install the section-changed watcher BEFORE awaiting the section state so a
+    // fast switch (vffOnSectionChanged firing during waitForSection) is still
+    // captured -- otherwise the hook installs after the event and reports a
+    // spurious sawSectionChanged:false.
+    var s1SectionId = getCurrentSection().id; // the section we are leaving
+    var greetP = waitForSectionGreeting();
+    var sectionW = await waitForSection(targetSectionOrder);
+    var greet = await greetP;
+    // Give lastNextField a moment to settle to the new section's hint, then read.
+    var nextHintW = await waitForCondition(function () {
+      var nf = null; try { nf = lastNextField(); } catch (e) {}
+      return nf === s2FieldId ? nf : false;
+    }, { timeoutMs: 10000 });
+    var completed = getCompletedSections();
+    var oldSectionFinalized = completed.indexOf(s1SectionId) !== -1;
+    var nextAfterCross = (function () { try { return lastNextField(); } catch (e) { return null; } })();
+    result.legs.push({
+      leg: 'section-cross',
+      orderReached: sectionW.met,
+      currentSection: getCurrentSection(),
+      oldSectionFinalized: oldSectionFinalized,
+      sawSectionChanged: greet.sawSectionChanged,
+      nextField: nextAfterCross,
+      nextIsTarget: nextHintW.met
+    });
+    if (!sectionW.met) {
+      result.verdict = 'FLAKY';
+      result.reason = 'confirmed section-1 field but currentSectionId never reached section ' + targetSectionOrder;
+      return result;
+    }
+    if (!greet.sawSectionChanged) {
+      result.verdict = 'FLAKY';
+      result.reason = 'currentSectionId advanced but the backend section_switched (vffOnSectionChanged) never fired -- switch not acknowledged';
+      return result;
+    }
+    if (!oldSectionFinalized) {
+      result.verdict = 'FLAKY';
+      result.reason = 'crossed sections but the old section (' + s1SectionId + ') was never moved into completedSections';
+      return result;
+    }
+    if (!nextHintW.met) {
+      result.verdict = 'FLAKY';
+      result.reason = 'crossed into section ' + targetSectionOrder + ' but Gemini was pointed at ' + nextAfterCross + ', not the seeded leg-2 target ' + s2FieldId;
+      return result;
+    }
+    result.crossedToSection = true;
+
+    // --- Leg 2: voice-fill the section-2 target -- proves multi-field across the
+    // boundary. Its section-2 prefix was seeded confirmed UP FRONT (above), so the
+    // switch handshake already pointed Gemini at this field. The target is not last
+    // in its section, so the cycle's normal advance check applies. ---
+    clearFieldState(s2FieldId);
+    var leg2 = await runCycle({
+      fieldId: s2FieldId, expectDigits: s2ExpectDigits,
+      digitsBuf: s2DigitsBuf, yesBuf: yesBuf
+    });
+    leg2.leg = 'section2-fill';
+    result.legs.push(leg2);
+    if (leg2.verdict !== 'PASS') {
+      result.verdict = leg2.verdict;
+      result.reason = 'leg2 ' + leg2.verdict + ': ' + (leg2.reason || 'see steps');
+      return result;
+    }
+
+    result.verdict = 'PASS';
+    return result;
   }
 
   window.__VFF_HARNESS = {
@@ -417,6 +754,12 @@
     readField: readField,
     lastNextField: lastNextField,
     runCycle: runCycle,
+    seedFields: seedFields,
+    getCurrentSection: getCurrentSection,
+    getCompletedSections: getCompletedSections,
+    waitForSection: waitForSection,
+    waitForSectionGreeting: waitForSectionGreeting,
+    runMultiSectionScenario: runMultiSectionScenario,
     isNativeVad: function () { return inject().isNativeVad(); }
   };
 
