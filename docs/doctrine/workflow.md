@@ -39,8 +39,14 @@ nits vs. priority) made SAFE by a deterministic write-overlap guard. The
   Declare at creation -- `--metadata` takes a full JSON object, e.g.
   `bd create ... --metadata '{"surfaces":["scripts/","docs/x.md"]}'` -- and via
   the spawn convention. A trailing slash (`scripts/`, `.claude/skills/`) means
-  "this directory and anything nested under it." **A bead with no declared
-  surfaces is UNKNOWN** and conservatively collides with everything.
+  "this directory and anything nested under it." **Only positively-stated,
+  actually-overlapping surfaces block** (bd polyglot-pdf-6hr): a bead with no
+  declared surfaces (UNKNOWN -- unannotated, or a tooling-failure read) does NOT
+  collide, so one undeclared in-progress bead can't freeze the whole board.
+  Declaring surfaces is still worthwhile -- it lets the guard PROVE a genuine
+  overlap and block it -- but the absence of a declaration is permissive, not
+  fail-closed. For an active claim that under-declared, the guard still derives
+  its real footprint from its open PR first (bd polyglot-pdf-8y7).
 - **`/next-bead` surfaces ready candidates and HARD-blocks write-overlaps.**
   `next_bead.py` cross-references each ready bead's surfaces against every ACTIVE
   claim (in_progress AND backed by a live branch/PR -- a stale claim does not

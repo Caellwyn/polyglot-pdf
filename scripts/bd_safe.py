@@ -440,9 +440,10 @@ def _is_own_current_branch(branch_line: str, current_branch: str | None) -> bool
 # the same as, or nested under, a surface of the other. Reads don't collide --
 # only declared writes do. A bead with no DECLARED surfaces is not immediately
 # UNKNOWN: _bead_surfaces first tries to DERIVE its real footprint from its open
-# PR's changed files (bd polyglot-pdf-8y7); only a bead with neither a declaration
-# nor an open PR is treated as UNKNOWN (see _surfaces_overlap) and conservatively
-# collides with everything.
+# PR's changed files (bd polyglot-pdf-8y7); a bead with neither a declaration nor
+# an open PR is UNKNOWN ([]). Post-6hr an UNKNOWN set is PERMISSIVE -- it has no
+# concrete surface to collide on and does NOT block (see _surfaces_overlap); only
+# two positively-stated, overlapping surfaces block.
 
 
 def _normalize_surface(surface: str) -> str:
@@ -509,17 +510,25 @@ def _one_surface_overlaps(a: str, b: str) -> bool:
 
 
 def _surfaces_overlap(surfaces_a, surfaces_b) -> bool:
-    """True if any declared surface in A overlaps any in B.
+    """True if any POSITIVELY-STATED surface in A overlaps any in B.
 
-    UNKNOWN-surface policy (conservative, per the bead's "no override" intent):
-    if EITHER side has no surfaces, we cannot prove the writes are disjoint, so
-    we report an overlap. Note callers pass surfaces from _bead_surfaces, which
-    already tried to DERIVE an undeclared bead's footprint from its open PR
-    (bd polyglot-pdf-8y7); an empty list here therefore means "no declaration AND
-    no open PR" -- genuinely unknown -- not merely "did not fill in metadata."
+    Empty-surface policy (permissive, bd polyglot-pdf-6hr): if EITHER side has no
+    surfaces, there is no concrete file pair to collide on, so we report NO
+    overlap. An empty set -- whether the bead was simply never annotated (the
+    common case) or a tooling failure left it UNKNOWN -- never blocks. Only two
+    concretely-declared, actually-overlapping surfaces block.
+
+    This reverses the earlier conservative "empty collides with everything"
+    policy, which froze the whole next-bead board behind any one undeclared
+    in-progress bead (e.g. a backend-only fix blocking every frontend bead). The
+    maintainer's call: it should be the RARE bead that legitimately blocks
+    everything, so the default is permissive, not fail-closed. The trade-off is
+    that a transient gh/bd failure that empties one side can let a real overlap
+    through; surfaces are advisory scheduling hints, and the same-bead PR/branch
+    guards remain the hard backstop against two workers on one bead.
     """
     if not surfaces_a or not surfaces_b:
-        return True
+        return False
     return any(
         _one_surface_overlaps(sa, sb) for sa in surfaces_a for sb in surfaces_b
     )
@@ -532,16 +541,18 @@ def _bead_surfaces(bead_id: str, *, derive_from_prs: bool = True,
     Source order (bd polyglot-pdf-8y7):
       1. The bead's DECLARED `metadata.surfaces` -- authoritative when present.
       2. If it declared none AND `derive_from_prs`, the files its open PR(s)
-         actually change (the real mid-flight footprint). This is what stops an
-         undeclared-surface claim from locking the whole next-bead board by
-         colliding with everything under the UNKNOWN policy.
-      3. [] -- UNKNOWN: the conservative collide-with-everything fallback in
-         _surfaces_overlap applies. This covers the genuinely-unknown case (no
-         declaration AND no open PR) AND every UNCERTAINTY: a `bd show` failure
-         (we could NOT read the declaration, so we must not trust a narrower PR
-         diff over an unreadable authoritative list), or a PR lookup that failed
-         / was truncated (Codex review). Uncertainty always collapses to UNKNOWN,
-         never to a partial footprint.
+         actually change (the real mid-flight footprint). This gives the guard a
+         CONCRETE footprint to match an under-declared active claim on, so a
+         genuine overlap is still caught even when the bead never annotated.
+      3. [] -- UNKNOWN. Post-6hr an UNKNOWN set is PERMISSIVE in _surfaces_overlap
+         (no concrete surface to collide on -> does not block); it is no longer a
+         collide-with-everything fallback. This covers the genuinely-unknown case
+         (no declaration AND no open PR) AND every UNCERTAINTY: a `bd show`
+         failure (we could NOT read the declaration, so we must not trust a
+         narrower PR diff over an unreadable authoritative list), or a PR lookup
+         that failed / was truncated (Codex review). Uncertainty always collapses
+         to UNKNOWN, never to a partial footprint -- the value now is avoiding a
+         WRONG partial overlap, not forcing a block.
 
     Set `derive_from_prs=False` for a pure read of the DECLARED surfaces with no
     network/gh lookup (e.g. unit tests of the declaration path, or callers that
@@ -627,11 +638,12 @@ def _surface_collision(bead_id: str) -> str | None:
     overlap `bead_id`'s, or None if no active claim collides.
 
     This is the R1 write-overlap guard. It is a HARD block with no override
-    (h2r.1): two workers writing the same file is a conflict regardless of
-    intent. An active claim with no declared surfaces AND no open PR to derive
-    them from (UNKNOWN) collides with everything by the conservative policy in
-    _surfaces_overlap (bd polyglot-pdf-8y7 narrowed this to the genuinely-unknown
-    case by deriving surfaces from an open PR first).
+    (h2r.1): two workers writing the same concretely-declared file is a conflict
+    regardless of intent. A claim with no declared (or derivable) surfaces does
+    NOT block -- the permissive empty-surface policy in _surfaces_overlap (bd
+    polyglot-pdf-6hr); only a positively-stated overlapping pair blocks. Active
+    claims still get PR-derivation (bd polyglot-pdf-8y7) so a mid-flight claim
+    that under-declared is matched on its real PR footprint, not nothing.
     """
     # The bead BEING CLAIMED is at claim time -- it has no open PR of its own yet,
     # so derivation would be a wasted gh call; read only its declared surfaces.
@@ -642,18 +654,15 @@ def _surface_collision(bead_id: str) -> str | None:
         theirs = _bead_surfaces(active_id)
         if not _surfaces_overlap(mine, theirs):
             continue
-        if not mine or not theirs:
-            # UNKNOWN on at least one side -> the conservative collide-with-
-            # everything case; there is no concrete overlapping pair to name.
-            detail = ("UNKNOWN surfaces (one side has no declaration and no "
-                      "open PR to derive them from)")
-        else:
-            shared = sorted(
-                "{} ~ {}".format(sa, sb)
-                for sa in mine for sb in theirs
-                if _one_surface_overlaps(sa, sb)
-            )
-            detail = "overlapping surfaces: {}".format("; ".join(shared))
+        # Reaching here means _surfaces_overlap was True, which (post-6hr) implies
+        # BOTH sides are non-empty with a concrete overlapping pair -- so there is
+        # always a pair to name; no UNKNOWN-surface branch is possible anymore.
+        shared = sorted(
+            "{} ~ {}".format(sa, sb)
+            for sa in mine for sb in theirs
+            if _one_surface_overlaps(sa, sb)
+        )
+        detail = "overlapping surfaces: {}".format("; ".join(shared))
         return "{} ({})".format(active_id, detail)
     return None
 
