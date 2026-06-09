@@ -43,6 +43,28 @@ from backend.ports.live_ai_port import ILiveAI, LiveAISession
 # ============================================================================
 
 
+def _build_function_response(tool_name, response_payload, call_id):
+    """Build a types.FunctionResponse, echoing the call_id back when present.
+
+    bd polyglot-pdf-0ux: Gemini Live sends a tool call WITH an id (verified on the
+    event.tool_call path via probe_tool_call_id.py, e.g.
+    id='function-call-211044821233914278'), and the SDK's AI-Studio (mldev) path
+    REQUIRES that id to be echoed on the response -- it raises
+    _FUNCTION_RESPONSE_REQUIRES_ID otherwise (google.genai live.py), crashing the
+    receive loop right after the first fill. (The Vertex path tolerates a missing
+    id, which is why this stayed latent in prod.) Earlier code dropped the id based
+    on a wrong "the SDK matches by order" assumption.
+
+    We include the id whenever we have one (the normal case) and omit it only if it
+    is genuinely absent -- so a rare id-less call still gets SOME response (and so
+    Gemini does not block waiting for one) rather than crashing the whole loop.
+    """
+    fr_kwargs = {"name": tool_name, "response": response_payload}
+    if call_id:
+        fr_kwargs["id"] = call_id
+    return types.FunctionResponse(**fr_kwargs)
+
+
 class LiveAIGeminiSession(LiveAISession):
     """Adapter for the Gemini Live AI session."""
 
@@ -1426,18 +1448,12 @@ class LiveAIGemini(ILiveAI):
                                                             #   2. a callback exception (caught above) left response_payload
                                                             #      None -> coerced to {} here, but the call_id gate could
                                                             #      still skip the append.
-                                                            # The sibling event.tool_call path gates on tool_name alone and
-                                                            # omits id (the SDK matches responses to calls by order), so
-                                                            # match that: append on tool_name, include id only when present.
+                                                            # Echo the call_id back when present (bd polyglot-pdf-0ux):
+                                                            # the SDK's AI-Studio path REQUIRES it, and the old claim that
+                                                            # the SDK "matches by order" was wrong (see _build_function_response).
                                                             if tool_name:
-                                                                fr_kwargs = {
-                                                                    "name": tool_name,
-                                                                    "response": response_payload,
-                                                                }
-                                                                if call_id:
-                                                                    fr_kwargs["id"] = call_id
                                                                 responses.append(
-                                                                    types.FunctionResponse(**fr_kwargs)
+                                                                    _build_function_response(tool_name, response_payload, call_id)
                                                                 )
 
                                                     # Handle text transcription (only from first part for backwards compatibility)
@@ -1533,13 +1549,19 @@ class LiveAIGemini(ILiveAI):
                                                 response_payload = {}
 
                                             if tool_name:
-                                                # According to Google's example code, FunctionResponse should NOT include 'id'
-                                                # The SDK matches responses to calls internally
+                                                # Echo the call_id back on the FunctionResponse (bd
+                                                # polyglot-pdf-0ux). The SDK's AI-Studio (mldev) path
+                                                # REQUIRES the id and raises _FUNCTION_RESPONSE_REQUIRES_ID
+                                                # without it (live.py send_tool_response), which crashes the
+                                                # receive loop after the first fill. The model DOES send an
+                                                # id on this event.tool_call path (verified:
+                                                # probe_tool_call_id.py shows fc.id='function-call-...'); the
+                                                # old "should NOT include id" comment was wrong for this SDK.
+                                                # Include it when present (it is, here); omit only if absent
+                                                # so a rare id-less call still gets SOME response (Vertex
+                                                # tolerates a missing id, AI Studio does not).
                                                 responses.append(
-                                                    types.FunctionResponse(
-                                                        name=tool_name,
-                                                        response=response_payload,
-                                                    )
+                                                    _build_function_response(tool_name, response_payload, call_id)
                                                 )
 
                                     if responses:
