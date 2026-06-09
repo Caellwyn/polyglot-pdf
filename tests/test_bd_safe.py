@@ -392,14 +392,17 @@ def test_root_surface_does_not_silently_opt_out_of_guard():
     assert bs._surfaces_overlap(["scripts/foo.py"], ["/"]) is True
 
 
-def test_surfaces_overlap_unknown_policy():
-    # Either side empty (UNKNOWN) -> conservative overlap.
-    assert bs._surfaces_overlap([], ["scripts/x.py"]) is True
-    assert bs._surfaces_overlap(["scripts/x.py"], []) is True
-    assert bs._surfaces_overlap([], []) is True
+def test_surfaces_overlap_empty_policy():
+    # bd polyglot-pdf-6hr: an empty surface set on EITHER side has no concrete
+    # file to collide on, so it NEVER blocks (reversed from the old conservative
+    # "empty collides with everything"). An unannotated or tooling-failure-empty
+    # bead no longer freezes the whole board.
+    assert bs._surfaces_overlap([], ["scripts/x.py"]) is False
+    assert bs._surfaces_overlap(["scripts/x.py"], []) is False
+    assert bs._surfaces_overlap([], []) is False
     # Both declared + disjoint -> no overlap.
     assert bs._surfaces_overlap(["docs/a.md"], ["scripts/b.py"]) is False
-    # Both declared + intersecting -> overlap.
+    # Both declared + intersecting -> overlap (the only thing that blocks).
     assert bs._surfaces_overlap(["scripts/"], ["docs/x", "scripts/y.py"]) is True
 
 
@@ -489,8 +492,8 @@ def test_bead_surfaces_derives_from_open_pr_when_undeclared(monkeypatch):
 
 
 def test_bead_surfaces_undeclared_no_pr_is_unknown(monkeypatch):
-    # No declaration AND no open PR -> [] (genuinely UNKNOWN; the conservative
-    # collide-with-everything policy still applies downstream).
+    # No declaration AND no open PR -> [] (UNKNOWN). Post-6hr an empty set is
+    # PERMISSIVE downstream (does not block); this test only pins the [] return.
     def fake(cmd, *, check=True):
         if cmd[:3] == ["bd", "show", "proj-aaa1"]:
             return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
@@ -503,7 +506,8 @@ def test_bead_surfaces_undeclared_no_pr_is_unknown(monkeypatch):
 
 def test_bead_surfaces_pr_view_failure_falls_back_to_unknown(monkeypatch):
     # The PR exists but `gh pr view` fails -> we cannot derive, so [] (UNKNOWN),
-    # never a crash. The conservative policy then blocks, which is the safe side.
+    # never a crash. Post-6hr an empty set is permissive (does not block); this
+    # test only pins the [] return, not a downstream block.
     def fake(cmd, *, check=True):
         if cmd[:3] == ["bd", "show", "proj-aaa1"]:
             return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
@@ -541,9 +545,10 @@ def test_bead_surfaces_pr_derivation_dedups_across_prs(monkeypatch):
 
 
 def test_pr_derived_surfaces_unblock_disjoint_candidate(monkeypatch):
-    # End-to-end of the fix: an active claim with NO declared surfaces but an open
-    # PR touching only frontend files must NOT block a candidate that declares
-    # only backend surfaces. Pre-fix this returned True (UNKNOWN-collides-all).
+    # An active claim with NO declared surfaces but an open PR touching only
+    # frontend files must NOT block a candidate that declares only backend
+    # surfaces. Here derivation (bd 8y7) gives a concrete disjoint footprint; even
+    # without it, post-6hr an empty set would not block either.
     def fake(cmd, *, check=True):
         if cmd[:3] == ["bd", "show", "proj-claim"]:
             return _proc(stdout=json.dumps([{"id": "claim", "metadata": {}}]))
@@ -560,8 +565,9 @@ def test_pr_derived_surfaces_unblock_disjoint_candidate(monkeypatch):
     assert bs._surfaces_overlap(candidate, claim_surfaces) is False
 
 
-# --- conservative on uncertainty: every failure collapses to UNKNOWN ([]) so the
-# overlap policy still blocks, never a partial footprint (bd 8y7, Codex review) ---
+# --- on uncertainty, every failure collapses to UNKNOWN ([]), never a partial
+# footprint (bd 8y7, Codex review). Post-6hr [] is permissive downstream, so the
+# value of staying UNKNOWN is avoiding a WRONG partial overlap, not blocking ---
 
 def test_bead_surfaces_bd_show_failure_is_unknown_not_pr_derived(monkeypatch):
     # bd show FAILS for a bead that genuinely has declared surfaces. We must NOT
@@ -579,8 +585,9 @@ def test_bead_surfaces_bd_show_failure_is_unknown_not_pr_derived(monkeypatch):
         return _proc()
     monkeypatch.setattr(bs, "_run", fake)
     assert bs._bead_surfaces("proj-aaa1") == []
-    # And UNKNOWN [] still blocks under the conservative policy.
-    assert bs._surfaces_overlap(["whatever.py"], []) is True
+    # Post-6hr: an empty (UNKNOWN) side no longer blocks -- there is no concrete
+    # surface to collide on, so the candidate is free to proceed.
+    assert bs._surfaces_overlap(["whatever.py"], []) is False
 
 
 def test_pr_changed_files_truncation_is_unknown(monkeypatch):

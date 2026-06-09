@@ -123,9 +123,11 @@ def test_stale_in_progress_claim_does_not_block(monkeypatch, capsys):
     assert out["active_claims"] == []
 
 
-def test_undeclared_surfaces_candidate_blocked_by_any_active_claim(monkeypatch, capsys):
-    # A candidate with NO declared surfaces is UNKNOWN -> conservatively blocked
-    # by any active claim (can't prove disjoint writes).
+def test_undeclared_surfaces_candidate_not_blocked(monkeypatch, capsys):
+    # bd polyglot-pdf-6hr: a candidate with NO declared surfaces is UNKNOWN, and
+    # an empty surface set no longer collides -- so it is AVAILABLE, not blocked.
+    # (Pre-6hr this was conservatively blocked by any active claim.) This is the
+    # core fix: one undeclared in-progress bead must not freeze the whole board.
     fake = _make_fake(
         ready=[{"id": "p-aaa1", "title": "mystery", "priority": 2}],
         in_progress=[{"id": "p-bbb2", "status": "in_progress"}],
@@ -134,7 +136,30 @@ def test_undeclared_surfaces_candidate_blocked_by_any_active_claim(monkeypatch, 
     )
     _run_next(monkeypatch, fake)
     out = json.loads(capsys.readouterr().out)
-    assert {r["id"] for r in out["blocked"]} == {"p-aaa1"}
+    assert {r["id"] for r in out["available"]} == {"p-aaa1"}
+    assert out["blocked"] == []
+
+
+def test_undeclared_active_claim_does_not_block_others(monkeypatch, capsys):
+    # The akn case (bd polyglot-pdf-6hr): an ACTIVE claim with no declared
+    # surfaces (and no derivable PR) must not block declared candidates.
+    fake = _make_fake(
+        ready=[
+            {"id": "p-aaa1", "title": "frontend", "priority": 1},
+            {"id": "p-ccc3", "title": "docs", "priority": 2},
+        ],
+        in_progress=[{"id": "p-bbb2", "status": "in_progress"}],
+        surfaces_by_id={
+            "p-aaa1": ["frontend/x.ts"],
+            "p-ccc3": ["docs/y.md"],
+            "p-bbb2": [],   # undeclared, no PR -> UNKNOWN, must not block
+        },
+        live_ids={"p-bbb2"},
+    )
+    _run_next(monkeypatch, fake)
+    out = json.loads(capsys.readouterr().out)
+    assert {r["id"] for r in out["available"]} == {"p-aaa1", "p-ccc3"}
+    assert out["blocked"] == []
 
 
 def test_no_active_claims_all_available(monkeypatch, capsys):

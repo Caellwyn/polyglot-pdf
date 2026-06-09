@@ -509,17 +509,25 @@ def _one_surface_overlaps(a: str, b: str) -> bool:
 
 
 def _surfaces_overlap(surfaces_a, surfaces_b) -> bool:
-    """True if any declared surface in A overlaps any in B.
+    """True if any POSITIVELY-STATED surface in A overlaps any in B.
 
-    UNKNOWN-surface policy (conservative, per the bead's "no override" intent):
-    if EITHER side has no surfaces, we cannot prove the writes are disjoint, so
-    we report an overlap. Note callers pass surfaces from _bead_surfaces, which
-    already tried to DERIVE an undeclared bead's footprint from its open PR
-    (bd polyglot-pdf-8y7); an empty list here therefore means "no declaration AND
-    no open PR" -- genuinely unknown -- not merely "did not fill in metadata."
+    Empty-surface policy (permissive, bd polyglot-pdf-6hr): if EITHER side has no
+    surfaces, there is no concrete file pair to collide on, so we report NO
+    overlap. An empty set -- whether the bead was simply never annotated (the
+    common case) or a tooling failure left it UNKNOWN -- never blocks. Only two
+    concretely-declared, actually-overlapping surfaces block.
+
+    This reverses the earlier conservative "empty collides with everything"
+    policy, which froze the whole next-bead board behind any one undeclared
+    in-progress bead (e.g. a backend-only fix blocking every frontend bead). The
+    maintainer's call: it should be the RARE bead that legitimately blocks
+    everything, so the default is permissive, not fail-closed. The trade-off is
+    that a transient gh/bd failure that empties one side can let a real overlap
+    through; surfaces are advisory scheduling hints, and the same-bead PR/branch
+    guards remain the hard backstop against two workers on one bead.
     """
     if not surfaces_a or not surfaces_b:
-        return True
+        return False
     return any(
         _one_surface_overlaps(sa, sb) for sa in surfaces_a for sb in surfaces_b
     )
@@ -627,11 +635,12 @@ def _surface_collision(bead_id: str) -> str | None:
     overlap `bead_id`'s, or None if no active claim collides.
 
     This is the R1 write-overlap guard. It is a HARD block with no override
-    (h2r.1): two workers writing the same file is a conflict regardless of
-    intent. An active claim with no declared surfaces AND no open PR to derive
-    them from (UNKNOWN) collides with everything by the conservative policy in
-    _surfaces_overlap (bd polyglot-pdf-8y7 narrowed this to the genuinely-unknown
-    case by deriving surfaces from an open PR first).
+    (h2r.1): two workers writing the same concretely-declared file is a conflict
+    regardless of intent. A claim with no declared (or derivable) surfaces does
+    NOT block -- the permissive empty-surface policy in _surfaces_overlap (bd
+    polyglot-pdf-6hr); only a positively-stated overlapping pair blocks. Active
+    claims still get PR-derivation (bd polyglot-pdf-8y7) so a mid-flight claim
+    that under-declared is matched on its real PR footprint, not nothing.
     """
     # The bead BEING CLAIMED is at claim time -- it has no open PR of its own yet,
     # so derivation would be a wasted gh call; read only its declared surfaces.
@@ -642,18 +651,15 @@ def _surface_collision(bead_id: str) -> str | None:
         theirs = _bead_surfaces(active_id)
         if not _surfaces_overlap(mine, theirs):
             continue
-        if not mine or not theirs:
-            # UNKNOWN on at least one side -> the conservative collide-with-
-            # everything case; there is no concrete overlapping pair to name.
-            detail = ("UNKNOWN surfaces (one side has no declaration and no "
-                      "open PR to derive them from)")
-        else:
-            shared = sorted(
-                "{} ~ {}".format(sa, sb)
-                for sa in mine for sb in theirs
-                if _one_surface_overlaps(sa, sb)
-            )
-            detail = "overlapping surfaces: {}".format("; ".join(shared))
+        # Reaching here means _surfaces_overlap was True, which (post-6hr) implies
+        # BOTH sides are non-empty with a concrete overlapping pair -- so there is
+        # always a pair to name; no UNKNOWN-surface branch is possible anymore.
+        shared = sorted(
+            "{} ~ {}".format(sa, sb)
+            for sa in mine for sb in theirs
+            if _one_surface_overlaps(sa, sb)
+        )
+        detail = "overlapping surfaces: {}".format("; ".join(shared))
         return "{} ({})".format(active_id, detail)
     return None
 
