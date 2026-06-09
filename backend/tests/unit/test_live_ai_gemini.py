@@ -171,6 +171,37 @@ async def test_live_ai_session_send_tool_response(mock_google_ai_client):
 
 
 @pytest.mark.asyncio
+async def test_live_ai_session_send_tool_response_missing_id(mock_google_ai_client):
+    """A response dict without an id is tolerated (id omitted, no KeyError).
+
+    bd polyglot-pdf-c4a: the wrapper now routes through _build_function_response
+    and uses .get("id"), so a missing id omits the field instead of raising
+    KeyError. Mirrors the hot path's omit-if-absent behavior (bd polyglot-pdf-0ux).
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGeminiSession
+
+    _, mock_session = mock_google_ai_client
+    session_adapter = LiveAIGeminiSession(mock_session)
+
+    tool_responses = [
+        {"name": "update_form_fields", "response": {"FullName": "John Doe"}}
+    ]
+
+    await session_adapter.send_tool_response(tool_responses)
+
+    mock_session.send_tool_response.assert_called_once()
+    function_responses_list = mock_session.send_tool_response.call_args.kwargs[
+        "function_responses"
+    ]
+    assert len(function_responses_list) == 1
+    function_response = function_responses_list[0]
+    assert isinstance(function_response, types.FunctionResponse)
+    assert function_response.id is None
+    assert function_response.name == "update_form_fields"
+    assert function_response.response == {"FullName": "John Doe"}
+
+
+@pytest.mark.asyncio
 async def test_live_ai_session_receive(mock_google_ai_client):
     """Tests that the receive method correctly yields chunks from the underlying session."""
     from backend.adapters.live_ai_gemini import LiveAIGeminiSession

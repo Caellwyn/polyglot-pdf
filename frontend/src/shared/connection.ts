@@ -22,6 +22,11 @@ declare global {
 			sendActivityEnd: () => Promise<void>
 			isNativeVad: () => boolean
 			getLastNextField: () => string | null
+			// bd polyglot-pdf-o1c: clear one field's state through the canonical
+			// SchemaFormStateManager path (save + schemaFormStateChange dispatch) AND
+			// refresh the live connection's in-memory state, so a SAME-PAGE harness
+			// rerun (no reload) does not read a stale filled/confirmed value.
+			resetFieldState: (fieldId: string) => void
 		}
 	}
 }
@@ -895,6 +900,22 @@ export function createConnectionManager(
 				sendActivityEnd: () => manager.sendActivityEnd(),
 				isNativeVad: () => manager.isNativeVad(),
 				getLastNextField: () => lastNextField,
+				// bd polyglot-pdf-o1c: same-page-rerun-safe field clear. Route through
+				// SchemaFormStateManager.save (fires schemaFormStateChange so SchemaForm's
+				// React state reloads), then refresh BOTH this closure's `state` and the
+				// live WebFormConnection.state so neither holds the prior attempt's value.
+				resetFieldState: (fieldId: string) => {
+					const current = SchemaFormStateManager.load()
+					if (current && current.fieldValues[fieldId]) {
+						const { [fieldId]: _removed, ...rest } = current.fieldValues
+						const cleared: SchemaFormState = { ...current, fieldValues: rest }
+						SchemaFormStateManager.save(cleared)
+						state = cleared
+					}
+					// Pull the cleared state into the connection even if storage had no
+					// entry (keeps the in-memory copy authoritative for the rerun).
+					connection?.reloadState()
+				},
 			}
 			console.log('[VFF Connection] TEST harness inject hook installed (__VFF_TEST_INJECT)')
 		}

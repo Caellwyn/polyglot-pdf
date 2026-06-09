@@ -83,8 +83,12 @@ class LiveAIGeminiSession(LiveAISession):
         )
 
     async def send_tool_response(self, responses: List[Dict[str, Any]]) -> None:
+        # Route through _build_function_response so this wrapper shares the hot
+        # path's id-handling (bd polyglot-pdf-0ux): echo the call id back when
+        # present, omit it when absent. Using .get("id") also avoids a KeyError
+        # on a response dict that lacks an id. (bd polyglot-pdf-c4a)
         function_responses = [
-            types.FunctionResponse(id=r["id"], name=r["name"], response=r["response"])
+            _build_function_response(r["name"], r["response"], r.get("id"))
             for r in responses
         ]
         # Use send_tool_response directly as shown in Vertex AI examples
