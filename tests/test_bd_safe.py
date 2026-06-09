@@ -591,15 +591,32 @@ def test_pr_changed_files_truncation_is_unknown(monkeypatch):
     assert bs._pr_changed_files(9, bs.DEFAULT_REPO) is None
 
 
-def test_pr_changed_files_includes_renamed_old_path(monkeypatch):
-    # A rename touches BOTH the new and old path -> both are write targets.
+def test_pr_changed_files_rename_is_unknown(monkeypatch):
+    # `gh pr view --json files` exposes path/changeType/counts but NO previous
+    # filename (Codex review), so a rename's OLD path is invisible -> the footprint
+    # is incomplete -> the whole PR is UNKNOWN (None). A candidate editing the old
+    # path must NOT be judged disjoint from a PR that is moving that path.
     rec = _RunRecorder([
         (lambda c: c[:3] == ["gh", "pr", "view"],
          _proc(stdout=json.dumps({"files": [
-             {"path": "new/name.py", "previousPath": "old/name.py"}]}))),
+             {"path": "kept.py", "changeType": "MODIFIED"},
+             {"path": "new/name.py", "changeType": "RENAMED"}]}))),
     ])
     monkeypatch.setattr(bs, "_run", rec)
-    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) == ["new/name.py", "old/name.py"]
+    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) is None
+
+
+def test_pr_changed_files_normal_change_types_kept(monkeypatch):
+    # ADDED/MODIFIED/DELETED are confident single-path entries -> kept as-is.
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "view"],
+         _proc(stdout=json.dumps({"files": [
+             {"path": "a.py", "changeType": "ADDED"},
+             {"path": "b.py", "changeType": "MODIFIED"},
+             {"path": "c.py", "changeType": "DELETED"}]}))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) == ["a.py", "b.py", "c.py"]
 
 
 def test_derive_surfaces_partial_failure_is_unknown(monkeypatch):

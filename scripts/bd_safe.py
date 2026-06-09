@@ -264,12 +264,18 @@ def _pr_changed_files(pr_number, repo: str):
 
     Returns a list of repo-relative POSIX paths (the surface format the overlap
     math expects) on a confident read, or **None** when the footprint cannot be
-    trusted -- a gh failure, unparseable JSON, or a possibly-truncated list at the
-    100-file gh cap. A None must be propagated as UNKNOWN by the caller (block
-    conservatively), NOT coerced to an empty list (bd polyglot-pdf-8y7).
+    trusted -- a gh failure, unparseable JSON, a possibly-truncated list at the
+    100-file gh cap, or a RENAMED entry (see below). A None must be propagated as
+    UNKNOWN by the caller (block conservatively), NOT coerced to an empty list
+    (bd polyglot-pdf-8y7).
 
-    For a RENAMED file, both the new and the old path are write targets, so both
-    are included when gh exposes the rename's `previousPath`/`originalPath`.
+    Renames are a hole in this API (Codex review): `gh pr view --json files`
+    exposes only `path`/`changeType`/counts -- the GraphQL PullRequestChangedFile
+    schema carries NO previous filename. A rename writes BOTH the new and the old
+    path, but we can only see the new one, so a candidate editing the OLD path
+    would be wrongly judged disjoint. Rather than fetch a second API for the old
+    name, we treat any PR containing a RENAMED entry as UNKNOWN (None) -- the same
+    conservative-on-uncertainty rule the rest of this path follows.
     """
     proc = _run(
         ["gh", "pr", "view", str(pr_number), "--json", "files", "--repo", repo],
@@ -289,10 +295,13 @@ def _pr_changed_files(pr_number, repo: str):
     for f in files:
         if not isinstance(f, dict):
             continue
-        for key in ("path", "previousPath", "originalPath"):
-            val = f.get(key)
-            if isinstance(val, str) and val:
-                out.append(val)
+        # A rename's old path is invisible to this API -> the footprint is
+        # incomplete -> UNKNOWN.
+        if str(f.get("changeType") or "").upper() == "RENAMED":
+            return None
+        path = f.get("path")
+        if isinstance(path, str) and path:
+            out.append(path)
     return out
 
 
