@@ -36,6 +36,10 @@ from gtts import gTTS
 UTTERANCES = [
     ("digits_1234567.wav", "one two three four five six seven"),
     ("confirm_yes.wav", "yes that's correct"),
+    # Section-2 numeric value for the multi-section scenario (bd polyglot-pdf-8k8):
+    # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled
+    # value "12345".
+    ("digits_12345.wav", "one two three four five"),
 ]
 
 TARGET_SR = 16000  # Gemini Live input rate (audio/pcm;rate=16000).
