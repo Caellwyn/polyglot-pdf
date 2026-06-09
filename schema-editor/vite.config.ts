@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -28,5 +29,14 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    coverage: {
+      // v8 provider + @vitest/coverage-v8. Opt-in via `vitest run --coverage`
+      // (npm run test:coverage); not forced on every `vitest run` so the CI
+      // test job and local watch stay fast (bd polyglot-pdf-uov.2).
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/**/*.d.ts', 'src/test/**'],
+      reporter: ['text', 'text-summary'],
+    },
   }
 })

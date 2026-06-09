@@ -1,0 +1,22 @@
+# Coverage config for pytest-cov / coverage.py (bd polyglot-pdf-uov.2).
+#
+# This lives in a STANDALONE .coveragerc, NOT in pytest.ini: coverage.py only
+# auto-discovers .coveragerc / setup.cfg / tox.ini / pyproject.toml -- it does
+# NOT read [coverage:*] sections from pytest.ini, so a bare `--cov` would
+# silently ignore the source/omit scoping if it lived there.
+#
+# Coverage is opt-in via the --cov flag (not in pytest.ini addopts) so a bare
+# `pytest` and the closeout gate stay fast. Run the backend baseline with:
+#   pytest backend/tests -m "not external" --cov --cov-report=term-missing
+[run]
+# Measure the backend SOURCE only -- tests in the denominator inflate the
+# number and obscure the real source-coverage signal.
+source =
+    backend
+omit =
+    backend/tests/*
+    backend/.venv/*
+    backend/test_*.py
+
+[report]
+show_missing = True
