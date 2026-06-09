@@ -232,9 +232,17 @@ def _pr_numbers_for_bead(bead_id: str, repo: str):
     caller fall through to UNKNOWN, whereas "lookup failed" must NOT be mistaken
     for "no PR" and silently narrow the footprint -- it stays UNKNOWN too.
     """
+    # Two anti-truncation measures (Codex review): (1) scope the server-side
+    # search to the TITLE (`in:title`), so only the handful of PRs that actually
+    # carry the id in their title match -- not every PR whose BODY mentions it as a
+    # deferred/related finding; this collapses the result set to ~1 in practice.
+    # (2) raise --limit well above gh's default of 30 so even a pathological number
+    # of title matches is not silently paged off. The local title-boundary regex
+    # below stays the authoritative filter regardless.
     proc = _run(
-        ["gh", "pr", "list", "--search", '"{}"'.format(bead_id), "--state",
-         "open", "--json", "number,title", "--repo", repo],
+        ["gh", "pr", "list", "--search", '"{}" in:title'.format(bead_id),
+         "--state", "open", "--limit", "200", "--json", "number,title",
+         "--repo", repo],
         check=False,
     )
     if proc.returncode != 0:
@@ -295,9 +303,13 @@ def _pr_changed_files(pr_number, repo: str):
     for f in files:
         if not isinstance(f, dict):
             continue
-        # A rename's old path is invisible to this API -> the footprint is
-        # incomplete -> UNKNOWN.
-        if str(f.get("changeType") or "").upper() == "RENAMED":
+        # We rely on changeType to detect a rename (whose old path is invisible to
+        # this API). RENAMED -> UNKNOWN; a MISSING/empty changeType -> also UNKNOWN
+        # (Codex review), because we cannot confirm it is NOT a rename and must not
+        # trust a footprint that might be hiding an old path. ADDED/MODIFIED/DELETED
+        # are confident single-path entries.
+        change_type = str(f.get("changeType") or "").upper()
+        if change_type in ("", "RENAMED"):
             return None
         path = f.get("path")
         if isinstance(path, str) and path:

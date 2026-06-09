@@ -481,8 +481,8 @@ def test_bead_surfaces_derives_from_open_pr_when_undeclared(monkeypatch):
             return _proc(stdout='[{"number": 7, "title": "feat (bd proj-aaa1)"}]')
         if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
             return _proc(stdout=json.dumps(
-                {"files": [{"path": "frontend/src/x.ts"},
-                           {"path": "docs/y.md"}]}))
+                {"files": [{"path": "frontend/src/x.ts", "changeType": "MODIFIED"},
+                           {"path": "docs/y.md", "changeType": "ADDED"}]}))
         return _proc()
     monkeypatch.setattr(bs, "_run", fake)
     assert bs._bead_surfaces("proj-aaa1") == ["frontend/src/x.ts", "docs/y.md"]
@@ -528,11 +528,13 @@ def test_bead_surfaces_pr_derivation_dedups_across_prs(monkeypatch):
                 {"number": 8, "title": "b (bd proj-aaa1)"},
             ]))
         if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
-            return _proc(stdout=json.dumps({"files": [{"path": "a.py"},
-                                                      {"path": "shared.py"}]}))
+            return _proc(stdout=json.dumps({"files": [
+                {"path": "a.py", "changeType": "ADDED"},
+                {"path": "shared.py", "changeType": "MODIFIED"}]}))
         if cmd[:3] == ["gh", "pr", "view"] and "8" in cmd:
-            return _proc(stdout=json.dumps({"files": [{"path": "shared.py"},
-                                                      {"path": "b.py"}]}))
+            return _proc(stdout=json.dumps({"files": [
+                {"path": "shared.py", "changeType": "MODIFIED"},
+                {"path": "b.py", "changeType": "ADDED"}]}))
         return _proc()
     monkeypatch.setattr(bs, "_run", fake)
     assert bs._bead_surfaces("proj-aaa1") == ["a.py", "shared.py", "b.py"]
@@ -548,7 +550,8 @@ def test_pr_derived_surfaces_unblock_disjoint_candidate(monkeypatch):
         if cmd[:3] == ["gh", "pr", "list"]:
             return _proc(stdout='[{"number": 9, "title": "x (bd proj-claim)"}]')
         if cmd[:3] == ["gh", "pr", "view"] and "9" in cmd:
-            return _proc(stdout=json.dumps({"files": [{"path": "frontend/a.ts"}]}))
+            return _proc(stdout=json.dumps(
+                {"files": [{"path": "frontend/a.ts", "changeType": "MODIFIED"}]}))
         return _proc()
     monkeypatch.setattr(bs, "_run", fake)
     claim_surfaces = bs._bead_surfaces("proj-claim")          # derived from PR
@@ -571,7 +574,8 @@ def test_bead_surfaces_bd_show_failure_is_unknown_not_pr_derived(monkeypatch):
         if cmd[:3] == ["gh", "pr", "list"]:
             return _proc(stdout='[{"number": 5, "title": "x (bd proj-aaa1)"}]')
         if cmd[:3] == ["gh", "pr", "view"]:
-            return _proc(stdout=json.dumps({"files": [{"path": "a.py"}]}))
+            return _proc(stdout=json.dumps(
+                {"files": [{"path": "a.py", "changeType": "MODIFIED"}]}))
         return _proc()
     monkeypatch.setattr(bs, "_run", fake)
     assert bs._bead_surfaces("proj-aaa1") == []
@@ -619,6 +623,38 @@ def test_pr_changed_files_normal_change_types_kept(monkeypatch):
     assert bs._pr_changed_files(9, bs.DEFAULT_REPO) == ["a.py", "b.py", "c.py"]
 
 
+def test_pr_changed_files_missing_change_type_is_unknown(monkeypatch):
+    # A file entry with no/empty changeType cannot be confirmed NOT a rename ->
+    # UNKNOWN (Codex review). We must not trust a footprint that could be hiding a
+    # rename's old path.
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "view"],
+         _proc(stdout=json.dumps({"files": [
+             {"path": "a.py", "changeType": "ADDED"},
+             {"path": "b.py"}]}))),  # no changeType
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) is None
+
+
+def test_pr_numbers_search_is_title_scoped_and_high_limit(monkeypatch):
+    # Anti-truncation (Codex review): the server-side search is scoped to the TITLE
+    # (in:title, so body-only mentions don't bloat the page) and --limit is raised
+    # well above gh's default of 30.
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "list"],
+         _proc(stdout=json.dumps([{"number": 3, "title": "x (bd proj-aaa1)"}]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._pr_numbers_for_bead("proj-aaa1", bs.DEFAULT_REPO) == [3]
+    # The search term carries the in:title qualifier and a generous limit.
+    listing = next(c for c in rec.calls if c[:3] == ["gh", "pr", "list"])
+    search_ix = listing.index("--search")
+    assert "in:title" in listing[search_ix + 1]
+    assert "--limit" in listing
+    assert int(listing[listing.index("--limit") + 1]) >= 100
+
+
 def test_derive_surfaces_partial_failure_is_unknown(monkeypatch):
     # Two PRs carry the id; the second PR's file lookup FAILS. The union would be
     # incomplete -> the whole derivation returns None (UNKNOWN), not a partial set.
@@ -631,7 +667,8 @@ def test_derive_surfaces_partial_failure_is_unknown(monkeypatch):
                 {"number": 8, "title": "b (bd proj-aaa1)"},
             ]))
         if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
-            return _proc(stdout=json.dumps({"files": [{"path": "a.py"}]}))
+            return _proc(stdout=json.dumps(
+                {"files": [{"path": "a.py", "changeType": "MODIFIED"}]}))
         if cmd[:3] == ["gh", "pr", "view"] and "8" in cmd:
             return _proc(returncode=1, stderr="boom")
         return _proc()
