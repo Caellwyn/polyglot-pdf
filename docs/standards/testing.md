@@ -32,21 +32,15 @@ addopts = --import-mode=importlib
 norecursedirs = scripts .venv node_modules .git build dist .claude
 markers =
     external: marks tests requiring real Gemini access
-
-[coverage:run]
-source = backend
-omit =
-    backend/tests/*
-    backend/.venv/*
-    backend/test_*.py
-[coverage:report]
-show_missing = True
 ```
 
 `--cov` is **not** in `addopts` — coverage is opt-in via the flag so a bare
-`pytest` (and the closeout gate) stays fast. The `[coverage:*]` sections only
-take effect when `--cov` is passed; `source = backend` with the `omit` keeps
-test files out of the denominator.
+`pytest` (and the closeout gate) stays fast. The coverage **source/omit scoping
+lives in a standalone `.coveragerc`** at the repo root, **not** in `pytest.ini`:
+coverage.py only auto-discovers `.coveragerc` / `setup.cfg` / `tox.ini` /
+`pyproject.toml`, so `[coverage:*]` sections in `pytest.ini` would be silently
+ignored. `.coveragerc` sets `source = backend` (so untested modules show at 0%
+rather than hiding) with `omit = backend/tests/*` to keep test files out.
 
 `--import-mode=importlib` lets duplicate test basenames coexist without
 `__init__.py` packaging (e.g. a `test_section_switching.py` under both `scripts/`
@@ -151,14 +145,15 @@ Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
 not enforced).** Run it explicitly:
 
 - **Backend:** `pytest backend/tests -m "not external" --cov --cov-report=term-missing`
-  (`pytest-cov`; config in the root `pytest.ini` `[coverage:*]` sections).
+  (`pytest-cov`; source/omit scoping in the root `.coveragerc`).
 - **Frontend:** `npm run test:coverage` from `frontend/` (`@vitest/coverage-v8`).
 - **Schema-editor:** `npm run test:coverage` from `schema-editor/`.
 
-Baseline statement coverage (recorded 2026-06-09): **backend 71%**, **frontend
-12%**, **schema-editor 33%**. These are instruments, not gates — no threshold is
-enforced and a low number is not a closeout blocker. Coverage artifacts
-(`.coverage`, `coverage/`) are gitignored.
+Baseline statement coverage (recorded 2026-06-09): **backend 54%** (source-scoped
+via `.coveragerc`, so untested modules count), **frontend 12%**, **schema-editor
+33%**. These are instruments, not gates — no threshold is enforced and a low
+number is not a closeout blocker. Coverage artifacts (`.coverage`, `coverage/`)
+are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
 backend pytest suite (`-m "not external"`) plus both vitest suites on every PR.
