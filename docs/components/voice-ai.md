@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-07. See [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -48,6 +48,11 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   callback; the frontend (`connection.ts` → `audioManager`) plays them and detects
   end-of-playback via the audio source's `onended`, which drives the activity
   watchdog.
+- **Dev test injection:** `connection.ts` publishes a dev-gated
+  `window.__VFF_TEST_INJECT` (only when `isTestHarnessEnabled()` — both
+  `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` set) that pushes scripted PCM straight
+  into `sendAudio`, bypassing the mic/worklet. Used by the E2E voice harness
+  (`tests/e2e/voice-harness/`); a no-op in production and normal dev.
 - **Text/hints:** `send_text_message()` queues hints; `send_client_content()`
   prompts Gemini to actually speak. The actual wire send is **model-conditional**
   via `_send_text_turn()` (bd `polyglot-pdf-1g6`): the **3.1 family** rejects

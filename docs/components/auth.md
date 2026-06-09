@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for closeout details.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the dev test-harness auth bypass; [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for the firestore-rules closeout.*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -24,7 +24,13 @@ and the `VFF_DISABLE_AUTH` dev bypass are in
   client auth state. It provides `user`, `loading`, `signInWithGoogle`,
   `signInWithEmail`, `signUpWithEmail`, `logout`, and `resetPassword`. Persistence is
   `browserLocalPersistence` (`setPersistence`), and `onAuthStateChanged` drives
-  `user` / `loading`.
+  `user` / `loading`. **Dev test bypass:** when `isTestHarnessEnabled()`
+  (`frontend/src/shared/config.ts` — requires both `__VFF_LOCAL_DEV` and
+  `__VFF_TEST_HARNESS`, set via window or localStorage) is true, `AuthContext`
+  installs a mock user and skips the Firebase listener entirely (no network, no
+  Firestore). This is the client-side companion to the backend `VFF_DISABLE_AUTH`
+  bypass and exists only for the E2E voice harness; it can never fire in production
+  or normal local dev.
 - **Login UI** (`frontend/src/components/auth/Login.tsx`) — a Google button plus an
   email/password form with three modes: `signin`, `signup`, and `reset` (password-
   reset email).
