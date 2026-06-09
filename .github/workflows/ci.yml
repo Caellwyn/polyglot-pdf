@@ -46,7 +46,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm test -- run
+          npm run test:run
 
   schema-editor-tests:
     name: schema-editor vitest

@@ -16,7 +16,7 @@ export default defineConfig({
 			// test job and local watch stay fast (bd polyglot-pdf-uov.2).
 			provider: 'v8',
 			include: ['src/**/*.{ts,tsx}'],
-			exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
+			exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/**/*.d.ts'],
 			reporter: ['text', 'text-summary'],
 		},
 	},

@@ -29,6 +29,8 @@
 		"prepreview:schema": "npm run form-kits:prepare",
 		"test": "vitest --environment jsdom",
 		"pretest": "npm run form-kits:prepare",
+		"test:run": "vitest run",
+		"pretest:run": "npm run form-kits:prepare",
 		"test:coverage": "vitest run --coverage",
 		"pretest:coverage": "npm run form-kits:prepare",
 		"parse": "tsx scripts/parse-form.ts",
