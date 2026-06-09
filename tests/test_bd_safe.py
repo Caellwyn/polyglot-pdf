@@ -442,6 +442,117 @@ def test_bead_surfaces_filters_non_string_junk(monkeypatch):
     ) is True
 
 
+# --- PR-derived surfaces for undeclared claims (bd polyglot-pdf-8y7) ---
+
+def test_bead_surfaces_declared_wins_without_pr_lookup(monkeypatch):
+    # Declared surfaces are authoritative: no gh call is made when they exist.
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=_bead_show_json(["scripts/x.py"]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1") == ["scripts/x.py"]
+    assert not rec.ran("gh", "pr", "list")  # never reached PR derivation
+
+
+def test_bead_surfaces_no_derive_flag_skips_gh(monkeypatch):
+    # derive_from_prs=False reads only the declaration and never calls gh, even
+    # when the bead declared nothing (the next_bead candidate path).
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
+         _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._bead_surfaces("proj-aaa1", derive_from_prs=False) == []
+    assert not rec.ran("gh", "pr", "list")
+
+
+def test_bead_surfaces_derives_from_open_pr_when_undeclared(monkeypatch):
+    # No declared surfaces + an open PR whose title carries the id -> the bead's
+    # surfaces are that PR's changed files (the board-lock fix).
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout='[{"number": 7, "title": "feat (bd proj-aaa1)"}]')
+        if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
+            return _proc(stdout=json.dumps(
+                {"files": [{"path": "frontend/src/x.ts"},
+                           {"path": "docs/y.md"}]}))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._bead_surfaces("proj-aaa1") == ["frontend/src/x.ts", "docs/y.md"]
+
+
+def test_bead_surfaces_undeclared_no_pr_is_unknown(monkeypatch):
+    # No declaration AND no open PR -> [] (genuinely UNKNOWN; the conservative
+    # collide-with-everything policy still applies downstream).
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout="[]")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._bead_surfaces("proj-aaa1") == []
+
+
+def test_bead_surfaces_pr_view_failure_falls_back_to_unknown(monkeypatch):
+    # The PR exists but `gh pr view` fails -> we cannot derive, so [] (UNKNOWN),
+    # never a crash. The conservative policy then blocks, which is the safe side.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout='[{"number": 7, "title": "feat (bd proj-aaa1)"}]')
+        if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
+            return _proc(returncode=1, stderr="boom")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._bead_surfaces("proj-aaa1") == []
+
+
+def test_bead_surfaces_pr_derivation_dedups_across_prs(monkeypatch):
+    # Two open PRs carry the id; the union of their files is returned once each,
+    # in first-seen order.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout=json.dumps([
+                {"number": 7, "title": "a (bd proj-aaa1)"},
+                {"number": 8, "title": "b (bd proj-aaa1)"},
+            ]))
+        if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
+            return _proc(stdout=json.dumps({"files": [{"path": "a.py"},
+                                                      {"path": "shared.py"}]}))
+        if cmd[:3] == ["gh", "pr", "view"] and "8" in cmd:
+            return _proc(stdout=json.dumps({"files": [{"path": "shared.py"},
+                                                      {"path": "b.py"}]}))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._bead_surfaces("proj-aaa1") == ["a.py", "shared.py", "b.py"]
+
+
+def test_pr_derived_surfaces_unblock_disjoint_candidate(monkeypatch):
+    # End-to-end of the fix: an active claim with NO declared surfaces but an open
+    # PR touching only frontend files must NOT block a candidate that declares
+    # only backend surfaces. Pre-fix this returned True (UNKNOWN-collides-all).
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-claim"]:
+            return _proc(stdout=json.dumps([{"id": "claim", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout='[{"number": 9, "title": "x (bd proj-claim)"}]')
+        if cmd[:3] == ["gh", "pr", "view"] and "9" in cmd:
+            return _proc(stdout=json.dumps({"files": [{"path": "frontend/a.ts"}]}))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    claim_surfaces = bs._bead_surfaces("proj-claim")          # derived from PR
+    assert claim_surfaces == ["frontend/a.ts"]
+    candidate = ["backend/config.py", "pytest.ini"]
+    assert bs._surfaces_overlap(candidate, claim_surfaces) is False
+
+
 def test_active_claim_ids_filters_to_live_work(monkeypatch):
     # in_progress beads: foo has an open PR (live -> active); bar has neither PR
     # nor branch (stale -> NOT active); the exclude_id is never counted.

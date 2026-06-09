@@ -71,7 +71,10 @@ def _classify(candidates: list, active_ids: list) -> dict:
     its surfaces overlap ANY active claim's surfaces; the blocking claim id and
     the offending surface pair are recorded for the report.
     """
-    # Cache each active claim's surfaces once.
+    # Cache each active claim's surfaces once. Active claims get PR-DERIVATION
+    # (the _bead_surfaces default): a mid-flight claim that declared no surfaces
+    # but has an open PR contributes its real diff footprint instead of blocking
+    # everything as UNKNOWN (bd polyglot-pdf-8y7).
     claim_surfaces = {aid: bd_safe._bead_surfaces(aid) for aid in active_ids}
 
     available, blocked = [], []
@@ -79,7 +82,10 @@ def _classify(candidates: list, active_ids: list) -> dict:
         cand_id = cand.get("id")
         if not cand_id:
             continue
-        mine = bd_safe._bead_surfaces(cand_id)
+        # Candidates are READY beads (open, no open PR yet by definition), so PR
+        # derivation would be ~50 wasted `gh` calls with nothing to find -- read
+        # only their DECLARED surfaces.
+        mine = bd_safe._bead_surfaces(cand_id, derive_from_prs=False)
         blockers = []
         for aid, theirs in claim_surfaces.items():
             if bd_safe._surfaces_overlap(mine, theirs):

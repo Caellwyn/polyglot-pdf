@@ -219,6 +219,79 @@ def _pr_collision(bead_id: str, repo: str) -> str | None:
     )
 
 
+def _pr_numbers_for_bead(bead_id: str, repo: str) -> list:
+    """Return the numbers of OPEN PRs whose TITLE carries this bead id.
+
+    Same scoping as `_pr_collision` (open-only, title boundary match) but returns
+    the PR numbers so a caller can fetch each PR's changed files. Used to DERIVE a
+    claim's real change-surfaces when the bead declared none (bd polyglot-pdf-8y7):
+    an undeclared-surface claim with a live PR is the common case, and treating it
+    as UNKNOWN-collides-everything locked the whole next-bead board.
+    """
+    proc = _run(
+        ["gh", "pr", "list", "--search", '"{}"'.format(bead_id), "--state",
+         "open", "--json", "number,title", "--repo", repo],
+        check=False,
+    )
+    if proc.returncode != 0:
+        # A tooling failure here means we cannot derive surfaces; the caller falls
+        # back to the conservative UNKNOWN policy, so swallow and report none.
+        return []
+    try:
+        prs = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+    needle = re.compile(re.escape(bead_id) + r"(?![0-9A-Za-z._-])", re.IGNORECASE)
+    return [
+        pr.get("number")
+        for pr in prs
+        if needle.search(pr.get("title") or "") and pr.get("number") is not None
+    ]
+
+
+def _pr_changed_files(pr_number, repo: str) -> list:
+    """Return the file paths an OPEN PR changes, via `gh pr view --json files`.
+
+    The exact, authoritative footprint of a mid-flight claim -- strictly better
+    than the UNKNOWN-collides-everything fallback when surfaces were not declared
+    (bd polyglot-pdf-8y7). Paths come back repo-relative with forward slashes,
+    which is exactly the surface format the overlap math expects.
+    """
+    proc = _run(
+        ["gh", "pr", "view", str(pr_number), "--json", "files", "--repo", repo],
+        check=False,
+    )
+    if proc.returncode != 0:
+        return []
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+    files = (data or {}).get("files") or []
+    return [
+        f.get("path") for f in files
+        if isinstance(f, dict) and isinstance(f.get("path"), str)
+    ]
+
+
+def _derive_surfaces_from_prs(bead_id: str, repo: str) -> list:
+    """Best-effort change-surfaces for a bead, derived from its open PR(s).
+
+    Returns the de-duplicated union of changed files across every open PR whose
+    title carries the id, or [] if there is no such PR (or the lookups fail). The
+    caller uses this ONLY when the bead declared no surfaces; a non-empty result
+    lets the overlap guard compare real footprints instead of blocking on UNKNOWN
+    (bd polyglot-pdf-8y7).
+    """
+    seen, out = set(), []
+    for num in _pr_numbers_for_bead(bead_id, repo):
+        for path in _pr_changed_files(num, repo):
+            if path not in seen:
+                seen.add(path)
+                out.append(path)
+    return out
+
+
 def _current_branch() -> str | None:
     """The branch checked out in THIS worktree, or None (detached/error).
 
@@ -309,8 +382,11 @@ def _is_own_current_branch(branch_line: str, current_branch: str | None) -> bool
 # MODIFY. A bead's `metadata.surfaces` is a structured list of paths (files or
 # directory prefixes ending in "/"); two beads collide if any surface of one is
 # the same as, or nested under, a surface of the other. Reads don't collide --
-# only declared writes do -- so a bead with no surfaces declared is treated as
-# UNKNOWN (see _surfaces_overlap) and conservatively collides with everything.
+# only declared writes do. A bead with no DECLARED surfaces is not immediately
+# UNKNOWN: _bead_surfaces first tries to DERIVE its real footprint from its open
+# PR's changed files (bd polyglot-pdf-8y7); only a bead with neither a declaration
+# nor an open PR is treated as UNKNOWN (see _surfaces_overlap) and conservatively
+# collides with everything.
 
 
 def _normalize_surface(surface: str) -> str:
@@ -380,10 +456,11 @@ def _surfaces_overlap(surfaces_a, surfaces_b) -> bool:
     """True if any declared surface in A overlaps any in B.
 
     UNKNOWN-surface policy (conservative, per the bead's "no override" intent):
-    if EITHER side declares no surfaces, we cannot prove the writes are
-    disjoint, so we report an overlap. A bead that wants to be schedulable
-    alongside others must declare what it will modify -- silence is treated as
-    "could touch anything," not "touches nothing."
+    if EITHER side has no surfaces, we cannot prove the writes are disjoint, so
+    we report an overlap. Note callers pass surfaces from _bead_surfaces, which
+    already tried to DERIVE an undeclared bead's footprint from its open PR
+    (bd polyglot-pdf-8y7); an empty list here therefore means "no declaration AND
+    no open PR" -- genuinely unknown -- not merely "did not fill in metadata."
     """
     if not surfaces_a or not surfaces_b:
         return True
@@ -392,27 +469,48 @@ def _surfaces_overlap(surfaces_a, surfaces_b) -> bool:
     )
 
 
-def _bead_surfaces(bead_id: str) -> list:
-    """Return a bead's declared change-surfaces (metadata.surfaces), or []."""
+def _bead_surfaces(bead_id: str, *, derive_from_prs: bool = True,
+                   repo: str = DEFAULT_REPO) -> list:
+    """Return a bead's change-surfaces.
+
+    Source order (bd polyglot-pdf-8y7):
+      1. The bead's DECLARED `metadata.surfaces` -- authoritative when present.
+      2. If it declared none AND `derive_from_prs`, the files its open PR(s)
+         actually change (the real mid-flight footprint). This is what stops an
+         undeclared-surface claim from locking the whole next-bead board by
+         colliding with everything under the UNKNOWN policy.
+      3. [] -- genuinely UNKNOWN (no declaration, no open PR): the conservative
+         collide-with-everything fallback in _surfaces_overlap still applies.
+
+    Set `derive_from_prs=False` for a pure read of the DECLARED surfaces with no
+    network/gh lookup (e.g. unit tests of the declaration path, or callers that
+    must not hit the GitHub API).
+    """
     proc = _run(["bd", "show", bead_id, "--json"], check=False)
-    if proc.returncode != 0:
-        # A show failure is surfaced by the caller's own error path; here, be
-        # conservative and return [] so the UNKNOWN policy (overlap) applies.
-        return []
-    try:
-        data = json.loads(proc.stdout or "[]")
-    except json.JSONDecodeError:
-        return []
-    # `bd show --json` returns a list; the bead itself is the first element.
-    bead = data[0] if isinstance(data, list) and data else data
-    meta = (bead or {}).get("metadata") or {}
-    surfaces = meta.get("surfaces")
-    if not isinstance(surfaces, list):
-        return []
-    # Keep only string entries -- a malformed bead (a null/number/nested list in
-    # surfaces) must not crash the overlap math with an AttributeError deep in
-    # _normalize_surface. Non-string junk is dropped, not coerced.
-    return [s for s in surfaces if isinstance(s, str)]
+    declared = []
+    if proc.returncode == 0:
+        try:
+            data = json.loads(proc.stdout or "[]")
+        except json.JSONDecodeError:
+            data = None
+        if data is not None:
+            # `bd show --json` returns a list; the bead is the first element.
+            bead = data[0] if isinstance(data, list) and data else data
+            meta = (bead or {}).get("metadata") or {}
+            surfaces = meta.get("surfaces")
+            if isinstance(surfaces, list):
+                # Keep only string entries -- a malformed bead (a null/number/
+                # nested list in surfaces) must not crash the overlap math with
+                # an AttributeError deep in _normalize_surface. Non-string junk
+                # is dropped, not coerced.
+                declared = [s for s in surfaces if isinstance(s, str)]
+    # A bd-show failure or empty/missing surfaces both fall through to the PR
+    # derivation (then to the UNKNOWN policy in the caller).
+    if declared:
+        return declared
+    if derive_from_prs:
+        return _derive_surfaces_from_prs(bead_id, repo)
+    return []
 
 
 def _active_claim_ids(exclude_id: str) -> list:
@@ -465,8 +563,10 @@ def _surface_collision(bead_id: str) -> str | None:
 
     This is the R1 write-overlap guard. It is a HARD block with no override
     (h2r.1): two workers writing the same file is a conflict regardless of
-    intent. An active claim that declares no surfaces (UNKNOWN) collides with
-    everything by the conservative policy in _surfaces_overlap.
+    intent. An active claim with no declared surfaces AND no open PR to derive
+    them from (UNKNOWN) collides with everything by the conservative policy in
+    _surfaces_overlap (bd polyglot-pdf-8y7 narrowed this to the genuinely-unknown
+    case by deriving surfaces from an open PR first).
     """
     mine = _bead_surfaces(bead_id)
     for active_id in _active_claim_ids(exclude_id=bead_id):
@@ -476,7 +576,8 @@ def _surface_collision(bead_id: str) -> str | None:
         if not mine or not theirs:
             # UNKNOWN on at least one side -> the conservative collide-with-
             # everything case; there is no concrete overlapping pair to name.
-            detail = "UNKNOWN surfaces (one side declared none)"
+            detail = ("UNKNOWN surfaces (one side has no declaration and no "
+                      "open PR to derive them from)")
         else:
             shared = sorted(
                 "{} ~ {}".format(sa, sb)
