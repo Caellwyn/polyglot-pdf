@@ -889,13 +889,27 @@ def _adapter_with_session_and_vad(monkeypatch, *, disable_gemini_vad):
 
 @pytest.mark.asyncio
 async def test_activity_signals_suppressed_in_native_vad(monkeypatch):
-    """DISABLE_GEMINI_VAD=False -> activity_start/end are dropped (Gemini owns VAD)."""
+    """DISABLE_GEMINI_VAD=False (native VAD) -> the conflicting manual
+    activity_start/activity_end signals are suppressed (Gemini owns turn-taking).
+
+    activity_start is dropped entirely. activity_end does NOT send the conflicting
+    types.ActivityEnd; instead it sends audio_stream_end=True -- the documented
+    realtime signal that is compatible with automatic VAD -- so PTT-as-a-gate can
+    still finalize the audio segment after release without the session going silent
+    (bd polyglot-pdf-6vo / PR #119). So exactly ONE send_realtime_input fires here,
+    carrying audio_stream_end, and never activity_start or activity_end.
+    """
     adapter = _adapter_with_session_and_vad(monkeypatch, disable_gemini_vad=False)
 
     await adapter.send_activity_start()
     await adapter.send_activity_end()
 
-    adapter._current_session.send_realtime_input.assert_not_awaited()
+    send = adapter._current_session.send_realtime_input
+    assert send.await_count == 1
+    only_kwargs = send.await_args_list[0].kwargs
+    assert only_kwargs.get("audio_stream_end") is True
+    assert "activity_start" not in only_kwargs
+    assert "activity_end" not in only_kwargs
 
 
 @pytest.mark.asyncio
