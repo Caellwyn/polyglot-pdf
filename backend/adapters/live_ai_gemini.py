@@ -55,9 +55,15 @@ def _build_function_response(tool_name, response_payload, call_id):
     id, which is why this stayed latent in prod.) Earlier code dropped the id based
     on a wrong "the SDK matches by order" assumption.
 
-    We include the id whenever we have one (the normal case) and omit it only if it
-    is genuinely absent -- so a rare id-less call still gets SOME response (and so
-    Gemini does not block waiting for one) rather than crashing the whole loop.
+    We include the id whenever we have one -- which is the normal case (real tool
+    calls always carry an id). We omit it only if it is genuinely absent, which
+    keeps the Vertex path working and matches the prior behavior there. NOTE: on
+    AI Studio a genuinely-id-less response would STILL fail at send time
+    (send_tool_response re-checks and raises _FUNCTION_RESPONSE_REQUIRES_ID) -- the
+    omit-if-absent branch does not prevent that crash, it only avoids forcing an
+    `id=None` field. We accept that because an id-less call is not something we have
+    actually observed; if it ever occurs on AI Studio it should surface loudly
+    rather than be papered over with a synthetic id the model never sent.
     """
     fr_kwargs = {"name": tool_name, "response": response_payload}
     if call_id:
@@ -1557,9 +1563,8 @@ class LiveAIGemini(ILiveAI):
                                                 # id on this event.tool_call path (verified:
                                                 # probe_tool_call_id.py shows fc.id='function-call-...'); the
                                                 # old "should NOT include id" comment was wrong for this SDK.
-                                                # Include it when present (it is, here); omit only if absent
-                                                # so a rare id-less call still gets SOME response (Vertex
-                                                # tolerates a missing id, AI Studio does not).
+                                                # _build_function_response includes the id when present (it is,
+                                                # here) -- see its docstring for the omit-if-absent behavior.
                                                 responses.append(
                                                     _build_function_response(tool_name, response_payload, call_id)
                                                 )

@@ -49,7 +49,6 @@ def _system_instruction() -> str:
         section_list="[1] Part 1 - Information About You",
         filled_count=0,
         total_fields=9,
-        unfilled_count=9,
         fields_json=FIELDS_TEXT,
         fill_language="English",
         previous_spoken_names="(none)",
