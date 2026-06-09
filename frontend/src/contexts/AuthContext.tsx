@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { isTestHarnessEnabled } from '../shared/config';
 
 interface AuthContextType {
     user: User | null;
@@ -31,6 +32,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // TEST-ONLY auth bypass (bd polyglot-pdf-g8w). The browser E2E voice harness
+        // cannot sign in through Firebase, so when the harness gate is set (the same
+        // double-gate as the injection hook in connection.ts: __VFF_LOCAL_DEV AND
+        // __VFF_TEST_HARNESS) we install a mock user and skip the real Firebase
+        // listener entirely. DOUBLE-GATED so it can NEVER run in production or in
+        // normal local dev. No network, no Firestore write.
+        if (isTestHarnessEnabled()) {
+            const mockUser = {
+                uid: 'vff-test-harness',
+                email: 'harness@test.local',
+                displayName: 'VFF Test Harness',
+                photoURL: null,
+                // getIdToken must resolve (SchemaForm calls user.getIdToken() for the
+                // WS token). The local backend runs with VFF_DISABLE_AUTH=true so the
+                // value is ignored -- a dummy string is enough to avoid a throw.
+                getIdToken: async () => 'vff-test-harness-token',
+            } as unknown as User;
+            console.log('[Auth] TEST harness bypass active -- mock user installed (__VFF_TEST_HARNESS)');
+            setUser(mockUser);
+            setLoading(false);
+            return;
+        }
+
         // Enable local persistence
         setPersistence(auth, browserLocalPersistence).catch(console.error);
 

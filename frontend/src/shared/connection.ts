@@ -12,6 +12,17 @@ declare global {
 		vffOnAudioPlaybackStart?: () => void  // Called when Gemini starts speaking (pause timer)
 		vffOnSectionChanged?: () => void  // Called when Gemini switches sections
 		// vffOnTurnComplete removed - now using audio silence detection (100ms threshold)
+		// TEST-ONLY (bd polyglot-pdf-g8w): dev gate + injection handle for the E2E
+		// voice harness. Double-gated install below; never set in production.
+		__VFF_LOCAL_DEV?: boolean
+		__VFF_TEST_HARNESS?: boolean
+		__VFF_TEST_INJECT?: {
+			sendAudio: (audioData: ArrayBuffer) => void
+			sendActivityStart: () => void
+			sendActivityEnd: () => Promise<void>
+			isNativeVad: () => boolean
+			getLastNextField: () => string | null
+		}
 	}
 }
 
@@ -21,7 +32,7 @@ import { SchemaFormStateManager, type SchemaFormState } from '../schema-forms/st
 import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
-import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl } from './config'
+import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
 
 export interface ConnectionManager {
 	connect: () => Promise<void>
@@ -196,6 +207,20 @@ export function createConnectionManager(
 	// continuous audio. Set from the backend session_ready handshake.
 	let nativeVad: boolean = false
 
+	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
+	// advanced to, so the dev-gated E2E voice harness can assert "moved to the
+	// next field" without scraping transcripts. Only meaningful when the harness
+	// hook below is installed; harmless otherwise (it just shadows onNextField).
+	let lastNextField: string | null = null
+	const trackedOnNextField = onNextField
+		? (fieldId: string | null) => {
+			lastNextField = fieldId
+			onNextField(fieldId)
+		}
+		: (fieldId: string | null) => {
+			lastNextField = fieldId
+		}
+
 	// Initialize state
 	let state: SchemaFormState = SchemaFormStateManager.load() || SchemaFormStateManager.init(schema)
 
@@ -334,10 +359,10 @@ export function createConnectionManager(
 			paused = false
 			onStatusChange('error')
 		},
-		onNextField: onNextField
+		onNextField: trackedOnNextField
 	}
 
-	return {
+	const manager: ConnectionManager = {
 		async connect() {
 			// BUG FIX (Nov 10, 2025): Reset paused flag on connect attempt
 			// This fixes the issue where after idle timeout, isPaused() returns true
@@ -405,7 +430,7 @@ export function createConnectionManager(
 				if (!connection) {
 					connection = new WebFormConnection(schema, {
 						...callbacks,
-						onNextField
+						onNextField: trackedOnNextField
 					}, fillLanguage)
 					// Register the fresh-token callback so reconnects (startSection,
 					// auto-reconnect) re-fetch a valid token (bd polyglot-pdf-wq0).
@@ -430,7 +455,7 @@ export function createConnectionManager(
 					connection.disconnect()
 					connection = new WebFormConnection(schema, {
 						...callbacks,
-						onNextField
+						onNextField: trackedOnNextField
 					}, fillLanguage)
 					if (getToken) connection.setGetToken(getToken)
 					capturePreFilledValues(connection, schema)
@@ -602,6 +627,17 @@ export function createConnectionManager(
 		async startRecording() {
 			console.log('[VFF Connection] startRecording called')
 
+			// TEST harness (bd polyglot-pdf-g8w): the E2E voice harness feeds audio
+			// through window.__VFF_TEST_INJECT.sendAudio, so it needs NO microphone.
+			// Skip getUserMedia/worklet setup entirely under the harness gate -- in a
+			// headless/no-mic browser getUserMedia would reject and drop the session
+			// into the connection-failed path even though injection would work fine
+			// (Codex review, PR #123). Gated identically to the inject hook.
+			if (isTestHarnessEnabled()) {
+				console.log('[VFF Connection] TEST harness active -- skipping microphone capture (audio is injected)')
+				return
+			}
+
 			if (!audioManager) {
 				console.error('[VFF Connection] Audio manager not initialized')
 				return
@@ -728,8 +764,9 @@ export function createConnectionManager(
 
 			await connection.startSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before
-			if (!paused && audioManager) {
+			// Restart recording if we were recording before. Skip the mic under the
+			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
+			if (!paused && audioManager && !isTestHarnessEnabled()) {
 				await audioManager.startRecording((data) => {
 					if (connection) {
 						connection.sendAudio(data)
@@ -750,8 +787,9 @@ export function createConnectionManager(
 
 			await connection.switchToSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before
-			if (!paused && audioManager) {
+			// Restart recording if we were recording before. Skip the mic under the
+			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
+			if (!paused && audioManager && !isTestHarnessEnabled()) {
 				await audioManager.startRecording((data) => {
 					if (connection) {
 						connection.sendAudio(data)
@@ -840,6 +878,31 @@ export function createConnectionManager(
 			console.log('[VFF Connection] 🎤 VAD speech ended - sent activity_end, audio playback resumed')
 		},
 	}
+
+	// TEST-ONLY injection hook (bd polyglot-pdf-g8w). Publishes a thin handle the
+	// browser E2E voice harness uses to push scripted fixture audio straight into
+	// the WS (the same path mic audio takes via sendAudio), bypassing getUserMedia
+	// and the worklet. DOUBLE-GATED so it can NEVER attach in production and never
+	// in normal local dev: it requires both window.__VFF_LOCAL_DEV (the existing
+	// dev override, see config.ts) AND an explicit window.__VFF_TEST_HARNESS opt-in.
+	// Re-published on every createConnectionManager call so it tracks the live
+	// manager across the disclaimer-driven session restart (switchToFirstSection).
+	try {
+		if (isTestHarnessEnabled()) {
+			window.__VFF_TEST_INJECT = {
+				sendAudio: (audioData: ArrayBuffer) => manager.sendAudio(audioData),
+				sendActivityStart: () => manager.sendActivityStart(),
+				sendActivityEnd: () => manager.sendActivityEnd(),
+				isNativeVad: () => manager.isNativeVad(),
+				getLastNextField: () => lastNextField,
+			}
+			console.log('[VFF Connection] TEST harness inject hook installed (__VFF_TEST_INJECT)')
+		}
+	} catch {
+		// window may be undefined in non-browser contexts (tests); ignore.
+	}
+
+	return manager
 }
 
 /**

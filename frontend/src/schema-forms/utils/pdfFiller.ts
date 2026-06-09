@@ -8,6 +8,7 @@
  */
 
 import type { FormSchema } from '../types/schema';
+import { getDevConfig } from '../../shared/config';
 
 /**
  * Get backend HTTP URL based on environment
@@ -16,11 +17,16 @@ import type { FormSchema } from '../types/schema';
  * Production: Uses current domain (Firebase Hosting with rewrites to Cloud Run)
  */
 export function getBackendHttpUrl(): string {
-  // Check for custom URL override (for local dev)
-  const customUrl = (window as any).__VFF_BACKEND_URL;
-  if (customUrl) {
+  // Check for custom URL override (for local dev). Use getDevConfig() so the
+  // override is read from window OR (localhost-gated) localStorage -- the SAME
+  // resolution config.ts uses for the WS URL. Reading window.__VFF_BACKEND_URL
+  // directly here meant the HTTP form-list/PDF fetches ignored a localStorage
+  // override that the WS honored, so they hit the wrong backend after a reload
+  // (bd polyglot-pdf-g8w; the harness sets the override in localStorage).
+  const dev = getDevConfig();
+  if (dev.enabled) {
     // Convert WebSocket URL to HTTP if needed
-    return customUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws/fill', '');
+    return dev.backendUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws/fill', '');
   }
 
   // Use environment variable if set (production builds)

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -143,8 +143,12 @@ order: (1) local-dev override (`window.__VFF_LOCAL_DEV` → `window.__VFF_BACKEN
 default `ws://localhost:8000/ws/fill`); (2) `VITE_WS_URL` env var; (3) production —
 the hardcoded `PRODUCTION_WS_URL` (`wss://polyglot-backend-d3mhrrkwfq-uc.a.run.app/ws/fill`)
 when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/ws/fill`.
+The `__VFF_*` dev overrides are read from `window` OR `localStorage` (so they
+survive a reload). `config.ts` also exposes `isTestHarnessEnabled()` (true only
+when both `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` are set) — a dev/test-only
+gate used by the E2E voice harness; never true in production.
 
 > **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
 > themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-07. See [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
+*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
