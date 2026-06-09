@@ -418,12 +418,16 @@ def test_bead_surfaces_parses_metadata(monkeypatch):
 
 
 def test_bead_surfaces_missing_metadata_returns_empty(monkeypatch):
+    # Empty metadata + no open PR (the _RunRecorder default makes `gh pr list`
+    # return empty) -> [] (UNKNOWN). derive_from_prs=False keeps it a pure read of
+    # the declaration with NO gh call, which is what this test pins.
     rec = _RunRecorder([
         (lambda c: c[:3] == ["bd", "show", "proj-aaa1"],
          _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))),
     ])
     monkeypatch.setattr(bs, "_run", rec)
-    assert bs._bead_surfaces("proj-aaa1") == []
+    assert bs._bead_surfaces("proj-aaa1", derive_from_prs=False) == []
+    assert not rec.ran("gh", "pr", "list")
 
 
 def test_bead_surfaces_filters_non_string_junk(monkeypatch):
@@ -551,6 +555,105 @@ def test_pr_derived_surfaces_unblock_disjoint_candidate(monkeypatch):
     assert claim_surfaces == ["frontend/a.ts"]
     candidate = ["backend/config.py", "pytest.ini"]
     assert bs._surfaces_overlap(candidate, claim_surfaces) is False
+
+
+# --- conservative on uncertainty: every failure collapses to UNKNOWN ([]) so the
+# overlap policy still blocks, never a partial footprint (bd 8y7, Codex review) ---
+
+def test_bead_surfaces_bd_show_failure_is_unknown_not_pr_derived(monkeypatch):
+    # bd show FAILS for a bead that genuinely has declared surfaces. We must NOT
+    # silently replace the unreadable authoritative declaration with a narrower PR
+    # diff -- a bd failure stays UNKNOWN ([]). If this fell through to derivation,
+    # the gh calls below would (wrongly) win.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(returncode=1, stderr="dolt down")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout='[{"number": 5, "title": "x (bd proj-aaa1)"}]')
+        if cmd[:3] == ["gh", "pr", "view"]:
+            return _proc(stdout=json.dumps({"files": [{"path": "a.py"}]}))
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._bead_surfaces("proj-aaa1") == []
+    # And UNKNOWN [] still blocks under the conservative policy.
+    assert bs._surfaces_overlap(["whatever.py"], []) is True
+
+
+def test_pr_changed_files_truncation_is_unknown(monkeypatch):
+    # A file list at the gh 100-file cap may be truncated -> None (UNKNOWN), never
+    # a partial list that could hide an overlap.
+    big = {"files": [{"path": "f{}.py".format(i)} for i in range(bs._PR_FILE_CAP)]}
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "view"],
+         _proc(stdout=json.dumps(big))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) is None
+
+
+def test_pr_changed_files_includes_renamed_old_path(monkeypatch):
+    # A rename touches BOTH the new and old path -> both are write targets.
+    rec = _RunRecorder([
+        (lambda c: c[:3] == ["gh", "pr", "view"],
+         _proc(stdout=json.dumps({"files": [
+             {"path": "new/name.py", "previousPath": "old/name.py"}]}))),
+    ])
+    monkeypatch.setattr(bs, "_run", rec)
+    assert bs._pr_changed_files(9, bs.DEFAULT_REPO) == ["new/name.py", "old/name.py"]
+
+
+def test_derive_surfaces_partial_failure_is_unknown(monkeypatch):
+    # Two PRs carry the id; the second PR's file lookup FAILS. The union would be
+    # incomplete -> the whole derivation returns None (UNKNOWN), not a partial set.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-aaa1"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(stdout=json.dumps([
+                {"number": 7, "title": "a (bd proj-aaa1)"},
+                {"number": 8, "title": "b (bd proj-aaa1)"},
+            ]))
+        if cmd[:3] == ["gh", "pr", "view"] and "7" in cmd:
+            return _proc(stdout=json.dumps({"files": [{"path": "a.py"}]}))
+        if cmd[:3] == ["gh", "pr", "view"] and "8" in cmd:
+            return _proc(returncode=1, stderr="boom")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._derive_surfaces_from_prs("proj-aaa1", bs.DEFAULT_REPO) is None
+    # And _bead_surfaces coerces that None -> [] (UNKNOWN) for the overlap math.
+    assert bs._bead_surfaces("proj-aaa1") == []
+
+
+def test_derive_surfaces_pr_list_failure_is_unknown(monkeypatch):
+    # The PR-list lookup itself fails -> None (UNKNOWN), distinct from a confident
+    # "no open PR" ([]).
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return _proc(returncode=1, stderr="rate limited")
+        return _proc()
+    monkeypatch.setattr(bs, "_run", fake)
+    assert bs._pr_numbers_for_bead("proj-aaa1", bs.DEFAULT_REPO) is None
+    assert bs._derive_surfaces_from_prs("proj-aaa1", bs.DEFAULT_REPO) is None
+
+
+def test_surface_collision_does_not_derive_for_claiming_bead(monkeypatch):
+    # The bead being CLAIMED is read with derive_from_prs=False (it has no PR yet),
+    # so _surface_collision makes no `gh pr view` for it -- only `_pr_collision`'s
+    # own `gh pr list` runs. With no active claims, no surface collision.
+    def fake(cmd, *, check=True):
+        if cmd[:3] == ["bd", "show", "proj-claim"]:
+            return _proc(stdout=json.dumps([{"id": "x", "metadata": {}}]))
+        if cmd[:2] == ["bd", "list"]:
+            return _proc(stdout="[]")  # no active claims
+        return _proc()
+    rec_calls = []
+    orig = fake
+    def recording(cmd, *, check=True):
+        rec_calls.append(list(cmd))
+        return orig(cmd, check=check)
+    monkeypatch.setattr(bs, "_run", recording)
+    assert bs._surface_collision("proj-claim") is None
+    assert not any(c[:3] == ["gh", "pr", "view"] for c in rec_calls)
 
 
 def test_active_claim_ids_filters_to_live_work(monkeypatch):

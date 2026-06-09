@@ -219,14 +219,18 @@ def _pr_collision(bead_id: str, repo: str) -> str | None:
     )
 
 
-def _pr_numbers_for_bead(bead_id: str, repo: str) -> list:
-    """Return the numbers of OPEN PRs whose TITLE carries this bead id.
+def _pr_numbers_for_bead(bead_id: str, repo: str):
+    """Numbers of OPEN PRs whose TITLE carries this bead id, or None if UNKNOWN.
 
     Same scoping as `_pr_collision` (open-only, title boundary match) but returns
     the PR numbers so a caller can fetch each PR's changed files. Used to DERIVE a
-    claim's real change-surfaces when the bead declared none (bd polyglot-pdf-8y7):
-    an undeclared-surface claim with a live PR is the common case, and treating it
-    as UNKNOWN-collides-everything locked the whole next-bead board.
+    claim's real change-surfaces when the bead declared none (bd polyglot-pdf-8y7).
+
+    Returns a list (possibly empty -- a confident "no open PR carries this id") on
+    a clean read, or **None** when the lookup itself failed (gh error / unparseable
+    JSON): the difference matters, because "no PR" is a real signal that lets the
+    caller fall through to UNKNOWN, whereas "lookup failed" must NOT be mistaken
+    for "no PR" and silently narrow the footprint -- it stays UNKNOWN too.
     """
     proc = _run(
         ["gh", "pr", "list", "--search", '"{}"'.format(bead_id), "--state",
@@ -234,13 +238,11 @@ def _pr_numbers_for_bead(bead_id: str, repo: str) -> list:
         check=False,
     )
     if proc.returncode != 0:
-        # A tooling failure here means we cannot derive surfaces; the caller falls
-        # back to the conservative UNKNOWN policy, so swallow and report none.
-        return []
+        return None
     try:
         prs = json.loads(proc.stdout or "[]")
     except json.JSONDecodeError:
-        return []
+        return None
     needle = re.compile(re.escape(bead_id) + r"(?![0-9A-Za-z._-])", re.IGNORECASE)
     return [
         pr.get("number")
@@ -249,43 +251,76 @@ def _pr_numbers_for_bead(bead_id: str, repo: str) -> list:
     ]
 
 
-def _pr_changed_files(pr_number, repo: str) -> list:
-    """Return the file paths an OPEN PR changes, via `gh pr view --json files`.
+# `gh pr view --json files` is capped at 100 files by the gh CLI's GraphQL query
+# (files(first: 100), no auto-pagination). A PR at or above this count may be
+# TRUNCATED, so its derived footprint would be incomplete -- and an incomplete
+# footprint can hide a real collision. We therefore treat a >= cap result as
+# UNKNOWN rather than trusting a partial list (bd polyglot-pdf-8y7, Codex review).
+_PR_FILE_CAP = 100
 
-    The exact, authoritative footprint of a mid-flight claim -- strictly better
-    than the UNKNOWN-collides-everything fallback when surfaces were not declared
-    (bd polyglot-pdf-8y7). Paths come back repo-relative with forward slashes,
-    which is exactly the surface format the overlap math expects.
+
+def _pr_changed_files(pr_number, repo: str):
+    """Files an OPEN PR changes, via `gh pr view --json files`, or None if UNKNOWN.
+
+    Returns a list of repo-relative POSIX paths (the surface format the overlap
+    math expects) on a confident read, or **None** when the footprint cannot be
+    trusted -- a gh failure, unparseable JSON, or a possibly-truncated list at the
+    100-file gh cap. A None must be propagated as UNKNOWN by the caller (block
+    conservatively), NOT coerced to an empty list (bd polyglot-pdf-8y7).
+
+    For a RENAMED file, both the new and the old path are write targets, so both
+    are included when gh exposes the rename's `previousPath`/`originalPath`.
     """
     proc = _run(
         ["gh", "pr", "view", str(pr_number), "--json", "files", "--repo", repo],
         check=False,
     )
     if proc.returncode != 0:
-        return []
+        return None  # tooling failure -> UNKNOWN, not "no files"
     try:
         data = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
-        return []
+        return None
     files = (data or {}).get("files") or []
-    return [
-        f.get("path") for f in files
-        if isinstance(f, dict) and isinstance(f.get("path"), str)
-    ]
+    # A list at/above the gh cap may be truncated -> cannot trust it as complete.
+    if len(files) >= _PR_FILE_CAP:
+        return None
+    out = []
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        for key in ("path", "previousPath", "originalPath"):
+            val = f.get(key)
+            if isinstance(val, str) and val:
+                out.append(val)
+    return out
 
 
-def _derive_surfaces_from_prs(bead_id: str, repo: str) -> list:
-    """Best-effort change-surfaces for a bead, derived from its open PR(s).
+def _derive_surfaces_from_prs(bead_id: str, repo: str):
+    """Change-surfaces for a bead derived from its open PR(s), or None if UNKNOWN.
 
     Returns the de-duplicated union of changed files across every open PR whose
-    title carries the id, or [] if there is no such PR (or the lookups fail). The
-    caller uses this ONLY when the bead declared no surfaces; a non-empty result
-    lets the overlap guard compare real footprints instead of blocking on UNKNOWN
-    (bd polyglot-pdf-8y7).
+    title carries the id. The caller uses this ONLY when the bead declared no
+    surfaces (bd polyglot-pdf-8y7).
+
+    Conservative on EVERY uncertainty (Codex review): if the PR-list lookup failed,
+    or ANY single PR's file lookup failed / was truncated, the union would be a
+    PARTIAL footprint that could hide a real collision -- so we return **None**
+    (UNKNOWN, propagated by the caller into a conservative block) rather than a
+    narrowed list. A confident empty union (no open PR carries the id) returns []
+    so the caller can fall through to its own UNKNOWN handling.
     """
+    numbers = _pr_numbers_for_bead(bead_id, repo)
+    if numbers is None:
+        return None  # could not even list PRs -> UNKNOWN
     seen, out = set(), []
-    for num in _pr_numbers_for_bead(bead_id, repo):
-        for path in _pr_changed_files(num, repo):
+    for num in numbers:
+        files = _pr_changed_files(num, repo)
+        if files is None:
+            # One PR's footprint is unknowable -> the union is incomplete ->
+            # refuse to trust a partial footprint.
+            return None
+        for path in files:
             if path not in seen:
                 seen.add(path)
                 out.append(path)
@@ -479,37 +514,46 @@ def _bead_surfaces(bead_id: str, *, derive_from_prs: bool = True,
          actually change (the real mid-flight footprint). This is what stops an
          undeclared-surface claim from locking the whole next-bead board by
          colliding with everything under the UNKNOWN policy.
-      3. [] -- genuinely UNKNOWN (no declaration, no open PR): the conservative
-         collide-with-everything fallback in _surfaces_overlap still applies.
+      3. [] -- UNKNOWN: the conservative collide-with-everything fallback in
+         _surfaces_overlap applies. This covers the genuinely-unknown case (no
+         declaration AND no open PR) AND every UNCERTAINTY: a `bd show` failure
+         (we could NOT read the declaration, so we must not trust a narrower PR
+         diff over an unreadable authoritative list), or a PR lookup that failed
+         / was truncated (Codex review). Uncertainty always collapses to UNKNOWN,
+         never to a partial footprint.
 
     Set `derive_from_prs=False` for a pure read of the DECLARED surfaces with no
     network/gh lookup (e.g. unit tests of the declaration path, or callers that
     must not hit the GitHub API).
     """
     proc = _run(["bd", "show", bead_id, "--json"], check=False)
+    if proc.returncode != 0:
+        # Could NOT read the declaration -> UNKNOWN. Do NOT fall through to PR
+        # derivation: a bead that actually declares surfaces would otherwise have
+        # an authoritative-but-unreadable list silently replaced by a narrower PR
+        # diff, letting a real collision through (Codex review).
+        return []
+    try:
+        data = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError:
+        return []  # unreadable declaration -> UNKNOWN, same reasoning
+    # `bd show --json` returns a list; the bead is the first element.
+    bead = data[0] if isinstance(data, list) and data else data
+    meta = (bead or {}).get("metadata") or {}
+    surfaces = meta.get("surfaces")
     declared = []
-    if proc.returncode == 0:
-        try:
-            data = json.loads(proc.stdout or "[]")
-        except json.JSONDecodeError:
-            data = None
-        if data is not None:
-            # `bd show --json` returns a list; the bead is the first element.
-            bead = data[0] if isinstance(data, list) and data else data
-            meta = (bead or {}).get("metadata") or {}
-            surfaces = meta.get("surfaces")
-            if isinstance(surfaces, list):
-                # Keep only string entries -- a malformed bead (a null/number/
-                # nested list in surfaces) must not crash the overlap math with
-                # an AttributeError deep in _normalize_surface. Non-string junk
-                # is dropped, not coerced.
-                declared = [s for s in surfaces if isinstance(s, str)]
-    # A bd-show failure or empty/missing surfaces both fall through to the PR
-    # derivation (then to the UNKNOWN policy in the caller).
+    if isinstance(surfaces, list):
+        # Keep only string entries -- a malformed bead (a null/number/nested list
+        # in surfaces) must not crash the overlap math with an AttributeError deep
+        # in _normalize_surface. Non-string junk is dropped, not coerced.
+        declared = [s for s in surfaces if isinstance(s, str)]
     if declared:
         return declared
     if derive_from_prs:
-        return _derive_surfaces_from_prs(bead_id, repo)
+        # None (any PR lookup failed/truncated) -> UNKNOWN -> []. Only a confident
+        # derived footprint (or confident empty) is trusted.
+        derived = _derive_surfaces_from_prs(bead_id, repo)
+        return derived if derived is not None else []
     return []
 
 
@@ -568,7 +612,11 @@ def _surface_collision(bead_id: str) -> str | None:
     _surfaces_overlap (bd polyglot-pdf-8y7 narrowed this to the genuinely-unknown
     case by deriving surfaces from an open PR first).
     """
-    mine = _bead_surfaces(bead_id)
+    # The bead BEING CLAIMED is at claim time -- it has no open PR of its own yet,
+    # so derivation would be a wasted gh call; read only its declared surfaces.
+    # The ACTIVE claims on the other side DO get derivation (the default), since a
+    # mid-flight claim that under-declared is exactly the footprint we want real.
+    mine = _bead_surfaces(bead_id, derive_from_prs=False)
     for active_id in _active_claim_ids(exclude_id=bead_id):
         theirs = _bead_surfaces(active_id)
         if not _surfaces_overlap(mine, theirs):

@@ -82,9 +82,11 @@ def _classify(candidates: list, active_ids: list) -> dict:
         cand_id = cand.get("id")
         if not cand_id:
             continue
-        # Candidates are READY beads (open, no open PR yet by definition), so PR
-        # derivation would be ~50 wasted `gh` calls with nothing to find -- read
-        # only their DECLARED surfaces.
+        # Candidates are READY beads (open, no open PR by workflow convention), so
+        # PR derivation would be ~50 wasted `gh` calls with nothing to find -- read
+        # only their DECLARED surfaces. (An unclaimed bead MAY still have an open
+        # PR; skipping derivation there is conservative -- it over-blocks as
+        # UNKNOWN rather than under-blocking, the safe direction.)
         mine = bd_safe._bead_surfaces(cand_id, derive_from_prs=False)
         blockers = []
         for aid, theirs in claim_surfaces.items():
