@@ -392,6 +392,30 @@ class Settings(BaseModel):
 		"Speak {spoken_language}. Read this disclaimer aloud verbatim: '{disclaimer_text}'. After reading, tell user to click 'I Agree' button to continue."
 	)
 
+	# === RECOVERY PROMPTS (Activity Watchdog) ===
+	# Sent by the frontend watchdog when the conversation stalls (bd zy3).
+	# Consumed by FormFillingService.send_recovery_prompt -- levels escalate.
+	# These are SCRIPTS/instructions for Gemini to act on aloud, not user turns.
+	# Dropped in commit 7a30ad4 (every level then raised AttributeError);
+	# restored from that commit's parent, L3 wording re-authored because the
+	# old "Connect to Voice" button no longer exists. ASCII-only (scar #6).
+
+	# Level 1: Re-prompt for the current field
+	RECOVERY_PROMPT_LEVEL_1: str = (
+		"The user seems to have paused. Please re-ask them for the same field you just asked for."
+	)
+
+	# Level 2: "Are you still there?"
+	RECOVERY_PROMPT_LEVEL_2: str = (
+		'Say to the user: "Hello, are you still there? If you need me to repeat the question, just let me know."'
+	)
+
+	# Level 3: Farewell before the session closes
+	RECOVERY_PROMPT_LEVEL_3: str = (
+		'Say to the user: "I haven\'t heard from you in a while, so I\'m going to close this session. '
+		"Don't worry, your progress is saved. Just start the voice assistant again when you're ready to continue.\""
+	)
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
 	"""Load and return validated settings.

@@ -295,7 +295,7 @@ class FormFillingService:
 
         # Only log Level 3 (farewell) - other levels are too noisy
         if level == 3:
-            _log.info("🚪 recovery_prompt_level_3_farewell", session_id=self._session_id)
+            _log.info("recovery_prompt_level_3_farewell", session_id=self._session_id)
 
         # Get configured prompt based on level
         if level == 1:
