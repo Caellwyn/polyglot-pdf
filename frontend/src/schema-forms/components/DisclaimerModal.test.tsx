@@ -43,9 +43,14 @@ describe('DisclaimerModal', () => {
 
     it('renders Chinese body copy when selectedLanguage is Chinese', () => {
         render(<DisclaimerModal {...defaultProps} selectedLanguage="Chinese" />);
-        expect(screen.getByText('重要通知')).toBeTruthy();
-        assertBodyText('它帮助您填写表格');
-        expect(screen.getByText('我同意')).toBeTruthy();
+        // ASCII-only source (scar #6 / AGENTS.md): the Chinese assertion strings are
+        // written as \u escapes, never raw glyphs. JS decodes them at parse time to
+        // the same characters the modal renders, so coverage is unchanged. Escapes:
+        // title = zh "Important Notice", body = zh "It helps you fill out a form",
+        // agree button = zh "I Agree".
+        expect(screen.getByText('\u91cd\u8981\u901a\u77e5')).toBeTruthy();
+        assertBodyText('\u5b83\u5e2e\u52a9\u60a8\u586b\u5199\u8868\u683c');
+        expect(screen.getByText('\u6211\u540c\u610f')).toBeTruthy();
     });
 
     it('falls back to English for unknown languages', () => {
