@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for client-side validation of AI-applied values (enum/format/required).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -85,6 +85,13 @@ which reuses `TextField`). **Not yet implemented** (render a placeholder):
 Manual edits from the React UI are **auto-confirmed** as `manual_edit`
 (`handleFieldChange`), and `field.copy_to` auto-copies the value to listed target
 fields (also auto-confirmed). Validation runs on blur (`validateField`).
+**AI-applied values are validated too** (bd polyglot-pdf-wpw.3): the voice layer
+runs `validateField` on every value the model fills *before* it lands (see
+[tool-call-flow.md](tool-call-flow.md)), so an invalid enum/format/required value
+never enters client state -- the client is authoritative over its own field state.
+`validateField` enforces option membership (enum) for option-backed fields
+(`select`/`radio`/checkbox groups) independently of any `validation` block, since
+the option set itself is the constraint.
 
 ## Conditional fields
 
@@ -118,4 +125,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for client-side validation of AI-applied values (enum/format/required).*

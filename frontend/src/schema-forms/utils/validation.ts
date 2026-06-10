@@ -38,20 +38,33 @@ export function normalizeFieldValue(field: FormField, value: any): any {
  * @returns Error message if invalid, null if valid
  */
 export function validateField(field: FormField, value: any): string | null {
-  if (!field.validation) {
-    return null; // No validation rules
-  }
-
   // Bug Fix: Unwrap FieldValue object before validation
   // Normalize to the canonical form first (e.g. strip an A-Number's "A" prefix)
   // so correct-but-differently-formatted input validates (bd polyglot-pdf-0zr).
   const rawValue = unwrapFieldValue(value);
   const actualValue = normalizeFieldValue(field, rawValue);
 
+  const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
+
+  // Enum / option-membership runs INDEPENDENTLY of field.validation: for an
+  // option-backed field (select, radio, and checkbox groups), the option set IS
+  // the constraint, and such fields often carry no `validation` block at all. A
+  // non-empty value MUST be one of field.options[].value -- this guards an
+  // AI-applied value where the model invents an option that does not exist in
+  // the schema (bd polyglot-pdf-wpw.3). Checked before the early
+  // `!field.validation` return below so a bad enum is still rejected.
+  if (!normalizedEmpty && field.options && field.options.length > 0) {
+    const optionError = validateOptionMembership(field, actualValue);
+    if (optionError) return optionError;
+  }
+
+  if (!field.validation) {
+    return null; // No further (rules-based) validation
+  }
+
   const rules = field.validation;
 
   const rawHadContent = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== "";
-  const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
 
   // Guard: if a non-empty input normalized down to empty (e.g. an a_number like
   // "A" or "A---" with no digits), it is INVALID, not unfilled -- the empty-skip
@@ -120,6 +133,29 @@ function validateTextValue(field: FormField, value: string, rules: ValidationRul
       }
     } catch (e) {
       console.error(`[Validation] Invalid regex pattern for field ${field.id}:`, e);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validate that a value is a member of an option-backed field's allowed set
+ * (enum check). `value` may be a single value (select/radio) or an array
+ * (checkbox group); every element must match a known option's `value`. Empty
+ * values are already short-circuited by the caller, so this only sees non-empty
+ * input. bd polyglot-pdf-wpw.3.
+ */
+function validateOptionMembership(field: FormField, value: any): string | null {
+  const allowed = new Set((field.options ?? []).map((opt) => opt.value));
+  const values = Array.isArray(value) ? value : [value];
+
+  for (const v of values) {
+    if (v === null || v === undefined || v === "") {
+      continue; // skip empty members of a group; presence is a required-check concern
+    }
+    if (!allowed.has(String(v))) {
+      return `${field.name} must be one of the available options`;
     }
   }
 

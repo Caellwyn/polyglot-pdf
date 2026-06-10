@@ -81,3 +81,78 @@ describe('validateField (a_number)', () => {
     expect(validateField(aNumberField, '')).toBeNull();
   });
 });
+
+// Enum / option-membership validation (bd polyglot-pdf-wpw.3): an option-backed
+// field's value must be one of its declared options. Guards an AI-applied value
+// where the model invents an option that does not exist in the schema.
+describe('validateField (enum / option membership)', () => {
+  const selectField: FormField = {
+    id: 'marital_status',
+    name: 'Marital Status',
+    spoken_name: 'marital status',
+    type: 'select',
+    section_id: 'Part 1',
+    options: [
+      { value: 'single', label: 'Single' },
+      { value: 'married', label: 'Married' },
+      { value: 'divorced', label: 'Divorced' },
+    ],
+  };
+
+  // No `validation` block at all -- the option set IS the constraint. The check
+  // must still fire (it runs before the `!field.validation` early return).
+  const radioNoValidation: FormField = {
+    id: 'has_children',
+    name: 'Has Children',
+    spoken_name: 'has children',
+    type: 'radio',
+    section_id: 'Part 1',
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+  };
+
+  // A required select: empty is a required-error, a bad option is an enum-error.
+  const requiredSelect: FormField = {
+    ...selectField,
+    id: 'marital_status_required',
+    validation: { required: true },
+  };
+
+  it.each(['single', 'married', 'divorced'])('accepts a valid option: %s', (v) => {
+    expect(validateField(selectField, v)).toBeNull();
+  });
+
+  it.each(['widowed', 'Single', 'MARRIED', 'unknown'])(
+    'rejects a value outside the option set: %s',
+    (v) => {
+      expect(validateField(selectField, v)).not.toBeNull();
+    }
+  );
+
+  it('enforces enum even when the field has no validation block', () => {
+    expect(validateField(radioNoValidation, 'yes')).toBeNull();
+    expect(validateField(radioNoValidation, 'maybe')).not.toBeNull();
+  });
+
+  it('treats an empty value on an optional option-field as valid (not an enum error)', () => {
+    expect(validateField(selectField, '')).toBeNull();
+    expect(validateField(selectField, null)).toBeNull();
+  });
+
+  it('reports required (not enum) for an empty required option-field', () => {
+    expect(validateField(requiredSelect, '')).toContain('required');
+  });
+
+  it('validates array (checkbox-group) values member-by-member', () => {
+    expect(validateField(selectField, ['single', 'married'])).toBeNull();
+    expect(validateField(selectField, ['single', 'widowed'])).not.toBeNull();
+  });
+
+  it('never echoes the rejected value in the error message (PII-safe)', () => {
+    const err = validateField(selectField, 'sensitive-made-up-value');
+    expect(err).not.toBeNull();
+    expect(err).not.toContain('sensitive-made-up-value');
+  });
+});
