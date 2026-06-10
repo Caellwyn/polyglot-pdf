@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change), and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change), and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -59,7 +59,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `ping` | → `pong` |
 | `form_state` | apply client field list → `form_state_ack` (backend echoes applied ids only; client owns state) |
 | `next_field_hint` | forward a hint to Gemini → `hint_ack` |
-| `form_state_response` / `field_value_response` / `next_field_hint_response` / `section_info_response` | resolve a pending backend→frontend async request |
+| `form_state_response` / `field_value_response` / `next_field_hint_response` / `section_info_response` / `confirm_field_response` | resolve a pending backend→frontend async request (`confirm_field_response` carries `{recorded, reason}` for the synchronous confirm round-trip, bd polyglot-pdf-wpw.2) |
 | `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync) |
 | `read_disclaimer` | send disclaimer initiating message in a language → `disclaimer_read_initiated` |
 | `completion_message` | send a prompt that should make Gemini speak → `completion_ack` |

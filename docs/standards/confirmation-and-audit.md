@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-10*
 
 Every field value that lands on the form is confirmed by the user, and every
 confirmation is recorded — by `field_id` and *method*, never by value — for
@@ -32,8 +32,13 @@ enum, re-check this section by hand. The two confirmation methods:
 
 `CallbackHandler._handle_confirm_field_tool` (`backend/services/callback_handler.py`)
 reads `confirmation_method` from the tool arguments (defaulting to `"verbal"` if
-absent), relays a `confirm_field` message to the frontend, and — when a `form_id`
-and `form_session_id` are present — calls `log_field_confirmation(...)`.
+absent) and makes a **synchronous** confirm round-trip to the frontend (bd
+polyglot-pdf-wpw.2): the frontend acks whether it actually recorded the
+confirmation. `log_field_confirmation(...)` is called **only on a recorded ack**
+(and only when a `form_id` and `form_session_id` are present) — a confirm that did
+not take (empty field, or a client timeout) is NOT logged, since no confirmation
+happened. See [tool-call-flow.md](../components/tool-call-flow.md) for the full
+ack flow.
 
 ## What gets recorded
 
@@ -103,4 +108,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-10*
