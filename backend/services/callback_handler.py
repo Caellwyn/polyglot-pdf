@@ -419,9 +419,18 @@ class CallbackHandler:
         # fill skip); the frontend reports that back and we tell Gemini success:false
         # so it re-asks IN-BAND, rather than confabulating a confirmation and losing
         # the user's value.
-        confirm_ack = await self._request_coordinator.request_confirm_field(
-            field_id, confirmation_method
-        )
+        # An absent coordinator (None) means we CANNOT reach the frontend to verify
+        # the confirm -- which is the same epistemic state as a confirm timeout: we
+        # do not know whether it was recorded, so under wpw.2 we must NOT report
+        # success (that would be the silent-success this round-trip exists to kill).
+        # Collapse it to the timeout path. (request_coordinator is a required
+        # positional, so None only arises in a test or a racing reconnect -- mirrors
+        # the send_form_update None-guard, bd polyglot-pdf-pen.)
+        confirm_ack = CONFIRM_REQUEST_TIMEOUT
+        if self._request_coordinator is not None:
+            confirm_ack = await self._request_coordinator.request_confirm_field(
+                field_id, confirmation_method
+            )
 
         if confirm_ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(confirm_ack, dict):
             # Slow/disconnected client (the sentinel), or -- defensively -- any

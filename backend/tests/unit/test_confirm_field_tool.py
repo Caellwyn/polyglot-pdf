@@ -168,11 +168,16 @@ class TestConfirmFieldTool:
         """A None coordinator must NOT crash and must NOT report completion.
 
         request_coordinator is a required positional, so it is never None in
-        production -- but a test or racing reconnect could pass None. An absent
-        coordinator means "next field unknown", which is the timeout semantics
-        (NOT "All fields confirmed") -- reporting completion here would let Gemini
-        wrap the form up early (the failure class bd polyglot-pdf-tks guards).
-        Mirrors the existing send_form_update guard (bd polyglot-pdf-pen).
+        production -- but a test or racing reconnect could pass None. UNDER wpw.2
+        (the synchronous confirm round-trip), an absent coordinator means we cannot
+        reach the frontend to VERIFY the confirm -- the same epistemic state as a
+        confirm timeout. So the confirm reports success:false (not recorded), NOT
+        success:true: claiming success without verification is exactly the
+        silent-success this round-trip exists to kill. Either way it must never
+        claim the form is complete (the failure class bd polyglot-pdf-tks guards)
+        or leak a non-serializable sentinel onto the wire. (Originally added by bd
+        polyglot-pdf-pen for the pre-wpw.2 fire-and-forget contract, where this
+        returned success:true; updated to wpw.2's verify-or-fail contract.)
         """
         handler = CallbackHandler(
             websocket=mock_websocket,
@@ -191,10 +196,10 @@ class TestConfirmFieldTool:
             },
         )
 
-        # Confirms the field, but does NOT claim the form is complete, and does
-        # NOT leak a non-serializable sentinel onto the wire.
-        assert response["success"] is True
-        assert response["field_confirmed"] == "p1_line1_firstname"
+        # Cannot verify the confirm -> success:false (not recorded), and crucially
+        # does NOT claim the form is complete, and does NOT leak the sentinel.
+        assert response["success"] is False
+        assert response["field_confirmed"] is None
         assert "All fields confirmed" not in response["message"]
         assert response["next_field_hint"] is None  # sentinel collapsed for the wire
 
