@@ -30,23 +30,36 @@ strings only; no control flow, no contracts.
   All of `backend/services/` is now ASCII-clean.
 - **xev**: stripped 13 cosmetic thumbs-up + 1 light-bulb emoji from
   comments/docstrings in `pr_review_watcher.py` + `tests/test_pr_review_watcher.py`.
-  **One functional non-ASCII char was KEPT on purpose**: the curly apostrophe
-  (U+2019) in the Codex clean-sentinel `"didn't find any major issues"` at
-  `pr_review_watcher.py:270`. That literal is matched (via `p in lo`) against
-  GitHub's RENDERED Codex comment, which emits the curly form. ASCII-ing it would
-  regress clean-detection. The `xev` bead assumed only ~2 cosmetic emoji; the file
+  One functional non-ASCII value remains in play: the curly apostrophe (U+2019) in
+  the Codex clean-sentinel `"didn't find any major issues"` at
+  `pr_review_watcher.py:270`. That sentinel is matched (via `p in lo`) against
+  GitHub's RENDERED Codex comment, which emits the curly form -- so the matched
+  VALUE must stay curly. The `xev` bead assumed only ~2 cosmetic emoji; the file
   actually had 14 non-ASCII lines, one of them load-bearing -- the bead
   under-scoped the file.
-  - **Fresh-eyes catch (adopted):** the kept curly sentinel was NOT actually
-    covered by a test -- every existing fixture used the straight apostrophe. So
-    this PR ADDS `test_codex_clean_sentinel_matches_curly_apostrophe`, which pins
-    the curly variant via `_is_approval_comment(..., CODEX)`. The test writes the
-    curly char as a `’` escape so the test file itself stays ASCII while
-    still exercising the non-ASCII match. (The pre-fix claim that "a test pins
-    both variants" was wrong at the time written; this change makes it true.)
+  - **My first attempt got the fix half-right, and review corrected it.** I
+    initially KEPT a literal U+2019 in the source, reasoning "load-bearing -> must
+    stay non-ASCII." That conflated *the matched value must be curly* with *the
+    source byte must be non-ASCII*. A Python `’` escape produces a
+    byte-identical runtime value while keeping the source ASCII -- so the literal
+    was never necessary.
+  - **Fresh-eyes (round 1)** caught that the curly sentinel had NO test coverage
+    (every fixture used the straight apostrophe). Adopted: this PR adds
+    `test_codex_clean_sentinel_matches_curly_apostrophe`, pinning the curly variant
+    via `_is_approval_comment(..., CODEX)`, with the curly char written as a
+    `’` escape so the test file stays ASCII.
+  - **Codex (round 2)** then flagged that the SOURCE literal at L270 still violated
+    scar #6 and could be escaped the same way. Adopted: L270 is now
+    `"didn’t find any major issues"` (escape), so `pr_review_watcher.py`
+    is fully ASCII with the runtime match unchanged. Net result: ZERO non-ASCII in
+    any code file; the curly match is preserved purely via escapes and pinned by a
+    test.
 - **bm3**: stripped em-dashes (5 test files), a UTF-8 BOM at
-  `test_live_ai_gemini.py:1`, and the check/cross/minus legend glyphs at
-  `test_get_form_status_compact.py:8-10` (-> bracketed ASCII). All of
+  `test_live_ai_gemini.py:1`, and the check/cross/minus legend glyphs in the
+  `test_get_form_status_compact.py` module docstring. (Codex round 2 noted the
+  first ASCII rendering -- `[confirmed]`/`[unconfirmed]` brackets -- could read as
+  literal wire tokens; reworded to name the real wire values `"confirmed"` /
+  `"unconfirmed"` and to state that empty fields are omitted entirely.) All of
   `backend/tests/` is now ASCII-clean. Bead items (1) `config.py` and (2)
   `pdf_fill_routes.py` were ALREADY clean (cleaned by intervening PRs); no change
   needed there.
@@ -72,9 +85,14 @@ warranted; this note IS the prescribed alternative to bumping each doc.
 
 - `py_compile` clean on every edited file.
 - Full backend suite: 250 passed, 2 skipped, 3 deselected (external), 0 failures.
-- `pr_review_watcher` suite: 120 passed -- confirms the kept curly-apostrophe
-  sentinel and the emoji-stripped comments leave clean-detection intact.
-- Final ASCII scan: `backend/services/` and `backend/tests/` fully clean;
-  `pr_review_watcher.py` retains only the one deliberate U+2019 at L270.
+- `pr_review_watcher` suite: 121 passed (was 120; the +1 is the new
+  curly-apostrophe sentinel test) -- confirms the sentinel and the emoji-stripped
+  comments leave clean-detection intact.
+- Final ASCII scan: ALL edited code files are now fully ASCII, including
+  `pr_review_watcher.py`. (Round 2: Codex correctly flagged that keeping a literal
+  U+2019 at L270 still violated scar #6; the curly char is now written as a
+  `’` escape, which yields a byte-identical runtime VALUE while keeping
+  the source ASCII. So the earlier "one deliberate non-ASCII char remains" framing
+  no longer applies -- there is zero non-ASCII left.)
 
 Closes polyglot-pdf-8i3, polyglot-pdf-xev, polyglot-pdf-bm3, polyglot-pdf-o1s.

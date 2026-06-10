@@ -267,9 +267,12 @@ CODEX_PROFILE = ReviewerProfile(
     clean_reaction="+1",  # thumbs-up -- the documented canonical approval signal
     clean_sentinels=(
         "didn't find any major issues",   # straight apostrophe U+0027
-        "didn’t find any major issues",   # NOT a duplicate -- curly apostrophe U+2019;
-                                          # GitHub's markdown renderer emits this form.
-                                          # Both variants are pinned by a test; keep both.
+        "didn\u2019t find any major issues",   # NOT a duplicate -- curly apostrophe (U+2019)
+                                          # written as a \u2019 escape so this
+                                          # source stays ASCII (scar #6) while the matched
+                                          # VALUE is curly: GitHub's markdown renderer emits
+                                          # that form. Pinned by
+                                          # test_codex_clean_sentinel_matches_curly_apostrophe.
         "no major issues",                # apostrophe-free fallback
     ),
 )
