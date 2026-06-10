@@ -491,9 +491,14 @@ def test_tool_error_envelope_is_structured_and_pii_free():
     assert env["status"] == "error"
     assert env["retryable"] is True
     assert isinstance(env["message"], str) and env["message"]
+    # The failure must nest under an `error` key -- the documented Live API
+    # tool-failure shape (response={"error": ...}); without it the model can read
+    # a free-form response dict as a successful result (Codex PR #138 round 2).
+    assert env["error"] == env["message"]
     # Default message must be a fixed string, never echo exception/argument text.
     env2 = _tool_error_envelope("custom note")
     assert env2["message"] == "custom note"
+    assert env2["error"] == "custom note"
 
 
 def _make_tool_call_session(path: str):
@@ -565,9 +570,11 @@ async def test_callback_raise_sends_structured_error_not_empty_dict(path):
     assert len(session.sent_responses) == 1
     resp = session.sent_responses[0][0]
     assert resp.name == "update_form_fields"
-    # Structured error -- NOT the silent {} that reads as success.
+    # Structured error -- NOT the silent {} that reads as success. The `error`
+    # key is the documented Live API tool-failure shape (Codex PR #138 round 2).
     assert resp.response.get("status") == "error", resp.response
     assert resp.response.get("retryable") is True, resp.response
+    assert resp.response.get("error"), resp.response
     assert resp.response != {}
     # The call_id is still echoed (0ux invariant preserved).
     assert resp.id == "function-call-1"

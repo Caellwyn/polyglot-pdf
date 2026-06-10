@@ -77,9 +77,15 @@ def _tool_error_envelope(message: str = "The tool call failed; ask the user to r
 
     Replaces the bare ``{}`` ack that a callback exception used to send: an empty
     body reads to the model as "the tool succeeded with no data," so it
-    confabulates success and moves on -- the user's value is silently lost. A
-    structured ``{"status": "error", ...}`` tells the model the call FAILED so it
-    re-asks instead. `retryable` lets the model distinguish a transient failure
+    confabulates success and moves on -- the user's value is silently lost. The
+    body nests the failure under an ``error`` key -- the exact shape the official
+    Live API docs use to report a tool failure (their ``except`` branch sends
+    ``response={"error": ...}``; see docs/genai_docs). The Live API
+    ``FunctionResponse`` carries only a free-form ``response`` dict (no dedicated
+    output/error channel in google-genai 1.38's type -- verified), so an
+    ``error`` key inside ``response`` is THE documented way to make the model
+    read the call as FAILED and re-ask. The ``status``/``retryable`` fields ride
+    alongside: ``retryable`` lets the model distinguish a transient failure
     (re-ask) from a permanent one.
 
     NO PII in THIS body: the message is a fixed, caller-controlled string --
@@ -94,7 +100,7 @@ def _tool_error_envelope(message: str = "The tool call failed; ask the user to r
     every-named-call-gets-a-response invariant); only a RAISE produces this
     envelope.
     """
-    return {"status": "error", "retryable": True, "message": message}
+    return {"status": "error", "retryable": True, "error": message, "message": message}
 
 
 class LiveAIGeminiSession(LiveAISession):
