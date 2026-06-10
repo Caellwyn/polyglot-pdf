@@ -203,3 +203,138 @@ describe('WebFormConnection client-side AI-value validation (bd polyglot-pdf-wpw
     expect(prompts(ws)).toHaveLength(1)
   })
 })
+
+// The session-wide cap must stop a model that ALTERNATES invalid values between
+// fields (Codex PR #145): each field switch resets the per-field counter, so the
+// per-field cap alone would let it prompt forever. The session-wide cap is not
+// reset on a field change, so the cross-field spin is bounded.
+describe('WebFormConnection AI-value reject session cap (cross-field spin) (bd polyglot-pdf-wpw.3)', () => {
+  const TWO_ENUM_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'field_a',
+        name: 'fieldA',
+        spoken_name: 'Field A',
+        type: 'select',
+        options: [{ value: 'a1', label: 'A1' }, { value: 'a2', label: 'A2' }],
+      },
+      {
+        id: 'field_b',
+        name: 'fieldB',
+        spoken_name: 'Field B',
+        type: 'select',
+        options: [{ value: 'b1', label: 'B1' }, { value: 'b2', label: 'B2' }],
+      },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['field_a', 'field_b'] }],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('caps total prompts even when the model alternates bad values between two fields', async () => {
+    const conn = new WebFormConnection(TWO_ENUM_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // Alternate bad values A, B, A, B, ... 40 times. Without the session cap the
+    // per-field counter would reset on every switch and every reject would prompt
+    // (~40 prompts). The session cap (6) must bound it.
+    for (let i = 0; i < 40; i++) {
+      const bad = i % 2 === 0 ? { fieldA: 'bad-a' } : { fieldB: 'bad-b' }
+      fireFieldUpdate(ws, bad)
+    }
+
+    expect(prompts(ws).length).toBe(6) // VALIDATION_REJECT_SESSION_CAP
+  })
+})
+
+// The reject streak must NOT carry across a section switch (fresh-eyes finding on
+// PR #145): switchToSection / startSection keep the same socket, so handleOpen's
+// reset does not fire -- they reset the validation-reject counters themselves.
+//
+// In production this is DEFENSE-IN-DEPTH, exactly like the 0y7 unconfirmable reset
+// at the same sites: the per-field streak is keyed on field_id, and field ids are
+// globally unique per schema (scar tissue #5), so a DIFFERENT field in the next
+// section already resets the streak via the field-id change in handleAiValueRejected.
+// The cross-section carry-over only bites if the SAME field_id were to recur, which
+// the uniqueness invariant forbids. This test deliberately reuses ONE field_id
+// across the switch boundary to exercise the reset path directly and remove the
+// reliance on that invariant -- mirroring why 0y7 resets here too.
+describe('WebFormConnection AI-value reject streak resets on section switch (bd polyglot-pdf-wpw.3)', () => {
+  // The SAME option-backed field id appears in both sections (intentionally
+  // violating id-uniqueness) so a streak built in s1 would, absent the reset,
+  // carry into s2 for that id.
+  const SHARED_ID_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'status',
+        name: 'status',
+        spoken_name: 'Status',
+        type: 'select',
+        options: [
+          { value: 'single', label: 'Single' },
+          { value: 'married', label: 'Married' },
+        ],
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['status'] },
+      { id: 's2', label: 'S2', order: 2, fields: ['status'] },
+    ],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('clears the per-field cap so the same field id gets a fresh prompt after a switch', async () => {
+    const conn = new WebFormConnection(SHARED_ID_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // Exhaust the cap (3 prompts) in section 1 on the shared field's bad value.
+    for (let i = 0; i < 10; i++) {
+      fireFieldUpdate(ws, { status: 'widowed' })
+    }
+    expect(prompts(ws)).toHaveLength(3) // cap reached for field id 'status'
+
+    // Switch sections (same socket, so handleOpen does not fire) -- this must reset
+    // the per-field reject tracking.
+    await conn.switchToSection('s2', 'ws://x')
+    ws.send.mockClear()
+
+    // The SAME field id, bad again in the new section, must get a fresh first-reject
+    // prompt. Without resetValidationRejectTracking() in switchToSection the cap
+    // would still be exhausted for 'status' and this would be 0.
+    fireFieldUpdate(ws, { status: 'widowed' })
+    expect(prompts(ws)).toHaveLength(1)
+  })
+})

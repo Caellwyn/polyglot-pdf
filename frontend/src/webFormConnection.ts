@@ -108,24 +108,33 @@ export class WebFormConnection {
   private static readonly UNCONFIRMABLE_CONFIRM_LIMIT = 2;
   private static readonly UNCONFIRMABLE_REPROMPT_CAP = 3;
 
-  // Per-field loop-breaker for AI-applied values that FAIL client-side validation
+  // Loop-breaker for AI-applied values that FAIL client-side validation
   // (bd polyglot-pdf-wpw.3). When the model fills a field with a value that violates
   // its schema (a non-existent enum option, a malformed SSN/A-Number, a too-long
   // string), we refuse to apply it -- the client owns field state, so an invalid
-  // value must never land -- and send ONE corrective prompt back to the model so it
-  // re-asks the user in-band. Mirroring the unconfirmable loop-breaker above, we
-  // rate-limit those prompts per-field and cap the total, so a model that keeps
-  // re-sending the same bad value cannot spin the session: count consecutive
-  // rejects of the same field, prompt on the first reject and then once per
-  // REJECT_LIMIT, up to REJECT_REPROMPT_CAP total. Both counters reset on a field
-  // that validates (a good value lands) and on (re)connect. The corrective message
-  // carries only the field's spoken name + the schema constraint category -- NEVER
-  // the rejected value (PII-safe, the p84m principle).
+  // value must never land -- and send a corrective prompt back to the model so it
+  // re-asks the user in-band. Two layers cap those prompts so the model cannot spin
+  // the session:
+  //   1. PER-FIELD (mirrors the unconfirmable loop-breaker above): count consecutive
+  //      rejects of the SAME field; prompt on the first reject and thereafter on
+  //      every count divisible by REJECT_LIMIT, up to REJECT_REPROMPT_CAP -- with
+  //      LIMIT=2/CAP=3 that fires at rejects #1, #2, #4 for that field, then silence.
+  //      Resets when a value for the tracked field validates.
+  //   2. SESSION-WIDE (Codex PR #145): a model bouncing invalid values BETWEEN
+  //      fields (A bad -> B bad -> A bad ...) would reset the per-field counter on
+  //      every switch and prompt forever. So a separate counter -- NOT reset on a
+  //      field change -- caps the TOTAL corrective prompts per session at
+  //      REJECT_SESSION_CAP. Once hit, we stop prompting regardless of field.
+  // Both layers reset on (re)connect and section switch (resetValidationRejectTracking).
+  // The corrective message carries only the field's spoken name + the schema
+  // constraint -- NEVER the rejected value (PII-safe, the p84m principle).
   private lastValidationRejectFieldId: string | null = null;
   private validationRejectCount = 0;
   private validationRejectRepromptCount = 0;
+  private validationRejectSessionPromptCount = 0;
   private static readonly VALIDATION_REJECT_LIMIT = 2;
   private static readonly VALIDATION_REJECT_REPROMPT_CAP = 3;
+  private static readonly VALIDATION_REJECT_SESSION_CAP = 6;
 
   // Auth token plumbing (bd polyglot-pdf-wq0). The backend /ws/fill gate rejects
   // tokenless connections with HTTP 403. Reconnect paths (startSection,
@@ -605,17 +614,15 @@ export class WebFormConnection {
         continue;
       }
 
-      // Validate AI-applied values before they land (bd polyglot-pdf-wpw.3). A
-      // reject skips the apply and routes a corrective PII-free prompt to the
-      // model. Only validate values the model actually APPLIED -- a value echoed
-      // back from prior form_state should not be re-validated/re-rejected here.
-      if (isApplied) {
-        if (this.applyAiValueWithValidation(field, value, { emit: false })) {
-          updatedFields.push({ fieldId: field.id, value });
-        }
-      } else {
-        // Not an applied field (state echo) -- write through without re-validating.
-        this.updateField(field.id, value as any, { confirmed: false, emit: false });
+      // Validate the AI value before it lands (bd polyglot-pdf-wpw.3). Every value
+      // reaching here is an AI change: either applied_fields named it (isApplied),
+      // or there were no applied_fields at all (the legacy on_form_update path,
+      // which sends raw tool args -- Codex PR #145) and it differs from the current
+      // value. A pure unchanged echo never reaches this point (it is `continue`d by
+      // the limitToApplied guard above or by shouldUpdate). So validate
+      // unconditionally; a reject skips the apply and routes a corrective PII-free
+      // prompt to the model.
+      if (this.applyAiValueWithValidation(field, value, { emit: false })) {
         updatedFields.push({ fieldId: field.id, value });
       }
     }
@@ -643,17 +650,14 @@ export class WebFormConnection {
           continue;
         }
 
-        // Validate AI-applied values before they land (bd polyglot-pdf-wpw.3).
-        // Re-enables the client-side validateField gate that was previously
-        // disabled here: a reject skips the apply and routes a corrective PII-free
-        // prompt to the model. Only applied values are validated; a state echo
-        // writes through unchanged. Applied values fill as UNCONFIRMED.
-        if (isApplied) {
-          if (this.applyAiValueWithValidation(field, value, { emit: false })) {
-            updatedFields.push({ fieldId: field.id, value });
-          }
-        } else {
-          this.updateField(field.id, value as any, { confirmed: false, emit: false });
+        // Validate the AI value before it lands (bd polyglot-pdf-wpw.3). Re-enables
+        // the client-side validateField gate that was previously disabled here.
+        // Every value reaching this point is an AI change (applied_fields named it,
+        // or the legacy no-applied_fields path sent it and it differs from current);
+        // a pure unchanged echo was already `continue`d above. So validate
+        // unconditionally; a reject skips the apply and routes a corrective PII-free
+        // prompt to the model. Applied values fill as UNCONFIRMED.
+        if (this.applyAiValueWithValidation(field, value, { emit: false })) {
           updatedFields.push({ fieldId: field.id, value });
         }
       }
@@ -1304,16 +1308,32 @@ export class WebFormConnection {
       this.validationRejectCount
     );
 
-    // Prompt on the FIRST reject (count === 1), then once per REJECT_LIMIT, capped.
+    // Prompt on the FIRST reject (count === 1), and thereafter on every count that
+    // is a multiple of REJECT_LIMIT, until the cap. With LIMIT=2 that is rejects
+    // #1, #2, #4 (then the cap of 3 is hit and it goes silent): the very first
+    // reject always nudges the model, and after that it is rate-limited to once
+    // per LIMIT rejects. The gap between prompt #1 and prompt #2 is therefore one
+    // reject (count 1 -> 2), not LIMIT -- the count===1 special case fires
+    // alongside the modulo schedule, it does not shift it.
     const windowFilled =
       this.validationRejectCount === 1 ||
       this.validationRejectCount % WebFormConnection.VALIDATION_REJECT_LIMIT === 0;
 
+    // Session-wide cap (Codex PR #145): a model alternating bad values between
+    // fields resets the per-field counter on every switch, so the per-field cap
+    // alone would let it prompt forever. This total-prompts cap is NOT reset on a
+    // field change -- only on (re)connect / section switch -- so it stops the
+    // cross-field spin.
+    const sessionCapReached =
+      this.validationRejectSessionPromptCount >= WebFormConnection.VALIDATION_REJECT_SESSION_CAP;
+
     if (
       windowFilled &&
-      this.validationRejectRepromptCount < WebFormConnection.VALIDATION_REJECT_REPROMPT_CAP
+      this.validationRejectRepromptCount < WebFormConnection.VALIDATION_REJECT_REPROMPT_CAP &&
+      !sessionCapReached
     ) {
       this.validationRejectRepromptCount += 1;
+      this.validationRejectSessionPromptCount += 1;
       const spokenName = field.spoken_name || field.name || field.id;
       // completion_message -> send_prompt is the proven channel that actually
       // redirects the model in-band (the unconfirmable loop-breaker uses it too);
@@ -1326,23 +1346,31 @@ export class WebFormConnection {
           `It was not saved. Ask the user to provide a valid value, then call ` +
           `update_form_fields again to fill it.`,
       });
-      // Surface to the UI directly too -- a signal that does not depend on the
-      // model acting on the prompt.
-      this.callbacks.onError?.(new Error(
-        `'${spokenName}' could not be saved: ${validationError}. Please provide a valid value.`
-      ));
+      // NOTE: deliberately do NOT call this.callbacks.onError here (Codex PR #145).
+      // A validation reject is a NORMAL, recoverable event -- the session is still
+      // live and the model is about to re-ask via the prompt above. onError maps the
+      // connection status to `error`, and the voice overlays disable push-to-talk
+      // unless the status is `connected`, so firing it would STRAND the user exactly
+      // when they need to speak the corrected value. The in-band completion_message
+      // is the correct, non-fatal channel; the connection-error callback is reserved
+      // for genuine transport/session failures.
     }
   }
 
   /**
    * Clear the AI-value validation-reject loop-breaker counters (bd
    * polyglot-pdf-wpw.3). Called on (re)connect, on section switch, and whenever a
-   * value for the tracked field validates.
+   * value for the tracked field validates. Resets BOTH the per-field counters and
+   * the session-wide prompt cap: a good value landing (or a fresh connection/
+   * section) is genuine progress, so the model earns a fresh prompt budget -- the
+   * pure cross-field spin Codex PR #145 flagged never lands a good value, so its
+   * session counter still climbs to the cap and stops it.
    */
   private resetValidationRejectTracking(): void {
     this.lastValidationRejectFieldId = null;
     this.validationRejectCount = 0;
     this.validationRejectRepromptCount = 0;
+    this.validationRejectSessionPromptCount = 0;
   }
 
   /**
@@ -1969,6 +1997,9 @@ export class WebFormConnection {
     this.lastUnconfirmableFieldId = null;
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
+    // Same for the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3):
+    // a reject streak must not carry across a section transition.
+    this.resetValidationRejectTracking();
 
     // Re-entrancy guard (bd polyglot-pdf-aun): reject a second switch while one is
     // already in flight, so two reconnects can't race. Distinct from
@@ -2084,6 +2115,10 @@ export class WebFormConnection {
     this.lastUnconfirmableFieldId = null;
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
+    // Same for the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3):
+    // a reject streak must not carry across a section switch (this same-socket path
+    // does not hit handleOpen's reset).
+    this.resetValidationRejectTracking();
 
     // Re-entrancy guard (bd polyglot-pdf-aun): a manual switch arriving while an
     // AI-initiated switch is mid-flight (or vice versa) must not start a second

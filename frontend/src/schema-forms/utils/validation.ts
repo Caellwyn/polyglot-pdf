@@ -58,11 +58,28 @@ export function validateField(field: FormField, value: any): string | null {
     if (optionError) return optionError;
   }
 
-  if (!field.validation) {
-    return null; // No further (rules-based) validation
+  // Build the EFFECTIVE rules by folding the top-level constraint fields
+  // (max_length / min / max) into any explicit `validation` block (bd
+  // polyglot-pdf-wpw.3 / Codex PR #145). Many generated schemas (e.g.
+  // form-kits/i-90: dozens of text fields with a top-level `max_length` and NO
+  // `validation` block) carry their constraints at the field level, not under
+  // `validation`. Without this merge an over-length AI value would bypass the
+  // length check entirely -- exactly the "block too-long strings" goal of this
+  // change. An explicit `validation` value wins over the top-level field when
+  // both are set. (Top-level min_date/max_date are read directly by
+  // validateDateValue from `field.*`, so they need no folding here.)
+  const effectiveRules: ValidationRules = {
+    ...(field.max_length !== undefined ? { max_length: field.max_length } : {}),
+    ...(field.min !== undefined ? { min: field.min } : {}),
+    ...(field.max !== undefined ? { max: field.max } : {}),
+    ...(field.validation ?? {}),
+  };
+
+  if (Object.keys(effectiveRules).length === 0) {
+    return null; // No rules-based constraints (top-level or validation block)
   }
 
-  const rules = field.validation;
+  const rules = effectiveRules;
 
   const rawHadContent = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== "";
 
@@ -140,14 +157,35 @@ function validateTextValue(field: FormField, value: string, rules: ValidationRul
 }
 
 /**
+ * Extract the allowed value of an option in EITHER runtime shape: the
+ * `{ value, label }` object form (most form-kit schemas) or the plain-string
+ * form (e.g. adult_intake_demo_schema.json: `options: ["Agender", ...]`, the
+ * shape the backend `List[str]` normalizer also emits). A string option's
+ * allowed value is the string itself. bd polyglot-pdf-wpw.3 / Codex PR #145.
+ */
+function optionValue(opt: any): string | undefined {
+  if (typeof opt === "string") return opt;
+  if (opt && typeof opt === "object" && opt.value !== undefined) return String(opt.value);
+  return undefined;
+}
+
+/**
  * Validate that a value is a member of an option-backed field's allowed set
  * (enum check). `value` may be a single value (select/radio) or an array
- * (checkbox group); every element must match a known option's `value`. Empty
- * values are already short-circuited by the caller, so this only sees non-empty
- * input. bd polyglot-pdf-wpw.3.
+ * (checkbox group); every element must match a known option. Empty values are
+ * already short-circuited by the caller, so this only sees non-empty input.
+ * bd polyglot-pdf-wpw.3.
+ *
+ * Both option shapes are handled (see optionValue): handling only `.value` would
+ * build an all-`undefined` allowed set for plain-string schemas and REJECT every
+ * valid value (Codex PR #145).
  */
 function validateOptionMembership(field: FormField, value: any): string | null {
-  const allowed = new Set((field.options ?? []).map((opt) => opt.value));
+  const allowed = new Set(
+    (field.options ?? [])
+      .map((opt) => optionValue(opt))
+      .filter((v): v is string => v !== undefined)
+  );
   const values = Array.isArray(value) ? value : [value];
 
   for (const v of values) {

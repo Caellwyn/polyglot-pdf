@@ -155,4 +155,84 @@ describe('validateField (enum / option membership)', () => {
     expect(err).not.toBeNull();
     expect(err).not.toContain('sensitive-made-up-value');
   });
+
+  // Plain-string options (e.g. adult_intake_demo_schema.json: options: ["Agender",...]),
+  // the shape the backend List[str] normalizer also emits. Reading only opt.value
+  // would build an all-undefined allowed set and reject every valid value (Codex PR #145).
+  const stringOptionField: FormField = {
+    id: 'gender_identity',
+    name: 'Gender Identity',
+    spoken_name: 'gender identity',
+    type: 'select',
+    section_id: 'Part 1',
+    options: ['Agender', 'Cisgender Female', 'Cisgender Male'] as any,
+  };
+
+  it('accepts a valid value when options are plain strings', () => {
+    expect(validateField(stringOptionField, 'Agender')).toBeNull();
+    expect(validateField(stringOptionField, 'Cisgender Male')).toBeNull();
+  });
+
+  it('rejects an out-of-set value when options are plain strings', () => {
+    expect(validateField(stringOptionField, 'Nonexistent')).not.toBeNull();
+  });
+});
+
+// Top-level constraint fields (max_length / min / max) live directly on the field
+// in many generated schemas (e.g. form-kits/i-90) with NO `validation` block. The
+// early `!field.validation` return used to skip them, letting an over-length AI
+// value land. bd polyglot-pdf-wpw.3 / Codex PR #145.
+describe('validateField (top-level constraint fields, no validation block)', () => {
+  const topLevelMaxLen: FormField = {
+    id: 'p1_line6b_streetnumbername',
+    name: 'Street Number and Name',
+    spoken_name: 'street number and name',
+    type: 'text',
+    section_id: 'Part 1',
+    max_length: 25,
+    // NOTE: deliberately NO `validation` block -- the constraint is top-level only.
+  };
+
+  const topLevelNumberRange: FormField = {
+    id: 'age',
+    name: 'Age',
+    spoken_name: 'age',
+    type: 'number',
+    section_id: 'Part 1',
+    min: 0,
+    max: 120,
+  };
+
+  it('accepts a value within the top-level max_length', () => {
+    expect(validateField(topLevelMaxLen, '123 Main Street')).toBeNull();
+  });
+
+  it('rejects a value over the top-level max_length', () => {
+    expect(validateField(topLevelMaxLen, 'X'.repeat(26))).not.toBeNull();
+  });
+
+  it('enforces top-level min/max for number fields', () => {
+    expect(validateField(topLevelNumberRange, '45')).toBeNull();
+    expect(validateField(topLevelNumberRange, '200')).not.toBeNull();
+    expect(validateField(topLevelNumberRange, '-1')).not.toBeNull();
+  });
+
+  it('an explicit validation block value wins over the top-level field', () => {
+    // validation.max_length (10) is tighter than top-level max_length (25): the
+    // validation block must take precedence.
+    const both: FormField = { ...topLevelMaxLen, validation: { max_length: 10 } };
+    expect(validateField(both, 'X'.repeat(15))).not.toBeNull(); // 15 > 10 -> invalid
+    expect(validateField(both, 'X'.repeat(8))).toBeNull();      // 8 <= 10 -> valid
+  });
+
+  it('treats a field with no constraints at all as valid', () => {
+    const bare: FormField = {
+      id: 'free_text',
+      name: 'Free Text',
+      spoken_name: 'free text',
+      type: 'text',
+      section_id: 'Part 1',
+    };
+    expect(validateField(bare, 'anything goes here')).toBeNull();
+  });
 });
