@@ -783,14 +783,6 @@ export class SchemaFormStateManager {
   // ============================================================================
 
   /**
-   * Check if a field is confirmed
-   */
-  static isFieldConfirmed(state: SchemaFormState, fieldId: string): boolean {
-    const fieldValue = state.fieldValues[fieldId];
-    return fieldValue?.confirmed === true;
-  }
-
-  /**
    * Confirm a field with timestamp and method
    */
   static confirmField(

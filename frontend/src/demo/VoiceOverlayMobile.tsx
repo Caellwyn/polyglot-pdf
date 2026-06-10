@@ -14,7 +14,7 @@ import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
-import { DisclaimerModal } from '../schema-forms/components/DisclaimerModal'
+import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
@@ -502,8 +502,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Clear the flag IMMEDIATELY to prevent double-firing
 			setPendingDisclaimerRead(false)
 
-			// Send read_disclaimer message to backend using the proven language change pattern
-			connectionManager.readDisclaimer(selectedLanguage)
+			// Send read_disclaimer message to backend using the proven language change pattern.
+			// Pass the full translated disclaimer text (mirrors desktop VoiceOverlay.tsx):
+			// omitting it makes the backend log missing_disclaimer_text and read a generic
+			// fallback instead of the verbatim legal disclaimer (bd polyglot-pdf-cd0).
+			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
 	}, [status, pendingDisclaimerRead, connectionManager, selectedLanguage])
 
@@ -620,8 +624,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		console.log('[VoiceOverlayMobile] User requested to listen again')
 
 		if (connectionManager && selectedLanguage) {
-			// Send read_disclaimer message using the same proven pattern
-			connectionManager.readDisclaimer(selectedLanguage)
+			// Send read_disclaimer message using the same proven pattern. Pass the
+			// full translated text so the backend reads the verbatim disclaimer, not
+			// the generic missing_disclaimer_text fallback (bd polyglot-pdf-cd0).
+			const disclaimerText = DISCLAIMER_TRANSLATIONS[selectedLanguage]?.fullText || DISCLAIMER_TRANSLATIONS['English'].fullText
+			connectionManager.readDisclaimer(selectedLanguage, disclaimerText)
 		}
 	}
 
