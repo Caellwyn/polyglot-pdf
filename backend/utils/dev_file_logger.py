@@ -430,9 +430,17 @@ class DevFileLogger:
 
         self._write_to_file(entry)
 
-        # Always output errors to terminal
+        # Always output errors to terminal -- but the unconditional terminal write
+        # reaches stdout/stderr -> Cloud Run -> Cloud Logging in PRODUCTION, where
+        # full PII bodies must NEVER go (docs/standards/hipaa-pii-policy.md). So the
+        # always-on line carries only the error_TYPE (a class/category name, never
+        # PII), NOT error_message: a caller may pass str(exception) as the message,
+        # and an exception string can embed the field value the failing code was
+        # handling (bd polyglot-pdf-p84m -- flagged on PR #138). The full
+        # error_message + context stay in the _write_to_file entry above, which is
+        # gated on self.enabled (dev-only), so local debuggability is unchanged.
         self._write_to_terminal(
-            f"[error] ERROR [{error_type}]: {error_message}",
+            f"[error] ERROR [{error_type}]",
             severity="ERROR"
         )
 

@@ -338,6 +338,21 @@ async def _handle_fill_session(
 						service.handle_next_field_hint_response(request_id, hint)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
+				elif mtype == "confirm_field_response":
+					# Frontend responds to a confirm_field request: whether it actually
+					# recorded the confirmation (bd polyglot-pdf-wpw.2 / WS-E2).
+					request_id = obj.get("request_id")
+					recorded = obj.get("recorded", False)
+					reason = obj.get("reason")  # fixed category token (e.g. "no_value"), never PII
+					if not request_id:
+						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
+					else:
+						try:
+							service.handle_confirm_field_response(request_id, bool(recorded), reason)
+						except Exception as e:
+							_log.error("confirm_field_response_handling_failed", error=str(e), request_id=request_id)
+						# No acknowledgment needed - this completes the async request cycle
+					continue
 				elif mtype == "manual_field_update":
 					# Frontend notifies backend when user manually edits a field
 					# Backend forwards this to Gemini to keep context synchronized

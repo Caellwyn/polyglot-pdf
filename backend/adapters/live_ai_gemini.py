@@ -1537,15 +1537,25 @@ class LiveAIGemini(ILiveAI):
                                                                         "response": response_payload,
                                                                     })
                                                                 except Exception as e:
-                                                                    # Print full traceback to console for debugging
-                                                                    import traceback
-                                                                    print(f"\n{'='*80}")
-                                                                    print(f"TOOL CALLBACK ERROR: {tool_name}")
-                                                                    print(f"{'='*80}")
-                                                                    traceback.print_exc()
-                                                                    print(f"{'='*80}\n")
+                                                                    # The verbose traceback (which prints str(e) -- and an
+                                                                    # exception string can embed the field value the callback
+                                                                    # was handling) is DEV-ONLY: print_exc/str(e) reach
+                                                                    # stderr -> Cloud Run -> Cloud Logging in production, where
+                                                                    # PII must never go (bd polyglot-pdf-p84m). Gate it on the
+                                                                    # same flag the dev file log uses; production keeps only the
+                                                                    # PII-free structured line below.
+                                                                    if DEV_LOGGING_ENABLED:
+                                                                        import traceback
+                                                                        print(f"\n{'='*80}")
+                                                                        print(f"TOOL CALLBACK ERROR: {tool_name}")
+                                                                        print(f"{'='*80}")
+                                                                        traceback.print_exc()
+                                                                        print(f"{'='*80}\n")
 
-                                                                    self._log.exception("tool_callback_error", tool=tool_name, error=str(e))
+                                                                    # No error=str(e): the exception text can carry PII and this
+                                                                    # log renders to jsonPayload in production. Log the tool name
+                                                                    # only (matches the event.tool_call path below).
+                                                                    self._log.exception("tool_callback_error", tool=tool_name)
 
                                                                     # Dev logging: Log tool errors
                                                                     dev_logger = get_dev_logger()
@@ -1663,13 +1673,16 @@ class LiveAIGemini(ILiveAI):
                                                         "response": response_payload,
                                                     })
                                                 except Exception as e:
-                                                    # Print full traceback to console for debugging (PATH 2)
-                                                    import traceback
-                                                    print(f"\n{'='*80}")
-                                                    print(f"TOOL CALLBACK ERROR (PATH 2): {tool_name}")
-                                                    print(f"{'='*80}")
-                                                    traceback.print_exc()
-                                                    print(f"{'='*80}\n")
+                                                    # Verbose traceback (prints str(e), which can embed the
+                                                    # field value) is DEV-ONLY -- in production it would reach
+                                                    # Cloud Logging (bd polyglot-pdf-p84m). Gate on the dev flag.
+                                                    if DEV_LOGGING_ENABLED:
+                                                        import traceback
+                                                        print(f"\n{'='*80}")
+                                                        print(f"TOOL CALLBACK ERROR (PATH 2): {tool_name}")
+                                                        print(f"{'='*80}")
+                                                        traceback.print_exc()
+                                                        print(f"{'='*80}\n")
                                                     self._log.exception("tool_callback_error", tool=tool_name)
                                                     # Structured error body, not the silent {} (bd
                                                     # polyglot-pdf-wpw.1) -- same as the model_turn.parts

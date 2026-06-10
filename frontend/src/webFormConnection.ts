@@ -1051,7 +1051,7 @@ export class WebFormConnection {
    * Handle confirm_field request from backend (Gemini called confirm_field tool)
    */
   private async handleConfirmFieldRequest(message: any): Promise<void> {
-    const { field_id, confirmation_method } = message;
+    const { field_id, confirmation_method, request_id } = message;
 
     console.log('[WebFormConnection] Confirming field:', field_id, 'method:', confirmation_method);
 
@@ -1124,6 +1124,12 @@ export class WebFormConnection {
           `Please provide the value before confirming.`
         ));
       }
+      // Ack the synchronous confirm round-trip (bd polyglot-pdf-wpw.2): tell the
+      // backend the confirm was NOT recorded so it returns success:false to Gemini
+      // in-band, instead of the old fire-and-forget that always read as success.
+      // `reason` is a fixed category token, never the field value (PII-safe). This
+      // is in ADDITION to the client-side re-prompt/onError loop-breaker above.
+      this.sendConfirmFieldResponse(request_id, false, 'no_value');
       return;
     }
 
@@ -1134,6 +1140,10 @@ export class WebFormConnection {
       confirmation_method === 'verbal' ? 'ai_voice' : 'manual_edit'
     );
     SchemaFormStateManager.save(this.state);
+
+    // Ack the synchronous confirm round-trip (bd polyglot-pdf-wpw.2): the confirm
+    // was recorded, so the backend reports success and advances.
+    this.sendConfirmFieldResponse(request_id, true);
 
     // Confirm took -- clear any pending unconfirmable tracking for this field.
     if (field_id === this.lastUnconfirmableFieldId) {
@@ -1187,7 +1197,37 @@ export class WebFormConnection {
       }
     }
 
-    // Note: No acknowledgment needed - backend handles confirmation logging internally
+    // The success ack was already sent above, right after the confirm was
+    // recorded (bd polyglot-pdf-wpw.2) -- the backend uses it to complete the
+    // synchronous confirm_field round-trip.
+  }
+
+  /**
+   * Ack a synchronous confirm_field request back to the backend (bd
+   * polyglot-pdf-wpw.2 / WS-E2). The backend waits on this to learn whether the
+   * confirmation was actually recorded, so it can return success:false to Gemini
+   * when a field has no value instead of confabulating a confirmation.
+   *
+   * `reason` is a fixed category token (e.g. 'no_value') when not recorded --
+   * never a field value (PII-safe). A request_id is always present on a
+   * synchronous confirm_field request; guard defensively in case an older backend
+   * sends the legacy fire-and-forget shape (no request_id) -- then there is
+   * nothing to ack.
+   */
+  private sendConfirmFieldResponse(
+    request_id: string | undefined,
+    recorded: boolean,
+    reason?: string
+  ): void {
+    if (!request_id) {
+      return;
+    }
+    this.send({
+      type: 'confirm_field_response',
+      request_id,
+      recorded,
+      ...(reason ? { reason } : {}),
+    });
   }
 
   /**

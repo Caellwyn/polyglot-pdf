@@ -25,6 +25,18 @@ _log = structlog.get_logger().bind(module="request_coordinator")
 HINT_REQUEST_TIMEOUT = object()
 
 
+# Sentinel for "the frontend did not answer the confirm_field round-trip in time"
+# (slow or disconnected client), distinct from a real ack. confirm_field is a
+# synchronous round-trip (bd polyglot-pdf-wpw.2 / WS-E2): the frontend replies
+# whether it actually RECORDED the confirmation, so the backend can return
+# success:false to Gemini when a field has no value. A timeout must NEVER read as
+# "confirmed" -- a slow/dead client that silently counted as a successful confirm
+# is exactly the failure this round-trip exists to prevent. Callers MUST treat
+# this sentinel as "not confirmed, do NOT advance / do NOT assume the form is
+# done", same discipline as HINT_REQUEST_TIMEOUT.
+CONFIRM_REQUEST_TIMEOUT = object()
+
+
 class RequestCoordinator:
     """Coordinates async request/response cycles with the frontend.
 
@@ -214,6 +226,67 @@ class RequestCoordinator:
             self._discard(request_id)
             return HINT_REQUEST_TIMEOUT
 
+    async def request_confirm_field(
+        self, field_id: str, confirmation_method: str
+    ) -> Any:
+        """
+        Ask the frontend to record a confirmation and report whether it took.
+
+        confirm_field is a synchronous round-trip (bd polyglot-pdf-wpw.2 / WS-E2):
+        the frontend owns all field state, so it -- not the backend -- is the
+        source of truth for whether a field was actually confirmed. A field with
+        no usable value cannot be confirmed (the 0y7 loop-breaker), and the
+        frontend reports that back so the confirm_field tool can return
+        success:false and Gemini re-asks in-band, instead of the old
+        fire-and-forget send that always read as success.
+
+        Returns:
+            - A dict ``{"recorded": bool, "reason": Optional[str]}`` when the
+              frontend answered. ``recorded`` is whether the confirmation was
+              recorded; ``reason`` is a fixed category token (e.g. "no_value")
+              when it was not -- never a field value (PII-free).
+            - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend did
+              NOT answer in time / the request could not be sent. Callers must NOT
+              treat this as confirmed (bd polyglot-pdf-wpw.2).
+        """
+        if not self._websocket:
+            _log.warning("request_confirm_field_no_websocket", session_id=self._session_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        request_id, future = self._register("confirm_field", field_id=field_id)
+
+        # Send request to frontend
+        try:
+            await self._websocket.send_json({
+                "type": "confirm_field",
+                "request_id": request_id,
+                "field_id": field_id,
+                "confirmation_method": confirmation_method,
+            })
+        except Exception as exc:
+            _log.error("failed_to_send_confirm_field_request",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        # Wait for response with timeout (same 2.0s budget as the next-field hint:
+        # a slow client must not hang the receive loop).
+        try:
+            return await asyncio.wait_for(future, timeout=2.0)
+        except asyncio.TimeoutError:
+            _log.error("confirm_field_request_timeout",
+                      session_id=self._session_id,
+                      request_id=request_id)
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+        except Exception as exc:
+            _log.error("confirm_field_request_error",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
     async def request_field_value(self, spoken_name: str) -> Dict[str, Any]:
         """
         Request field value from frontend using spoken name.
@@ -353,6 +426,25 @@ class RequestCoordinator:
         # on the WS path (Codex PR #136).
         self._resolve(request_id, "next_field", hint,
                       transform=strip_field_id_from_hint)
+
+    def handle_confirm_field_response(
+        self, request_id: str, recorded: bool, reason: Optional[str] = None
+    ) -> None:
+        """
+        Handle confirm_field_response message from frontend.
+
+        Completes the synchronous confirm_field round-trip (bd polyglot-pdf-wpw.2)
+        by resolving the keyed future with whether the frontend recorded the
+        confirmation.
+
+        Args:
+            request_id: ID matching the original confirm_field request.
+            recorded: True if the frontend actually recorded the confirmation.
+            reason: Fixed category token when not recorded (e.g. "no_value"); never
+                a field value (PII-free).
+        """
+        self._resolve(request_id, "confirm_field",
+                      {"recorded": bool(recorded), "reason": reason})
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """

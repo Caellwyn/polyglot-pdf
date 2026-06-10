@@ -10,7 +10,10 @@ Tests that the confirm_field tool:
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from backend.services.callback_handler import CallbackHandler
-from backend.services.request_coordinator import RequestCoordinator
+from backend.services.request_coordinator import (
+    CONFIRM_REQUEST_TIMEOUT,
+    RequestCoordinator,
+)
 
 
 @pytest.fixture
@@ -26,6 +29,12 @@ def mock_coordinator():
     """Mock RequestCoordinator."""
     coordinator = AsyncMock(spec=RequestCoordinator)
     coordinator.request_next_field_hint = AsyncMock(return_value="Next, please provide your last name")
+    # confirm_field is now a synchronous round-trip (bd polyglot-pdf-wpw.2): the FE
+    # acks whether it recorded the confirmation. Default to "recorded" so the
+    # success-path tests below exercise the happy path; failure-path tests override.
+    coordinator.request_confirm_field = AsyncMock(
+        return_value={"recorded": True, "reason": None}
+    )
     return coordinator
 
 
@@ -63,19 +72,17 @@ class TestConfirmFieldTool:
         assert "next_field_hint" in response
         assert response["next_field_hint"] == "Next, please provide your last name"
 
-        # Verify WebSocket message sent to frontend
-        mock_websocket.send_json.assert_called()
-        calls = mock_websocket.send_json.call_args_list
-        confirm_call = [call for call in calls if call[0][0]["type"] == "confirm_field"]
-        assert len(confirm_call) > 0
-        assert confirm_call[0][0][0]["field_id"] == "p1_line1_firstname"
-        assert confirm_call[0][0][0]["confirmation_method"] == "verbal"
+        # The confirm request now flows through the coordinator round-trip
+        # (bd polyglot-pdf-wpw.2), not a fire-and-forget websocket.send_json.
+        mock_coordinator.request_confirm_field.assert_called_once_with(
+            "p1_line1_firstname", "verbal"
+        )
 
-        # Verify next field hint was requested
+        # Verify next field hint was requested (recorded path advances)
         mock_coordinator.request_next_field_hint.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_manual_confirmation_success(self, callback_handler, mock_websocket):
+    async def test_manual_confirmation_success(self, callback_handler, mock_websocket, mock_coordinator):
         """Manual confirmation (user edited field) should mark field as confirmed."""
         response = await callback_handler.on_tool_call(
             tool_name="confirm_field",
@@ -89,10 +96,10 @@ class TestConfirmFieldTool:
         assert response["success"] is True
         assert response["field_confirmed"] == "p1_line1_lastname"
 
-        # Verify WebSocket message
-        calls = mock_websocket.send_json.call_args_list
-        confirm_call = [call for call in calls if call[0][0]["type"] == "confirm_field"]
-        assert confirm_call[0][0][0]["confirmation_method"] == "manual"
+        # The confirm request flows through the coordinator with the method.
+        mock_coordinator.request_confirm_field.assert_called_once_with(
+            "p1_line1_lastname", "manual"
+        )
 
     @pytest.mark.asyncio
     async def test_confirmation_logging_called(self, callback_handler, mock_websocket):
@@ -179,4 +186,72 @@ class TestConfirmFieldTool:
 
             # Should still succeed but logging should not be called
             assert response["success"] is True
+            mock_log.assert_not_called()
+
+
+class TestConfirmFieldFailsWhenNotRecorded:
+    """The synchronous confirm round-trip (bd polyglot-pdf-wpw.2 / WS-E2): when the
+    frontend reports the confirm was NOT recorded (empty field) -- or never answers
+    -- the tool must return success:false so Gemini re-asks IN-BAND, instead of the
+    old always-success that let 3.1's confirm-without-fill skip lose the value.
+
+    RED-FIRST: against the pre-wpw.2 backend, an empty-field confirm returned
+    success:True; these assert the opposite.
+    """
+
+    @pytest.mark.asyncio
+    async def test_empty_field_confirm_returns_failure(self, callback_handler, mock_coordinator):
+        """FE acks recorded:false (no_value) -> success:false + corrective message,
+        and the next-field hint is NOT requested (we did not advance)."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": False, "reason": "no_value"}
+        )
+
+        response = await callback_handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={"field_id": "p1_line1_firstname", "confirmation_method": "verbal"},
+        )
+
+        assert response["success"] is False
+        assert response["field_confirmed"] is None
+        # WS-C2 envelope shape so Gemini reads it as a real failure.
+        assert response["status"] == "error"
+        assert response.get("error")
+        # Corrective guidance tells Gemini to collect the value first.
+        assert "no value" in response["message"].lower()
+        assert "update_form_fields" in response["message"]
+        # We did NOT advance -- no next-field hint requested on a failed confirm.
+        mock_coordinator.request_next_field_hint.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_confirm_timeout_returns_failure_not_completion(self, callback_handler, mock_coordinator):
+        """A slow/disconnected client (CONFIRM_REQUEST_TIMEOUT) must read as
+        not-confirmed + keep-going, NEVER as a successful confirm or completion."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value=CONFIRM_REQUEST_TIMEOUT
+        )
+
+        response = await callback_handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={"field_id": "p1_line1_firstname", "confirmation_method": "verbal"},
+        )
+
+        assert response["success"] is False
+        assert response["status"] == "error"
+        # Must NOT claim the form is done.
+        assert "do not assume" in response["message"].lower()
+        mock_coordinator.request_next_field_hint.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_confirm_does_not_log_confirmation(self, callback_handler, mock_coordinator):
+        """A confirmation that did not happen must NOT be logged."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": False, "reason": "no_value"}
+        )
+
+        with patch('backend.services.callback_handler.log_field_confirmation') as mock_log:
+            await callback_handler.on_tool_call(
+                tool_name="confirm_field",
+                arguments={"field_id": "p1_line1_firstname", "confirmation_method": "verbal"},
+            )
             mock_log.assert_not_called()

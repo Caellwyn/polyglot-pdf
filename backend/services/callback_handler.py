@@ -9,7 +9,11 @@ from typing import Any, Dict, Optional
 from fastapi import WebSocket
 import structlog
 
-from .request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
+from .request_coordinator import (
+    CONFIRM_REQUEST_TIMEOUT,
+    HINT_REQUEST_TIMEOUT,
+    RequestCoordinator,
+)
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
 
@@ -407,14 +411,50 @@ class CallbackHandler:
         field_id = arguments.get("field_id", "") if isinstance(arguments, dict) else ""
         confirmation_method = arguments.get("confirmation_method", "verbal") if isinstance(arguments, dict) else "verbal"
 
-        # Request confirmation from frontend
-        await self._websocket.send_json({
-            "type": "confirm_field",
-            "field_id": field_id,
-            "confirmation_method": confirmation_method
-        })
+        # SYNCHRONOUS confirm round-trip (bd polyglot-pdf-wpw.2 / WS-E2). The
+        # frontend owns all field state, so it -- not the backend -- is the source
+        # of truth for whether a field was actually confirmed. Ask it and WAIT for
+        # the ack instead of the old fire-and-forget send that always read as
+        # success. A field with no value cannot be confirmed (3.1's confirm-without-
+        # fill skip); the frontend reports that back and we tell Gemini success:false
+        # so it re-asks IN-BAND, rather than confabulating a confirmation and losing
+        # the user's value.
+        confirm_ack = await self._request_coordinator.request_confirm_field(
+            field_id, confirmation_method
+        )
 
-        # Log confirmation (anonymized - no PII)
+        if confirm_ack is CONFIRM_REQUEST_TIMEOUT:
+            # Slow/disconnected client: never read a non-answer as confirmed. Do NOT
+            # request the next-field hint (we did not advance) and do NOT log a
+            # confirmation that did not happen.
+            return self._confirm_failure_response(
+                field_id,
+                "Could not record the confirmation right now (the form did not "
+                "respond). Do NOT assume the field is confirmed or that the form is "
+                "complete -- ask the user to confirm again, or call get_form_status.",
+            )
+
+        if not confirm_ack.get("recorded"):
+            # The field has no usable value yet, so the confirm could not be
+            # recorded (the 0y7 loop-breaker, reported in-band). `reason` is a fixed
+            # category token, never the field value (PII-free).
+            reason = confirm_ack.get("reason")
+            if reason == "no_value":
+                guidance = (
+                    f"Field '{field_id}' has no value yet, so it cannot be "
+                    f"confirmed. Ask the user for the value and call "
+                    f"update_form_fields to fill it BEFORE confirming."
+                )
+            else:
+                guidance = (
+                    f"Field '{field_id}' could not be confirmed. Ask the user for "
+                    f"the value and fill it with update_form_fields before "
+                    f"confirming again."
+                )
+            return self._confirm_failure_response(field_id, guidance)
+
+        # Recorded -- the confirmation actually took. Log it (anonymized, no PII)
+        # only now: we must not log a confirmation that did not happen.
         if self._form_id and self._form_session_id:
             # Get field name from schema for logging (we need to request this from frontend)
             # For now, just log the field_id
@@ -480,8 +520,36 @@ class CallbackHandler:
 
         return response
 
+    def _confirm_failure_response(self, field_id: str, message: str) -> Dict[str, Any]:
+        """Build the confirm_field tool response for a confirm that did NOT take
+        (bd polyglot-pdf-wpw.2).
+
+        Carries the WS-C2 structured-error keys (status/retryable/error -- bd
+        polyglot-pdf-wpw.1) so the failure reads to Gemini as an actual tool
+        failure (the documented Live API failure shape uses an ``error`` key),
+        merged with the confirm-specific keys. The shape is duplicated here rather
+        than imported from the adapter's private ``_tool_error_envelope`` so the
+        services layer does not depend on adapter internals (and does not pull the
+        heavy genai SDK module in at import time); the key set is kept in sync with
+        WS-C2 deliberately. ``message`` is a fixed, caller-controlled string --
+        never a field value (PII-free)."""
+        response = {
+            "success": False,
+            "field_confirmed": None,
+            "next_field_hint": None,
+            "status": "error",
+            "retryable": True,
+            "error": message,
+            "message": message,
+        }
+        _log.info("-" * 80)
+        _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmed=False)
+        _log.info("-" * 80)
+        _dev_log.log_tool_response("confirm_field", response, session_id=self._session_id)
+        return response
+
     # Helper methods
-    
+
     def _parse_update_arguments(self, arguments: Any) -> Dict[str, Any]:
         """Parse raw update arguments into normalized dict.
 
