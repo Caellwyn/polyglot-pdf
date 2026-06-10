@@ -1119,6 +1119,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const currentStatus = connectionManager?.getStatus()
 		const isConnectionActive = currentStatus === 'connected' || currentStatus === 'switching_section'
 
+		let reconnected = false
 		if (!isConnectionActive) {
 			console.log('[VoiceOverlay] 🔄 Connection stale after disclaimer - reconnecting...')
 			console.log('[VoiceOverlay] Current status:', currentStatus)
@@ -1126,6 +1127,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			try {
 				// Reconnect to backend
 				await handleConnect()
+				reconnected = true
 				console.log('[VoiceOverlay] ✅ Reconnected after disclaimer acceptance')
 			} catch (err) {
 				console.error('[VoiceOverlay] ❌ Reconnection failed:', err)
@@ -1145,9 +1147,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				am.resumePlayback()
 			}
 
-			// Step 4: Send activity_end to close the "user turn" so Gemini can respond
-			console.log('[VoiceOverlay] 🎤 Sending activity_end to signal user turn complete')
-			await connectionManager.sendActivityEnd()
+			// Step 4: Send activity_end to close the "user turn" so Gemini can respond.
+			// SKIP on the reconnect path (bd polyglot-pdf-ala0): the sendActivityStart
+			// above opened the turn on the OLD (stale) connection, so the new connection
+			// has no matching open turn -- sending activity_end here would be an unmatched
+			// signal (in native VAD the backend turns it into a spurious audio_stream_end
+			// on a turn that never opened). On reconnect, switchToFirstSection below
+			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
+			if (!reconnected) {
+				console.log('[VoiceOverlay] 🎤 Sending activity_end to signal user turn complete')
+				await connectionManager.sendActivityEnd()
+			}
 
 			// Step 5: Switch to first section - this restarts Gemini with form-filling context
 			// The section switch mechanism:

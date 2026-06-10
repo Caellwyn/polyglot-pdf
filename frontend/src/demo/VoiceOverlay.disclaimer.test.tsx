@@ -57,8 +57,10 @@ const MINIMAL_SCHEMA: FormSchema = {
 /**
  * Build a mock ConnectionManager whose relevant methods push a label into a
  * shared `calls` array when invoked, so the test can assert relative ordering.
- * Status starts 'connected' so handleDisclaimerAgree skips the reconnect branch
- * (that branch is its own concern, tracked by bd polyglot-pdf-ala0).
+ * getStatus() reports 'connected' until __forceStale() is called; after that it
+ * reports 'disconnected' until connect() reconnects it. The reconnect test calls
+ * __forceStale() between mount and the Agree click to model a connection that
+ * went stale during the disclaimer read (bd polyglot-pdf-ala0).
  */
 function makeMockManager(calls: string[]) {
   const audioManager = {
@@ -82,9 +84,16 @@ function makeMockManager(calls: string[]) {
     playAudio: vi.fn(async () => {}),
     destroy: vi.fn(),
   }
-  return {
+  // getStatus reports 'connected' until __forceStale() is called, after which it
+  // reports 'disconnected' until connect() reconnects it. The component's
+  // mount-time auto-connect would otherwise leave it 'connected' the whole time,
+  // so the reconnect test calls manager.__forceStale() AFTER mount but BEFORE the
+  // Agree click to model a connection that went stale during the disclaimer read.
+  let connected = true
+  const manager: any = {
+    __forceStale: () => { connected = false },
     // tracked for the ordering assertion:
-    getStatus: vi.fn(() => 'connected'),
+    getStatus: vi.fn(() => (connected ? 'connected' : 'disconnected')),
     sendActivityStart: vi.fn(() => calls.push('sendActivityStart')),
     sendActivityEnd: vi.fn(async () => { calls.push('sendActivityEnd') }),
     switchToFirstSection: vi.fn(async () => { calls.push('switchToFirstSection') }),
@@ -93,7 +102,7 @@ function makeMockManager(calls: string[]) {
     // may touch -- harmless stubs so rendering reaches the Agree click. (Full
     // interface stubbed to avoid is-not-a-function crashes from effects we are
     // not exercising, e.g. the pendingDisclaimerRead effect's readDisclaimer.)
-    connect: vi.fn(async () => {}),
+    connect: vi.fn(async () => { connected = true; calls.push('connect') }),
     disconnect: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(async () => {}),
@@ -119,7 +128,8 @@ function makeMockManager(calls: string[]) {
     getCompletedSectionIds: vi.fn(() => new Set<string>()),
     onVADSpeechStart: vi.fn(),
     onVADSpeechEnd: vi.fn(),
-  } as any
+  }
+  return manager
 }
 
 describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
@@ -226,11 +236,77 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
     expect(iSwitch).toBeGreaterThan(iEnd)         // section switch last
   }
 
+  /**
+   * On the RECONNECT path (connection went stale during the disclaimer read),
+   * handleDisclaimerAgree must NOT send activity_end (bd polyglot-pdf-ala0): the
+   * earlier sendActivityStart opened the turn on the OLD connection, so the fresh
+   * connection has no matching open turn -- an activity_end there is an unmatched
+   * signal. It must still reconnect and switchToFirstSection (which drives the new
+   * session's turn). This is the regression guard for the ala0 fix.
+   */
+  async function assertReconnectSkipsActivityEnd(Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile) {
+    const calls: string[] = []
+    const manager = makeMockManager(calls)
+
+    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
+      schema: MINIMAL_SCHEMA,
+      fieldValues: {},
+      currentSectionId: 'section_1',
+      completedSections: new Set<string>(),
+      validationErrors: {},
+      lastUpdated: 0,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      disclaimerAccepted: false,
+      selectedLanguage: 'English',
+    } as any))
+    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+
+    render(
+      <Overlay
+        schema={MINIMAL_SCHEMA}
+        connectionManager={manager}
+        status="connected"
+        initialLanguage="English"
+      />
+    )
+
+    const agreeButton = await screen.findByText('I Agree')
+
+    // Mark the connection stale NOW (post-mount, pre-Agree): the component
+    // auto-connects on mount, so getStatus() would otherwise be 'connected'
+    // and the reconnect branch would never run. This models the connection
+    // dropping during the (long) disclaimer read.
+    manager.__forceStale()
+
+    fireEvent.click(agreeButton)
+
+    // Wait for the terminal call (the section switch) to land.
+    await waitFor(() => expect(manager.switchToFirstSection).toHaveBeenCalledWith('English'))
+
+    // The reconnect branch ran (connect() was called)...
+    expect(manager.connect).toHaveBeenCalled()
+    // ...and the section restart still happened...
+    expect(manager.switchToFirstSection).toHaveBeenCalled()
+    // ...but NO activity_end was sent on the freshly-reconnected session.
+    expect(manager.sendActivityEnd).not.toHaveBeenCalled()
+    expect(calls).not.toContain('sendActivityEnd')
+  }
+
   it('desktop (VoiceOverlay): interrupts before the section transition on Agree', async () => {
     await assertInterruptOrdering(VoiceOverlay)
   })
 
   it('mobile (VoiceOverlayMobile): interrupts before the section transition on Agree', async () => {
     await assertInterruptOrdering(VoiceOverlayMobile)
+  })
+
+  it('desktop (VoiceOverlay): skips activity_end on the reconnect path (ala0)', async () => {
+    await assertReconnectSkipsActivityEnd(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): skips activity_end on the reconnect path (ala0)', async () => {
+    await assertReconnectSkipsActivityEnd(VoiceOverlayMobile)
   })
 })
