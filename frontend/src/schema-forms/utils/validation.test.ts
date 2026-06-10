@@ -163,18 +163,42 @@ describe('validateField (enum / option membership)', () => {
     expect(validateField(checkboxGroup, ['single', 'widowed'])).not.toBeNull();
   });
 
-  it('rejects an array (including []) for a single-choice select/radio field', () => {
-    // A single-choice field cannot take an array; an empty [] must NOT vacuously
-    // pass (Codex PR #145 round 3).
+  it('rejects a NON-empty array for a single-choice select/radio field', () => {
+    // A single-choice field cannot take a multi-value array (Codex PR #145 round 3).
     expect(validateField(selectField, ['single'])).not.toBeNull();
-    expect(validateField(selectField, [])).not.toBeNull();
-    expect(validateField(radioNoValidation, [])).not.toBeNull();
+    expect(validateField(selectField, ['single', 'married'])).not.toBeNull();
+  });
+
+  it('treats an empty array [] on an OPTIONAL single-choice field as empty (not an error)', () => {
+    // [] is "no value" -> empty (fresh-eyes PR #145 round 4 unified empty-handling).
+    // For an optional field that means valid/unfilled, NOT a vacuous-pass landing:
+    // because it is empty, the enum check is skipped and nothing is stored. (A
+    // REQUIRED single-choice field with [] is covered by the required check below.)
+    expect(validateField(selectField, [])).toBeNull();
+    expect(validateField(radioNoValidation, [])).toBeNull();
   });
 
   it('never echoes the rejected value in the error message (PII-safe)', () => {
     const err = validateField(selectField, 'sensitive-made-up-value');
     expect(err).not.toBeNull();
     expect(err).not.toContain('sensitive-made-up-value');
+  });
+
+  it('treats an empty array [] as empty: optional checkbox group passes, required fails', () => {
+    // [] = a checkbox group with no selections -> empty (fresh-eyes PR #145 round 4).
+    const optionalGroup: FormField = {
+      id: 'tags_opt[]',
+      name: 'Optional Tags',
+      spoken_name: 'optional tags',
+      type: 'checkbox',
+      group_kind: 'checkbox',
+      section_id: 'Part 1',
+      options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+    };
+    const requiredGroup: FormField = { ...optionalGroup, id: 'tags_req[]', validation: { required: true } };
+
+    expect(validateField(optionalGroup, [])).toBeNull();            // optional -> ok empty
+    expect(validateField(requiredGroup, [])).toContain('required'); // required -> required error, NOT vacuous pass
   });
 
   // Plain-string options (e.g. adult_intake_demo_schema.json: options: ["Agender",...]),

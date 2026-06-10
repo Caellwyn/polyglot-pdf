@@ -44,7 +44,16 @@ export function validateField(field: FormField, value: any): string | null {
   const rawValue = unwrapFieldValue(value);
   const actualValue = normalizeFieldValue(field, rawValue);
 
-  const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
+  // An empty array (a checkbox group with NO selections) counts as empty, same as
+  // null/undefined/"" (fresh-eyes PR #145 round 4): otherwise a REQUIRED checkbox
+  // group submitted as `[]` would slip past the required check (which gates on
+  // normalizedEmpty) AND the enum loop (which is vacuous for `[]`), landing a blank
+  // value that confirm_field would then treat as filled.
+  const normalizedEmpty =
+    actualValue === null ||
+    actualValue === undefined ||
+    actualValue === "" ||
+    (Array.isArray(actualValue) && actualValue.length === 0);
 
   // Enum / option-membership runs INDEPENDENTLY of field.validation: for a
   // STRING-enum field (select, radio, or a checkbox GROUP), the option set IS the

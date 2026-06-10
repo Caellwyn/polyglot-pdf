@@ -262,29 +262,53 @@ describe('WebFormConnection AI-value reject session cap (cross-field spin) (bd p
     expect(prompts(ws).length).toBe(6) // VALIDATION_REJECT_SESSION_CAP
   })
 
-  it('restores the prompt budget after a successful fill on a DIFFERENT field', async () => {
+  it('restores the prompt budget when the STUCK field itself finally succeeds', async () => {
     const conn = new WebFormConnection(TWO_ENUM_SCHEMA)
     await conn.connect('wss://example/ws/fill')
     const ws = lastWs()
     ws.send.mockClear()
 
-    // Exhaust the session cap (6) alternating bad values between A and B.
-    for (let i = 0; i < 40; i++) {
-      const bad = i % 2 === 0 ? { fieldA: 'bad-a' } : { fieldB: 'bad-b' }
-      fireFieldUpdate(ws, bad)
+    // Repeatedly reject field A until its budget is spent (per-field cap reached).
+    for (let i = 0; i < 10; i++) {
+      fireFieldUpdate(ws, { fieldA: 'bad-a' })
     }
-    expect(prompts(ws).length).toBe(6)
+    const spent = prompts(ws).length
+    expect(spent).toBeGreaterThan(0)
 
-    // Genuine PROGRESS: a valid value lands on field A. This must restore the
-    // prompt budget (Codex PR #145 round 2) -- earlier the reset only fired when
-    // the good value matched lastValidationRejectFieldId, so a good fill of the
-    // OTHER field left the cap stuck and the next bad value got no prompt.
+    // Genuine PROGRESS on the STUCK field: A lands a valid value. lastValidationReject
+    // is A, so this clears the streak + session cap -- the model fixed the failing thing.
     ws.send.mockClear()
     fireFieldUpdate(ws, { fieldA: 'a1' }) // valid -> lands, budget restored
 
-    // A later bad value now gets a fresh corrective prompt again.
-    fireFieldUpdate(ws, { fieldB: 'bad-b-again' })
+    // A later bad value gets a fresh corrective prompt again (budget was restored).
+    fireFieldUpdate(ws, { fieldA: 'bad-a-again' })
     expect(prompts(ws).length).toBe(1)
+  })
+
+  it('does NOT restore the budget on a good value for a DIFFERENT field while another is still failing', async () => {
+    // The [bad-A, good-B] alternation must NOT reset the session cap each batch --
+    // good-B is not progress on the FAILING field A, and resetting would let the
+    // model spin corrective prompts for A forever (fresh-eyes round 4). The cap must
+    // hold at the session limit regardless of the interleaved good-B fills.
+    const conn = new WebFormConnection(TWO_ENUM_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // 30 batches of "field A bad + field B GOOD". If a different-field success reset
+    // A's tracking each batch, A's streak would restart every time and it would
+    // prompt on (almost) every batch (~30). Because good-B does NOT reset the streak
+    // of the still-failing A, A stays bounded by its OWN per-field cap (3) -- the
+    // good-B fills are ignored for A's budget entirely.
+    for (let i = 0; i < 30; i++) {
+      fireFieldUpdate(ws, { fieldA: 'bad-a' })  // reject A
+      fireFieldUpdate(ws, { fieldB: 'b1' })     // valid B (a DIFFERENT field)
+    }
+
+    // Bounded at A's per-field reprompt cap (VALIDATION_REJECT_REPROMPT_CAP = 3),
+    // NOT ~30 -- proving good-B did not keep resetting A's streak/budget
+    // (fresh-eyes round 4).
+    expect(prompts(ws).length).toBe(3)
   })
 })
 

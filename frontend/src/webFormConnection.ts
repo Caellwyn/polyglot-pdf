@@ -1109,7 +1109,13 @@ export class WebFormConnection {
     // and re-prompt Gemini to collect the value.
     const fieldValue = this.state.fieldValues[field_id]?.value;
     const hasUsableValue =
-      fieldValue !== null && fieldValue !== undefined && fieldValue !== '';
+      fieldValue !== null &&
+      fieldValue !== undefined &&
+      fieldValue !== '' &&
+      // An empty array (a checkbox group with no selections) is NOT a usable value:
+      // it must not be confirmable as filled (fresh-eyes PR #145 round 4). Mirrors
+      // the empty-array handling in validateField's normalizedEmpty.
+      !(Array.isArray(fieldValue) && fieldValue.length === 0);
 
     if (!hasUsableValue) {
       if (field_id === this.lastUnconfirmableFieldId) {
@@ -1271,14 +1277,23 @@ export class WebFormConnection {
       return false;
     }
 
-    // A valid value landing is PROGRESS -- on ANY successful AI apply, clear all
-    // reject tracking (per-field AND the session-wide cap). Earlier this reset only
-    // ran when the good value was for the SAME field that was being rejected, which
-    // left the session cap stuck after progress on a DIFFERENT field: once the cap
-    // was hit on A/B, a successful fill of C would not restore the prompt budget, so
-    // a later bad value on a new field got no corrective prompt (Codex PR #145 round
-    // 2). Resetting on any success ties the prompt budget to forward progress.
-    this.resetValidationRejectTracking();
+    // Reset the reject tracking when the STUCK field finally lands a good value --
+    // i.e. the field currently being rejected is the one that just succeeded. That
+    // is genuine progress on the thing that was failing, so it restores the full
+    // prompt budget (per-field AND session-wide).
+    //
+    // It must NOT reset on a success for a DIFFERENT field while a reject streak is
+    // active (Codex round 2 wanted any-success-resets, but fresh-eyes round 4 showed
+    // that over-corrects): a model alternating [bad-A, good-B] in every batch would
+    // otherwise clear the session cap each batch and prompt for A forever -- exactly
+    // the cross-field spin the session cap exists to bound. So good-B with A still
+    // failing leaves A's streak + the session cap intact; the cap lifts only when A
+    // itself succeeds (or on connect/section-switch). When there is NO active streak,
+    // this is just a clean fill and there is nothing to reset.
+    if (this.lastValidationRejectFieldId !== null &&
+        field.id === this.lastValidationRejectFieldId) {
+      this.resetValidationRejectTracking();
+    }
 
     // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
     this.updateField(field.id, value as any, { confirmed: false, emit: options.emit });
