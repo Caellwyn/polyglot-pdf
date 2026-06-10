@@ -16,8 +16,13 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
   `gh pr create` by hand). Reviewed by Copilot + fresh-eyes in parallel, looped
   to clean. The maintainer clicks merge (auto-merge is disabled).
-- **`dev → main`** — maintainer-driven promotion; `dev` auto-deploys to staging,
-  `main` to prod. You do **not** push to `main`.
+- **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
+  target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent
+  MAY run the demo deploy, but only after a local test of the change, with
+  explicit per-instance maintainer permission, and a post-deploy test-drive (the
+  three-part gate in [`docs/doctrine/promotion-tiers.md`](../docs/doctrine/promotion-tiers.md)).
+  Syncing the local root to `dev` is autonomous; merging a PR into `dev` is the
+  maintainer's.
 
 **Before saying "done":**
 

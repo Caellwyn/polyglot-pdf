@@ -148,7 +148,10 @@ survive a reload). `config.ts` also exposes `isTestHarnessEnabled()` (true only
 when both `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` are set) — a dev/test-only
 gate used by the E2E voice harness; never true in production.
 
-> **Promotion path** is feature → `dev` (staging) → `main` (prod); deploys
-> themselves stay manual. See [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
+> **Promotion path** is worktree → local test server → `dev` → demo remote
+> (`deploy-demo.sh`); deploys stay manual (local shell scripts, not CI) and there
+> is **no active prod**. The agent may run the demo deploy under a three-part gate
+> (local-test-first + per-instance permission + post-deploy test-drive). See
+> [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
