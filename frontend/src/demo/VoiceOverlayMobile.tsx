@@ -137,7 +137,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				// so the new (remounted) overlay must re-start it without reconnecting.
 				// No-ops if already recording (double-arm guard inside rearmAudioCapture).
 				// bd polyglot-pdf-nlfc.
-				connectionManager?.rearmAudioCapture()
+				connectionManager?.rearmAudioCapture().catch((err) => {
+					console.error('[VoiceOverlayMobile] rearmAudioCapture failed -- mic may be dead after overlay swap:', err)
+				})
 				return
 			}
 			console.log('[VoiceOverlayMobile] Language pre-selected from onboarding:', initialLanguage)

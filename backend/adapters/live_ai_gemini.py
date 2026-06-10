@@ -1893,17 +1893,22 @@ class LiveAIGemini(ILiveAI):
                                         # call duration. Also reset the activity/audio burst
                                         # reference so the NEXT turn measures from a clean start.
                                         _t_send_resp_start = time.monotonic()
-                                        await session.send_tool_response(function_responses=responses)
-                                        _send_resp_ms = round((time.monotonic() - _t_send_resp_start) * 1000)
-                                        _tool_names_sent = [r.name for r in responses]
-                                        self._log.info(
-                                            "timing_tool_response_sent",
-                                            tool_names=_tool_names_sent,
-                                            send_ms=_send_resp_ms,
-                                        )
-                                        # Reset burst-reference state for the next turn.
-                                        self._timing_last_activity_end = None
-                                        self._timing_first_inbound_audio = None
+                                        try:
+                                            await session.send_tool_response(function_responses=responses)
+                                            _send_resp_ms = round((time.monotonic() - _t_send_resp_start) * 1000)
+                                            _tool_names_sent = [r.name for r in responses]
+                                            self._log.info(
+                                                "timing_tool_response_sent",
+                                                tool_names=_tool_names_sent,
+                                                send_ms=_send_resp_ms,
+                                            )
+                                        finally:
+                                            # Reset burst-reference state for the next turn --
+                                            # in a finally so a failed send cannot leave stale
+                                            # references that inflate the next turn's
+                                            # since_activity_end_ms (fresh-eyes, PR #150).
+                                            self._timing_last_activity_end = None
+                                            self._timing_first_inbound_audio = None
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
 
@@ -2258,6 +2263,9 @@ class LiveAIGemini(ILiveAI):
                     print(f"{'='*80}")
                     print(f"Previous error: {str(last_exc) if last_exc else 'Unknown'}")
                     print(f"{'='*80}\n")
+                # Reset per attempt so a retry's connect_to_ready_ms measures THIS
+                # attempt only, not prior failures + backoff (fresh-eyes, PR #150).
+                _t_connect_start = time.monotonic()
                 try:
                     # Re-create connect_obj each attempt to avoid reusing a failed object
                     if websocket_base_override:
