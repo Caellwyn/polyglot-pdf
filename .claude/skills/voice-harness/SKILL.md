@@ -87,6 +87,8 @@ premium, which skips tool calls more). On non-PASS, capture
 
 ## Known issue the harness catches
 
-bd polyglot-pdf-0ux: on native-audio the `update_form_fields` FunctionResponse can
-be sent without an `id`, crashing the receive loop AFTER the first fill -- so the
-fill PASSES but confirm/advance FLAKY-times-out until that bug is fixed.
+bd polyglot-pdf-0ux (FIXED 2026-06-09): on native-audio the `update_form_fields`
+FunctionResponse could be sent without an `id`, crashing the receive loop AFTER
+the first fill -- fill PASSED but confirm/advance FLAKY-timed-out. Fixed by
+echoing the `call_id` on both receive paths; kept here as the canonical example
+of the failure class the harness catches.

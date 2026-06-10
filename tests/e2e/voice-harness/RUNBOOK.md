@@ -236,8 +236,8 @@ truth. `runCycle` already classifies:
   `field never confirmed` / `confirmed but never advanced`). The model behaved
   unexpectedly but not provably wrong. (PASS requires fill AND confirm AND advance
   -- the full fill -> confirm -> advance invariant; confirm-without-advance is the
-  signature of the bd polyglot-pdf-0ux receive-loop crash and is correctly FLAKY,
-  not PASS.)
+  signature of the since-fixed bd polyglot-pdf-0ux receive-loop crash and is
+  correctly FLAKY, not PASS.)
 
 **Retry -- clear state BEFORE the reload.** `sessionStorage["schema_form_state"]`
 survives a reload, and on the next boot the app RESTORES the old DOM value,
@@ -281,10 +281,11 @@ reports the rate, not a brittle boolean.
 - **VAD mode is auto-handled.** `injectUtterance` branches on `isNativeVad()`:
   manual VAD brackets with activity_start/end; native VAD streams continuous audio
   + trailing silence. No caller action needed.
-- **Known backend bug (bd polyglot-pdf-0ux):** on native-audio, the
-  `update_form_fields` FunctionResponse can be sent without an `id`, raising in
-  `send_tool_response` and crashing the receive loop AFTER the first fill. Until
-  it's fixed, the fill step PASSES but confirm/advance will FLAKY-timeout. The
-  harness CAUGHT this on its first live run.
+- **FIXED backend bug (bd polyglot-pdf-0ux, fixed 2026-06-09):** on native-audio
+  the `update_form_fields` FunctionResponse could be sent without an `id`,
+  crashing the receive loop AFTER the first fill (fill PASSED, confirm/advance
+  FLAKY-timed-out). `_build_function_response` now echoes the `call_id` on both
+  receive paths. The harness CAUGHT this on its first live run; a
+  confirm-without-advance FLAKY is no longer expected from this cause.
 - **Never commit** `backend/.env.DEV` or `backend/logs/*.jsonl` (PII). The
   fixtures and harness contain no PII and ARE committed.
