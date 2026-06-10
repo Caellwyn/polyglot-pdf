@@ -80,19 +80,41 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     vi.useRealTimers()
   })
 
-  it('switchToSection rejects a SECOND switch while one is in flight (re-entrancy)', async () => {
+  it('switchToSection REJECTS (throws) a second switch while one is in flight', async () => {
     const conn = new WebFormConnection(SCHEMA)
-    // First switch goes in flight (no section_switched yet -> stays in flight).
     await conn.switchToSection('s2', 'ws://x')
     expect(conn.getStatus()).toBe('switching_section')
+    expect((conn as any).switchInFlight).toBe(true)
 
-    const ws = MockWebSocket.instances[0]
-    const sendCountAfterFirst = ws ? ws.send.mock.calls.length : 0
+    // A second switch must be REJECTED (throw), not silently resolved -- the caller
+    // pre-updates the UI and needs to know to roll back (Codex PR #137).
+    await expect(conn.switchToSection('s1', 'ws://x')).rejects.toThrow(/already in progress/)
+  })
 
-    // A concurrent second switch must be ignored (no extra manual_section_switch).
-    await conn.switchToSection('s1', 'ws://x')
-    const sendCountAfterSecond = ws ? ws.send.mock.calls.length : 0
-    expect(sendCountAfterSecond).toBe(sendCountAfterFirst)
+  it('two CONCURRENT switchToSection calls: only ONE manual_section_switch is sent', async () => {
+    // The TOCTOU race (Codex/fresh-eyes PR #137): guard must be claimed
+    // SYNCHRONOUSLY before the waitForBufferDrain await, so two calls started in
+    // the same tick can't both pass. The second rejects.
+    const conn = new WebFormConnection(SCHEMA)
+    // A live socket so switchToSection's send() has a target and waitForBufferDrain
+    // is exercised.
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+
+    const p1 = conn.switchToSection('s2', 'ws://x')
+    const p2 = conn.switchToSection('s1', 'ws://x')
+    const results = await Promise.allSettled([p1, p2])
+
+    // Exactly one fulfilled, one rejected -- and exactly one manual_section_switch.
+    const fulfilled = results.filter(r => r.status === 'fulfilled').length
+    const rejected = results.filter(r => r.status === 'rejected').length
+    expect(fulfilled).toBe(1)
+    expect(rejected).toBe(1)
+    // send() stringifies the message, so parse each call's first arg.
+    const switchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(switchSends).toBe(1)
   })
 
   it('a server error during a switch surfaces `error`, not a stuck switching_section', async () => {
@@ -155,5 +177,59 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
 
     expect(errors.length).toBe(1)
     expect(conn.getStatus()).not.toBe('switching_section')
+  })
+
+  it('the AI-initiated path (prepare_section_switch) sets the guard, blocking a manual switch', async () => {
+    // Codex PR #137: handlePrepareSectionSwitchRequest must mark the switch in
+    // flight so a manual click during an AI switch is rejected.
+    const conn = new WebFormConnection(SCHEMA)
+    // The schema needs `parts` for this handler's guard; seed via the real init.
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 2 })
+
+    expect((conn as any).switchInFlight).toBe(true)
+    expect(conn.getStatus()).toBe('switching_section')
+
+    // A manual switch during the AI window is now rejected.
+    await expect(conn.switchToSection('s1', 'ws://x')).rejects.toThrow(/already in progress/)
+
+    // section_switched releases the guard.
+    ;(conn as any).handleSectionSwitched({ section_number: 2 })
+    expect((conn as any).switchInFlight).toBe(false)
+  })
+
+  it('an INTENTIONAL disconnect during a switch cancels it silently (no false error)', async () => {
+    // Codex PR #137: disconnect() (UI unmount / stop-session) must clear the guard
+    // so the close it triggers does not fire a false onError/`error` status.
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA, { onError: (e) => errors.push(e) })
+    await conn.switchToSection('s2', 'ws://x')
+    expect((conn as any).switchInFlight).toBe(true)
+
+    conn.disconnect()
+
+    expect((conn as any).switchInFlight).toBe(false)
+    expect((conn as any).sectionSwitchWatchdog).toBeNull()
+    expect(errors.length).toBe(0) // no false switch-failure error
+    expect(conn.getStatus()).not.toBe('error')
+  })
+
+  it('startSection releases the guard on session_ready, not merely on handshake send', async () => {
+    // Codex/fresh-eyes PR #137: a stall after the handshake but before session_ready
+    // must still be watchdog-covered, so the guard must survive until session_ready.
+    const conn = new WebFormConnection(SCHEMA)
+    const p = conn.startSection('s2', 'ws://x')
+    // Let the mock socket open + the handshake send complete.
+    await vi.advanceTimersByTimeAsync(1)
+    await p
+
+    // After the handshake send, the switch is still in flight (NOT released early).
+    expect((conn as any).switchInFlight).toBe(true)
+
+    // session_ready is the terminal success -> releases the guard + watchdog.
+    ;(conn as any).handleSessionReady({ session_id: 's', native_vad: true })
+    expect((conn as any).switchInFlight).toBe(false)
+    expect((conn as any).sectionSwitchWatchdog).toBeNull()
+    expect(conn.getStatus()).toBe('connected')
   })
 })

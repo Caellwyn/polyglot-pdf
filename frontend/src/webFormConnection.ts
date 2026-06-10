@@ -243,6 +243,20 @@ export class WebFormConnection {
       this.reconnectTimer = null;
     }
 
+    // An INTENTIONAL disconnect (UI unmount / stop-session) cancels any in-flight
+    // section switch SILENTLY -- it must not be reported as a switch FAILURE
+    // (Codex PR #137: otherwise handleClose's switchInFlight branch fires a false
+    // onError + `error` status after normal teardown). Clear the guard + watchdog
+    // first; the close that follows then takes the normal disconnected path.
+    // EXCEPTION: startSection performs its own intentional disconnect mid-switch
+    // (isSectionSwitching is set across that window) -- there we keep the guard so
+    // the switch continues, and handleClose's isSectionSwitching early-return
+    // covers the close.
+    if (this.switchInFlight && !this.isSectionSwitching) {
+      this.switchInFlight = false;
+      this.clearSectionSwitchWatchdog();
+    }
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -411,6 +425,15 @@ export class WebFormConnection {
     // Default to false (manual VAD) when the backend doesn't send the field.
     if (this.callbacks.onNativeVadMode) {
       this.callbacks.onNativeVadMode(native_vad === true);
+    }
+
+    // If a reconnect-based section switch was in flight (startSection), THIS is
+    // its terminal success signal -- not the moment the handshake was sent
+    // (Codex/fresh-eyes PR #137). Release the guard + disarm the watchdog here so
+    // a stall AFTER the handshake but BEFORE session_ready is still caught by the
+    // watchdog, and a second switch can't start during the switching window.
+    if (this.switchInFlight) {
+      this.completeSectionSwitch();
     }
 
     this.setStatus("connected");
@@ -756,6 +779,20 @@ export class WebFormConnection {
     const identifier = message.identifier;
 
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
+
+    // This is the AI-INITIATED switch path (Gemini called switch_section -> backend
+    // prepare_section_switch -> here -> section_info_response -> backend restarts
+    // -> section_switched). Mark the switch in flight + arm the watchdog (Codex PR
+    // #137) so a MANUAL click during this window is rejected by switchToSection's
+    // guard, and a stalled AI switch surfaces `error` instead of hanging. The guard
+    // releases on section_switched (handleSectionSwitched -> completeSectionSwitch)
+    // or on an error/watchdog. If a switch is somehow already in flight, don't
+    // re-arm (the existing one owns the lifecycle).
+    if (!this.switchInFlight) {
+      this.switchInFlight = true;
+      this.setStatus('switching_section');
+      this.armSectionSwitchWatchdog();
+    }
 
     try {
       const currentState = SchemaFormStateManager.load();
@@ -1726,8 +1763,10 @@ export class WebFormConnection {
     // already in flight, so two reconnects can't race. Distinct from
     // isSectionSwitching, which is cleared the moment the new socket opens.
     if (this.switchInFlight) {
-      console.warn('[WebFormConnection] startSection ignored -- a section switch is already in progress');
-      return;
+      // THROW so the caller knows the switch was rejected and can roll back its
+      // optimistic UI update (Codex PR #137), rather than a silent resolve.
+      console.warn('[WebFormConnection] startSection rejected -- a section switch is already in progress');
+      throw new Error('A section switch is already in progress');
     }
     this.switchInFlight = true;
     try {
@@ -1800,9 +1839,11 @@ export class WebFormConnection {
         initial_field_hint: initialFieldHint,
       });
 
-      // The reconnect-based switch has no `section_switched` reply; it is done
-      // once the handshake is on the wire. Release the guards + disarm watchdog.
-      this.completeSectionSwitch();
+      // Do NOT release the guard here: the switch is terminally DONE only when the
+      // backend replies `session_ready` (-> handleSessionReady -> completeSectionSwitch),
+      // so a stall after this handshake send is still caught by the watchdog
+      // (Codex/fresh-eyes PR #137). isSectionSwitching was already cleared above so
+      // the new socket's auto-reconnect works; switchInFlight stays set until ready.
 
     } catch (error) {
       // A failed reconnect/handshake must surface `error` (bd polyglot-pdf-aun),
@@ -1838,39 +1879,54 @@ export class WebFormConnection {
     // overlapping switch. The backend (post-0c1) also rejects the second switch
     // with success:false; this guard stops the FE from even sending it.
     if (this.switchInFlight) {
-      console.warn('[WebFormConnection] switchToSection ignored -- a section switch is already in progress');
-      return;
+      // THROW (not a silent resolve) so the caller can roll back: the UI pre-updates
+      // currentSectionId/sessionStorage before awaiting this, so a silent ignore
+      // would leave the UI on the wrong section while the first switch is still
+      // running (Codex PR #137).
+      console.warn('[WebFormConnection] switchToSection rejected -- a section switch is already in progress');
+      throw new Error('A section switch is already in progress');
     }
+    // Claim the guard SYNCHRONOUSLY, before ANY await -- otherwise two concurrent
+    // callers (an AI prepare_section_switch and a user nav click in the same tick)
+    // both pass the check above and race past the await below (fresh-eyes PR #137).
+    // Set the status + arm the watchdog here too so the whole switch window is
+    // covered. This path keeps the SAME socket open and waits for the backend's
+    // `section_switched` (-> handleSectionSwitched -> completeSectionSwitch) or an
+    // `error` (-> handleServerError -> failSectionSwitch); the watchdog backstops a
+    // switch that never replies.
+    this.switchInFlight = true;
+    this.setStatus('switching_section');
+    this.armSectionSwitchWatchdog();
 
-    const currentState = SchemaFormStateManager.load();
-    if (!currentState || !currentState.schema.sections) {
-      throw new Error('Sections not initialized');
-    }
+    let currentState: ReturnType<typeof SchemaFormStateManager.load>;
+    let targetSection: { id: string; order: number; label: string } | undefined;
+    try {
+      currentState = SchemaFormStateManager.load();
+      if (!currentState || !currentState.schema.sections) {
+        throw new Error('Sections not initialized');
+      }
 
-    // Find section by ID
-    const targetSection = currentState.schema.sections.find(s => s.id === sectionId);
-    if (!targetSection) {
-      throw new Error(`Section not found: ${sectionId}`);
-    }
+      // Find section by ID
+      targetSection = currentState.schema.sections.find(s => s.id === sectionId) as any;
+      if (!targetSection) {
+        throw new Error(`Section not found: ${sectionId}`);
+      }
 
-    // Validate range
-    if (targetSection.order < 1 || targetSection.order > currentState.schema.sections.length) {
-      throw new Error(`Invalid section number: ${targetSection.order} (must be 1-${currentState.schema.sections.length})`);
+      // Validate range
+      if (targetSection.order < 1 || targetSection.order > currentState.schema.sections.length) {
+        throw new Error(`Invalid section number: ${targetSection.order} (must be 1-${currentState.schema.sections.length})`);
+      }
+    } catch (err) {
+      // A validation failure must release the guard we just claimed (else the next
+      // switch is wrongly rejected) and surface error, not stay switching_section.
+      this.failSectionSwitch(err instanceof Error ? err.message : 'Section switch failed');
+      throw err;
     }
 
     // Wait for WebSocket send buffer to drain before sending control message
     // This prevents the control message from being queued behind audio frames
     console.log('[WebFormConnection] Waiting for buffer to drain before section switch');
     await this.waitForBufferDrain(1000);
-
-    // Mark the switch in flight + arm the watchdog (bd polyglot-pdf-aun). This
-    // path keeps the SAME socket open and waits for the backend's
-    // `section_switched` (-> handleSectionSwitched -> completeSectionSwitch) or an
-    // `error` (-> handleServerError -> failSectionSwitch). If neither arrives, the
-    // watchdog surfaces `error` instead of a stuck `switching_section`.
-    this.switchInFlight = true;
-    this.setStatus('switching_section');
-    this.armSectionSwitchWatchdog();
 
     // Switch to target section in local state
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
