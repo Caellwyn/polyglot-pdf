@@ -477,6 +477,139 @@ async def test_model_turn_parts_tool_call_without_id_still_responds():
     assert responses[0].name == "get_form_status"
     assert responses[0].response == {"state": "ok"}
 
+
+# ===========================================================================
+# Structured tool-error envelope on a callback RAISE (bd polyglot-pdf-wpw.1 /
+# WS-C2). A callback exception must send {"status":"error",...}, NOT the silent
+# {} that reads as success and makes the model confabulate. Extends the uov.14
+# tool-contract scope.
+# ===========================================================================
+
+def test_tool_error_envelope_is_structured_and_pii_free():
+    from backend.adapters.live_ai_gemini import _tool_error_envelope
+    env = _tool_error_envelope()
+    assert env["status"] == "error"
+    assert env["retryable"] is True
+    assert isinstance(env["message"], str) and env["message"]
+    # The failure must nest under an `error` key -- the documented Live API
+    # tool-failure shape (response={"error": ...}); without it the model can read
+    # a free-form response dict as a successful result (Codex PR #138 round 2).
+    assert env["error"] == env["message"]
+    # Default message must be a fixed string, never echo exception/argument text.
+    env2 = _tool_error_envelope("custom note")
+    assert env2["message"] == "custom note"
+    assert env2["error"] == "custom note"
+
+
+def _make_tool_call_session(path: str):
+    """A fake session that yields ONE tool call on the requested receive path and
+    records the FunctionResponses sent back."""
+    class _Session:
+        def __init__(self):
+            self.sent_responses = []
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, *, function_responses):
+            self.sent_responses.append(function_responses)
+
+        async def send_client_content(self, **kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    if path == "event.tool_call":
+                        fc = SimpleNamespace(
+                            name="update_form_fields",
+                            id="function-call-1",
+                            arguments='{"field_id": "x", "value": "y"}',
+                        )
+                        tool_call = SimpleNamespace(function_calls=[fc])
+                        yield SimpleNamespace(tool_call=tool_call)
+                    else:  # model_turn.parts
+                        fc = SimpleNamespace(
+                            name="update_form_fields",
+                            id="function-call-1",
+                            arguments='{"field_id": "x", "value": "y"}',
+                        )
+                        part = SimpleNamespace(function_call=fc)
+                        model_turn = SimpleNamespace(parts=[part])
+                        server_content = SimpleNamespace(model_turn=model_turn)
+                        yield SimpleNamespace(server_content=server_content)
+                self._generator = gen()
+            return self._generator
+    return _Session()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["event.tool_call", "model_turn.parts"])
+async def test_callback_raise_sends_structured_error_not_empty_dict(path):
+    """On BOTH receive paths, a callback that RAISES must send a structured error
+    envelope, not a bare {} (bd polyglot-pdf-wpw.1)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    async def on_tool_call(name, args):
+        raise RuntimeError("field value 12345 -- must NOT appear in the response")
+    adapter._on_tool_call = on_tool_call
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    session = _make_tool_call_session(path)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    assert len(session.sent_responses) == 1
+    resp = session.sent_responses[0][0]
+    assert resp.name == "update_form_fields"
+    # Structured error -- NOT the silent {} that reads as success. The `error`
+    # key is the documented Live API tool-failure shape (Codex PR #138 round 2).
+    assert resp.response.get("status") == "error", resp.response
+    assert resp.response.get("retryable") is True, resp.response
+    assert resp.response.get("error"), resp.response
+    assert resp.response != {}
+    # The call_id is still echoed (0ux invariant preserved).
+    assert resp.id == "function-call-1"
+    # No PII: the exception text (with the field value) must not leak into the body.
+    assert "12345" not in str(resp.response)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["event.tool_call", "model_turn.parts"])
+async def test_callback_returning_none_still_coerces_to_empty_dict(path):
+    """The tks invariant is preserved: a callback that legitimately RETURNS None
+    (not a raise) still gets the {} coercion -- only a RAISE produces the error
+    envelope (bd polyglot-pdf-wpw.1). Both receive paths, so neither routes a
+    legitimate None through the error envelope."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    async def on_tool_call(name, args):
+        return None
+    adapter._on_tool_call = on_tool_call
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    session = _make_tool_call_session(path)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    resp = session.sent_responses[0][0]
+    assert resp.response == {}  # legitimate None -> {} (NOT an error envelope)
+
     await adapter.finalize()
 
 
@@ -485,9 +618,10 @@ async def test_model_turn_parts_tool_call_exception_still_responds():
     """A callback exception on the model_turn.parts path must still respond.
 
     Regression guard (bd polyglot-pdf-tks): if the tool callback raises, the
-    exception is caught and logged, response_payload stays None -> coerced to {},
-    and a FunctionResponse must STILL be sent (an empty ack) so Gemini is not left
-    blocking on an unanswered call.
+    exception is caught and logged and a FunctionResponse must STILL be sent so
+    Gemini is not left blocking on an unanswered call. The BODY is now a structured
+    error envelope (bd polyglot-pdf-wpw.1), not the old silent {} -- so the model
+    re-asks instead of confabulating success.
     """
     from backend.adapters.live_ai_gemini import LiveAIGemini
 
@@ -539,12 +673,14 @@ async def test_model_turn_parts_tool_call_exception_still_responds():
 
     await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
 
-    # Even though the callback raised, an (empty) response was still sent.
+    # Even though the callback raised, a response was still sent (tks invariant) --
+    # now a STRUCTURED error envelope, not the old silent {} (wpw.1).
     assert len(session.sent_responses) == 1
     responses = session.sent_responses[0]
     assert len(responses) == 1
     assert responses[0].name == "get_form_status"
-    assert responses[0].response == {}
+    assert responses[0].response.get("status") == "error"
+    assert responses[0].response != {}
 
     await adapter.finalize()
 
