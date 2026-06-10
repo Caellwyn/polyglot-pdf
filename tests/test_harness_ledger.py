@@ -201,23 +201,52 @@ class TestBuildRow:
 
 
 # --------------------------------------------------------------------------- #
-# Append
+# Append (per-row file protocol)
 # --------------------------------------------------------------------------- #
 class TestAppendRow:
-    def test_append_creates_and_appends(self, tmp_path):
-        ledger_path = tmp_path / "nested" / "harness_ledger.jsonl"
-        ledger.append_row({"a": 1}, ledger_path)
-        ledger.append_row({"b": 2}, ledger_path)
-        lines = ledger_path.read_text(encoding="utf-8").splitlines()
-        assert [json.loads(l) for l in lines] == [{"a": 1}, {"b": 2}]
+    def test_creates_unique_file_per_row(self, tmp_path):
+        tdir = tmp_path / "telemetry"
+        r1 = {"recorded_at": "2026-06-01T00:00:00Z", "session_id": "aabbccdd", "arm": "A"}
+        r2 = {"recorded_at": "2026-06-02T00:00:00Z", "session_id": "eeff0011", "arm": "B"}
+        p1 = ledger.append_row(r1, tdir)
+        p2 = ledger.append_row(r2, tdir)
+        assert p1 != p2
+        assert json.loads(p1.read_text(encoding="utf-8")) == r1
+        assert json.loads(p2.read_text(encoding="utf-8")) == r2
+
+    def test_creates_directory_if_missing(self, tmp_path):
+        tdir = tmp_path / "nested" / "telemetry"
+        p = ledger.append_row({"recorded_at": "2026-06-01T00:00:00Z", "session_id": "x"}, tdir)
+        assert p.exists()
+
+    def test_filename_uses_hyphens_not_colons(self, tmp_path):
+        tdir = tmp_path / "telemetry"
+        p = ledger.append_row({"recorded_at": "2026-06-01T12:34:56Z", "session_id": "abcd1234"}, tdir)
+        assert ":" not in p.name
+        assert "2026-06-01T12-34-56Z" in p.name
+        assert "abcd1234" in p.name
 
 
 # --------------------------------------------------------------------------- #
 # Experiment counter + directives
 # --------------------------------------------------------------------------- #
-def _write_ledger(path, arms):
-    """Write a ledger JSONL with one row per entry in `arms` (each an arm value
-    or None). Only the `arm` field matters for derive_experiment_state."""
+def _write_telemetry(tdir, arms):
+    """Write one JSON file per arm value into tdir (as per-row protocol).
+
+    Each file gets a unique timestamp derived from its index.
+    """
+    tdir.mkdir(parents=True, exist_ok=True)
+    for i, a in enumerate(arms):
+        ts = "2026-06-01T00:00:{:02d}Z".format(i % 60)
+        fname = "{}-{:08d}.json".format(ts.replace(":", "-"), i)
+        (tdir / fname).write_text(
+            json.dumps({"arm": a, "recorded_at": ts, "session_id": "{:08d}".format(i)}) + "\n",
+            encoding="utf-8",
+        )
+
+
+def _write_legacy_ledger(path, arms):
+    """Write a legacy JSONL ledger with one row per entry in arms."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for a in arms:
@@ -230,10 +259,10 @@ class TestExperimentState:
         assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
     def test_derive_counts_rows_by_arm(self, tmp_path):
-        # The counter is now a projection of the ledger: count rows per arm.
-        led = tmp_path / "harness_ledger.jsonl"
-        _write_ledger(led, ["A", "A", "B", "BC"])
-        state = ledger.derive_experiment_state(led)
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
+        _write_telemetry(tdir, ["A", "A", "B", "BC"])
+        state = ledger.derive_experiment_state(no_legacy, tdir)
         assert state["baseline_A"] == 2
         assert state["arm_B"] == 1
         assert state["arm_C"] == 0
@@ -241,45 +270,57 @@ class TestExperimentState:
         assert state["phase"] == "A"
 
     def test_derive_ignores_null_and_unknown_arm(self, tmp_path):
-        # null / unknown arms count toward nothing (the old "no --arm doesn't
-        # bump" behavior, now expressed as "no arm key matches").
-        led = tmp_path / "harness_ledger.jsonl"
-        _write_ledger(led, ["A", "A", None, "X"])
-        state = ledger.derive_experiment_state(led)
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
+        _write_telemetry(tdir, ["A", "A", None, "X"])
+        state = ledger.derive_experiment_state(no_legacy, tdir)
         assert state["baseline_A"] == 2
         assert state["arm_B"] == state["arm_C"] == state["arm_BC"] == 0
 
-    def test_derive_missing_ledger_returns_zeros(self, tmp_path):
-        state = ledger.derive_experiment_state(tmp_path / "nope.jsonl")
+    def test_derive_missing_both_returns_zeros(self, tmp_path):
+        state = ledger.derive_experiment_state(tmp_path / "nope.jsonl", tmp_path / "nope_dir")
         assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
-    def test_derive_skips_malformed_line(self, tmp_path):
-        # A crashed write can leave a partial last line; it must not cost the
-        # whole count (the same tolerance _iter_records gives the transcript).
-        led = tmp_path / "harness_ledger.jsonl"
-        led.write_text(
-            json.dumps({"arm": "A"}) + "\n" + '{"arm": "A", partial',
-            encoding="utf-8",
+    def test_derive_skips_malformed_file(self, tmp_path):
+        tdir = tmp_path / "telemetry"
+        tdir.mkdir()
+        (tdir / "2026-06-01T00-00-00Z-good.json").write_text(
+            json.dumps({"arm": "A"}) + "\n", encoding="utf-8"
         )
-        assert ledger.derive_experiment_state(led)["baseline_A"] == 1
+        (tdir / "2026-06-01T00-00-01Z-bad.json").write_text(
+            '{"arm": "A", partial', encoding="utf-8"
+        )
+        assert ledger.derive_experiment_state(tmp_path / "nope.jsonl", tdir)["baseline_A"] == 1
+
+    def test_derive_reads_legacy_jsonl_too(self, tmp_path):
+        # Backwards compat: rows in the old harness_ledger.jsonl must still count.
+        led = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
+        _write_legacy_ledger(led, ["A", "B"])
+        _write_telemetry(tdir, ["A"])  # one new-style row
+        state = ledger.derive_experiment_state(led, tdir)
+        assert state["baseline_A"] == 2  # 1 legacy + 1 new
+        assert state["arm_B"] == 1
 
     def test_derive_phase_thresholds(self, tmp_path):
-        led = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
         # baseline_A > 15 -> BC-toggle.
-        _write_ledger(led, ["A"] * 16)
-        assert ledger.derive_experiment_state(led)["phase"] == "BC-toggle"
+        _write_telemetry(tdir, ["A"] * 16)
+        assert ledger.derive_experiment_state(no_legacy, tdir)["phase"] == "BC-toggle"
         # arm_B > 10 and arm_C > 10 -> BC.
-        _write_ledger(led, ["A"] * 16 + ["B"] * 11 + ["C"] * 11)
-        assert ledger.derive_experiment_state(led)["phase"] == "BC"
+        _write_telemetry(tdir, ["A"] * 16 + ["B"] * 11 + ["C"] * 11)
+        assert ledger.derive_experiment_state(no_legacy, tdir)["phase"] == "BC"
         # arm_BC > 10 -> report (most-advanced wins).
-        _write_ledger(led, ["A"] * 16 + ["B"] * 11 + ["C"] * 11 + ["BC"] * 11)
-        assert ledger.derive_experiment_state(led)["phase"] == "report"
+        _write_telemetry(tdir, ["A"] * 16 + ["B"] * 11 + ["C"] * 11 + ["BC"] * 11)
+        assert ledger.derive_experiment_state(no_legacy, tdir)["phase"] == "report"
 
     def test_refresh_writes_cache_matching_derived_counts(self, tmp_path):
-        led = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
         cache = tmp_path / "experiment_state.json"
-        _write_ledger(led, ["A", "A", "B"])
-        state = ledger.refresh_experiment_state(led, cache)
+        _write_telemetry(tdir, ["A", "A", "B"])
+        state = ledger.refresh_experiment_state(no_legacy, cache, tdir)
         assert state["baseline_A"] == 2 and state["arm_B"] == 1
         # The cache file is written and matches the returned state.
         assert json.loads(cache.read_text(encoding="utf-8")) == state
@@ -303,51 +344,70 @@ class TestExperimentState:
 # End-to-end CLI
 # --------------------------------------------------------------------------- #
 class TestMainCLI:
-    def test_main_appends_and_derives_counter(self, tmp_path, monkeypatch):
+    def test_main_writes_file_and_derives_counter(self, tmp_path, monkeypatch):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=42, out=7))])
-        ledger_path = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
         state_path = tmp_path / "experiment_state.json"
-        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", no_legacy)
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
         rc = ledger.main([
             "--transcript", str(t), "--bead", "polyglot-pdf-hrn.1",
             "--arm", "A", "--recorded-at", "2026-06-01T00:00:00Z",
         ])
         assert rc == 0
-        row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        files = list(tdir.glob("*.json"))
+        assert len(files) == 1
+        row = json.loads(files[0].read_text(encoding="utf-8"))
         assert row["tokens"]["total"]["input_tokens"] == 42
         assert row["beads"] == ["polyglot-pdf-hrn.1"]
-        # The counter is DERIVED from the just-appended row (cache reflects it).
+        # The counter is DERIVED from the just-written file.
         assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 1
-        assert ledger.derive_experiment_state(ledger_path)["baseline_A"] == 1
+        assert ledger.derive_experiment_state(no_legacy, tdir)["baseline_A"] == 1
 
-    def test_main_counts_the_just_appended_row(self, tmp_path, monkeypatch):
-        # Pin the append-BEFORE-refresh ordering: with the ledger already holding
-        # N arm="A" rows, one more closeout must show N+1 -- proving the new row
-        # is counted, not a pre-append snapshot. A 1-row test can't catch a
-        # reorder (0->1 either way); a pre-populated ledger can.
+    def test_main_prints_telemetry_file_line(self, tmp_path, monkeypatch, capsys):
+        # closeout_finish.py relies on "TELEMETRY_FILE: <path>" being on stdout.
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
-        ledger_path = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
+        monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "state.json")
+        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--recorded-at", "2026-06-01T00:00:01Z"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        lines = [l for l in out.splitlines() if l.startswith("TELEMETRY_FILE: ")]
+        assert len(lines) == 1
+        assert lines[0].endswith(".json")
+
+    def test_main_counts_the_just_written_row(self, tmp_path, monkeypatch):
+        # Pin the write-BEFORE-refresh ordering: with N existing rows, one more
+        # closeout must show N+1 -- proving the new row is counted.
+        t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
+        tdir = tmp_path / "telemetry"
+        no_legacy = tmp_path / "nope.jsonl"
         state_path = tmp_path / "experiment_state.json"
-        _write_ledger(ledger_path, ["A", "A", "A"])  # N = 3 before this run
-        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        _write_telemetry(tdir, ["A", "A", "A"])  # N = 3 before this run
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", no_legacy)
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
-        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--recorded-at", "x"])
+        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--recorded-at", "2026-06-02T00:00:00Z"])
         assert rc == 0
         assert json.loads(state_path.read_text(encoding="utf-8"))["baseline_A"] == 4
 
     def test_main_no_counter_skips_cache_refresh(self, tmp_path, monkeypatch):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
-        ledger_path = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
         state_path = tmp_path / "experiment_state.json"
-        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
-        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--no-counter", "--recorded-at", "x"])
+        rc = ledger.main(["--transcript", str(t), "--arm", "A", "--no-counter", "--recorded-at", "2026-06-01T00:00:02Z"])
         assert rc == 0
-        # --no-counter skips the cache write; the row is still appended, so the
-        # count is recoverable by deriving from the ledger.
+        # --no-counter skips the cache write; the row is still written, so the
+        # count is recoverable by deriving from the telemetry dir.
         assert not state_path.exists()
-        assert ledger.derive_experiment_state(ledger_path)["baseline_A"] == 1
+        assert ledger.derive_experiment_state(tmp_path / "nope.jsonl", tdir)["baseline_A"] == 1
 
     def test_main_missing_transcript_returns_1(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ledger, "claude_projects_dir", lambda: tmp_path / "projects")
@@ -356,52 +416,56 @@ class TestMainCLI:
 
     def test_main_dry_run_does_not_write(self, tmp_path, monkeypatch, capsys):
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
-        ledger_path = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
         state_path = tmp_path / "experiment_state.json"
-        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
         rc = ledger.main(["--transcript", str(t), "--arm", "A", "--dry-run", "--recorded-at", "x"])
         assert rc == 0
-        assert not ledger_path.exists()
+        assert not tdir.exists()
         assert not state_path.exists()
 
     def test_main_warns_when_arm_missing_but_counter_on(self, tmp_path, monkeypatch, capsys):
         # No --arm + no --no-counter: the row lands with arm=null and the
         # cache is refreshed but no arm is counted; a warning fires.
         t = _write_transcript(tmp_path, [_assistant(_usage(inp=1))])
-        ledger_path = tmp_path / "harness_ledger.jsonl"
+        tdir = tmp_path / "telemetry"
         state_path = tmp_path / "experiment_state.json"
-        monkeypatch.setattr(ledger, "LEDGER_PATH", ledger_path)
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", state_path)
-        rc = ledger.main(["--transcript", str(t), "--recorded-at", "x"])
+        rc = ledger.main(["--transcript", str(t), "--recorded-at", "2026-06-01T00:00:03Z"])
         assert rc == 0
         err = capsys.readouterr().err
         assert "no --arm given" in err
-        row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        files = list(tdir.glob("*.json"))
+        assert len(files) == 1
+        row = json.loads(files[0].read_text(encoding="utf-8"))
         assert row["arm"] is None
         # Cache refreshed, but the null-arm row counted toward nothing.
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert state == {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
 
     def test_main_print_directive_derives_without_cache(self, tmp_path, monkeypatch, capsys):
-        # --print-directive must derive from the LEDGER on demand, working even
-        # with the gitignored cache file absent. Point LEDGER_PATH at a missing
-        # ledger -> all-zeros -> Phase A.
+        # --print-directive must derive from all rows on demand, working even
+        # with the gitignored cache file absent. Empty telemetry dir + no legacy
+        # -> all-zeros -> Phase A.
         monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tmp_path / "nope_dir")
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")
         rc = ledger.main(["--print-directive"])
         assert rc == 0
         assert "Phase A (baseline)" in capsys.readouterr().out
 
-    def test_main_print_directive_reflects_ledger_not_cache(self, tmp_path, monkeypatch, capsys):
-        # Distinguish the NEW (derive-from-ledger) path from the OLD
-        # (read-the-cache) path: a populated LEDGER with NO cache file must drive
-        # the directive past Phase A. The old code (reading the absent cache)
-        # would still say "Phase A (baseline)"; only deriving from the ledger
-        # advances it.
-        led = tmp_path / "harness_ledger.jsonl"
-        _write_ledger(led, ["A"] * 16)  # baseline_A=16 > 15 -> "Phase A done"
-        monkeypatch.setattr(ledger, "LEDGER_PATH", led)
+    def test_main_print_directive_reflects_telemetry_dir(self, tmp_path, monkeypatch, capsys):
+        # A populated telemetry dir with NO cache file must drive the directive
+        # past Phase A. The old code (reading the absent cache / legacy JSONL)
+        # would still say "Phase A (baseline)"; only scanning the new dir advances it.
+        tdir = tmp_path / "telemetry"
+        _write_telemetry(tdir, ["A"] * 16)  # baseline_A=16 > 15 -> "Phase A done"
+        monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "nope.jsonl")
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
         monkeypatch.setattr(ledger, "EXPERIMENT_STATE_PATH", tmp_path / "nope.json")
         rc = ledger.main(["--print-directive"])
         assert rc == 0

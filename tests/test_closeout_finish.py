@@ -355,7 +355,7 @@ class TestTelemetryCommitPush:
         job.run()
         assert not any("commit" in j and "telemetry" in j for j in rec.joined())
 
-    def test_uses_git_C_worktree_and_no_git_add(self):
+    def test_uses_git_C_worktree_and_no_broad_add(self):
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/7", ""),
             "harness_ledger": (0, self._LEDGER_STDOUT, ""),
@@ -363,11 +363,17 @@ class TestTelemetryCommitPush:
         })
         job = _job(rec, skip_review=True, review_worthy=False)
         job.run()
-        # Every git call (incl. the new commit+push) is `git -C <WT>` and none use add.
+        # Every git call uses git -C <WT>.
         for cmd in rec.calls:
             if cmd and cmd[0] == "git":
                 assert cmd[1] == "-C" and cmd[2] == str(FAKE_WT), cmd
-                assert "add" not in " ".join(cmd), cmd
+        # The only `git add` allowed is the exact-path telemetry stage (no -A, no ".").
+        add_calls = [c for c in rec.calls if c and c[0] == "git" and "add" in c]
+        for cmd in add_calls:
+            # Must be `git -C <WT> add -- <exact-telemetry-path>`
+            assert "--" in cmd, cmd
+            assert self._TELEMETRY_ROW_PATH in " ".join(cmd), cmd
+            assert "-A" not in cmd and "." not in cmd, cmd
 
     def test_push_failure_is_warn_only(self):
         # A failed telemetry push must NOT fail the run (the PR is already open).

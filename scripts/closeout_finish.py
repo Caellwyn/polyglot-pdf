@@ -366,6 +366,14 @@ class Closeout:
             return
         if not status.stdout.strip():
             return  # clean (e.g. --dry-run, or a ledger GAP) -- nothing to commit
+        # Stage the file before committing -- git commit -- <path> does not add
+        # untracked files, and each new telemetry row is untracked on first write.
+        add = _run(["git", "-C", self.wt, "add", "--", telemetry_file], check=False)
+        if add.returncode != 0:
+            self.out["telemetry"] += " | ADD-FAILED: {}".format(
+                (add.stderr or add.stdout or "").strip().splitlines()[-1]
+                if (add.stderr or add.stdout).strip() else "no output")
+            return
         pr = self.out["PR"]
         msg = ("chore(harness): PR #{} telemetry row (recorded by closeout_finish.py)"
                .format(pr) if pr != "-"
