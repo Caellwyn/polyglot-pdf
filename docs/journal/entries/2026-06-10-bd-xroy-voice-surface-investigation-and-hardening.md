@@ -48,15 +48,22 @@ classification run for the new model-silence bug.
    send path for THAT hang. The new transition logging is the trap that will
    catch it on the next live occurrence.
 
-3. **NEW P1, `95uy`: the native-audio model goes silent at the confirm step,
-   3/3 reproducible on dev.** `update_form_fields` lands, Gemini speaks the
-   verification question, the injected "yes" is received and transcribed
-   (`in_trans=3`)... then NOTHING: no `confirm_field`, no audio, no
-   `turn_complete` within 35s. This is a model/adapter-level failure, distinct
-   from the frontend gate. Open question (classification run was still in
-   flight at writing): terminal stall vs glacial latency -- the demo's 49s
-   tool call suggests the model may answer eventually, beyond harness
-   timeouts. Results land in the bead.
+3. **NEW P1->P2, `95uy`: the live loop dies at the confirm step -- but the wire
+   exonerates our plumbing.** In repeated live harness runs,
+   `update_form_fields` lands, its FunctionResponse goes out correctly (id
+   echoed, well-formed -- the maintainer's missing-tool-response hypothesis is
+   RULED OUT by two independent raw-event captures), Gemini speaks the
+   verification question and `turn_complete` fires... and `confirm_field`
+   appears ZERO times in 1133 raw events. The injected "yes" reaches Gemini
+   and is transcribed, but the model never responds. Leading explanation:
+   the harness injection stops streaming frames after the utterance, so
+   native VAD never closes the user's turn (a real mic streams ambient
+   silence) -- which reconciles with real verbal confirmations working in
+   the maintainer's hands. A trailing-silence discriminator experiment
+   settles harness-artifact vs model-behavior; verdict lands in the bead.
+   Side catch (`m7es`): one run showed a SECOND concurrent Gemini session
+   spawning mid-run with a different system instruction and receiving the
+   user's audio -- a real session-management race to investigate.
 
 4. **`cwsy` reframed: restarts-per-field RULED OUT; the 49s is
    unattributable without instrumentation -- so instrumentation shipped.**
