@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change) and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-aun-section-switch-durability.md](../journal/entries/2026-06-10-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change), and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -92,6 +92,17 @@ frontend-driven: when it detects every field in the current section confirmed it
 auto-sends `manual_section_switch` to advance, or fires `onFormComplete` on the
 last section — it does **not** send `section_completed` (that type has a backend
 handler but no current client sender).
+
+**Client-side switch durability** (`webFormConnection.ts`, bd polyglot-pdf-aun):
+a switch is gated by a `switchInFlight` re-entrancy guard (distinct from the
+`isSectionSwitching` auto-reconnect suppressor), so a second switch — a manual
+click during an AI-initiated switch, which the backend also rejects with
+`{"type":"error","code":"section_switch_failed"}` post-`0c1` — is dropped rather
+than racing a second reconnect. A switch that fails (a server `error`, an
+unexpected mid-switch socket close, or a hang caught by a ~15s watchdog) settles
+the connection status to **`error`** and fires `onError`, instead of leaving the
+UI stuck on `switching_section`; `section_switched` releases the guard and
+settles to `connected`.
 
 ## Idle watchdog
 
