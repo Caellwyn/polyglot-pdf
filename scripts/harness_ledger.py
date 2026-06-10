@@ -2,7 +2,7 @@
 
 What this is
 ------------
-A **deterministic, zero-model-token** script (plan §Change #1, bd
+A **deterministic, zero-model-token** script (plan section Change #1, bd
 polyglot-pdf-hrn.1). It parses the Claude Code session transcript JSONL and
 writes one JSON file to ``docs/journal/telemetry/`` so the A/B harness
 experiment has a real dataset instead of anecdote. Each closeout gets its own
@@ -376,7 +376,7 @@ def load_experiment_state(path: Path = EXPERIMENT_STATE_PATH) -> dict:
 def phase_directive(state: dict) -> str:
     """Return the next-step directive string for the current counts.
 
-    Thresholds are the plan's (§Change #1, "Experiment-state counter"):
+    Thresholds are the plan's (section Change #1, "Experiment-state counter"):
       baseline_A <= 15            -> Phase A: run as-is, just measure.
       baseline_A > 15             -> Phase A done -- start B/C toggling.
       arm_B > 10 and arm_C > 10   -> arms done -- report; if both adopted, run BC.
