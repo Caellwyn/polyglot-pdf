@@ -23,10 +23,8 @@ class TestRequestCoordinatorInit:
         
         assert coordinator._websocket is mock_ws
         assert coordinator._session_id == "test-session"
-        assert coordinator._pending_form_state_request is None
-        assert coordinator._pending_next_field_request is None
-        assert coordinator._pending_field_value_request is None
-        assert coordinator._pending_section_switch is None
+        # bd polyglot-pdf-bxw: pending requests now live in ONE keyed map.
+        assert coordinator._pending == {}
     
     def test_init_without_websocket(self):
         """Should initialize with None websocket."""
@@ -115,7 +113,7 @@ class TestRequestFormState:
         result = await coordinator.request_form_state()
         
         assert result == {}
-        assert coordinator._pending_form_state_request is None
+        assert coordinator._pending == {}
     
     @pytest.mark.asyncio
     async def test_request_form_state_send_error(self):
@@ -127,7 +125,7 @@ class TestRequestFormState:
         result = await coordinator.request_form_state()
         
         assert result == {}
-        assert coordinator._pending_form_state_request is None
+        assert coordinator._pending == {}
 
 
 class TestRequestNextFieldHint:
@@ -200,7 +198,7 @@ class TestRequestNextFieldHint:
         result = await coordinator.request_next_field_hint()
 
         assert result is HINT_REQUEST_TIMEOUT
-        assert coordinator._pending_next_field_request is None
+        assert coordinator._pending == {}
 
 
 class TestRequestFieldValue:
@@ -265,7 +263,7 @@ class TestRequestFieldValue:
         result = await coordinator.request_field_value("email")
         
         assert result == {"found": False, "value": None}
-        assert coordinator._pending_field_value_request is None
+        assert coordinator._pending == {}
 
 
 class TestRequestSectionInfo:
@@ -319,92 +317,91 @@ class TestRequestSectionInfo:
         result = await coordinator.request_section_info("3")
         
         assert result is None
-        assert coordinator._pending_section_switch is None
+        assert coordinator._pending == {}
+
+
+def _seed(coordinator, request_id, request_type, **extras):
+    """Place a keyed pending entry, mirroring _register's shape (bd bxw)."""
+    future = asyncio.Future()
+    entry = {"future": future, "type": request_type}
+    entry.update(extras)
+    coordinator._pending[request_id] = entry
+    return future
 
 
 class TestResponseHandlers:
     """Tests for response handler methods."""
-    
+
     def test_handle_form_state_response_no_pending(self):
-        """Should warn when no pending request."""
+        """Should warn (not raise) when there is no pending request for the id."""
         coordinator = RequestCoordinator()
-        
+
         # Should not raise, just log warning
         coordinator.handle_form_state_response("test-id", {})
-    
+
     def test_handle_form_state_response_mismatched_id(self):
-        """Should warn when request_id doesn't match."""
+        """A response for an UNKNOWN id must not resolve a different pending future."""
         coordinator = RequestCoordinator()
-        coordinator._pending_form_state_request = {
-            "request_id": "correct-id",
-            "future": asyncio.Future()
-        }
-        
+        future = _seed(coordinator, "correct-id", "form_state")
+
         coordinator.handle_form_state_response("wrong-id", {})
-        
-        # Future should not be resolved
-        assert not coordinator._pending_form_state_request["future"].done()
-    
-    def test_handle_form_state_response_resolves_future(self):
-        """Should resolve future with field values."""
+
+        # The genuine pending future is untouched.
+        assert not future.done()
+        assert "correct-id" in coordinator._pending
+
+    def test_handle_response_wrong_type_does_not_cross_resolve(self):
+        """bd polyglot-pdf-bxw: if a response's id maps to a DIFFERENT request
+        type, it must NOT resolve that future -- the exact clobber this removes."""
         coordinator = RequestCoordinator()
-        future = asyncio.Future()
-        coordinator._pending_form_state_request = {
-            "request_id": "test-id",
-            "future": future
-        }
-        
+        future = _seed(coordinator, "id-1", "next_field")
+
+        # A form_state response arrives carrying id-1 (which is a next_field req).
+        coordinator.handle_form_state_response("id-1", {"field1": "value1"})
+
+        assert not future.done()           # the next_field future is NOT resolved
+        assert "id-1" in coordinator._pending
+
+    def test_handle_form_state_response_resolves_future(self):
+        coordinator = RequestCoordinator()
+        future = _seed(coordinator, "test-id", "form_state")
+
         coordinator.handle_form_state_response("test-id", {"field1": "value1"})
-        
+
         assert future.done()
         assert future.result() == {"field1": "value1"}
-        assert coordinator._pending_form_state_request is None
-    
+        assert coordinator._pending == {}
+
     def test_handle_next_field_hint_response_resolves_future(self):
-        """Should resolve future with hint."""
         coordinator = RequestCoordinator()
-        future = asyncio.Future()
-        coordinator._pending_next_field_request = {
-            "request_id": "test-id",
-            "future": future
-        }
-        
+        future = _seed(coordinator, "test-id", "next_field")
+
         coordinator.handle_next_field_hint_response("test-id", "Next: email")
-        
+
         assert future.done()
         assert future.result() == "Next: email"
-        assert coordinator._pending_next_field_request is None
-    
+        assert coordinator._pending == {}
+
     def test_handle_field_value_response_resolves_future(self):
-        """Should resolve future with value and found status."""
         coordinator = RequestCoordinator()
-        future = asyncio.Future()
-        coordinator._pending_field_value_request = {
-            "request_id": "test-id",
-            "future": future
-        }
-        
+        future = _seed(coordinator, "test-id", "field_value")
+
         coordinator.handle_field_value_response("test-id", "test@example.com", True)
-        
+
         assert future.done()
         assert future.result() == {"value": "test@example.com", "found": True}
-        assert coordinator._pending_field_value_request is None
-    
+        assert coordinator._pending == {}
+
     def test_handle_section_info_response_resolves_future(self):
-        """Should resolve future with section info."""
         coordinator = RequestCoordinator()
-        future = asyncio.Future()
-        coordinator._pending_section_switch = {
-            "request_id": "test-id",
-            "future": future
-        }
-        
+        future = _seed(coordinator, "test-id", "section_info")
+
         section_data = {"schema": {}, "current_values": {}}
         coordinator.handle_section_info_response("test-id", section_data)
-        
+
         assert future.done()
         assert future.result() == section_data
-        assert coordinator._pending_section_switch is None
+        assert coordinator._pending == {}
 
 
 class TestMultipleConcurrentRequests:
@@ -435,6 +432,39 @@ class TestMultipleConcurrentRequests:
         next_hint_task = coordinator.request_next_field_hint()
         
         results = await asyncio.gather(form_state_task, next_hint_task)
-        
+
         assert results[0] == {"field1": "value1"}
         assert results[1] == "Next: email"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_same_type_requests_do_not_cross_resolve(self):
+        """THE clobber regression (bd polyglot-pdf-bxw): two overlapping requests
+        of the SAME type must each resolve to ITS OWN caller. Under the old single-
+        slot-per-type design the second request overwrote the first's slot, so the
+        first hung to timeout and the responses cross-resolved. With keyed slots,
+        each request_id has its own future."""
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        # Two next_field_hint requests in flight at once.
+        t1 = asyncio.create_task(coordinator.request_next_field_hint())
+        t2 = asyncio.create_task(coordinator.request_next_field_hint())
+        await asyncio.sleep(0.01)  # let both send
+
+        # Both must be tracked simultaneously (the old design held only one).
+        assert len(coordinator._pending) == 2
+
+        # Pull the two distinct request_ids from the two sent messages, and answer
+        # them with DIFFERENT payloads to prove no cross-resolve.
+        sent = [c[0][0] for c in mock_ws.send_json.call_args_list]
+        ids = [m["request_id"] for m in sent if m["type"] == "get_next_field_hint"]
+        assert len(ids) == 2 and ids[0] != ids[1]
+
+        coordinator.handle_next_field_hint_response(ids[0], "Hint for FIRST")
+        coordinator.handle_next_field_hint_response(ids[1], "Hint for SECOND")
+
+        r1, r2 = await asyncio.gather(t1, t2)
+        # Each caller got the answer keyed to ITS request -- not the other's.
+        assert r1 == "Hint for FIRST"
+        assert r2 == "Hint for SECOND"
+        assert coordinator._pending == {}
