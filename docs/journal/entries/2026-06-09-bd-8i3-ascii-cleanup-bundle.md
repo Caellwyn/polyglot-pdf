@@ -33,11 +33,17 @@ strings only; no control flow, no contracts.
   **One functional non-ASCII char was KEPT on purpose**: the curly apostrophe
   (U+2019) in the Codex clean-sentinel `"didn't find any major issues"` at
   `pr_review_watcher.py:270`. That literal is matched (via `p in lo`) against
-  GitHub's RENDERED Codex comment, which emits the curly form, and a test pins
-  both the straight- and curly-apostrophe variants. ASCII-ing it would regress
-  clean-detection. The `xev` bead assumed only ~2 cosmetic emoji; the file
+  GitHub's RENDERED Codex comment, which emits the curly form. ASCII-ing it would
+  regress clean-detection. The `xev` bead assumed only ~2 cosmetic emoji; the file
   actually had 14 non-ASCII lines, one of them load-bearing -- the bead
   under-scoped the file.
+  - **Fresh-eyes catch (adopted):** the kept curly sentinel was NOT actually
+    covered by a test -- every existing fixture used the straight apostrophe. So
+    this PR ADDS `test_codex_clean_sentinel_matches_curly_apostrophe`, which pins
+    the curly variant via `_is_approval_comment(..., CODEX)`. The test writes the
+    curly char as a `’` escape so the test file itself stays ASCII while
+    still exercising the non-ASCII match. (The pre-fix claim that "a test pins
+    both variants" was wrong at the time written; this change makes it true.)
 - **bm3**: stripped em-dashes (5 test files), a UTF-8 BOM at
   `test_live_ai_gemini.py:1`, and the check/cross/minus legend glyphs at
   `test_get_form_status_compact.py:8-10` (-> bracketed ASCII). All of

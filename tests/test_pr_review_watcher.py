@@ -956,6 +956,20 @@ def test_codex_clean_sentinel_via_is_approval_comment():
     assert cw._is_approval_comment(sentinel, PROFILE) is False
 
 
+def test_codex_clean_sentinel_matches_curly_apostrophe():
+    # GitHub's markdown renderer emits a CURLY apostrophe (U+2019), so the Codex
+    # profile pins both the straight- and curly-apostrophe sentinel variants
+    # (pr_review_watcher.py:269-270). This is the ONLY consumer of that curly
+    # literal; without this test, an ASCII-normalization sweep could silently
+    # strip it and break the prose-fallback CLEAN path. The curly char is written
+    # as a \u2019 escape so THIS file stays ASCII (scar #6) while still exercising
+    # the non-ASCII match.
+    curly = "Codex Review: Didn\u2019t find any major issues."
+    assert "\u2019" in curly  # guard: the matched char is curly, not straight
+    assert cw._is_approval_comment(curly, CODEX) is True
+    assert cw._is_approval_comment(curly, PROFILE) is False
+
+
 def test_has_clean_reaction_detects_thumbs_up():
     # The thumbs-up rollup ("+1" > 0) is the canonical Codex approval. Copilot has no
     # clean_reaction, so the SAME payload must read False for it.
