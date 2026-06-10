@@ -110,6 +110,32 @@ as a `bd remember` memory: every worktree subagent must first
 Verified on the assembled branch: frontend 264/264 vitest, tsc steady at the
 22 pre-existing errors (bd `0tgc`), backend 266 passed / 2 skipped.
 
+## Doc freshness
+
+- Bumped with content updates: `docs/standards/voice-and-vad.md` (new "Mic send
+  gate" section), `docs/standards/logging-and-cost.md` (new timing-checkpoint
+  section), `tests/e2e/voice-harness/RUNBOOK.md` +
+  `.claude/skills/voice-harness/SKILL.md` (0ux marked fixed, bd kom1).
+- Reviewed and left (stale flags from files OTHER branches changed, or no
+  content impact from this branch's observability-only edits):
+  `docs/standards/ai-models.md`, `docs/standards/risk-rating.md`,
+  `docs/standards/stateless-architecture.md` (this branch changes no state
+  ownership), `docs/standards/terminology.md`, `docs/technical_guide.md`,
+  `docs/components/beads-remote-bootstrap.md`.
+
+## Files touched
+
+- `backend/adapters/live_ai_gemini.py`, `backend/services/form_filling_service.py`,
+  `backend/services/request_coordinator.py` -- timing checkpoints + drop counter (cwsy).
+- `frontend/src/shared/connection.ts` -- shouldSendMicChunk gate, shared
+  sendMicChunkToBackend callback, rearmAudioCapture (xroy, nlfc).
+- `frontend/src/webFormConnection.ts` -- setStatus reason logging, isSocketOpen (xroy).
+- `frontend/src/demo/VoiceOverlay.tsx`, `frontend/src/demo/VoiceOverlayMobile.tsx`
+  -- alreadyLive re-arm (nlfc).
+- New tests: `frontend/src/shared/micSendGate.test.ts`,
+  `frontend/src/demo/VoiceOverlayResizeFlip.test.tsx`.
+- Docs: the four above + this entry.
+
 ## Lessons
 
 - The harness's injection bypass means the entire frontend mic send path --

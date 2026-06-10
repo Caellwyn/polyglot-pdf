@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-10. See [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -79,6 +79,19 @@ stream is scaffolding — the contract is defined, the wiring lands in Phases 2�
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)
 
+## Voice round-trip timing checkpoints (bd polyglot-pdf-cwsy)
+
+The backend logs `structlog` INFO events at every stage of the voice round trip
+so tool-call latency can be attributed (no field values are ever logged):
+`timing_session_connect_ready`, `timing_sysinstruction_build` (+`size_bytes`),
+`timing_activity_start`/`timing_activity_end`, `timing_tool_call_received`
+(`tool`, `since_activity_end_ms` -- the headline user-to-tool-call number),
+`timing_tool_callback_ms`, `timing_tool_response_sent`,
+`timing_coordinator_roundtrip` (`request_type`, `roundtrip_ms`),
+`timing_section_switch_total`, and `timing_audio_drops_session` (emitted only
+when nonzero; `audio_frames_dropped` also rides in the session-end
+`session_cost_summary`).
+
 ## Roadmap (phased)
 
 Phase 1 (token/cost file logging) is done. The remaining phases are tracked as
@@ -94,4 +107,4 @@ beads; this doc is their canonical home (migrated out of
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
 
-*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](../journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for closeout details.*
+*Last updated: 2026-06-10. See [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
