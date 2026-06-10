@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, [journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md](../journal/entries/2026-06-07-bd-kbf-gemini-io-logging.md) for the full Gemini I/O dev logging + interrupt `canceled_tool_names`, [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD activity-signal change, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -23,16 +23,28 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   / `on_audio` / `on_tool_call` callbacks + system instruction + tool declarations,
   then lazily creates the audio queue (`maxsize=100`, ~2s) and text queue and
   starts the background `_run_session_loop()` task.
-  - **CRITICAL:** it resets `self._intentional_shutdown = False` *before* checking
-    task status — without that, a section-switch `finalize()` leaves the flag set
-    and the freshly-started session immediately exits thinking it was
-    intentionally shut down.
+  - **CRITICAL:** it resets `self._intentional_shutdown = False` AND
+    `self._close_after_flush = False` *before* checking task status — without that,
+    a section-switch teardown leaves a flag set and the freshly-started session
+    immediately exits thinking it was shut down. It also binds a fresh per-session
+    `_closed_event` and attaches a task done-callback that sets it on EVERY exit
+    path (the cooperative-shutdown handshake, bd polyglot-pdf-0c1).
   - It warns `bg_task_already_running_callbacks_overwritten` if called while a task
     is live (a sign two connections are sharing one adapter).
+- **`begin_graceful_shutdown()`** (bd polyglot-pdf-0c1 / y4a): synchronous,
+  lock-free, and safe to call from a tool callback running ON the receive task
+  (e.g. `switch_section`). Sets `_close_after_flush` so the receive loop flushes
+  its pending tool responses and then breaks cleanly — instead of the self-cancel
+  that orphaned the `switch_section` response. Returns the per-session
+  `_closed_event` so the caller can await the old loop's exit before restarting.
 - **`finalize()`** (the adapter method; the service wraps it as
   `finalize_gemini_session()`): closes ONLY the Gemini session (keeps the WebSocket
-  alive) under `_task_lock`, setting `_intentional_shutdown = True` — used for the
-  Level-3 farewell so the client can later `restart_gemini_session`.
+  alive). Sets `_intentional_shutdown = True` and clears the session-ready/pending
+  state INSIDE `_task_lock` (the shutdown-flag race), then cancels + awaits the bg
+  task. Used for the Level-3 farewell so the client can later
+  `restart_gemini_session`. A **self-call guard** downgrades a (mis)call from the
+  receive task itself to `begin_graceful_shutdown()` — the y4a self-cancel can
+  never be reintroduced.
 - **`set_session_context(form_session_id, form_id, current_section_id)`**: injects the
   ids used for token logging (token events only fire when these are set — see
   [../standards/logging-and-cost.md](../standards/logging-and-cost.md)).

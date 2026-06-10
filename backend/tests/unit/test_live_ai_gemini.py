@@ -972,3 +972,89 @@ async def test_activity_signals_fire_in_manual_vad(monkeypatch):
     assert "activity_end" in second_kwargs
 
 
+# ===========================================================================
+# Cooperative receive-loop shutdown (bd polyglot-pdf-0c1 / y4a).
+# ===========================================================================
+
+def test_begin_graceful_shutdown_sets_flags_without_cancel():
+    """begin_graceful_shutdown is sync + lock-free: it sets _close_after_flush and
+    _intentional_shutdown, clears _session_ready, and returns the per-session
+    _closed_event -- WITHOUT cancelling the task (the whole point of y4a)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini(api_key="test_key")
+    ev = asyncio.Event()
+    adapter._closed_event = ev
+    adapter._session_ready = True
+    adapter._close_after_flush = False
+    adapter._intentional_shutdown = False
+
+    returned = adapter.begin_graceful_shutdown()
+
+    assert returned is ev
+    assert adapter._close_after_flush is True
+    assert adapter._intentional_shutdown is True
+    assert adapter._session_ready is False
+
+
+def test_begin_graceful_shutdown_returns_set_event_when_no_session():
+    """With no live session (_closed_event is None) the returned event is already
+    SET, so a caller awaiting it never hangs."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._closed_event = None
+
+    ev = adapter.begin_graceful_shutdown()
+    assert ev.is_set()
+
+
+@pytest.mark.asyncio
+async def test_finalize_from_bg_task_downgrades_to_graceful(monkeypatch):
+    """The y4a self-cancel guard: if finalize() is ever awaited from the receive
+    task itself, it must NOT cancel that task -- it downgrades to a cooperative
+    shutdown instead, so the in-flight tool response can never be orphaned."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._closed_event = asyncio.Event()
+
+    cancelled = {"v": False}
+
+    async def _fake_bg():
+        # Simulate the receive task calling finalize() on ITSELF.
+        await adapter.finalize()
+        # If finalize self-cancelled, we'd never reach here on this task.
+        return "reached-after-finalize"
+
+    task = asyncio.create_task(_fake_bg())
+    adapter._bg_task = task
+    result = await task
+
+    assert result == "reached-after-finalize"  # task was NOT cancelled
+    assert adapter._close_after_flush is True   # downgraded to graceful shutdown
+    assert cancelled["v"] is False
+
+
+@pytest.mark.asyncio
+async def test_set_callbacks_resets_close_after_flush_and_event():
+    """A stale _close_after_flush must never kill the NEXT session, and a fresh
+    _closed_event is bound per session (bd 0c1). set_callbacks resets both."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._close_after_flush = True  # stale from a prior session
+    old_event = asyncio.Event()
+    adapter._closed_event = old_event
+
+    # Force the "spawn a new bg task" branch by leaving _bg_task None; patch the
+    # loop coroutine so no real Gemini connect happens.
+    async def _noop_loop():
+        return None
+    adapter._run_session_loop = _noop_loop
+
+    adapter.set_callbacks()
+
+    assert adapter._close_after_flush is False
+    assert adapter._closed_event is not old_event  # a fresh per-session event
+    # Let the trivial bg task finish so its done-callback sets the new event.
+    await adapter._bg_task
+    assert adapter._closed_event.is_set()
+
+

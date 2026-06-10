@@ -1,5 +1,6 @@
 from fastapi import WebSocket
 from typing import Any, Dict, Optional, List
+import asyncio
 import json
 from copy import deepcopy
 import structlog
@@ -63,6 +64,13 @@ class FormFillingService:
         self._request_coordinator: Optional[RequestCoordinator] = None
         # Callback handler for Gemini Live AI events
         self._callback_handler: Optional[CallbackHandler] = None
+        # Section-switch serialization (bd polyglot-pdf-0c1). _switch_lock
+        # serializes switch_to_section so a manual switch (WS route) and an
+        # AI-initiated switch (switch_section tool) can't restart the session
+        # concurrently. _switch_task holds a strong ref to the detached swap task
+        # spawned by handle_switch_section, so it isn't garbage-collected mid-swap.
+        self._switch_lock = asyncio.Lock()
+        self._switch_task: Optional[asyncio.Task] = None
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -537,6 +545,17 @@ class FormFillingService:
         # Note: current_values are client-managed, we don't store them
 
     async def end_session(self):
+        # Cancel any in-flight detached AI section-switch BEFORE teardown (Codex
+        # PR #135): otherwise, if the client disconnects while _complete_section_switch
+        # is waiting on closed_event, it would later restart Gemini via start_session
+        # against a cleared WebSocket -- an orphaned backend session after the user
+        # is gone. The task's CancelledError handler exits without restarting.
+        if self._switch_task is not None and not self._switch_task.done():
+            self._switch_task.cancel()
+            try:
+                await self._switch_task
+            except (asyncio.CancelledError, Exception):
+                pass
         if self._live_ai is not None:
             await self._live_ai.finalize()
         self._websocket = None
@@ -550,10 +569,33 @@ class FormFillingService:
         initial_field_hint: Optional[str] = None,
     ) -> None:
         """Switch to a new section by restarting the Gemini session with new context.
-        
+
+        Serialized by _switch_lock (bd polyglot-pdf-0c1, absorbed from WS-D): both
+        the manual switch (websocket_routes manual_section_switch) and the
+        AI-initiated switch (via _complete_section_switch) call this method, and a
+        concurrent click-during-AI-switch must not restart the session twice. The
+        lock makes the finalize()->start_session restart atomic per switch.
+        """
+        async with self._switch_lock:
+            await self._switch_to_section_locked(
+                section_schema=section_schema,
+                section_values=section_values,
+                section_metadata=section_metadata,
+                initial_field_hint=initial_field_hint,
+            )
+
+    async def _switch_to_section_locked(
+        self,
+        section_schema: Dict[str, Any],
+        section_values: Dict[str, Any],
+        section_metadata: Dict[str, Any],
+        initial_field_hint: Optional[str] = None,
+    ) -> None:
+        """The actual section restart, run under _switch_lock (see switch_to_section).
+
         This properly flushes Gemini's context (forgets old section fields) without
         disconnecting the WebSocket connection to the frontend.
-        
+
         Args:
             section_schema: Schema for the new section
             section_values: Current values for fields in the new section
@@ -563,7 +605,7 @@ class FormFillingService:
         if self._live_ai is None:
             _log.warning("switch_to_section_no_ai", session_id=self._session_id)
             return
-        
+
         section_number = section_metadata.get("section_number", 1)
         total_sections = section_metadata.get("total_sections", 1)
 
@@ -843,30 +885,100 @@ class FormFillingService:
                  identifier=section_identifier)
         
         section_info = await self._request_coordinator.request_section_info(section_identifier)
-        
+
         if not section_info:
             return {"success": False, "message": "Section switch request failed or timed out."}
-        
+
+        # KEYSTONE y4a FIX (bd polyglot-pdf-0c1): this handler runs ON the Gemini
+        # receive task (the switch_section tool callback). Awaiting switch_to_section
+        # here would await finalize(), which cancels that very task BEFORE the
+        # FunctionResponse we return below reaches the wire -- orphaning the
+        # switch_section response on the session that issued it. Instead:
+        #   1. ask the adapter for a COOPERATIVE shutdown (flush-then-exit, no
+        #      self-cancel) and grab the Event that fires when the old loop is done;
+        #   2. perform the actual session swap on a DETACHED task that awaits that
+        #      Event first (so the old loop is fully wound down -- no two live loops
+        #      sharing callbacks);
+        #   3. RETURN the success payload now. That return value is the
+        #      FunctionResponse the receive loop sends on the OLD session before it
+        #      breaks (the cooperative flush point), so the call is answered on the
+        #      session that made it -- the Live API contract y4a violated.
+
+        # Guard: refuse a second switch while one is already in flight, so a manual
+        # click during an AI switch (or vice versa) can't start two swaps.
+        if self._switch_task is not None and not self._switch_task.done():
+            return {"success": False, "message": "A section switch is already in progress."}
+
+        if self._live_ai is None:
+            return {"success": False, "message": "No AI session to switch."}
+
+        closed_event = self._live_ai.begin_graceful_shutdown()
+        self._switch_task = asyncio.create_task(
+            self._complete_section_switch(closed_event, section_info)
+        )
+
+        return {
+            "success": True,
+            "message": f"Switched to section {section_info['metadata']['section_number']}: {section_info['metadata']['section_label']}",
+        }
+
+    async def _complete_section_switch(self, closed_event, section_info: Dict[str, Any]) -> None:
+        """Finish an AI-initiated section switch on a DETACHED task (bd 0c1).
+
+        Holds _switch_lock for the ENTIRE swap -- including the wait for the old
+        loop to close -- so a concurrent MANUAL switch (websocket_routes ->
+        switch_to_section, which also takes _switch_lock) cannot interleave and
+        leave the user on the wrong section (Codex/fresh-eyes PR #135: the
+        is-in-progress guard alone didn't cover the AI-vs-manual overlap, because
+        the manual path does not consult _switch_task). Because we hold the lock,
+        we call the INNER _switch_to_section_locked directly -- re-acquiring the
+        non-reentrant lock via the public switch_to_section would deadlock.
+
+        A detached task MUST NOT swallow exceptions silently -- the catch-all logs
+        and notifies the frontend so a failed swap surfaces instead of leaving the
+        user on a dead session.
+        """
         try:
-            # Switch Gemini session to new section
-            await self.switch_to_section(
-                section_schema=section_info["schema"],
-                section_values=section_info["current_values"],
-                section_metadata=section_info["metadata"],
-                initial_field_hint=section_info.get("initial_field_hint"),
-            )
-            
-            return {
-                "success": True,
-                "message": f"Switched to section {section_info['metadata']['section_number']}: {section_info['metadata']['section_label']}",
-            }
-            
+            async with self._switch_lock:
+                # Wait for the old loop to finish flushing + exit. The 5s bound is a
+                # backstop: switch_to_section's own finalize() hard-cancels as a
+                # fallback if the cooperative exit somehow stalls, so we proceed
+                # either way -- but normally the event fires in well under a second.
+                try:
+                    await asyncio.wait_for(closed_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    _log.warning("section_switch_graceful_close_timeout",
+                                session_id=self._session_id)
+
+                await self._switch_to_section_locked(
+                    section_schema=section_info["schema"],
+                    section_values=section_info["current_values"],
+                    section_metadata=section_info["metadata"],
+                    initial_field_hint=section_info.get("initial_field_hint"),
+                )
+        except asyncio.CancelledError:
+            # The WS closed mid-swap and end_session cancelled this task (Codex
+            # PR #135). Do NOT restart Gemini against a dead socket -- just exit.
+            _log.info("section_switch_cancelled", session_id=self._session_id)
+            raise
         except Exception as exc:
-            _log.error("section_switch_failed", 
+            _log.error("section_switch_failed",
                       session_id=self._session_id,
-                      identifier=section_identifier,
                       error=str(exc))
-            return {"success": False, "message": f"Failed to switch section: {str(exc)}"}
+            # Surface the failure to the frontend in a shape it HANDLES: the FE
+            # message switch handles `error` (and ignores unknown types), so use
+            # the error envelope, not a bespoke section_switch_failed type
+            # (Codex PR #135).
+            if self._websocket is not None:
+                try:
+                    await self._websocket.send_json({
+                        "type": "error",
+                        "code": "section_switch_failed",
+                        "message": f"Failed to switch section: {str(exc)}",
+                    })
+                except Exception:
+                    _log.error("section_switch_failed_notify_failed",
+                              session_id=self._session_id)
 
     async def handle_get_field_value(self, spoken_name: str) -> Dict[str, Any]:
         """

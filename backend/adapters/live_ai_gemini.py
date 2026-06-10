@@ -209,6 +209,17 @@ class LiveAIGemini(ILiveAI):
         self._current_text_sender_task: Optional[asyncio.Task] = None
         self._current_session: Optional[Any] = None  # Store active Gemini session for text messages
         self._intentional_shutdown: bool = False  # Track intentional finalize() to prevent auto-retry
+        # Cooperative graceful-shutdown signal (bd polyglot-pdf-0c1 / y4a). A
+        # tool callback running ON the receive task (e.g. switch_section) cannot
+        # cancel its own task to tear down the session -- that orphans the
+        # FunctionResponse it is about to send. Instead it calls
+        # begin_graceful_shutdown(), which sets _close_after_flush; the receive
+        # loop FLUSHES its pending tool responses and then breaks cleanly. The
+        # detached swap task awaits _closed_event (set in _run_session_loop's
+        # finally) before starting the new session, so the old loop is fully wound
+        # down first. _closed_event is created per-session in set_callbacks.
+        self._close_after_flush: bool = False
+        self._closed_event: Optional[asyncio.Event] = None
 
         # Session readiness flag and message queue for race condition handling
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
@@ -401,6 +412,12 @@ class LiveAIGemini(ILiveAI):
         # This prevents section-switching crashes where finalize() sets the flag
         # but the new session immediately exits thinking it was intentionally shut down
         self._intentional_shutdown = False
+        # Reset the cooperative-shutdown flag too: a stale _close_after_flush left
+        # over from a prior session must NEVER make the NEW receive loop break on
+        # its first turn (bd polyglot-pdf-0c1). The fresh _closed_event below
+        # belongs to the new task -- begin_graceful_shutdown returns THIS instance,
+        # so a swap task always awaits the event for the session it is replacing.
+        self._close_after_flush = False
 
         # Start background task if not already running
         if self._bg_task is None or self._bg_task.done():
@@ -408,7 +425,17 @@ class LiveAIGemini(ILiveAI):
             # Audio queue has max size to prevent blocking - drops frames if backed up
             self._audio_queue = asyncio.Queue(maxsize=100)  # ~2 seconds of audio at 50fps
             self._text_queue = asyncio.Queue()
+            closed_event = asyncio.Event()
+            self._closed_event = closed_event
             self._bg_task = asyncio.create_task(self._run_session_loop())
+            # Set _closed_event when the task COMPLETES by any path -- normal
+            # return, exception, OR cancellation (bd polyglot-pdf-0c1). A
+            # done-callback is strictly more robust than a try/finally in the
+            # coroutine body (it also fires on cancel) and needs no re-indent of
+            # the ~1200-line loop. Bind THIS event (not self._closed_event) so a
+            # later session's callback can't race-set the wrong event. The
+            # done-callback runs on the loop thread after the task finishes.
+            self._bg_task.add_done_callback(lambda _t, _ev=closed_event: _ev.set())
             # Removed verbose logging - session start logged below
         else:
             self._log.warn("bg_task_already_running_callbacks_overwritten", 
@@ -621,16 +648,70 @@ class LiveAIGemini(ILiveAI):
         except Exception as e:
             self._log.error("[error] ACTIVITY_END_FAILED", error=str(e), native_vad=native_vad)
 
-    async def finalize(self):
-        """Stop the background task and clear resources."""
-        # Set flag to prevent auto-retry after intentional shutdown
-        self._intentional_shutdown = True
+    def begin_graceful_shutdown(self) -> asyncio.Event:
+        """Ask the receive loop to exit cleanly AFTER flushing pending tool responses.
 
-        # Reset session ready flag and clear any pending messages
+        SYNCHRONOUS and lock-free on purpose: this is called from a tool callback
+        running ON the receive task (switch_section), where awaiting finalize()
+        would cancel that very task and orphan the FunctionResponse it is about to
+        send (bd polyglot-pdf-0c1 / y4a). Instead we set flags the receive loop
+        polls: it flushes its pending tool responses, then breaks. The returned
+        Event is set by _run_session_loop's finally on EVERY exit path, so the
+        caller (a detached swap task) can await it before starting the new session
+        -- guaranteeing the old loop is fully wound down first (no two live loops
+        sharing callbacks, plan hazard 5).
+
+        Suppresses auto-retry (_intentional_shutdown) and stops new client content
+        from being sent on the dying session (_session_ready=False). Returns the
+        per-session _closed_event (created in set_callbacks); if no session is
+        running, returns an already-set event so a caller never hangs.
+        """
+        self._close_after_flush = True
+        self._intentional_shutdown = True
         self._session_ready = False
-        self._pending_client_content.clear()
+        if self._closed_event is None:
+            # No live session/task -> nothing to wind down; hand back a set event.
+            ev = asyncio.Event()
+            ev.set()
+            return ev
+        return self._closed_event
+
+    async def finalize(self):
+        """Stop the background task and clear resources.
+
+        Safe to call from OUTSIDE the receive task (WS disconnect, manual switch,
+        Level-3 timeout). It must NEVER be awaited from a callback running ON
+        _bg_task -- that is the y4a self-cancel that orphans the switch_section
+        response (bd polyglot-pdf-0c1). The guard below converts such a misuse into
+        a cooperative shutdown instead of a self-cancel, so the bug can never be
+        reintroduced by a future caller.
+        """
+        # Self-call guard: if we are running ON the background task, cancelling it
+        # would cancel ourselves mid-callback and orphan any pending tool response.
+        # Downgrade to a cooperative shutdown and return.
+        bg = self._bg_task
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        if bg is not None and current is bg:
+            self._log.error(
+                "finalize_called_from_bg_task",
+                message="finalize() invoked from the receive task -- downgrading to "
+                        "begin_graceful_shutdown() to avoid the y4a self-cancel",
+            )
+            self.begin_graceful_shutdown()
+            return
 
         async with self._task_lock:
+            # Set the shutdown flags INSIDE the lock (bd polyglot-pdf-0c1 shutdown
+            # race): a concurrent start/stop must see a consistent
+            # (_intentional_shutdown / _session_ready / _pending_client_content)
+            # snapshot, not a half-applied one.
+            self._intentional_shutdown = True
+            self._session_ready = False
+            self._pending_client_content.clear()
+
             if self._bg_task is not None:
                 self._bg_task.cancel()
                 try:
@@ -1601,6 +1682,22 @@ class LiveAIGemini(ILiveAI):
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
 
+                                        # COOPERATIVE FLUSH POINT (bd polyglot-pdf-0c1 /
+                                        # y4a): a switch_section callback (handled inline
+                                        # above) called begin_graceful_shutdown(), so the
+                                        # FunctionResponse it produced is now ON THE WIRE
+                                        # for the OLD session. Break out of the receive loop
+                                        # cleanly -- the swap to the new section happens on a
+                                        # detached task that awaits _closed_event. This is the
+                                        # single flush point for BOTH tool-call paths
+                                        # (model_turn.parts + event.tool_call feed the same
+                                        # `responses` list sent just above). The inner break
+                                        # exits the `async for`; the `if not received_any or
+                                        # _close_after_flush` check below exits the while-loop.
+                                        if self._close_after_flush:
+                                            self._log.info("graceful_shutdown_after_tool_flush")
+                                            break
+
                                     # ========================================
                                     # TOKEN TRACKING (extract usage metadata)
                                     # ========================================
@@ -1748,6 +1845,15 @@ class LiveAIGemini(ILiveAI):
 
                                 except Exception:
                                     self._log.exception("event_handling_error")
+                                    # If a graceful shutdown was requested (e.g.
+                                    # send_tool_response raised AFTER the switch_section
+                                    # callback set _close_after_flush), BREAK rather than
+                                    # continue -- otherwise the loop keeps iterating until
+                                    # the swap task's 5s wait_for backstop fires, a
+                                    # demo-visible freeze (fresh-eyes PR #135).
+                                    if self._close_after_flush:
+                                        self._log.info("graceful_shutdown_after_event_error")
+                                        break
                                     continue
                         except ConnectionClosed as exc:
                             print(f"\n{'='*80}")
@@ -1764,8 +1870,14 @@ class LiveAIGemini(ILiveAI):
                                           intentional_shutdown=self._intentional_shutdown)
                             break
 
+                        # Exit the while-loop on a cooperative graceful shutdown (the
+                        # `break` after send_tool_response above lands here) OR when
+                        # the session produced no events (bd polyglot-pdf-0c1).
+                        if self._close_after_flush:
+                            self._log.info("receive_loop_exit_graceful_shutdown")
+                            break
                         if not received_any:
-                            self._log.error("gemini_session_no_events_received", 
+                            self._log.error("gemini_session_no_events_received",
                                           event_count=event_count,
                                           message="Session ended - no events from Gemini")
                             break
