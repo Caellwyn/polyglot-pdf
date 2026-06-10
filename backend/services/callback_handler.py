@@ -479,7 +479,17 @@ class CallbackHandler:
         # so made a slow round-trip masquerade as completion and Gemini wrapped the
         # form up early. On timeout we tell Gemini the hint is temporarily unavailable
         # and to keep going, never that the form is done.
-        next_hint_result = await self._request_coordinator.request_next_field_hint()
+        #
+        # Guard the coordinator the same way send_form_update does (bd polyglot-pdf-pen).
+        # The constructor takes request_coordinator as a REQUIRED positional, so it is
+        # never None in production -- but a test or racing reconnect that passes None
+        # would AttributeError here. An absent coordinator means "next field unknown",
+        # which is the TIMEOUT semantics (NOT "complete"): we must not let a missing
+        # coordinator masquerade as completion, so collapse it into the timeout path.
+        if self._request_coordinator is None:
+            next_hint_result = HINT_REQUEST_TIMEOUT
+        else:
+            next_hint_result = await self._request_coordinator.request_next_field_hint()
         hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
         # The value forwarded to Gemini must be JSON-serializable: collapse the
         # sentinel to None for the wire, but keep the timeout distinction in the
