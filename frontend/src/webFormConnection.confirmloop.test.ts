@@ -72,14 +72,19 @@ function prompts(ws: MockWebSocket): any[] {
   return sentMessages(ws).filter(m => m.type === 'completion_message')
 }
 
-function fireConfirm(ws: MockWebSocket, fieldId: string): void {
+function fireConfirm(ws: MockWebSocket, fieldId: string, requestId?: string): void {
   ws.onmessage?.({
     data: JSON.stringify({
       type: 'confirm_field',
       field_id: fieldId,
       confirmation_method: 'verbal',
+      ...(requestId ? { request_id: requestId } : {}),
     }),
   })
+}
+
+function confirmAcks(ws: MockWebSocket): any[] {
+  return sentMessages(ws).filter(m => m.type === 'confirm_field_response')
 }
 
 // Drive a real value into the field through the production field_update path
@@ -175,5 +180,64 @@ describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y
     fireConfirm(ws, 'p1_line1_aliennumber')
 
     expect(prompts(ws)).toHaveLength(0)
+  })
+})
+
+describe('WebFormConnection synchronous confirm ack (bd polyglot-pdf-wpw.2)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function connected(): Promise<MockWebSocket> {
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    return ws
+  }
+
+  it('acks recorded:false + reason no_value when confirming an empty field', async () => {
+    const ws = await connected()
+
+    fireConfirm(ws, 'p1_line1_aliennumber', 'req-empty-1')
+
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].request_id).toBe('req-empty-1')
+    expect(acks[0].recorded).toBe(false)
+    expect(acks[0].reason).toBe('no_value')
+  })
+
+  it('acks recorded:true (no reason) when the field has a usable value', async () => {
+    const ws = await connected()
+
+    fireFieldUpdate(ws, 'A123456789')
+    fireConfirm(ws, 'p1_line1_aliennumber', 'req-ok-1')
+
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].request_id).toBe('req-ok-1')
+    expect(acks[0].recorded).toBe(true)
+    expect(acks[0].reason).toBeUndefined()
+  })
+
+  it('sends no ack for a legacy fire-and-forget confirm_field (no request_id)', async () => {
+    const ws = await connected()
+
+    fireFieldUpdate(ws, 'A123456789')
+    fireConfirm(ws, 'p1_line1_aliennumber') // no request_id -> nothing to ack
+
+    expect(confirmAcks(ws)).toHaveLength(0)
   })
 })

@@ -37,6 +37,13 @@ def mock_coordinator():
     coordinator.request_next_field_hint = AsyncMock()
     coordinator.request_field_value = AsyncMock()
     coordinator.request_section_info = AsyncMock()
+    # confirm_field is a synchronous round-trip (bd polyglot-pdf-wpw.2): the FE acks
+    # whether it recorded the confirmation. Default to recorded so the existing
+    # next-hint tests exercise the recorded path explicitly (not via an implicit
+    # truthy AsyncMock).
+    coordinator.request_confirm_field = AsyncMock(
+        return_value={"recorded": True, "reason": None}
+    )
     return coordinator
 
 

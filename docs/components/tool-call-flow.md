@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), and [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -89,38 +89,47 @@ callbacks.
 ## `confirm_field` round-trip (code expectation)
 
 1. Gemini -> `confirm_field(field_id, confirmation_method)`.
-2. `_handle_confirm_field_tool`: emits a **`confirm_field`** WS message to the
-   frontend, then **blocks up to 2s** on `request_next_field_hint()`
-   (`request_coordinator.py`), which asks the FRONTEND for the next field
-   (`get_next_field_hint` -> `next_field_hint_response`).
-3. The tool response returns `{success, field_confirmed, next_field_hint,
-   message}`. `request_next_field_hint()` returns one of three things, and the
-   tool response distinguishes all three (bd polyglot-pdf-tks):
-   - a **hint string** -> there is a next field; `message` is just
-     "Field confirmed."
-   - **`None`** -> the frontend answered and the form is genuinely complete;
-     `message` says "All fields confirmed."
-   - **`HINT_REQUEST_TIMEOUT`** (the coordinator sentinel) -> the frontend did
-     NOT answer within 2s. `next_field_hint` is sent as `None` (the sentinel
-     never reaches the wire) but `message` explicitly tells Gemini NOT to assume
-     completion and to ask for the next field / call `get_form_status`.
-     Previously a timeout collapsed to `None` and read as "All fields confirmed",
-     letting a slow round-trip make Gemini wrap the form up early.
-   dev-log: `tool_callback_result` shows the exact response, including whether
-   `next_field_hint` was null.
+2. `_handle_confirm_field_tool` makes confirm a **synchronous round-trip** (bd
+   polyglot-pdf-wpw.2 / WS-E2): it calls `request_confirm_field()`
+   (`request_coordinator.py`), which sends a `confirm_field` WS message carrying a
+   `request_id` and **blocks up to 2s** for the frontend's
+   `confirm_field_response`. The frontend owns all field state, so it -- not the
+   backend -- is the source of truth for whether the confirm was actually
+   recorded. The ack is `{recorded: bool, reason}` (or the
+   `CONFIRM_REQUEST_TIMEOUT` sentinel on no answer). Only on a **recorded** ack
+   does the handler then request the next-field hint and log the confirmation.
+3. The tool response depends on the ack:
+   - **recorded** -> `{success: true, field_confirmed, next_field_hint, message}`.
+     `request_next_field_hint()` then returns one of three things (bd
+     polyglot-pdf-tks), and the message distinguishes all three: a **hint string**
+     ("Field confirmed."), **`None`** (form genuinely complete -- "All fields
+     confirmed."), or **`HINT_REQUEST_TIMEOUT`** (frontend did not answer in 2s --
+     `next_field_hint` goes out as `None` but the message tells Gemini NOT to
+     assume completion and to ask for the next field / call `get_form_status`).
+   - **not recorded** (the field has no value -- `reason: "no_value"`) or the
+     confirm-ack **timed out** -> `{success: false, ...}` carrying the WS-C2
+     error-envelope keys (`status:"error"`, `retryable`, `error`) plus a corrective
+     `message`, and the next-field hint is NOT requested (no advance). So 3.1's
+     confirm-without-fill skip self-corrects IN-BAND: Gemini reads an actual
+     failure and re-asks, instead of the old fire-and-forget that always read as
+     success and silently lost the value.
+   dev-log: `tool_callback_result` shows the exact response, including
+   `success`/`status` and whether `next_field_hint` was null.
 
-**Frontend loop-breaker (bd polyglot-pdf-0y7).** A `confirm_field` for a field
-with no value is a no-op (`SchemaFormStateManager.confirmField` can't confirm what
-isn't filled), so `computeNextField` keeps returning the SAME field and the
-backend can re-request `confirm_field` for it indefinitely while Gemini stalls.
-`webFormConnection.handleConfirmFieldRequest` guards this: it checks whether the
-field actually became confirmed and, after 2 consecutive failed confirms of the
-same field, breaks the spin. It surfaces the stall via `onError` (works today) and
-also attempts a level-1 `recovery_prompt` -- the latter is currently inert because
-`RECOVERY_PROMPT_LEVEL_*` are missing from `Settings` (`polyglot-pdf-zy3`) and
-becomes the spoken Gemini re-prompt once that is fixed. The streak resets on a
-successful confirm, a different field, or a section switch. The no-op also logs a
-console warning so the stall is diagnosable.
+**Frontend loop-breaker (bd polyglot-pdf-0y7) + in-band ack (wpw.2).** A
+`confirm_field` for a field with no value is a no-op
+(`SchemaFormStateManager.confirmField` can't confirm what isn't filled), so
+`computeNextField` keeps returning the SAME field.
+`webFormConnection.handleConfirmFieldRequest` gates on the field VALUE: when there
+is no usable value it sends `confirm_field_response {recorded:false,
+reason:"no_value"}` (the in-band signal the backend turns into `success:false`),
+AND -- as a client-side belt-and-suspenders -- after 2 consecutive failed confirms
+of the same field it re-prompts Gemini via `completion_message` (capped) and
+surfaces the stall via `onError`. On a usable value it records the confirm and
+sends `{recorded:true}`. The streak resets on a successful confirm, a different
+field, or a section switch. `reason` is a fixed category token, never the field
+value (PII-safe). (The legacy fire-and-forget shape -- a `confirm_field` with no
+`request_id` -- still no-ops the ack for backward compatibility.)
 
 ## Wire reality vs. expectation -- what to check
 

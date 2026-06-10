@@ -10,7 +10,11 @@ from unittest.mock import AsyncMock, MagicMock
 # compares against. The bare `services.request_coordinator` path resolves to a
 # DIFFERENT module object under pytest's pythonpath, which would make every
 # `is HINT_REQUEST_TIMEOUT` identity check silently false (fresh-eyes, PR #121).
-from backend.services.request_coordinator import HINT_REQUEST_TIMEOUT, RequestCoordinator
+from backend.services.request_coordinator import (
+    CONFIRM_REQUEST_TIMEOUT,
+    HINT_REQUEST_TIMEOUT,
+    RequestCoordinator,
+)
 
 
 class TestRequestCoordinatorInit:
@@ -493,4 +497,114 @@ class TestMultipleConcurrentRequests:
         # the other's id -- the set of results equals the set of per-id hints.
         assert {r1, r2} == {f"Hint for {rid}" for rid in ids}
         assert r1 != r2
+        assert coordinator._pending == {}
+
+
+class TestRequestConfirmField:
+    """Tests for request_confirm_field -- the synchronous confirm round-trip
+    (bd polyglot-pdf-wpw.2 / WS-E2)."""
+
+    @pytest.mark.asyncio
+    async def test_request_confirm_field_no_websocket(self):
+        """No websocket -> CONFIRM_REQUEST_TIMEOUT (never read as confirmed)."""
+        coordinator = RequestCoordinator()
+
+        result = await coordinator.request_confirm_field("email", "verbal")
+
+        assert result is CONFIRM_REQUEST_TIMEOUT
+
+    @pytest.mark.asyncio
+    async def test_request_confirm_field_sends_message_and_records(self):
+        """Sends a confirm_field request and resolves with the FE ack (recorded)."""
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        async def send_response():
+            await asyncio.sleep(0.01)
+            call_args = mock_ws.send_json.call_args[0][0]
+            request_id = call_args["request_id"]
+            coordinator.handle_confirm_field_response(request_id, True)
+
+        asyncio.create_task(send_response())
+
+        result = await coordinator.request_confirm_field("email", "verbal")
+
+        assert mock_ws.send_json.called
+        sent_message = mock_ws.send_json.call_args[0][0]
+        assert sent_message["type"] == "confirm_field"
+        assert sent_message["field_id"] == "email"
+        assert sent_message["confirmation_method"] == "verbal"
+        assert "request_id" in sent_message
+        assert result == {"recorded": True, "reason": None}
+
+    @pytest.mark.asyncio
+    async def test_request_confirm_field_not_recorded_with_reason(self):
+        """A not-recorded ack carries the fixed reason token (no PII)."""
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        async def send_response():
+            await asyncio.sleep(0.01)
+            call_args = mock_ws.send_json.call_args[0][0]
+            request_id = call_args["request_id"]
+            coordinator.handle_confirm_field_response(request_id, False, "no_value")
+
+        asyncio.create_task(send_response())
+
+        result = await coordinator.request_confirm_field("email", "verbal")
+
+        assert result == {"recorded": False, "reason": "no_value"}
+
+    @pytest.mark.asyncio
+    async def test_request_confirm_field_timeout(self):
+        """No FE answer in time -> CONFIRM_REQUEST_TIMEOUT + slot cleaned up.
+
+        A slow/disconnected client must NEVER read as a successful confirm -- the
+        whole reason the round-trip exists.
+        """
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        # Patch the wait to time out fast instead of blocking the suite 2s.
+        import backend.services.request_coordinator as rc_mod
+        original_wait_for = rc_mod.asyncio.wait_for
+
+        async def fast_timeout(awaitable, timeout):
+            # Cancel the underlying future and raise as a real timeout would.
+            if hasattr(awaitable, "cancel"):
+                awaitable.cancel()
+            raise asyncio.TimeoutError()
+
+        rc_mod.asyncio.wait_for = fast_timeout
+        try:
+            result = await coordinator.request_confirm_field("email", "verbal")
+        finally:
+            rc_mod.asyncio.wait_for = original_wait_for
+
+        assert result is CONFIRM_REQUEST_TIMEOUT
+        assert coordinator._pending == {}
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_does_not_clobber_concurrent_next_field(self):
+        """A confirm_field request and a next_field_hint request in flight at the
+        same time resolve to their own callers (keyed slots, bd bxw)."""
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        t_confirm = asyncio.create_task(coordinator.request_confirm_field("email", "verbal"))
+        t_hint = asyncio.create_task(coordinator.request_next_field_hint())
+        await asyncio.sleep(0.01)
+
+        sent = [c[0][0] for c in mock_ws.send_json.call_args_list]
+        confirm_id = next(m["request_id"] for m in sent if m["type"] == "confirm_field")
+        hint_id = next(m["request_id"] for m in sent if m["type"] == "get_next_field_hint")
+        assert confirm_id != hint_id
+
+        coordinator.handle_confirm_field_response(confirm_id, True)
+        coordinator.handle_next_field_hint_response(hint_id, "Next field hint")
+
+        confirm_result = await t_confirm
+        hint_result = await t_hint
+        assert confirm_result == {"recorded": True, "reason": None}
+        assert hint_result == "Next field hint"
         assert coordinator._pending == {}
