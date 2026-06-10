@@ -1071,6 +1071,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		// Hide modal
 		setShowDisclaimerModal(false)
 
+		// Step 1: Send activity_start FIRST to stop backend from sending more audio.
+		// The user just agreed, so cut off any still-playing disclaimer read instead
+		// of letting it finish (matches VoiceOverlayMobile; bd polyglot-pdf-zq9l).
+		// No-op in native VAD (connection.ts suppresses activity_start there); in
+		// manual VAD it opens the user turn that the sendActivityEnd below closes.
+		console.log('[VoiceOverlay] Sending activity_start to interrupt Gemini')
+		connectionManager?.sendActivityStart()
+
+		// Step 2: THEN flush the local audio queue (the interrupt the user perceives).
+		const agreeAudioManager = connectionManager?.getAudioManager()
+		if (agreeAudioManager) {
+			console.log('[VoiceOverlay] Clearing audio queue on disclaimer agreement')
+			agreeAudioManager.flushAudioQueue()
+		}
+
 		// Log disclaimer acceptance to backend
 		try {
 			const timestamp = Date.now()
