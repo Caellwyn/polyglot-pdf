@@ -66,6 +66,18 @@ class ILiveAI(ABC):
         """Send activity_end signal to Gemini (user stopped speaking)."""
         raise NotImplementedError()
 
+    def begin_graceful_shutdown(self):
+        """Request a cooperative receive-loop shutdown AFTER flushing pending tool
+        responses, returning an awaitable Event set when the loop has fully exited.
+
+        Synchronous + lock-free so it is safe to call from a tool callback running
+        ON the receive task (e.g. switch_section), where awaiting finalize() would
+        self-cancel that task and orphan the FunctionResponse it is mid-send
+        (bd polyglot-pdf-0c1 / y4a). Concrete audio adapters implement this; a
+        caller awaits the returned Event before starting the replacement session.
+        """
+        raise NotImplementedError()
+
     async def finalize(self):
         """Cleanly stop any background tasks and close underlying sessions."""
         raise NotImplementedError()
