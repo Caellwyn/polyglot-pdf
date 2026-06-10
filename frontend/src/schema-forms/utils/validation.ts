@@ -46,14 +46,23 @@ export function validateField(field: FormField, value: any): string | null {
 
   const normalizedEmpty = actualValue === null || actualValue === undefined || actualValue === "";
 
-  // Enum / option-membership runs INDEPENDENTLY of field.validation: for an
-  // option-backed field (select, radio, and checkbox groups), the option set IS
-  // the constraint, and such fields often carry no `validation` block at all. A
-  // non-empty value MUST be one of field.options[].value -- this guards an
-  // AI-applied value where the model invents an option that does not exist in
-  // the schema (bd polyglot-pdf-wpw.3). Checked before the early
-  // `!field.validation` return below so a bad enum is still rejected.
-  if (!normalizedEmpty && field.options && field.options.length > 0) {
+  // Enum / option-membership runs INDEPENDENTLY of field.validation: for a
+  // STRING-enum field (select, radio, or a checkbox GROUP), the option set IS the
+  // constraint, and such fields often carry no `validation` block at all. A
+  // non-empty value MUST be one of the options -- this guards an AI-applied value
+  // where the model invents an option that does not exist in the schema (bd
+  // polyglot-pdf-wpw.3). Checked before the early `!field.validation` return below
+  // so a bad enum is still rejected.
+  //
+  // CRITICAL SCOPING (Codex PR #145 round 3): a STANDALONE checkbox (type
+  // "checkbox" WITHOUT group_kind "checkbox") is a BOOLEAN field -- the backend
+  // contract is "For checkbox: boolean" (config.py). Its `options` array describes
+  // the single PDF widget, not an enum of allowed values, so Gemini sends
+  // true/false, NOT an option value. Running the enum check on it would compare
+  // "true" against an option like "P2_checkbox3[0]" and reject every valid fill.
+  // So the enum gate applies ONLY to select/radio and checkbox GROUPS; a standalone
+  // checkbox skips it (its boolean is validated structurally, nothing to enum).
+  if (!normalizedEmpty && field.options && field.options.length > 0 && isStringEnumField(field)) {
     const optionError = validateOptionMembership(field, actualValue);
     if (optionError) return optionError;
   }
@@ -74,6 +83,16 @@ export function validateField(field: FormField, value: any): string | null {
     ...(field.max !== undefined ? { max: field.max } : {}),
     ...(field.validation ?? {}),
   };
+
+  // Date fields carry an inherent FORMAT constraint even with no rules: a date
+  // field with only `format`/`type:"date"` and no validation block (e.g. i-589's
+  // many `type:"date"`, `format:"mm/dd/yyyy"` fields) must still reject a malformed
+  // AI-applied date (Codex PR #145 round 3). validateDateValue checks parseability
+  // + min/max regardless of rules, so always run it for a non-empty date value
+  // rather than letting the empty-effectiveRules early return below skip it.
+  if (field.type === "date" && !normalizedEmpty) {
+    return validateDateValue(field, String(actualValue), effectiveRules);
+  }
 
   if (Object.keys(effectiveRules).length === 0) {
     return null; // No rules-based constraints (top-level or validation block)
@@ -109,9 +128,8 @@ export function validateField(field: FormField, value: any): string | null {
     return validateNumberValue(field, actualValue, rules);
   }
 
-  if (field.type === "date") {
-    return validateDateValue(field, String(actualValue), rules);
-  }
+  // Date fields are handled by the early `field.type === "date"` return above
+  // (which runs whether or not there are rules), so they never reach here.
 
   return null;
 }
@@ -170,6 +188,21 @@ function optionValue(opt: any): string | undefined {
 }
 
 /**
+ * Whether a field's value is a STRING drawn from its option set -- i.e. the enum
+ * check applies. True for `select`, `radio`, and checkbox GROUPS (group_kind
+ * "checkbox"). FALSE for a STANDALONE checkbox (type "checkbox" without a group),
+ * whose value is a BOOLEAN per the backend contract ("For checkbox: boolean"),
+ * even though it carries an `options` array describing its single widget. Running
+ * the enum check on a standalone checkbox would reject every valid true/false fill
+ * (Codex PR #145 round 3).
+ */
+function isStringEnumField(field: FormField): boolean {
+  if (field.type === "select" || field.type === "radio") return true;
+  if (field.type === "checkbox" && field.group_kind === "checkbox") return true;
+  return false;
+}
+
+/**
  * Validate that a value is a member of an option-backed field's allowed set
  * (enum check). `value` may be a single value (select/radio), an array (checkbox
  * group), OR a comma-separated string for a checkbox group; every element must
@@ -196,7 +229,15 @@ function validateOptionMembership(field: FormField, value: any): string | null {
       .filter((v): v is string => v !== undefined)
   );
 
-  const isCheckboxGroup = field.type === "checkbox" || field.group_kind === "checkbox";
+  const isCheckboxGroup = field.group_kind === "checkbox";
+
+  // A single-choice field (select/radio) cannot take an array. An empty array in
+  // particular would make the membership loop below vacuously pass, letting a blank
+  // choice land as a non-empty object that handleConfirmFieldRequest then treats as
+  // confirmable (Codex PR #145 round 3). Reject any array for a single-choice field.
+  if (!isCheckboxGroup && Array.isArray(value)) {
+    return `${field.name} must be one of the available options`;
+  }
 
   let values: any[];
   if (Array.isArray(value)) {

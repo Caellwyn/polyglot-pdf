@@ -146,8 +146,29 @@ describe('validateField (enum / option membership)', () => {
   });
 
   it('validates array (checkbox-group) values member-by-member', () => {
-    expect(validateField(selectField, ['single', 'married'])).toBeNull();
-    expect(validateField(selectField, ['single', 'widowed'])).not.toBeNull();
+    // Arrays are valid ONLY for a checkbox GROUP, not a single-choice select.
+    const checkboxGroup: FormField = {
+      id: 'tags[]',
+      name: 'Tags',
+      spoken_name: 'tags',
+      type: 'checkbox',
+      group_kind: 'checkbox',
+      section_id: 'Part 1',
+      options: [
+        { value: 'single', label: 'Single' },
+        { value: 'married', label: 'Married' },
+      ],
+    };
+    expect(validateField(checkboxGroup, ['single', 'married'])).toBeNull();
+    expect(validateField(checkboxGroup, ['single', 'widowed'])).not.toBeNull();
+  });
+
+  it('rejects an array (including []) for a single-choice select/radio field', () => {
+    // A single-choice field cannot take an array; an empty [] must NOT vacuously
+    // pass (Codex PR #145 round 3).
+    expect(validateField(selectField, ['single'])).not.toBeNull();
+    expect(validateField(selectField, [])).not.toBeNull();
+    expect(validateField(radioNoValidation, [])).not.toBeNull();
   });
 
   it('never echoes the rejected value in the error message (PII-safe)', () => {
@@ -314,5 +335,64 @@ describe('validateField (comma-separated checkbox-group values)', () => {
       options: [{ value: 'Springfield, IL', label: 'Springfield, IL' }],
     };
     expect(validateField(selectWithComma, 'Springfield, IL')).toBeNull();
+  });
+});
+
+// Standalone checkbox fields (type "checkbox" WITHOUT group_kind "checkbox") are
+// BOOLEAN per the backend contract ("For checkbox: boolean"), even though they
+// carry an `options` array describing their single PDF widget. The enum gate must
+// NOT run on them or every valid true/false fill is rejected. Codex PR #145 round 3.
+describe('validateField (standalone boolean checkbox)', () => {
+  const standaloneCheckbox: FormField = {
+    id: 'p2_checkbox3',
+    name: 'Previous card never received',
+    spoken_name: 'previous card never received',
+    type: 'checkbox',
+    section_id: 'Part 2',
+    // group_kind is NOT "checkbox" -> standalone boolean, not an enum group.
+    options: [{ value: 'P2_checkbox3[0]', label: 'My previous card was issued but never received' }],
+  };
+
+  it('accepts a boolean true fill (does not enum-check against the option value)', () => {
+    expect(validateField(standaloneCheckbox, true)).toBeNull();
+  });
+
+  it('accepts a boolean false fill', () => {
+    expect(validateField(standaloneCheckbox, false)).toBeNull();
+  });
+
+  it('does not reject true even though it is not equal to the option value', () => {
+    // Regression: the option value is "P2_checkbox3[0]"; String(true) != that, so
+    // an enum check would have rejected it.
+    expect(validateField(standaloneCheckbox, 'true')).toBeNull();
+  });
+});
+
+// Bare date fields (type "date" with only a format, no validation/min/max) must
+// still have their FORMAT validated -- a malformed AI date should not land.
+// Codex PR #145 round 3.
+describe('validateField (bare date field, format-only)', () => {
+  const bareDate: FormField = {
+    id: 'part_a_ii_spouse_dob',
+    name: "Spouse's Date of Birth",
+    spoken_name: 'spouse date of birth',
+    type: 'date',
+    section_id: 'Part A',
+    format: 'mm/dd/yyyy' as any,
+    // NO validation block, NO min/max/min_date/max_date.
+  };
+
+  it('accepts a parseable date', () => {
+    expect(validateField(bareDate, '1990-06-15')).toBeNull();
+    expect(validateField(bareDate, '06/15/1990')).toBeNull();
+  });
+
+  it('rejects a malformed date', () => {
+    expect(validateField(bareDate, 'not-a-date')).not.toBeNull();
+    expect(validateField(bareDate, 'the fifteenth')).not.toBeNull();
+  });
+
+  it('treats an empty optional bare date as valid (not a format error)', () => {
+    expect(validateField(bareDate, '')).toBeNull();
   });
 });
