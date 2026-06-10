@@ -1956,51 +1956,59 @@ export class WebFormConnection {
     console.log('[WebFormConnection] Waiting for buffer to drain before section switch');
     await this.waitForBufferDrain(1000);
 
-    // Switch to target section in local state
-    const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
-    this.state = updatedState;
+    // Wrap the post-validation state-update + send in a catch so an unexpected
+    // throw (e.g. corrupted sessionStorage in extractSectionFields) releases the
+    // guard immediately rather than leaving it stuck until the watchdog fires.
+    try {
+      // Switch to target section in local state
+      const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
+      this.state = updatedState;
 
-    // Build section info to send to backend (avoid round-trip delay)
-    const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
-    const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
-    const sectionValues: Record<string, any> = {};
+      // Build section info to send to backend (avoid round-trip delay)
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
+      const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
+      const sectionValues: Record<string, any> = {};
 
-    for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
-      if (sectionFieldIds.has(fieldId)) {
-        sectionValues[fieldId] = fieldValue;
+      for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
+        if (sectionFieldIds.has(fieldId)) {
+          sectionValues[fieldId] = fieldValue;
+        }
       }
-    }
 
-    // Build previous spoken names from completed sections
-    const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
+      // Build previous spoken names from completed sections
+      const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
 
-    // Compute initial field hint
-    const initialFieldHint = this.computeNextFieldHintString();
+      // Compute initial field hint
+      const initialFieldHint = this.computeNextFieldHintString();
 
-    console.log('[WebFormConnection] Sending section switch with embedded info', {
-      sectionId: targetSection.id,
-      sectionNumber: targetSection.order,
-      fieldCount: sectionSchema.fields.length,
-      valueCount: Object.keys(sectionValues).length
-    });
+      console.log('[WebFormConnection] Sending section switch with embedded info', {
+        sectionId: targetSection.id,
+        sectionNumber: targetSection.order,
+        fieldCount: sectionSchema.fields.length,
+        valueCount: Object.keys(sectionValues).length
+      });
 
-    // Send section switch with all info embedded (no round-trip needed)
-    this.send({
-      type: "manual_section_switch",
-      identifier: targetSection.id,
-      section_info: {
-        schema: sectionSchema,
-        current_values: sectionValues,
-        metadata: {
-          section_id: targetSection.id,
-          section_number: targetSection.order,
-          total_sections: updatedState.schema.sections.length,
-          section_label: targetSection.label,
-          previous_spoken_names: previousSpokenNames,
+      // Send section switch with all info embedded (no round-trip needed)
+      this.send({
+        type: "manual_section_switch",
+        identifier: targetSection.id,
+        section_info: {
+          schema: sectionSchema,
+          current_values: sectionValues,
+          metadata: {
+            section_id: targetSection.id,
+            section_number: targetSection.order,
+            total_sections: updatedState.schema.sections.length,
+            section_label: targetSection.label,
+            previous_spoken_names: previousSpokenNames,
+          },
+          initial_field_hint: initialFieldHint,
         },
-        initial_field_hint: initialFieldHint,
-      },
-    });
+      });
+    } catch (err) {
+      this.failSectionSwitch(err instanceof Error ? err.message : 'Section switch failed');
+      throw err;
+    }
   }
 
   /**

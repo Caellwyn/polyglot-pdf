@@ -1,5 +1,5 @@
 ---
-date: 2026-06-10
+date: 2026-06-09
 bead: polyglot-pdf-aun
 title: "WS-D: section-switch durability (frontend re-entrancy guard + error surfacing)"
 tags: [hotfix, testing]
