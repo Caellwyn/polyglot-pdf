@@ -16,9 +16,13 @@ For the verified architecture overview, read the re-orientation brief
 
 ## Environments
 
-Promotion is feature -> `dev` (staging) -> `main` (prod); deploys are
-**local/manual** (`deploy-demo.sh`, `deploy-production.sh` -> `deploy-all.sh`),
-not CI. See [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md).
+Promotion is worktree -> local test server (`scripts/dev-local.ps1`) -> `dev` ->
+demo remote (`deploy-demo.sh`). Deploys are **local/manual** (`deploy-demo.sh`,
+`deploy-production.sh` -> `deploy-all.sh`), NOT branch-triggered/CI, and there is
+**no active prod** -- the demo remote (`polyglot-demo-aa709`) is the live target.
+The agent may run `deploy-demo.sh` under the three-part gate (local-test-first +
+per-instance permission + post-deploy test-drive); see
+[`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md).
 
 Two Firebase projects: demo and production (frontend picks the backend by the
 Cloud Run host it's built against). Backend config is env-driven via

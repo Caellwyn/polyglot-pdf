@@ -16,7 +16,12 @@ This skill launches the polyglot-pdf app on the developer's machine so you can:
 - **Iterate on the frontend** with vite HMR and (later) drive it via the preview
   tools for rapid UI tweaks.
 
-It does NOT deploy. Deployment stays manual via `deploy-*.sh` (maintainer only).
+It does NOT deploy -- it is the LOCAL test stage. Deployment is a separate manual
+step via `deploy-*.sh`. As of 2026-06-10 the agent MAY run the demo deploy
+(`deploy-demo.sh`), but only after exercising the change here first, with explicit
+per-instance maintainer permission, and with a post-deploy test-drive -- see the
+demo-deploy gate in [`docs/doctrine/promotion-tiers.md`](../../../docs/doctrine/promotion-tiers.md).
+`deploy-production.sh` has no live prod target and stays maintainer-directed.
 
 ## What it runs
 

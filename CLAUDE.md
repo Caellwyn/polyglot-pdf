@@ -152,12 +152,22 @@ case (a real commitment or product/direction call). Decide-by-default wins the t
 Run this decision procedure for any choice you face:
 
 1. **Is it on the NEVER list?** -> Don't do it yourself, and don't ask permission
-   to do it yourself. You never `git push --force`, never deploy to any
-   environment, and never run `gh pr merge`. The maintainer gates all deployment
-   and clicks every merge; dev merges go through PR + review. (Deliberately
-   conservative while autonomy ramps up.) **Pinging the maintainer that a PR is
-   ready for them to merge is NOT "asking to merge"** -- it's the handoff that ends
-   closeout, and it stays required (see "Closeout" below).
+   to do it yourself. You never `git push --force` (the safe `--force-with-lease`
+   is likewise reserved for the maintainer) and never run `gh pr merge`. The
+   maintainer clicks every PR merge; dev merges go through PR + review.
+   (Deliberately conservative while autonomy ramps up.) **Pinging the maintainer
+   that a PR is ready for them to merge is NOT "asking to merge"** -- it's the
+   handoff that ends closeout, and it stays required (see "Closeout" below).
+   - **Demo deploy is NO LONGER on the NEVER list** (autonomy increase 2026-06-10):
+     you MAY run `deploy-demo.sh`, but it is a **per-instance ASK** (step 2 below),
+     never standing pre-authorization, and only after the test gates in
+     "Deployment / promotion" below. Running it without an explicit per-instance
+     yes is the violation.
+   - **Syncing the LOCAL ROOT repo to `dev` is now autonomous** -- pulling /
+     fast-forwarding the main checkout to `origin/dev`, and running the local test
+     stack (`scripts/dev-local.ps1` / the `/run-local` skill), need no ask. This is
+     NOT "merging into dev" (a PR -> dev merge is still the maintainer's
+     `gh pr merge`, above).
 2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
    or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
    - **A longer-term / cross-cutting commitment not explicit in the bead** -- a
@@ -273,8 +283,25 @@ Make the decisions easy to scan; do not bury them.
   Full cadence: [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
 
 ### Deployment / promotion
-- feature branch -> `dev` (staging) -> `main` (prod). Details:
+- **Flow:** worktree -> local test server (`scripts/dev-local.ps1`, via
+  `/run-local`) -> `dev` -> demo remote server (`deploy-demo.sh`). **There is NO
+  active prod** for this project. Details:
   [`docs/doctrine/promotion-tiers.md`](docs/doctrine/promotion-tiers.md).
+- **Demo deploy (`deploy-demo.sh`) is gated by ALL THREE (autonomy increase
+  2026-06-10):**
+  1. **Local test FIRST.** Start the local stack (`scripts/dev-local.ps1`) and
+     actually EXERCISE the specific change working there -- behavioral
+     verification, not just "the server boots."
+  2. **Explicit per-instance permission.** Ping the maintainer and get a "yes"
+     BEFORE each `deploy-demo.sh` run. This is NOT standing pre-authorization --
+     every deploy is its own ask, every time. (You may run the deploy; you may
+     never run it without that specific yes.)
+  3. **Post-deploy test-drive.** After deploying, test-drive the LIVE demo to
+     confirm the change actually works there -- the deploy isn't "done" until the
+     running demo is verified.
+- **Syncing the local root repo to `dev`** (pull / fast-forward the main checkout
+  to `origin/dev`) is autonomous -- no ask. Merging a PR INTO `dev` is not (that
+  is the maintainer's `gh pr merge`).
 
 ### Doc maintenance
 - Tier-1 and tier-2 docs are CURRENT STATE ONLY -- no `Previously:` chains, no
