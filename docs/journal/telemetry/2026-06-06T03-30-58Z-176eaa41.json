@@ -1,0 +1,61 @@
+{
+  "recorded_at": "2026-06-06T03:30:58Z",
+  "session_id": "176eaa41-e16a-481f-8e5a-08af5f5b4f41",
+  "beads": [
+    "polyglot-pdf-7a9.1"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-06-05T21:15:35.978Z",
+    "last_ts": "2026-06-06T03:30:47.530Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 49582,
+      "output_tokens": 245313,
+      "cache_read_input_tokens": 72137055,
+      "cache_creation_input_tokens": 1331287
+    },
+    "subagent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0
+    },
+    "total": {
+      "input_tokens": 49582,
+      "output_tokens": 245313,
+      "cache_read_input_tokens": 72137055,
+      "cache_creation_input_tokens": 1331287
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-haiku-4-5-20251001": {
+        "input_tokens": 18,
+        "output_tokens": 635,
+        "cache_read_input_tokens": 132909,
+        "cache_creation_input_tokens": 89960
+      },
+      "claude-opus-4-8": {
+        "input_tokens": 49564,
+        "output_tokens": 244678,
+        "cache_read_input_tokens": 72004146,
+        "cache_creation_input_tokens": 1241327
+      }
+    },
+    "subagent": {}
+  },
+  "subagent_models": [],
+  "assistant_turns": {
+    "orchestrator": 340,
+    "subagent": 0
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

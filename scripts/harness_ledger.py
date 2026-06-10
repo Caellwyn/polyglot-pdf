@@ -4,11 +4,12 @@ What this is
 ------------
 A **deterministic, zero-model-token** script (plan §Change #1, bd
 polyglot-pdf-hrn.1). It parses the Claude Code session transcript JSONL and
-appends one row to ``docs/journal/harness_ledger.jsonl`` so the A/B harness
-experiment has a real dataset instead of anecdote. Closeout calls it at the
-end (Step 8.5). It spends no model tokens -- the orchestrator only passes the
-handful of facts a script cannot read off the transcript (Copilot rounds,
-maintainer touchpoints, etc.) as flags.
+writes one JSON file to ``docs/journal/telemetry/`` so the A/B harness
+experiment has a real dataset instead of anecdote. Each closeout gets its own
+file (named by timestamp + session prefix), so parallel PRs never conflict on
+GitHub. Closeout calls it at the end (Step 8.5). It spends no model tokens --
+the orchestrator only passes the handful of facts a script cannot read off the
+transcript (Copilot rounds, maintainer touchpoints, etc.) as flags.
 
 The orchestrator-vs-subagent split is the whole point
 -----------------------------------------------------
@@ -76,12 +77,14 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-# Resolve the ledger path relative to THIS file, not the process cwd, so the
-# script writes to the worktree's own docs/journal/ regardless of where it is
-# invoked from (the worktree-safety lesson: a cwd-relative path silently
-# targets the wrong checkout). Path(__file__) is scripts/harness_ledger.py, so
+# Resolve paths relative to THIS file, not the process cwd, so the script
+# writes to the worktree's own docs/journal/ regardless of where it is invoked
+# from (the worktree-safety lesson: a cwd-relative path silently targets the
+# wrong checkout). Path(__file__) is scripts/harness_ledger.py, so
 # parent.parent is the repo (worktree) root.
 REPO_ROOT = Path(__file__).resolve().parent.parent
+TELEMETRY_DIR = REPO_ROOT / "docs" / "journal" / "telemetry"
+# Legacy path kept for backwards-compat reads; new writes go to TELEMETRY_DIR.
 LEDGER_PATH = REPO_ROOT / "docs" / "journal" / "harness_ledger.jsonl"
 EXPERIMENT_STATE_PATH = REPO_ROOT / ".beads" / "experiment_state.json"
 
@@ -290,11 +293,67 @@ def build_row(parsed: dict, args: argparse.Namespace, *, recorded_at: str) -> di
     }
 
 
-def append_row(row: dict, ledger_path: Path = LEDGER_PATH) -> None:
-    """Append one JSON row (newline-terminated) to the ledger, creating it."""
-    ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    with ledger_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+def _row_filename(row: dict) -> str:
+    """Return the filename for a per-row telemetry file.
+
+    Format: ``<recorded_at_hyphens>-<session_id_prefix8>.json``
+    Colons are replaced with hyphens because NTFS forbids colons in filenames.
+    """
+    ts = (row.get("recorded_at") or "0000-00-00T00-00-00Z").replace(":", "-")
+    sid = (row.get("session_id") or "unknown")[:8]
+    return "{}-{}.json".format(ts, sid)
+
+
+def append_row(row: dict, telemetry_dir: Path = TELEMETRY_DIR) -> Path:
+    """Write one JSON file to telemetry_dir and return its path.
+
+    Each row gets a uniquely-named file (<timestamp>-<session_prefix>.json) so
+    parallel PRs never touch the same path and GitHub merges them trivially --
+    no .gitattributes union driver needed for server-side merges.
+    """
+    telemetry_dir.mkdir(parents=True, exist_ok=True)
+    dest = telemetry_dir / _row_filename(row)
+    dest.write_text(json.dumps(row, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return dest
+
+
+def _row_key(row: dict) -> tuple:
+    """Return a dedup key for a telemetry row: (recorded_at, session_id).
+
+    Used by _iter_all_rows to avoid counting a row twice when it appears in
+    both the per-file dir (new) and the legacy JSONL (old), which can happen
+    during the migration window when both sources coexist.
+    """
+    return (row.get("recorded_at") or "", row.get("session_id") or "")
+
+
+def _iter_all_rows(
+    telemetry_dir: Path = TELEMETRY_DIR,
+    legacy_path: Path = LEDGER_PATH,
+):
+    """Yield all rows from the new per-file dir and the legacy JSONL.
+
+    Scans telemetry_dir/*.json (sorted for determinism) then reads the legacy
+    harness_ledger.jsonl, skipping any row whose (recorded_at, session_id) key
+    was already yielded from the per-file dir. This handles three cases:
+    1. Pure new-style (telemetry dir populated, JSONL empty/absent): dir only.
+    2. Pure legacy (dir absent/empty): JSONL only.
+    3. Migration window (dir AND JSONL have rows): dir for all migrated rows;
+       JSONL for any NEW rows appended by pre-migration branches still in flight.
+    """
+    seen: set = set()
+    if telemetry_dir.is_dir():
+        for p in sorted(telemetry_dir.glob("*.json")):
+            try:
+                row = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            seen.add(_row_key(row))
+            yield row
+    if legacy_path.is_file():
+        for row in _iter_records(legacy_path):
+            if _row_key(row) not in seen:
+                yield row
 
 
 # --------------------------------------------------------------------------- #
@@ -344,23 +403,23 @@ def phase_directive(state: dict) -> str:
 _ARM_TO_KEY = {"A": "baseline_A", "B": "arm_B", "C": "arm_C", "BC": "arm_BC"}
 
 
-def derive_experiment_state(ledger_path: Path = LEDGER_PATH) -> dict:
-    """Recompute the experiment-state counter by COUNTING ledger rows by arm.
+def derive_experiment_state(
+    ledger_path: Path = LEDGER_PATH,
+    telemetry_dir: Path = TELEMETRY_DIR,
+) -> dict:
+    """Recompute the experiment-state counter by COUNTING all rows by arm.
 
-    The ledger is the single source of truth; this is a pure projection, so the
-    counter can never lose an increment to a parallel-branch merge (the whole
-    point of bd polyglot-pdf-8o4). baseline_A = #rows with arm=="A", arm_B =
-    #"B", arm_C = #"C", arm_BC = #"BC". Rows with a null / unknown arm count
-    toward nothing (matches the old "no --arm doesn't bump" behavior). A missing
-    ledger -> all-zeros; malformed lines are skipped (``_iter_records``). ``phase``
-    is derived from the counts so it never drifts from the numbers.
+    Reads both the new per-file telemetry dir and the legacy JSONL (via
+    _iter_all_rows) so pre-migration rows still count. baseline_A = #rows with
+    arm=="A", arm_B = #"B", arm_C = #"C", arm_BC = #"BC". Rows with a null /
+    unknown arm count toward nothing. ``phase`` is derived from the counts so it
+    never drifts from the numbers.
     """
     state = {"baseline_A": 0, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
-    if ledger_path.is_file():
-        for row in _iter_records(ledger_path):
-            key = _ARM_TO_KEY.get(row.get("arm") or "")
-            if key:
-                state[key] += 1
+    for row in _iter_all_rows(telemetry_dir, ledger_path):
+        key = _ARM_TO_KEY.get(row.get("arm") or "")
+        if key:
+            state[key] += 1
     # Derive a coarse phase label from the counts (A -> B/C -> BC -> report).
     if state["arm_BC"] > 10:
         state["phase"] = "report"
@@ -374,16 +433,18 @@ def derive_experiment_state(ledger_path: Path = LEDGER_PATH) -> dict:
 
 
 def refresh_experiment_state(
-    ledger_path: Path = LEDGER_PATH, state_path: Path = EXPERIMENT_STATE_PATH
+    ledger_path: Path = LEDGER_PATH,
+    state_path: Path = EXPERIMENT_STATE_PATH,
+    telemetry_dir: Path = TELEMETRY_DIR,
 ) -> dict:
-    """Re-derive the counter from the ledger and write the local cache file.
+    """Re-derive the counter from all rows and write the local cache file.
 
     Returns the derived state. The cache file (``.beads/experiment_state.json``)
     is gitignored -- it is a convenience view for humans / ``cat``, NOT a
     source of truth and never committed, so it can never collide on a merge.
     Call this AFTER appending the row so the new row is counted.
     """
-    state = derive_experiment_state(ledger_path)
+    state = derive_experiment_state(ledger_path, telemetry_dir)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
@@ -474,11 +535,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.print_directive:
-        # Derive the directive from the LEDGER on demand (not the cache file), so
-        # it works even with the gitignored cache absent. Pass the module-level
-        # path explicitly so a test's monkeypatched LEDGER_PATH is honored -- the
-        # function's default arg is bound at def-time and would ignore it.
-        print(phase_directive(derive_experiment_state(LEDGER_PATH)))
+        # Derive from all rows (new dir + legacy JSONL) on demand (not the cache
+        # file) so it works even with the gitignored cache absent. Pass paths
+        # explicitly so a test's monkeypatched values are honored.
+        print(phase_directive(derive_experiment_state(LEDGER_PATH, TELEMETRY_DIR)))
         return 0
 
     transcript = args.transcript or discover_transcript()
@@ -507,20 +567,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # Pass module-level paths explicitly (not via the functions' def-time
-    # default args) so a monkeypatched LEDGER_PATH / EXPERIMENT_STATE_PATH is
-    # honored in tests and any runtime reassignment.
+    # default args) so a monkeypatched TELEMETRY_DIR / LEDGER_PATH is honored
+    # in tests and any runtime reassignment.
     try:
-        append_row(row, LEDGER_PATH)
+        dest = append_row(row, TELEMETRY_DIR)
     except OSError as e:
-        sys.stderr.write(f"harness_ledger.py: failed to append ledger row: {e}\n")
+        sys.stderr.write(f"harness_ledger.py: failed to write telemetry file: {e}\n")
         return 1
 
-    # Display the ledger path relative to the repo when it lives under it;
-    # fall back to the absolute path otherwise (e.g. a test's tmp dir).
+    # Emit the repo-relative path so closeout_finish.py can capture it and
+    # stage exactly that file (no glob, no git add -A).
     try:
-        ledger_display = LEDGER_PATH.relative_to(REPO_ROOT).as_posix()
+        dest_display = dest.relative_to(REPO_ROOT).as_posix()
     except ValueError:
-        ledger_display = str(LEDGER_PATH)
+        dest_display = dest.as_posix()
+    print(f"TELEMETRY_FILE: {dest_display}")
 
     if not args.no_counter:
         # The counter is arm-attributed accumulation, so a run without --arm is
@@ -529,20 +590,19 @@ def main(argv: list[str] | None = None) -> int:
         # hard-fail: an intentional no-arm run is rare but legitimate, and a
         # telemetry row must never block the merge. --no-counter is the explicit
         # "skip refreshing the cache" path and is silent. The COUNTS come from
-        # the ledger regardless of this flag -- refresh only rewrites the
-        # gitignored local cache (the row we just appended is now counted).
+        # all rows regardless of this flag -- refresh only rewrites the
+        # gitignored local cache.
         if not args.arm:
             sys.stderr.write(
                 "harness_ledger.py: WARNING -- no --arm given; the row records "
                 "arm=null and contributes to no arm's count. Pass "
                 "--arm A|B|C|BC (or --no-counter to skip the cache refresh).\n"
             )
-        state = refresh_experiment_state(LEDGER_PATH, EXPERIMENT_STATE_PATH)
-        print(f"Ledger row appended to {ledger_display}")
+        state = refresh_experiment_state(LEDGER_PATH, EXPERIMENT_STATE_PATH, TELEMETRY_DIR)
         print(f"Experiment state: {json.dumps(state)}")
         print(f"Directive: {phase_directive(state)}")
     else:
-        print(f"Ledger row appended to {ledger_display} (cache not refreshed).")
+        print(f"Telemetry file written (cache not refreshed).")
 
     return 0
 

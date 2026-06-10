@@ -14,11 +14,13 @@ judgment -- so this script collapses the mechanical subset into ONE process wher
 the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
 
 The telemetry row is written AFTER the closeout commit + push, so a dedicated
-``commit_push_telemetry`` step commits + pushes the tool-owned ledger
-(``docs/journal/harness_ledger.jsonl``) by EXPLICIT PATH -- otherwise the row
-sits uncommitted in the working tree and is lost when the worktree is archived
-(bd polyglot-pdf-3yf). The experiment counter (``.beads/experiment_state.json``)
-is NOT committed: it is a gitignored cache derived from the ledger (bd
+``commit_push_telemetry`` step commits + pushes the tool-owned row file by
+EXPLICIT PATH -- otherwise the row sits uncommitted in the working tree and is
+lost when the worktree is archived (bd polyglot-pdf-3yf). Each row is its own
+file under ``docs/journal/telemetry/`` (one per closeout), so parallel PRs never
+touch the same path and GitHub merges them without conflict (no custom merge
+driver needed). The experiment counter (``.beads/experiment_state.json``) is NOT
+committed: it is a gitignored cache derived from all row files (bd
 polyglot-pdf-8o4). This is the ONE place the script commits its own files; it
 still never ``git add``s the orchestrator's content. WARN-ONLY, like the
 telemetry write itself.
@@ -293,7 +295,13 @@ class Closeout:
         )
 
     def telemetry(self) -> None:
-        """Append the ledger row. WARN-ONLY: never raises / changes exit code."""
+        """Write the telemetry row file. WARN-ONLY: never raises / changes exit code.
+
+        harness_ledger.py writes one JSON file per row under
+        docs/journal/telemetry/ and prints the relative path on a
+        ``TELEMETRY_FILE: <path>`` line so commit_push_telemetry can stage it
+        by exact path (no glob, no git add -A).
+        """
         ledger = self.WT / "scripts" / "harness_ledger.py"
         cmd = [str(self.PY), str(ledger), "--recorded-at", _utcnow()]
         for b in self.args.bead:
@@ -312,57 +320,78 @@ class Closeout:
             if val is not None:
                 cmd += [flag, str(val)]
         proc = _run(cmd, check=False)
+        # Parse TELEMETRY_FILE: from stdout before checking exit code. The
+        # harness_ledger.py prints the path BEFORE the cache-refresh step, so a
+        # cache-write failure (non-zero exit) can still leave a valid row file
+        # that we should commit. Preserving the path here is what makes that case
+        # recoverable rather than silently orphaning the row.
+        written = None
+        for line in (proc.stdout or "").splitlines():
+            if line.startswith("TELEMETRY_FILE: "):
+                written = line[len("TELEMETRY_FILE: "):].strip()
+                break
         if proc.returncode == 0:
             self.out["telemetry"] = "OK"
+            self._telemetry_file = written
         else:
             self.out["telemetry"] = "GAP: ledger exit {} ({})".format(
                 proc.returncode,
                 (proc.stderr or proc.stdout or "no output").strip().splitlines()[-1]
                 if (proc.stderr or proc.stdout).strip() else "no output",
             )
+            # Still commit the file if harness_ledger.py did write it (non-zero may
+            # be a cache-refresh failure, not a file-write failure).
+            self._telemetry_file = written
 
-    # The one tool-owned file committed by commit_push_telemetry so the row is
-    # never orphaned in the working tree (bd polyglot-pdf-3yf). The experiment
-    # counter (.beads/experiment_state.json) is NO LONGER committed -- it is a
-    # gitignored cache derived from the ledger (bd polyglot-pdf-8o4), so it can't
-    # collide on a parallel merge and there's nothing to commit for it.
-    _TELEMETRY_FILES = ("docs/journal/harness_ledger.jsonl",)
+    # _telemetry_file is set by telemetry() to the repo-relative path of the
+    # just-written row file (e.g. "docs/journal/telemetry/2026-06-10T...json").
+    # commit_push_telemetry reads it to stage exactly that one file.
+    _telemetry_file: "str | None" = None
 
     def commit_push_telemetry(self) -> None:
-        """Commit + push the ledger row this run just wrote (bd polyglot-pdf-3yf).
+        """Commit + push the telemetry row file this run just wrote.
 
-        The ``telemetry`` step appends to the ledger AFTER commit + push, so
-        without this step the row sits uncommitted in the working tree and is
-        lost when the worktree is archived. Staging is by EXPLICIT PATH
-        (never ``git add -A``), so the script still never stages the
-        orchestrator's content -- only its OWN bookkeeping. WARN-ONLY, mirroring
-        ``telemetry``: a failure here annotates ``out["telemetry"]`` but never
-        changes the exit code (the PR is already open; a telemetry-commit hiccup
-        must not fail the closeout)."""
-        # Nothing to do if telemetry didn't actually write (GAP) -- guard on the
-        # real dirty state of exactly these two paths.
+        The ``telemetry`` step writes the file AFTER the closeout commit + push,
+        so without this step the file sits uncommitted and is lost when the
+        worktree is archived. Staging is by EXACT PATH captured from
+        harness_ledger.py stdout -- never ``git add -A``. WARN-ONLY.
+        """
+        telemetry_file = self._telemetry_file
+        if not telemetry_file:
+            # Nothing was written (GAP / --dry-run) -- nothing to commit.
+            return
         status = _run(["git", "-C", self.wt, "status", "--porcelain", "--",
-                       *self._TELEMETRY_FILES], check=False)
+                       telemetry_file], check=False)
         if status.returncode != 0:
-            # The guard itself failed (broken git / bad path). Don't silently
-            # treat that as "clean" -- that would re-orphan the row, the exact bug
-            # this step fixes. Surface it (still warn-only). (fresh-eyes PR #70 F1)
+            # The guard itself failed. Surface it rather than silently skipping
+            # (that would re-orphan the row). (fresh-eyes PR #70 F1)
             self.out["telemetry"] += " | STATUS-CHECK-FAILED: {}".format(
                 (status.stderr or status.stdout or "").strip().splitlines()[-1]
                 if (status.stderr or status.stdout).strip() else "no output")
             return
         if not status.stdout.strip():
             return  # clean (e.g. --dry-run, or a ledger GAP) -- nothing to commit
+        # Stage the file before committing -- git commit -- <path> does not add
+        # untracked files, and each new telemetry row is untracked on first write.
+        add = _run(["git", "-C", self.wt, "add", "--", telemetry_file], check=False)
+        if add.returncode != 0:
+            self.out["telemetry"] += " | ADD-FAILED: {}".format(
+                (add.stderr or add.stdout or "").strip().splitlines()[-1]
+                if (add.stderr or add.stdout).strip() else "no output")
+            return
         pr = self.out["PR"]
         msg = ("chore(harness): PR #{} telemetry row (recorded by closeout_finish.py)"
                .format(pr) if pr != "-"
                else "chore(harness): telemetry row (recorded by closeout_finish.py)")
         commit = _run(["git", "-C", self.wt, "commit", "-m", msg, "--",
-                       *self._TELEMETRY_FILES], check=False)
+                       telemetry_file], check=False)
         if commit.returncode != 0:
             self.out["telemetry"] += " | COMMIT-FAILED: {}".format(
                 (commit.stderr or commit.stdout or "").strip().splitlines()[-1]
                 if (commit.stderr or commit.stdout).strip() else "no output")
+            # Unstage the row so it does not bleed into the next closeout commit.
+            _run(["git", "-C", self.wt, "reset", "HEAD", "--", telemetry_file],
+                 check=False)
             return
         push = _run(["git", "-C", self.wt, "push", "origin", self.args.branch],
                     check=False)
@@ -429,9 +458,9 @@ class Closeout:
                                  self.args.arm or "-"),
             self.telemetry))
         plan.append((
-            'git -C "{}" commit -m "chore(harness): PR #<PR> telemetry row" -- {} '
-            "&& git push (warn-only; bd polyglot-pdf-3yf)".format(
-                self.wt, " ".join(self._TELEMETRY_FILES)),
+            'git -C "{}" commit -m "chore(harness): PR #<PR> telemetry row" -- '
+            "docs/journal/telemetry/<row>.json && git push (warn-only; bd 3yf)".format(
+                self.wt),
             self.commit_push_telemetry))
         if self.args.close_beads:
             plan.append((
