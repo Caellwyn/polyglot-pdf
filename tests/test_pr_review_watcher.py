@@ -885,7 +885,7 @@ def test_pr21_real_shape_with_since_is_clean(capsys, monkeypatch):
 # driven by CODEX_PROFILE. Codex differs from Copilot in four ways exercised
 # here: (1) bot login "chatgpt-codex-connector[bot]", (2) NO copilot_work_*
 # timeline events (uses_timeline=False), (3) its clean verdict is an issue
-# comment "Codex Review: Didn't find any major issues. 👍", (4) error sentinel.
+# comment "Codex Review: Didn't find any major issues. <thumbs-up>", (4) error sentinel.
 # ===========================================================================
 
 CODEX = cw.CODEX_PROFILE
@@ -956,8 +956,22 @@ def test_codex_clean_sentinel_via_is_approval_comment():
     assert cw._is_approval_comment(sentinel, PROFILE) is False
 
 
+def test_codex_clean_sentinel_matches_curly_apostrophe():
+    # GitHub's markdown renderer emits a CURLY apostrophe (U+2019), so the Codex
+    # profile pins both the straight- and curly-apostrophe sentinel variants
+    # (pr_review_watcher.py:269-270). This is the ONLY consumer of that curly
+    # literal; without this test, an ASCII-normalization sweep could silently
+    # strip it and break the prose-fallback CLEAN path. The curly char is written
+    # as a \u2019 escape so THIS file stays ASCII (scar #6) while still exercising
+    # the non-ASCII match.
+    curly = "Codex Review: Didn\u2019t find any major issues."
+    assert "\u2019" in curly  # guard: the matched char is curly, not straight
+    assert cw._is_approval_comment(curly, CODEX) is True
+    assert cw._is_approval_comment(curly, PROFILE) is False
+
+
 def test_has_clean_reaction_detects_thumbs_up():
-    # The 👍 rollup ("+1" > 0) is the canonical Codex approval. Copilot has no
+    # The thumbs-up rollup ("+1" > 0) is the canonical Codex approval. Copilot has no
     # clean_reaction, so the SAME payload must read False for it.
     has = {"reactions": {"+1": 1, "-1": 0}}
     none_ = {"reactions": {"+1": 0}}
@@ -968,7 +982,7 @@ def test_has_clean_reaction_detects_thumbs_up():
 
 
 def test_codex_thumbs_up_reaction_is_clean(capsys, monkeypatch):
-    # The documented canonical signal: Codex 👍 reaction on its own comment ->
+    # The documented canonical signal: Codex thumbs-up reaction on its own comment ->
     # CLEAN, even with a body the prose heuristics wouldn't match on their own.
     issue = [{
         "user": {"login": _CODEX_LOGIN},
@@ -984,7 +998,7 @@ def test_codex_thumbs_up_reaction_is_clean(capsys, monkeypatch):
 
 
 def test_codex_thumbs_up_on_empty_comment_is_clean(capsys, monkeypatch):
-    # Codex can 👍 with an empty/minimal body. The reaction alone is the verdict.
+    # Codex can thumbs-up with an empty/minimal body. The reaction alone is the verdict.
     issue = [{
         "user": {"login": _CODEX_LOGIN},
         "created_at": "2026-06-01T12:00:00Z",
@@ -998,8 +1012,8 @@ def test_codex_thumbs_up_on_empty_comment_is_clean(capsys, monkeypatch):
 
 
 def test_codex_inline_finding_beats_thumbs_up(capsys, monkeypatch):
-    # ORDERING GUARANTEE: a 👍 reaction must NOT override a real inline finding.
-    # A comment with a 👍 AND a same-round inline ask is COMMENTS, not CLEAN --
+    # ORDERING GUARANTEE: a thumbs-up reaction must NOT override a real inline finding.
+    # A comment with a thumbs-up AND a same-round inline ask is COMMENTS, not CLEAN --
     # the inline-findings check ranks above the reaction check.
     issue = [{
         "user": {"login": _CODEX_LOGIN},

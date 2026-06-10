@@ -13,7 +13,7 @@ async def _wait_for_audio(session, timeout: float = 30.0) -> bytes | None:
     """Iterate over live responses until we observe inline audio bytes.
 
     Native audio-to-audio models reply with AUDIO (inline_data on the model
-    turn), NOT a TEXT modality — requesting TEXT from them is rejected with a
+    turn), NOT a TEXT modality -- requesting TEXT from them is rejected with a
     1007 close. So the smoke test asserts we get real audio bytes back.
     """
 

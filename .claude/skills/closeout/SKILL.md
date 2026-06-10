@@ -27,9 +27,13 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 > and reuse them in a later call. **Prepend both lines to every command** that
 > needs them, in the SAME Bash call. So a hand-run script step is
 > `REPO=...; PY=...; "$PY" "$REPO/scripts/X.py"` and the test step is
-> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`
-> (NOT `pytest tests/`). The `!`...`` lines that auto-run at skill-load (Step 1,
-> Step 2) already inline the resolution this way.
+> `REPO=...; PY=...; PYTHONPATH="$REPO" "$PY" -m pytest backend/tests/ -q`.
+> Target `backend/tests/` EXPLICITLY: since the root `pytest.ini` landed
+> (bd polyglot-pdf-uov.1) a bare `pytest` runs BOTH suites (`backend/tests/`
+> plus the top-level `tests/` harness suite); the closeout step names
+> `backend/tests/` for speed, not to exclude the harness suite. The `!`...``
+> lines that auto-run at skill-load (Step 1, Step 2) already inline the
+> resolution this way.
 
 ## Hard rules (read before doing anything)
 

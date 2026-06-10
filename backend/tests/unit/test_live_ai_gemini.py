@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -813,7 +813,7 @@ def test_vad_disabled_sends_only_disabled_flag():
     """bd polyglot-pdf-p1t: when VAD is disabled, send ONLY {disabled: True}.
 
     The Live API rejects (1007) a config that sets disabled=True alongside any
-    sensitivity/padding field — so even though the VAD_* knobs are populated
+    sensitivity/padding field -- so even though the VAD_* knobs are populated
     (the default config), none of them may leak into the payload.
     """
     from backend.adapters.live_ai_gemini import LiveAIGemini

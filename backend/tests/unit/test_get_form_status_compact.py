@@ -4,10 +4,11 @@ Unit tests for get_form_status compact response format.
 Tests that get_form_status returns ultra-minimal token format:
 field_id:value:status|field_id:value:status
 
-Status indicators:
-- ✓ = confirmed
-- ✗ = unconfirmed (filled but not confirmed)
-- − = empty
+The status token is one of the literal wire values:
+- "confirmed"   -- has a value and is confirmed
+- "unconfirmed" -- has a value but is not yet confirmed
+Empty fields (no value) are OMITTED from the output entirely, so there is no
+empty-status token.
 """
 import pytest
 from unittest.mock import AsyncMock

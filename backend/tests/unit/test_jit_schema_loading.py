@@ -216,7 +216,7 @@ class TestCallbackHandlerJITIntegration:
         the hint/schema are sent only after the user confirms the field). This test
         guards the current behavior: the JIT getter fires during confirm_field when
         there is a next field (the fixture's coordinator returns a truthy
-        next_field_hint — see test_confirm_field_last_field_skips_jit for the
+        next_field_hint -- see test_confirm_field_last_field_skips_jit for the
         no-next-field branch).
         """
         handler, mock_jit_getter = callback_handler_with_jit
