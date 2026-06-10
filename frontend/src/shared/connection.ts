@@ -44,6 +44,27 @@ import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
 
+/**
+ * Pure gate function: should the mic audio chunk be forwarded to the backend?
+ *
+ * Rules:
+ *   - 'connected': always send.
+ *   - 'switching_section' + socket OPEN: send (same-socket section-switch path keeps
+ *     the socket alive; the backend sets drop_audio=True on the manual switch path so
+ *     audio sent here cannot leak into the new Gemini session -- see
+ *     backend/routes/websocket_routes.py manual_section_switch handler, line ~511).
+ *     NOTE: the AI-initiated switch path does NOT set drop_audio=True server-side
+ *     (the old Gemini session is already shutting down via begin_graceful_shutdown),
+ *     so audio that arrives during that window is buffered but the old session is
+ *     already winding down before any new session starts.
+ *   - All other statuses, or socket not open: drop (and the caller warns).
+ */
+export function shouldSendMicChunk(status: ConnectionStatus, socketOpen: boolean): boolean {
+	if (status === 'connected') return true;
+	if (status === 'switching_section' && socketOpen) return true;
+	return false;
+}
+
 export interface ConnectionManager {
 	connect: () => Promise<void>
 	pause: () => void  // Pause recording but keep connection warm
@@ -210,6 +231,9 @@ export function createConnectionManager(
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
+	// Rate-limit audio-drop warns to at most 1 per second so a stranded status
+	// does not flood the console (one line per chunk would be ~100/sec).
+	let _audioDropLastWarnMs = 0
 	// PTT is the DEFAULT (HALLUCINATION_REDUCTION, Oct 30 2025), and this must match
 	// the overlays' default so a fresh session starts gated. The overlays now lazy-init
 	// their pushToTalkMode FROM this value via getPushToTalkMode() (so a remount onto a
@@ -661,9 +685,23 @@ export function createConnectionManager(
 			console.log('[VFF Connection] Requesting microphone access...')
 
 			await audioManager.startRecording((audioData) => {
-				// Send audio to backend
-				if (connection && connection.getStatus() === 'connected') {
+				// Send audio to backend.
+				// 'switching_section' with socket open is also allowed: the same-socket
+				// section-switch path keeps the WebSocket alive, and the backend drops
+				// audio server-side via drop_audio=True (manual path) or the old Gemini
+				// session is already shutting down (AI-initiated path).
+				if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
 					connection.sendAudio(audioData)
+				} else {
+					// Chunk dropped -- emit a rate-limited warn so a stranded status is
+					// visible in devtools without flooding the console (~100 chunks/sec).
+					const now = Date.now()
+					if (now - _audioDropLastWarnMs >= 1000) {
+						_audioDropLastWarnMs = now
+						const st = connection ? connection.getStatus() : 'no-connection'
+						const rs = connection ? connection.isSocketOpen() : false
+						console.warn('[VFF Connection] mic chunk DROPPED -- status=' + st + ' socketOpen=' + rs)
+					}
 				}
 			})
 		},
