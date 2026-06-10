@@ -77,6 +77,19 @@ export class WebFormConnection {
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
+  // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
+  // (bd polyglot-pdf-aun / WS-D). isSectionSwitching is the auto-reconnect
+  // suppressor and is cleared the instant the new socket opens; it does NOT
+  // protect against a SECOND switch starting before the first finished, nor does
+  // it survive long enough to gate the post-open handshake window. switchInFlight
+  // is set for the WHOLE switch (until the new section is confirmed, errors, or
+  // the watchdog fires) and released in finally, so a concurrent
+  // startSection/switchToSection is rejected instead of racing two reconnects.
+  private switchInFlight = false;
+  // Watchdog: if a switch neither confirms (section_switched) nor errors within
+  // this window, surface `error` instead of a stuck `switching_section` forever.
+  private sectionSwitchWatchdog: number | null = null;
+  private static readonly SECTION_SWITCH_TIMEOUT_MS = 15000;
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
 
@@ -900,6 +913,10 @@ export class WebFormConnection {
     const sectionNumber = message.section_number;
     console.log(`[WebFormConnection] Section switched confirmed: ${sectionNumber}`);
 
+    // The switch is confirmed: release the re-entrancy guard + disarm the
+    // watchdog (bd polyglot-pdf-aun) BEFORE settling the status to connected.
+    this.completeSectionSwitch();
+
     // Update status
     this.setStatus('connected');
 
@@ -1189,8 +1206,18 @@ export class WebFormConnection {
     });
     // Build error message from available fields
     const errorText = message.message || message.reason || message.code || "Server error";
-    const error = new Error(errorText);
 
+    // If a section switch is in flight, this error (e.g. the backend's
+    // section_switch_failed rejection of a concurrent switch, post-0c1) ends it:
+    // release the guards + surface `error` so the UI doesn't hang on a stuck
+    // `switching_section` (bd polyglot-pdf-aun). failSectionSwitch fires onError
+    // itself, so don't double-fire below.
+    if (this.switchInFlight) {
+      this.failSectionSwitch(errorText);
+      return;
+    }
+
+    const error = new Error(errorText);
     if (this.callbacks.onError) {
       this.callbacks.onError(error);
     }
@@ -1233,9 +1260,22 @@ export class WebFormConnection {
       return;
     }
 
-    // Don't auto-reconnect during intentional section switches
+    // Don't auto-reconnect during the intentional disconnect a reconnect-based
+    // switch performs itself (isSectionSwitching is set across that window and
+    // cleared the moment the new socket opens). The switch logic owns the
+    // lifecycle here; the watchdog backstops a switch that never completes.
     if (this.isSectionSwitching) {
-      return; // Keep current status, will be updated after reconnect
+      return; // Keep current status, startSection drives the reconnect
+    }
+
+    // A close that arrives while a switch is still IN FLIGHT but the intentional-
+    // disconnect window is already over (isSectionSwitching cleared) is an
+    // UNEXPECTED drop mid-switch -- surface `error` fast instead of waiting for
+    // the watchdog or leaving a stuck `switching_section` (bd polyglot-pdf-aun).
+    if (this.switchInFlight) {
+      console.error('[WebFormConnection] Connection dropped mid-section-switch -- surfacing error');
+      this.failSectionSwitch('Connection lost during section switch');
+      return;
     }
 
     // Don't auto-reconnect if connection was closed due to idle timeout
@@ -1585,6 +1625,51 @@ export class WebFormConnection {
     return this.status;
   }
 
+  // --- Section-switch durability (bd polyglot-pdf-aun / WS-D) ----------------
+
+  /** Arm the watchdog so a switch that never confirms/errors can't leave the UI
+   *  stuck on `switching_section`. */
+  private armSectionSwitchWatchdog(): void {
+    this.clearSectionSwitchWatchdog();
+    this.sectionSwitchWatchdog = window.setTimeout(() => {
+      this.sectionSwitchWatchdog = null;
+      // Only fire if a switch is genuinely still in flight (a late
+      // section_switched would have disarmed us).
+      if (this.switchInFlight) {
+        console.error('[WebFormConnection] Section switch timed out -- surfacing error');
+        this.failSectionSwitch('Section switch timed out');
+      }
+    }, WebFormConnection.SECTION_SWITCH_TIMEOUT_MS);
+  }
+
+  private clearSectionSwitchWatchdog(): void {
+    if (this.sectionSwitchWatchdog !== null) {
+      clearTimeout(this.sectionSwitchWatchdog);
+      this.sectionSwitchWatchdog = null;
+    }
+  }
+
+  /** A switch finished SUCCESSFULLY (section_switched arrived): release the
+   *  guards so the next switch can proceed and the status can settle. */
+  private completeSectionSwitch(): void {
+    this.switchInFlight = false;
+    this.isSectionSwitching = false;
+    this.clearSectionSwitchWatchdog();
+  }
+
+  /** A switch FAILED (reconnect close, server error, or watchdog). Release the
+   *  guards and surface `error` instead of a stuck `switching_section` (bd aun).
+   *  The caller's onError is invoked so the UI can prompt a manual reconnect. */
+  private failSectionSwitch(reason: string): void {
+    this.switchInFlight = false;
+    this.isSectionSwitching = false;
+    this.clearSectionSwitchWatchdog();
+    this.setStatus('error');
+    if (this.callbacks.onError) {
+      this.callbacks.onError(new Error(reason));
+    }
+  }
+
   /**
    * Get current state
    */
@@ -1636,10 +1721,20 @@ export class WebFormConnection {
     this.lastUnconfirmableFieldId = null;
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
+
+    // Re-entrancy guard (bd polyglot-pdf-aun): reject a second switch while one is
+    // already in flight, so two reconnects can't race. Distinct from
+    // isSectionSwitching, which is cleared the moment the new socket opens.
+    if (this.switchInFlight) {
+      console.warn('[WebFormConnection] startSection ignored -- a section switch is already in progress');
+      return;
+    }
+    this.switchInFlight = true;
     try {
-      // Set switching status
+      // Set switching status + arm the watchdog so a hung switch surfaces error.
       this.isSectionSwitching = true;
       this.setStatus("switching_section");
+      this.armSectionSwitchWatchdog();
 
       // Disconnect current session if connected
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -1681,7 +1776,10 @@ export class WebFormConnection {
 
       // Connect to backend with section-specific handshake
       await this.connect(wsUrl);
-      this.isSectionSwitching = false; // Reset flag after successful reconnect
+      // Reset the auto-reconnect suppressor now the new socket is open. The
+      // switch is not fully "complete" until the handshake is sent below; the
+      // watchdog stays armed until then.
+      this.isSectionSwitching = false;
 
       // Compute initial field hint (first unfilled field in this section)
       const initialFieldHint = this.computeNextFieldHintString();
@@ -1702,9 +1800,16 @@ export class WebFormConnection {
         initial_field_hint: initialFieldHint,
       });
 
+      // The reconnect-based switch has no `section_switched` reply; it is done
+      // once the handshake is on the wire. Release the guards + disarm watchdog.
+      this.completeSectionSwitch();
+
     } catch (error) {
-      // Reset flag on error
-      this.isSectionSwitching = false;
+      // A failed reconnect/handshake must surface `error` (bd polyglot-pdf-aun),
+      // not leave the UI stuck on `switching_section`. failSectionSwitch clears
+      // the guards, disarms the watchdog, sets `error`, and fires onError.
+      this.failSectionSwitch(
+        error instanceof Error ? error.message : 'Section switch failed');
       throw error;
     }
   }
@@ -1728,6 +1833,15 @@ export class WebFormConnection {
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
 
+    // Re-entrancy guard (bd polyglot-pdf-aun): a manual switch arriving while an
+    // AI-initiated switch is mid-flight (or vice versa) must not start a second
+    // overlapping switch. The backend (post-0c1) also rejects the second switch
+    // with success:false; this guard stops the FE from even sending it.
+    if (this.switchInFlight) {
+      console.warn('[WebFormConnection] switchToSection ignored -- a section switch is already in progress');
+      return;
+    }
+
     const currentState = SchemaFormStateManager.load();
     if (!currentState || !currentState.schema.sections) {
       throw new Error('Sections not initialized');
@@ -1749,8 +1863,14 @@ export class WebFormConnection {
     console.log('[WebFormConnection] Waiting for buffer to drain before section switch');
     await this.waitForBufferDrain(1000);
 
-    // Update status
+    // Mark the switch in flight + arm the watchdog (bd polyglot-pdf-aun). This
+    // path keeps the SAME socket open and waits for the backend's
+    // `section_switched` (-> handleSectionSwitched -> completeSectionSwitch) or an
+    // `error` (-> handleServerError -> failSectionSwitch). If neither arrives, the
+    // watchdog surfaces `error` instead of a stuck `switching_section`.
+    this.switchInFlight = true;
     this.setStatus('switching_section');
+    this.armSectionSwitchWatchdog();
 
     // Switch to target section in local state
     const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
