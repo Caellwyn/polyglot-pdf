@@ -300,15 +300,27 @@ class TestExperimentState:
         assert state["baseline_A"] == 1
         assert state["arm_B"] == 1
 
-    def test_derive_skips_legacy_when_telemetry_dir_populated(self, tmp_path):
-        # No double-counting: once per-file rows exist, legacy JSONL is skipped.
+    def test_derive_deduplicates_migrated_rows(self, tmp_path):
+        # No double-counting: rows present in BOTH per-file dir and legacy JSONL
+        # (migrated rows) are only counted once via dedup on (recorded_at, session_id).
         led = tmp_path / "harness_ledger.jsonl"
         tdir = tmp_path / "telemetry"
-        _write_legacy_ledger(led, ["A", "B"])  # legacy: 1 A + 1 B
-        _write_telemetry(tdir, ["A"])            # new: 1 A only
+        # Write an "A" row to legacy with a known key.
+        ts = "2026-06-01T00:00:00Z"
+        sid = "aabbccdd"
+        row = {"arm": "A", "recorded_at": ts, "session_id": sid}
+        led.parent.mkdir(parents=True, exist_ok=True)
+        led.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        # Also write the same row to the per-file dir (as migration would have done).
+        tdir.mkdir()
+        fn = "{}-{}.json".format(ts.replace(":", "-"), sid[:8])
+        (tdir / fn).write_text(json.dumps(row) + "\n", encoding="utf-8")
+        # Write a NEW row in legacy only (pre-migration branch still in flight).
+        new_row = {"arm": "B", "recorded_at": "2026-06-02T00:00:00Z", "session_id": "new00001"}
+        led.write_text(json.dumps(row) + "\n" + json.dumps(new_row) + "\n", encoding="utf-8")
         state = ledger.derive_experiment_state(led, tdir)
-        assert state["baseline_A"] == 1  # only the new-style row
-        assert state["arm_B"] == 0       # legacy B not counted
+        assert state["baseline_A"] == 1  # migrated row counted once (not twice)
+        assert state["arm_B"] == 1       # new legacy-only row counted
 
     def test_derive_phase_thresholds(self, tmp_path):
         tdir = tmp_path / "telemetry"

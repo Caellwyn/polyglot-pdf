@@ -317,28 +317,43 @@ def append_row(row: dict, telemetry_dir: Path = TELEMETRY_DIR) -> Path:
     return dest
 
 
+def _row_key(row: dict) -> tuple:
+    """Return a dedup key for a telemetry row: (recorded_at, session_id).
+
+    Used by _iter_all_rows to avoid counting a row twice when it appears in
+    both the per-file dir (new) and the legacy JSONL (old), which can happen
+    during the migration window when both sources coexist.
+    """
+    return (row.get("recorded_at") or "", row.get("session_id") or "")
+
+
 def _iter_all_rows(
     telemetry_dir: Path = TELEMETRY_DIR,
     legacy_path: Path = LEDGER_PATH,
 ):
     """Yield all rows from the new per-file dir and the legacy JSONL.
 
-    Scans telemetry_dir/*.json (sorted for determinism). The legacy JSONL is
-    read ONLY when the telemetry dir is absent or empty -- once migration has
-    written per-file rows, reading the JSONL too would double-count the rows
-    that were migrated from it.
+    Scans telemetry_dir/*.json (sorted for determinism) then reads the legacy
+    harness_ledger.jsonl, skipping any row whose (recorded_at, session_id) key
+    was already yielded from the per-file dir. This handles three cases:
+    1. Pure new-style (telemetry dir populated, JSONL empty/absent): dir only.
+    2. Pure legacy (dir absent/empty): JSONL only.
+    3. Migration window (dir AND JSONL have rows): dir for all migrated rows;
+       JSONL for any NEW rows appended by pre-migration branches still in flight.
     """
+    seen: set = set()
     if telemetry_dir.is_dir():
-        files = sorted(telemetry_dir.glob("*.json"))
-        for p in files:
+        for p in sorted(telemetry_dir.glob("*.json")):
             try:
-                yield json.loads(p.read_text(encoding="utf-8", errors="replace"))
+                row = json.loads(p.read_text(encoding="utf-8", errors="replace"))
             except (json.JSONDecodeError, OSError):
                 continue
-        if files:
-            return  # telemetry dir is populated; skip legacy to avoid double-counting
+            seen.add(_row_key(row))
+            yield row
     if legacy_path.is_file():
-        yield from _iter_records(legacy_path)
+        for row in _iter_records(legacy_path):
+            if _row_key(row) not in seen:
+                yield row
 
 
 # --------------------------------------------------------------------------- #
