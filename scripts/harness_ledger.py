@@ -323,15 +323,20 @@ def _iter_all_rows(
 ):
     """Yield all rows from the new per-file dir and the legacy JSONL.
 
-    Scans telemetry_dir/*.json (sorted for determinism) then falls back to the
-    old harness_ledger.jsonl so pre-migration rows still count.
+    Scans telemetry_dir/*.json (sorted for determinism). The legacy JSONL is
+    read ONLY when the telemetry dir is absent or empty -- once migration has
+    written per-file rows, reading the JSONL too would double-count the rows
+    that were migrated from it.
     """
     if telemetry_dir.is_dir():
-        for p in sorted(telemetry_dir.glob("*.json")):
+        files = sorted(telemetry_dir.glob("*.json"))
+        for p in files:
             try:
                 yield json.loads(p.read_text(encoding="utf-8", errors="replace"))
             except (json.JSONDecodeError, OSError):
                 continue
+        if files:
+            return  # telemetry dir is populated; skip legacy to avoid double-counting
     if legacy_path.is_file():
         yield from _iter_records(legacy_path)
 

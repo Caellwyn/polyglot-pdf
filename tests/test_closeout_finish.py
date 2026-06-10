@@ -401,6 +401,37 @@ class TestTelemetryCommitPush:
         # Did NOT attempt a telemetry commit after the failed guard.
         assert not any("commit" in j and "telemetry" in j for j in rec.joined())
 
+    def test_unstages_on_commit_failure(self):
+        # If git add succeeds but git commit fails, the staged file is reset so it
+        # doesn't bleed into the next closeout commit.
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
+            "status --porcelain": self._DIRTY_STATUS,
+            "commit -m": (1, "", "pre-commit hook rejected"),
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        assert job.run() == cf.EXIT_OK
+        assert "COMMIT-FAILED" in job.out["telemetry"]
+        # A `git reset HEAD -- <telemetry_file>` must follow the failed commit.
+        resets = [j for j in rec.joined() if "reset" in j and self._TELEMETRY_ROW_PATH in j]
+        assert len(resets) == 1, rec.joined()
+
+    def test_commits_even_when_ledger_exits_nonzero_but_wrote_file(self):
+        # If harness_ledger.py writes the file but fails the cache refresh
+        # (non-zero exit), the TELEMETRY_FILE path is still preserved and committed.
+        nonzero_stdout = self._LEDGER_STDOUT + "Experiment state: ..."
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "harness_ledger": (1, nonzero_stdout, "cache write failed"),
+            "status --porcelain": self._DIRTY_STATUS,
+        })
+        job = _job(rec, skip_review=True, review_worthy=False)
+        job.run()
+        commits = [j for j in rec.joined()
+                   if "commit" in j and self._TELEMETRY_ROW_PATH in j]
+        assert len(commits) == 1, rec.joined()
+
     def test_close_only_never_commits_telemetry(self):
         # --close-only returns before the telemetry steps -> no status/commit/push.
         rec = RunRecorder()

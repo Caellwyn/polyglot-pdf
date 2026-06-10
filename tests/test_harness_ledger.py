@@ -292,15 +292,23 @@ class TestExperimentState:
         )
         assert ledger.derive_experiment_state(tmp_path / "nope.jsonl", tdir)["baseline_A"] == 1
 
-    def test_derive_reads_legacy_jsonl_too(self, tmp_path):
-        # Backwards compat: rows in the old harness_ledger.jsonl must still count.
+    def test_derive_reads_legacy_jsonl_when_telemetry_dir_empty(self, tmp_path):
+        # Backwards compat: when telemetry dir is absent/empty, the old JSONL counts.
+        led = tmp_path / "harness_ledger.jsonl"
+        _write_legacy_ledger(led, ["A", "B"])
+        state = ledger.derive_experiment_state(led, tmp_path / "nope_dir")
+        assert state["baseline_A"] == 1
+        assert state["arm_B"] == 1
+
+    def test_derive_skips_legacy_when_telemetry_dir_populated(self, tmp_path):
+        # No double-counting: once per-file rows exist, legacy JSONL is skipped.
         led = tmp_path / "harness_ledger.jsonl"
         tdir = tmp_path / "telemetry"
-        _write_legacy_ledger(led, ["A", "B"])
-        _write_telemetry(tdir, ["A"])  # one new-style row
+        _write_legacy_ledger(led, ["A", "B"])  # legacy: 1 A + 1 B
+        _write_telemetry(tdir, ["A"])            # new: 1 A only
         state = ledger.derive_experiment_state(led, tdir)
-        assert state["baseline_A"] == 2  # 1 legacy + 1 new
-        assert state["arm_B"] == 1
+        assert state["baseline_A"] == 1  # only the new-style row
+        assert state["arm_B"] == 0       # legacy B not counted
 
     def test_derive_phase_thresholds(self, tmp_path):
         tdir = tmp_path / "telemetry"

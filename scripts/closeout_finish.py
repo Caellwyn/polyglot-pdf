@@ -320,15 +320,18 @@ class Closeout:
             if val is not None:
                 cmd += [flag, str(val)]
         proc = _run(cmd, check=False)
+        # Parse TELEMETRY_FILE: from stdout before checking exit code. The
+        # harness_ledger.py prints the path BEFORE the cache-refresh step, so a
+        # cache-write failure (non-zero exit) can still leave a valid row file
+        # that we should commit. Preserving the path here is what makes that case
+        # recoverable rather than silently orphaning the row.
+        written = None
+        for line in (proc.stdout or "").splitlines():
+            if line.startswith("TELEMETRY_FILE: "):
+                written = line[len("TELEMETRY_FILE: "):].strip()
+                break
         if proc.returncode == 0:
-            # Extract the written file path from stdout for commit_push_telemetry.
-            written = None
-            for line in (proc.stdout or "").splitlines():
-                if line.startswith("TELEMETRY_FILE: "):
-                    written = line[len("TELEMETRY_FILE: "):].strip()
-                    break
             self.out["telemetry"] = "OK"
-            # Store for commit_push_telemetry (None if line was absent / dry-run).
             self._telemetry_file = written
         else:
             self.out["telemetry"] = "GAP: ledger exit {} ({})".format(
@@ -336,7 +339,9 @@ class Closeout:
                 (proc.stderr or proc.stdout or "no output").strip().splitlines()[-1]
                 if (proc.stderr or proc.stdout).strip() else "no output",
             )
-            self._telemetry_file = None
+            # Still commit the file if harness_ledger.py did write it (non-zero may
+            # be a cache-refresh failure, not a file-write failure).
+            self._telemetry_file = written
 
     # _telemetry_file is set by telemetry() to the repo-relative path of the
     # just-written row file (e.g. "docs/journal/telemetry/2026-06-10T...json").
@@ -384,6 +389,9 @@ class Closeout:
             self.out["telemetry"] += " | COMMIT-FAILED: {}".format(
                 (commit.stderr or commit.stdout or "").strip().splitlines()[-1]
                 if (commit.stderr or commit.stdout).strip() else "no output")
+            # Unstage the row so it does not bleed into the next closeout commit.
+            _run(["git", "-C", self.wt, "reset", "HEAD", "--", telemetry_file],
+                 check=False)
             return
         push = _run(["git", "-C", self.wt, "push", "origin", self.args.branch],
                     check=False)
