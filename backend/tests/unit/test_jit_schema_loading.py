@@ -169,6 +169,12 @@ class TestCallbackHandlerJITIntegration:
         """Create a mock RequestCoordinator."""
         coordinator = MagicMock(spec=RequestCoordinator)
         coordinator.request_next_field_hint = AsyncMock(return_value="last name")
+        # confirm_field is a synchronous round-trip (bd polyglot-pdf-wpw.2): the FE
+        # acks whether it recorded the confirm. Default to recorded so these JIT
+        # tests exercise the recorded path (where the next_field_schema is delivered).
+        coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": True, "reason": None}
+        )
         return coordinator
 
     @pytest.fixture
@@ -246,6 +252,10 @@ class TestCallbackHandlerJITIntegration:
         """
         coordinator = MagicMock(spec=RequestCoordinator)
         coordinator.request_next_field_hint = AsyncMock(return_value=None)
+        # Recorded confirm (bd polyglot-pdf-wpw.2) so we reach the next-hint path.
+        coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": True, "reason": None}
+        )
 
         handler = CallbackHandler(
             websocket=mock_websocket,

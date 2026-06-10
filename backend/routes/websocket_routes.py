@@ -350,7 +350,10 @@ async def _handle_fill_session(
 						try:
 							service.handle_confirm_field_response(request_id, bool(recorded), reason)
 						except Exception as e:
-							_log.error("confirm_field_response_handling_failed", error=str(e), request_id=request_id)
+							# Log the exception TYPE, not str(e): an exception string can embed
+							# PII and this reaches Cloud Logging in production (the p84m principle,
+							# applied uniformly -- fresh-eyes PR #141).
+							_log.error("confirm_field_response_handling_failed", error_type=type(e).__name__, request_id=request_id)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
 				elif mtype == "manual_field_update":

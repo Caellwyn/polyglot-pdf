@@ -423,10 +423,14 @@ class CallbackHandler:
             field_id, confirmation_method
         )
 
-        if confirm_ack is CONFIRM_REQUEST_TIMEOUT:
-            # Slow/disconnected client: never read a non-answer as confirmed. Do NOT
+        if confirm_ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(confirm_ack, dict):
+            # Slow/disconnected client (the sentinel), or -- defensively -- any
+            # unexpected non-dict ack: never read a non-answer as confirmed. Do NOT
             # request the next-field hint (we did not advance) and do NOT log a
-            # confirmation that did not happen.
+            # confirmation that did not happen. (request_confirm_field only ever
+            # returns the sentinel or a {recorded, reason} dict; the isinstance guard
+            # is belt-and-suspenders against a future resolve-path regression --
+            # fresh-eyes PR #141.)
             return self._confirm_failure_response(
                 field_id,
                 "Could not record the confirmation right now (the form did not "

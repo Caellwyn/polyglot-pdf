@@ -1551,11 +1551,17 @@ class LiveAIGemini(ILiveAI):
                                                                         print(f"{'='*80}")
                                                                         traceback.print_exc()
                                                                         print(f"{'='*80}\n")
-
-                                                                    # No error=str(e): the exception text can carry PII and this
-                                                                    # log renders to jsonPayload in production. Log the tool name
-                                                                    # only (matches the event.tool_call path below).
-                                                                    self._log.exception("tool_callback_error", tool=tool_name)
+                                                                        # Full traceback (rendered by format_exc_info) is DEV-ONLY.
+                                                                        self._log.exception("tool_callback_error", tool=tool_name)
+                                                                    else:
+                                                                        # Production: NEVER self._log.exception here -- structlog's
+                                                                        # format_exc_info processor (backend/utils/logging.py) renders
+                                                                        # the traceback AND the exception message into the JSON
+                                                                        # "exception" field, and that message can embed the field value
+                                                                        # the callback was handling (bd polyglot-pdf-p84m; Codex PR #141
+                                                                        # P0). Log the tool name + exception TYPE only -- no str(e),
+                                                                        # no exc_info.
+                                                                        self._log.error("tool_callback_error", tool=tool_name, error_type=type(e).__name__)
 
                                                                     # Dev logging: Log tool errors
                                                                     dev_logger = get_dev_logger()
@@ -1683,7 +1689,14 @@ class LiveAIGemini(ILiveAI):
                                                         print(f"{'='*80}")
                                                         traceback.print_exc()
                                                         print(f"{'='*80}\n")
-                                                    self._log.exception("tool_callback_error", tool=tool_name)
+                                                        # Full traceback (rendered by format_exc_info) is DEV-ONLY.
+                                                        self._log.exception("tool_callback_error", tool=tool_name)
+                                                    else:
+                                                        # Production: NEVER self._log.exception here -- format_exc_info renders
+                                                        # the exception MESSAGE (which can embed a field value) into the JSON
+                                                        # "exception" field -> Cloud Logging (bd polyglot-pdf-p84m; Codex PR
+                                                        # #141 P0). Tool name + exception TYPE only.
+                                                        self._log.error("tool_callback_error", tool=tool_name, error_type=type(e).__name__)
                                                     # Structured error body, not the silent {} (bd
                                                     # polyglot-pdf-wpw.1) -- same as the model_turn.parts
                                                     # path above, so the model re-asks on a callback raise.
