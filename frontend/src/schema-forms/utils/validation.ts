@@ -171,14 +171,23 @@ function optionValue(opt: any): string | undefined {
 
 /**
  * Validate that a value is a member of an option-backed field's allowed set
- * (enum check). `value` may be a single value (select/radio) or an array
- * (checkbox group); every element must match a known option. Empty values are
- * already short-circuited by the caller, so this only sees non-empty input.
- * bd polyglot-pdf-wpw.3.
+ * (enum check). `value` may be a single value (select/radio), an array (checkbox
+ * group), OR a comma-separated string for a checkbox group; every element must
+ * match a known option. Empty values are already short-circuited by the caller,
+ * so this only sees non-empty input. bd polyglot-pdf-wpw.3.
  *
  * Both option shapes are handled (see optionValue): handling only `.value` would
  * build an all-`undefined` allowed set for plain-string schemas and REJECT every
  * valid value (Codex PR #145).
+ *
+ * Comma-separated checkbox values: the backend prompt
+ * (`backend/config.py`: "Multiple checkboxes: comma-separated exact values")
+ * tells the model to send a checkbox group as a single comma-joined string, e.g.
+ * "Fears/Phobias/Worries, Family Concerns". For a checkbox-group field we split
+ * that into members before checking, so a backend-blessed multi-checkbox answer
+ * is not rejected as one giant non-matching candidate (Codex PR #145 round 2).
+ * Option values in these schemas use "/" as an internal separator, never ",",
+ * so comma is an unambiguous delimiter.
  */
 function validateOptionMembership(field: FormField, value: any): string | null {
   const allowed = new Set(
@@ -186,7 +195,17 @@ function validateOptionMembership(field: FormField, value: any): string | null {
       .map((opt) => optionValue(opt))
       .filter((v): v is string => v !== undefined)
   );
-  const values = Array.isArray(value) ? value : [value];
+
+  const isCheckboxGroup = field.type === "checkbox" || field.group_kind === "checkbox";
+
+  let values: any[];
+  if (Array.isArray(value)) {
+    values = value;
+  } else if (isCheckboxGroup && typeof value === "string" && value.includes(",")) {
+    values = value.split(",").map((s) => s.trim());
+  } else {
+    values = [value];
+  }
 
   for (const v of values) {
     if (v === null || v === undefined || v === "") {
@@ -264,23 +283,40 @@ function validateDateValue(field: FormField, value: string, rules: ValidationRul
     }
   }
 
-  // Min date
-  if (field.min_date) {
-    const minDate = new Date(field.min_date);
-    if (dateValue < minDate) {
+  // Min date. Prefer the canonical field.min_date; fall back to a top-level
+  // min folded into the rules (Codex PR #145 round 2): some date fields carry
+  // their bounds as top-level min/max string dates (e.g. adult_intake `dob`:
+  // min "1900-01-01", max "2007-10-13") with NO min_date/max_date, so without
+  // this an out-of-range AI-applied DOB would pass. rules.min/max may be a
+  // number (numeric fields) -- guard to strings/date-likes only.
+  const minDateSource = field.min_date ?? asDateBound(rules.min);
+  if (minDateSource) {
+    const minDate = new Date(minDateSource);
+    if (!isNaN(minDate.getTime()) && dateValue < minDate) {
       return `${field.name} must be on or after ${formatDate(minDate)}`;
     }
   }
 
-  // Max date
-  if (field.max_date) {
-    const maxDate = new Date(field.max_date);
-    if (dateValue > maxDate) {
+  // Max date (same fallback to a top-level max).
+  const maxDateSource = field.max_date ?? asDateBound(rules.max);
+  if (maxDateSource) {
+    const maxDate = new Date(maxDateSource);
+    if (!isNaN(maxDate.getTime()) && dateValue > maxDate) {
       return `${field.name} must be on or before ${formatDate(maxDate)}`;
     }
   }
 
   return null;
+}
+
+/**
+ * Coerce a rules.min/max bound to a date-parseable value for date fields. A
+ * date field's bound is a string like "1900-01-01"; a numeric field's min/max is
+ * a number (and would never reach validateDateValue). Returns undefined for a
+ * non-string so a stray numeric bound is ignored rather than mis-parsed.
+ */
+function asDateBound(bound: number | string | undefined): string | undefined {
+  return typeof bound === "string" ? bound : undefined;
 }
 
 /**

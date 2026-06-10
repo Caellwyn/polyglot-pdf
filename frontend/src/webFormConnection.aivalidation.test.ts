@@ -261,6 +261,31 @@ describe('WebFormConnection AI-value reject session cap (cross-field spin) (bd p
 
     expect(prompts(ws).length).toBe(6) // VALIDATION_REJECT_SESSION_CAP
   })
+
+  it('restores the prompt budget after a successful fill on a DIFFERENT field', async () => {
+    const conn = new WebFormConnection(TWO_ENUM_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // Exhaust the session cap (6) alternating bad values between A and B.
+    for (let i = 0; i < 40; i++) {
+      const bad = i % 2 === 0 ? { fieldA: 'bad-a' } : { fieldB: 'bad-b' }
+      fireFieldUpdate(ws, bad)
+    }
+    expect(prompts(ws).length).toBe(6)
+
+    // Genuine PROGRESS: a valid value lands on field A. This must restore the
+    // prompt budget (Codex PR #145 round 2) -- earlier the reset only fired when
+    // the good value matched lastValidationRejectFieldId, so a good fill of the
+    // OTHER field left the cap stuck and the next bad value got no prompt.
+    ws.send.mockClear()
+    fireFieldUpdate(ws, { fieldA: 'a1' }) // valid -> lands, budget restored
+
+    // A later bad value now gets a fresh corrective prompt again.
+    fireFieldUpdate(ws, { fieldB: 'bad-b-again' })
+    expect(prompts(ws).length).toBe(1)
+  })
 })
 
 // The reject streak must NOT carry across a section switch (fresh-eyes finding on

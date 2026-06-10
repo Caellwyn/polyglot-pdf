@@ -1271,11 +1271,14 @@ export class WebFormConnection {
       return false;
     }
 
-    // Valid value lands. Clear any reject streak for this field so a later bad
-    // value starts fresh (and so a corrected value does not count against the cap).
-    if (field.id === this.lastValidationRejectFieldId) {
-      this.resetValidationRejectTracking();
-    }
+    // A valid value landing is PROGRESS -- on ANY successful AI apply, clear all
+    // reject tracking (per-field AND the session-wide cap). Earlier this reset only
+    // ran when the good value was for the SAME field that was being rejected, which
+    // left the session cap stuck after progress on a DIFFERENT field: once the cap
+    // was hit on A/B, a successful fill of C would not restore the prompt budget, so
+    // a later bad value on a new field got no corrective prompt (Codex PR #145 round
+    // 2). Resetting on any success ties the prompt budget to forward progress.
+    this.resetValidationRejectTracking();
 
     // AI fills field as UNCONFIRMED - requires explicit confirmation via confirm_field tool
     this.updateField(field.id, value as any, { confirmed: false, emit: options.emit });

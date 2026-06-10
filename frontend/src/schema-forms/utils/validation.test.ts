@@ -235,4 +235,84 @@ describe('validateField (top-level constraint fields, no validation block)', () 
     };
     expect(validateField(bare, 'anything goes here')).toBeNull();
   });
+
+  // Date fields carry their bounds as top-level min/max STRING dates in some
+  // schemas (e.g. adult_intake `dob`: min "1900-01-01", max "2007-10-13") with no
+  // min_date/max_date. validateDateValue must honor the folded-in rules.min/max
+  // (Codex PR #145 round 2) or an out-of-range AI DOB slips through.
+  // NOTE: the runtime schema puts string dates in `min`/`max`, which the TS type
+  // annotates as `number` -- cast through `any` to mirror that real shape.
+  const dobField: FormField = {
+    id: 'dob',
+    name: 'Date of Birth',
+    spoken_name: 'date of birth',
+    type: 'date',
+    section_id: 'Part 1',
+    min: '1900-01-01' as any,
+    max: '2007-10-13' as any,
+  };
+
+  it('accepts a date within the top-level min/max', () => {
+    expect(validateField(dobField, '1990-06-15')).toBeNull();
+  });
+
+  it('rejects a date before the top-level min', () => {
+    expect(validateField(dobField, '1899-12-31')).not.toBeNull();
+  });
+
+  it('rejects a date after the top-level max', () => {
+    expect(validateField(dobField, '2010-01-01')).not.toBeNull();
+  });
+});
+
+// Checkbox groups: the backend prompt (config.py) tells the model to send a
+// checkbox group as a single comma-separated string ("Multiple checkboxes:
+// comma-separated exact values"). validateField must split it before membership
+// checking or a backend-blessed multi-checkbox answer is false-rejected.
+// bd polyglot-pdf-wpw.3 / Codex PR #145 round 2.
+describe('validateField (comma-separated checkbox-group values)', () => {
+  const checkboxGroup: FormField = {
+    id: 'reason[]',
+    name: 'Reason for Visit',
+    spoken_name: 'reason for visit',
+    type: 'checkbox',
+    group_kind: 'checkbox',
+    section_id: 'Part 1',
+    options: ['Fears/Phobias/Worries', 'Family Concerns', 'Work Difficulties'] as any,
+  };
+
+  it('accepts a single valid checkbox value', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns')).toBeNull();
+  });
+
+  it('accepts a comma-separated list of valid checkbox values', () => {
+    expect(validateField(checkboxGroup, 'Fears/Phobias/Worries, Family Concerns')).toBeNull();
+  });
+
+  it('accepts comma-separated values without surrounding spaces', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns,Work Difficulties')).toBeNull();
+  });
+
+  it('rejects a comma-separated list containing an invalid member', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns, Made Up Option')).not.toBeNull();
+  });
+
+  it('still validates an array-shaped checkbox value member-by-member', () => {
+    expect(validateField(checkboxGroup, ['Family Concerns', 'Work Difficulties'])).toBeNull();
+    expect(validateField(checkboxGroup, ['Family Concerns', 'Nope'])).not.toBeNull();
+  });
+
+  it('does NOT split a comma in a single-select value (only checkbox groups split)', () => {
+    // A non-checkbox option field whose option literally contains a comma must be
+    // matched whole, not split.
+    const selectWithComma: FormField = {
+      id: 'city_state',
+      name: 'City, State',
+      spoken_name: 'city and state',
+      type: 'select',
+      section_id: 'Part 1',
+      options: [{ value: 'Springfield, IL', label: 'Springfield, IL' }],
+    };
+    expect(validateField(selectWithComma, 'Springfield, IL')).toBeNull();
+  });
 });
