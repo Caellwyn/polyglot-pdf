@@ -172,7 +172,7 @@ class TestToolRouting:
     # NOTE: the `complete_section` tool was removed (section completion is now
     # auto-detected by the frontend when all fields are confirmed). Its routing
     # and handler are gone, so a `complete_section` call falls through to the
-    # unknown-tool path — covered by test_unknown_tool_returns_empty_dict below.
+    # unknown-tool path -- covered by test_unknown_tool_returns_empty_dict below.
 
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_empty_dict(self, callback_handler):

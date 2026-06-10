@@ -5,9 +5,9 @@ Tests that get_form_status returns ultra-minimal token format:
 field_id:value:status|field_id:value:status
 
 Status indicators:
-- ✓ = confirmed
-- ✗ = unconfirmed (filled but not confirmed)
-- − = empty
+- [confirmed]   = confirmed
+- [unconfirmed] = unconfirmed (filled but not confirmed)
+- [empty]       = empty
 """
 import pytest
 from unittest.mock import AsyncMock

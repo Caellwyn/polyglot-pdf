@@ -193,7 +193,7 @@ class FormFillingService:
                         tool_declarations=tool_declarations,
                     )
                 except TypeError:
-                    # If this also fails, give up silently — the adapter
+                    # If this also fails, give up silently -- the adapter
                     # truly doesn't implement callback registration.
                     pass
 
@@ -359,7 +359,7 @@ class FormFillingService:
         _log.info("finalize_gemini_session_start", session_id=self._session_id)
         try:
             await self._live_ai.finalize()
-            _log.info("🚪 gemini_session_closed", session_id=self._session_id)
+            _log.info("gemini_session_closed", session_id=self._session_id)
         except Exception as exc:
             _log.error("failed_to_finalize_gemini_session", 
                       session_id=self._session_id,
@@ -381,7 +381,7 @@ class FormFillingService:
         
         # Check if session is already active
         is_active = self._live_ai.is_session_active()
-        _log.info("🔍 restart_gemini_session_check", 
+        _log.info("restart_gemini_session_check",
                  session_id=self._session_id,
                  session_active=is_active)
         
@@ -401,7 +401,7 @@ class FormFillingService:
             _log.error("restart_gemini_session_no_callbacks", session_id=self._session_id)
             raise RuntimeError("No callback handler available - cannot restart")
 
-        _log.info("🔄 restart_gemini_session_start", 
+        _log.info("restart_gemini_session_start",
                  session_id=self._session_id,
                  has_next_field_hint=bool(next_field_hint))
         
@@ -437,7 +437,7 @@ class FormFillingService:
         tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
 
         # Re-register the same callbacks used at session creation
-        # (form_filling_service.py:155). set_callbacks is synchronous — do not
+        # (form_filling_service.py:155). set_callbacks is synchronous -- do not
         # await it. on_transcript is always passed; whether transcripts are
         # actually emitted is gated by enable_transcripts.
         self._live_ai.set_callbacks(
@@ -452,7 +452,7 @@ class FormFillingService:
 
         # Verify session is now active
         is_active_after = self._live_ai.is_session_active()
-        _log.info("✅ gemini_session_restarted", 
+        _log.info("gemini_session_restarted",
                  session_id=self._session_id,
                  session_active_after=is_active_after)
 

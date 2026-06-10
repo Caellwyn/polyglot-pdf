@@ -19,7 +19,7 @@ from backend.services.callback_handler import CallbackHandler
 def _make_service_ready_for_restart(send_transcript: bool = True):
     """Build a service in the state restart_gemini_session expects.
 
-    live_ai is a MagicMock so set_callbacks is *synchronous* — if the code ever
+    live_ai is a MagicMock so set_callbacks is *synchronous* -- if the code ever
     re-introduces `await self._live_ai.set_callbacks(...)`, awaiting a MagicMock
     return value raises TypeError and this test fails.
     """

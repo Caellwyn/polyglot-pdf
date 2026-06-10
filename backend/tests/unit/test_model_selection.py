@@ -3,7 +3,7 @@
 Covers the `_resolve_model` validator and its alignment with the family-keyed
 pricing table. We pass values via the Settings constructor rather than env vars:
 the field defaults read os.getenv at class-definition time, so setting os.environ
-after import would NOT affect a later Settings() — constructor args are the
+after import would NOT affect a later Settings() -- constructor args are the
 reliable way to exercise the validator. See bd polyglot-pdf-4cm.
 """
 

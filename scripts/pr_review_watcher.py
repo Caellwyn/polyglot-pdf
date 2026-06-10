@@ -26,7 +26,7 @@ classified. Zero polling turns.
 Why "review completion", not "a new comment"
 ---------------------------------------------
 The COMMON case is the bot finishing a review with NO inline comments (just a
-completed review whose state, or a 👍 reaction, is the verdict). "No comment
+completed review whose state, or a thumbs-up reaction, is the verdict). "No comment
 yet" and "done, nothing to say" look identical if you only watch the
 inline-comment stream, so a naive new-comment watcher would hang forever on a
 clean review. This script instead watches for the review to COMPLETE and then
@@ -44,7 +44,7 @@ can't tell "not started" from "in progress" from "finished with nothing."
 
 CODEX emits NO such timeline events. Its completion is detected directly from
 the review surfaces: a posted review / inline comments (= findings), or its
-clean sentinel -- a 👍 reaction plus a "Codex Review: Didn't find any major
+clean sentinel -- a thumbs-up reaction plus a "Codex Review: Didn't find any major
 issues" issue comment. With no in-flight signal, the Codex profile relies on
 the --since floor and the timeout to bound the wait.
 
@@ -144,7 +144,7 @@ import swarm_config  # noqa: E402
 def _setup_utf8_stdio() -> None:
     """Force stdout/stderr to UTF-8 so printing review text can't crash.
 
-    Copilot review bodies routinely contain emoji (e.g. 💡) and other
+    Copilot review bodies routinely contain emoji (e.g. a light-bulb) and other
     non-Latin-1 characters. On Windows the default console encoding is cp1252,
     so printing a review detail raises UnicodeEncodeError and crashes the
     watcher AFTER it has already classified the verdict -- the caller then sees
@@ -217,7 +217,7 @@ class ReviewerProfile:
                             find any major issues"). Merged into the shared
                             approval check; the shared LGTM/no-further-changes
                             phrases apply to every reviewer.
-      clean_reaction     -- a GitHub reaction (rollup key, e.g. "+1" for 👍) the
+      clean_reaction     -- a GitHub reaction (rollup key, e.g. "+1" for thumbs-up) the
                             bot adds to its OWN comment to signal approval. When
                             set, a bot comment carrying this reaction with a
                             positive count classifies CLEAN -- the canonical,
@@ -251,7 +251,7 @@ COPILOT_PROFILE = ReviewerProfile(
 # Codex (OpenAI ChatGPT GitHub app): review actor login is
 # "chatgpt-codex-connector[bot]" (confirmed from a live PR 2026-06-01). Emits
 # NO timeline lifecycle events -- completion is detected from the review
-# surfaces. The CANONICAL clean signal is a 👍 ("+1") reaction Codex adds to its
+# surfaces. The CANONICAL clean signal is a thumbs-up ("+1") reaction Codex adds to its
 # own approval comment (documented behavior) -- `clean_reaction="+1"` makes that
 # the primary CLEAN path, independent of the comment's prose/language. The text
 # sentinels below ("Codex Review: Didn't find any major issues") are a
@@ -264,7 +264,7 @@ CODEX_PROFILE = ReviewerProfile(
     login_markers=("codex",),
     error_body_prefix="Codex encountered an error",
     uses_timeline=False,
-    clean_reaction="+1",  # 👍 -- the documented canonical approval signal
+    clean_reaction="+1",  # thumbs-up -- the documented canonical approval signal
     clean_sentinels=(
         "didn't find any major issues",   # straight apostrophe U+0027
         "didn’t find any major issues",   # NOT a duplicate -- curly apostrophe U+2019;
@@ -749,17 +749,17 @@ def _is_approval_comment(body: str, profile: ReviewerProfile) -> bool:
 
 
 def _has_clean_reaction(comment: dict, profile: ReviewerProfile) -> bool:
-    """True if `comment` carries the profile's canonical approval reaction (👍).
+    """True if `comment` carries the profile's canonical approval reaction (thumbs-up).
 
     Reads the `reactions` rollup that GitHub ships INLINE on the comment payload
-    (no extra API call): `comment["reactions"]["+1"]` is the count of 👍. A
+    (no extra API call): `comment["reactions"]["+1"]` is the count of thumbs-up. A
     positive count means the bot signed off via its documented approval signal.
     Returns False when the profile defines no clean_reaction (Copilot), when the
     rollup is absent, or when the count is zero -- so it can only ever ADD a
     CLEAN signal, never suppress a finding.
 
     Note: the rollup is a count, not an actor list, so this does not prove the
-    BOT (vs a human) added the 👍. The caller only consults it on a comment it
+    BOT (vs a human) added the thumbs-up. The caller only consults it on a comment it
     has already attributed to the bot, and a human thumbs-up on the bot's own
     approval comment would agree with it anyway, so the count is sufficient.
     """
@@ -919,9 +919,9 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
       2. a NEW actionable inline finding this round -> COMMENTS. The primary signal:
          a real "please change X" from the bot is an inline comment on the diff,
          regardless of the summary prose's wording.
-      3. the profile's canonical approval REACTION (Codex's 👍 / "+1") on the bot
+      3. the profile's canonical approval REACTION (Codex's thumbs-up / "+1") on the bot
          comment -> CLEAN. This is the documented, language-independent approval
-         signal, so it ranks above prose -- but BELOW inline findings (a 👍 plus a
+         signal, so it ranks above prose -- but BELOW inline findings (a thumbs-up plus a
          real inline ask is still COMMENTS).
       4. exact `LGTM` / known approval phrase / reviewer clean sentinel -> CLEAN
          (fast path). For Codex this is the prose fallback when the reaction is
@@ -973,7 +973,7 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
             ),
         )
 
-    # 3. Canonical approval REACTION (Codex's 👍). The documented, language-
+    # 3. Canonical approval REACTION (Codex's thumbs-up). The documented, language-
     # independent sign-off. Ranks above prose but below inline findings (checked
     # above), so a +1 reaction can never override a real inline ask. This IS a
     # genuine passed-review verdict (the bot reviewed and approved), so
@@ -1047,7 +1047,7 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: Revi
         # No in-window formal REVIEW. Either (1) the bot delivered this round's
         # verdict as an ISSUE COMMENT (re-reviews often do -- no state, no
         # review_id, absent from /reviews; Codex's clean verdict is always an
-        # issue comment + 👍), or (2) the reviews endpoint just hasn't caught up
+        # issue comment + thumbs-up), or (2) the reviews endpoint just hasn't caught up
         # yet. Try the issue-comment surface; if nothing there either, signal the
         # caller to keep polling.
         rc = _classify_issue_comment_round(repo, pr, since, profile)
