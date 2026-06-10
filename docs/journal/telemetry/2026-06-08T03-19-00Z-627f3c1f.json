@@ -1,0 +1,62 @@
+{
+  "recorded_at": "2026-06-08T03:19:00Z",
+  "session_id": "627f3c1f-6eb2-4f2c-8040-59fb4c3c6500",
+  "beads": [
+    "polyglot-pdf-7a9.15",
+    "polyglot-pdf-7a9.16"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-06-07T17:23:25.595Z",
+    "last_ts": "2026-06-08T03:18:55.218Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 88883,
+      "output_tokens": 473824,
+      "cache_read_input_tokens": 268109848,
+      "cache_creation_input_tokens": 2303897
+    },
+    "subagent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0
+    },
+    "total": {
+      "input_tokens": 88883,
+      "output_tokens": 473824,
+      "cache_read_input_tokens": 268109848,
+      "cache_creation_input_tokens": 2303897
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 88883,
+        "output_tokens": 473824,
+        "cache_read_input_tokens": 268109848,
+        "cache_creation_input_tokens": 2303897
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      }
+    },
+    "subagent": {}
+  },
+  "subagent_models": [],
+  "assistant_turns": {
+    "orchestrator": 830,
+    "subagent": 0
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 1,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

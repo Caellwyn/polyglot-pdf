@@ -1,7 +1,7 @@
-# Telemetry ledger is strictly append-only (one JSON object per line). The
-# `union` built-in merge driver keeps BOTH sides' added lines on a conflict, so
-# two PRs that each append a closeout telemetry row auto-merge instead of
-# colliding (bd polyglot-pdf-8o4). Order is not preserved across an auto-merge,
-# but nothing reads the ledger by position -- the experiment counter is derived
-# by counting rows' `arm` field, which is order-independent.
+# Telemetry rows are now written as individual files under
+# docs/journal/telemetry/<timestamp>-<session>.json -- one file per closeout --
+# so parallel PRs never touch the same path and GitHub merges them without any
+# custom merge driver. The old single-file ledger is kept as a read-only source
+# for backwards-compatible counting of pre-migration rows; no new rows are
+# appended to it, so the union driver below is inert but kept for history.
 docs/journal/harness_ledger.jsonl merge=union

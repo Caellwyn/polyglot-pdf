@@ -371,9 +371,9 @@ doctrine says to decide yourself (see CLAUDE.md "Escalation vs. autonomy").
 ordering** -- both sides are independently correct and the only question is how to
 arrange them. This is the common case:
 
-- **append-only ordering** -- journal entries, `harness_ledger.jsonl` rows, a
-  CHANGELOG, a doc's "Related" list: **keep BOTH sides**, ordered the natural way
-  (chronological for journal/ledger, then re-stamp if a date/sequence collides);
+- **append-only ordering** -- journal entries, a CHANGELOG, a doc's "Related"
+  list: **keep BOTH sides**, ordered the natural way (chronological for journal,
+  then re-stamp if a date/sequence collides);
 - **independent additions to the same list/table** -- two new rows in a doc table,
   two new entries in `MEMORY.md` or an index: keep both, in a sensible order;
 - **a pure interleave** where neither side changed the other's lines, git just
@@ -419,12 +419,14 @@ The PR is already a normal, mergeable PR -- there is no flip step. The merge is 
 
 ## Step 8.5 -- Record the harness telemetry row (deterministic)
 
-Append one row to `docs/journal/harness_ledger.jsonl` capturing this closeout's
-cost (bd polyglot-pdf-hrn.1). The script is **zero-model-token**: it parses the
-session transcript JSONL for the token split (orchestrator-vs-subagent, by
-model) and wall-clock; you only pass the handful of numbers a script can't read
-off the transcript. Run the **worktree's copy** so the ledger path resolves into
-THIS checkout (same `$WT` rule as Steps 3/4):
+Write one JSON file to `docs/journal/telemetry/` capturing this closeout's
+cost (bd polyglot-pdf-hrn.1). Each closeout writes its own file (named by
+timestamp + session prefix), so parallel PRs never touch the same path and
+GitHub merges them without conflict -- no custom merge driver needed. The script
+is **zero-model-token**: it parses the session transcript JSONL for the token
+split (orchestrator-vs-subagent, by model) and wall-clock; you only pass the
+handful of numbers a script can't read off the transcript. Run the **worktree's
+copy** so the file path resolves into THIS checkout (same `$WT` rule as Steps 3/4):
 
 `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
 
@@ -461,11 +463,11 @@ PR). Fill the counters from what actually happened this session:
 - `--errors-shipped` -- known bugs shipped in this PR (usually 0; a later
   nit-turned-blocker audit may revise this retroactively against the deferring arm).
 
-This is **warn-only**: a missing/failed ledger row must never block the merge.
+This is **warn-only**: a missing/failed telemetry file must never block the merge.
 If the script exits non-zero (e.g. it can't locate the transcript), note the
 telemetry gap in the journal entry and continue -- do NOT loop on it. The
-experiment counter is **derived from the ledger** (counted by `arm`), not bumped;
-the script refreshes a gitignored local cache (`.beads/experiment_state.json`)
-that is never committed and can't collide on a parallel merge (bd
-polyglot-pdf-8o4). `--no-counter` only skips that cache refresh (cosmetic; the
-counts live in the ledger regardless).
+experiment counter is **derived by scanning `docs/journal/telemetry/`** (plus the
+legacy `harness_ledger.jsonl` for pre-migration rows), counted by `arm`; the
+script refreshes a gitignored local cache (`.beads/experiment_state.json`)
+that is never committed and can't collide on a parallel merge. `--no-counter`
+only skips that cache refresh (cosmetic; the counts are always re-derivable).
