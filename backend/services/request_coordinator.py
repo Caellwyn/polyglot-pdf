@@ -75,23 +75,35 @@ class RequestCoordinator:
         the id is already gone (a late timeout after the handler resolved it)."""
         self._pending.pop(request_id, None)
 
-    def _resolve(self, request_id: str, expected_type: str, result: Any) -> bool:
+    def _resolve(self, request_id: str, expected_type: str, result: Any,
+                 transform=None) -> bool:
         """Resolve the future for request_id with `result`, if the entry exists
-        and is of the expected type. Returns True on success. Logs the same
-        unexpected/mismatched cases the per-type handlers used to, so a stray or
-        late response is still visible. Pops the entry on success."""
+        and is of the expected type. Returns True only when the future was
+        actually set (not when it was already done/cancelled by a timeout race).
+        Logs a stray (no-entry) or wrong-type response so it stays visible. Pops a
+        matched entry.
+
+        `transform`, when given, is applied to `result` AFTER the entry is
+        validated -- so a parse/normalize step (e.g. strip_field_id_from_hint)
+        NEVER runs on an unmatched/stale response. This is load-bearing: running
+        the strip on a malformed unknown-id response could raise and tear down the
+        WS path (Codex PR #136); the old per-slot guards returned before stripping.
+        """
         entry = self._pending.get(request_id)
         if entry is None:
+            # No pending request with this id (a stray or post-timeout-late
+            # response). There is no "expected" type here -- log the id only.
             _log.warning(
-                "unexpected_response",
+                "unexpected_response_no_pending_request",
                 session_id=self._session_id,
                 request_id=request_id,
-                expected_type=expected_type,
             )
             return False
         if entry.get("type") != expected_type:
             # A response whose id maps to a DIFFERENT request type -- never
-            # cross-resolve it (that is the exact clobber this redesign removes).
+            # cross-resolve it. (Practically unreachable since the wire response
+            # type selects the handler, but a defensive guard against a future
+            # mis-route.)
             _log.warning(
                 "mismatched_response_type",
                 session_id=self._session_id,
@@ -100,11 +112,18 @@ class RequestCoordinator:
                 actual_type=entry.get("type"),
             )
             return False
+        # Validated -- now it is safe to apply any transform to the result.
+        if transform is not None:
+            result = transform(result)
         future = entry.get("future")
+        self._pending.pop(request_id, None)
         if future is not None and not future.done():
             future.set_result(result)
-        self._pending.pop(request_id, None)
-        return True
+            return True
+        # The future was already resolved/cancelled (e.g. wait_for timed out and
+        # cancelled it just before this late response arrived) -- nothing
+        # delivered, so report no-op.
+        return False
 
     # Request methods
 
@@ -327,8 +346,13 @@ class RequestCoordinator:
         # never reads the raw field_id aloud (bd polyglot-pdf-dx7). The field_id
         # Gemini needs for update_form_fields comes from the system instruction's
         # FIELDS block, not this hint -- so stripping it here is safe.
-        hint = strip_field_id_from_hint(hint)
-        self._resolve(request_id, "next_field", hint)
+        #
+        # Pass the strip as a TRANSFORM so it runs ONLY after _resolve validates a
+        # matching pending request -- a stale/malformed response (unknown id, or a
+        # non-string hint) must not reach strip_field_id_from_hint and risk raising
+        # on the WS path (Codex PR #136).
+        self._resolve(request_id, "next_field", hint,
+                      transform=strip_field_id_from_hint)
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """

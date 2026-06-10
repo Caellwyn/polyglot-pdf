@@ -350,6 +350,30 @@ class TestResponseHandlers:
         assert not future.done()
         assert "correct-id" in coordinator._pending
 
+    def test_stale_next_field_response_with_bad_hint_does_not_raise(self):
+        """Codex PR #136: a next_field_hint_response for an UNKNOWN id carrying a
+        non-string hint must be ignored, NOT crash -- the strip transform runs
+        only AFTER _resolve validates a matching pending request. Pre-fix the
+        strip ran before validation and could raise on the WS path."""
+        coordinator = RequestCoordinator()
+        # No pending request at all; hint is a non-string (e.g. a stray object).
+        # Must log + return without raising (strip is never reached).
+        coordinator.handle_next_field_hint_response("unknown-id", {"oops": "object"})
+        assert coordinator._pending == {}
+
+    def test_next_field_strip_still_applies_on_a_matched_request(self):
+        """The strip transform still runs for a MATCHED next_field request, so the
+        field_id parenthetical is removed before the future resolves (dx7)."""
+        coordinator = RequestCoordinator()
+        future = _seed(coordinator, "rid", "next_field")
+        # The strip regex requires the single-quoted, end-anchored field_id form.
+        coordinator.handle_next_field_hint_response(
+            "rid", "Next field: email (field_id: 'p1_email', type: text)")
+        assert future.done()
+        # The "(field_id: ...)" parenthetical is stripped.
+        assert "field_id" not in future.result()
+        assert "email" in future.result()
+
     def test_handle_response_wrong_type_does_not_cross_resolve(self):
         """bd polyglot-pdf-bxw: if a response's id maps to a DIFFERENT request
         type, it must NOT resolve that future -- the exact clobber this removes."""
@@ -454,17 +478,19 @@ class TestMultipleConcurrentRequests:
         # Both must be tracked simultaneously (the old design held only one).
         assert len(coordinator._pending) == 2
 
-        # Pull the two distinct request_ids from the two sent messages, and answer
-        # them with DIFFERENT payloads to prove no cross-resolve.
+        # Pull the two distinct request_ids and answer them with DIFFERENT payloads
+        # (echoing the id) to prove each future resolves to ITS OWN id -- without
+        # trusting any positional task<->call ordering (fresh-eyes PR #136).
         sent = [c[0][0] for c in mock_ws.send_json.call_args_list]
         ids = [m["request_id"] for m in sent if m["type"] == "get_next_field_hint"]
         assert len(ids) == 2 and ids[0] != ids[1]
 
-        coordinator.handle_next_field_hint_response(ids[0], "Hint for FIRST")
-        coordinator.handle_next_field_hint_response(ids[1], "Hint for SECOND")
+        for rid in ids:
+            coordinator.handle_next_field_hint_response(rid, f"Hint for {rid}")
 
         r1, r2 = await asyncio.gather(t1, t2)
-        # Each caller got the answer keyed to ITS request -- not the other's.
-        assert r1 == "Hint for FIRST"
-        assert r2 == "Hint for SECOND"
+        # Both distinct hints were delivered (one per caller), and no future got
+        # the other's id -- the set of results equals the set of per-id hints.
+        assert {r1, r2} == {f"Hint for {rid}" for rid in ids}
+        assert r1 != r2
         assert coordinator._pending == {}
