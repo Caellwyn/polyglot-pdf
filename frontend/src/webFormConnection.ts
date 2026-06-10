@@ -197,7 +197,8 @@ export class WebFormConnection {
       }, timeoutMs);
 
       try {
-        this.ws = new WebSocket(finalUrl);
+        const socket = new WebSocket(finalUrl);
+        this.ws = socket;
 
         this.ws.onopen = () => {
           clearTimeout(timeout);
@@ -215,7 +216,10 @@ export class WebFormConnection {
 
         this.ws.onclose = (event) => {
           clearTimeout(timeout);
-          this.handleClose(event);
+          // Pass the socket that fired so handleClose can ignore a STALE close --
+          // e.g. the old section socket's close arriving after startSection already
+          // opened the new one (Codex PR #137).
+          this.handleClose(event, socket);
         };
       } catch (error) {
         clearTimeout(timeout);
@@ -782,18 +786,24 @@ export class WebFormConnection {
 
     // This is the AI-INITIATED switch path (Gemini called switch_section -> backend
     // prepare_section_switch -> here -> section_info_response -> backend restarts
-    // -> section_switched). Mark the switch in flight + arm the watchdog (Codex PR
-    // #137) so a MANUAL click during this window is rejected by switchToSection's
-    // guard, and a stalled AI switch surfaces `error` instead of hanging. The guard
-    // releases on section_switched (handleSectionSwitched -> completeSectionSwitch)
-    // or on an error/watchdog. If a switch is somehow already in flight, don't
-    // re-arm (the existing one owns the lifecycle).
-    if (!this.switchInFlight) {
-      this.switchInFlight = true;
-      this.setStatus('switching_section');
-      this.armSectionSwitchWatchdog();
+    // -> section_switched). If a switch is ALREADY in flight (e.g. a manual switch
+    // started first), REJECT this one: reply with a null section_info + error and
+    // do NOT mutate local section state or start a second backend switch (Codex PR
+    // #137 -- otherwise the reverse-order manual-then-AI overlap is not blocked).
+    if (this.switchInFlight) {
+      console.warn('[WebFormConnection] prepare_section_switch rejected -- a section switch is already in progress');
+      this.send({
+        type: "section_info_response",
+        request_id: requestId,
+        section_info: null,
+        error: 'A section switch is already in progress',
+      });
+      return;
     }
 
+    // The guard is claimed only AFTER a valid target is resolved (below), so the
+    // null/error early-returns for an invalid request never leave a stuck
+    // switching_section (Codex PR #137).
     try {
       const currentState = SchemaFormStateManager.load();
       console.log('[WebFormConnection] Loaded state', { hasState: !!currentState, hasParts: !!currentState?.schema.parts });
@@ -858,6 +868,14 @@ export class WebFormConnection {
         });
         return;
       }
+
+      // A valid target is resolved -- NOW claim the switch guard + arm the watchdog
+      // (Codex PR #137). Doing it here (not at entry) means the null/error returns
+      // above for an invalid request never leave a stuck switching_section. The
+      // guard releases on section_switched (-> completeSectionSwitch) or watchdog.
+      this.switchInFlight = true;
+      this.setStatus('switching_section');
+      this.armSectionSwitchWatchdog();
 
       // Switch to target section in local state (no disconnect!)
       console.log('[WebFormConnection] Switching to section', targetSectionId);
@@ -1277,7 +1295,17 @@ export class WebFormConnection {
   /**
    * Handle WebSocket close
    */
-  private handleClose(event?: CloseEvent): void {
+  private handleClose(event?: CloseEvent, socket?: WebSocket): void {
+    // Ignore a STALE close: the old section socket's close can arrive AFTER
+    // startSection already swapped this.ws to the new socket (Codex PR #137). If
+    // the firing socket is not the current one, it's the replaced socket winding
+    // down -- not a real disconnect of the live connection, so do nothing (else
+    // the switchInFlight branch below would falsely fail a healthy switch).
+    if (socket && this.ws && socket !== this.ws) {
+      console.log('[WebFormConnection] Ignoring close from a stale (replaced) socket');
+      return;
+    }
+
     // Log close details for debugging
     console.log('[WebFormConnection] 🔌 WebSocket closed', {
       code: event?.code,

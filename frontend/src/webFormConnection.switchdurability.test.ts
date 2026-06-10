@@ -52,6 +52,9 @@ const SCHEMA: FormSchema = {
     { id: 's1', label: 'S1', order: 1, fields: ['f1'] },
     { id: 's2', label: 'S2', order: 2, fields: ['f2'] },
   ],
+  // The AI-initiated path (handlePrepareSectionSwitchRequest) guards on
+  // schema.parts being present, so include a minimal parts list.
+  parts: [{ id: 'p1', label: 'P1', order: 1, sections: ['s1', 's2'] }],
 } as unknown as FormSchema
 
 function installSessionStorage() {
@@ -198,6 +201,40 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     expect((conn as any).switchInFlight).toBe(false)
   })
 
+  it('an INVALID AI section request does not leave the guard stuck (Codex round 2)', () => {
+    // Codex PR #137 round 2: the guard is claimed only after a valid target, so an
+    // unknown section sends section_info: null WITHOUT a stuck switching_section.
+    const conn = new WebFormConnection(SCHEMA)
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 999 })
+
+    expect((conn as any).switchInFlight).toBe(false)
+    expect(conn.getStatus()).not.toBe('switching_section')
+    // It replied with a null section_info (error).
+    const sent = (conn as any).ws.send.mock.calls.map((c: any[]) => JSON.parse(c[0]))
+    const resp = sent.find((m: any) => m.type === 'section_info_response')
+    expect(resp.section_info).toBeNull()
+  })
+
+  it('the AI path REJECTS a prepare_section_switch while a switch is already in flight (Codex round 2)', async () => {
+    // Codex PR #137 round 2: manual-then-AI overlap -- a manual switch is in flight,
+    // then Gemini emits prepare_section_switch. The AI path must reply null/error
+    // and NOT mutate state or start a second backend switch.
+    const conn = new WebFormConnection(SCHEMA)
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    await conn.switchToSection('s2', 'ws://x')
+    expect((conn as any).switchInFlight).toBe(true)
+
+    const sendCountBefore = (conn as any).ws.send.mock.calls.length
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 1 })
+
+    // It replied with a null section_info + error (a rejection, not a switch).
+    const newSends = (conn as any).ws.send.mock.calls.slice(sendCountBefore).map((c: any[]) => JSON.parse(c[0]))
+    const resp = newSends.find((m: any) => m.type === 'section_info_response')
+    expect(resp.section_info).toBeNull()
+    expect(resp.error).toMatch(/already in progress/)
+  })
+
   it('an INTENTIONAL disconnect during a switch cancels it silently (no false error)', async () => {
     // Codex PR #137: disconnect() (UI unmount / stop-session) must clear the guard
     // so the close it triggers does not fire a false onError/`error` status.
@@ -212,6 +249,29 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     expect((conn as any).sectionSwitchWatchdog).toBeNull()
     expect(errors.length).toBe(0) // no false switch-failure error
     expect(conn.getStatus()).not.toBe('error')
+  })
+
+  it('a STALE close from a replaced socket does not fail a healthy in-flight switch (Codex round 2)', async () => {
+    // Codex PR #137 round 2: during startSection the old socket's close can arrive
+    // after this.ws is swapped to the new socket. handleClose must ignore a close
+    // from a socket that is not the current this.ws, else it falsely fails the switch.
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA, { onError: (e) => errors.push(e) })
+    await conn.switchToSection('s2', 'ws://x')
+    expect((conn as any).switchInFlight).toBe(true)
+
+    const currentWs = { readyState: MockWebSocket.OPEN } as any
+    ;(conn as any).ws = currentWs
+    ;(conn as any).enableAutoReconnect = true
+
+    // A close fires from a DIFFERENT (stale/old) socket.
+    const staleWs = { readyState: MockWebSocket.CLOSED } as any
+    ;(conn as any).handleClose({ code: 1006 } as any, staleWs)
+
+    // The switch is untouched -- no error, still in flight.
+    expect(errors.length).toBe(0)
+    expect(conn.getStatus()).not.toBe('error')
+    expect((conn as any).switchInFlight).toBe(true)
   })
 
   it('startSection releases the guard on session_ready, not merely on handshake send', async () => {
