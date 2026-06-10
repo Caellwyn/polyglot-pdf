@@ -82,12 +82,17 @@ def _tool_error_envelope(message: str = "The tool call failed; ask the user to r
     re-asks instead. `retryable` lets the model distinguish a transient failure
     (re-ask) from a permanent one.
 
-    NO PII: the message is a fixed, caller-controlled string -- NEVER the
-    exception text (which can embed the field value the callback was handling) and
-    NEVER the arguments. Mirrors the no-PII rule the surrounding logs follow
-    (bd polyglot-pdf-oeq / hjo). The legitimate "callback returned None" case keeps
-    the ``{}`` coercion (the tks every-named-call-gets-a-response invariant); only a
-    RAISE produces this envelope.
+    NO PII in THIS body: the message is a fixed, caller-controlled string --
+    NEVER the exception text (which can embed the field value the callback was
+    handling) and NEVER the arguments. The scrubbing guarantee is scoped to the
+    model-facing FunctionResponse this helper builds; it does NOT extend to the
+    surrounding ``except`` block, whose pre-existing dev_logger.log_error call
+    still passes ``str(e)`` and ``parsed_arguments`` (the terminal write emits
+    ``str(e)`` unconditionally). Redacting that callback-error log path is a
+    separate, pre-existing concern tracked under bd polyglot-pdf-oeq / hjo. The
+    legitimate "callback returned None" case keeps the ``{}`` coercion (the tks
+    every-named-call-gets-a-response invariant); only a RAISE produces this
+    envelope.
     """
     return {"status": "error", "retryable": True, "message": message}
 

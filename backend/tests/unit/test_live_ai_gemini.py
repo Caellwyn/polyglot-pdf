@@ -567,6 +567,7 @@ async def test_callback_raise_sends_structured_error_not_empty_dict(path):
     assert resp.name == "update_form_fields"
     # Structured error -- NOT the silent {} that reads as success.
     assert resp.response.get("status") == "error", resp.response
+    assert resp.response.get("retryable") is True, resp.response
     assert resp.response != {}
     # The call_id is still echoed (0ux invariant preserved).
     assert resp.id == "function-call-1"
@@ -575,10 +576,12 @@ async def test_callback_raise_sends_structured_error_not_empty_dict(path):
 
 
 @pytest.mark.asyncio
-async def test_callback_returning_none_still_coerces_to_empty_dict():
+@pytest.mark.parametrize("path", ["event.tool_call", "model_turn.parts"])
+async def test_callback_returning_none_still_coerces_to_empty_dict(path):
     """The tks invariant is preserved: a callback that legitimately RETURNS None
     (not a raise) still gets the {} coercion -- only a RAISE produces the error
-    envelope (bd polyglot-pdf-wpw.1)."""
+    envelope (bd polyglot-pdf-wpw.1). Both receive paths, so neither routes a
+    legitimate None through the error envelope."""
     from backend.adapters.live_ai_gemini import LiveAIGemini
 
     adapter = LiveAIGemini()
@@ -590,7 +593,7 @@ async def test_callback_returning_none_still_coerces_to_empty_dict():
     adapter._audio_queue = asyncio.Queue()
     adapter._text_queue = asyncio.Queue()
 
-    session = _make_tool_call_session("event.tool_call")
+    session = _make_tool_call_session(path)
     fake_live = MagicMock()
     fake_live.connect.return_value = _DummyContextManager(session)
     adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
