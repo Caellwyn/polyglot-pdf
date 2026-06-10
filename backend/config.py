@@ -410,9 +410,11 @@ class Settings(BaseModel):
 		'Say to the user: "Hello, are you still there? If you need me to repeat the question, just let me know."'
 	)
 
-	# Level 3: Farewell before the session closes
+	# Level 3: Farewell before the session closes.
+	# Single double-quoted literal: the inner speech quotes are escaped (\"),
+	# apostrophes stay bare -- no single/double-quote mixing to break on edit (bd bpm7).
 	RECOVERY_PROMPT_LEVEL_3: str = (
-		'Say to the user: "I haven\'t heard from you in a while, so I\'m going to close this session. '
+		"Say to the user: \"I haven't heard from you in a while, so I'm going to close this session. "
 		"Don't worry, your progress is saved. Just start the voice assistant again when you're ready to continue.\""
 	)
 
