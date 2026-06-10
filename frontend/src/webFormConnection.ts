@@ -77,6 +77,19 @@ export class WebFormConnection {
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
+  // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
+  // (bd polyglot-pdf-aun / WS-D). isSectionSwitching is the auto-reconnect
+  // suppressor and is cleared the instant the new socket opens; it does NOT
+  // protect against a SECOND switch starting before the first finished, nor does
+  // it survive long enough to gate the post-open handshake window. switchInFlight
+  // is set for the WHOLE switch (until the new section is confirmed, errors, or
+  // the watchdog fires) and released in finally, so a concurrent
+  // startSection/switchToSection is rejected instead of racing two reconnects.
+  private switchInFlight = false;
+  // Watchdog: if a switch neither confirms (section_switched) nor errors within
+  // this window, surface `error` instead of a stuck `switching_section` forever.
+  private sectionSwitchWatchdog: number | null = null;
+  private static readonly SECTION_SWITCH_TIMEOUT_MS = 15000;
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
 
@@ -184,7 +197,8 @@ export class WebFormConnection {
       }, timeoutMs);
 
       try {
-        this.ws = new WebSocket(finalUrl);
+        const socket = new WebSocket(finalUrl);
+        this.ws = socket;
 
         this.ws.onopen = () => {
           clearTimeout(timeout);
@@ -202,7 +216,10 @@ export class WebFormConnection {
 
         this.ws.onclose = (event) => {
           clearTimeout(timeout);
-          this.handleClose(event);
+          // Pass the socket that fired so handleClose can ignore a STALE close --
+          // e.g. the old section socket's close arriving after startSection already
+          // opened the new one (Codex PR #137).
+          this.handleClose(event, socket);
         };
       } catch (error) {
         clearTimeout(timeout);
@@ -228,6 +245,20 @@ export class WebFormConnection {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // An INTENTIONAL disconnect (UI unmount / stop-session) cancels any in-flight
+    // section switch SILENTLY -- it must not be reported as a switch FAILURE
+    // (Codex PR #137: otherwise handleClose's switchInFlight branch fires a false
+    // onError + `error` status after normal teardown). Clear the guard + watchdog
+    // first; the close that follows then takes the normal disconnected path.
+    // EXCEPTION: startSection performs its own intentional disconnect mid-switch
+    // (isSectionSwitching is set across that window) -- there we keep the guard so
+    // the switch continues, and handleClose's isSectionSwitching early-return
+    // covers the close.
+    if (this.switchInFlight && !this.isSectionSwitching) {
+      this.switchInFlight = false;
+      this.clearSectionSwitchWatchdog();
     }
 
     if (this.ws) {
@@ -398,6 +429,15 @@ export class WebFormConnection {
     // Default to false (manual VAD) when the backend doesn't send the field.
     if (this.callbacks.onNativeVadMode) {
       this.callbacks.onNativeVadMode(native_vad === true);
+    }
+
+    // If a reconnect-based section switch was in flight (startSection), THIS is
+    // its terminal success signal -- not the moment the handshake was sent
+    // (Codex/fresh-eyes PR #137). Release the guard + disarm the watchdog here so
+    // a stall AFTER the handshake but BEFORE session_ready is still caught by the
+    // watchdog, and a second switch can't start during the switching window.
+    if (this.switchInFlight) {
+      this.completeSectionSwitch();
     }
 
     this.setStatus("connected");
@@ -744,6 +784,26 @@ export class WebFormConnection {
 
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
 
+    // This is the AI-INITIATED switch path (Gemini called switch_section -> backend
+    // prepare_section_switch -> here -> section_info_response -> backend restarts
+    // -> section_switched). If a switch is ALREADY in flight (e.g. a manual switch
+    // started first), REJECT this one: reply with a null section_info + error and
+    // do NOT mutate local section state or start a second backend switch (Codex PR
+    // #137 -- otherwise the reverse-order manual-then-AI overlap is not blocked).
+    if (this.switchInFlight) {
+      console.warn('[WebFormConnection] prepare_section_switch rejected -- a section switch is already in progress');
+      this.send({
+        type: "section_info_response",
+        request_id: requestId,
+        section_info: null,
+        error: 'A section switch is already in progress',
+      });
+      return;
+    }
+
+    // The guard is claimed only AFTER a valid target is resolved (below), so the
+    // null/error early-returns for an invalid request never leave a stuck
+    // switching_section (Codex PR #137).
     try {
       const currentState = SchemaFormStateManager.load();
       console.log('[WebFormConnection] Loaded state', { hasState: !!currentState, hasParts: !!currentState?.schema.parts });
@@ -808,6 +868,14 @@ export class WebFormConnection {
         });
         return;
       }
+
+      // A valid target is resolved -- NOW claim the switch guard + arm the watchdog
+      // (Codex PR #137). Doing it here (not at entry) means the null/error returns
+      // above for an invalid request never leave a stuck switching_section. The
+      // guard releases on section_switched (-> completeSectionSwitch) or watchdog.
+      this.switchInFlight = true;
+      this.setStatus('switching_section');
+      this.armSectionSwitchWatchdog();
 
       // Switch to target section in local state (no disconnect!)
       console.log('[WebFormConnection] Switching to section', targetSectionId);
@@ -899,6 +967,10 @@ export class WebFormConnection {
   private handleSectionSwitched(message: any): void {
     const sectionNumber = message.section_number;
     console.log(`[WebFormConnection] Section switched confirmed: ${sectionNumber}`);
+
+    // The switch is confirmed: release the re-entrancy guard + disarm the
+    // watchdog (bd polyglot-pdf-aun) BEFORE settling the status to connected.
+    this.completeSectionSwitch();
 
     // Update status
     this.setStatus('connected');
@@ -1189,8 +1261,18 @@ export class WebFormConnection {
     });
     // Build error message from available fields
     const errorText = message.message || message.reason || message.code || "Server error";
-    const error = new Error(errorText);
 
+    // If a section switch is in flight, this error (e.g. the backend's
+    // section_switch_failed rejection of a concurrent switch, post-0c1) ends it:
+    // release the guards + surface `error` so the UI doesn't hang on a stuck
+    // `switching_section` (bd polyglot-pdf-aun). failSectionSwitch fires onError
+    // itself, so don't double-fire below.
+    if (this.switchInFlight) {
+      this.failSectionSwitch(errorText);
+      return;
+    }
+
+    const error = new Error(errorText);
     if (this.callbacks.onError) {
       this.callbacks.onError(error);
     }
@@ -1213,7 +1295,17 @@ export class WebFormConnection {
   /**
    * Handle WebSocket close
    */
-  private handleClose(event?: CloseEvent): void {
+  private handleClose(event?: CloseEvent, socket?: WebSocket): void {
+    // Ignore a STALE close: the old section socket's close can arrive AFTER
+    // startSection already swapped this.ws to the new socket (Codex PR #137). If
+    // the firing socket is not the current one, it's the replaced socket winding
+    // down -- not a real disconnect of the live connection, so do nothing (else
+    // the switchInFlight branch below would falsely fail a healthy switch).
+    if (socket && this.ws && socket !== this.ws) {
+      console.log('[WebFormConnection] Ignoring close from a stale (replaced) socket');
+      return;
+    }
+
     // Log close details for debugging
     console.log('[WebFormConnection] 🔌 WebSocket closed', {
       code: event?.code,
@@ -1233,9 +1325,22 @@ export class WebFormConnection {
       return;
     }
 
-    // Don't auto-reconnect during intentional section switches
+    // Don't auto-reconnect during the intentional disconnect a reconnect-based
+    // switch performs itself (isSectionSwitching is set across that window and
+    // cleared the moment the new socket opens). The switch logic owns the
+    // lifecycle here; the watchdog backstops a switch that never completes.
     if (this.isSectionSwitching) {
-      return; // Keep current status, will be updated after reconnect
+      return; // Keep current status, startSection drives the reconnect
+    }
+
+    // A close that arrives while a switch is still IN FLIGHT but the intentional-
+    // disconnect window is already over (isSectionSwitching cleared) is an
+    // UNEXPECTED drop mid-switch -- surface `error` fast instead of waiting for
+    // the watchdog or leaving a stuck `switching_section` (bd polyglot-pdf-aun).
+    if (this.switchInFlight) {
+      console.error('[WebFormConnection] Connection dropped mid-section-switch -- surfacing error');
+      this.failSectionSwitch('Connection lost during section switch');
+      return;
     }
 
     // Don't auto-reconnect if connection was closed due to idle timeout
@@ -1585,6 +1690,51 @@ export class WebFormConnection {
     return this.status;
   }
 
+  // --- Section-switch durability (bd polyglot-pdf-aun / WS-D) ----------------
+
+  /** Arm the watchdog so a switch that never confirms/errors can't leave the UI
+   *  stuck on `switching_section`. */
+  private armSectionSwitchWatchdog(): void {
+    this.clearSectionSwitchWatchdog();
+    this.sectionSwitchWatchdog = window.setTimeout(() => {
+      this.sectionSwitchWatchdog = null;
+      // Only fire if a switch is genuinely still in flight (a late
+      // section_switched would have disarmed us).
+      if (this.switchInFlight) {
+        console.error('[WebFormConnection] Section switch timed out -- surfacing error');
+        this.failSectionSwitch('Section switch timed out');
+      }
+    }, WebFormConnection.SECTION_SWITCH_TIMEOUT_MS);
+  }
+
+  private clearSectionSwitchWatchdog(): void {
+    if (this.sectionSwitchWatchdog !== null) {
+      clearTimeout(this.sectionSwitchWatchdog);
+      this.sectionSwitchWatchdog = null;
+    }
+  }
+
+  /** A switch finished SUCCESSFULLY (section_switched arrived): release the
+   *  guards so the next switch can proceed and the status can settle. */
+  private completeSectionSwitch(): void {
+    this.switchInFlight = false;
+    this.isSectionSwitching = false;
+    this.clearSectionSwitchWatchdog();
+  }
+
+  /** A switch FAILED (reconnect close, server error, or watchdog). Release the
+   *  guards and surface `error` instead of a stuck `switching_section` (bd aun).
+   *  The caller's onError is invoked so the UI can prompt a manual reconnect. */
+  private failSectionSwitch(reason: string): void {
+    this.switchInFlight = false;
+    this.isSectionSwitching = false;
+    this.clearSectionSwitchWatchdog();
+    this.setStatus('error');
+    if (this.callbacks.onError) {
+      this.callbacks.onError(new Error(reason));
+    }
+  }
+
   /**
    * Get current state
    */
@@ -1636,10 +1786,22 @@ export class WebFormConnection {
     this.lastUnconfirmableFieldId = null;
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
+
+    // Re-entrancy guard (bd polyglot-pdf-aun): reject a second switch while one is
+    // already in flight, so two reconnects can't race. Distinct from
+    // isSectionSwitching, which is cleared the moment the new socket opens.
+    if (this.switchInFlight) {
+      // THROW so the caller knows the switch was rejected and can roll back its
+      // optimistic UI update (Codex PR #137), rather than a silent resolve.
+      console.warn('[WebFormConnection] startSection rejected -- a section switch is already in progress');
+      throw new Error('A section switch is already in progress');
+    }
+    this.switchInFlight = true;
     try {
-      // Set switching status
+      // Set switching status + arm the watchdog so a hung switch surfaces error.
       this.isSectionSwitching = true;
       this.setStatus("switching_section");
+      this.armSectionSwitchWatchdog();
 
       // Disconnect current session if connected
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -1681,7 +1843,10 @@ export class WebFormConnection {
 
       // Connect to backend with section-specific handshake
       await this.connect(wsUrl);
-      this.isSectionSwitching = false; // Reset flag after successful reconnect
+      // Reset the auto-reconnect suppressor now the new socket is open. The
+      // switch is not fully "complete" until the handshake is sent below; the
+      // watchdog stays armed until then.
+      this.isSectionSwitching = false;
 
       // Compute initial field hint (first unfilled field in this section)
       const initialFieldHint = this.computeNextFieldHintString();
@@ -1702,9 +1867,18 @@ export class WebFormConnection {
         initial_field_hint: initialFieldHint,
       });
 
+      // Do NOT release the guard here: the switch is terminally DONE only when the
+      // backend replies `session_ready` (-> handleSessionReady -> completeSectionSwitch),
+      // so a stall after this handshake send is still caught by the watchdog
+      // (Codex/fresh-eyes PR #137). isSectionSwitching was already cleared above so
+      // the new socket's auto-reconnect works; switchInFlight stays set until ready.
+
     } catch (error) {
-      // Reset flag on error
-      this.isSectionSwitching = false;
+      // A failed reconnect/handshake must surface `error` (bd polyglot-pdf-aun),
+      // not leave the UI stuck on `switching_section`. failSectionSwitch clears
+      // the guards, disarms the watchdog, sets `error`, and fires onError.
+      this.failSectionSwitch(
+        error instanceof Error ? error.message : 'Section switch failed');
       throw error;
     }
   }
@@ -1728,20 +1902,53 @@ export class WebFormConnection {
     this.unconfirmableConfirmCount = 0;
     this.unconfirmableRepromptCount = 0;
 
-    const currentState = SchemaFormStateManager.load();
-    if (!currentState || !currentState.schema.sections) {
-      throw new Error('Sections not initialized');
+    // Re-entrancy guard (bd polyglot-pdf-aun): a manual switch arriving while an
+    // AI-initiated switch is mid-flight (or vice versa) must not start a second
+    // overlapping switch. The backend (post-0c1) also rejects the second switch
+    // with success:false; this guard stops the FE from even sending it.
+    if (this.switchInFlight) {
+      // THROW (not a silent resolve) so the caller can roll back: the UI pre-updates
+      // currentSectionId/sessionStorage before awaiting this, so a silent ignore
+      // would leave the UI on the wrong section while the first switch is still
+      // running (Codex PR #137).
+      console.warn('[WebFormConnection] switchToSection rejected -- a section switch is already in progress');
+      throw new Error('A section switch is already in progress');
     }
+    // Claim the guard SYNCHRONOUSLY, before ANY await -- otherwise two concurrent
+    // callers (an AI prepare_section_switch and a user nav click in the same tick)
+    // both pass the check above and race past the await below (fresh-eyes PR #137).
+    // Set the status + arm the watchdog here too so the whole switch window is
+    // covered. This path keeps the SAME socket open and waits for the backend's
+    // `section_switched` (-> handleSectionSwitched -> completeSectionSwitch) or an
+    // `error` (-> handleServerError -> failSectionSwitch); the watchdog backstops a
+    // switch that never replies.
+    this.switchInFlight = true;
+    this.setStatus('switching_section');
+    this.armSectionSwitchWatchdog();
 
-    // Find section by ID
-    const targetSection = currentState.schema.sections.find(s => s.id === sectionId);
-    if (!targetSection) {
-      throw new Error(`Section not found: ${sectionId}`);
-    }
+    let currentState: ReturnType<typeof SchemaFormStateManager.load>;
+    let targetSection: { id: string; order: number; label: string } | undefined;
+    try {
+      currentState = SchemaFormStateManager.load();
+      if (!currentState || !currentState.schema.sections) {
+        throw new Error('Sections not initialized');
+      }
 
-    // Validate range
-    if (targetSection.order < 1 || targetSection.order > currentState.schema.sections.length) {
-      throw new Error(`Invalid section number: ${targetSection.order} (must be 1-${currentState.schema.sections.length})`);
+      // Find section by ID
+      targetSection = currentState.schema.sections.find(s => s.id === sectionId) as any;
+      if (!targetSection) {
+        throw new Error(`Section not found: ${sectionId}`);
+      }
+
+      // Validate range
+      if (targetSection.order < 1 || targetSection.order > currentState.schema.sections.length) {
+        throw new Error(`Invalid section number: ${targetSection.order} (must be 1-${currentState.schema.sections.length})`);
+      }
+    } catch (err) {
+      // A validation failure must release the guard we just claimed (else the next
+      // switch is wrongly rejected) and surface error, not stay switching_section.
+      this.failSectionSwitch(err instanceof Error ? err.message : 'Section switch failed');
+      throw err;
     }
 
     // Wait for WebSocket send buffer to drain before sending control message
@@ -1749,54 +1956,59 @@ export class WebFormConnection {
     console.log('[WebFormConnection] Waiting for buffer to drain before section switch');
     await this.waitForBufferDrain(1000);
 
-    // Update status
-    this.setStatus('switching_section');
+    // Wrap the post-validation state-update + send in a catch so an unexpected
+    // throw (e.g. corrupted sessionStorage in extractSectionFields) releases the
+    // guard immediately rather than leaving it stuck until the watchdog fires.
+    try {
+      // Switch to target section in local state
+      const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
+      this.state = updatedState;
 
-    // Switch to target section in local state
-    const updatedState = SchemaFormStateManager.switchToSection(currentState, sectionId);
-    this.state = updatedState;
+      // Build section info to send to backend (avoid round-trip delay)
+      const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
+      const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
+      const sectionValues: Record<string, any> = {};
 
-    // Build section info to send to backend (avoid round-trip delay)
-    const sectionSchema = SchemaFormStateManager.extractSectionFields(updatedState.schema, sectionId);
-    const sectionFieldIds = new Set(sectionSchema.fields.map((f: any) => f.id));
-    const sectionValues: Record<string, any> = {};
-
-    for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
-      if (sectionFieldIds.has(fieldId)) {
-        sectionValues[fieldId] = fieldValue;
+      for (const [fieldId, fieldValue] of Object.entries(updatedState.fieldValues)) {
+        if (sectionFieldIds.has(fieldId)) {
+          sectionValues[fieldId] = fieldValue;
+        }
       }
-    }
 
-    // Build previous spoken names from completed sections
-    const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
+      // Build previous spoken names from completed sections
+      const previousSpokenNames = SchemaFormStateManager.getPreviousSpokenNames(updatedState);
 
-    // Compute initial field hint
-    const initialFieldHint = this.computeNextFieldHintString();
+      // Compute initial field hint
+      const initialFieldHint = this.computeNextFieldHintString();
 
-    console.log('[WebFormConnection] Sending section switch with embedded info', {
-      sectionId: targetSection.id,
-      sectionNumber: targetSection.order,
-      fieldCount: sectionSchema.fields.length,
-      valueCount: Object.keys(sectionValues).length
-    });
+      console.log('[WebFormConnection] Sending section switch with embedded info', {
+        sectionId: targetSection.id,
+        sectionNumber: targetSection.order,
+        fieldCount: sectionSchema.fields.length,
+        valueCount: Object.keys(sectionValues).length
+      });
 
-    // Send section switch with all info embedded (no round-trip needed)
-    this.send({
-      type: "manual_section_switch",
-      identifier: targetSection.id,
-      section_info: {
-        schema: sectionSchema,
-        current_values: sectionValues,
-        metadata: {
-          section_id: targetSection.id,
-          section_number: targetSection.order,
-          total_sections: updatedState.schema.sections.length,
-          section_label: targetSection.label,
-          previous_spoken_names: previousSpokenNames,
+      // Send section switch with all info embedded (no round-trip needed)
+      this.send({
+        type: "manual_section_switch",
+        identifier: targetSection.id,
+        section_info: {
+          schema: sectionSchema,
+          current_values: sectionValues,
+          metadata: {
+            section_id: targetSection.id,
+            section_number: targetSection.order,
+            total_sections: updatedState.schema.sections.length,
+            section_label: targetSection.label,
+            previous_spoken_names: previousSpokenNames,
+          },
+          initial_field_hint: initialFieldHint,
         },
-        initial_field_hint: initialFieldHint,
-      },
-    });
+      });
+    } catch (err) {
+      this.failSectionSwitch(err instanceof Error ? err.message : 'Section switch failed');
+      throw err;
+    }
   }
 
   /**
