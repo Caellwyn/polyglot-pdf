@@ -387,3 +387,75 @@ describe('WebFormConnection AI-value reject streak resets on section switch (bd 
     expect(prompts(ws)).toHaveLength(1)
   })
 })
+
+// An OPTIONAL checkbox group filled with [] (the user selected none) must be a
+// CONFIRMABLE end state, not a deadlock (fresh-eyes PR #145 round 5). A round-4
+// change briefly made confirm_field reject [] as "no usable value"; combined with
+// computeNextField counting [] as a value, that stranded the form -- the field was
+// re-offered forever while confirm refused it. validateField treats [] as empty
+// (so a REQUIRED group's [] is caught at the apply gate), but an OPTIONAL group's
+// [] is valid and must confirm.
+describe('WebFormConnection optional checkbox group [] is confirmable, not stranded (bd polyglot-pdf-wpw.3)', () => {
+  const GROUP_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'concerns[]',
+        name: 'concerns',
+        spoken_name: 'Concerns',
+        type: 'checkbox',
+        group_kind: 'checkbox',
+        // optional: no validation.required
+        options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+      },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['concerns[]'] }],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  function confirmAcks(ws: MockWebSocket): any[] {
+    return ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+      .filter((m: any) => m.type === 'confirm_field_response')
+  }
+
+  it('confirms an optional checkbox group whose value is [] (no deadlock)', async () => {
+    const conn = new WebFormConnection(GROUP_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // Store [] for the optional group (the AI fill path -- valid, lands).
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { 'concerns[]': [] } }) })
+
+    // Confirm it -- must be RECORDED (true), not refused as "no usable value".
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'confirm_field',
+        field_id: 'concerns[]',
+        confirmation_method: 'verbal',
+        request_id: 'req-empty-group',
+      }),
+    })
+
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].recorded).toBe(true)
+  })
+})

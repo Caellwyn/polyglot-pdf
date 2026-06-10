@@ -115,17 +115,26 @@ export class WebFormConnection {
   // value must never land -- and send a corrective prompt back to the model so it
   // re-asks the user in-band. Two layers cap those prompts so the model cannot spin
   // the session:
-  //   1. PER-FIELD (mirrors the unconfirmable loop-breaker above): count consecutive
+  //   1. PER-FIELD (mirrors the unconfirmable loop-breaker above): count CONSECUTIVE
   //      rejects of the SAME field; prompt on the first reject and thereafter on
   //      every count divisible by REJECT_LIMIT, up to REJECT_REPROMPT_CAP -- with
-  //      LIMIT=2/CAP=3 that fires at rejects #1, #2, #4 for that field, then silence.
-  //      Resets when a value for the tracked field validates.
-  //   2. SESSION-WIDE (Codex PR #145): a model bouncing invalid values BETWEEN
-  //      fields (A bad -> B bad -> A bad ...) would reset the per-field counter on
-  //      every switch and prompt forever. So a separate counter -- NOT reset on a
-  //      field change -- caps the TOTAL corrective prompts per session at
-  //      REJECT_SESSION_CAP. Once hit, we stop prompting regardless of field.
-  // Both layers reset on (re)connect and section switch (resetValidationRejectTracking).
+  //      LIMIT=2/CAP=3 that fires at rejects #1, #2, #4 then silence WHILE THE SAME
+  //      FIELD KEEPS FAILING CONSECUTIVELY. Resets when the tracked field validates
+  //      OR when a DIFFERENT field is rejected (the streak is per-field), so under
+  //      cross-field alternation the per-field cap does NOT bound the total -- layer
+  //      2 does. (Do not rely on the per-field cap alone; see layer 2.)
+  //   2. SESSION-WIDE (Codex PR #145): because the per-field counter resets on every
+  //      field change, a model bouncing invalid values BETWEEN fields (A bad -> B bad
+  //      -> A bad ...) would re-arm the per-field prompt each switch and prompt
+  //      forever. So a separate counter -- NOT reset on a field change -- caps the
+  //      TOTAL corrective prompts per session at REJECT_SESSION_CAP. Once hit, we
+  //      stop prompting regardless of field. This is the real bound on cross-field
+  //      spin; the per-field cap only shapes the cadence within one field's streak.
+  // Both layers reset on (re)connect and section switch (resetValidationRejectTracking),
+  // and when the STUCK field (the one currently being rejected) finally validates --
+  // genuine progress on the failing thing restores the budget, but an unrelated
+  // success does NOT (else [bad-A, good-B] alternation would reset the cap forever;
+  // fresh-eyes round 4).
   // The corrective message carries only the field's spoken name + the schema
   // constraint -- NEVER the rejected value (PII-safe, the p84m principle).
   private lastValidationRejectFieldId: string | null = null;
@@ -1108,14 +1117,16 @@ export class WebFormConnection {
     // the session and silences Gemini). Detect that, do not record a bogus confirmation,
     // and re-prompt Gemini to collect the value.
     const fieldValue = this.state.fieldValues[field_id]?.value;
+    // NOTE on empty arrays (fresh-eyes PR #145 rounds 4+5): an empty `[]` on a
+    // checkbox group is deliberately NOT treated as unusable here. A blank OPTIONAL
+    // group ("the user selected none") is a legitimate, confirmable end state;
+    // rejecting it would STRAND the form -- computeNextField (navigation.ts) counts
+    // `[]` as a value, so the field would be re-offered forever while confirm refused
+    // it (a deadlock). The REQUIRED case is already handled upstream: validateField
+    // treats `[]` as empty, so a required-blank fails the required check at the apply
+    // gate and never lands. So hasUsableValue keeps the null/undefined/'' notion only.
     const hasUsableValue =
-      fieldValue !== null &&
-      fieldValue !== undefined &&
-      fieldValue !== '' &&
-      // An empty array (a checkbox group with no selections) is NOT a usable value:
-      // it must not be confirmable as filled (fresh-eyes PR #145 round 4). Mirrors
-      // the empty-array handling in validateField's normalizedEmpty.
-      !(Array.isArray(fieldValue) && fieldValue.length === 0);
+      fieldValue !== null && fieldValue !== undefined && fieldValue !== '';
 
     if (!hasUsableValue) {
       if (field_id === this.lastUnconfirmableFieldId) {
