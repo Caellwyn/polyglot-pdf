@@ -44,8 +44,10 @@ async def test_handle_switch_section_responds_before_teardown_then_swaps_off_tas
     }
     coordinator.request_section_info.return_value = section_info
 
-    # Patch the swap so we can assert it runs on the detached task, AFTER the return.
-    service.switch_to_section = AsyncMock()
+    # Patch the INNER locked swap (_complete_section_switch calls it directly while
+    # holding _switch_lock) so we can assert it runs on the detached task, AFTER the
+    # return.
+    service._switch_to_section_locked = AsyncMock()
 
     result = await service.handle_switch_section("2")
 
@@ -60,7 +62,7 @@ async def test_handle_switch_section_responds_before_teardown_then_swaps_off_tas
 
     # Now let the detached task run to completion and assert the swap happened.
     await service._switch_task
-    service.switch_to_section.assert_awaited_once_with(
+    service._switch_to_section_locked.assert_awaited_once_with(
         section_schema=section_info["schema"],
         section_values=section_info["current_values"],
         section_metadata=section_info["metadata"],
@@ -264,21 +266,26 @@ async def test_swap_awaits_graceful_close_before_starting_new_session():
 
     order = []
 
-    # An event that records WHEN it is awaited (resolves only after we set it).
+    # An event that records (via a barrier) the MOMENT it is first awaited, so the
+    # test can deterministically wait for the swap task to REACH the await before
+    # releasing it -- no fragile sleep(0) tick-counting (fresh-eyes PR #135).
     closed = asyncio.Event()
+    reached_wait = asyncio.Event()
 
     class _RecordingWait:
         async def wait(self):
             order.append("awaited_closed_event")
+            reached_wait.set()
             await closed.wait()
 
     live_ai = AsyncMock()
     live_ai.begin_graceful_shutdown = MagicMock(return_value=_RecordingWait())
     service._live_ai = live_ai
 
+    # Patch the INNER locked method (that is what _complete_section_switch calls).
     async def _record_switch(**kwargs):
         order.append("switch_to_section")
-    service.switch_to_section = _record_switch
+    service._switch_to_section_locked = _record_switch
 
     coordinator.request_section_info.return_value = {
         "schema": {"fields": []},
@@ -290,8 +297,11 @@ async def test_swap_awaits_graceful_close_before_starting_new_session():
     result = await service.handle_switch_section("2")
     assert result["success"] is True
 
-    # The swap task is now waiting on the closed event. Release it.
-    await asyncio.sleep(0)  # let the task reach the await
+    # Deterministically wait until the swap task has REACHED the closed-event await,
+    # then release it -- this proves switch ran strictly AFTER the await, not just
+    # "in the same tick".
+    await asyncio.wait_for(reached_wait.wait(), timeout=1.0)
+    assert order == ["awaited_closed_event"], "switch must NOT run before the close is awaited"
     closed.set()
     await service._switch_task
 
@@ -318,7 +328,7 @@ async def test_detached_swap_failure_notifies_frontend():
 
     async def _boom(**kwargs):
         raise RuntimeError("swap exploded")
-    service.switch_to_section = _boom
+    service._switch_to_section_locked = _boom
 
     coordinator.request_section_info.return_value = {
         "schema": {"fields": []},
@@ -330,6 +340,100 @@ async def test_detached_swap_failure_notifies_frontend():
     await service.handle_switch_section("2")
     await service._switch_task  # detached task swallows the error internally
 
-    # The frontend was told the switch failed (not left on a dead session).
-    sent_types = [c.args[0].get("type") for c in service._websocket.send_json.call_args_list]
-    assert "section_switch_failed" in sent_types
+    # The frontend was told the switch failed, in a shape it HANDLES: the `error`
+    # envelope (the FE message switch ignores unknown types) with the
+    # section_switch_failed code (Codex PR #135).
+    sent = [c.args[0] for c in service._websocket.send_json.call_args_list]
+    err = [m for m in sent if m.get("type") == "error" and m.get("code") == "section_switch_failed"]
+    assert err, f"expected an error/section_switch_failed message, got {sent}"
+
+
+@pytest.mark.asyncio
+async def test_manual_switch_serializes_behind_pending_ai_swap():
+    """Codex/fresh-eyes PR #135: a MANUAL switch arriving while an AI swap is still
+    waiting on closed_event must not interleave -- _complete_section_switch holds
+    _switch_lock across the whole swap, so switch_to_section (manual) blocks until
+    the AI swap finishes. Both restarts run, fully serialized, never concurrently."""
+    service = FormFillingService()
+    coordinator = AsyncMock()
+    service._request_coordinator = coordinator
+    service._session_id = "s"
+
+    closed = asyncio.Event()  # NOT set -> the AI swap parks inside the lock
+    live_ai = AsyncMock()
+    live_ai.begin_graceful_shutdown = MagicMock(return_value=closed)
+    service._live_ai = live_ai
+
+    active = {"count": 0}
+    overlap = {"max": 0}
+
+    async def _locked_switch(*args, **kwargs):
+        active["count"] += 1
+        overlap["max"] = max(overlap["max"], active["count"])
+        await asyncio.sleep(0)  # give a concurrent caller a chance to interleave
+        active["count"] -= 1
+    service._switch_to_section_locked = _locked_switch
+
+    coordinator.request_section_info.return_value = {
+        "schema": {"fields": []},
+        "current_values": {},
+        "metadata": {"section_number": 2, "section_label": "P", "total_sections": 4},
+        "initial_field_hint": "x",
+    }
+
+    # Start the AI swap (parks on the unset closed event, holding _switch_lock).
+    await service.handle_switch_section("2")
+    await asyncio.sleep(0)
+
+    # A manual switch now races in -- it must BLOCK on _switch_lock.
+    manual = asyncio.create_task(service.switch_to_section(
+        section_schema={"fields": []}, section_values={},
+        section_metadata={"section_number": 3, "section_label": "Q", "total_sections": 4},
+        initial_field_hint="y",
+    ))
+    await asyncio.sleep(0)
+
+    # Release the AI swap; both should now complete, never overlapping.
+    closed.set()
+    await service._switch_task
+    await manual
+
+    assert overlap["max"] == 1, "manual and AI swaps must never run the restart concurrently"
+
+
+@pytest.mark.asyncio
+async def test_end_session_cancels_pending_swap_without_restart():
+    """Codex PR #135: if the WS closes mid-swap, end_session cancels the detached
+    _switch_task BEFORE finalize, so it never restarts Gemini against a dead socket."""
+    service = FormFillingService()
+    coordinator = AsyncMock()
+    service._request_coordinator = coordinator
+    service._session_id = "s"
+    service._websocket = AsyncMock()
+
+    closed = asyncio.Event()  # never set -> the swap parks
+    live_ai = AsyncMock()
+    live_ai.begin_graceful_shutdown = MagicMock(return_value=closed)
+    service._live_ai = live_ai
+
+    restarted = {"v": False}
+
+    async def _locked_switch(**kwargs):
+        restarted["v"] = True
+    service._switch_to_section_locked = _locked_switch
+
+    coordinator.request_section_info.return_value = {
+        "schema": {"fields": []},
+        "current_values": {},
+        "metadata": {"section_number": 2, "section_label": "P", "total_sections": 4},
+        "initial_field_hint": "x",
+    }
+
+    await service.handle_switch_section("2")
+    await asyncio.sleep(0)  # swap is parked on closed_event
+
+    # WS closes -> end_session must cancel the pending swap.
+    await service.end_session()
+
+    assert service._switch_task.cancelled() or service._switch_task.done()
+    assert restarted["v"] is False, "a cancelled swap must NOT restart the session"

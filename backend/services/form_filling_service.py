@@ -545,6 +545,17 @@ class FormFillingService:
         # Note: current_values are client-managed, we don't store them
 
     async def end_session(self):
+        # Cancel any in-flight detached AI section-switch BEFORE teardown (Codex
+        # PR #135): otherwise, if the client disconnects while _complete_section_switch
+        # is waiting on closed_event, it would later restart Gemini via start_session
+        # against a cleared WebSocket -- an orphaned backend session after the user
+        # is gone. The task's CancelledError handler exits without restarting.
+        if self._switch_task is not None and not self._switch_task.done():
+            self._switch_task.cancel()
+            try:
+                await self._switch_task
+            except (asyncio.CancelledError, Exception):
+                pass
         if self._live_ai is not None:
             await self._live_ai.finalize()
         self._websocket = None
@@ -567,7 +578,10 @@ class FormFillingService:
         """
         async with self._switch_lock:
             await self._switch_to_section_locked(
-                section_schema, section_values, section_metadata, initial_field_hint
+                section_schema=section_schema,
+                section_values=section_values,
+                section_metadata=section_metadata,
+                initial_field_hint=initial_field_hint,
             )
 
     async def _switch_to_section_locked(
@@ -911,37 +925,55 @@ class FormFillingService:
     async def _complete_section_switch(self, closed_event, section_info: Dict[str, Any]) -> None:
         """Finish an AI-initiated section switch on a DETACHED task (bd 0c1).
 
-        Awaits the old receive loop's graceful close, then performs the real
-        session swap. A detached task MUST NOT swallow exceptions silently -- the
-        catch-all logs and notifies the frontend so a failed swap surfaces instead
-        of leaving the user on a dead session.
+        Holds _switch_lock for the ENTIRE swap -- including the wait for the old
+        loop to close -- so a concurrent MANUAL switch (websocket_routes ->
+        switch_to_section, which also takes _switch_lock) cannot interleave and
+        leave the user on the wrong section (Codex/fresh-eyes PR #135: the
+        is-in-progress guard alone didn't cover the AI-vs-manual overlap, because
+        the manual path does not consult _switch_task). Because we hold the lock,
+        we call the INNER _switch_to_section_locked directly -- re-acquiring the
+        non-reentrant lock via the public switch_to_section would deadlock.
+
+        A detached task MUST NOT swallow exceptions silently -- the catch-all logs
+        and notifies the frontend so a failed swap surfaces instead of leaving the
+        user on a dead session.
         """
         try:
-            # Wait for the old loop to finish flushing + exit. The 5s bound is a
-            # backstop: switch_to_section's own finalize() hard-cancels as a
-            # fallback if the cooperative exit somehow stalls, so we proceed either
-            # way -- but normally the event fires in well under a second.
-            try:
-                await asyncio.wait_for(closed_event.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                _log.warning("section_switch_graceful_close_timeout",
-                            session_id=self._session_id)
+            async with self._switch_lock:
+                # Wait for the old loop to finish flushing + exit. The 5s bound is a
+                # backstop: switch_to_section's own finalize() hard-cancels as a
+                # fallback if the cooperative exit somehow stalls, so we proceed
+                # either way -- but normally the event fires in well under a second.
+                try:
+                    await asyncio.wait_for(closed_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    _log.warning("section_switch_graceful_close_timeout",
+                                session_id=self._session_id)
 
-            await self.switch_to_section(
-                section_schema=section_info["schema"],
-                section_values=section_info["current_values"],
-                section_metadata=section_info["metadata"],
-                initial_field_hint=section_info.get("initial_field_hint"),
-            )
+                await self._switch_to_section_locked(
+                    section_schema=section_info["schema"],
+                    section_values=section_info["current_values"],
+                    section_metadata=section_info["metadata"],
+                    initial_field_hint=section_info.get("initial_field_hint"),
+                )
+        except asyncio.CancelledError:
+            # The WS closed mid-swap and end_session cancelled this task (Codex
+            # PR #135). Do NOT restart Gemini against a dead socket -- just exit.
+            _log.info("section_switch_cancelled", session_id=self._session_id)
+            raise
         except Exception as exc:
             _log.error("section_switch_failed",
                       session_id=self._session_id,
                       error=str(exc))
-            # Surface the failure to the frontend rather than dying silently.
+            # Surface the failure to the frontend in a shape it HANDLES: the FE
+            # message switch handles `error` (and ignores unknown types), so use
+            # the error envelope, not a bespoke section_switch_failed type
+            # (Codex PR #135).
             if self._websocket is not None:
                 try:
                     await self._websocket.send_json({
-                        "type": "section_switch_failed",
+                        "type": "error",
+                        "code": "section_switch_failed",
                         "message": f"Failed to switch section: {str(exc)}",
                     })
                 except Exception:

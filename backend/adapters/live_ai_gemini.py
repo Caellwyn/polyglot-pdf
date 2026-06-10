@@ -1845,6 +1845,15 @@ class LiveAIGemini(ILiveAI):
 
                                 except Exception:
                                     self._log.exception("event_handling_error")
+                                    # If a graceful shutdown was requested (e.g.
+                                    # send_tool_response raised AFTER the switch_section
+                                    # callback set _close_after_flush), BREAK rather than
+                                    # continue -- otherwise the loop keeps iterating until
+                                    # the swap task's 5s wait_for backstop fires, a
+                                    # demo-visible freeze (fresh-eyes PR #135).
+                                    if self._close_after_flush:
+                                        self._log.info("graceful_shutdown_after_event_error")
+                                        break
                                     continue
                         except ConnectionClosed as exc:
                             print(f"\n{'='*80}")
