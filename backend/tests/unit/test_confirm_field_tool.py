@@ -157,6 +157,41 @@ class TestConfirmFieldTool:
         assert "All fields confirmed" in response["message"]
 
     @pytest.mark.asyncio
+    async def test_none_coordinator_does_not_signal_completion(self, mock_websocket):
+        """A None coordinator must NOT crash and must NOT report completion.
+
+        request_coordinator is a required positional, so it is never None in
+        production -- but a test or racing reconnect could pass None. An absent
+        coordinator means "next field unknown", which is the timeout semantics
+        (NOT "All fields confirmed") -- reporting completion here would let Gemini
+        wrap the form up early (the failure class bd polyglot-pdf-tks guards).
+        Mirrors the existing send_form_update guard (bd polyglot-pdf-pen).
+        """
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            session_id="test_session",
+            request_coordinator=None,  # the guarded condition
+            send_transcript=False,
+            form_id="I-90",
+            form_session_id="fss_test_12345",
+        )
+
+        response = await handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={
+                "field_id": "p1_line1_firstname",
+                "confirmation_method": "verbal",
+            },
+        )
+
+        # Confirms the field, but does NOT claim the form is complete, and does
+        # NOT leak a non-serializable sentinel onto the wire.
+        assert response["success"] is True
+        assert response["field_confirmed"] == "p1_line1_firstname"
+        assert "All fields confirmed" not in response["message"]
+        assert response["next_field_hint"] is None  # sentinel collapsed for the wire
+
+    @pytest.mark.asyncio
     async def test_no_logging_without_form_ids(self, mock_websocket, mock_coordinator):
         """Confirmation logging should not crash if form_id/form_session_id are missing."""
         handler = CallbackHandler(

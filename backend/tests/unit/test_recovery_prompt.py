@@ -33,7 +33,11 @@ def test_recovery_prompts_are_ascii_clean():
     settings = Settings()
     for level in (1, 2, 3):
         prompt = getattr(settings, f"RECOVERY_PROMPT_LEVEL_{level}")
-        prompt.encode("ascii")
+        # Explicit assert (not a bare prompt.encode("ascii")) so the check still
+        # fails loudly if a refactor ever wraps this in a try/except (bd bpm7).
+        assert all(ord(c) < 128 for c in prompt), (
+            f"RECOVERY_PROMPT_LEVEL_{level} contains non-ASCII characters"
+        )
 
 
 @pytest.mark.asyncio
