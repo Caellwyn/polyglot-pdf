@@ -81,3 +81,342 @@ describe('validateField (a_number)', () => {
     expect(validateField(aNumberField, '')).toBeNull();
   });
 });
+
+// Enum / option-membership validation (bd polyglot-pdf-wpw.3): an option-backed
+// field's value must be one of its declared options. Guards an AI-applied value
+// where the model invents an option that does not exist in the schema.
+describe('validateField (enum / option membership)', () => {
+  const selectField: FormField = {
+    id: 'marital_status',
+    name: 'Marital Status',
+    spoken_name: 'marital status',
+    type: 'select',
+    section_id: 'Part 1',
+    options: [
+      { value: 'single', label: 'Single' },
+      { value: 'married', label: 'Married' },
+      { value: 'divorced', label: 'Divorced' },
+    ],
+  };
+
+  // No `validation` block at all -- the option set IS the constraint. The check
+  // must still fire (it runs before the `!field.validation` early return).
+  const radioNoValidation: FormField = {
+    id: 'has_children',
+    name: 'Has Children',
+    spoken_name: 'has children',
+    type: 'radio',
+    section_id: 'Part 1',
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+  };
+
+  // A required select: empty is a required-error, a bad option is an enum-error.
+  const requiredSelect: FormField = {
+    ...selectField,
+    id: 'marital_status_required',
+    validation: { required: true },
+  };
+
+  it.each(['single', 'married', 'divorced'])('accepts a valid option: %s', (v) => {
+    expect(validateField(selectField, v)).toBeNull();
+  });
+
+  it.each(['widowed', 'Single', 'MARRIED', 'unknown'])(
+    'rejects a value outside the option set: %s',
+    (v) => {
+      expect(validateField(selectField, v)).not.toBeNull();
+    }
+  );
+
+  it('enforces enum even when the field has no validation block', () => {
+    expect(validateField(radioNoValidation, 'yes')).toBeNull();
+    expect(validateField(radioNoValidation, 'maybe')).not.toBeNull();
+  });
+
+  it('treats an empty value on an optional option-field as valid (not an enum error)', () => {
+    expect(validateField(selectField, '')).toBeNull();
+    expect(validateField(selectField, null)).toBeNull();
+  });
+
+  it('reports required (not enum) for an empty required option-field', () => {
+    expect(validateField(requiredSelect, '')).toContain('required');
+  });
+
+  it('validates array (checkbox-group) values member-by-member', () => {
+    // Arrays are valid ONLY for a checkbox GROUP, not a single-choice select.
+    const checkboxGroup: FormField = {
+      id: 'tags[]',
+      name: 'Tags',
+      spoken_name: 'tags',
+      type: 'checkbox',
+      group_kind: 'checkbox',
+      section_id: 'Part 1',
+      options: [
+        { value: 'single', label: 'Single' },
+        { value: 'married', label: 'Married' },
+      ],
+    };
+    expect(validateField(checkboxGroup, ['single', 'married'])).toBeNull();
+    expect(validateField(checkboxGroup, ['single', 'widowed'])).not.toBeNull();
+  });
+
+  it('rejects a NON-empty array for a single-choice select/radio field', () => {
+    // A single-choice field cannot take a multi-value array (Codex PR #145 round 3).
+    expect(validateField(selectField, ['single'])).not.toBeNull();
+    expect(validateField(selectField, ['single', 'married'])).not.toBeNull();
+  });
+
+  it('treats an empty array [] on an OPTIONAL single-choice field as empty (not an error)', () => {
+    // [] is "no value" -> empty (fresh-eyes PR #145 round 4 unified empty-handling).
+    // For an optional field that means valid/unfilled, NOT a vacuous-pass landing:
+    // because it is empty, the enum check is skipped and nothing is stored. (A
+    // REQUIRED single-choice field with [] is covered by the required check below.)
+    expect(validateField(selectField, [])).toBeNull();
+    expect(validateField(radioNoValidation, [])).toBeNull();
+  });
+
+  it('never echoes the rejected value in the error message (PII-safe)', () => {
+    const err = validateField(selectField, 'sensitive-made-up-value');
+    expect(err).not.toBeNull();
+    expect(err).not.toContain('sensitive-made-up-value');
+  });
+
+  it('treats an empty array [] as empty: optional checkbox group passes, required fails', () => {
+    // [] = a checkbox group with no selections -> empty (fresh-eyes PR #145 round 4).
+    const optionalGroup: FormField = {
+      id: 'tags_opt[]',
+      name: 'Optional Tags',
+      spoken_name: 'optional tags',
+      type: 'checkbox',
+      group_kind: 'checkbox',
+      section_id: 'Part 1',
+      options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+    };
+    const requiredGroup: FormField = { ...optionalGroup, id: 'tags_req[]', validation: { required: true } };
+
+    expect(validateField(optionalGroup, [])).toBeNull();            // optional -> ok empty
+    expect(validateField(requiredGroup, [])).toContain('required'); // required -> required error, NOT vacuous pass
+  });
+
+  // Plain-string options (e.g. adult_intake_demo_schema.json: options: ["Agender",...]),
+  // the shape the backend List[str] normalizer also emits. Reading only opt.value
+  // would build an all-undefined allowed set and reject every valid value (Codex PR #145).
+  const stringOptionField: FormField = {
+    id: 'gender_identity',
+    name: 'Gender Identity',
+    spoken_name: 'gender identity',
+    type: 'select',
+    section_id: 'Part 1',
+    options: ['Agender', 'Cisgender Female', 'Cisgender Male'] as any,
+  };
+
+  it('accepts a valid value when options are plain strings', () => {
+    expect(validateField(stringOptionField, 'Agender')).toBeNull();
+    expect(validateField(stringOptionField, 'Cisgender Male')).toBeNull();
+  });
+
+  it('rejects an out-of-set value when options are plain strings', () => {
+    expect(validateField(stringOptionField, 'Nonexistent')).not.toBeNull();
+  });
+});
+
+// Top-level constraint fields (max_length / min / max) live directly on the field
+// in many generated schemas (e.g. form-kits/i-90) with NO `validation` block. The
+// early `!field.validation` return used to skip them, letting an over-length AI
+// value land. bd polyglot-pdf-wpw.3 / Codex PR #145.
+describe('validateField (top-level constraint fields, no validation block)', () => {
+  const topLevelMaxLen: FormField = {
+    id: 'p1_line6b_streetnumbername',
+    name: 'Street Number and Name',
+    spoken_name: 'street number and name',
+    type: 'text',
+    section_id: 'Part 1',
+    max_length: 25,
+    // NOTE: deliberately NO `validation` block -- the constraint is top-level only.
+  };
+
+  const topLevelNumberRange: FormField = {
+    id: 'age',
+    name: 'Age',
+    spoken_name: 'age',
+    type: 'number',
+    section_id: 'Part 1',
+    min: 0,
+    max: 120,
+  };
+
+  it('accepts a value within the top-level max_length', () => {
+    expect(validateField(topLevelMaxLen, '123 Main Street')).toBeNull();
+  });
+
+  it('rejects a value over the top-level max_length', () => {
+    expect(validateField(topLevelMaxLen, 'X'.repeat(26))).not.toBeNull();
+  });
+
+  it('enforces top-level min/max for number fields', () => {
+    expect(validateField(topLevelNumberRange, '45')).toBeNull();
+    expect(validateField(topLevelNumberRange, '200')).not.toBeNull();
+    expect(validateField(topLevelNumberRange, '-1')).not.toBeNull();
+  });
+
+  it('an explicit validation block value wins over the top-level field', () => {
+    // validation.max_length (10) is tighter than top-level max_length (25): the
+    // validation block must take precedence.
+    const both: FormField = { ...topLevelMaxLen, validation: { max_length: 10 } };
+    expect(validateField(both, 'X'.repeat(15))).not.toBeNull(); // 15 > 10 -> invalid
+    expect(validateField(both, 'X'.repeat(8))).toBeNull();      // 8 <= 10 -> valid
+  });
+
+  it('treats a field with no constraints at all as valid', () => {
+    const bare: FormField = {
+      id: 'free_text',
+      name: 'Free Text',
+      spoken_name: 'free text',
+      type: 'text',
+      section_id: 'Part 1',
+    };
+    expect(validateField(bare, 'anything goes here')).toBeNull();
+  });
+
+  // Date fields carry their bounds as top-level min/max STRING dates in some
+  // schemas (e.g. adult_intake `dob`: min "1900-01-01", max "2007-10-13") with no
+  // min_date/max_date. validateDateValue must honor the folded-in rules.min/max
+  // (Codex PR #145 round 2) or an out-of-range AI DOB slips through.
+  // NOTE: the runtime schema puts string dates in `min`/`max`, which the TS type
+  // annotates as `number` -- cast through `any` to mirror that real shape.
+  const dobField: FormField = {
+    id: 'dob',
+    name: 'Date of Birth',
+    spoken_name: 'date of birth',
+    type: 'date',
+    section_id: 'Part 1',
+    min: '1900-01-01' as any,
+    max: '2007-10-13' as any,
+  };
+
+  it('accepts a date within the top-level min/max', () => {
+    expect(validateField(dobField, '1990-06-15')).toBeNull();
+  });
+
+  it('rejects a date before the top-level min', () => {
+    expect(validateField(dobField, '1899-12-31')).not.toBeNull();
+  });
+
+  it('rejects a date after the top-level max', () => {
+    expect(validateField(dobField, '2010-01-01')).not.toBeNull();
+  });
+});
+
+// Checkbox groups: the backend prompt (config.py) tells the model to send a
+// checkbox group as a single comma-separated string ("Multiple checkboxes:
+// comma-separated exact values"). validateField must split it before membership
+// checking or a backend-blessed multi-checkbox answer is false-rejected.
+// bd polyglot-pdf-wpw.3 / Codex PR #145 round 2.
+describe('validateField (comma-separated checkbox-group values)', () => {
+  const checkboxGroup: FormField = {
+    id: 'reason[]',
+    name: 'Reason for Visit',
+    spoken_name: 'reason for visit',
+    type: 'checkbox',
+    group_kind: 'checkbox',
+    section_id: 'Part 1',
+    options: ['Fears/Phobias/Worries', 'Family Concerns', 'Work Difficulties'] as any,
+  };
+
+  it('accepts a single valid checkbox value', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns')).toBeNull();
+  });
+
+  it('accepts a comma-separated list of valid checkbox values', () => {
+    expect(validateField(checkboxGroup, 'Fears/Phobias/Worries, Family Concerns')).toBeNull();
+  });
+
+  it('accepts comma-separated values without surrounding spaces', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns,Work Difficulties')).toBeNull();
+  });
+
+  it('rejects a comma-separated list containing an invalid member', () => {
+    expect(validateField(checkboxGroup, 'Family Concerns, Made Up Option')).not.toBeNull();
+  });
+
+  it('still validates an array-shaped checkbox value member-by-member', () => {
+    expect(validateField(checkboxGroup, ['Family Concerns', 'Work Difficulties'])).toBeNull();
+    expect(validateField(checkboxGroup, ['Family Concerns', 'Nope'])).not.toBeNull();
+  });
+
+  it('does NOT split a comma in a single-select value (only checkbox groups split)', () => {
+    // A non-checkbox option field whose option literally contains a comma must be
+    // matched whole, not split.
+    const selectWithComma: FormField = {
+      id: 'city_state',
+      name: 'City, State',
+      spoken_name: 'city and state',
+      type: 'select',
+      section_id: 'Part 1',
+      options: [{ value: 'Springfield, IL', label: 'Springfield, IL' }],
+    };
+    expect(validateField(selectWithComma, 'Springfield, IL')).toBeNull();
+  });
+});
+
+// Standalone checkbox fields (type "checkbox" WITHOUT group_kind "checkbox") are
+// BOOLEAN per the backend contract ("For checkbox: boolean"), even though they
+// carry an `options` array describing their single PDF widget. The enum gate must
+// NOT run on them or every valid true/false fill is rejected. Codex PR #145 round 3.
+describe('validateField (standalone boolean checkbox)', () => {
+  const standaloneCheckbox: FormField = {
+    id: 'p2_checkbox3',
+    name: 'Previous card never received',
+    spoken_name: 'previous card never received',
+    type: 'checkbox',
+    section_id: 'Part 2',
+    // group_kind is NOT "checkbox" -> standalone boolean, not an enum group.
+    options: [{ value: 'P2_checkbox3[0]', label: 'My previous card was issued but never received' }],
+  };
+
+  it('accepts a boolean true fill (does not enum-check against the option value)', () => {
+    expect(validateField(standaloneCheckbox, true)).toBeNull();
+  });
+
+  it('accepts a boolean false fill', () => {
+    expect(validateField(standaloneCheckbox, false)).toBeNull();
+  });
+
+  it('does not reject true even though it is not equal to the option value', () => {
+    // Regression: the option value is "P2_checkbox3[0]"; String(true) != that, so
+    // an enum check would have rejected it.
+    expect(validateField(standaloneCheckbox, 'true')).toBeNull();
+  });
+});
+
+// Bare date fields (type "date" with only a format, no validation/min/max) must
+// still have their FORMAT validated -- a malformed AI date should not land.
+// Codex PR #145 round 3.
+describe('validateField (bare date field, format-only)', () => {
+  const bareDate: FormField = {
+    id: 'part_a_ii_spouse_dob',
+    name: "Spouse's Date of Birth",
+    spoken_name: 'spouse date of birth',
+    type: 'date',
+    section_id: 'Part A',
+    format: 'mm/dd/yyyy' as any,
+    // NO validation block, NO min/max/min_date/max_date.
+  };
+
+  it('accepts a parseable date', () => {
+    expect(validateField(bareDate, '1990-06-15')).toBeNull();
+    expect(validateField(bareDate, '06/15/1990')).toBeNull();
+  });
+
+  it('rejects a malformed date', () => {
+    expect(validateField(bareDate, 'not-a-date')).not.toBeNull();
+    expect(validateField(bareDate, 'the fifteenth')).not.toBeNull();
+  });
+
+  it('treats an empty optional bare date as valid (not a format error)', () => {
+    expect(validateField(bareDate, '')).toBeNull();
+  });
+});

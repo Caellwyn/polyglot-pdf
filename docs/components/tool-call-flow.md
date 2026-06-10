@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), and [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker.*
+*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for the client-side AI-value validation gate.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -85,6 +85,19 @@ callbacks.
 
 **Note:** `update_form_fields` deliberately does NOT fetch the next-field hint
 (that is deferred to `confirm_field`) to save a round-trip.
+
+**Client-side validation gate (bd polyglot-pdf-wpw.3 / WS-E3).** The frontend
+re-validates every AI-applied value in `webFormConnection.handleFieldUpdate` /
+`handleFormUpdated` via `validateField` (enum / format / required) *before* it
+lands -- the client owns all field state, so an invalid value must never be
+stored. A reject SKIPS the apply and routes a corrective `completion_message` back
+to the model (the proven in-band channel -- `dependency_error` is not consumed by
+the backend) so the model re-asks the user. The prompt carries only the field's
+spoken name + the schema constraint, NEVER the rejected value (PII-safe). Those
+prompts are rate-limited per field and capped, mirroring the `confirm_field`
+loop-breaker below, so a value the model cannot get right does not spin the
+session. This is a second, client-authoritative layer in addition to the backend
+`validates` step in step 2 above.
 
 ## `confirm_field` round-trip (code expectation)
 
