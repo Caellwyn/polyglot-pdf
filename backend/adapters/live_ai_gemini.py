@@ -71,6 +71,27 @@ def _build_function_response(tool_name, response_payload, call_id):
     return types.FunctionResponse(**fr_kwargs)
 
 
+def _tool_error_envelope(message: str = "The tool call failed; ask the user to repeat.") -> dict:
+    """Structured, PII-free error body for a FunctionResponse when a tool callback
+    RAISES (bd polyglot-pdf-wpw.1 / WS-C2).
+
+    Replaces the bare ``{}`` ack that a callback exception used to send: an empty
+    body reads to the model as "the tool succeeded with no data," so it
+    confabulates success and moves on -- the user's value is silently lost. A
+    structured ``{"status": "error", ...}`` tells the model the call FAILED so it
+    re-asks instead. `retryable` lets the model distinguish a transient failure
+    (re-ask) from a permanent one.
+
+    NO PII: the message is a fixed, caller-controlled string -- NEVER the
+    exception text (which can embed the field value the callback was handling) and
+    NEVER the arguments. Mirrors the no-PII rule the surrounding logs follow
+    (bd polyglot-pdf-oeq / hjo). The legitimate "callback returned None" case keeps
+    the ``{}`` coercion (the tks every-named-call-gets-a-response invariant); only a
+    RAISE produces this envelope.
+    """
+    return {"status": "error", "retryable": True, "message": message}
+
+
 class LiveAIGeminiSession(LiveAISession):
     """Adapter for the Gemini Live AI session."""
 
@@ -1522,6 +1543,13 @@ class LiveAIGemini(ILiveAI):
                                                                         error_message=str(e),
                                                                         context={"tool_name": tool_name, "arguments": parsed_arguments}
                                                                     )
+
+                                                                    # Send a STRUCTURED error body (not the silent {} the None
+                                                                    # coercion below would otherwise produce) so the model knows
+                                                                    # the call FAILED and re-asks, instead of confabulating
+                                                                    # success on an empty ack (bd polyglot-pdf-wpw.1). PII-free:
+                                                                    # a fixed message, never the exception text.
+                                                                    response_payload = _tool_error_envelope()
                                                             elif tool_name == "update_form_fields" and self._on_form_update:
                                                                 await self._on_form_update(parsed_arguments)
 
@@ -1632,6 +1660,10 @@ class LiveAIGemini(ILiveAI):
                                                     traceback.print_exc()
                                                     print(f"{'='*80}\n")
                                                     self._log.exception("tool_callback_error", tool=tool_name)
+                                                    # Structured error body, not the silent {} (bd
+                                                    # polyglot-pdf-wpw.1) -- same as the model_turn.parts
+                                                    # path above, so the model re-asks on a callback raise.
+                                                    response_payload = _tool_error_envelope()
                                             elif tool_name == "update_form_fields" and self._on_form_update:
                                                 await self._on_form_update(parsed_arguments)
 
