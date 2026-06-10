@@ -234,6 +234,28 @@ export function createConnectionManager(
 	// Rate-limit audio-drop warns to at most 1 per second so a stranded status
 	// does not flood the console (one line per chunk would be ~100/sec).
 	let _audioDropLastWarnMs = 0
+	// Single mic send callback shared by EVERY arming site (initial startRecording,
+	// rearmAudioCapture, and the startSection/switchToSection re-arms) so the gate
+	// policy (shouldSendMicChunk) and the drop logging stay consistent (bd xroy).
+	// 'switching_section' with socket open is allowed: the same-socket section-switch
+	// path keeps the WebSocket alive, and the backend drops audio server-side via
+	// drop_audio=True (manual path) or the old Gemini session is already shutting
+	// down (AI-initiated path).
+	const sendMicChunkToBackend = (audioData: ArrayBuffer) => {
+		if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
+			connection.sendAudio(audioData)
+		} else {
+			// Chunk dropped -- emit a rate-limited warn so a stranded status is
+			// visible in devtools without flooding the console (~100 chunks/sec).
+			const now = Date.now()
+			if (now - _audioDropLastWarnMs >= 1000) {
+				_audioDropLastWarnMs = now
+				const st = connection ? connection.getStatus() : 'no-connection'
+				const rs = connection ? connection.isSocketOpen() : false
+				console.warn('[VFF Connection] mic chunk DROPPED -- status=' + st + ' socketOpen=' + rs)
+			}
+		}
+	}
 	// PTT is the DEFAULT (HALLUCINATION_REDUCTION, Oct 30 2025), and this must match
 	// the overlays' default so a fresh session starts gated. The overlays now lazy-init
 	// their pushToTalkMode FROM this value via getPushToTalkMode() (so a remount onto a
@@ -684,26 +706,7 @@ export function createConnectionManager(
 
 			console.log('[VFF Connection] Requesting microphone access...')
 
-			await audioManager.startRecording((audioData) => {
-				// Send audio to backend.
-				// 'switching_section' with socket open is also allowed: the same-socket
-				// section-switch path keeps the WebSocket alive, and the backend drops
-				// audio server-side via drop_audio=True (manual path) or the old Gemini
-				// session is already shutting down (AI-initiated path).
-				if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
-					connection.sendAudio(audioData)
-				} else {
-					// Chunk dropped -- emit a rate-limited warn so a stranded status is
-					// visible in devtools without flooding the console (~100 chunks/sec).
-					const now = Date.now()
-					if (now - _audioDropLastWarnMs >= 1000) {
-						_audioDropLastWarnMs = now
-						const st = connection ? connection.getStatus() : 'no-connection'
-						const rs = connection ? connection.isSocketOpen() : false
-						console.warn('[VFF Connection] mic chunk DROPPED -- status=' + st + ' socketOpen=' + rs)
-					}
-				}
-			})
+			await audioManager.startRecording(sendMicChunkToBackend)
 		},
 
 		stopRecording() {
@@ -753,12 +756,7 @@ export function createConnectionManager(
 
 			console.log('[VFF Connection] rearmAudioCapture: re-arming mic after overlay remount')
 
-			await audioManager.startRecording((audioData) => {
-				// Same send callback as startRecording() -- route mic audio to backend.
-				if (connection && connection.getStatus() === 'connected') {
-					connection.sendAudio(audioData)
-				}
-			})
+			await audioManager.startRecording(sendMicChunkToBackend)
 
 			// Re-apply PTT/mute state so the new overlay's defaults take effect
 			// without waiting for its PTT useEffect.
@@ -873,11 +871,7 @@ export function createConnectionManager(
 			// Restart recording if we were recording before. Skip the mic under the
 			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
 			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording((data) => {
-					if (connection) {
-						connection.sendAudio(data)
-					}
-				})
+				await audioManager.startRecording(sendMicChunkToBackend)
 			}
 		},
 
@@ -896,11 +890,7 @@ export function createConnectionManager(
 			// Restart recording if we were recording before. Skip the mic under the
 			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
 			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording((data) => {
-					if (connection) {
-						connection.sendAudio(data)
-					}
-				})
+				await audioManager.startRecording(sendMicChunkToBackend)
 			}
 		},
 
