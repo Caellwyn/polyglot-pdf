@@ -65,6 +65,11 @@ export interface ConnectionManager {
 	stopRecording: () => void
 	isRecording: () => boolean
 	isPaused: () => boolean
+	// Re-arm mic capture after an overlay remount onto an already-live session
+	// (e.g. a desktop<->mobile resize flip). The WebSocket and Gemini session
+	// survive the flip; only the old overlay's unmount tears down audio capture,
+	// so the new overlay must re-arm. No-ops if already recording (bd nlfc).
+	rearmAudioCapture: () => Promise<void>
 	changeFillLanguage: (language: string) => Promise<void>
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
 	readDisclaimer: (language: string, disclaimerText: string) => void  // Read disclaimer in specified language
@@ -675,6 +680,59 @@ export function createConnectionManager(
 
 		isPaused() {
 			return paused
+		},
+
+		// Re-arm mic capture after an overlay remount onto an already-live session.
+		// The WebSocket and Gemini session survive a desktop<->mobile resize flip;
+		// the old overlay's unmount stops audio capture via its cleanup path, so the
+		// new overlay calls this to re-arm the mic without reconnecting (bd nlfc).
+		//
+		// Double-arm guard: bail out immediately if audioManager reports it is
+		// already recording (e.g. a rapid flip that mounts before the old overlay's
+		// cleanup runs, or multiple useEffect firings).
+		//
+		// PTT/mute re-sync: after arming, re-apply the stored PTT mode so the new
+		// overlay's mount-time PTT effect (which fires in the same React batch) sees
+		// a consistent state and does not leave the input unmuted when PTT is on.
+		async rearmAudioCapture() {
+			// Skip under the test harness (audio is injected, no microphone needed).
+			if (isTestHarnessEnabled()) {
+				console.log('[VFF Connection] rearmAudioCapture: TEST harness active -- skipping')
+				return
+			}
+
+			if (!audioManager) {
+				console.warn('[VFF Connection] rearmAudioCapture: audioManager not initialized')
+				return
+			}
+
+			// Double-arm guard: if already recording, the old overlay has not yet
+			// finished its unmount cleanup; nothing to do.
+			if (audioManager.isRecording()) {
+				console.log('[VFF Connection] rearmAudioCapture: already recording -- skipping')
+				return
+			}
+
+			console.log('[VFF Connection] rearmAudioCapture: re-arming mic after overlay remount')
+
+			await audioManager.startRecording((audioData) => {
+				// Same send callback as startRecording() -- route mic audio to backend.
+				if (connection && connection.getStatus() === 'connected') {
+					connection.sendAudio(audioData)
+				}
+			})
+
+			// Re-apply PTT/mute state so the new overlay's defaults take effect
+			// without waiting for its PTT useEffect.
+			const am = audioManager
+			am.setPTTMode(pushToTalkMode)
+			if (pushToTalkMode) {
+				am.muteInput()
+			} else {
+				am.unmuteInput()
+			}
+
+			console.log('[VFF Connection] rearmAudioCapture: mic re-armed, PTT mode synced:', pushToTalkMode)
 		},
 
 		async changeFillLanguage(language: string) {

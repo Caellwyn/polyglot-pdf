@@ -133,6 +133,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				} else {
 					console.log('[VoiceOverlayMobile] Mounted onto a live session (disclaimer accepted) - skipping connect/disclaimer')
 				}
+				// Re-arm mic capture: the old overlay's unmount stopped audio capture,
+				// so the new (remounted) overlay must re-start it without reconnecting.
+				// No-ops if already recording (double-arm guard inside rearmAudioCapture).
+				// bd polyglot-pdf-nlfc.
+				connectionManager?.rearmAudioCapture()
 				return
 			}
 			console.log('[VoiceOverlayMobile] Language pre-selected from onboarding:', initialLanguage)
