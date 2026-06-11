@@ -1,6 +1,6 @@
 ---
 name: closeout
-description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then open a NORMAL (non-draft) PR and run Codex round 1 in parallel with fresh-eyes, fix the combined issues, loop Codex until clean, then close the bead + ping the maintainer to merge. NO draft PRs. The only thing it never does autonomously is the final merge (that is the maintainer's). Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
+description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Codex outer review until clean, then close the bead + ping the maintainer to merge. NO draft PRs. The only thing it never does autonomously is the final merge (that is the maintainer's). Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
 ---
 
 # Sprint closeout
@@ -38,7 +38,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 ## Hard rules (read before doing anything)
 
 - **Codex AUTO-REVIEWS on PR open; round 2+ re-reviews need an `@codex review` COMMENT (opt-in per PR).** Round 1 fires automatically when the PR opens -- no trigger call; include an `@codex review` line in the PR BODY as a belt-and-suspenders nudge. Round 2+ (after a fix-push) need an explicit `@codex review` issue comment (`gh api repos/<owner>/<repo>/issues/$PR/comments -f 'body=@codex review'`, as the gh-authenticated user), capturing its `created_at` as that round's `--since` floor. **The trigger string is EXACTLY `@codex review`** -- `@codex please commit ...` would instead invoke Codex's commit path (see AGENTS.md "If you are reviewing a PR"). **For a PR that does not warrant a review** (see the Step 6 review-worthiness gate), omit the `@codex review` line from the body and skip the whole watch loop; a docs-only / beads-only / journal-only / trivial PR gets no review. (Codex's prepaid-Copilot predecessor was retired at bd hrn.8/hrn.9 -- never use the `requested_reviewers` reviewer API; that fires Copilot, whose credits are exhausted.)
-- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. Fresh-eyes runs regardless; Codex runs in parallel with it ONLY when the PR is review-worthy (it auto-reviews on open; the body carries an `@codex review` nudge). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
+- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. The adversarial fresh-eyes assess loop runs PRE-PR (Step 5.5) regardless of review-worthiness; Codex is the OUTER review that runs once the PR opens, ONLY when the PR is review-worthy (it auto-reviews on open; the body carries an `@codex review` nudge). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** A draft adds a state flip for no benefit. Always open normal; never trigger a redundant review of content Codex already approved.
 - **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
 - **Loop Codex until it reports CLEAN (only if the PR is review-worthy).** A fix-push does NOT re-trigger Codex on its own -- you MUST post a fresh `@codex review` comment to request each re-review. Adopt -> push -> re-comment `@codex review` (capture the new comment's `created_at` as the floor) -> re-watch -> repeat until clean; only then is Codex done. Codex signals CLEAN with a 👍 (`+1`) reaction on its summary comment (canonical), with "Didn't find any major issues" / exact `LGTM` as fallbacks. Handle all four `pr_review_watcher.py` states (CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2 -- never treat ERROR/TIMEOUT as clean). A PR that skipped review per the Step 6 gate has no loop at all.
@@ -112,15 +112,18 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
   traps **internally**, so neither you nor the subagent re-derives them.
 
 **The flow:** you make the judgments (prep is READY, the journal prose is written,
-the review verdict is decided), then hand the `closeout-runner` a structured brief
+**the pre-PR Assess is done -- Step 5.5's rubric scorecard plus the recursive
+fresh-eyes loop, looped to `NO-GAPS`**, with its fixes committed -- and the
+review verdict is decided), then hand the `closeout-runner` a structured brief
 (bead id(s) + close reason; the review verdict; the **complete filled journal
-text**; PR title + body; the telemetry counters; branch + base; whether to pass
-`--close-beads`). It runs the glue and **stops back at every judgment point**
-(prep ATTENTION, a rebase conflict, any tooling error, a missing brief input). You
-then resume: launch the watcher from the `WATCH_CMD` it returns (adding
-`--close-on-clean <bead-id>` -- see below), spawn fresh-eyes, and run the Step-7
-loop. For a review-worthy PR you no longer make a separate post-CLEAN close call:
-the watcher does it.
+text**; PR title + body, including the Step-5.5 scorecard; the telemetry counters;
+branch + base; whether to pass `--close-beads`). It runs the glue and **stops back
+at every judgment point** (prep ATTENTION, a rebase conflict, any tooling error, a
+missing brief input). You then resume: launch the watcher from the `WATCH_CMD` it
+returns (adding `--close-on-clean <bead-id>` -- see below) and run the Step-7 Codex
+loop. Fresh-eyes is NOT spawned here -- it already ran pre-PR in Step 5.5. For a
+review-worthy PR you no longer make a separate post-CLEAN close call: the watcher
+does it.
 
 **CLEAN-trigger bead close (the second "call" is now the watcher -- bd hrn.14).**
 A **review-skipped** PR (docs/beads/journal-only) has no review loop, so the single
@@ -141,8 +144,9 @@ so the first call's row is not duplicated (the hrn.15 A/B discipline). If the cl
 itself fails the watcher exits **CLOSE-FAILED (3)** so you triage it instead of
 pinging merge. `closeout_finish.py` never blocks on the watcher.
 
-**When YOU run `--close-only` by hand** (the fresh-eyes-race path: round 1 watched
-WITHOUT `--close-on-clean`, then you close after CLEAN -- see Step 7), it runs the
+**When YOU run `--close-only` by hand** (the CLOSE-FAILED recovery path: the
+watcher's `--close-on-clean` close failed, and you re-run it after fixing the
+cause -- see Step 7's CLOSE-FAILED handling), it runs the
 slow `bd dolt push`, so **the harness backgrounds it and notifies you on
 completion -- exactly like the watcher.** Fire it and **END YOUR TURN; do not
 `sleep`/`cat`/poll its output file.** The bead-close is committed locally before
@@ -249,8 +253,8 @@ the single write above:
 Prep already ran the suite in Step 0 (`backend/tests/`, excluding the flaky
 `external` live-Gemini test). That result stands through Steps 3/5 as long as you
 do NOT change code after it -- journal/doc work doesn't. **If you DO change code
-during triage** (a fresh-eyes/Codex fix in Step 7, or a Step-1 fix that touched
-source), re-run the suite so the PR ships a green run:
+during triage** (a fresh-eyes gap fix in Step 5.5, a Codex fix in Step 7, or a
+Step-1 fix that touched source), re-run the suite so the PR ships a green run:
 
 `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; PYTHONPATH="$WT" "$PY" -m pytest "$WT/backend/tests/" -q -m "not external"`  -- `$WT` (the worktree root) MUST be set in the SAME command (shell state does not persist between tool calls), or `PYTHONPATH`/the test path expand empty and you silently test the wrong checkout (fresh-eyes finding on PR #47). Point `PYTHONPATH` and the test path at the WORKTREE so you test THIS branch's code, not the main checkout; `$R` supplies only the venv interpreter. Watch the COLLECTED count, not just pass/fail -- a broken import silently drops tests from collection. (If slow, run it in the background and wait for the notification rather than polling.)
 
@@ -260,7 +264,94 @@ If anything FAILS, stop and fix it before continuing -- a red suite is not eligi
 
 The journal entry and any doc bumps must ship in THIS PR, on THIS branch. Stage and commit them now, then re-run `git status --short` to confirm the tree is clean again.
 
-## Step 6 -- Decide review-worthiness, then open a NORMAL PR and start reviews
+## Step 5.5 -- Pre-PR Assess: rubric scorecard + recursive adversarial fresh-eyes
+
+This is the SPEAR **Assess** gate, and it runs BEFORE the PR opens (doctrine:
+[`docs/doctrine/planning.md`](../../../docs/doctrine/planning.md) +
+[`review-flow.md`](../../../docs/doctrine/review-flow.md)). Two parts: you score the
+rubric yourself, then a recursive adversarial fresh-eyes loop hunts the gaps you
+cannot see. **Fresh-eyes ALWAYS runs here -- review-worthy or not** -- so for a
+review-skipped PR (Codex off, or credits exhausted until ~2026-06-15) the
+fresh-eyes gap-free verdict IS the review record.
+
+### Step 5.5.a -- Score the exit-criteria rubric (orchestrator judgment)
+
+Read the `## Exit criteria` of each bead this PR closes and score EACH criterion
+`PASS` / `FAIL` with one line of evidence (the file:line or behavior that settles
+it):
+
+- **Any FAIL -> fix it before opening the PR.** A FAIL means the work does not meet
+  its own contract; opening the PR anyway ships a known gap. Fix, re-test, re-score.
+- **Missing criteria** (a legacy bead with no rubric) -> write a RETROSPECTIVE
+  rubric now (1-3 binary criteria the work should have met), score against it, and
+  note in the journal that the rubric was reconstructed at closeout (a
+  creation-time-norm slip the claim-time gate should have caught).
+- The final scorecard goes in the **PR body under an `## Exit criteria` section**
+  (Step 6 writes the body; carry the scorecard there). This is the
+  self-demonstrating record the maintainer scans.
+
+### Step 5.5.b -- Recursive adversarial fresh-eyes loop (the inner Assess cycle)
+
+Fresh-eyes is the **Assessor**; its mandate is gap-exhaustion against the rubric
+("find every place the changes do NOT meet the criteria"), never approval. The
+cycle is: spawn fresh-eyes (criteria passed in) -> fix the gaps it finds -> re-spawn
+on the updated diff -> ... until a pass returns **`NO-GAPS`**, THEN proceed to
+Step 6 (open the PR).
+
+1. **Pick the fresh-eyes model from diff size (A/B arm B).** Zero-token router --
+   size in, model name out, NO risk judgment (the risk call happens inside the
+   fresh-eyes turn, by the cheap model):
+   `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/pick_review_model.py" --base origin/dev)`
+   It prints `haiku` (<= ~80 changed lines) or `sonnet`. **Run the worktree's OWN
+   copy (`$WT/scripts/...`), and `cd "$WT"` first** (same discipline as Steps
+   2/3/4): the script only exists on THIS branch until merge, and it runs
+   `git diff` in its own cwd -- without `cd "$WT"` it would measure the MAIN repo's
+   `origin/dev...HEAD` (~0 lines) and route every review to `haiku`. On a
+   measurement failure it prints `sonnet` and exits 1 (fail toward the capable
+   model). **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set, that
+   session-wide override wins, so the picker is moot -- skip it and use Sonnet. Note
+   whether arm B was active (picker ran AND the env var was unset); count Haiku
+   self-escalations for Step 8.5's `--haiku-escalations`.
+2. **Spawn the reviewer, passing it the bead's EXIT CRITERIA.** Prefer the standing
+   agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type) with a `model`
+   override of the picked value; otherwise use its prompt via a one-off
+   `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. The prompt
+   MUST (a) include the bead's `## Exit criteria` verbatim so the assessor scores
+   the rubric, not just style; (b) name the branch; (c) tell it to read the REAL
+   diff (`git diff origin/dev...HEAD`), never a summary. **If you picked `haiku`,
+   the prompt MUST tell the reviewer it is running as Haiku** -- that sentence arms
+   the self-escalation clause (a Haiku run that finds the change risky stops and
+   recommends a Sonnet re-review). Without it the clause is dormant.
+3. **Read its STATUS line gap verdict and act:**
+   - **`NO-GAPS`** -> the inner loop is done. Collect any out-of-scope bead IDs it
+     filed (it files genuine out-of-scope bugs itself -- it has Bash) for the journal
+     + merge ping, then proceed to Step 6.
+   - **`GAPS-FOUND (n)`** -> **fix the gaps before the PR opens.** A rubric-criterion
+     FAIL is a criterion failure, not a deferrable nit -- fix it inline (Step 5.5.a's
+     "any FAIL -> fix before opening the PR" governs here too); fix other
+     high-confidence findings inline as well. A genuinely out-of-scope bug is fresh-eyes'
+     own to file as a separate bead (it has Bash). Do NOT defer a gap via the Step-7
+     nit convention here -- that convention needs a PR number that does not exist
+     pre-PR, and a rubric gap is never a "true nit." Commit the fixes, then **re-spawn
+     fresh-eyes** on the updated diff. This is the recursion.
+   - **`BLOCKED`** (Haiku self-escalation) -> re-spawn the SAME reviewer with
+     `model: sonnet`; count it for `--haiku-escalations`.
+   - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
+     maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
+4. **Ceiling: `MAX_FRESH_EYES_ROUNDS = 3`.** If round 3 still returns
+   `GAPS-FOUND`, STOP and escalate to the maintainer (summarize the persistent
+   gaps) rather than looping forever -- reaching the ceiling is an escalation, never
+   an auto-pass.
+
+Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
+fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
+into the journal entry's "What shipped" section) so the tree is clean before
+Step 6. **Codex, when credits are available, is the OUTER review** that runs after
+the PR opens (Steps 6-7). While Codex credits are exhausted (until ~2026-06-15),
+the last fresh-eyes `NO-GAPS` verdict here is the review record -- note that in the
+PR body.
+
+## Step 6 -- Decide review-worthiness, then open a NORMAL PR and start the Codex review
 
 **First, judge whether this PR warrants a Codex review at all** (the orchestrator
 makes this call -- there is no script gate). A review of a PR that can't contain a
@@ -278,13 +369,16 @@ code regression is wasted effort. Decision rule:
   a shipped regression. "Ambiguous" means a real judgment call, not "I'd rather not
   wait"; do not use the gate to dodge review of actual code.
 
-Fresh-eyes ALWAYS runs regardless of this gate.
+**Fresh-eyes already ran in Step 5.5** -- the adversarial assess loop is the PRE-PR
+inner cycle, so by the time you reach Step 6 the rubric is `NO-GAPS` and its fixes
+are committed. Step 6 opens the PR and (for a review-worthy PR) starts the Codex
+OUTER review. Do NOT re-spawn fresh-eyes here.
 
-Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR and start fresh-eyes. For a review-worthy PR, **Codex auto-reviews on open** (see below), so the watch runs concurrently with fresh-eyes. (**If this pre-push `git pull --rebase origin dev` hits a merge conflict, resolve it per Step 7's "Merge-conflict resolution in the loop"** -- mechanical/ordering conflicts inline, structural ones escalate; the same boundary applies to both rebases.)
+Push the branch (`git push -u origin <branch>` after `git fetch origin && git pull --rebase origin dev`), then -- in the SAME step -- open the PR. For a review-worthy PR, **Codex auto-reviews on open** (see below). (**If this pre-push `git pull --rebase origin dev` hits a merge conflict, resolve it per Step 7's "Merge-conflict resolution in the loop"** -- mechanical/ordering conflicts inline, structural ones escalate; the same boundary applies to both rebases.)
 
 **ROUND 1: Codex AUTO-REVIEWS a review-worthy PR on open -- no trigger comment needed.** Codex (chatgpt-codex-connector[bot]) automatically reviews a PR when it opens, so round 1 needs no explicit trigger. Include an **`@codex review` line in the PR BODY** as a belt-and-suspenders nudge (it costs nothing and guarantees the review fires). **The trigger string is EXACTLY `@codex review`** -- `@codex please commit ...` would instead invoke Codex's commit path (see AGENTS.md "If you are reviewing a PR"). Do NOT use the `requested_reviewers` reviewer API -- that fires Copilot, whose prepaid credits are exhausted (bd hrn.8/hrn.9). The round-1 watch floor is the PR-open time, captured BEFORE `gh pr create` (the auto-review can land inside the create round-trip -- a floor stamped after could miss it; see the bash block above). **Round 2+ re-reviews DO need an explicit `@codex review` COMMENT** -- that's the Step-7 loop, below. (Auto-review is scoped maintainer-side, so a review-SKIPPED PR per the gate above genuinely gets no Codex review and correctly skips the watch loop -- there is no unhandled auto-review feedback to triage.)
 
-1. **Open a NORMAL (NOT draft) PR with `@codex review` in the body, then (if review-worthy) capture the watch floor -- all in ONE Bash call.** The body is a **brief what-shipped summary + bead id(s)**, plus an `@codex review` line for review-worthy PRs. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Codex outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, omit the `@codex review` line and the `TS`:
+1. **Open a NORMAL (NOT draft) PR with `@codex review` in the body, then (if review-worthy) capture the watch floor -- all in ONE Bash call.** The body is a **brief what-shipped summary + bead id(s)**, the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence -- the self-demonstrating record; when Codex is skipped, also note "review record: fresh-eyes NO-GAPS, round <n>"), plus an `@codex review` line for review-worthy PRs. Keep it short and write it ONCE -- you will NOT come back to edit it after review (Step 8 records the fresh-eyes/Codex outcome in the journal + merge ping, not here), so do NOT add an empty 'Fresh-eyes review' placeholder section to fill in later. If you're skipping review per the gate above, omit the `@codex review` line and the `TS`:
    ```bash
    # review-worthy ONLY -- capture the floor BEFORE `gh pr create`. Codex
    # auto-reviews the instant the PR opens, so a verdict can land inside the
@@ -300,31 +394,19 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
    echo "PR=$PR TS=$TS"
    ```
    (For a review-SKIPPED PR, drop the `@codex review` line from the body and skip the `TS`.) Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. (`<owner>/<repo>` comes from `swarm.config.json` / `gh repo view --json nameWithOwner`.)
-2. **(Review-worthy PRs only) Start the round-1 watch with `--reviewer codex --since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. `--reviewer codex` is the watcher default (bd hrn.9), so it is optional but passed explicitly for clarity. Passing `--since` scopes detection to the auto-review that fires on open. **Do NOT pass `--close-on-clean` on this round-1 watch** -- fresh-eyes is spawned in the very next sub-step and runs concurrently, so a fast clean Codex verdict here would close the bead before fresh-eyes' findings are triaged (the fresh-eyes race -- see Step 7 and the watcher's own `--close-on-clean` help). You carry `--close-on-clean <bead-id>` (one per bead) on the RE-WATCH in Step 7 instead, after all round-1 fixes are pushed -- so the deterministic close (bd hrn.14) fires on a genuinely terminal CLEAN:
-   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --reviewer codex --since "$TS"`  (the Step-7 re-watch adds `--close-on-clean`; same `--since` discipline). **Skip this entirely for a review-skipped PR** -- there is no Codex round to watch (a review-skipped PR closes its bead in the single `closeout_finish.py` run, not via the watcher). (Edge case: if fresh-eyes turns out to produce NO on-branch fixes, you MAY add `--close-on-clean` to a re-watch even if Codex round 1 was already clean.)
-3. **Pick the fresh-eyes model from diff size (A/B arm B), then spawn the reviewer** concurrently.
+2. **(Review-worthy PRs only) Start the round-1 watch with `--reviewer codex --since "$TS"`** via `run_in_background` so you're woken once with the verdict, no polling turns. `--reviewer codex` is the watcher default (bd hrn.9), so it is optional but passed explicitly for clarity. Passing `--since` scopes detection to the auto-review that fires on open. **Because fresh-eyes already ran (and cleared to `NO-GAPS`) in Step 5.5, the old "fresh-eyes race" is gone** -- there is no concurrent reviewer whose findings a fast Codex CLEAN could pre-empt, so you MAY carry `--close-on-clean <bead-id>` (one per bead) on THIS round-1 watch, and the deterministic close (bd hrn.14) fires on a terminal CLEAN:
+   `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --reviewer codex --since "$TS" --close-on-clean <bead-id>`  (the Step-7 re-watch carries the same flags + a fresh `--since`). **Skip this entirely for a review-skipped PR** -- there is no Codex round to watch (a review-skipped PR closes its bead in the single `closeout_finish.py` run, not via the watcher).
 
-   **First run the deterministic router** so the cheap model handles small diffs (bd polyglot-pdf-hrn.4). It is zero-token -- size in, model name out, NO risk judgment (the risk call happens inside the fresh-eyes turn, by the cheap model):
-   `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/pick_review_model.py" --base origin/dev)`
-   It prints `haiku` (≤ ~80 changed lines) or `sonnet`. **Run the worktree's OWN copy (`$WT/scripts/...`), and `cd "$WT"` first** -- two distinct worktree-safety reasons (same discipline as Steps 2/3/4): (a) the script file itself only exists in THIS branch until merge, so `$R/scripts/...` (the main checkout) would be a "file not found" pre-merge; and (b) the script runs `git diff` in its own cwd, so without `cd "$WT"` -- if the shell cwd has drifted to the main checkout -- it would measure the MAIN repo's `origin/dev...HEAD` (typically ~0 lines) and silently route every review to `haiku`. `$R` supplies only the venv interpreter. On a measurement failure it prints `sonnet` and exits 1 (fail toward the capable model); use whatever it printed.
+(The fresh-eyes spawn that used to live here is now Step 5.5.b -- the pre-PR adversarial assess loop. By Step 6 it is already `NO-GAPS` and its fixes are committed; the model-picker, the A/B arm-B control, and the Haiku self-escalation handling all moved there.)
 
-   **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set in the env, that session-wide override wins over any per-agent `model:`, so the picker is moot -- **skip it and use Sonnet** (the control arm). Run the picker only when that env var is unset. **Note whether arm B was active this session** (it was, if you let the picker route AND `CLAUDE_CODE_SUBAGENT_MODEL` was unset) -- Step 8.5 turns the active arms into the single `--arm` value (and honors the Phase-A baseline default). Count any Haiku self-escalations for `--haiku-escalations`.
+## Step 7 -- Fix Codex's findings, then loop Codex until clean
 
-   **Then spawn the reviewer** with the chosen model. Prefer the standing agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type) with a `model` override of the picked value; otherwise use that file's prompt via a one-off `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. Substitute the branch name. **If you picked `haiku`, your prompt MUST tell the reviewer it is running as Haiku** -- that one sentence is what arms the agent's self-escalation clause (a Haiku run that finds the change risky -- a cross-file symbol, multiple surfaces, or `google-genai` wiring -- stops and recommends a Sonnet re-review instead of rendering a verdict). Without that sentence the clause is dormant and you lose the safety net. It MUST read the REAL diff (`git diff origin/dev...HEAD`), never a summary.
+**If you skipped Codex per the Step 6 gate, there is no Codex round here** -- fresh-eyes already cleared the rubric in Step 5.5, so go straight to Step 8. The rest of this step applies only to review-worthy PRs.
 
-   **If the Haiku reviewer self-escalates** (its STATUS line is `BLOCKED` + "escalating to Sonnet re-review"), re-spawn the SAME fresh-eyes reviewer with `model: sonnet` and use that verdict; count the escalation for Step 8.5's `--haiku-escalations`.
+**Fresh-eyes is NOT a round-1 reviewer here** -- it ran (and looped to `NO-GAPS`) pre-PR in Step 5.5; its triage breakdown and any filed out-of-scope beads are already recorded. Step 7 is the Codex OUTER review only. **Wait for Codex's round-1 verdict, then fix its findings:**
 
-For a review-worthy PR both reviewers run simultaneously -- total round-1 wait is `max(codex, fresh-eyes)`, not the sum. For a review-skipped PR, only fresh-eyes runs. (A Haiku self-escalation adds a short Sonnet re-run after the cheap pass; that is the expected, diagnostic cost of arm B, not a failure.)
-
-## Step 7 -- Fix the COMBINED round-1 issues, then loop Codex until clean
-
-**If you skipped Codex per the Step 6 gate, there is no Codex round here** -- triage fresh-eyes only (below), then go straight to Step 8. The rest of this step applies only to review-worthy PRs.
-
-**Wait for BOTH round-1 reviewers, then fix their findings together in one batch** (so the next push carries all of them and you trigger ONE Codex re-review, not one per reviewer):
-
-- **Fresh-eyes (one pass):** triage -- high-confidence findings fixed inline; the rest filed as a bead BEFORE moving on (the PR body is an audit log, not a tracker); record the adopt/reject/defer breakdown for the PR body + journal.
 - **Codex round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2; plus **CLOSE-FAILED=3** when `--close-on-clean` was passed and the deterministic close itself failed) -- handle ALL of them:
-  - **CLEAN** (👍 reaction / no findings) -> Codex already happy. **If `--close-on-clean` was passed, the watcher has ALREADY closed the bead(s)** -- do NOT make a separate `--close-only` call (that would be the removed second turn). If fresh-eyes also produced no on-branch fixes, go to Step 8 (the bead is already closed; Step 8 just does telemetry + the merge ping). **One caveat -- the fresh-eyes race:** pass `--close-on-clean` on the round-1 watch ONLY once fresh-eyes is known to have produced no on-branch fixes; if fresh-eyes fixes are still pending, a round-1 CLEAN would close the bead before those fixes are reviewed. In that case launch round 1 WITHOUT `--close-on-clean`, push the fresh-eyes fixes, and carry `--close-on-clean` on the re-watch instead (every re-watch follows you having addressed everything, so its CLEAN is genuinely terminal).
+  - **CLEAN** (👍 reaction / no findings) -> Codex already happy. **If `--close-on-clean` was passed, the watcher has ALREADY closed the bead(s)** -- do NOT make a separate `--close-only` call (that would be the removed second turn). Go to Step 8 (the bead is already closed; Step 8 just does telemetry + the merge ping). (Because fresh-eyes ran and cleared pre-PR in Step 5.5, there are no pending fresh-eyes fixes to race a round-1 CLEAN -- the old fresh-eyes-race caveat no longer applies, so `--close-on-clean` is safe on the round-1 watch.)
   - **CLOSE-FAILED** (exit 3) -> the review WAS clean but the mechanical bead-close failed (the watcher prints the `closeout_finish.py` error). Do NOT ping "ready to merge"; triage the close (re-run `closeout_finish.py --bead <id> --close-only` by hand, or surface to the maintainer if it's a `bd`/network failure). The review verdict still stands -- only the close needs fixing.
   - **COMMENTS** -> the watcher already printed the comment bodies; **you** (the orchestrator) judge each one nit-vs-blocker per the decision rule below, then adopt blockers inline / defer true nits to a bead.
   - **ERROR** (quota/failure) -> surface to the maintainer; NO auto-retry (a quota error won't clear for hours). NOT a clean state.
@@ -332,13 +414,13 @@ For a review-worthy PR both reviewers run simultaneously -- total round-1 wait i
 
 ### The nit-vs-blocker decision rule (A/B arm C -- bd polyglot-pdf-hrn.5)
 
-`pr_review_watcher.py` only detects the terminal state and **extracts the comment bodies** -- a script cannot reliably tell a nit from a blocker, so **the orchestrator makes that call.** For EACH Codex finding (and each deferred fresh-eyes finding), classify and act:
+`pr_review_watcher.py` only detects the terminal state and **extracts the comment bodies** -- a script cannot reliably tell a nit from a blocker, so **the orchestrator makes that call.** For EACH Codex finding, classify and act (fresh-eyes findings never reach here -- they are resolved pre-PR in Step 5.5, fixed inline or filed as their own beads):
 
 - **Blocker -- address now, then loop.** Anything that *is*, or *might be*, a correctness / security / data-loss / regression issue. **Ambiguous counts as a blocker** (safe default): if you cannot confidently say "this is purely cosmetic and changes no behavior," treat it as a blocker and fix it. A wasted fix is cheap; a shipped regression is not.
 - **True nit -- defer, don't fix inline.** A finding that is unambiguously cosmetic / stylistic / non-behavioral (naming preference, a comment-wording tweak, an optional micro-refactor with no functional effect). Do **not** fix these inline (that just spawns another review round for no behavior change). Instead **file them as ONE follow-up bead** (see the convention below) and proceed.
 - **When in doubt, it's a blocker.** Do not use "nit" as an excuse to skip a fix you're unsure about -- the whole point of "ambiguous = blocker" is that the cheap mistake (an extra fix) is the one we choose.
 
-**Deferred-nit bead convention.** File **one** bead per closeout collecting that PR's true nits (not one bead per nit): title `chore(nits): deferred review nits from PR #<n>`, body listing each nit with its source (`codex`/`fresh-eyes`) + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 8.5). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 8.5's `--deferred-nits`.
+**Deferred-nit bead convention.** File **one** bead per closeout collecting that PR's true nits (not one bead per nit): title `chore(nits): deferred review nits from PR #<n>`, body listing each Codex nit with its `codex` source + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 8.5). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 8.5's `--deferred-nits`.
 
 **Hard loop ceiling.** The Codex adopt-and-loop cycle is bounded at **`MAX_REVIEW_ROUNDS = 2`** rounds (formerly 3, then `MAX_COPILOT_ROUNDS`; lowered to 2 to cut Codex credit burn -- bd hrn.9/9us). If Codex still reports COMMENTS after 2 rounds of you addressing blockers, **stop looping and escalate to the maintainer** (do not loop forever): summarize the still-open findings, what you changed each round, and why they persist, and let the maintainer decide. Reaching the ceiling is an escalation, never an auto-clear -- never treat "I'm tired of looping" as CLEAN. (Round 1 from Step 6 counts as round 1; the re-watch loop below is round 2. **Why 2, not 3:** PR #118's review history showed round 1 carries most of the critical value -- the real bugs -- round 2 catches siblings of round-1 findings, and round 3+ was largely re-litigation that burned credits for little gain. Keep Codex's per-review depth aggressive; just cap the iterations.)
 
@@ -403,11 +485,11 @@ structural conflict escalates -- is recorded in this bead's journal entry.)
 
 **As soon as Codex reports CLEAN, make sure no `pr_review_watcher.py` is still running** (a lingering watcher wastes tokens). `pr_review_watcher.py` exits on its own at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT), so the one you just read is already gone -- the real hazard is an EARLIER watch you launched and never read, or a re-watch you started and then abandoned. The watcher runs as a `run_in_background` **Bash** task (not an agent task, so there is no `TaskStop` handle) -- if one is still alive, kill it by its background task / PID (e.g. `Stop-Process`). Do this before moving to Step 8 -- do not leave a watcher running into the merge wait.
 
-Keep the working tree clean between rounds (`git status --short`). Fresh-eyes is one pass (round 1 only); only Codex loops.
+Keep the working tree clean between rounds (`git status --short`). Fresh-eyes loops PRE-PR in Step 5.5 (to `NO-GAPS`); Codex loops POST-PR here (to CLEAN). The two assess layers do not interleave.
 
 ## Step 8 -- Close the bead + ping the maintainer to merge
 
-Once Codex is CLEAN (👍 / no findings) and fresh-eyes is triaged, finish autonomously:
+Once Codex is CLEAN (👍 / no findings) -- or review was skipped per the Step 6 gate -- and the pre-PR assess (Step 5.5) is already complete, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Codex went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
 1. **Close the bead(s)** this PR resolves at PR handoff -- **but only if they are not already closed.** For a **review-worthy** PR the watcher's `--close-on-clean` already closed them when the review went CLEAN (Step 7); do NOT re-close (a redundant `bd close` is a no-op but a wasted turn). Close here ONLY when the watcher did NOT (a **review-skipped** PR -- where `closeout_finish.py --close-beads` already closed in the single run, so nothing to do here either; or a recovery after a **CLOSE-FAILED** that you then fixed). When you do close by hand: one `scripts/bd_safe.py close <full-id> --reason "..."` per bead (at least one; all of them if the PR bundled several). If you're unsure, `bd show <id>` -- a re-close of an already-closed bead is harmless but skip it.
@@ -438,9 +520,10 @@ string and land junk in `--recorded-at`. The script also has a UTC fallback if
 Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
 PR). Fill the counters from what actually happened this session:
 - `--arm` -- the experiment arm you ran, as a SINGLE value derived from which
-  arms were active (Steps 6.3 / 7 told you to note each):
+  arms were active (Steps 5.5.b / 7 told you to note each -- arm B is the
+  fresh-eyes model-picker in Step 5.5.b, arm C is the Codex nit-loop in Step 7):
   - **Phase A (the default, until the counter says otherwise): pass `A`** --
-    regardless of what Steps 6.3/7 noted. In Phase A you are measuring the
+    regardless of what Steps 5.5.b/7 noted. In Phase A you are measuring the
     baseline, so the arm is `A` even though the picker/loop ran their normal
     path; the B/C notes only become the arm value once the phase directive has
     advanced to B/C toggling. Mislabeling a baseline closeout `B`/`C` would

@@ -14,8 +14,10 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 - **feature branch** — one bead's work; where you commit. Branch off freshly-
   pulled `dev`.
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
-  `gh pr create` by hand). Reviewed by Copilot + fresh-eyes in parallel, looped
-  to clean. The maintainer clicks merge (auto-merge is disabled).
+  `gh pr create` by hand). Reviewed in two serial layers — a pre-PR adversarial
+  fresh-eyes assess loop (scored against the bead's exit criteria), then Codex as
+  the outer post-PR review when the PR is review-worthy — looped to clean. The
+  maintainer clicks merge (auto-merge is disabled).
 - **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
   target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent
   MAY run the demo deploy, but only after a local test of the change, with
@@ -29,13 +31,13 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 ```
 [ ] 1. git status                              confirm what changed
 [ ] 2. git add <files> && git commit -m "..."  commit code (worktree: git -C <path>)
-[ ] 3. /closeout                               opens the PR into dev, runs dual review,
-                                               loops to clean, THEN closes the bead(s)
+[ ] 3. /closeout                               pre-PR assess, opens the PR into dev,
+                                               loops review to clean, THEN closes the bead(s)
                                                and pushes the beads store
 ```
 
 `/closeout` owns PR creation and the review loop, and it is the step that closes
-the bead(s) — **at PR handoff, after Copilot is clean**, never before the PR
+the bead(s) — **at PR handoff, after the review loop is clean**, never before the PR
 exists (a bead closed against work that hasn't landed corrupts the tracker).
 Closeout also runs the final `bd dolt push`; do not pre-close or pre-push the
 bead yourself. It pings the maintainer to merge and never merges itself. Work is

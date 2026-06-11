@@ -1,6 +1,6 @@
 # Workflow doctrine: beads + the agent-swarm tooling
 
-*Last updated: <DATE>.*
+*Last updated: 2026-06-11.*
 
 The load-bearing rules for how work moves through this project. Product-agnostic;
 ported from the claude-swarm-kit. Adapt the specifics, keep the principles.
@@ -78,6 +78,38 @@ mechanical toil:
 - **`journal_scaffold.py <bead-id>`** -- emits the journal-entry skeleton.
 
 All four read project config (repo slug, bead prefix) from `swarm.config.json`.
+
+## Bead creation requirements
+
+Every code-change bead carries an **`## Exit criteria`** section in its **body**
+-- the contract for what "done" means, written so any later agent (or reviewer)
+can score it. See [`planning.md`](planning.md) for the full rubric doctrine; the
+creation-time mechanics:
+
+- **In the body, not metadata JSON.** Exit criteria live as a greppable
+  `## Exit criteria` markdown section in the bead description, NOT as a
+  `metadata` key. They must be readable with `bd show <id>` and `grep`.
+- **1-3 binary, testable criteria** stating what resolution looks like -- e.g.
+  "microphone streams seamlessly across breakpoint crossings and overlay
+  switches." Binary (PASS/FAIL), outcome-based, with an implicit or explicit
+  verify step.
+- **Written at CREATION time -- the norm.** The creator has the observational
+  context to state what success looks like; **filing a code-change bead without
+  exit criteria is an incomplete filing.** Write them when you file.
+- **Claim-time gate is the backstop.** The legacy ~250-bead backlog retrofits
+  lazily: `/next-bead` checks at claim time and writes criteria for any bead that
+  slipped through without them (see that skill's claim-time gate step). The gate
+  catches slipped filings; it does not replace the creation-time norm.
+- **Epic children inherit; standalone tickets get their own.** A child bead's
+  `## Exit criteria` names the >= 1 parent criterion it is on the hook for; a
+  standalone ticket writes its own 1-3 (a ticket whose work clusters into more
+  than ~3 distinct criteria is a signal to split it -- see `planning.md`).
+- **Translate to tests where feasible** -- a criterion that can be a test should
+  be (test-first encouraged); the test is then the verify step.
+- **Mechanical validation is deliberately DEFERRED.** There is intentionally no
+  `validate_bead_body.py` gate yet -- convention first. If you observe drift
+  (beads filed without criteria faster than the claim-time gate catches them),
+  file a follow-up bead to add mechanical validation; do not build it pre-emptively.
 
 ## Bead lifecycle
 
