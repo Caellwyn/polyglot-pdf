@@ -54,6 +54,7 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 | PDF filling (`backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py`) | `docs/components/pdf-filling.md` |
 | Anything logging PII/PHI or audit trails | `docs/standards/hipaa-pii-policy.md` + `docs/standards/confirmation-and-audit.md` |
 | VAD / activity signals (`DISABLE_GEMINI_VAD`, `activity_start/end`) | `docs/standards/voice-and-vad.md` |
+| Planning a feature/epic, filing a bead, or model-tiering a task (`/plan-epic`, exit criteria, SPEAR) | [`docs/doctrine/planning.md`](docs/doctrine/planning.md) |
 
 ---
 
@@ -62,9 +63,12 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 1. **Beads is the system of record for "what to do next."** Resume work via
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
-2. **Every PR ships through `/closeout`:** commit, then closeout opens a normal
-   PR and runs fresh-eyes, **with OpenAI Codex reviewing in parallel only when the
-   PR is review-worthy.** Codex (`chatgpt-codex-connector[bot]`) replaced GitHub
+2. **Every PR ships through `/closeout`:** commit, then closeout runs the **pre-PR
+   adversarial fresh-eyes assess loop** (scored against the bead's exit criteria,
+   looped to no-gap), opens a normal PR, and **then** runs the **OpenAI Codex outer
+   review only when the PR is review-worthy** (fresh-eyes is the inner pre-PR layer,
+   Codex the outer post-PR layer -- they are serial, not parallel). Codex
+   (`chatgpt-codex-connector[bot]`) replaced GitHub
    Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). **Codex auto-reviews
    on PR open**, so round 1 needs no trigger -- just include an `@codex review`
    line in the PR BODY as a nudge. **Round 2+ re-reviews** need an explicit
@@ -282,6 +286,18 @@ Make the decisions easy to scan; do not bury them.
 - Beads (`bd`) is the canonical tracker. Pull-before-read, push-after-write.
   Full cadence: [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
 
+### Planning + model tiering (SPEAR)
+- **Plan features per-epic, not per-bead.** A whole feature is scoped + planned
+  up front via `/plan-epic` (orchestrator-owned): probe the Why, challenge the
+  How, draft a 2-5 criterion exit rubric, MECE-decompose, gate on maintainer
+  approval. **Every code-change bead carries a `## Exit criteria` section in its
+  body** (1-3 binary criteria), written at creation time; `/next-bead` retrofits
+  any that slipped at claim time. Doctrine: [`docs/doctrine/planning.md`](docs/doctrine/planning.md).
+- **Model tiering: expensive models at decision gates ONLY -- never bug-hunting
+  or grepping.** Fable/Opus for Plan / escalation / Resolve; Sonnet for execution
+  + the fresh-eyes assessor; Haiku/Explore for search + mechanical glue. The
+  orchestrator delegates search and keeps the conclusion.
+
 ### Deployment / promotion
 - **Flow:** worktree -> local test server (`scripts/dev-local.ps1`, via
   `/run-local`) -> `dev` -> demo remote server (`deploy-demo.sh`). **There is NO
@@ -328,7 +344,7 @@ Do NOT hand-roll the review cycle. In particular:
 - **`/closeout` OWNS PR creation.** Finish the work, commit until the tree is
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
-  parallel-review setup and tempts hand-polling).
+  review + telemetry setup and tempts hand-polling).
 - **Codex reviews review-worthy PRs -- auto on open, `@codex review` comment for
   re-reviews.** The reviewer is OpenAI Codex (`chatgpt-codex-connector[bot]`), which
   replaced Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). The
@@ -350,14 +366,16 @@ Do NOT hand-roll the review cycle. In particular:
   Never treat `ERROR`/`TIMEOUT` as clean. **Never poll `gh api .../comments`
   yourself** -- that's the expensive manual loop the watcher exists to replace, and
   hand-polling silently misses feedback.
-- **Fresh-eyes runs in parallel** with Codex round 1 (and runs even when Codex is
-  skipped); you fix the COMBINED findings, push once, and **loop Codex until it
-  reports `CLEAN`.**
+- **The adversarial fresh-eyes assess loop runs PRE-PR** (closeout Step 5.5, always
+  -- review-worthy or not): fresh-eyes is scored against the bead's exit criteria and
+  re-spawned until no gap remains, with the fixes committed before the PR opens. Codex
+  is the **outer** review that runs after the PR opens (review-worthy PRs only); you
+  loop Codex until it reports `CLEAN`. The two layers are serial, not parallel.
 - Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
   to merge** -- it never merges (that's the maintainer's).
 
 The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
-PR + dual review loop) lives in
+pre-PR fresh-eyes assess loop + the PR + the Codex outer-review loop) lives in
 [`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md) -- that
 skill is the source of truth; this section just makes running it **non-optional,
 once per PR.**

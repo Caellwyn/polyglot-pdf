@@ -18,7 +18,7 @@ merging.
 > claim check only fires once the other worker has a branch/PR. This skill adds
 > the EARLIER guard -- comparing the files each bead will *modify* -- so an
 > overlapping pick is refused before anyone edits. See
-> [`docs/doctrine/workflow.md`](../../docs/doctrine/workflow.md).
+> [`docs/doctrine/workflow.md`](../../../docs/doctrine/workflow.md).
 
 **The optional argument** (`$1`) is a prioritization hint, not a bead id -- e.g.
 `/next-bead finish the harness epic` or `/next-bead something small`. Weigh it in
@@ -107,9 +107,45 @@ decide-and-note doctrine. This is a decide-it-yourself call -- do NOT escalate
    later bead in the bundle that aborts means it's no longer safe to include --
    drop it from the bundle and continue with the rest.
 
-Only after a clean `CLAIMED:` do you start editing. When the work is done, ship
-it through **`/closeout`** (which closes the bead(s) and pings the maintainer to
-merge -- this skill never merges).
+## Step 4 -- Exit-criteria gate (the claim-time backstop), BEFORE any edit
+
+A code-change bead must carry an **`## Exit criteria`** section in its body --
+the contract for what "done" means. The norm is that the section is written at
+**creation** time (see
+[`workflow.md`](../../../docs/doctrine/workflow.md#bead-creation-requirements)); this
+gate is the **backstop** that retrofits the legacy backlog lazily, so a bead that
+slipped through without criteria gets them before any code is touched.
+
+After a clean `CLAIMED:` and **before you edit any file:**
+
+1. **Read the bead body** (`bd show <full-bead-id>`). Look for an
+   `## Exit criteria` section.
+2. **If it is present** -- nothing to do; proceed to the work. (For an epic
+   child, confirm it names the >= 1 parent criterion it inherits.)
+3. **If it is missing** -- derive **1-3 binary, testable criteria** from the
+   bead's description (what does resolution look like; what would you read/run/
+   observe to call it done) and **append them to the bead body** with a bracketed
+   write BEFORE editing any file:
+   ```bash
+   bd dolt pull && bd update <full-bead-id> --description "<existing description>
+
+   ## Exit criteria
+
+   1. <binary, outcome-based criterion + how to verify>
+   2. ...
+   " && bd dolt push
+   ```
+   (Preserve the existing description -- append the section, don't overwrite it.
+   `bd update --description` replaces the field, so include the prior text. If the
+   bead is an epic child, inherit >= 1 parent criterion rather than inventing
+   unrelated ones.)
+
+Only after the bead has exit criteria do you start editing. Skipping this gate on
+a criteria-less bead reintroduces the silent-scope-drift problem the rubric
+exists to prevent.
+
+When the work is done, ship it through **`/closeout`** (which closes the bead(s)
+and pings the maintainer to merge -- this skill never merges).
 
 ## What this skill never does
 
