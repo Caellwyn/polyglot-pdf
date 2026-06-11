@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-11. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate; `BEADS_GITHUB_TOKEN` direct-push support added 2026-06-11.*
+*Last updated: 2026-06-11. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate; `BEADS_GITHUB_TOKEN` direct-push support added 2026-06-11; dolt-ignored-table repair generalized to all ignored tables (wisps + local_metadata + repo_mtimes) and gated on table presence rather than is_hydrated() 2026-06-11 (polyglot-pdf-080y).*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
@@ -44,14 +44,19 @@ block a naive `bd bootstrap`:
    (`git+http://local_proxy@127.0.0.1:<port>/…`). The script neutralises
    `sync.remote` for the duration of the clone so `bd bootstrap` falls back to
    cloning over that git origin, then restores `config.yaml` exactly.
-3. **The dolt-ignored `wisps` tables.** `wisps` / `wisp_*` are in `dolt_ignore`
-   (so per-clone wisp state can't cause merge conflicts), which also means they are
-   **absent from `refs/dolt/data`**. On a fresh clone bd migrates the schema forward,
-   but migration `0047_recompute_mixed_is_blocked` references `wisps` — which does not
-   exist — so bd aborts with `table not found: wisps` and **cannot open the database
-   at all**. (A long-lived local checkout dodges this: it only ever *pulls* into a DB
-   that already has the local wisp tables. Only a fresh clone trips it. This is an
-   upstream beads fresh-clone bug.)
+3. **The dolt-ignored local tables.** `wisps` / `wisp_*`, `local_metadata`, and
+   `repo_mtimes` are in `dolt_ignore` (so per-clone local state can't cause merge
+   conflicts), which also means they are **absent from `refs/dolt/data`** and never
+   arrive on a fresh clone. Older bd **aborted on open** when `wisps` was missing
+   (migration `0047_recompute_mixed_is_blocked` references it → `table not found:
+   wisps`). The **current** bd is harder to spot: the fresh clone **opens and serves
+   every read** without these tables, but any **write** that recomputes is_blocked
+   (`bd import`/`create`/`close`, and so `/closeout`) dies with `table not found:
+   wisps`, and `bd create`/`migrate` die on the missing `local_metadata`. So "does
+   bd open?" (a read) is **not** a sufficient signal — the repair is gated on the
+   tables' actual presence (bd polyglot-pdf-080y). (A long-lived local checkout
+   dodges this: it only ever *pulls* into a DB that already has the local tables.
+   Only a fresh clone trips it. This is an upstream beads fresh-clone bug.)
 
 ### The stale-snapshot trap (why a hydration marker, not an issue count)
 
@@ -101,12 +106,18 @@ untouched (this self-heal is for disposable remote/web containers only).
    empty / partial / stale DB before cloning.
 2. **Hydrate** over the authenticated proxy origin (`sync.remote` neutralised, then
    restored). This already advances the clone through migrations 41→46.
-3. **Repair wisps** (only if bd still can't open): recreate the `wisps` / `wisp_*`
-   tables with the **exact schema of the installed bd version** — sourced from a
-   throwaway `bd init` in a tempdir, so there is no hand-written DDL to rot — then bd
-   runs its final migration (0047) and opens. Needs a `dolt` CLI: PATH → cached
-   download → latest release download → `go install`, in that order, cached under
-   the gitignored `.beads/.cache/`.
+3. **Repair the dolt-ignored tables** (whenever any is **missing** — gated on the
+   tables, not on whether bd opens; bd polyglot-pdf-080y): read `dolt_ignore`, expand
+   its (possibly-glob) patterns against a throwaway `bd init`, and recreate **every**
+   such table the clone lacks (`wisps` / `wisp_*`, `local_metadata`, `repo_mtimes`)
+   with the **exact schema of the installed bd version** — so there is no hand-written
+   DDL to rot. `CREATE TABLE IF NOT EXISTS`, FK checks off, committed locally only
+   (these tables are dolt-ignored, never pushed). bd then runs its final migration
+   and writes work. Runs in **both** the fresh-clone and the early-return/cached
+   paths (a snapshot-cached container can inherit a write-broken store). Needs a
+   `dolt` CLI: PATH → cached download → latest release download → `go install`, in
+   that order, cached under the gitignored `.beads/.cache/`; if none is obtainable,
+   the script **warns that writes may fail** rather than reporting a silent success.
 4. **Reconcile onto the ref** (the bd polyglot-pdf-0q8 fix): once bd opens a
    populated DB, compare the working branch's issue count to the fetched ref
    (`origin/main`). If the working branch is a **stale JSONL seed** (fewer issues
