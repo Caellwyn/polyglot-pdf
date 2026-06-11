@@ -81,14 +81,26 @@ DOLT_RELEASE = "https://github.com/dolthub/dolt/releases/latest/download/{asset}
 
 VERBOSE = False
 
+# Secret values (e.g. BEADS_GITHUB_TOKEN) that must never appear in output.
+# Every log/vlog line is filtered through _mask(); run() echoes command lines
+# through vlog, so a token embedded in a remote URL is masked there too.
+_SECRET_VALUES: list[str] = []
+
+
+def _mask(msg: str) -> str:
+    for secret in _SECRET_VALUES:
+        if secret:
+            msg = msg.replace(secret, "***")
+    return msg
+
 
 def log(msg: str) -> None:
-    print(f"[beads-bootstrap] {msg}", flush=True)
+    print(f"[beads-bootstrap] {_mask(msg)}", flush=True)
 
 
 def vlog(msg: str) -> None:
     if VERBOSE:
-        print(f"[beads-bootstrap]   {msg}", flush=True)
+        print(f"[beads-bootstrap]   {_mask(msg)}", flush=True)
 
 
 def run(cmd, cwd=None, check=False, capture=True, timeout=300, **kw):
@@ -483,8 +495,44 @@ def _git_fetch_dolt_ref() -> bool:
     return p.returncode == 0
 
 
+def _direct_github_dolt_url(proxy_origin: str) -> str | None:
+    """Build a token-authenticated ``git+https`` URL straight to github.com for the
+    dolt remote, bypassing the session's git proxy entirely.
+
+    Why: the web-container proxy forwards fetches and ``refs/heads/*`` pushes but
+    returns HTTP 403 on a push of ``refs/dolt/data`` (observed 2026-06-10/11), so
+    ``bd dolt push`` -- and therefore the live cross-session bead store -- silently
+    cannot sync from remote sessions. github.com itself IS directly reachable from
+    the container, so when the maintainer provides a fine-grained PAT (repo-scoped,
+    Contents read/write) in ``BEADS_GITHUB_TOKEN``, we push around the proxy.
+
+    Returns None (caller falls back to the proxy URL) when the token is absent or
+    the ``owner/repo`` slug cannot be derived from the proxy origin URL
+    (``http://local_proxy@127.0.0.1:<port>/git/<owner>/<repo>``)."""
+    token = os.environ.get("BEADS_GITHUB_TOKEN", "").strip()
+    if not token:
+        # Say so (fresh-eyes, PR #152): a silent fallback hides a misnamed /
+        # mis-set token -- the operator would just see push 403s with no clue.
+        log("BEADS_GITHUB_TOKEN not set -- dolt remote stays on the proxy "
+            "(bd dolt pull works; bd dolt push will 403; see "
+            "docs/components/beads-remote-bootstrap.md).")
+        return None
+    m = re.search(r"/git/([^/]+/[^/]+?)(?:\.git)?/?$", proxy_origin)
+    if not m:
+        log("BEADS_GITHUB_TOKEN is set but the repo slug could not be derived "
+            f"from the git origin ({proxy_origin}); falling back to the proxy "
+            "(pushes to refs/dolt/data will fail with HTTP 403).")
+        return None
+    if token not in _SECRET_VALUES:
+        _SECRET_VALUES.append(token)
+    return f"git+https://token:{token}@github.com/{m.group(1)}"
+
+
 def repoint_dolt_remote_to_proxy() -> bool:
-    """Point the dolt-level ``origin`` remote at THIS session's live proxy git origin.
+    """Point the dolt-level ``origin`` remote at THIS session's live proxy git origin
+    -- or, when ``BEADS_GITHUB_TOKEN`` is set, straight at github.com so ``bd dolt
+    push`` works from the container (the proxy 403s pushes to ``refs/dolt/data``;
+    see ``_direct_github_dolt_url``).
     The proxy port rotates each session and the dolt remote is snapshot-cached, so a
     baked URL is dead -- and the committed ``sync.remote`` points at the unreachable
     public github URL. ``bd dolt remote add`` also rewrites ``sync.remote`` in the
@@ -496,7 +544,13 @@ def repoint_dolt_remote_to_proxy() -> bool:
         return False
     if not origin:
         return False
-    dolt_url = origin if origin.startswith("git+") else "git+" + origin
+    direct = _direct_github_dolt_url(origin)
+    if direct:
+        dolt_url = direct
+        log("dolt remote: using direct github.com (BEADS_GITHUB_TOKEN set; "
+            "proxy bypassed for refs/dolt/data push support)")
+    else:
+        dolt_url = origin if origin.startswith("git+") else "git+" + origin
     existed = CONFIG.exists()
     original = CONFIG.read_text(encoding="utf-8") if existed else None
     try:
