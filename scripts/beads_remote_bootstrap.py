@@ -511,6 +511,11 @@ def _direct_github_dolt_url(proxy_origin: str) -> str | None:
     (``http://local_proxy@127.0.0.1:<port>/git/<owner>/<repo>``)."""
     token = os.environ.get("BEADS_GITHUB_TOKEN", "").strip()
     if not token:
+        # Say so (fresh-eyes, PR #152): a silent fallback hides a misnamed /
+        # mis-set token -- the operator would just see push 403s with no clue.
+        log("BEADS_GITHUB_TOKEN not set -- dolt remote stays on the proxy "
+            "(bd dolt pull works; bd dolt push will 403; see "
+            "docs/components/beads-remote-bootstrap.md).")
         return None
     m = re.search(r"/git/([^/]+/[^/]+?)(?:\.git)?/?$", proxy_origin)
     if not m:
@@ -518,7 +523,8 @@ def _direct_github_dolt_url(proxy_origin: str) -> str | None:
             f"from the git origin ({proxy_origin}); falling back to the proxy "
             "(pushes to refs/dolt/data will fail with HTTP 403).")
         return None
-    _SECRET_VALUES.append(token)
+    if token not in _SECRET_VALUES:
+        _SECRET_VALUES.append(token)
     return f"git+https://token:{token}@github.com/{m.group(1)}"
 
 
