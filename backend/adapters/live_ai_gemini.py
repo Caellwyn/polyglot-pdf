@@ -15,6 +15,7 @@ from pathlib import Path
 from websockets.exceptions import ConnectionClosed
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 import structlog
 
@@ -944,10 +945,11 @@ class LiveAIGemini(ILiveAI):
         ``disabled=True`` AND any of the sensitivity/padding fields together.
         So this is a hard either/or:
 
-        - VAD disabled (``DISABLE_GEMINI_VAD=True``, the default): return ONLY
-          ``{'disabled': True}``. We drive turn-taking with manual
-          ``activity_start`` / ``activity_end`` signals instead -- see
-          ``docs/standards/voice-and-vad.md``.
+        - VAD disabled (``DISABLE_GEMINI_VAD=True``; NOT the default --
+          ``config.py`` defaults it to false, so Gemini's native VAD is ON
+          unless the env opts out): return ONLY ``{'disabled': True}``. We
+          drive turn-taking with manual ``activity_start`` / ``activity_end``
+          signals instead -- see ``docs/standards/voice-and-vad.md``.
         - VAD enabled: omit ``disabled`` and pass through whichever
           sensitivity/padding knobs (``VAD_*``) are configured.
 
@@ -2085,7 +2087,15 @@ class LiveAIGemini(ILiveAI):
                                         self._log.info("graceful_shutdown_after_event_error")
                                         break
                                     continue
-                        except ConnectionClosed as exc:
+                        # google-genai >= 2.x converts websocket closures inside
+                        # AsyncSession.receive() into genai errors.APIError
+                        # (code = the WS close code) instead of letting
+                        # ConnectionClosed propagate; the send_* methods still
+                        # raise raw ConnectionClosed. Catch BOTH so every
+                        # server-side close (normal end, GoAway expiry, 1011)
+                        # takes this graceful break path, not the unexpected-
+                        # error re-raise below. bd polyglot-pdf-x52p
+                        except (ConnectionClosed, genai_errors.APIError) as exc:
                             print(f"\n{'='*80}")
                             print(f"[error] GEMINI CONNECTION DROPPED")
                             print(f"{'='*80}")

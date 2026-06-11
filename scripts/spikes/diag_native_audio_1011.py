@@ -40,8 +40,15 @@ if str(_REPO_ROOT) not in sys.path:
 
 import os  # noqa: E402
 from google import genai  # noqa: E402
+from google.genai import errors as genai_errors  # noqa: E402
 from google.genai import types  # noqa: E402
 from websockets.exceptions import ConnectionClosed  # noqa: E402
+
+# google-genai >= 2.x converts websocket closures inside receive() into
+# errors.APIError (code = the WS close code); sends still raise raw
+# ConnectionClosed. Catch both so the 1011 counting survives the cutover
+# (bd polyglot-pdf-x52p).
+_CLOSE_ERRORS = (ConnectionClosed, genai_errors.APIError)
 
 # Both native-audio models reachable on our key. The 3.1 is our default; the 2.5 preview
 # is the one the forum report implicates.
@@ -132,7 +139,7 @@ async def _measure(model: str, n_turns: int) -> dict:
                     if billed:
                         result["clean"] += 1
                     print(f"    turn {i + 1:>2}: {'clean' if billed else 'no-bill'}")
-                except ConnectionClosed as exc:
+                except _CLOSE_ERRORS as exc:
                     code = getattr(exc, "code", None) or getattr(getattr(exc, "rcvd", None), "code", None)
                     if code == 1011:
                         result["code_1011"] += 1
@@ -142,7 +149,7 @@ async def _measure(model: str, n_turns: int) -> dict:
                         result["first_failure_turn"] = i + 1
                     print(f"    turn {i + 1:>2}: CLOSED code={code} -- {str(exc)[:70]}")
                     break  # connection is gone; can't continue this session
-    except ConnectionClosed as exc:
+    except _CLOSE_ERRORS as exc:
         code = getattr(exc, "code", None)
         result["connect_failed"] = f"code={code}: {str(exc)[:80]}"
     except Exception as exc:  # noqa: BLE001
