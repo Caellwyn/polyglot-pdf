@@ -20,23 +20,29 @@ Two things then block a naive ``bd bootstrap`` in a remote container:
    (``git+http://local_proxy@127.0.0.1:<port>/...``). Neutralising ``sync.remote``
    makes ``bd bootstrap`` fall back to cloning over that git origin, which works.
 
-2. **The dolt-ignored ``wisps`` tables.** ``wisps`` / ``wisp_*`` are registered in
-   ``dolt_ignore`` (so per-clone wisp state never causes merge conflicts), which
-   also means they are absent from ``refs/dolt/data``. On a fresh clone bd runs
-   its schema migrations up to the latest level, but migration
-   ``0047_recompute_mixed_is_blocked`` references the ``wisps`` table -- which does
-   not exist -- so ``bd`` aborts with "table not found: wisps" and **cannot open
-   the database at all**. (Long-lived local checkouts never hit this because they
-   only ever *pull* into a DB that already has the local wisp tables; only a fresh
-   clone trips it.)
+2. **The dolt-ignored local tables.** ``wisps`` / ``wisp_*``, ``local_metadata``,
+   and ``repo_mtimes`` are registered in ``dolt_ignore`` (so per-clone local state
+   never causes merge conflicts), which also means they are absent from
+   ``refs/dolt/data`` and never arrive on a fresh clone. Older bd ABORTED on open
+   when ``wisps`` was missing (migration ``0047_recompute_mixed_is_blocked``
+   references it -> "table not found: wisps"), so the clone could not open at all.
+   The CURRENT bd is harder to diagnose: the fresh clone OPENS and serves every
+   READ without these tables, but any WRITE that recomputes is_blocked
+   (``bd import``/``create``/``close``, and so ``/closeout``) dies with
+   "table not found: wisps", and ``bd create``/``migrate`` die on the missing
+   ``local_metadata``. So "does bd open?" (reads) is NOT a sufficient signal -- the
+   repair is gated on the tables themselves. (Long-lived local checkouts never hit
+   this because they only ever *pull* into a DB that already has these local tables;
+   only a fresh clone trips it.)
 
 This script makes a remote session self-heal: clone over the proxy, then recreate
-the missing wisp tables (with the *exact* schema of whatever bd version is
-installed -- extracted from a throwaway ``bd init`` -- so there is no hand-written
-DDL to rot), and let bd finish its last migration and open normally. It is
-idempotent: if bd already opens, it does nothing.
+every MISSING dolt-ignored local table (with the *exact* schema of whatever bd
+version is installed -- extracted from a throwaway ``bd init`` -- so there is no
+hand-written DDL to rot), gated on the tables' actual presence rather than on
+whether bd opens. It is idempotent: if all the local tables are already present,
+it does nothing.
 
-It NEVER pushes. The recreated wisp tables and the forward-migration commits are
+It NEVER pushes. The recreated local tables and the forward-migration commits are
 local to this ephemeral clone. NB: a remote session runs bd ``@latest`` (a newer
 schema than the maintainer's level-40 canonical), so the first ``bd dolt push``
 from a remote session (e.g. via ``/closeout``) will bump the canonical schema --
@@ -333,39 +339,113 @@ def _data_dir_from_config() -> Path:
     return REPO_ROOT / ".beads" / "dolt"
 
 
-def repair_wisps(dolt: str) -> None:
-    """Recreate the dolt-ignored ``wisps`` / ``wisp_*`` tables in the freshly cloned
-    DB, using the exact schema of the installed bd version (sourced from a
-    throwaway ``bd init``). bd then runs its final migration and opens."""
+def _ignored_tables_need_repair(dolt: str | None) -> bool | None:
+    """Whether the clone is missing any dolt-IGNORED local table -- the WRITE-path
+    gate. Returns True if at least one ``dolt_ignore`` pattern matches NO table in
+    the clone, False if every pattern matches at least one, or None if it cannot be
+    determined (no dolt CLI / query failure -- callers treat None conservatively and
+    attempt the idempotent repair anyway).
+
+    Why this exists: ``bd stats`` and every READ work without these tables, so
+    ``is_hydrated()`` (reads OK) does NOT imply a usable store. ``wisps`` is needed
+    by the is_blocked recompute on every WRITE (import/create/close/update, and so
+    /closeout); ``local_metadata`` by ``bd create``/``bd migrate``. So the repair
+    must be gated on the TABLES, not on whether bd opens (bd polyglot-pdf-080y)."""
+    if dolt is None:
+        return None
+    clone_db = _dolt_db_dir(_data_dir_from_config())
+    if clone_db is None:
+        return None
+
+    def q(sql: str):
+        try:
+            p = run([dolt, "sql", "-r", "json", "-q", sql], cwd=clone_db, timeout=60)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+        out = (p.stdout or "").strip()
+        try:
+            return json.loads(out).get("rows", []) if out else []
+        except (ValueError, json.JSONDecodeError):
+            return None
+
+    pats = q("SELECT pattern FROM dolt_ignore WHERE ignored = 1")
+    if not pats:
+        # None (query failed) OR [] (no ignored patterns -- unexpected: dolt_ignore
+        # should always carry the beads local-table patterns). Treat both as
+        # undeterminable so the caller attempts the idempotent repair rather than
+        # skipping it on a false "all present" (bd polyglot-pdf-080y, fresh-eyes).
+        return None
+    for r in pats:
+        pattern = list(r.values())[0]
+        rows = q(f"SHOW TABLES LIKE '{pattern}'")
+        if rows is None:
+            return None
+        if len(rows) == 0:
+            return True  # this ignore pattern matches no table in the clone
+    return False
+
+
+def repair_ignored_tables(dolt: str) -> None:
+    """Recreate the dolt-IGNORED local tables (``wisps`` / ``wisp_*``,
+    ``local_metadata``, ``repo_mtimes``, ...) that a fresh clone lacks, using the
+    exact schema of the installed bd version (sourced from a throwaway ``bd init``).
+
+    These tables are registered in ``dolt_ignore`` (so per-clone local state never
+    causes merge conflicts), which also means they are ABSENT from ``refs/dolt/data``
+    and never arrive on a clone. bd is meant to create them lazily but does not
+    before they are needed -- ``wisps`` by the is_blocked recompute on every write,
+    ``local_metadata`` by tip-tracking and ``bd migrate``. We recreate EVERY missing
+    ignored table, not just the wisp ones: an earlier version repaired only
+    ``wisp%`` and left ``local_metadata`` broken, so ``bd create``/``migrate`` still
+    failed (bd polyglot-pdf-080y). Idempotent (``CREATE TABLE IF NOT EXISTS``);
+    local-only (never pushed -- these tables are dolt-ignored)."""
     clone_db = _dolt_db_dir(_data_dir_from_config())
     if clone_db is None:
         raise RuntimeError("could not locate the cloned Dolt database directory")
     vlog(f"clone db: {clone_db}")
 
-    with tempfile.TemporaryDirectory(prefix="bd-wisp-src-") as tmp:
-        # 1) A throwaway bd db at the installed version -- has wisp tables at the
-        #    correct (current) schema.
-        log("sourcing wisp schema from a throwaway 'bd init' ...")
+    with tempfile.TemporaryDirectory(prefix="bd-ignored-src-") as tmp:
+        # 1) A throwaway bd db at the installed version -- carries every dolt-ignored
+        #    local table at the correct (current) schema.
+        log("sourcing dolt-ignored table schema from a throwaway 'bd init' ...")
         run(["bd", "init", "--prefix", "wispsrc"], cwd=tmp, timeout=120)
         src_db = _dolt_db_dir(Path(tmp) / ".beads" / "embeddeddolt") \
             or _dolt_db_dir(Path(tmp) / ".beads" / "dolt")
         if src_db is None:
             raise RuntimeError("throwaway bd init produced no Dolt database")
 
-        # 2) Extract CREATE TABLE for every wisp* table (wisps first -- others FK to it).
         def q(db: Path, sql: str):
             p = run([dolt, "sql", "-r", "json", "-q", sql], cwd=db, timeout=120)
             out = (p.stdout or "").strip()
             return json.loads(out).get("rows", []) if out else []
 
-        tbls = [list(r.values())[0] for r in q(src_db, "SHOW TABLES LIKE 'wisp%'")]
-        tbls.sort(key=lambda t: (t != "wisps", t))
-        if "wisps" not in tbls:
-            raise RuntimeError("throwaway db has no wisp tables -- bd internals changed?")
-        vlog(f"wisp tables: {tbls}")
+        # 2) Expand the dolt_ignore patterns (some are globs, e.g. 'wisp_%') against
+        #    the throwaway source -- that is the set of local tables a clone SHOULD
+        #    carry -- then keep only the ones actually MISSING from this clone. Read
+        #    the patterns from the clone (it always has dolt_ignore); read the real
+        #    table names + DDL from the source.
+        patterns = [list(r.values())[0]
+                    for r in q(clone_db, "SELECT pattern FROM dolt_ignore WHERE ignored = 1")]
+        want: list[str] = []
+        for pattern in patterns:
+            for r in q(src_db, f"SHOW TABLES LIKE '{pattern}'"):
+                t = list(r.values())[0]
+                if t not in want:
+                    want.append(t)
+        if "wisps" not in want:
+            raise RuntimeError("throwaway db has no 'wisps' table -- bd internals changed?")
+        have = {list(r.values())[0] for r in q(clone_db, "SHOW TABLES")}
+        missing = [t for t in want if t not in have]
+        if not missing:
+            vlog("all dolt-ignored tables already present in the clone")
+            return
+        # wisps before wisp_* (the others FK to it); FK checks are off anyway.
+        missing.sort(key=lambda t: (t != "wisps", t))
+        vlog(f"recreating dolt-ignored tables: {missing}")
 
+        # 3) Copy each missing table's CREATE statement.
         ddl = ["SET FOREIGN_KEY_CHECKS=0;"]
-        for t in tbls:
+        for t in missing:
             create_rows = q(src_db, f"SHOW CREATE TABLE `{t}`")
             if not create_rows or "Create Table" not in create_rows[0]:
                 raise RuntimeError(f"could not read CREATE TABLE for {t!r} from throwaway db")
@@ -374,8 +454,8 @@ def repair_wisps(dolt: str) -> None:
         ddl.append("SET FOREIGN_KEY_CHECKS=1;")
         schema_sql = "\n".join(ddl)
 
-        # 3) Apply into the clone and commit (local-only; never pushed).
-        log("recreating wisp tables in the cloned database ...")
+        # 4) Apply into the clone and commit (local-only; never pushed).
+        log(f"recreating {len(missing)} dolt-ignored table(s) in the cloned database ...")
         run([dolt, "sql"], cwd=clone_db, input=schema_sql, timeout=120, check=True)
         # A throwaway local identity scoped to this clone's dolt repo (gitignored).
         run([dolt, "config", "--local", "--add", "user.name", "beads-remote-bootstrap"],
@@ -383,7 +463,7 @@ def repair_wisps(dolt: str) -> None:
         run([dolt, "config", "--local", "--add", "user.email", "bootstrap@local"],
             cwd=clone_db, timeout=30)
         run([dolt, "add", "."], cwd=clone_db, timeout=120, check=True)
-        run([dolt, "commit", "-m", "local: recreate dolt-ignored wisp tables post-clone"],
+        run([dolt, "commit", "-m", "local: recreate dolt-ignored tables post-clone"],
             cwd=clone_db, timeout=120)
 
 
@@ -628,6 +708,27 @@ def main() -> int:
     if HYDRATION_MARKER.exists() and is_hydrated():
         if is_remote_container():
             ok = refresh_remote_and_pull()
+            # Even a marked/cached container can be missing the dolt-ignored local
+            # tables: the marker is stamped on a READ-OK store, so a snapshot taken
+            # before the post-clone repair (or by a bd that opened without them)
+            # inherits a write-broken store. Recreate any that are absent so a later
+            # bd write / /closeout does not die on 'table not found' (bd polyglot-pdf-080y).
+            dolt = ensure_dolt()
+            if dolt is not None and _ignored_tables_need_repair(dolt) is not False:
+                log("cached store is missing dolt-ignored local tables; repairing ...")
+                try:
+                    repair_ignored_tables(dolt)
+                except Exception as e:  # noqa: BLE001
+                    log(f"WARNING: dolt-ignored table repair failed: {e} -- WRITES may fail.")
+            elif dolt is None:
+                # No dolt CLI -> we could neither verify nor recreate the dolt-ignored
+                # tables. Warn rather than report a silent success (bd polyglot-pdf-080y,
+                # fresh-eyes): the same write-broken-but-readable hazard the fresh-clone
+                # path warns about applies to a cached container too.
+                log("WARNING: no 'dolt' CLI available to verify/recreate the dolt-ignored "
+                    "local tables -- READS work but WRITES (bd import/create/close, and "
+                    "/closeout) may fail with 'table not found' (e.g. wisps / local_metadata). "
+                    "Install dolt (https://github.com/dolthub/dolt) and re-run to repair.")
             if ok:
                 log(f"already hydrated; refreshed from remote ({bd_total_issues()} issues).")
             else:
@@ -656,23 +757,40 @@ def main() -> int:
     quiet_beads_hygiene()
     wipe_local_db()
     hydrate_via_proxy()
-    dolt: str | None = None
-    if not is_hydrated():
-        log("clone is missing the dolt-ignored wisp tables; repairing ...")
-        dolt = ensure_dolt()
-        if not dolt:
-            log("ERROR: could not obtain a 'dolt' CLI to repair wisp tables. "
-                "Install dolt (https://github.com/dolthub/dolt) and re-run.")
-            return 1
+    # A fresh clone never carries the dolt-IGNORED local tables (wisps/wisp_*,
+    # local_metadata, repo_mtimes). Recreate any that are MISSING -- gated on the
+    # tables, NOT on is_hydrated(). Older bd ABORTED on open when 'wisps' was absent
+    # (migration 0047 -> 'table not found: wisps'), so "not hydrated" used to imply
+    # "tables missing"; the current bd OPENS for reads without them while every WRITE
+    # (is_blocked recompute: import/create/close, and so /closeout) still dies on the
+    # missing table -- and 'bd create'/'migrate' die on the missing local_metadata.
+    # Gating on is_hydrated() silently shipped a read-only store (bd polyglot-pdf-080y).
+    dolt: str | None = ensure_dolt()
+    if dolt is not None and _ignored_tables_need_repair(dolt) is not False:
+        # True (something missing) or None (undeterminable) -> attempt the idempotent repair.
+        log("clone is missing dolt-ignored local tables; repairing ...")
         try:
-            repair_wisps(dolt)
+            repair_ignored_tables(dolt)
         except Exception as e:  # noqa: BLE001
-            log(f"ERROR: wisp repair failed: {e}")
+            log(f"ERROR: dolt-ignored table repair failed: {e}")
             return 1
-        if not is_hydrated():
+    if not is_hydrated():
+        if dolt is None:
+            log("ERROR: bd cannot open a populated database and no 'dolt' CLI is "
+                "available to recreate the missing dolt-ignored local tables. Install "
+                "dolt (https://github.com/dolthub/dolt) and re-run.")
+        else:
             log("ERROR: bd still cannot open a populated database after repair. Re-run "
                 "with --verbose and inspect, or read docs/components/beads-remote-bootstrap.md.")
-            return 1
+        return 1
+    if dolt is None:
+        # Reads work, but with no dolt CLI we could neither verify nor recreate the
+        # dolt-ignored tables -- WRITES may still be broken. Do NOT claim a silent
+        # success (bd polyglot-pdf-080y).
+        log("WARNING: no 'dolt' CLI available to verify/recreate the dolt-ignored "
+            "local tables -- READS work but WRITES (bd import/create/close, and "
+            "/closeout) may fail with 'table not found' (e.g. wisps / local_metadata). "
+            "Install dolt (https://github.com/dolthub/dolt) and re-run to repair.")
 
     # bd now opens a populated DB, but `bd bootstrap` may have left the dolt remote
     # pointing at the unreachable public `sync.remote` and seeded the WORKING branch
