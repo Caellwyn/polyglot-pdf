@@ -123,7 +123,10 @@
         try { h.sendAudio(silence.slice(0)); } catch (e) { stream.stop(); return; }
         await sleep(chunkMs);
       }
-    })();
+    })().catch(function (e) {
+      stream.stop();
+      try { console.error('[VFF Harness] silence pump unexpected error', e); } catch (_) {}
+    });
     _silenceStream = stream;
     return stream;
   }

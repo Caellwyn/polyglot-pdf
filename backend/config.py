@@ -116,8 +116,8 @@ class Settings(BaseModel):
 	# HIGH registered 20/20 -- see docs/standards/voice-and-vad.md.
 	VAD_START_SENSITIVITY: str = os.getenv("VAD_START_SENSITIVITY", "HIGH")  # Options: "LOW", "HIGH", "UNSPECIFIED"
 	VAD_END_SENSITIVITY: str = os.getenv("VAD_END_SENSITIVITY", "LOW")    # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_PREFIX_PADDING_MS: int | None = int(os.getenv("VAD_PREFIX_PADDING_MS", "500"))  # Milliseconds of audio before speech start to include
-	VAD_SILENCE_DURATION_MS: int | None = int(os.getenv("VAD_SILENCE_DURATION_MS", "500"))  # Milliseconds of silence before ending speech
+	VAD_PREFIX_PADDING_MS: int | None = int(os.getenv("VAD_PREFIX_PADDING_MS") or "500")  # Milliseconds of audio before speech start to include
+	VAD_SILENCE_DURATION_MS: int | None = int(os.getenv("VAD_SILENCE_DURATION_MS") or "500")  # Milliseconds of silence before ending speech
 
 	# === Context-window compression (Gemini Live) ===
 	# Server-side ContextWindowCompressionConfig: a sliding window bounds the live
