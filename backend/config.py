@@ -109,10 +109,15 @@ class Settings(BaseModel):
 	# END_SENSITIVITY: How quickly Gemini detects speech end
 	#   - LOW: Waits longer for silence, reduces choppy cutoffs
 	#   - HIGH: Ends faster, more responsive but may cut off pauses
-	VAD_START_SENSITIVITY: str = "LOW"  # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_END_SENSITIVITY: str = "LOW"    # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_PREFIX_PADDING_MS: int | None = 500  # Milliseconds of audio before speech start to include
-	VAD_SILENCE_DURATION_MS: int | None = 500  # Milliseconds of silence before ending speech
+	# Env-overridable (bd polyglot-pdf-4sv7: these were hard-coded literals, so
+	# the deploy env could not tune Gemini-side VAD at all). Default START=HIGH:
+	# measured on the audio path 2026-06-11, START_SENSITIVITY_LOW dropped 6/20
+	# turns (incl. the short "yes" confirmations the demo kept missing) while
+	# HIGH registered 20/20 -- see docs/standards/voice-and-vad.md.
+	VAD_START_SENSITIVITY: str = os.getenv("VAD_START_SENSITIVITY", "HIGH")  # Options: "LOW", "HIGH", "UNSPECIFIED"
+	VAD_END_SENSITIVITY: str = os.getenv("VAD_END_SENSITIVITY", "LOW")    # Options: "LOW", "HIGH", "UNSPECIFIED"
+	VAD_PREFIX_PADDING_MS: int | None = int(os.getenv("VAD_PREFIX_PADDING_MS", "500"))  # Milliseconds of audio before speech start to include
+	VAD_SILENCE_DURATION_MS: int | None = int(os.getenv("VAD_SILENCE_DURATION_MS", "500"))  # Milliseconds of silence before ending speech
 
 	# === Context-window compression (Gemini Live) ===
 	# Server-side ContextWindowCompressionConfig: a sliding window bounds the live

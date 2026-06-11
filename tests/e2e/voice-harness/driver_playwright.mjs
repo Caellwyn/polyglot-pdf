@@ -19,9 +19,17 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+
+// ESM does not honor NODE_PATH; resolve playwright from the repo, or from an
+// out-of-repo install pointed at by VFF_PLAYWRIGHT_DIR (e.g. /tmp/node_modules).
+const require_ = createRequire(import.meta.url);
+const playwrightPath = process.env.VFF_PLAYWRIGHT_DIR
+  ? join(process.env.VFF_PLAYWRIGHT_DIR, 'playwright')
+  : 'playwright';
+const { chromium } = require_(playwrightPath);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = process.env.VFF_FRONTEND_URL || 'http://localhost:5174';
