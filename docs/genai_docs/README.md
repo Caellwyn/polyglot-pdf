@@ -21,12 +21,12 @@ data or live web docs.
 
 | File | What it covers | Reach for it when |
 |------|----------------|-------------------|
-| [`codegen_instructions.md`](codegen_instructions.md) | Official Gemini API Python coding guidelines: correct SDK surface (`genai.Client()`, `client.models.*`, `client.aio.live.*`), explicit anti-patterns (legacy `google-generativeai`, `genai.configure`, `GenerativeModel`, `types.ResponseModality.TEXT`), thinking/streaming/structured-output/function-calling/media examples. | Any `google-genai` call — pick the right method, avoid deprecated patterns. |
-| [`genai.live-docs.md`](genai.live-docs.md) | `genai.live` module reference (`AsyncLive` / `AsyncSession`): `connect(model=, config=)`, `send_client_content`, `send_realtime_input`, `send_tool_response`, `receive()`, deprecated `send`/`start_stream`. | Working on the Live WebSocket session lifecycle / message-sending surface. |
+| [`codegen_instructions.md`](codegen_instructions.md) | Official Gemini API Python coding guidelines: correct SDK surface (`genai.Client()`, `client.models.*`, `client.aio.live.*`), explicit anti-patterns (legacy `google-generativeai`, `genai.configure`, `GenerativeModel`, `types.ResponseModality.TEXT`), thinking/streaming/structured-output/function-calling/media examples. Targets `google-genai` 2.8.0. | Any `google-genai` call -- pick the right method, avoid deprecated patterns. |
+| [`genai.live-docs.md`](genai.live-docs.md) | `genai.live` module reference (`AsyncLive` / `AsyncSession`): `connect(model=, config=)`, `send_client_content`, `send_realtime_input`, `send_tool_response`, `receive()` (2.x error semantics: `ConnectionClosed` inside `receive()` is re-raised as `genai.errors.APIError`), deprecated `send`/`start_stream`. Targets `google-genai` 2.8.0. | Working on the Live WebSocket session lifecycle / message-sending surface. |
 | [`gemini_live_api_examples.md`](gemini_live_api_examples.md) | End-to-end Live example (Python + JS): connect, send audio/text/video blobs, receive **audio + transcriptions** (`input_transcription`/`output_transcription`), handle tool calls. Canonical example model: `gemini-3.1-flash-live-preview` + `response_modalities:["AUDIO"]`. | Implementing audio in/out, transcription, or tool-call round-trips. |
 | [`live-api-best-practices.md`](live-api-best-practices.md) | System-instruction design, precise tool defs, streaming (20–40 ms chunks, interruption → discard client buffer), **context-window compression** (`ContextWindowCompressionConfig`; 15-min audio cap without it), **session resumption** tokens (valid 2 h) + **GoAway**/`generationComplete` handling, the **compounding per-turn billing** model, proactive-audio caveats. | Cost/latency tuning, long-session reliability, SI/tool prompt design. |
 
-## Hard-won facts (verified against the live endpoint, 2026-05-30)
+## Hard-won facts (verified against the live endpoint; SDK surface verified 2026-06-11 against 2.8.0)
 
 - **Native-audio models emit AUDIO only.** Requesting `response_modalities:["TEXT"]`
   against a native-audio model fails with **1007** ("response modalities (TEXT)
@@ -71,6 +71,12 @@ data or live web docs.
   SDK question -- probes cost real tokens. Here the expensive mistake was building the
   feature + a 4-session sweep on an unverified premise; a single connect probe would have
   caught it first.) (bd memory `gemini-capability-questions-need-endpoint-probe`.)
+- **In `google-genai` 2.x, `AsyncSession.receive()` raises `google.genai.errors.APIError`
+  on WebSocket closure** (the error code equals the WS close code, e.g. 1011) instead of
+  letting `websockets.exceptions.ConnectionClosed` propagate. The `send_*` methods still
+  raise raw `ConnectionClosed`. Catch BOTH in any receive loop. Our adapter does this
+  (see `backend/adapters/live_ai_gemini.py`, bd `polyglot-pdf-x52p`). SDK surface
+  verified 2026-06-11 against `google-genai` 2.8.0.
 
 ## Related project context
 

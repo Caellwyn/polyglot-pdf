@@ -1,4 +1,9 @@
 The Gemini Live API allows for real-time, bidirectional interaction with Gemini models, supporting audio, video, and text inputs and native audio outputs. This guide explains how to integrate with the API using the Google GenAI SDK on your server.
+
+> SDK version documented: `google-genai` 2.8.0 (verified 2026-06-11). All
+> examples below remain valid against 2.8.0. See "Handling WebSocket
+> disconnections" below for the one behavioral change that affects receive loops.
+
 [Try the Live API in Google AI Studio](https://aistudio.google.com/live) [Clone the example app from GitHub](https://github.com/google-gemini/gemini-live-api-examples/tree/main/gemini-live-genai-python-sdk) [Use coding agent skills](https://ai.google.dev/gemini-api/docs/coding-agents)
 
 ## Overview
@@ -229,6 +234,48 @@ The API supports tool calling (function calling). When the model requests a tool
       }
       session.sendToolResponse({ functionResponses });
     }
+
+## Handling WebSocket disconnections
+
+In `google-genai` 2.x, `AsyncSession.receive()` catches
+`websockets.exceptions.ConnectionClosed` internally and re-raises it as
+`google.genai.errors.APIError` (with the WS close code as the error code, e.g.
+1011 for a server-side abnormal closure). The `send_*` methods still raise raw
+`ConnectionClosed`. To handle all server-side closes in one place, catch both:
+
+    import asyncio
+    from websockets.exceptions import ConnectionClosed
+    from google import genai
+    from google.genai import errors as genai_errors, types
+
+    client = genai.Client(api_key="YOUR_API_KEY")
+    model = "gemini-3.1-flash-live-preview"
+    config = {"response_modalities": ["AUDIO"]}
+
+    async def run():
+        async with client.aio.live.connect(model=model, config=config) as session:
+            await session.send_realtime_input(text="Hello!")
+            try:
+                async for msg in session.receive():
+                    if msg.server_content and msg.server_content.model_turn:
+                        for part in msg.server_content.model_turn.parts:
+                            if part.inline_data:
+                                # process audio bytes: part.inline_data.data
+                                pass
+            except (ConnectionClosed, genai_errors.APIError) as exc:
+                # ConnectionClosed: raised by send_* methods or by receive() in
+                #   google-genai 1.x.
+                # genai_errors.APIError: raised by receive() in google-genai 2.x
+                #   when the underlying WS closes (exc.code == WS close code).
+                print(f"Connection dropped: {exc}")
+                # reconnect / surface error to caller as appropriate
+
+    asyncio.run(run())
+
+This is the pattern used in `backend/adapters/live_ai_gemini.py` (bd
+`polyglot-pdf-x52p`). The `send_*` path still raises `ConnectionClosed`
+directly, so the outer `except` block covers both send and receive failures when
+both are in the same try scope.
 
 ## What's next
 

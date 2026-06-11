@@ -1,5 +1,7 @@
 # Gemini API Coding Guidelines (Python)
 
+> SDK version targeted: `google-genai` 2.8.0 (verified 2026-06-11).
+
 You are a Gemini API coding expert. Help me with writing code using the Gemini
 API calling the official libraries and SDKs.
 
