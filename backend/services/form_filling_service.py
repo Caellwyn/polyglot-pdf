@@ -65,6 +65,10 @@ class FormFillingService:
         self._request_coordinator: Optional[RequestCoordinator] = None
         # Callback handler for Gemini Live AI events
         self._callback_handler: Optional[CallbackHandler] = None
+        # Resume flag: True when the handshake carried resume:true (mid-section
+        # reconnect). Suppresses the greeting in send_initiating_message so Gemini
+        # resumes silently rather than re-introducing the form/section.
+        self._is_resume_session: bool = False
         # Section-switch serialization (bd polyglot-pdf-0c1). _switch_lock
         # serializes switch_to_section so a manual switch (WS route) and an
         # AI-initiated switch (switch_section tool) can't restart the session
@@ -293,8 +297,14 @@ class FormFillingService:
         # available to Gemini via the system instruction's FIELDS block.
         spoken_hint = strip_field_id_from_hint(next_field_hint)
 
-        # Format initiating message template
-        message = self._settings.INITIATING_MESSAGE.format(
+        # On mid-section reconnects use the resume template so Gemini skips
+        # the greeting and section re-introduction (bd polyglot-pdf-vmxx).
+        template = (
+            self._settings.RESUME_INITIATING_MESSAGE
+            if self._is_resume_session
+            else self._settings.INITIATING_MESSAGE
+        )
+        message = template.format(
             spoken_language=spoken_language,
             next_field_hint=spoken_hint
         )
@@ -302,6 +312,7 @@ class FormFillingService:
         _log.info("send_initiating_message",
                  session_id=self._session_id,
                  spoken_language=spoken_language,
+                 is_resume=self._is_resume_session,
                  message=message)
 
         # Send to Gemini via session.send_client_content()
@@ -561,7 +572,8 @@ class FormFillingService:
             total_sections=total_sections,
             section_label=section_label,
             previous_spoken_names=previous_spoken_names,
-            next_field_hint=strip_field_id_from_hint(next_field_hint)
+            next_field_hint=strip_field_id_from_hint(next_field_hint),
+            is_reconnect=self._is_resume_session,
         )
         _si_ms = round((time.monotonic() - _t_si_start) * 1000)
         try:

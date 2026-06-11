@@ -171,6 +171,7 @@ async def _handle_fill_session(
 	previous_spoken_names: list | None = None,  # Phase 3: Spoken names from completed sections
 	initial_field_hint: str | None = None,  # Initial field hint from frontend (pre-computed)
 	form_session_id: str | None = None,  # Persistent form session ID from frontend
+	is_reconnect: bool = False,  # True when handshake carries resume:true (mid-section reconnect)
 ) -> None:
 	log = _log.bind(session_id=session_id, form_session_id=form_session_id)
 	
@@ -178,6 +179,10 @@ async def _handle_fill_session(
 	# System instruction goes in Gemini config
 	system_instruction = None
 	
+	# Store resume flag on the service so send_initiating_message can select
+	# the correct template (bd polyglot-pdf-vmxx).
+	service._is_resume_session = is_reconnect
+
 	if schema:
 		# Update schema with fill_language
 		service.update_schema(schema, current_values or {}, fill_language)
@@ -688,6 +693,10 @@ async def fill_form_from_schema(
 	# Extract initial field hint (computed by frontend before connection)
 	initial_field_hint = handshake.get("initial_field_hint")  # Can be None if form is complete
 
+	# Resume flag: True when the frontend is reconnecting mid-section (not a fresh start).
+	# Suppresses the greeting/section-intro in send_initiating_message (bd polyglot-pdf-vmxx).
+	is_reconnect = bool(handshake.get("resume", False))
+
 	source = str(schema.get("source") or "web").lower().strip() or "web"
 	# Accept both "web" and "pdf" sources - PDF schemas can be voice-filled via web interface
 	if source not in ("web", "pdf"):
@@ -709,10 +718,12 @@ async def fill_form_from_schema(
 		section_id=section_id,
 		section_number=section_number,
 		total_sections=total_sections,
+		is_reconnect=is_reconnect,
 	)
 	log.info("web_session_starting",
 	         ephemeral_id=ephemeral_id,
-	         form_session_id=form_session_id)
+	         form_session_id=form_session_id,
+	         is_reconnect=is_reconnect)
 
 	print(f"\n{'='*80}")
 	print(f"[session] NEW FORM SESSION")
@@ -721,6 +732,7 @@ async def fill_form_from_schema(
 	print(f"Ephemeral ID: {ephemeral_id}")
 	print(f"Section: {section_id} ({section_number}/{total_sections}) - {section_label}")
 	print(f"JIT Mode: {is_jit_mode}")
+	print(f"Resume: {is_reconnect}")
 	print(f"{'='*80}\n")
 
 	# Acknowledge handshake
@@ -752,4 +764,5 @@ async def fill_form_from_schema(
 		previous_spoken_names=previous_spoken_names,  # Phase 3: Completed sections lookup
 		initial_field_hint=initial_field_hint,  # Computed by frontend before connection
 		form_session_id=form_session_id,  # Persistent ID from frontend (survives reconnects)
+		is_reconnect=is_reconnect,  # Suppresses greeting on mid-section reconnect (bd polyglot-pdf-vmxx)
 	)

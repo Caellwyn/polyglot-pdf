@@ -56,13 +56,14 @@ def build_form_context(
     total_sections: Optional[int] = None,
     section_label: Optional[str] = None,
     previous_spoken_names: Optional[List[str]] = None,
-    next_field_hint: Optional[str] = None
+    next_field_hint: Optional[str] = None,
+    is_reconnect: bool = False,
 ) -> str:
     """Build form context system instruction for AI.
-    
+
     This system instruction provides the AI with complete form schema and current state.
     Uses Settings.SYSTEM_INSTRUCTION template for centralized configuration.
-    
+
     Args:
         schema: Form schema with field definitions
         current_values: Current field values from client (may be pre-filled by user)
@@ -339,6 +340,16 @@ def build_form_context(
             previous_spoken_names=previous_names_text,
             confirmation_policy=confirmation_policy,
             next_field_hint=next_field_hint or "the first unfilled field"
+        )
+
+    # On mid-section reconnects, override any greet directive so Gemini resumes
+    # silently rather than re-introducing the form/section (bd polyglot-pdf-vmxx).
+    if is_reconnect:
+        system_instruction = (
+            system_instruction
+            + "\n\nRESUME: The user has reconnected mid-session. "
+            "Do NOT greet them. Do NOT re-introduce the form or section. "
+            "Simply ask for the next field as if continuing naturally."
         )
 
     return system_instruction

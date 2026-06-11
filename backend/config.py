@@ -385,6 +385,16 @@ class Settings(BaseModel):
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field."
 	)
+
+	# === RESUME INITIATING MESSAGE TEMPLATE ===
+	# Used instead of INITIATING_MESSAGE when the handshake carries resume:true.
+	# The user is already mid-section; skip greeting and section re-introduction.
+	# Placeholders: {spoken_language}, {next_field_hint}
+	RESUME_INITIATING_MESSAGE: str = (
+		"Speak {spoken_language}. Do NOT greet the user. Do NOT introduce the form or section. "
+		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally."
+	)
+
 	# === DISCLAIMER INITIATING MESSAGE ===
 	# Used when user first selects language - reads disclaimer before starting form
 	# Placeholders: {spoken_language}
