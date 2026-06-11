@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-04. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate.*
+*Last updated: 2026-06-11. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate; `BEADS_GITHUB_TOKEN` direct-push support added 2026-06-11.*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
@@ -139,6 +139,37 @@ untouched (this self-heal is for disposable remote/web containers only).
    runs in this container stay quiet and re-runs no-op. Written only AFTER the
    reconcile + freshness gate pass, and **stamped with the verified
    `refs/dolt/data` commit** so freshness is checkable, not inferred from a count.
+
+## Pushing from a remote container: `BEADS_GITHUB_TOKEN` (required)
+
+The web-container git proxy forwards fetches and `refs/heads/*` pushes but
+**returns HTTP 403 on a push of `refs/dolt/data`** (observed 2026-06-10/11:
+`addTableFiles, updateManifestAddFiles: ... HTTP 403`), so through the proxy a
+remote session can read the live store and commit locally but **cannot
+`bd dolt push`** — its bead writes die with the container unless hand-exported.
+
+The fix is built into the bootstrap: when the **`BEADS_GITHUB_TOKEN`**
+environment variable is set, `repoint_dolt_remote_to_proxy()` points the dolt
+`origin` at `git+https://token:<TOKEN>@github.com/<owner>/<repo>` — straight at
+github.com, which the container can reach directly — instead of the proxy, and
+`bd dolt push` works normally. The token is masked (`***`) in all script
+output, and the URL persists only in the gitignored `embeddeddolt/` state.
+
+Setup (maintainer, one-time):
+
+1. Create a **fine-grained PAT**: github.com → Settings → Developer settings →
+   Fine-grained tokens; Repository access = only this repo; Permissions =
+   **Contents: Read and write**. Set an expiry you can live with re-issuing.
+2. Add `BEADS_GITHUB_TOKEN=<the token>` to the Claude Code **environment
+   configuration** (code.claude.com → your environment → environment
+   variables), so every new remote session gets it at container start.
+3. Mind [the schema caveat](#the-one-caveat-schema-version-on-push): the first
+   remote-session push bumps the canonical schema, so the local `bd` must be
+   `@latest` before — or right after — that first push.
+
+Without the token the bootstrap falls back to the proxy URL unchanged (pull
+works, push 403s) and says so. If the environment's network policy is ever
+tightened, `github.com` must stay on the allowlist for this path to work.
 
 ## Staying fresh: pull before every read, pull before every push
 
