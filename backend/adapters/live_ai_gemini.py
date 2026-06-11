@@ -1003,33 +1003,14 @@ class LiveAIGemini(ILiveAI):
             vad_settings['silence_duration_ms'] = settings.VAD_SILENCE_DURATION_MS
         return vad_settings
 
-    async def _run_session_loop(self):
-        """Background loop that connects to Gemini Live and handles audio and events.
+    def _build_live_config(self, settings) -> Dict[str, Any]:
+        """Build the Live connect config exactly as the session loop sends it.
 
-        This is a minimal implementation: connect, send audio from queue, and
-        dispatch simple transcript/tool events to callbacks. It's intentionally
-        conservative so tests and local dev don't require full protocol coverage.
+        Extracted from _run_session_loop so external callers (the contract
+        smoke test, probes) can drive the REAL config shape instead of a
+        hand-rolled minimal dict that 3.1 rejects with 1007
+        (bd polyglot-pdf-a7k / polyglot-pdf-4td1).
         """
-
-        # Import settings at the start to avoid UnboundLocalError
-        from backend.config import get_settings
-        settings = get_settings()
-
-        # Reset token counters for this session
-        self._session_total_tokens = 0
-        self._session_prompt_tokens = 0
-        self._session_candidate_tokens = 0
-        self._session_total_cost = 0.0
-        self._session_text_input_tokens = 0
-        self._session_audio_input_tokens = 0
-        self._session_text_output_tokens = 0
-        self._session_audio_output_tokens = 0
-        self._cost_summary_emitted = False
-        # Reset timing state for this session (bd polyglot-pdf-cwsy).
-        self._timing_last_activity_end = None
-        self._timing_first_inbound_audio = None
-        self._timing_audio_dropped = 0
-
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
         response_modalities = ["AUDIO"]
@@ -1123,6 +1104,36 @@ class LiveAIGemini(ILiveAI):
                         f.write("=" * 80 + "\n")
                 except Exception as e:
                     self._log.warn("failed_to_write_debug_file", error=str(e))
+        return config
+
+    async def _run_session_loop(self):
+        """Background loop that connects to Gemini Live and handles audio and events.
+
+        This is a minimal implementation: connect, send audio from queue, and
+        dispatch simple transcript/tool events to callbacks. It's intentionally
+        conservative so tests and local dev don't require full protocol coverage.
+        """
+
+        # Import settings at the start to avoid UnboundLocalError
+        from backend.config import get_settings
+        settings = get_settings()
+
+        # Reset token counters for this session
+        self._session_total_tokens = 0
+        self._session_prompt_tokens = 0
+        self._session_candidate_tokens = 0
+        self._session_total_cost = 0.0
+        self._session_text_input_tokens = 0
+        self._session_audio_input_tokens = 0
+        self._session_text_output_tokens = 0
+        self._session_audio_output_tokens = 0
+        self._cost_summary_emitted = False
+        # Reset timing state for this session (bd polyglot-pdf-cwsy).
+        self._timing_last_activity_end = None
+        self._timing_first_inbound_audio = None
+        self._timing_audio_dropped = 0
+
+        config = self._build_live_config(settings)
 
         # If client is missing, exit
         if self._client is None:
