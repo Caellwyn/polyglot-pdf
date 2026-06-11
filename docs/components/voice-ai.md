@@ -2,11 +2,17 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-11 (SDK 2.8.0 cutover: APIError catch + _build_live_config extraction, bd x52p/4td1). See [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` test-injection hook, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
-calls, and tracks cost. Model selection is in
+calls, and tracks cost. As of bd polyglot-pdf-x52p the SDK is `google-genai`
+**2.8.0** (empirical 1.38.0-vs-2.8.0 diff on the 1cnn epic): the one behavioral
+break is that 2.x re-raises receive-path WebSocket closures as
+`google.genai.errors.APIError`, so the receive loop's graceful-close handler
+catches `(ConnectionClosed, genai_errors.APIError)`; the Live connect config is
+now built by `_build_live_config(settings)` (extracted from `_run_session_loop`
+so the contract smoke test and probes drive the REAL config shape, bd 4td1/a7k). Model selection is in
 [../standards/ai-models.md](../standards/ai-models.md); turn-taking / VAD in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md); the WS protocol
 that feeds it in [websocket-routing.md](websocket-routing.md).
