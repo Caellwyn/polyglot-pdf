@@ -147,6 +147,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				} else {
 					console.log('[VoiceOverlay] Mounted onto a live session (disclaimer accepted) - skipping connect/disclaimer')
 				}
+				// Re-arm mic capture: the old overlay's unmount stopped audio capture,
+				// so the new (remounted) overlay must re-start it without reconnecting.
+				// No-ops if already recording (double-arm guard inside rearmAudioCapture).
+				// bd polyglot-pdf-nlfc.
+				connectionManager?.rearmAudioCapture().catch((err) => {
+					console.error('[VoiceOverlay] rearmAudioCapture failed -- mic may be dead after overlay swap:', err)
+				})
 				return
 			}
 			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)

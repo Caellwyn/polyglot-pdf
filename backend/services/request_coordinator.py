@@ -6,6 +6,7 @@ communication. Backend sends requests to frontend and awaits responses
 via WebSocket with timeout handling.
 """
 import asyncio
+import time
 import uuid
 from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
@@ -171,10 +172,30 @@ class RequestCoordinator:
             return {}
 
         # Wait for response with timeout
+        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
+        _t_coord_start = time.monotonic()
         try:
-            return await asyncio.wait_for(future, timeout=5.0)
+            result = await asyncio.wait_for(future, timeout=5.0)
+            _coord_ms = round((time.monotonic() - _t_coord_start) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="form_state",
+                request_id=request_id,
+                roundtrip_ms=_coord_ms,
+                session_id=self._session_id,
+            )
+            return result
         except asyncio.TimeoutError:
+            _coord_ms = round((time.monotonic() - _t_coord_start) * 1000)
             _log.error("form_state_request_timeout", session_id=self._session_id, request_id=request_id)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="form_state",
+                request_id=request_id,
+                roundtrip_ms=_coord_ms,
+                timeout=True,
+                session_id=self._session_id,
+            )
             self._discard(request_id)
             return {}
         except Exception as exc:
@@ -215,10 +236,30 @@ class RequestCoordinator:
             return HINT_REQUEST_TIMEOUT
 
         # Wait for response with timeout
+        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
+        _t_coord_nf = time.monotonic()
         try:
-            return await asyncio.wait_for(future, timeout=2.0)
+            result = await asyncio.wait_for(future, timeout=2.0)
+            _coord_nf_ms = round((time.monotonic() - _t_coord_nf) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="next_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_nf_ms,
+                session_id=self._session_id,
+            )
+            return result
         except asyncio.TimeoutError:
+            _coord_nf_ms = round((time.monotonic() - _t_coord_nf) * 1000)
             _log.error("next_field_request_timeout", session_id=self._session_id, request_id=request_id)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="next_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_nf_ms,
+                timeout=True,
+                session_id=self._session_id,
+            )
             self._discard(request_id)
             return HINT_REQUEST_TIMEOUT
         except Exception as exc:
@@ -272,12 +313,32 @@ class RequestCoordinator:
 
         # Wait for response with timeout (same 2.0s budget as the next-field hint:
         # a slow client must not hang the receive loop).
+        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
+        _t_coord_cf = time.monotonic()
         try:
-            return await asyncio.wait_for(future, timeout=2.0)
+            result = await asyncio.wait_for(future, timeout=2.0)
+            _coord_cf_ms = round((time.monotonic() - _t_coord_cf) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="confirm_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_cf_ms,
+                session_id=self._session_id,
+            )
+            return result
         except asyncio.TimeoutError:
+            _coord_cf_ms = round((time.monotonic() - _t_coord_cf) * 1000)
             _log.error("confirm_field_request_timeout",
                       session_id=self._session_id,
                       request_id=request_id)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="confirm_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_cf_ms,
+                timeout=True,
+                session_id=self._session_id,
+            )
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
         except Exception as exc:
@@ -322,13 +383,33 @@ class RequestCoordinator:
             return {"found": False, "value": None}
 
         # Wait for response with timeout
+        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
+        _t_coord_fv = time.monotonic()
         try:
-            return await asyncio.wait_for(future, timeout=2.0)
+            result = await asyncio.wait_for(future, timeout=2.0)
+            _coord_fv_ms = round((time.monotonic() - _t_coord_fv) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="field_value",
+                request_id=request_id,
+                roundtrip_ms=_coord_fv_ms,
+                session_id=self._session_id,
+            )
+            return result
         except asyncio.TimeoutError:
+            _coord_fv_ms = round((time.monotonic() - _t_coord_fv) * 1000)
             _log.error("get_field_value_timeout",
                       session_id=self._session_id,
                       spoken_name=spoken_name,
                       request_id=request_id)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="field_value",
+                request_id=request_id,
+                roundtrip_ms=_coord_fv_ms,
+                timeout=True,
+                session_id=self._session_id,
+            )
             self._discard(request_id)
             return {"found": False, "value": None}
         except Exception as exc:
@@ -373,12 +454,32 @@ class RequestCoordinator:
             return None
 
         # Wait for response with timeout
+        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
+        _t_coord_si = time.monotonic()
         try:
-            return await asyncio.wait_for(future, timeout=5.0)
+            result = await asyncio.wait_for(future, timeout=5.0)
+            _coord_si_ms = round((time.monotonic() - _t_coord_si) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="section_info",
+                request_id=request_id,
+                roundtrip_ms=_coord_si_ms,
+                session_id=self._session_id,
+            )
+            return result
         except asyncio.TimeoutError:
+            _coord_si_ms = round((time.monotonic() - _t_coord_si) * 1000)
             _log.error("section_info_request_timeout",
                       session_id=self._session_id,
                       request_id=request_id)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="section_info",
+                request_id=request_id,
+                roundtrip_ms=_coord_si_ms,
+                timeout=True,
+                session_id=self._session_id,
+            )
             self._discard(request_id)
             return None
         except Exception as exc:

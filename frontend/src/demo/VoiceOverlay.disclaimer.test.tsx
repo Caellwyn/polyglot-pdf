@@ -128,6 +128,8 @@ function makeMockManager(calls: string[]) {
     getCompletedSectionIds: vi.fn(() => new Set<string>()),
     onVADSpeechStart: vi.fn(),
     onVADSpeechEnd: vi.fn(),
+    // bd polyglot-pdf-nlfc: new method called from the alreadyLive branch.
+    rearmAudioCapture: vi.fn(async () => {}),
   }
   return manager
 }

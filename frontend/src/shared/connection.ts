@@ -44,6 +44,25 @@ import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
 import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHarnessEnabled } from './config'
 
+/**
+ * Pure gate function: should the mic audio chunk be forwarded to the backend?
+ *
+ * Rules:
+ *   - 'connected': always send.
+ *   - 'switching_section' + socket OPEN: send (same-socket section-switch path keeps
+ *     the socket alive). Safe on BOTH switch paths because the backend drops
+ *     switch-window audio server-side: the WS route's drop_audio flag on the manual
+ *     path (websocket_routes.py manual_section_switch handler), and
+ *     FormFillingService.stream_audio's _switch_lock.locked() backstop, which covers
+ *     the AI-initiated switch too (fresh-eyes round 2, PR #150).
+ *   - All other statuses, or socket not open: drop (and the caller warns).
+ */
+export function shouldSendMicChunk(status: ConnectionStatus, socketOpen: boolean): boolean {
+	if (status === 'connected') return true;
+	if (status === 'switching_section' && socketOpen) return true;
+	return false;
+}
+
 export interface ConnectionManager {
 	connect: () => Promise<void>
 	pause: () => void  // Pause recording but keep connection warm
@@ -65,6 +84,11 @@ export interface ConnectionManager {
 	stopRecording: () => void
 	isRecording: () => boolean
 	isPaused: () => boolean
+	// Re-arm mic capture after an overlay remount onto an already-live session
+	// (e.g. a desktop<->mobile resize flip). The WebSocket and Gemini session
+	// survive the flip; only the old overlay's unmount tears down audio capture,
+	// so the new overlay must re-arm. No-ops if already recording (bd nlfc).
+	rearmAudioCapture: () => Promise<void>
 	changeFillLanguage: (language: string) => Promise<void>
 	changeSpokenLanguage: (language: string, nextFieldHint: string) => void  // Change spoken conversation language
 	readDisclaimer: (language: string, disclaimerText: string) => void  // Read disclaimer in specified language
@@ -205,6 +229,31 @@ export function createConnectionManager(
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
+	// Rate-limit audio-drop warns to at most 1 per second so a stranded status
+	// does not flood the console (one line per chunk would be ~100/sec).
+	let _audioDropLastWarnMs = 0
+	// Single mic send callback shared by EVERY arming site (initial startRecording,
+	// rearmAudioCapture, and the startSection/switchToSection re-arms) so the gate
+	// policy (shouldSendMicChunk) and the drop logging stay consistent (bd xroy).
+	// 'switching_section' with socket open is allowed: the same-socket section-switch
+	// path keeps the WebSocket alive, and the backend drops switch-window audio
+	// server-side on BOTH paths (the WS route's drop_audio flag on the manual path;
+	// FormFillingService.stream_audio's _switch_lock backstop on the AI path).
+	const sendMicChunkToBackend = (audioData: ArrayBuffer) => {
+		if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
+			connection.sendAudio(audioData)
+		} else {
+			// Chunk dropped -- emit a rate-limited warn so a stranded status is
+			// visible in devtools without flooding the console (~100 chunks/sec).
+			const now = Date.now()
+			if (now - _audioDropLastWarnMs >= 1000) {
+				_audioDropLastWarnMs = now
+				const st = connection ? connection.getStatus() : 'no-connection'
+				const rs = connection ? connection.isSocketOpen() : false
+				console.warn('[VFF Connection] mic chunk DROPPED -- status=' + st + ' socketOpen=' + rs)
+			}
+		}
+	}
 	// PTT is the DEFAULT (HALLUCINATION_REDUCTION, Oct 30 2025), and this must match
 	// the overlays' default so a fresh session starts gated. The overlays now lazy-init
 	// their pushToTalkMode FROM this value via getPushToTalkMode() (so a remount onto a
@@ -655,12 +704,7 @@ export function createConnectionManager(
 
 			console.log('[VFF Connection] Requesting microphone access...')
 
-			await audioManager.startRecording((audioData) => {
-				// Send audio to backend
-				if (connection && connection.getStatus() === 'connected') {
-					connection.sendAudio(audioData)
-				}
-			})
+			await audioManager.startRecording(sendMicChunkToBackend)
 		},
 
 		stopRecording() {
@@ -675,6 +719,54 @@ export function createConnectionManager(
 
 		isPaused() {
 			return paused
+		},
+
+		// Re-arm mic capture after an overlay remount onto an already-live session.
+		// The WebSocket and Gemini session survive a desktop<->mobile resize flip;
+		// the old overlay's unmount stops audio capture via its cleanup path, so the
+		// new overlay calls this to re-arm the mic without reconnecting (bd nlfc).
+		//
+		// Double-arm guard: bail out immediately if audioManager reports it is
+		// already recording (e.g. a rapid flip that mounts before the old overlay's
+		// cleanup runs, or multiple useEffect firings).
+		//
+		// PTT/mute re-sync: after arming, re-apply the stored PTT mode so the new
+		// overlay's mount-time PTT effect (which fires in the same React batch) sees
+		// a consistent state and does not leave the input unmuted when PTT is on.
+		async rearmAudioCapture() {
+			// Skip under the test harness (audio is injected, no microphone needed).
+			if (isTestHarnessEnabled()) {
+				console.log('[VFF Connection] rearmAudioCapture: TEST harness active -- skipping')
+				return
+			}
+
+			if (!audioManager) {
+				console.warn('[VFF Connection] rearmAudioCapture: audioManager not initialized')
+				return
+			}
+
+			// Double-arm guard: if already recording, the old overlay has not yet
+			// finished its unmount cleanup; nothing to do.
+			if (audioManager.isRecording()) {
+				console.log('[VFF Connection] rearmAudioCapture: already recording -- skipping')
+				return
+			}
+
+			console.log('[VFF Connection] rearmAudioCapture: re-arming mic after overlay remount')
+
+			await audioManager.startRecording(sendMicChunkToBackend)
+
+			// Re-apply PTT/mute state so the new overlay's defaults take effect
+			// without waiting for its PTT useEffect.
+			const am = audioManager
+			am.setPTTMode(pushToTalkMode)
+			if (pushToTalkMode) {
+				am.muteInput()
+			} else {
+				am.unmuteInput()
+			}
+
+			console.log('[VFF Connection] rearmAudioCapture: mic re-armed, PTT mode synced:', pushToTalkMode)
 		},
 
 		async changeFillLanguage(language: string) {
@@ -777,11 +869,7 @@ export function createConnectionManager(
 			// Restart recording if we were recording before. Skip the mic under the
 			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
 			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording((data) => {
-					if (connection) {
-						connection.sendAudio(data)
-					}
-				})
+				await audioManager.startRecording(sendMicChunkToBackend)
 			}
 		},
 
@@ -800,11 +888,7 @@ export function createConnectionManager(
 			// Restart recording if we were recording before. Skip the mic under the
 			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
 			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording((data) => {
-					if (connection) {
-						connection.sendAudio(data)
-					}
-				})
+				await audioManager.startRecording(sendMicChunkToBackend)
 			}
 		},
 

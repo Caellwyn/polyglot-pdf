@@ -2,6 +2,7 @@ from fastapi import WebSocket
 from typing import Any, Dict, Optional, List
 import asyncio
 import json
+import time
 from copy import deepcopy
 import structlog
 import os
@@ -71,6 +72,8 @@ class FormFillingService:
         # spawned by handle_switch_section, so it isn't garbage-collected mid-swap.
         self._switch_lock = asyncio.Lock()
         self._switch_task: Optional[asyncio.Task] = None
+        # Rate-limit stamp for the switch-window audio-drop log (stream_audio).
+        self._last_switch_drop_log: float = 0.0
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -198,7 +201,25 @@ class FormFillingService:
                     pass
 
     async def stream_audio(self, audio_chunk: bytes):
-        """Stream audio chunk to Gemini. Delegates to AudioHandler."""
+        """Stream audio chunk to Gemini. Delegates to AudioHandler.
+
+        Dropped while a section switch is in flight: _switch_lock is held for
+        the ENTIRE swap on BOTH switch paths (manual switch_to_section and the
+        AI-initiated _complete_section_switch), so this is the server-side
+        backstop that keeps mic audio captured during 'switching_section' from
+        leaking into the NEW Gemini session before the client has been told the
+        switch completed. The manual path is additionally guarded by the WS
+        loop's drop_audio flag; the AI path has only this guard (fresh-eyes
+        round 2, PR #150).
+        """
+        if self._switch_lock.locked():
+            now = time.monotonic()
+            if now - self._last_switch_drop_log >= 1.0:
+                self._last_switch_drop_log = now
+                _log.info("audio_dropped_switch_in_progress",
+                          session_id=self._session_id,
+                          bytes=len(audio_chunk))
+            return
         if self._audio_handler:
             await self._audio_handler.stream_audio(audio_chunk)
 
@@ -527,7 +548,12 @@ class FormFillingService:
         # parenthetical here so that directive never carries the raw field_id into
         # Gemini's spoken greeting (bd polyglot-pdf-dx7). This is the system-
         # instruction sibling of the runtime-hint strip in request_coordinator.
-        return build_form_context(
+        # timing_sysinstruction_build checkpoint 2 (bd polyglot-pdf-cwsy):
+        # measure build duration and log size_bytes. Call site logged at INFO so
+        # a log scan for "timing_sysinstruction_build" shows how long context
+        # assembly takes relative to the connect latency.
+        _t_si_start = time.monotonic()
+        result = build_form_context(
             schema,
             current_values,
             self._fill_language,
@@ -537,6 +563,19 @@ class FormFillingService:
             previous_spoken_names=previous_spoken_names,
             next_field_hint=strip_field_id_from_hint(next_field_hint)
         )
+        _si_ms = round((time.monotonic() - _t_si_start) * 1000)
+        try:
+            _log.info(
+                "timing_sysinstruction_build",
+                build_ms=_si_ms,
+                size_bytes=len(result.encode("utf-8")) if result else 0,
+                session_id=self._session_id,
+            )
+        except Exception:
+            # Measurement must never alter this method's return path
+            # (fresh-eyes round 2, PR #150).
+            pass
+        return result
 
     def update_schema(self, schema: dict, current_values: dict, fill_language: str = "English"):
         """Update session schema and language settings."""
@@ -933,8 +972,12 @@ class FormFillingService:
             return {"success": False, "message": "No AI session to switch."}
 
         closed_event = self._live_ai.begin_graceful_shutdown()
+        # timing_section_switch_total checkpoint 8 (bd polyglot-pdf-cwsy):
+        # capture the monotonic timestamp at begin_graceful_shutdown so the
+        # detached swap task can measure total switch duration end-to-end.
+        _t_switch_start = time.monotonic()
         self._switch_task = asyncio.create_task(
-            self._complete_section_switch(closed_event, section_info)
+            self._complete_section_switch(closed_event, section_info, _t_switch_start)
         )
 
         return {
@@ -942,7 +985,10 @@ class FormFillingService:
             "message": f"Switched to section {section_info['metadata']['section_number']}: {section_info['metadata']['section_label']}",
         }
 
-    async def _complete_section_switch(self, closed_event, section_info: Dict[str, Any]) -> None:
+    async def _complete_section_switch(
+        self, closed_event, section_info: Dict[str, Any],
+        t_switch_start: Optional[float] = None,
+    ) -> None:
         """Finish an AI-initiated section switch on a DETACHED task (bd 0c1).
 
         Holds _switch_lock for the ENTIRE swap -- including the wait for the old
@@ -976,6 +1022,21 @@ class FormFillingService:
                     section_metadata=section_info["metadata"],
                     initial_field_hint=section_info.get("initial_field_hint"),
                 )
+                # timing_section_switch_total checkpoint 8 (bd polyglot-pdf-cwsy):
+                # _switch_to_section_locked has returned -- the new session is ready
+                # and the initiating message has been sent. Measure total switch time
+                # from begin_graceful_shutdown to here.
+                if t_switch_start is not None:
+                    try:
+                        _sw_ms = round((time.monotonic() - t_switch_start) * 1000)
+                        _log.info(
+                            "timing_section_switch_total",
+                            switch_total_ms=_sw_ms,
+                            section_number=section_info.get("metadata", {}).get("section_number"),
+                            session_id=self._session_id,
+                        )
+                    except Exception:
+                        pass
         except asyncio.CancelledError:
             # The WS closed mid-swap and end_session cancelled this task (Codex
             # PR #135). Do NOT restart Gemini against a dead socket -- just exit.

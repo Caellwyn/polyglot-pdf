@@ -1,0 +1,155 @@
+---
+date: 2026-06-10
+bead: polyglot-pdf-xroy
+title: "Voice round-trip surface: orchestrated investigation + hardening bundle (xroy, nlfc, cwsy, kom1; files 95uy, ykvt)"
+tags: [postmortem, performance, testing, harness]
+---
+
+## Trigger
+
+The 2026-06-10 demo failures (investigated under the now-closed `irck`) kept
+widening: Gemini going silent on field 2, a ~49s tool-call round trip, a
+resize that killed the mic. The maintainer asked for a high-level
+investigation of the whole voice round-trip / tool-call surface -- the app's
+highest-priority, costliest failure surface -- with liberal subagent use, plus
+fixes for whatever was already actionable.
+
+## How the investigation ran
+
+An orchestrator session fanned out nine subagents: two read-only deep-dives
+(frontend status/audio path; backend session lifecycle + latency), a
+docs/journal synthesis (full failure-mode catalog), a live voice-harness
+reproduction against real Gemini, three fix implementations in isolated
+worktrees, a re-run after a base mix-up (below), and a long-timeout
+classification run for the new model-silence bug.
+
+## Findings (the short version)
+
+1. **The irck silent-mic gate is real and is now fixed (`xroy`).** All mic
+   audio was gated on `status === 'connected'` in
+   `frontend/src/shared/connection.ts` with no log, no buffer, no recovery --
+   any stranded status (`switching_section`, `reconnecting`, `error`,
+   `idle_timeout`) silently discarded the user's voice while Gemini audio kept
+   playing. Worse, four arming sites had three different copies of the gate
+   (one narrow, two absent). Fix: one shared `sendMicChunkToBackend` callback
+   built on a pure `shouldSendMicChunk(status, socketOpen)` policy --
+   `connected` always sends; `switching_section` sends while the socket is
+   open; everything else drops LOUDLY via a rate-limited warn. Every
+   `setStatus` transition is now logged `old->new (reason)` at all 16 call
+   sites, so the next stranded status is visible instead of invisible.
+   A second fresh-eyes round caught that the original "AI switch path is safe
+   anyway" justification was WRONG (no `drop_audio` on that path, and the new
+   session's audio queue goes live before the client learns the switch
+   finished) -- fixed with a symmetric server-side backstop:
+   `FormFillingService.stream_audio` drops chunks while `_switch_lock` is
+   held, covering BOTH switch paths.
+
+2. **Which transition stranded the demo's status is still unproven.** The
+   live harness could not test it: harness audio injection bypasses the mic
+   callback entirely (filed `ykvt` to add a real-path injection mode). In 3/3
+   live runs the status stayed `connected` -- but the demo evidence (backend
+   saw ZERO inbound frames for ~4 min) still firmly implicates the frontend
+   send path for THAT hang. The new transition logging is the trap that will
+   catch it on the next live occurrence.
+
+3. **NEW P1->P2, `95uy`: the live loop dies at the confirm step -- but the wire
+   exonerates our plumbing.** In repeated live harness runs,
+   `update_form_fields` lands, its FunctionResponse goes out correctly (id
+   echoed, well-formed -- the maintainer's missing-tool-response hypothesis is
+   RULED OUT by two independent raw-event captures), Gemini speaks the
+   verification question and `turn_complete` fires... and `confirm_field`
+   appears ZERO times in 1133 raw events. The injected "yes" reaches Gemini
+   and is transcribed, but the model never responds. Leading explanation:
+   the harness injection stops streaming frames after the utterance, so
+   native VAD never closes the user's turn (a real mic streams ambient
+   silence) -- which reconciles with real verbal confirmations working in
+   the maintainer's hands. A trailing-silence discriminator experiment
+   settles harness-artifact vs model-behavior; verdict lands in the bead.
+   Side catch (`m7es`): one run showed a SECOND concurrent Gemini session
+   spawning mid-run with a different system instruction and receiving the
+   user's audio -- a real session-management race to investigate.
+
+4. **`cwsy` reframed: restarts-per-field RULED OUT; the 49s is
+   unattributable without instrumentation -- so instrumentation shipped.**
+   Same-section advances do NOT restart Gemini (only `manual_section_switch`
+   or the AI `switch_section` tool do); the demo's 3 sessions were initial
+   connect + first-section switch + idle-timeout reconnect. The backend had
+   zero timing checkpoints between user activity and tool-response send. Now
+   it logs `timing_session_connect_ready`, `timing_sysinstruction_build`,
+   `timing_activity_start/end`, `timing_tool_call_received` (with
+   `since_activity_end_ms` -- the headline number), `timing_tool_callback_ms`,
+   `timing_tool_response_sent`, `timing_coordinator_roundtrip`,
+   `timing_section_switch_total`, plus an `audio_frames_dropped` counter in
+   the session summary. No behavior change, no PII.
+
+5. **`nlfc` fixed: the desktop<->mobile resize flip killed the mic.** The new
+   overlay's `alreadyLive` early-return skipped `handleConnect()`, so
+   `startRecording()` never re-armed after the old overlay's teardown. Both
+   overlays now call a shared `rearmAudioCapture()` on the manager (double-arm
+   guarded, PTT/mute re-synced, no reconnect, no re-disclaimer), with
+   component regression tests.
+
+## The wrong-base trap (process scar tissue)
+
+Remote-container agent worktrees (`isolation: worktree`) branch from
+**origin/main**, not the session's checked-out branch. origin/main is ~270
+commits divergent from dev BOTH WAYS and its HEAD is unbootable (SyntaxError
+in `backend/services/form_filling_service.py` ~L223, bad merge of bd `9dq`;
+measured detail added to bead `m85` -- dev->main is NOT a fast-forward). Two
+fixes and one harness run were silently built on that base before the
+divergence was caught (the giveaway: a "pre-existing" 23-test failure
+baseline that does not exist on dev). Everything was re-run on dev. Recorded
+as a `bd remember` memory: every worktree subagent must first
+`git fetch origin dev && git reset --hard origin/dev` and verify
+`py_compile` passes.
+
+## What shipped (this PR)
+
+- `55d22af` backend timing checkpoints + audio-queue drop counter [`cwsy`]
+- `8cb4027` mic re-arm on alreadyLive overlay remount [`nlfc`]
+- `20b8e6a` widened mic send gate + drop logging + status-transition logging [`xroy`]
+- `70a914d` all four mic arming sites unified on the shared gated callback [`xroy`]
+- `65edd77` harness RUNBOOK/SKILL: 0ux marked fixed [`kom1`]
+
+Verified on the assembled branch: frontend 264/264 vitest, tsc steady at the
+22 pre-existing errors (bd `0tgc`), backend 266 passed / 2 skipped.
+
+## Doc freshness
+
+- Bumped with content updates: `docs/standards/voice-and-vad.md` (new "Mic send
+  gate" section), `docs/standards/logging-and-cost.md` (new timing-checkpoint
+  section), `tests/e2e/voice-harness/RUNBOOK.md` +
+  `.claude/skills/voice-harness/SKILL.md` (0ux marked fixed, bd kom1).
+- Reviewed and left (stale flags from files OTHER branches changed, or no
+  content impact from this branch's observability-only edits):
+  `docs/standards/ai-models.md`, `docs/standards/risk-rating.md`,
+  `docs/standards/stateless-architecture.md` (this branch changes no state
+  ownership), `docs/standards/terminology.md`, `docs/technical_guide.md`,
+  `docs/components/beads-remote-bootstrap.md`.
+
+## Files touched
+
+- `backend/adapters/live_ai_gemini.py`, `backend/services/form_filling_service.py`,
+  `backend/services/request_coordinator.py` -- timing checkpoints + drop counter (cwsy).
+- `frontend/src/shared/connection.ts` -- shouldSendMicChunk gate, shared
+  sendMicChunkToBackend callback, rearmAudioCapture (xroy, nlfc).
+- `frontend/src/webFormConnection.ts` -- setStatus reason logging, isSocketOpen (xroy).
+- `frontend/src/demo/VoiceOverlay.tsx`, `frontend/src/demo/VoiceOverlayMobile.tsx`
+  -- alreadyLive re-arm (nlfc).
+- New tests: `frontend/src/shared/micSendGate.test.ts`,
+  `frontend/src/demo/VoiceOverlayResizeFlip.test.tsx`.
+- Docs: the four above + this entry.
+
+## Lessons
+
+- The harness's injection bypass means the entire frontend mic send path --
+  exactly where the demo died -- has NO automated coverage (`ykvt`). A test
+  harness that skips the layer under suspicion produces confident-looking
+  NOT-REPRODUCED verdicts that mean nothing for that layer.
+- Multiple copies of a safety gate WILL drift; the bug was not the gate's
+  policy but its duplication. Pure-function policy + one shared callback is
+  the durable shape.
+- "Model went silent" had at least three distinct mechanisms on this surface
+  (frontend drop, model stall, receive-loop crash families fixed under wpw);
+  symptom-level bug reports on this surface need the layer attributed before
+  fixes are chosen -- which is what the new timing + transition logging buys.

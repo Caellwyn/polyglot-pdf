@@ -221,7 +221,7 @@ export class WebFormConnection {
     // Don't change status to "connecting" during section switches
     // (keeps current status visible until reconnected)
     if (!this.isSectionSwitching) {
-      this.setStatus("connecting");
+      this.setStatus("connecting", "connect");
     }
 
     return new Promise((resolve, reject) => {
@@ -305,7 +305,7 @@ export class WebFormConnection {
 
     // Don't change status during section switches (will be updated after reconnect)
     if (!this.isSectionSwitching) {
-      this.setStatus("disconnected");
+      this.setStatus("disconnected", "disconnect");
     }
   }
 
@@ -432,7 +432,7 @@ export class WebFormConnection {
           // Set flag to prevent auto-reconnect, require manual reconnect
           console.log('[WebFormConnection] ⏱️ Idle timeout received from backend:', message);
           this.idleTimedOut = true;
-          this.setStatus("idle_timeout");
+          this.setStatus("idle_timeout", "handleMessage:idle_timeout");
           // WebSocket will close shortly, handleClose() will see idleTimedOut flag
           break;
 
@@ -479,7 +479,7 @@ export class WebFormConnection {
       this.completeSectionSwitch();
     }
 
-    this.setStatus("connected");
+    this.setStatus("connected", "handleSessionReady");
 
     // Check if this is a reconnect (disclaimer already accepted)
     if (this.state.disclaimerAccepted && this.state.selectedLanguage) {
@@ -922,7 +922,7 @@ export class WebFormConnection {
       // above for an invalid request never leave a stuck switching_section. The
       // guard releases on section_switched (-> completeSectionSwitch) or watchdog.
       this.switchInFlight = true;
-      this.setStatus('switching_section');
+      this.setStatus('switching_section', "handlePrepareSectionSwitch");
       this.armSectionSwitchWatchdog();
 
       // Switch to target section in local state (no disconnect!)
@@ -1024,7 +1024,7 @@ export class WebFormConnection {
     this.completeSectionSwitch();
 
     // Update status
-    this.setStatus('connected');
+    this.setStatus('connected', "handleSectionSwitched");
 
     // State was already updated in handlePrepareSectionSwitchRequest
     // Now trigger UI update to show the new section
@@ -1524,7 +1524,7 @@ export class WebFormConnection {
   private handleError(error: Event | Error): void {
     // Don't show error during section switches (expected during reconnect)
     if (!this.isSectionSwitching) {
-      this.setStatus("error");
+      this.setStatus("error", "handleError");
     }
 
     if (this.callbacks.onError && error instanceof Error) {
@@ -1561,7 +1561,7 @@ export class WebFormConnection {
     // Don't auto-reconnect if this is the initial connection attempt
     // (allows fallback logic in connection.ts to try cloud URL)
     if (!this.enableAutoReconnect) {
-      this.setStatus("disconnected");
+      this.setStatus("disconnected", "handleClose:no-auto-reconnect");
       return;
     }
 
@@ -1587,7 +1587,7 @@ export class WebFormConnection {
     // User must manually click "Reconnect" button to resume
     if (this.idleTimedOut) {
       console.log('[WebFormConnection] ⏱️ Idle timeout - no auto-reconnect, user must manually reconnect');
-      this.setStatus("idle_timeout");
+      this.setStatus("idle_timeout", "handleClose:idle-timeout");
       return;
     }
 
@@ -1595,7 +1595,7 @@ export class WebFormConnection {
     if (this.status !== "disconnected" && this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect();
     } else {
-      this.setStatus("disconnected");
+      this.setStatus("disconnected", "handleClose:max-retries");
     }
   }
 
@@ -1604,7 +1604,7 @@ export class WebFormConnection {
    */
   private attemptReconnect(): void {
     this.reconnectAttempts++;
-    this.setStatus("reconnecting");
+    this.setStatus("reconnecting", "attemptReconnect");
 
     const delay = Math.min(
       this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
@@ -1617,7 +1617,7 @@ export class WebFormConnection {
         this.connect(this.connectedUrl);
       } else {
         console.error('[WebFormConnection] Cannot reconnect - no connectedUrl stored');
-        this.setStatus("disconnected");
+        this.setStatus("disconnected", "attemptReconnect:no-url");
       }
     }, delay);
   }
@@ -1911,10 +1911,17 @@ export class WebFormConnection {
   }
 
   /**
-   * Set connection status and notify
+   * Set connection status and notify.
+   * Every transition is logged at console.info level with old->new and a
+   * short caller-supplied reason tag so status stranding is visible in devtools.
    */
-  private setStatus(status: ConnectionStatus): void {
+  private setStatus(status: ConnectionStatus, reason = ''): void {
     if (this.status === status) return;
+
+    console.info(
+      '[WebFormConnection] status ' + this.status + '->' + status +
+      (reason ? ' (' + reason + ')' : '')
+    );
 
     this.status = status;
 
@@ -1928,6 +1935,17 @@ export class WebFormConnection {
    */
   getStatus(): ConnectionStatus {
     return this.status;
+  }
+
+  /**
+   * Returns true when the underlying WebSocket is in the OPEN state.
+   * Used by the mic audio-send gate in connection.ts: during a same-socket
+   * section switch (switching_section) the socket stays open, so audio can
+   * still be forwarded to the backend -- which drops it server-side via
+   * drop_audio=True (manual path: websocket_routes.py manual_section_switch).
+   */
+  isSocketOpen(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
   // --- Section-switch durability (bd polyglot-pdf-aun / WS-D) ----------------
@@ -1969,7 +1987,7 @@ export class WebFormConnection {
     this.switchInFlight = false;
     this.isSectionSwitching = false;
     this.clearSectionSwitchWatchdog();
-    this.setStatus('error');
+    this.setStatus('error', "failSectionSwitch:" + reason);
     if (this.callbacks.onError) {
       this.callbacks.onError(new Error(reason));
     }
@@ -2043,7 +2061,7 @@ export class WebFormConnection {
     try {
       // Set switching status + arm the watchdog so a hung switch surfaces error.
       this.isSectionSwitching = true;
-      this.setStatus("switching_section");
+      this.setStatus("switching_section", "startSection");
       this.armSectionSwitchWatchdog();
 
       // Disconnect current session if connected
@@ -2170,7 +2188,7 @@ export class WebFormConnection {
     // `error` (-> handleServerError -> failSectionSwitch); the watchdog backstops a
     // switch that never replies.
     this.switchInFlight = true;
-    this.setStatus('switching_section');
+    this.setStatus('switching_section', "switchToSection");
     this.armSectionSwitchWatchdog();
 
     let currentState: ReturnType<typeof SchemaFormStateManager.load>;
@@ -2283,7 +2301,7 @@ export class WebFormConnection {
 
     // Check if this was the last section
     if (currentSection.order >= currentState.schema.sections.length) {
-      this.setStatus('connected'); // Stay connected but don't start new section
+      this.setStatus('connected', "completeSection:last-section"); // Stay connected but don't start new section
       return;
     }
 

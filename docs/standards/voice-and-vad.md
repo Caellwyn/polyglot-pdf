@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-09. See [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, [journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md](../journal/entries/2026-06-07-bd-tlc-ptt-toggle-native-vad.md) for the prior PTT-toggle native-VAD work, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-10. See [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -170,6 +170,26 @@ There's a barge-in **grace period**: tool calls arriving within
 `frontend/src/shared/metrics.ts`) of a barge-in are treated as hallucinations from
 the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; see
 `connection.ts onFieldUpdate`).
+
+## Mic send gate (audio-up path)
+
+Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
+`startSection`/`switchToSection` re-arms) shares ONE send callback in
+`frontend/src/shared/connection.ts`, gated by the pure function
+`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy):
+
+- `connected` → always send.
+- `switching_section` **with the WebSocket open** → send. Safe because the
+  backend discards switch-window audio server-side on BOTH switch paths: the
+  `drop_audio` flag in `websocket_routes.py` (manual switch), and
+  `FormFillingService.stream_audio`'s `_switch_lock.locked()` backstop, which
+  also covers the AI-initiated `switch_section` swap.
+- Anything else (or socket closed) → **drop, never silently**: a rate-limited
+  (~1/s) `console.warn` reports the status + socket state. Silent mic loss is
+  what made the 2026-06-10 demo hang invisible.
+
+Every `WebFormConnection.status` transition is logged `old->new (reason)` so a
+stranded status is visible in the console.
 
 ## fill-language vs spoken-language
 

@@ -7,6 +7,7 @@ import json
 import re
 import os
 import socket
+import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -282,6 +283,21 @@ class LiveAIGemini(ILiveAI):
         # start of each session loop.
         self._cost_summary_emitted: bool = False
 
+        # Timing state for voice round-trip observability (bd polyglot-pdf-cwsy).
+        # All timestamps are time.monotonic() seconds.
+        # _timing_last_activity_end: monotonic timestamp of the most recent
+        #   activity_end (or audio_stream_end) sent to Gemini. Reset after each
+        #   tool response is sent so the next turn starts fresh.
+        # _timing_first_inbound_audio: monotonic timestamp of the FIRST inbound
+        #   audio frame after the most recent tool response -- used as the burst
+        #   reference in native-VAD mode where no activity_end is sent. Set on
+        #   the first enqueued frame; reset after each tool response.
+        # _timing_audio_dropped: count of audio frames dropped due to a full
+        #   queue during this session. Included in session-end summary.
+        self._timing_last_activity_end: Optional[float] = None
+        self._timing_first_inbound_audio: Optional[float] = None
+        self._timing_audio_dropped: int = 0
+
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
             adapter="LiveAIGemini",
@@ -494,6 +510,13 @@ class LiveAIGemini(ILiveAI):
             if not hasattr(self, '_first_adapter_audio_logged'):
                 self._log.info("[mic] [Adapter] First audio chunk enqueued", bytes=len(audio_chunk), queue_size=self._audio_queue.qsize())
                 self._first_adapter_audio_logged = True
+            # timing_activity_start/end checkpoint 3 (native-VAD burst reference):
+            # record the first inbound frame's monotonic time so timing_tool_call_received
+            # has a reference even when no activity_end was sent (bd polyglot-pdf-cwsy).
+            # Only set when no activity_end reference exists and not yet captured for
+            # this burst. A None-check on the fast path; the assignment only runs once.
+            if self._timing_first_inbound_audio is None and self._timing_last_activity_end is None:
+                self._timing_first_inbound_audio = time.monotonic()
             # Inbound-audio rollup (bd polyglot-pdf-2m9): count user->Gemini frames and
             # emit a dev-log summary on the FIRST frame and every 100 thereafter, so the
             # log shows whether mic audio actually reaches Gemini (and at what rate)
@@ -511,7 +534,8 @@ class LiveAIGemini(ILiveAI):
             # Queue backed up - drop this audio frame to avoid blocking
             # Audio is resilient to dropped frames (slight quality degradation vs blocking control msgs)
             # Rate limit this warning to avoid flooding logs (only log once per interval)
-            import time
+            # Increment per-session drop counter for timing_audio_drops_session (bd polyglot-pdf-cwsy).
+            self._timing_audio_dropped += 1
             current_time = time.time()
             if current_time - self._last_audio_queue_warning >= self._audio_queue_warning_interval:
                 self._log.warn("[warn] AUDIO_QUEUE_FULL", message="Dropping audio frames - queue backed up (suppressing similar warnings for 5s)")
@@ -641,8 +665,17 @@ class LiveAIGemini(ILiveAI):
             return
 
         try:
+            _t_act_start = time.monotonic()
             await self._current_session.send_realtime_input(activity_start=types.ActivityStart())
-            # Success - no logging (noisy, system works)
+            # timing_activity_start checkpoint 3 (bd polyglot-pdf-cwsy).
+            # Record the timestamp of the forwarded activity_start signal; clear
+            # the native-VAD burst reference so the next audio burst starts fresh.
+            self._timing_last_activity_end = None
+            self._timing_first_inbound_audio = None
+            self._log.info(
+                "timing_activity_start",
+                ts_monotonic=round(_t_act_start, 4),
+            )
         except Exception as e:
             self._log.error("[error] ACTIVITY_START_FAILED", error=str(e))
 
@@ -672,11 +705,22 @@ class LiveAIGemini(ILiveAI):
         # with automatic VAD (it is not the conflicting activity_end), so we send THAT
         # in native mode and the real activity_end only in manual mode.
         try:
+            _t_act_end = time.monotonic()
             if native_vad:
                 await self._current_session.send_realtime_input(audio_stream_end=True)
             else:
                 await self._current_session.send_realtime_input(activity_end=types.ActivityEnd())
-            # Success - no logging (noisy, system works)
+            # timing_activity_end checkpoint 3 (bd polyglot-pdf-cwsy).
+            # Record the timestamp so timing_tool_call_received can compute
+            # since_activity_end_ms. Clear the native-VAD first-audio reference
+            # (activity_end supersedes it as the burst anchor).
+            self._timing_last_activity_end = _t_act_end
+            self._timing_first_inbound_audio = None
+            self._log.info(
+                "timing_activity_end",
+                ts_monotonic=round(_t_act_end, 4),
+                native_vad=native_vad,
+            )
         except Exception as e:
             self._log.error("[error] ACTIVITY_END_FAILED", error=str(e), native_vad=native_vad)
 
@@ -777,9 +821,26 @@ class LiveAIGemini(ILiveAI):
                         audio_input_tokens=self._session_audio_input_tokens,
                         text_output_tokens=self._session_text_output_tokens,
                         audio_output_tokens=self._session_audio_output_tokens,
+                        # checkpoint 9: include drop count in session summary
+                        # so every cost-summary row shows whether frames were dropped.
+                        audio_frames_dropped=self._timing_audio_dropped,
                     )
                 except Exception as e:  # noqa: BLE001 -- summary must never block teardown
                     self._log.warning("session_cost_summary_failed", error=str(e))
+            # timing_audio_drops_session checkpoint 9 (bd polyglot-pdf-cwsy):
+            # emit a dedicated timing event when any frames were dropped this
+            # session so a log scan for "timing_audio_drops_session" surfaces
+            # queue-pressure sessions without scanning every cost summary.
+            if self._timing_audio_dropped > 0:
+                try:
+                    self._log.info(
+                        "timing_audio_drops_session",
+                        audio_frames_dropped=self._timing_audio_dropped,
+                    )
+                except Exception:
+                    pass
+            # Reset the drop counter for any subsequent session on this instance.
+            self._timing_audio_dropped = 0
             # Drain/clear the audio queue
             if self._audio_queue is not None:
                 while not self._audio_queue.empty():
@@ -962,6 +1023,10 @@ class LiveAIGemini(ILiveAI):
         self._session_text_output_tokens = 0
         self._session_audio_output_tokens = 0
         self._cost_summary_emitted = False
+        # Reset timing state for this session (bd polyglot-pdf-cwsy).
+        self._timing_last_activity_end = None
+        self._timing_first_inbound_audio = None
+        self._timing_audio_dropped = 0
 
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
@@ -1170,9 +1235,8 @@ class LiveAIGemini(ILiveAI):
                             # Sentinel received: exit the send loop cleanly
                             break
                         try:
-                            import time
                             t_start = time.time()
-                            
+
                             # Wrap ALL text messages with activity signals for reliable response
                             # (recovery prompts, tool responses, etc.)
                             # NOTE: Removing these causes "unknown_control" errors in frontend!
@@ -1222,6 +1286,21 @@ class LiveAIGemini(ILiveAI):
 
                 # Mark session as ready and send any queued client content messages
                 self._session_ready = True
+
+                # timing_session_connect_ready checkpoint 1 (bd polyglot-pdf-cwsy).
+                # _t_connect_start is set just before the while-attempt loop in
+                # _run_session_loop; it is a nonlocal from that scope. The delta is
+                # the wall time from "connect object created" to "session receiving".
+                try:
+                    _t_ready = time.monotonic()
+                    _connect_ms = round((_t_ready - _t_connect_start) * 1000)
+                    self._log.info(
+                        "timing_session_connect_ready",
+                        connect_to_ready_ms=_connect_ms,
+                        attempt=self._live_attempt,
+                    )
+                except Exception:
+                    pass
 
                 # Clear console output for focused logging
                 print(f"\n{'='*80}")
@@ -1311,7 +1390,6 @@ class LiveAIGemini(ILiveAI):
 
                                             # Track first audio chunk timing (for transcript correlation)
                                             if self._audio_chunk_count == 1:
-                                                import time
                                                 self._first_audio_time = time.time()
                                                 self._log.info("[audio] [Gemini Audio] First audio chunk received",
                                                              bytes=len(audio_bytes),
@@ -1361,7 +1439,6 @@ class LiveAIGemini(ILiveAI):
                                                         if fc_name:
                                                             canceled_tool_names.append(fc_name)
 
-                                            import time
                                             now = time.time()
                                             elapsed_since_audio_start = None
                                             if hasattr(self, '_first_audio_time') and self._first_audio_time:
@@ -1406,7 +1483,6 @@ class LiveAIGemini(ILiveAI):
                                         transcription = getattr(server_content, "output_transcription", None)
                                         if transcription is not None and getattr(transcription, "text", None):
                                             # Log transcript receipt (indicates Gemini finished speaking)
-                                            import time
                                             now = time.time()
                                             elapsed_since_first_audio = None
                                             if hasattr(self, '_first_audio_time') and self._first_audio_time:
@@ -1461,6 +1537,31 @@ class LiveAIGemini(ILiveAI):
                                                                           has_payload=bool(payload),
                                                                           payload_type=type(payload).__name__)
 
+                                                            # timing_tool_call_received checkpoint 4
+                                                            # (bd polyglot-pdf-cwsy): compute delta
+                                                            # since the last activity_end (or the
+                                                            # first-inbound-audio burst reference for
+                                                            # native-VAD). This is the headline number
+                                                            # that attributes the 49s latency.
+                                                            try:
+                                                                _t_tool_recv = time.monotonic()
+                                                                _ref = (
+                                                                    self._timing_last_activity_end
+                                                                    or self._timing_first_inbound_audio
+                                                                )
+                                                                _since_ms = (
+                                                                    round((_t_tool_recv - _ref) * 1000)
+                                                                    if _ref is not None else None
+                                                                )
+                                                                self._log.info(
+                                                                    "timing_tool_call_received",
+                                                                    tool=tool_name,
+                                                                    since_activity_end_ms=_since_ms,
+                                                                    path="model_turn.parts",
+                                                                )
+                                                            except Exception:
+                                                                pass
+
                                                             if isinstance(payload, str):
                                                                 try:
                                                                     import json as _json
@@ -1514,13 +1615,23 @@ class LiveAIGemini(ILiveAI):
                                                             if self._on_tool_call is not None and tool_name:
                                                                 try:
                                                                     # REDACT: Don't log arguments or response (contain field values)
-                                                                    self._log.info("invoking_tool_callback", 
-                                                                                  tool=tool_name, 
+                                                                    self._log.info("invoking_tool_callback",
+                                                                                  tool=tool_name,
                                                                                   args_keys=list(parsed_arguments.keys()) if isinstance(parsed_arguments, dict) else None,
                                                                                   callback_id=id(self._on_tool_call))
-                                                                    
-                                                                    response_payload = await self._on_tool_call(tool_name, parsed_arguments)
 
+                                                                    _t_cb_start = time.monotonic()
+                                                                    response_payload = await self._on_tool_call(tool_name, parsed_arguments)
+                                                                    _cb_ms = round((time.monotonic() - _t_cb_start) * 1000)
+
+                                                                    # timing_tool_callback_ms checkpoint 5
+                                                                    # (bd polyglot-pdf-cwsy).
+                                                                    self._log.info(
+                                                                        "timing_tool_callback_ms",
+                                                                        tool=tool_name,
+                                                                        callback_ms=_cb_ms,
+                                                                        path="model_turn.parts",
+                                                                    )
                                                                     self._log.info("tool_callback_completed", tool=tool_name, response_ok=bool(response_payload))
 
                                                                     # DEV-ONLY: the FULL response the callback produced for this
@@ -1665,11 +1776,41 @@ class LiveAIGemini(ILiveAI):
                                                 "parsed_arguments": parsed_arguments,
                                             })
 
+                                            # timing_tool_call_received checkpoint 4
+                                            # (bd polyglot-pdf-cwsy): headline latency number.
+                                            try:
+                                                _t_tool_recv2 = time.monotonic()
+                                                _ref2 = (
+                                                    self._timing_last_activity_end
+                                                    or self._timing_first_inbound_audio
+                                                )
+                                                _since_ms2 = (
+                                                    round((_t_tool_recv2 - _ref2) * 1000)
+                                                    if _ref2 is not None else None
+                                                )
+                                                self._log.info(
+                                                    "timing_tool_call_received",
+                                                    tool=tool_name,
+                                                    since_activity_end_ms=_since_ms2,
+                                                    path="event.tool_call",
+                                                )
+                                            except Exception:
+                                                pass
+
                                             response_payload = None
 
                                             if self._on_tool_call is not None and tool_name:
                                                 try:
+                                                    _t_cb2_start = time.monotonic()
                                                     response_payload = await self._on_tool_call(tool_name, parsed_arguments)
+                                                    _cb2_ms = round((time.monotonic() - _t_cb2_start) * 1000)
+                                                    # timing_tool_callback_ms checkpoint 5 (bd polyglot-pdf-cwsy).
+                                                    self._log.info(
+                                                        "timing_tool_callback_ms",
+                                                        tool=tool_name,
+                                                        callback_ms=_cb2_ms,
+                                                        path="event.tool_call",
+                                                    )
                                                     self._log.info("tool_callback_returned", tool_name=tool_name, has_response=response_payload is not None, response_keys=list(response_payload.keys()) if isinstance(response_payload, dict) else None)
                                                     # direction="local": backend's own callback output, not inbound.
                                                     self._dev_log_io("local", "tool_callback_result", {
@@ -1747,7 +1888,27 @@ class LiveAIGemini(ILiveAI):
                                                 "response": getattr(resp, "response", None),
                                             })
 
-                                        await session.send_tool_response(function_responses=responses)
+                                        # timing_tool_response_sent checkpoint 6
+                                        # (bd polyglot-pdf-cwsy): measure the send_tool_response
+                                        # call duration. Also reset the activity/audio burst
+                                        # reference so the NEXT turn measures from a clean start.
+                                        _t_send_resp_start = time.monotonic()
+                                        try:
+                                            await session.send_tool_response(function_responses=responses)
+                                            _send_resp_ms = round((time.monotonic() - _t_send_resp_start) * 1000)
+                                            _tool_names_sent = [r.name for r in responses]
+                                            self._log.info(
+                                                "timing_tool_response_sent",
+                                                tool_names=_tool_names_sent,
+                                                send_ms=_send_resp_ms,
+                                            )
+                                        finally:
+                                            # Reset burst-reference state for the next turn --
+                                            # in a finally so a failed send cannot leave stale
+                                            # references that inflate the next turn's
+                                            # since_activity_end_ms (fresh-eyes, PR #150).
+                                            self._timing_last_activity_end = None
+                                            self._timing_first_inbound_audio = None
                                         # Don't send additional prompts - just let Gemini process the tool responses
                                         # and generate its natural continuation
 
@@ -2078,6 +2239,11 @@ class LiveAIGemini(ILiveAI):
             print(f"Model: {self._model_name}")
             print(f"{'='*80}\n")
 
+            # timing_session_connect_ready checkpoint 1 (bd polyglot-pdf-cwsy):
+            # capture the connect-attempt start time; the ready timestamp is set
+            # inside _handle_session once the session is accepting messages.
+            _t_connect_start = time.monotonic()
+
             while attempt < max_attempts:
                 # Check if session was intentionally finalized (Level 3 timeout, manual disconnect)
                 # If so, don't retry - just exit cleanly
@@ -2097,6 +2263,9 @@ class LiveAIGemini(ILiveAI):
                     print(f"{'='*80}")
                     print(f"Previous error: {str(last_exc) if last_exc else 'Unknown'}")
                     print(f"{'='*80}\n")
+                # Reset per attempt so a retry's connect_to_ready_ms measures THIS
+                # attempt only, not prior failures + backoff (fresh-eyes, PR #150).
+                _t_connect_start = time.monotonic()
                 try:
                     # Re-create connect_obj each attempt to avoid reusing a failed object
                     if websocket_base_override:
