@@ -21,7 +21,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | worktree -> local -> dev -> demo promotion (no prod); the gated demo-deploy authority. |
 | [`beads-setup.md`](beads-setup.md) | One-time beads install + sync wiring (prerequisite for the swarm tooling). |
 | [`doctrine/branch-protection-setup.md`](doctrine/branch-protection-setup.md) | This repo's actual `main`/`dev` GitHub rulesets. The generic agent-executable template lives at [`branch-protection-setup.md`](branch-protection-setup.md). |
-| **Active sprint plans** | `sprint_<N>_<slug>_plan.md` -- listed here while at repo root; archived to `archive/` at closeout. Active: [`sprint_1_harness-tuning_plan.md`](sprint_1_harness-tuning_plan.md) -- harness tuning: token burn, bounded autonomy (epics `polyglot-pdf-hrn` + `polyglot-pdf-h2r`). |
+| **Active sprint plans** | `sprint_<N>_<slug>_plan.md` -- listed here while at repo root; archived to `archive/` at closeout. Active: [`sprint_1_harness-tuning_plan.md`](sprint_1_harness-tuning_plan.md) -- harness tuning: token burn, bounded autonomy (epics `polyglot-pdf-hrn` + `polyglot-pdf-h2r`); [`sprint_2_spear-adoption_plan.md`](sprint_2_spear-adoption_plan.md) -- SPEAR partial adoption: epic-level planning, exit criteria, adversarial assess loop (epic `polyglot-pdf-7dkb`). |
 
 ## Components (tier 2 -- per surface)
 
