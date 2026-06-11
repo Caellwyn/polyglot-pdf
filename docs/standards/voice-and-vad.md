@@ -180,9 +180,10 @@ Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
 
 - `connected` → always send.
 - `switching_section` **with the WebSocket open** → send. Safe because the
-  backend discards audio server-side during a manual switch (`drop_audio=True`
-  in `websocket_routes.py`) and the AI-initiated switch path is already tearing
-  the old Gemini session down.
+  backend discards switch-window audio server-side on BOTH switch paths: the
+  `drop_audio` flag in `websocket_routes.py` (manual switch), and
+  `FormFillingService.stream_audio`'s `_switch_lock.locked()` backstop, which
+  also covers the AI-initiated `switch_section` swap.
 - Anything else (or socket closed) → **drop, never silently**: a rate-limited
   (~1/s) `console.warn` reports the status + socket state. Silent mic loss is
   what made the 2026-06-10 demo hang invisible.

@@ -72,6 +72,8 @@ class FormFillingService:
         # spawned by handle_switch_section, so it isn't garbage-collected mid-swap.
         self._switch_lock = asyncio.Lock()
         self._switch_task: Optional[asyncio.Task] = None
+        # Rate-limit stamp for the switch-window audio-drop log (stream_audio).
+        self._last_switch_drop_log: float = 0.0
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
@@ -199,7 +201,25 @@ class FormFillingService:
                     pass
 
     async def stream_audio(self, audio_chunk: bytes):
-        """Stream audio chunk to Gemini. Delegates to AudioHandler."""
+        """Stream audio chunk to Gemini. Delegates to AudioHandler.
+
+        Dropped while a section switch is in flight: _switch_lock is held for
+        the ENTIRE swap on BOTH switch paths (manual switch_to_section and the
+        AI-initiated _complete_section_switch), so this is the server-side
+        backstop that keeps mic audio captured during 'switching_section' from
+        leaking into the NEW Gemini session before the client has been told the
+        switch completed. The manual path is additionally guarded by the WS
+        loop's drop_audio flag; the AI path has only this guard (fresh-eyes
+        round 2, PR #150).
+        """
+        if self._switch_lock.locked():
+            now = time.monotonic()
+            if now - self._last_switch_drop_log >= 1.0:
+                self._last_switch_drop_log = now
+                _log.info("audio_dropped_switch_in_progress",
+                          session_id=self._session_id,
+                          bytes=len(audio_chunk))
+            return
         if self._audio_handler:
             await self._audio_handler.stream_audio(audio_chunk)
 
@@ -544,12 +564,17 @@ class FormFillingService:
             next_field_hint=strip_field_id_from_hint(next_field_hint)
         )
         _si_ms = round((time.monotonic() - _t_si_start) * 1000)
-        _log.info(
-            "timing_sysinstruction_build",
-            build_ms=_si_ms,
-            size_bytes=len(result.encode("utf-8")) if result else 0,
-            session_id=self._session_id,
-        )
+        try:
+            _log.info(
+                "timing_sysinstruction_build",
+                build_ms=_si_ms,
+                size_bytes=len(result.encode("utf-8")) if result else 0,
+                session_id=self._session_id,
+            )
+        except Exception:
+            # Measurement must never alter this method's return path
+            # (fresh-eyes round 2, PR #150).
+            pass
         return result
 
     def update_schema(self, schema: dict, current_values: dict, fill_language: str = "English"):

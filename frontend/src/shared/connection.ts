@@ -50,13 +50,11 @@ import { getBackendUrl as getBackendUrlFromConfig, getCloudBackendUrl, isTestHar
  * Rules:
  *   - 'connected': always send.
  *   - 'switching_section' + socket OPEN: send (same-socket section-switch path keeps
- *     the socket alive; the backend sets drop_audio=True on the manual switch path so
- *     audio sent here cannot leak into the new Gemini session -- see
- *     backend/routes/websocket_routes.py manual_section_switch handler, line ~511).
- *     NOTE: the AI-initiated switch path does NOT set drop_audio=True server-side
- *     (the old Gemini session is already shutting down via begin_graceful_shutdown),
- *     so audio that arrives during that window is buffered but the old session is
- *     already winding down before any new session starts.
+ *     the socket alive). Safe on BOTH switch paths because the backend drops
+ *     switch-window audio server-side: the WS route's drop_audio flag on the manual
+ *     path (websocket_routes.py manual_section_switch handler), and
+ *     FormFillingService.stream_audio's _switch_lock.locked() backstop, which covers
+ *     the AI-initiated switch too (fresh-eyes round 2, PR #150).
  *   - All other statuses, or socket not open: drop (and the caller warns).
  */
 export function shouldSendMicChunk(status: ConnectionStatus, socketOpen: boolean): boolean {
@@ -238,9 +236,9 @@ export function createConnectionManager(
 	// rearmAudioCapture, and the startSection/switchToSection re-arms) so the gate
 	// policy (shouldSendMicChunk) and the drop logging stay consistent (bd xroy).
 	// 'switching_section' with socket open is allowed: the same-socket section-switch
-	// path keeps the WebSocket alive, and the backend drops audio server-side via
-	// drop_audio=True (manual path) or the old Gemini session is already shutting
-	// down (AI-initiated path).
+	// path keeps the WebSocket alive, and the backend drops switch-window audio
+	// server-side on BOTH paths (the WS route's drop_audio flag on the manual path;
+	// FormFillingService.stream_audio's _switch_lock backstop on the AI path).
 	const sendMicChunkToBackend = (audioData: ArrayBuffer) => {
 		if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
 			connection.sendAudio(audioData)

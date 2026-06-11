@@ -34,11 +34,15 @@ classification run for the new model-silence bug.
    (one narrow, two absent). Fix: one shared `sendMicChunkToBackend` callback
    built on a pure `shouldSendMicChunk(status, socketOpen)` policy --
    `connected` always sends; `switching_section` sends while the socket is
-   open (safe: the backend sets `drop_audio=True` during manual switches, and
-   the AI-initiated switch path tears the old session down); everything else
-   drops LOUDLY via a rate-limited warn. Every `setStatus` transition is now
-   logged `old->new (reason)` at all 14 call sites, so the next stranded
-   status is visible instead of invisible.
+   open; everything else drops LOUDLY via a rate-limited warn. Every
+   `setStatus` transition is now logged `old->new (reason)` at all 16 call
+   sites, so the next stranded status is visible instead of invisible.
+   A second fresh-eyes round caught that the original "AI switch path is safe
+   anyway" justification was WRONG (no `drop_audio` on that path, and the new
+   session's audio queue goes live before the client learns the switch
+   finished) -- fixed with a symmetric server-side backstop:
+   `FormFillingService.stream_audio` drops chunks while `_switch_lock` is
+   held, covering BOTH switch paths.
 
 2. **Which transition stranded the demo's status is still unproven.** The
    live harness could not test it: harness audio injection bypasses the mic
