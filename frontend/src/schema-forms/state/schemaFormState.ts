@@ -585,10 +585,10 @@ export class SchemaFormStateManager {
    * Used when connecting to backend or switching sections
    * Automatically uses JIT mode if enabled in state
    */
-  static getHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
+  static getHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English', resume: boolean = false) {
     // Check if JIT mode is enabled
     if (state.jitModeEnabled) {
-      return this.getJITHandshakePayload(state, fillLanguage);
+      return this.getJITHandshakePayload(state, fillLanguage, resume);
     }
 
     // Legacy mode: send full schema for current section
@@ -601,6 +601,7 @@ export class SchemaFormStateManager {
     const previousSpokenNames = this.getPreviousSpokenNames(state);
 
     return {
+      type: 'handshake',
       form_session_id: state.formSessionId, // Persistent ID for logging/metrics
       schema: sectionSchema,
       current_values: state.fieldValues, // Already in FieldValue format
@@ -608,7 +609,8 @@ export class SchemaFormStateManager {
       section_label: currentSection?.label ?? '',
       total_sections: state.schema.sections.length,
       previous_spoken_names: previousSpokenNames,
-      fill_language: fillLanguage
+      fill_language: fillLanguage,
+      resume,
     };
   }
 
@@ -616,7 +618,7 @@ export class SchemaFormStateManager {
    * Generate JIT mode handshake payload with manifest
    * Only sends field_id|spoken_name pairs, not full schemas
    */
-  static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English') {
+  static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English', resume: boolean = false) {
     const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
 
     // Build manifest with current + previous sections
@@ -637,6 +639,7 @@ export class SchemaFormStateManager {
       first_field_schema: firstFieldSchema,
       loaded_field_ids: Array.from(state.loadedFieldIds),
       current_values: state.fieldValues,
+      resume,
       section_number: currentSection?.order ?? 1,
       section_label: currentSection?.label ?? '',
       total_sections: state.schema.sections?.length ?? 1,

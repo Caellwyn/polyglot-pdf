@@ -101,11 +101,46 @@
   }
 
   /*
+   * Continuous silence streamer (bd polyglot-pdf-95uy). Gemini's NATIVE VAD
+   * needs an UNBROKEN audio stream to detect end-of-utterance: a fixed 500 ms
+   * tail followed by dead air leaves the turn open forever (the model waits
+   * for more audio; 3/3 stalls in the 95uy repro). The real client streams the
+   * mic continuously in native mode, so the harness must too: after each
+   * utterance, stream zero-filled frames at real-time pace until the next
+   * utterance (or an explicit stopSilenceStream()).
+   */
+  var _silenceStream = null;
+
+  function startSilenceStream(chunkMs) {
+    stopSilenceStream();
+    chunkMs = chunkMs || CHUNK_MS;
+    var h = inject();
+    var bytesPerChunk = Math.round((SAMPLE_RATE * BYTES_PER_SAMPLE * chunkMs) / 1000);
+    var silence = new ArrayBuffer(bytesPerChunk);
+    var stream = { alive: true, stop: function () { stream.alive = false; if (_silenceStream === stream) _silenceStream = null; } };
+    (async function pump() {
+      while (stream.alive) {
+        try { h.sendAudio(silence.slice(0)); } catch (e) { stream.stop(); return; }
+        await sleep(chunkMs);
+      }
+    })().catch(function (e) {
+      stream.stop();
+      try { console.error('[VFF Harness] silence pump unexpected error', e); } catch (_) {}
+    });
+    _silenceStream = stream;
+    return stream;
+  }
+
+  function stopSilenceStream() {
+    if (_silenceStream) _silenceStream.stop();
+  }
+
+  /*
    * Stream a PCM16 ArrayBuffer into the WS as ~20 ms chunks, pacing in real time
    * so Gemini's VAD/turn logic behaves like a live mic. VAD-mode aware, mirroring
    * the real client: manual VAD brackets the burst with activity_start/end;
-   * native VAD streams continuously and appends a short trailing silence to let
-   * Gemini's own VAD detect end-of-speech.
+   * native VAD streams continuously -- the utterance, then unbroken real-time
+   * silence (see startSilenceStream above) so Gemini's own VAD can close the turn.
    */
   async function injectUtterance(pcmBuffer, opts) {
     opts = opts || {};
@@ -114,6 +149,10 @@
     var native = h.isNativeVad();
 
     var bytesPerChunk = Math.round((SAMPLE_RATE * BYTES_PER_SAMPLE * chunkMs) / 1000);
+
+    // Pause the inter-turn silence stream while the utterance frames go out
+    // (two writers would double-pace the stream).
+    stopSilenceStream();
 
     if (!native) {
       h.sendActivityStart();
@@ -126,14 +165,7 @@
     }
 
     if (native) {
-      // ~500 ms of trailing silence so Gemini's VAD closes the turn.
-      var silence = new ArrayBuffer(bytesPerChunk);
-      var silenceMs = 500;
-      var frames = Math.ceil(silenceMs / chunkMs);
-      for (var i = 0; i < frames; i++) {
-        h.sendAudio(silence.slice(0));
-        await sleep(chunkMs);
-      }
+      startSilenceStream(chunkMs);
     } else {
       await h.sendActivityEnd();
     }
@@ -406,6 +438,15 @@
     } else {
       await injectUtterance(yesBuf);
       confirmW = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
+      if (!confirmW.met) {
+        // bd polyglot-pdf-95uy secondary quirk: ~50% of native-VAD runs emit a
+        // ctrl46 control token + a second turn_complete and then stall even with
+        // silence streaming. A single re-inject of the "yes" recovers the turn;
+        // retry once before declaring FLAKY.
+        await injectUtterance(yesBuf);
+        confirmW = await waitForConfirmed(fieldId, { timeoutMs: turnTimeoutMs });
+        confirmW.retried = true;
+      }
     }
     var confSnap = readField(fieldId);
     report.steps.push({ step: 'confirm', met: confirmW.met, when: confirmedEarly ? 'early' : 'post-yes', elapsedMs: confirmW.elapsedMs, ssConfirmed: confSnap.ssConfirmed, domConfirmed: confSnap.domConfirmed });
@@ -746,6 +787,8 @@
     SAMPLE_RATE: SAMPLE_RATE,
     loadFixture: loadFixture,
     injectUtterance: injectUtterance,
+    startSilenceStream: startSilenceStream,
+    stopSilenceStream: stopSilenceStream,
     waitForGeminiQuestion: waitForGeminiQuestion,
     waitForCondition: waitForCondition,
     waitForFieldValue: waitForFieldValue,

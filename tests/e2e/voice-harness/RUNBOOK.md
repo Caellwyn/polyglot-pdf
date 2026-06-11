@@ -279,8 +279,13 @@ reports the rate, not a brittle boolean.
   switch can be dropped by the backend's `drop_audio` guard; the disclaimer-agree
   -> first-question pacing wait covers this.
 - **VAD mode is auto-handled.** `injectUtterance` branches on `isNativeVad()`:
-  manual VAD brackets with activity_start/end; native VAD streams continuous audio
-  + trailing silence. No caller action needed.
+  manual VAD brackets with activity_start/end; native VAD streams the utterance
+  then CONTINUOUS real-time silence until the next utterance (bd
+  polyglot-pdf-95uy: a fixed 500 ms tail then dead air never closes the turn --
+  Gemini's native VAD needs an unbroken stream). `stopSilenceStream()` ends it
+  explicitly if a driver needs quiet. `runCycle` also retries the "yes" once on
+  a confirm timeout (the 95uy ctrl46 second-turn_complete stall quirk). No
+  caller action needed.
 - **FIXED backend bug (bd polyglot-pdf-0ux, fixed 2026-06-09):** on native-audio
   the `update_form_fields` FunctionResponse could be sent without an `id`,
   crashing the receive loop AFTER the first fill (fill PASSED, confirm/advance

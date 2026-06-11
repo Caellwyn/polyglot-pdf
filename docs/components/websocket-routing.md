@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change), and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-11 (handshake `resume` flag + explicit legacy `type`, bd vmxx/wq9y; sprint-3 journal entry). See [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook (a test seam over the existing `sendAudio` path — no routing change), and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -37,8 +37,14 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 4. The handshake also carries `current_values` (pre-filled answers, used on
    reconnect — **not stored**, see stateless-architecture), `fill_language`, the
    persistent `form_session_id`, section metadata (`section_id`/`section_number`/
-   `section_label`, `total_sections`, `previous_spoken_names`), and
-   `initial_field_hint`.
+   `section_label`, `total_sections`, `previous_spoken_names`),
+   `initial_field_hint`, and `resume` (bd polyglot-pdf-vmxx: `true` on any
+   reconnect after the connection's first successful open — the backend then
+   sends the RESUME initiating message and appends a no-greeting override to the
+   system instruction, so a mid-section reconnect does not re-greet or
+   re-introduce the section). The legacy payload now also carries
+   `type: "handshake"` explicitly (bd wq9y) — the backend always defaulted a
+   missing `type` to that, so the wire routing is unchanged.
 5. Backend replies `{"type": "session_ready", "session_id": "web_…", "ephemeral":
    true, "jit_mode_enabled": <bool>, "native_vad": <bool>}`. The `session_id` is an
    ephemeral per-connection id for log correlation only — it is **not** the

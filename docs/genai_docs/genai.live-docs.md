@@ -1,6 +1,7 @@
 
-
 # genai.live module
+
+> SDK version documented: `google-genai` 2.8.0 (verified 2026-06-11).
 
 ## full genai docs available at https://googleapis.github.io/python-genai/
 [Preview] Live API client.
@@ -48,6 +49,12 @@ Bases: object
 
 [Preview] AsyncSession.
 
+**2.x note -- instance attributes exposed at construction time:**
+- `session.session_id` -- the server-assigned session ID string (may be `None`
+  until the server sends a setup_complete; exposed since 1.40).
+- `session.setup_complete` -- the `LiveServerSetupComplete` message object
+  received from the server, or `None` if not yet received (added 1.69).
+
 async close()
 Return type:
 None
@@ -62,6 +69,15 @@ AsyncIterator[LiveServerMessage]
 
 Yields:
 The model responses from the server.
+
+**2.x error semantics (BREAKING vs 1.x):** In `google-genai` 2.x, `receive()`
+catches `websockets.exceptions.ConnectionClosed` internally (inside `_receive()`)
+and re-raises it as `google.genai.errors.APIError` with the WS close code as the
+error code (e.g. code 1011 for a server-side error). The `send_*` methods still
+raise raw `ConnectionClosed`. Any loop over `receive()` must catch BOTH:
+`except (ConnectionClosed, genai_errors.APIError)`. See
+`backend/adapters/live_ai_gemini.py` for the production pattern (bd
+`polyglot-pdf-x52p`).
 
 Example usage:
 

@@ -509,6 +509,40 @@ describe('SchemaFormStateManager', () => {
       expect(payload.current_values).toHaveProperty('field-1')
       expect(payload.current_values).toHaveProperty('field-2')
     })
+
+    // === Fix 2 (bd polyglot-pdf-wq9y): legacy payload must include type:'handshake' ===
+    it('includes type:handshake in legacy (non-JIT) payload', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state)
+      expect((payload as any).type).toBe('handshake')
+    })
+
+    // === Fix 1 (bd polyglot-pdf-vmxx): resume flag ===
+    it('defaults resume to false when not supplied', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state)
+      expect((payload as any).resume).toBe(false)
+    })
+
+    it('sets resume:false on fresh connect', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state, 'English', false)
+      expect((payload as any).resume).toBe(false)
+    })
+
+    it('sets resume:true on reconnect', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state, 'English', true)
+      expect((payload as any).resume).toBe(true)
+    })
   })
 
   // ============================================================================

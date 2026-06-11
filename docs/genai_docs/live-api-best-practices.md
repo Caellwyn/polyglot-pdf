@@ -1,6 +1,8 @@
 > [!WARNING]
 > **Preview:** The Live API is in preview.
 
+> SDK version documented: `google-genai` 2.8.0 (verified 2026-06-11).
+
 This guide covers best practices you can follow to
 optimize your use of the Live API.
 See [Get started with Live API](https://ai.google.dev/gemini-api/docs/live)
@@ -72,6 +74,14 @@ When implementing real-time audio, follow these best practices:
 Use `ContextWindowCompressionConfig` for long sessions, as native audio tokens
 accumulate rapidly (approximately 25 tokens per sec of audio).
 
+**DEAD END for native-audio models (verified 2026-06-04, bd polyglot-pdf-l3a.1):**
+`ContextWindowCompressionConfig` is an unreleased/unsupported stub on native-audio
+Live models. The SDK type exists and the config serializes without error, but the
+server NEVER evicts tokens -- prompt tokens compound past the trigger exactly as
+with compression off. Keep `CONTEXT_COMPRESSION_ENABLED=False` for native-audio
+models; do not re-investigate unless Google announces support. See
+`docs/genai_docs/README.md` hard-won facts for full detail.
+
 ## Client buffering
 
 Don't buffer input audio significantly (such as 1 second) before sending. Send
@@ -94,6 +104,57 @@ experience:
 
 For implementation details, see
 [Session management](https://ai.google.dev/gemini-api/docs/live-api/session-management).
+
+## Additive 2.8.0 features relevant to voice work
+
+The following types and fields were added between 1.38.0 and 2.8.0. They are
+present in the installed SDK and their shapes are verified by inspection.
+**They are NOT yet endpoint-verified on our native-audio models** -- per the
+hard-won rule in `docs/genai_docs/README.md`, type existence is not availability.
+Do not use any of these in production code without a connect-and-probe first.
+
+### Explicit VAD signal (available as of 2.8.0, NOT yet endpoint-verified)
+
+`LiveConnectConfig` gained `explicit_vad_signal` (bool). When set, the server
+emits `LiveServerMessage.voice_activity_detection_signal` events for explicit
+VAD start/end signals alongside the existing `voice_activity` field.
+`LiveServerMessage` now has both `voice_activity` and
+`voice_activity_detection_signal` fields (verified present in 2.8.0 type).
+These are intended to replace manual `activity_start`/`activity_end` signaling
+for VAD-aware clients; our current VAD path (via `DISABLE_GEMINI_VAD` and
+`activity_start`/`activity_end`) remains the only endpoint-verified approach.
+
+### Transcription language codes (available as of 2.8.0, NOT yet endpoint-verified)
+
+`AudioTranscriptionConfig` gained `language_codes` (list of BCP-47 strings,
+e.g. `["en-US", "es-MX"]`). Pass via `LiveConnectConfig.input_audio_transcription`
+or `output_audio_transcription`. This allows hinting the transcription language
+for multilingual sessions, which is directly relevant to the polyglot-pdf use
+case. Endpoint behavior on our native-audio models: unverified.
+
+### Translation config (available as of 2.8.0, NOT yet endpoint-verified)
+
+`LiveConnectConfig` gained `translation_config` (`TranslationConfig`). Intended
+to enable real-time speech translation. Not explored for this repo yet.
+
+### History config (available as of 2.8.0, NOT yet endpoint-verified)
+
+`LiveConnectConfig` gained `history_config` (`HistoryConfig`). Related to the
+1.67 `initial_history_in_client_content` feature for pre-seeding session context.
+
+### Thinking config in LiveConnectConfig (available as of 2.8.0)
+
+`LiveConnectConfig` gained `thinking_config`. This is the same
+`ThinkingConfig` type used in `GenerateContentConfig`. Whether it does anything
+on native-audio Live models is unverified.
+
+### Session ID and setup_complete on AsyncSession (available as of 2.8.0)
+
+`AsyncSession` now exposes two instance attributes set at construction time:
+- `session.session_id` -- the server-assigned session ID (may be `None` until
+  setup_complete arrives).
+- `session.setup_complete` -- the `LiveServerSetupComplete` message object
+  (`None` until received). Also present as `LiveServerMessage.setup_complete`.
 
 ## Examples
 

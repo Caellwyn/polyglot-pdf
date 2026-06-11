@@ -15,6 +15,7 @@ from pathlib import Path
 from websockets.exceptions import ConnectionClosed
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 import structlog
 
@@ -944,10 +945,11 @@ class LiveAIGemini(ILiveAI):
         ``disabled=True`` AND any of the sensitivity/padding fields together.
         So this is a hard either/or:
 
-        - VAD disabled (``DISABLE_GEMINI_VAD=True``, the default): return ONLY
-          ``{'disabled': True}``. We drive turn-taking with manual
-          ``activity_start`` / ``activity_end`` signals instead -- see
-          ``docs/standards/voice-and-vad.md``.
+        - VAD disabled (``DISABLE_GEMINI_VAD=True``; NOT the default --
+          ``config.py`` defaults it to false, so Gemini's native VAD is ON
+          unless the env opts out): return ONLY ``{'disabled': True}``. We
+          drive turn-taking with manual ``activity_start`` / ``activity_end``
+          signals instead -- see ``docs/standards/voice-and-vad.md``.
         - VAD enabled: omit ``disabled`` and pass through whichever
           sensitivity/padding knobs (``VAD_*``) are configured.
 
@@ -1001,33 +1003,14 @@ class LiveAIGemini(ILiveAI):
             vad_settings['silence_duration_ms'] = settings.VAD_SILENCE_DURATION_MS
         return vad_settings
 
-    async def _run_session_loop(self):
-        """Background loop that connects to Gemini Live and handles audio and events.
+    def _build_live_config(self, settings) -> Dict[str, Any]:
+        """Build the Live connect config exactly as the session loop sends it.
 
-        This is a minimal implementation: connect, send audio from queue, and
-        dispatch simple transcript/tool events to callbacks. It's intentionally
-        conservative so tests and local dev don't require full protocol coverage.
+        Extracted from _run_session_loop so external callers (the contract
+        smoke test, probes) can drive the REAL config shape instead of a
+        hand-rolled minimal dict that 3.1 rejects with 1007
+        (bd polyglot-pdf-a7k / polyglot-pdf-4td1).
         """
-
-        # Import settings at the start to avoid UnboundLocalError
-        from backend.config import get_settings
-        settings = get_settings()
-
-        # Reset token counters for this session
-        self._session_total_tokens = 0
-        self._session_prompt_tokens = 0
-        self._session_candidate_tokens = 0
-        self._session_total_cost = 0.0
-        self._session_text_input_tokens = 0
-        self._session_audio_input_tokens = 0
-        self._session_text_output_tokens = 0
-        self._session_audio_output_tokens = 0
-        self._cost_summary_emitted = False
-        # Reset timing state for this session (bd polyglot-pdf-cwsy).
-        self._timing_last_activity_end = None
-        self._timing_first_inbound_audio = None
-        self._timing_audio_dropped = 0
-
         # Build a minimal config; request AUDIO responses and use native
         # transcription output.
         response_modalities = ["AUDIO"]
@@ -1121,6 +1104,36 @@ class LiveAIGemini(ILiveAI):
                         f.write("=" * 80 + "\n")
                 except Exception as e:
                     self._log.warn("failed_to_write_debug_file", error=str(e))
+        return config
+
+    async def _run_session_loop(self):
+        """Background loop that connects to Gemini Live and handles audio and events.
+
+        This is a minimal implementation: connect, send audio from queue, and
+        dispatch simple transcript/tool events to callbacks. It's intentionally
+        conservative so tests and local dev don't require full protocol coverage.
+        """
+
+        # Import settings at the start to avoid UnboundLocalError
+        from backend.config import get_settings
+        settings = get_settings()
+
+        # Reset token counters for this session
+        self._session_total_tokens = 0
+        self._session_prompt_tokens = 0
+        self._session_candidate_tokens = 0
+        self._session_total_cost = 0.0
+        self._session_text_input_tokens = 0
+        self._session_audio_input_tokens = 0
+        self._session_text_output_tokens = 0
+        self._session_audio_output_tokens = 0
+        self._cost_summary_emitted = False
+        # Reset timing state for this session (bd polyglot-pdf-cwsy).
+        self._timing_last_activity_end = None
+        self._timing_first_inbound_audio = None
+        self._timing_audio_dropped = 0
+
+        config = self._build_live_config(settings)
 
         # If client is missing, exit
         if self._client is None:
@@ -2085,7 +2098,15 @@ class LiveAIGemini(ILiveAI):
                                         self._log.info("graceful_shutdown_after_event_error")
                                         break
                                     continue
-                        except ConnectionClosed as exc:
+                        # google-genai >= 2.x converts websocket closures inside
+                        # AsyncSession.receive() into genai errors.APIError
+                        # (code = the WS close code) instead of letting
+                        # ConnectionClosed propagate; the send_* methods still
+                        # raise raw ConnectionClosed. Catch BOTH so every
+                        # server-side close (normal end, GoAway expiry, 1011)
+                        # takes this graceful break path, not the unexpected-
+                        # error re-raise below. bd polyglot-pdf-x52p
+                        except (ConnectionClosed, genai_errors.APIError) as exc:
                             print(f"\n{'='*80}")
                             print(f"[error] GEMINI CONNECTION DROPPED")
                             print(f"{'='*80}")

@@ -109,10 +109,15 @@ class Settings(BaseModel):
 	# END_SENSITIVITY: How quickly Gemini detects speech end
 	#   - LOW: Waits longer for silence, reduces choppy cutoffs
 	#   - HIGH: Ends faster, more responsive but may cut off pauses
-	VAD_START_SENSITIVITY: str = "LOW"  # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_END_SENSITIVITY: str = "LOW"    # Options: "LOW", "HIGH", "UNSPECIFIED"
-	VAD_PREFIX_PADDING_MS: int | None = 500  # Milliseconds of audio before speech start to include
-	VAD_SILENCE_DURATION_MS: int | None = 500  # Milliseconds of silence before ending speech
+	# Env-overridable (bd polyglot-pdf-4sv7: these were hard-coded literals, so
+	# the deploy env could not tune Gemini-side VAD at all). Default START=HIGH:
+	# measured on the audio path 2026-06-11, START_SENSITIVITY_LOW dropped 6/20
+	# turns (incl. the short "yes" confirmations the demo kept missing) while
+	# HIGH registered 20/20 -- see docs/standards/voice-and-vad.md.
+	VAD_START_SENSITIVITY: str = os.getenv("VAD_START_SENSITIVITY", "HIGH")  # Options: "LOW", "HIGH", "UNSPECIFIED"
+	VAD_END_SENSITIVITY: str = os.getenv("VAD_END_SENSITIVITY", "LOW")    # Options: "LOW", "HIGH", "UNSPECIFIED"
+	VAD_PREFIX_PADDING_MS: int | None = int(os.getenv("VAD_PREFIX_PADDING_MS") or "500")  # Milliseconds of audio before speech start to include
+	VAD_SILENCE_DURATION_MS: int | None = int(os.getenv("VAD_SILENCE_DURATION_MS") or "500")  # Milliseconds of silence before ending speech
 
 	# === Context-window compression (Gemini Live) ===
 	# Server-side ContextWindowCompressionConfig: a sliding window bounds the live
@@ -385,6 +390,16 @@ class Settings(BaseModel):
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field."
 	)
+
+	# === RESUME INITIATING MESSAGE TEMPLATE ===
+	# Used instead of INITIATING_MESSAGE when the handshake carries resume:true.
+	# The user is already mid-section; skip greeting and section re-introduction.
+	# Placeholders: {spoken_language}, {next_field_hint}
+	RESUME_INITIATING_MESSAGE: str = (
+		"Speak {spoken_language}. Do NOT greet the user. Do NOT introduce the form or section. "
+		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally."
+	)
+
 	# === DISCLAIMER INITIATING MESSAGE ===
 	# Used when user first selects language - reads disclaimer before starting form
 	# Placeholders: {spoken_language}

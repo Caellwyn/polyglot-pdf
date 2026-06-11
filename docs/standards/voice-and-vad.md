@@ -2,7 +2,8 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-10. See [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-11 (VAD sensitivity findings + chosen config, bd
+polyglot-pdf-4sv7). See [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -30,6 +31,34 @@ The flag flows to the frontend as `native_vad` in the `session_ready` handshake
 (`websocket_routes.py`), and a backend guard on `send_activity_start/end`
 (`live_ai_gemini.py`) drops any stray manual signal when native VAD is on -- so
 the two ends can never land in the conflicting state below.
+
+## Native-mode sensitivity: measured findings + chosen config (2026-06-11, bd 4sv7)
+
+The demo's "short answers drop / rarely two turns in a row" bug was root-caused
+by a measured A/B on the real audio path (SDK 2.8.0, the committed harness
+fixtures incl. the short "yes that's correct" clip, continuous-silence
+streaming; `scripts/spikes/diag_turn_reliability_4sv7.py`):
+
+| model | VAD mode | turns registered |
+|---|---|---|
+| 2.5 native-audio | native, START=**LOW** (the old shipped config) | **14/20 (70%)** -- non-deterministic per session (4/8, 7/8, 3/4), exactly the live-demo feel |
+| 2.5 native-audio | native, START=**HIGH** | **20/20**, plus a tool call on every turn |
+| 2.5 / 3.1 | manual (activity signals) | 16/16 |
+| 3.1 live-preview | native, LOW or HIGH | 16/16 (latency ~1.1-1.3 s vs 2.5's ~0.0-0.5 s) |
+
+`START_SENSITIVITY_LOW` is the LESS sensitive setting: it misses short/quiet
+utterance onsets entirely (no input transcription, no turn -- silence from the
+user's perspective). **Chosen config: keep the 2.5 model + native VAD, set
+`VAD_START_SENSITIVITY=HIGH`, keep `END=LOW` / `SILENCE_DURATION_MS=500`.**
+The `VAD_*` settings in `backend/config.py` were hard-coded literals until bd
+4sv7 made them env-overridable; the in-code default is now `START=HIGH`.
+Zero `code=1011` closures were observed across ~24 sessions on 2026-06-11
+(both models), consistent with bd `daa`'s "transient upstream outage" verdict.
+
+Caveat: turn REGISTRATION is fixed by this; tool-call COMPLIANCE under the
+app's full system instruction is a separate, pre-existing defect (2.5 hears the
+"yes" but does not call `confirm_field`; 3.1 skips `update_form_fields`) --
+tracked in bd `polyglot-pdf-i9q8` with the full E2E evidence.
 
 ## Manual mode: client-side VAD, not Gemini's
 

@@ -94,25 +94,6 @@ var VoiceFormFillerAudioProcessor = class extends AudioWorkletProcessor {
     } else {
       this.smoothedRMS = this.RMS_SMOOTHING_BETA * instantEnergy + (1 - this.RMS_SMOOTHING_BETA) * this.smoothedRMS;
     }
-    if (Math.random() < 1e-3) {
-      const clippedCount = processedData.filter((s) => Math.abs(s) > 0.99).length;
-      let sumSquaresFiltered = 0;
-      for (let i = 0; i < filteredData.length; i++) {
-        sumSquaresFiltered += filteredData[i] * filteredData[i];
-      }
-      const rmsFiltered = Math.sqrt(sumSquaresFiltered / filteredData.length);
-      console.log("[AudioWorklet] Quality check (post-filter):", {
-        samples: processedData.length,
-        rms: instantRMS.toFixed(4),
-        energy: instantEnergy.toFixed(2),
-        firstSample: processedData[0].toFixed(4),
-        lastSample: processedData[processedData.length - 1].toFixed(4),
-        clippedSamples: clippedCount,
-        clippingRate: (clippedCount / processedData.length * 100).toFixed(2) + "%",
-        pttMode: this.pttMode,
-        noiseGateActive: !this.pttMode && rmsFiltered < this.NOISE_GATE_THRESHOLD
-      });
-    }
     const pcmData = new Int16Array(processedData.length);
     for (let i = 0; i < processedData.length; i++) {
       const s = Math.max(-1, Math.min(1, processedData[i]));

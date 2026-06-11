@@ -92,6 +92,9 @@ export class WebFormConnection {
   private static readonly SECTION_SWITCH_TIMEOUT_MS = 15000;
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
+  // Set to true after the first successful handleOpen so that subsequent opens
+  // (auto-reconnects) include resume:true in the handshake (bd polyglot-pdf-vmxx).
+  private hasConnectedOnce: boolean = false;
 
   // Loop-breaker for unconfirmable fields (bd polyglot-pdf-0y7). When the backend
   // asks to confirm_field a field that has no usable value, the confirm cannot make
@@ -333,8 +336,12 @@ export class WebFormConnection {
       return;
     }
 
-    // Send handshake with schema + current_values + fill_language
-    const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage);
+    // Send handshake with schema + current_values + fill_language.
+    // Pass resume:true on reconnects so the backend skips the greeting
+    // and section re-introduction (bd polyglot-pdf-vmxx).
+    const isResume = this.hasConnectedOnce;
+    this.hasConnectedOnce = true;
+    const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, isResume);
     this.send(handshake);
   }
 

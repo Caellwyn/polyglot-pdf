@@ -61,3 +61,5 @@ tmp_*
 # by scripts/harness_ledger.py), not source of truth -- untracked so parallel
 # closeouts can't collide on it
 .beads/experiment_state.json
+.venv-backend/
+backend/.venv
