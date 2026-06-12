@@ -1,10 +1,19 @@
-"""Bisect harness for bd polyglot-pdf-i9q8: WHICH part of the full system
-instruction makes the Live model skip update_form_fields?
+"""Bisect harness for bd polyglot-pdf-wpw.4 (was i9q8): WHICH part of the full
+system instruction makes the Live model skip update_form_fields?
 
-Established baseline (re-measured on google-genai 2.8.0, 2026-06-11):
-  - 3.1 (gemini-3.1-flash-live-preview) + the FULL Settings.SYSTEM_INSTRUCTION
-    skips update_form_fields after the user gives a value (5/5 NO TOOL CALL).
-  - A SHORT explicit SI gets reliable tool calls (the historic control).
+OUTCOME (what this harness PROVED, google-genai 2.8.0, 2026-06-11): the SI was a
+red herring -- the cause was the UNTYPED update_form_fields.value param. The fix
+(typing value "string" in Settings.TOOL_DECLARATIONS) HAS LANDED, so the numbers
+below describe the PRE-FIX investigation, NOT current behavior:
+  - PRE-FIX: 3.1 + the FULL SI skipped update_form_fields (5/5 NO TOOL CALL); 3.1
+    + a SHORT SI ALSO skipped it (0/4) -- so SI length/content was not the
+    variable. 2.5 worked either way (4/4).
+  - POST-FIX (today): with the typed value param now in the real config, 3.1 emits
+    the call on BOTH short and full SI (5/5, 4/4). Re-running any variant here WILL
+    succeed -- that is the fix working, not a contradiction.
+The `PROBE_TYPED_VALUE` override (below) was the causation A/B; with the param now
+typed in the real config it is vestigial (no-op when run without it). Kept as a
+forensic record of the bisect.
 
 This harness drives the SAME single fill->answer turn as probe_tool_call.py
 (greeting -> "My A-Number is A123456789." -> expect update_form_fields), but the
@@ -165,12 +174,14 @@ def _client() -> genai.Client:
 
 
 def _tool_declarations():
-    """Return TOOL_DECLARATIONS, optionally patching update_form_fields.value to
-    carry an explicit type. The live config leaves `value` UNTYPED (a required
-    param with only a description); on google-genai 2.8.0 that makes 3.1 reject
-    the update_form_fields call (it verbalizes "I encountered an issue processing
-    that value" instead of filling). PROBE_TYPED_VALUE=string|number|boolean adds
-    the type so we can A/B whether typing the param restores the call on 3.1.
+    """Return TOOL_DECLARATIONS, optionally OVERRIDING update_form_fields.value's
+    type via PROBE_TYPED_VALUE. NOTE: the real config now types `value` "string"
+    (the wpw.4 fix has landed), so the default path already carries a typed param
+    and PROBE_TYPED_VALUE is a no-op unless you set it to a DIFFERENT type to
+    explore. Historically (pre-fix) the live config left `value` UNTYPED, which
+    made 3.1 reject the call on google-genai 2.8.0 (it verbalized "I encountered
+    an issue processing that value"); this override is how that causation was
+    A/B'd. Set PROBE_TYPED_VALUE=string|number|boolean to force a specific type.
     """
     import copy
 
