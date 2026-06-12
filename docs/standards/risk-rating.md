@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-12. bd polyglot-pdf-c5t (GoAway), 4sv7 (VAD env-parse hardening), vmxx (resume reconnect), w3ic/jbxm (empty-field confirm) all landed; none change the risk classification of their surfaces.*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of

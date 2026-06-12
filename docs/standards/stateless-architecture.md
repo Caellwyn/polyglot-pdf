@@ -1,6 +1,6 @@
 # Stateless architecture
 
-*Last updated: 2026-06-09. The `connection.ts` dev test-injection hook (bd polyglot-pdf-g8w, [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md)) is a client-side test seam and adds no server-side state — the stateless invariant is unchanged. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for the prior closeout.*
+*Last updated: 2026-06-12. bd polyglot-pdf-vmxx: the handshake now carries `resume:true` on reconnects after the first successful open so the backend selects a no-greeting resume prompt; the stateless invariant is unchanged -- `resume` is a hint that controls the initiating message, not persisted state. The `connection.ts` dev test-injection hook (bd polyglot-pdf-g8w) is a client-side test seam and likewise adds no server-side state.*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
@@ -53,8 +53,11 @@ the backend's working context **from the handshake** (`/ws/fill` in
    full `schema`) or `"handshake_jit"` (carries a `manifest` +
    `first_field_schema` + `loaded_field_ids` instead, for token-lean loading). It
    also carries `current_values` (the pre-filled answers, used on reconnect),
-   `fill_language`, the persistent `form_session_id`, and section metadata
-   (`section_number`/`section_label`, `total_sections`, `previous_spoken_names`).
+   `fill_language`, the persistent `form_session_id`, section metadata
+   (`section_number`/`section_label`, `total_sections`, `previous_spoken_names`),
+   and `resume: boolean` (bd polyglot-pdf-vmxx: `true` on any reconnect after the
+   first successful open -- the backend selects a no-greeting resume prompt; the
+   stateless invariant holds, as `resume` is a hint, not persisted state).
    The warm-reconnect frame (`getHandshakePayload`/`getJITHandshakePayload`, sent on
    every connect) stops there; `section_id` and `initial_field_hint` ride the
    section-switch paths instead — the explicit `startSection` handshake (top-level
