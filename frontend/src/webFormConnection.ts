@@ -611,7 +611,6 @@ export class WebFormConnection {
     const data = (message && message.data) || {};
     const formState = data.form_state || {};
     const applied = data.applied_fields || {};
-    const requestNextFieldHint = data.request_next_field_hint || false;
     const requestId = data.request_id;
     const nextFieldSchema = data.next_field_schema; // JIT mode: backend sends next field schema
 
@@ -701,22 +700,6 @@ export class WebFormConnection {
       if (this.callbacks.onFieldUpdate) {
         this.callbacks.onFieldUpdate(updatedFields);
       }
-    }
-
-    // If backend requested next field hint, send it now
-    if (requestNextFieldHint && requestId) {
-      const hint = this.computeNextFieldHintString();
-
-      // Store last field hint for recovery prompts
-      if (hint) {
-        sessionStorage.setItem('vff_last_field_hint', hint);
-      }
-
-      this.send({
-        type: "next_field_hint_response",
-        request_id: requestId,
-        hint: hint
-      });
     }
   }
 
