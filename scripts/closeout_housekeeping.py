@@ -42,7 +42,7 @@ import sys
 # Importing swarm_config applies the npm bd PATH fix at import time (see
 # swarm_config.py) so subprocess.run(["bd", ...]) finds the right binary on
 # Windows without needing the Windows shell.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: F401, E402
 
 # bd emits UTF-8 (e.g. a U+2713 check mark in a clean-audit line). Printing

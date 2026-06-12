@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 # Apply the npm bd PATH fix so subprocess finds the right binary on Windows.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import swarm_config  # noqa: F401, E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
