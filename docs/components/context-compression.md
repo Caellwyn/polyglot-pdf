@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-09 (l3a.1 root cause: compression is a no-op on native-audio). The bd polyglot-pdf-0ux `live_ai_gemini.py` change is a tool-response id fix and does not touch the compression config -- unaffected.*
+*Last updated: 2026-06-12 (session resumption evaluated -> not adopted, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption no-go evaluation and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path. Earlier: l3a.1 root cause (compression is a no-op on native-audio).*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 
@@ -197,18 +197,30 @@ and ephemeral -- inherent to using the Live API at all. It is called out here so
 change is a conscious, documented choice, not a silent one. See
 [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md).
 
-## Session resumption + GoAway -- deferred
+## Session resumption + GoAway
 
 `LiveConnectConfig` also exposes `session_resumption` (a `SessionResumptionConfig`
 with a `handle` valid 2h) and the API sends `GoAway` before terminating a
-connection. **Both are deferred out of `45o`**, filed as separate beads:
+connection. Both were deferred out of `45o` and resolved separately:
 
-- **Session resumption** is redundant with -- and in mild tension with -- our
-  stateless design: our reconnect is already lossless via client-owned rehydration,
-  so a server-side 2h handle reintroduces server-correlated session state we
-  deliberately avoid. Not adopted.
-- **GoAway handling** (graceful pre-termination UX) is worth a small follow-up but
-  is not required for the compression win.
+- **GoAway handling -- DONE** (`c5t`). The adapter reads `event.go_away` in the
+  receive loop and the backend forwards `{"type":"go_away","time_left": ...}` to the
+  client so it can reconnect ahead of the close. See
+  [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
+  (acting on the signal) is a follow-up (`l3a.2`).
+- **Session resumption -- evaluated, NOT adopted** (`wnt`; conditional). The
+  re-greeting that made reconnect jarring is handled at the prompt layer by the
+  `is_reconnect` RESUME override (`vmxx`); and because this is a form-filler, the
+  durable state is the FORM (field values + confirmations), which the
+  client-owns-state design already makes lossless across reconnect. A vmxx
+  reconnect loses only CONVERSATIONAL context (the last few spoken turns), which is
+  low value for a field-at-a-time flow. So native resumption's win does not move the
+  needle here, while it adds a 2h handle lifecycle + a stale-handle failure mode.
+  (Note: the old "adds server-correlated state" objection is weaker than first
+  thought -- the handle can live CLIENT-side in `sessionStorage` and pass back
+  through the stateless backend, so the stateless invariant would hold.) **Re-open
+  if** live verification of `vmxx` shows suppress-greeting is insufficient (e.g.
+  Gemini repeats an answered question or mis-tracks the field on reconnect).
 
 ## Workaround sideline map (hand-off to `7kp`)
 
