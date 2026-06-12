@@ -1,6 +1,6 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
 *Last updated: 2026-06-12. See [../journal/entries/2026-06-12-bd-9w5k-cloudrun-ws-timeout.md](../journal/entries/2026-06-12-bd-9w5k-cloudrun-ws-timeout.md) for the `--timeout=3600` deploy flag (300s default killed every WS at 5 min). Prior: [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
 
@@ -156,5 +156,3 @@ gate used by the E2E voice harness; never true in production.
 > is **no active prod**. The agent may run the demo deploy under a three-part gate
 > (local-test-first + per-instance permission + post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
-
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*
