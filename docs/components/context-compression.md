@@ -2,122 +2,110 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-12 (session resumption: adopt for unintentional disconnects only, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption decision and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
-*Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
-*Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
+*Last updated: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
+cost-motivation of section resets corrected per maintainer; epic `polyglot-pdf-hcsl`,
+bead `polyglot-pdf-h04c`). Session-resumption/GoAway decisions: see
+[../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md)
+and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md).*
 
-> **STATUS (2026-06-04): DEAD END -- compression does NOT work on our models.**
-> `ContextWindowCompressionConfig` is an unreleased/unsupported stub on the
-> native-audio Live models we use: the server accepts the config but never evicts
-> (bd `polyglot-pdf-l3a.1`, closed; see [Validation status](#validation-status----dead-end-compression-is-a-no-op-on-native-audio) below). The
-> cost-win design that follows is the ORIGINAL premise and **did not hold** -- it is
-> kept for context and in case Google later ships native-audio support. The feature
-> stays `CONTEXT_COMPRESSION_ENABLED=False`. Do not re-pursue without re-verifying
-> against the live endpoint first.
+> **STATUS (2026-06-12): WORKING on 3.1 -- eviction confirmed on SDK 2.8.0; 2.5
+> blocked by unrelated instability.** Sliding-window eviction is real and reliable on
+> `gemini-3.1-flash-live-preview` given enough post-trigger runway (3/3 twenty-turn
+> runs, 3-4 evictions each, ON sessions 54-74% below the unbounded baseline at turn
+> 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`). This overturns the
+> 2026-06-04 dead-end verdict (bd `l3a.1`, SDK 1.38.0; the journal keeps that story).
+> On `gemini-2.5-flash-native-audio-preview-12-2025` compression is UNTESTED: probe
+> sessions die with `1011 Internal error` after turn 1 in ALL arms of a controlled
+> matrix -- compression off included -- so the failure is NOT compression-related
+> (classification in progress, bd `h04c`). **`CONTEXT_COMPRESSION_ENABLED` stays
+> `False`** until epic `polyglot-pdf-hcsl` picks production parameters and regression-
+> tests coherence. Re-run the verdict:
+> `backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py`
+> (matrix) or `... scripts/spikes/diag_compression_usage.py --trigger 1500 --window 800
+> --turns 20` (single config; 20 turns minimum -- see "How eviction actually behaves").
 
 The Gemini Live API can bound its own context window server-side via
 `ContextWindowCompressionConfig` (a compression *trigger* + a *sliding window*).
-This doc is the design `45o` implements against and the hand-off contract telling
-`7kp` which of our manual context-bounding workarounds it may sideline. Related:
-the adapter itself ([voice-ai.md](voice-ai.md)), the stateless contract
+Related: the adapter ([voice-ai.md](voice-ai.md)), the stateless contract
 ([../standards/stateless-architecture.md](../standards/stateless-architecture.md)),
 the PII layering ([../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md)),
-and the authoritative SDK reference ([../genai_docs/README.md](../genai_docs/README.md)).
+the authoritative SDK reference ([../genai_docs/README.md](../genai_docs/README.md)),
+and the active exploration plan
+([../sprint_4_sliding-window-context_plan.md](../sprint_4_sliding-window-context_plan.md)).
 
 ## Why -- and what compression actually buys us
 
 The Live API **re-bills the entire accumulated context every turn** (the
 compounding billing model in
 [../genai_docs/live-api-best-practices.md](../genai_docs/live-api-best-practices.md)),
-and native audio accrues ~25 tokens/sec. The `tak` spike
-(`scripts/spikes/tak_token_curve_findings.md`) measured this on real audio: over 8
-short turns, prompt tokens compounded **6.6x (271 -> 1,799)** and per-turn cost rose
-~4.8x purely from re-billed history. Without compression, audio-only sessions are
+and native audio accrues tokens fast: in the 2026-06-12 twenty-turn probes the
+unbounded prompt reached 4,945-5,729 tokens (18-21x the turn-1 baseline) with
+**~73% of prompt tokens being audio**. Without compression, audio-only sessions are
 also hard-capped at **15 minutes**.
 
-**The headline: against the status quo (unbounded), compression is a large cost
-win -- it turns a quadratic cost curve linear.** Today the in-session context is
-**not bounded at all**; it grows unbounded within a connection (exactly why the
-`tak` spike measured 6.6x growth). Because every turn re-bills the whole context and
-the context grows ~linearly with turns, **cumulative cost grows roughly
-quadratically (~n^2) in session length.** A sliding window caps the per-turn context,
-so once it saturates the per-turn cost is ~constant and **cumulative cost grows
-linearly (~n).** Quadratic -> linear is the whole game at scale.
+Because every turn re-bills the whole context and the context grows ~linearly with
+turns, **cumulative cost grows roughly quadratically (~n^2) in session length** when
+nothing bounds it. A sliding window caps the per-turn context, so once it saturates
+the per-turn cost is ~constant and **cumulative cost grows linearly (~n)**.
 
-The compression win, then, is all three of:
+### The current system already pays for this -- with section resets
 
-1. **Cost** -- linear instead of quadratic. The gap widens without bound as sessions
-   lengthen (table below): at 120 long-intake turns it's **$6.79 unbounded vs. ~$0.94
-   bounded (~7x)**; at 240 turns **$26.86 vs. $1.91 (~14x)**. At deployment scale
-   that is the difference between viable and runaway per-form economics.
-2. **Duration** -- it lifts the 15-min audio cap; sessions can run unbounded.
-3. **Simplicity / robustness** -- a single built-in server-side bound replaces any
-   hand-rolled reset/restart machinery: much simpler to implement, debug, and
-   reason about, and far less fragile than restart-timing logic.
+**Session restarts at section boundaries exist specifically to mitigate compounding
+token cost** (maintainer, 2026-06-12). An unmitigated ~150-question I-90 fill would
+cost on the order of **$7 in tokens**; to bound that, the form was deliberately
+chopped into sections -- including **artificial sections smaller than the form's real
+pages** -- so each Gemini session's context stays short and is thrown away at the
+boundary. (The alternative seriously considered at the time was a new session after
+EACH question.) The same cost pressure drove the JIT-schema design: never feed the
+whole form schema, give the model exploration tools instead.
 
-The one honest caveat: a window is *not* the theoretical cost minimum. A full
-context *reset* (drop to the ~271-token base) would be marginally cheaper still,
-because a window retains `target_tokens` of history while a reset keeps none -- see
-the reset baseline in the table. But we don't have (or want) a cost-driven reset
-mechanism, and the residual gap is small next to the quadratic->linear win. **This is
-a cost reduction -- a big one vs. how the system bills today.** (Directional model;
-`45o` confirms with a real run.)
+So the honest framing is NOT "compression vs unbounded" -- it is **compression vs
+the section-reset machinery we already run**:
 
-### Cost model: unbounded (status quo) vs. sliding window
+| | Section resets (current) | Sliding window (candidate) |
+|---|---|---|
+| Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: context capped at `target_tokens` continuously |
+| Session length | Bounded by the 15-min audio cap within a section | Cap lifted -- a whole form can be one session |
+| Conversational continuity | Lost at every boundary (re-greeting suppressed by `vmxx` resume, but context is gone) | Preserved (subject to eviction of old turns) |
+| Moving parts | Reset orchestration: `switch_to_section` finalize/restart, section chopping, carried-over `previous_spoken_names` | One server-side config; eviction timing is the server's |
 
-Modeled with code from the `tak` curve (per-turn context increment, audio fraction
-0.69, 3.1 pricing from `backend/config.py`). Cost is dominated by re-billed
-**audio_input** (6x the text rate). The **"unbounded" row is the current system**;
-the windows are the proposal. The "full reset" row is an **illustrative-only**
-theoretical floor (NOT an existing code path -- the backend has no cost-driven
-restart; 8 = the `tak` spike's measurement window), shown so the residual
-window-vs-reset gap is visible.
+Which side wins on real workloads -- and whether artificial section chopping can be
+relaxed -- is exactly what epic `polyglot-pdf-hcsl` measures (three-arm comparison:
+unbounded / section-reset emulation / sliding window, per-question token CSVs, both
+models). Do not assume the answer in either direction; the maintainer's earlier cost
+digging also found **text-in tokens dominated total cost** in production traffic
+(the system-instruction + tool-context re-sends), so the per-reset text re-send cost
+is a first-class term in that comparison, not a footnote.
 
-**40 turns, short answers (~tak rate, +218 tok/turn):**
+## How eviction actually behaves (measured, SDK 2.8.0, 3.1)
 
-| Scenario | cum $ | vs unbounded |
-|---|--:|--:|
-| **Unbounded (current system)** | **0.462** | **100%** |
-| Sliding window 2k tok | 0.212 | 46% |
-| Sliding window 3k tok | 0.279 | 60% |
-| Sliding window 4k tok | 0.336 | 73% |
-| Sliding window 6k tok | 0.418 | 91% |
-| _Full reset (illustrative floor only)_ | _0.141_ | _30%_ |
+From `scripts/spikes/eycd_compression_eviction_findings.md` (3x 20-turn runs,
+trigger=1500/window=800) and the `h04c` matrix day-1 data
+(`scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl`):
 
-**120 turns, long intake (longer answers, +400 tok/turn) -- the case scale cares
-about most:**
-
-| Scenario | cum $ | vs unbounded |
-|---|--:|--:|
-| **Unbounded (current system)** | **6.793** | **100%** |
-| Sliding window 2k tok | 0.678 | 10% |
-| Sliding window 3k tok | 0.941 | 14% |
-| Sliding window 4k tok | 1.198 | 18% |
-| _Full reset (illustrative floor only)_ | _0.598_ | _9%_ |
-
-Reading the table:
-
-- **vs. the current system (unbounded), a sliding window saves ~3x-10x** and the
-  saving grows with session length -- because it converts quadratic cumulative cost
-  into linear. That is the cost case for this feature.
-- A full reset would be marginally cheaper than a window (it keeps no history vs. the
-  window's `target_tokens`), but that gap is small and we have no reset mechanism --
-  the quadratic->linear win against the status quo is what matters.
-- **The docs' example 25k trigger never fires for us.** In the 40-turn scenario the
-  unbounded prompt peaks at only ~9k tokens (271 + 218 x 40), far below the 25k the
-  best-practices doc assumes; even the 120-turn scenario peaks ~48k. A 25k/8k config
-  is effectively a no-op in short sessions; useful windows are 2k-4k. **In practice
-  the 15-min audio cap, not a turn count, is what bounds real session length** -- so
-  `45o` must re-measure with compression on rather than assume the 9k figure.
-
-The model is a single-session directional baseline; `45o` validates it with a real
-re-run (see Validation).
+- **Compression is an asynchronous server-side process.** Crossing `trigger_tokens`
+  schedules it; the visible prompt-token DROP lands **1-3 turns later**, not on the
+  next turn. Short probes miss it: 10-turn sessions (trigger crossed ~turn 7-8)
+  detected eviction in only 2/3 and 0/5 of runs; 20-turn sessions detected it 3/3
+  with 3-4 evictions each. **Any probe or verdict logic must allow >= 3-4 turns of
+  post-trigger runway.**
+- **The eviction signal is the prompt_token_count drop.** `cached_content_token_count`
+  stays `None` on every turn of every run -- never key a verdict on it (the original
+  l3a.1 probe did, which contributed to the dead-end misread).
+- **Landing zone is above the configured target:** post-eviction prompts land at
+  ~1,000-1,600 tokens against an 800-token window. Treat `target_tokens` as
+  approximate, not exact.
+- **Evictions can be incremental:** in 2/3 runs one compression event was spread
+  across two consecutive turns (e.g. -221 then -502). Sum across adjacent drops when
+  measuring.
+- Steady state oscillates: grow to ~2,000-2,500, drop to ~1,000-1,600, repeat. At
+  turn 20 the ON prompt was 1,402-2,254 vs OFF 4,945-5,729.
 
 ## The API (verified SDK syntax)
 
 `docs/genai_docs/` names `ContextWindowCompressionConfig` but ships no runnable
-example, so this is the canonical syntax for `45o`. Introspected from the installed
-`google-genai` in `backend/.venv`:
+example, so this is the canonical syntax. Introspected from the installed
+`google-genai` in `backend/.venv` (2.8.0):
 
 ```python
 # google.genai.types
@@ -132,9 +120,9 @@ LiveConnectConfig(
 )
 ```
 
-The adapter builds its config as a **dict** (see `_run_session_loop` in
-`backend/adapters/live_ai_gemini.py`), so the implementer adds one optional
-top-level key alongside `proactivity` / `realtime_input_config`:
+The adapter builds its config as a **dict** (see `_build_live_config` in
+`backend/adapters/live_ai_gemini.py`); the optional top-level key sits alongside
+`proactivity` / `realtime_input_config`:
 
 ```python
 config["context_window_compression"] = {
@@ -146,28 +134,26 @@ config["context_window_compression"] = {
 (The SDK accepts snake_case keys and aliases them to the camelCase wire form
 `triggerTokens` / `slidingWindow` / `targetTokens`.)
 
-## Chosen parameters
+## Parameters
 
-Make all three env-swappable in `backend/config.py` so they are tuning knobs, not
-load-bearing constants:
+All three are env-swappable in `backend/config.py` -- tuning knobs, not load-bearing
+constants:
 
-| Setting | Purpose | Recommended start |
+| Setting | Purpose | Current state |
 |---|---|---|
-| `CONTEXT_COMPRESSION_ENABLED` | Master flag; also gates the sideline of the old hack (see below) | `False` until validated |
-| `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Tokens that trigger compression | `~5000` |
-| `CONTEXT_COMPRESSION_WINDOW_TOKENS` | `target_tokens` to retain (must be `< trigger`) | `~3000-4000` |
+| `CONTEXT_COMPRESSION_ENABLED` | Master flag | `False` until epic `hcsl` completes parameter selection + coherence regression tests |
+| `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Tokens that trigger compression | Production value TBD by the epic's elbow analysis (bead `6x1y`); 1500 is the PROBE value, chosen only to make eviction observable in short runs |
+| `CONTEXT_COMPRESSION_WINDOW_TOKENS` | `target_tokens` to retain (must be `< trigger`) | Production value TBD by the same analysis; 800 is the probe value |
 
-Rationale: a ~3-4k window keeps enough recent history for coherent dialog while
-holding per-turn cost low (the table's cost saving vs. unbounded is already large at
-this size; shrinking further buys little). Our sessions peak near ~9k tokens, so the
-trigger must be **low** (~5k) to ever fire -- the docs' 25k example would be inert.
-`45o` re-runs the `tak` probe and tunes from there.
+Two anchors for the eventual choice: the trigger must leave the async eviction
+enough runway below any hard limit it is protecting (it fires 1-3 turns late), and
+the window must keep enough recent history for coherent dialog + correct tool calls
+after eviction (the epic's behavioral-integrity measurements, bead `wyhh`).
 
 ## How compression coexists with the stateless backend
 
-The load-bearing concern this bead exists to resolve. Compression operates on the
-**live in-session context the API holds** -- it does **not** touch our handshake
-rehydration:
+Compression operates on the **live in-session context the API holds** -- it does
+**not** touch our handshake rehydration:
 
 - On every (re)connect we still rebuild the system instruction from
   client-supplied `current_values` (see
@@ -177,31 +163,21 @@ rehydration:
   and dies with it. The stateless invariant ("the client is the single source of
   truth for form field values; the backend is stateless with respect to them") is
   preserved.
-
-### PII across the three layers
-
-The "backend never stores PII" rule is specifically about the **Cloud Run** layer.
-The three layers differ, and compression changes one of them:
-
-| Layer | PII/PID handling |
-|---|---|
-| **Client** (browser) | *May* store it (`sessionStorage`), and may print / save / send it -- it owns the data. |
-| **Cloud Run backend** | **Never** stores it. In-memory, in-transit only. **Unchanged by compression.** |
-| **Gemini** | *May* hold it **ephemerally in its context window**. |
-
-Enabling a sliding window changes *how* PII ages out of **Gemini's** ephemeral
-context: it is evicted on the sliding-window schedule rather than only at a
-section-switch restart or a session teardown. This is a different (generally
-*longer*-lived within a connection) eviction profile, but it is still Gemini-side
-and ephemeral -- inherent to using the Live API at all. It is called out here so the
-change is a conscious, documented choice, not a silent one. See
-[../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md).
+- PII layering: the client may store field data (it owns it); the Cloud Run backend
+  never stores it (unchanged by compression); Gemini holds it ephemerally in its
+  context window, and a sliding window changes only how that ephemeral context ages
+  out within a connection. **Maintainer decision (2026-06-11): the PII lifetime in
+  Gemini's ephemeral context is not a product concern** -- Google retains session
+  context server-side for a period regardless of our session boundaries, so
+  per-section resets do not meaningfully shorten its life. See
+  [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md) for the layer
+  rules that DO bind (the backend never logs/stores field values).
 
 ## Session resumption + GoAway
 
 `LiveConnectConfig` also exposes `session_resumption` (a `SessionResumptionConfig`
 with a `handle` valid 2h) and the API sends `GoAway` before terminating a
-connection. Both were deferred out of `45o` and resolved separately:
+connection. Both were resolved separately from compression:
 
 - **GoAway handling -- DONE** (`c5t`). The adapter reads `event.go_away` in the
   receive loop and the backend forwards `{"type":"go_away","time_left": ...}` to the
@@ -218,12 +194,13 @@ connection. Both were deferred out of `45o` and resolved separately:
     `new_handle`, store it CLIENT-side (`sessionStorage`), and pass it back via
     `SessionResumptionConfig(handle=...)` on the auto-reconnect handshake. The
     reconnect is then truly invisible (same context), not merely de-greeted.
-  - **Intentional reset** -- a fresh session is the POINT (clear context). Covers two
-    shapes: (a) a SERVER-side restart that keeps the WebSocket open (section switch
-    `finalize`->`start_session`; the Level-3 idle-FAREWELL `restart_gemini_session`),
-    and (b) a CLIENT-side WS close+reopen that is still intentional -- the section
-    advance via `webFormConnection.startSection`/`switchToSection`. Never pass a
-    handle on any of these.
+  - **Intentional reset** -- a fresh session is the POINT (clear context AND bound
+    cost -- see above). Covers two shapes: (a) a SERVER-side restart that keeps the
+    WebSocket open (section switch `finalize`->`start_session`; the Level-3
+    idle-FAREWELL `restart_gemini_session`), and (b) a CLIENT-side WS close+reopen
+    that is still intentional -- the section advance via
+    `webFormConnection.startSection`/`switchToSection`. Never pass a handle on any
+    of these.
 
   **The correct hook (verified):** the handle must ride ONLY `handleOpen`'s
   auto-reconnect handshake -- the same `resume:true` path gated on `hasConnectedOnce`
@@ -245,77 +222,61 @@ connection. Both were deferred out of `45o` and resolved separately:
   fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
   is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
 
-## Workaround sideline map (hand-off to `7kp`)
+## What compression could replace -- and what it must not touch
 
-**Important correction for `7kp`:** an audit of the current backend found that we
-**never actually built a cost-motivated context-bounding restart.** The mechanisms
-that *look* like candidates are all driven by other concerns:
+The cost-bounding machinery that exists today, and its fate if the epic's go/no-go
+lands on "go":
 
-- The **idle-timeout watchdog** (`WS_IDLE_TIMEOUT_SEC` in `backend/config.py`,
-  watchdog in `backend/routes/websocket_routes.py`) sends an `idle_timeout` message
-  and **closes the WebSocket** on inactivity. It does **not** call `finalize`, and it
-  is a connection-health / UX mechanism, not cost-bounding. **Keep it.**
-- The **Level-3 "farewell" finalize** (`finalize_gemini_session`, dispatched at
-  `backend/routes/websocket_routes.py` on a frontend `finalize_gemini_session`
-  message; timing in `backend/services/callback_handler.py`) is **frontend-initiated
-  after the goodbye prompt** -- a UX flow, not a cost timer. **Keep it.**
-- The **section-switch restart** (`switch_to_section`) is an intentional context
-  reset at a section boundary. **Keep it.**
+| Mechanism | Location | Role | If compression goes live |
+|---|---|---|---|
+| Section-switch session restart | `backend/services/form_filling_service.py` `switch_to_section` | **Cost mitigation first** (kills compounding context at each boundary), context hygiene second (flushes old-section fields) | Candidate for RELAXATION: fewer/larger sections, or no per-section restart at all -- the epic's go/no-go decides; never remove before the three-arm data is in |
+| Artificial section chopping (sections smaller than the form's real pages) | form schemas (`frontend/public/*.json`) | Pure cost mitigation | Same -- candidate for consolidation if the window holds costs flat |
+| Idle/UX recovery prompts (levels 1-3) + idle-timeout watchdog + farewell finalize | `backend/services/form_filling_service.py`, `backend/routes/websocket_routes.py` | UX / connection-health | **Keep** -- not cost machinery |
+| `_intentional_shutdown` retry-guard | `backend/adapters/live_ai_gemini.py` | Lifecycle correctness | **Keep** |
+| Carried-over `previous_spoken_names` / section history in the SI | `backend/services/form_filling_service.py`, `backend/config.py` | Client-owned rehydration (stateless contract) | **Keep** |
+| Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for all of this | **Keep** |
+| Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | Connect race fix, orthogonal | **Keep** |
 
-So there is **no cost-bounding hack for compression to retire** -- today the context
-simply grows unbounded (the `tak` curve). That means `7kp`'s scope shrinks to a
-verification/cleanup pass rather than a removal: confirm no restart path exists that
-was *implicitly* bounding cost, and coordinate with `polyglot-pdf-umv`. The epic
-title ("replace manual disconnect/restart hacks") was written before this audit; the
-"hacks" turned out to be UX/lifecycle mechanisms that stay. Gate compression itself
-behind `CONTEXT_COMPRESSION_ENABLED` so the *new* behaviour (bounded vs. unbounded
-context) is one env var from reverting; nothing existing needs sidelining.
+Related design idea on file (maintainer, 2026-06-12): a **2.5 -> 3.1 mid-session
+failover** -- default to 2.5 for its much lower turn latency, and on a `1011` from
+the 2.5 backend immediately open a 3.1 session rehydrated from client state for a
+seamless model switch (bd `polyglot-pdf-3v5m`). The stateless handshake makes this
+architecturally cheap; it is a separate bead, not part of the compression epic.
 
-**Keep active regardless of the flag:**
+## Validation status -- eviction CONFIRMED on 3.1; 2.5 blocked by unrelated 1011s
 
-| Mechanism | Location | Why it stays |
-|---|---|---|
-| Section-switch restart (finalize + restart to flush old-section fields) | `backend/services/form_filling_service.py` `switch_to_section` | Intentional context *reset*, not cost-bounding. A window carries stale fields until evicted; we want them gone at the switch. (Coordinate with `polyglot-pdf-umv` -- restart-loses-section-metadata -- which may become moot.) |
-| Idle/UX recovery prompts (levels 1-3) + idle-timeout watchdog + farewell finalize | `backend/services/form_filling_service.py`, `backend/routes/websocket_routes.py` | UX / connection-health concerns, not cost-bounding. |
-| `_intentional_shutdown` retry-guard | `backend/adapters/live_ai_gemini.py` | Lifecycle correctness, unrelated to context size. |
-| Carried-over `previous_spoken_names` / section history in the SI | `backend/services/form_filling_service.py`, `backend/config.py` | This is client-owned rehydration -- the stateless contract, not a hack. |
-| Per-turn token tracking + session-end cost summary | `backend/adapters/live_ai_gemini.py` | The measurement surface for the compression win. |
-| Session-readiness queue (`_session_ready` + pending) | `backend/adapters/live_ai_gemini.py` | A connect race-condition fix, orthogonal to context size. |
+**3.1 (`gemini-3.1-flash-live-preview`):** eviction works. Evidence:
+`scripts/spikes/eycd_compression_eviction_findings.md` (3x 20-turn runs, full
+per-turn per-modality tables; 54-74% prompt reduction at turn 20) plus the day-1
+matrix (`scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl`: 15/15 3.1
+sessions stable across off/on-inert/on-live arms; its 10-turn on-live runs showed no
+eviction, consistent with the async lag -- see "How eviction actually behaves").
 
-## Validation status -- DEAD END: compression is a no-op on native-audio (`l3a.1`, 2026-06-04)
+**2.5 (`gemini-2.5-flash-native-audio-preview-12-2025`):** compression untestable so
+far. In the day-1 matrix, 14/15 2.5 probe sessions died with `1011 Internal error`
+after turn 1 **identically across compression-off, on-inert, and on-live arms** --
+the OFF control proves the failure is NOT compression-related. Whether it is
+transient server-side instability (the bd `daa` class), specific to this probe
+configuration (no tools / minimal SI -- the 4sv7 reliability spike WITH the full
+tool config got clean 2.5 sessions on 2026-06-11), or routing/alias-sensitive, is
+the open classification question of bd `h04c` (day-2 matrix adds alias, api-version,
+and with-tools cells).
 
-**The cost model above is MODELED, and live validation came back NEGATIVE: compression
-is a silent no-op on the native-audio Live models.** A window-size sweep
-(`scripts/spikes/sweep_compression_window.py`,
-`scripts/spikes/sweep_compression_window_findings.md`) found `prompt_token_count` kept
-compounding (10x-14x) with compression on, even past `trigger_tokens`. The `l3a.1`
-root-cause diagnostics (`scripts/spikes/l3a1_compression_rootcause_findings.md`) then
-RULED OUT every config-side cause: the config serializes correctly, the server **accepts**
-it (no rejection across triggers 200-4096), and behavior is **identical under `v1alpha`
-and `v1beta`** (so the preview-API-version theory is wrong) and **identical on
-`gemini-2.5-flash-native-audio` and `gemini-3.1-flash-live`** (so it isn't 3.1-specific).
-**Conclusion: `contextWindowCompression` is accepted but never honored -- no eviction --
-on any native-audio Live model reachable on this key.** Most likely it is simply not
-implemented for native-audio Live models (the genai docs' compression example uses a
-*cascade* model, which this key cannot reach to compare). **Keep
-`CONTEXT_COMPRESSION_ENABLED=False`.** The config is plumbed and reversible: if Google
-ships eviction for native-audio later, the existing flag turns it on with no code change.
-The one untested branch (does it evict on a cascade model?) needs a key with cascade
-Live access; until then `l3a.1` stays open as a watch item, not an active bug.
+**What changed since the l3a.1 dead-end:** the probes are identical; the SDK moved
+1.38.0 -> 2.8.0 (PR #156) and the server-side behavior changed -- most likely Google
+shipped native-audio eviction between 2026-06-04 and 2026-06-11. The l3a.1
+conclusion was also partially a measurement artifact (verdict keyed on
+`cached_content_token_count`, which never moves). Both are reasons every
+pre-cutover behavioral claim is treated as a stale hypothesis (bd memory
+`pre-sdk28-findings-stale-recheck-everything`).
 
-The one clean positive: **response latency was low and stable** across all window sizes
-(median ~0.8-1.1s, p90 ~1.2-1.8s) -- no latency cost from enabling compression.
+Success criteria for ENABLING in production (owned by epic `hcsl`):
 
-The original success criteria (kept as the bar `l3a.1` must clear):
-
-1. **Prompt tokens plateau at the window size** instead of compounding. *(NOT met --
-   the headline finding above.)*
-2. **A session survives past the 15-min audio cap** -- the primary, non-cost win.
-   *(Not yet exercised; the sweep ran short 12-turn sessions.)*
-3. The measured curve matches the modeled table. *(NOT met; the model's plateau did not
-   reproduce.)*
-
-Harness reuse: the sweep captures cost from the session-end summary in `finalize()`
-([logging-and-cost.md](../standards/logging-and-cost.md)) and latency from the
-`on_audio` callback. The older single-config probe
-(`scripts/spikes/measure_live_token_curve.py`) measured the unbounded baseline.
+1. Production (trigger, window) chosen from measured realistic-workload curves
+   (beads `4loz`/`wyhh`/`6x1y`), not probe values.
+2. Behavioral integrity holds after eviction: tool-call compliance and dialog
+   coherence measured before/after eviction events (bead `wyhh`).
+3. A session demonstrably survives past the 15-min audio cap with compression on
+   (the headline product win -- whole form in one session).
+4. Maintainer go/no-go on relaxing the section-reset machinery, decided on the
+   three-arm cost data (bead `6x1y`).
