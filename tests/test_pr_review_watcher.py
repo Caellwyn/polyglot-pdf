@@ -1065,6 +1065,86 @@ def test_codex_error_sentinel_is_error(capsys, monkeypatch):
     assert rc == 1 and "RESULT: ERROR" in out
 
 
+# --- bd polyglot-pdf-yic2: quota/usage-limit notice must map to ERROR ---
+# Observed on PR #163 (2026-06-11): Codex replied
+# "You have reached your Codex usage limits for code reviews" -- a quota
+# notice, NOT a review. The no-inline-findings heuristic was treating it as an
+# approval and emitting RESULT: CLEAN (exit 0). These tests verify the new
+# _is_error_body guard fires BEFORE the approval fallback.
+
+def test_codex_quota_notice_is_error_via_issue_comment(capsys, monkeypatch):
+    # The exact quota message observed on PR #163. Must classify ERROR, not CLEAN.
+    body = (
+        "You have reached your Codex usage limits for code reviews. "
+        "Please check your usage dashboard for details."
+    )
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-11T10:00:00Z",
+        "body": body,
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 163, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 1, "quota notice must exit 1 (ERROR), not 0"
+    assert "RESULT: ERROR" in out
+
+
+def test_codex_quota_notice_is_error_via_formal_review(capsys, monkeypatch):
+    # Same quota body arriving as a formal review (not just an issue comment).
+    body = (
+        "You have reached your Codex usage limits for code reviews. "
+        "Please check your usage dashboard for details."
+    )
+    review = {
+        "id": 99, "state": "COMMENTED", "submitted_at": "2026-06-11T10:00:00Z",
+        "body": body, "user": {"login": _CODEX_LOGIN},
+    }
+    _patch_api(monkeypatch, reviews=[review])
+    rc = cw.watch("o/r", 163, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 1, "quota notice in a formal review must exit 1 (ERROR)"
+    assert "RESULT: ERROR" in out
+
+
+def test_is_error_body_prefix_match():
+    # Existing prefix-match behavior is preserved through the helper.
+    assert cw._is_error_body("Codex encountered an error right away.", CODEX) is True
+    assert cw._is_error_body("Codex encountered an error right away.", cw.COPILOT_PROFILE) is False
+    assert cw._is_error_body(
+        "Copilot encountered an error processing the PR.", cw.COPILOT_PROFILE
+    ) is True
+
+
+def test_is_error_body_substring_match():
+    # New substring-based path: quota phrases that do NOT start with the prefix.
+    assert cw._is_error_body(
+        "You have reached your Codex usage limits for code reviews.", CODEX
+    ) is True
+    # Must be case-insensitive.
+    assert cw._is_error_body(
+        "You have Reached Your Codex Usage Limits for code reviews.", CODEX
+    ) is True
+
+
+def test_is_error_body_clean_comment_is_not_error():
+    # A normal approval comment must NOT match the error substrings.
+    assert cw._is_error_body("LGTM", CODEX) is False
+    assert cw._is_error_body(
+        "Codex Review: Didn't find any major issues.", CODEX
+    ) is False
+    # Guard against false-positive ERROR on a legitimate review finding that
+    # happens to mention plausible-but-common product terms. "usage dashboard"
+    # was originally considered as a co-occurrence signal from PR #163 but
+    # removed (fresh-eyes yic2 finding 1): too broad -- a real code review
+    # could say "the analytics page lacks a usage dashboard" and get
+    # misclassified as ERROR instead of COMMENTS. Only the highly-specific
+    # quota phrasing is in error_body_substrings.
+    assert cw._is_error_body(
+        "The analytics page lacks a proper usage dashboard for tracking.", CODEX
+    ) is False
+
+
 def test_codex_change_ask_prose_is_comments(capsys, monkeypatch):
     # A Codex issue-comment that asks for a change (no inline) -> COMMENTS, via
     # the same change-ask gate the Copilot path uses.
@@ -1157,9 +1237,11 @@ def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
 
 
 # --- --close-on-clean: deterministic CLEAN-trigger bead close (bd hrn.14) ---
-# The close fires ONLY on the CLEAN terminal state, never on COMMENTS / ERROR /
-# TIMEOUT / MERGED, and never without the flag. A failed close downgrades the
-# exit to EXIT_CLOSE_FAILED so the orchestrator triages instead of pinging
+# The close fires on CLEAN (genuine passed-review verdict) and MERGED (bd rlpq:
+# the maintainer merged the PR, which is the definitive success signal -- no
+# separate CLEAN wait needed). It does NOT fire on COMMENTS / ERROR / TIMEOUT,
+# and never without the flag. A failed close downgrades the exit to
+# EXIT_CLOSE_FAILED so the orchestrator triages instead of pinging
 # "ready to merge". These tests stub watch() (to drive the terminal state via
 # _emit, which sets cw._LAST_STATE) and _close_beads_on_clean (to spy on whether
 # the close fired) -- no network, no bd/git.
@@ -1193,13 +1275,24 @@ def _run_main_with_state(monkeypatch, state, close_args, *, close_rc=0,
     return rc, ("beads" in calls), calls.get("beads")
 
 
-@pytest.mark.parametrize("state", ["COMMENTS", "ERROR", "TIMEOUT", "MERGED"])
+@pytest.mark.parametrize("state", ["COMMENTS", "ERROR", "TIMEOUT"])
 def test_close_on_clean_does_not_fire_on_non_clean_state(monkeypatch, state):
     rc, called, _ = _run_main_with_state(
         monkeypatch, state, ["--close-on-clean", "polyglot-pdf-x1"])
     assert called is False, "{} must NOT trigger the bead close".format(state)
     # The exit code stays the review's own state code (close never ran).
     assert rc == cw._EXIT_CODES[state]
+
+
+def test_close_on_clean_fires_on_merged(monkeypatch):
+    # bd polyglot-pdf-rlpq: MERGED is also a valid close trigger (the maintainer
+    # merging the PR is the definitive success signal; waiting for a separate
+    # CLEAN review would leave the bead open after a fast merge).
+    rc, called, beads = _run_main_with_state(
+        monkeypatch, "MERGED", ["--close-on-clean", "polyglot-pdf-x1"])
+    assert called is True, "MERGED must trigger the bead close"
+    assert beads == ["polyglot-pdf-x1"]
+    assert rc == 0
 
 
 def test_close_on_clean_fires_on_clean(monkeypatch):
