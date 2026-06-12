@@ -351,9 +351,23 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Example: name="reason[]" with values ["Depressed Mood", "Divorce/Custody"]
 	 */
 	function handleCheckboxGroup(checkboxInputs: NodeListOf<HTMLInputElement>, newValue: any, fieldId: string): void {
+		// Empty string (or ['']) means clear all checkboxes (bd polyglot-pdf-qc46).
+		// Without this guard, ''.includes('') is true for every option in the fuzzy-
+		// match loop below, so every checkbox would be CHECKED instead of cleared.
+		const isEmpty = newValue === '' || (Array.isArray(newValue) && newValue.length === 1 && newValue[0] === '')
+		if (isEmpty) {
+			for (const checkbox of checkboxInputs) {
+				checkbox.checked = false
+				checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+				checkbox.dispatchEvent(new Event('input', { bubbles: true }))
+			}
+			console.log('[VFF FieldManager] ✓ Cleared checkbox group:', fieldId)
+			return
+		}
+
 		// Convert single value to array
 		const values = Array.isArray(newValue) ? newValue : [newValue]
-		
+
 		console.log('[VFF FieldManager] 📋 Checkbox group:', fieldId)
 		console.log('  Requested values:', values)
 		
@@ -505,8 +519,21 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Handle radio group (multiple radio inputs with same name)
 	 */
 	function handleRadioGroup(radioInputs: NodeListOf<HTMLInputElement>, newValue: string, fieldId: string): void {
+		// Empty string means clear: uncheck all (bd polyglot-pdf-qc46).
+		// Without this guard, lowerRadioValue.includes('') is true for every option
+		// so the fuzzy-match loop below would select the FIRST radio instead of clearing.
+		if (newValue === '') {
+			for (const radio of radioInputs) {
+				radio.checked = false
+				radio.dispatchEvent(new Event('change', { bubbles: true }))
+				radio.dispatchEvent(new Event('input', { bubbles: true }))
+			}
+			console.log('[VFF FieldManager] ✓ Cleared radio group:', fieldId)
+			return
+		}
+
 		let matched = false
-		
+
 		// Try to find matching radio button by value
 		for (const radio of radioInputs) {
 			if (radio.value === newValue) {

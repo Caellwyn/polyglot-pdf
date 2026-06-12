@@ -459,3 +459,91 @@ describe('WebFormConnection optional checkbox group [] is confirmable, not stran
     expect(acks[0].recorded).toBe(true)
   })
 })
+
+// --- bd polyglot-pdf-z6xs: locked-field rejects must reach the model -------
+// When AI tries to fill a hidden/locked field, the FE was sending a
+// 'dependency_error' WS message which has NO backend handler -- the reason
+// silently disappeared. The fix routes the message through 'completion_message'
+// (the same in-band channel used for validation rejects), so Gemini actually
+// receives the explanation and can stop re-attempting the locked field.
+
+describe('WebFormConnection locked-field rejection (bd polyglot-pdf-z6xs)', () => {
+  const CONDITIONAL_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'spouse_name',
+        name: 'spouseName',
+        spoken_name: 'Spouse Name',
+        type: 'text',
+        hidden: true,  // locked: not visible until a condition is met
+      },
+      {
+        id: 'first_name',
+        name: 'firstName',
+        spoken_name: 'First Name',
+        type: 'text',
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['spouse_name', 'first_name'] },
+    ],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('sends a completion_message (not dependency_error) when AI targets a locked field', async () => {
+    const conn = new WebFormConnection(CONDITIONAL_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // AI tries to fill the hidden spouse_name field
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { spouseName: 'Jordan' } }) })
+
+    const sent = ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+
+    // Must send completion_message so the backend forwards it to Gemini
+    const completions = sent.filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    expect(completions[0].message).toContain('Spouse Name')
+
+    // Must NOT send the dead dependency_error type
+    const depErrors = sent.filter((m: any) => m.type === 'dependency_error')
+    expect(depErrors).toHaveLength(0)
+  })
+
+  it('does not send completion_message when the locked field is not targeted', async () => {
+    const conn = new WebFormConnection(CONDITIONAL_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // AI fills the visible field -- no locked-field message should fire
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { firstName: 'Alex' } }) })
+
+    const sent = ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+
+    const completions = sent.filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(0)
+  })
+})
