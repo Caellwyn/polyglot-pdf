@@ -12,8 +12,14 @@ from pathlib import Path
 # USE_PREMIUM_MODEL flips between these (defaults FALSE -> standard/2.5):
 #   standard -> gemini-2.5-flash-native-audio-preview-12-2025 (DEFAULT; reliably
 #               emits the update_form_fields tool call; family 2.5)
-#   premium  -> gemini-3.1-flash-live-preview            (opt-in; family 3.1;
-#               UNRELIABLE tool-calling in audio mode ~50% -- bd polyglot-pdf-5oq)
+#   premium  -> gemini-3.1-flash-live-preview            (opt-in; family 3.1)
+# NOTE on 3.1 tool-calling: the historic "3.1 skips update_form_fields ~50%"
+# finding (bd polyglot-pdf-5oq) was traced to the update_form_fields `value`
+# param being declared with NO type -- under google-genai 2.8.0, 3.1 rejects an
+# untyped required param (it verbalizes "I had an issue processing that value").
+# With `value` typed as "string" (see TOOL_DECLARATIONS), 3.1 emits the call
+# reliably (5/5, 2026-06-11, bd polyglot-pdf-i9q8). 2.5 tolerated the untyped
+# param, which is why only 3.1 showed the defect.
 # NOTE: Gemini model naming is inconsistent across Google's sources -- the 2.5
 # native model also appears as `gemini-live-2.5-flash-preview` (the old MODEL_LIVE
 # default), and that exact string 1008'd ("not found for bidiGenerateContent") in
@@ -48,17 +54,17 @@ class Settings(BaseModel):
 	# directly via env to pin an exact model string (overrides the flag).
 	# MODEL_LABELING: Model for field labeling/normalization (normalizer currently
 	#   deprecated; kept as an env-swappable knob and surfaced on /health).
-	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). 2.5 RELIABLY
-	# emits the update_form_fields tool call; 3.1 does NOT -- in audio mode it
-	# calls the tool only ~50% of the time and often confabulates a "trouble
-	# saving" message without calling it at all, so fields silently fail to save
-	# (bd polyglot-pdf-5oq, reproduced via backend/scripts/probe_tool_call.py
-	# 2026-06-07; TEXT modality can't help -- native-audio 3.1 1007s on TEXT).
-	# So 2.5 is the working default. Its known tradeoff is intermittent silence
+	# Default FALSE -> 2.5 (gemini-2.5-flash-native-audio-preview). BOTH families
+	# now emit update_form_fields reliably: the historic "3.1 only calls the tool
+	# ~50% of the time and confabulates a 'trouble saving' message" defect (bd
+	# polyglot-pdf-5oq, probe_tool_call.py 2026-06-07) was the UNTYPED `value`
+	# param, not the model -- under google-genai 2.8.0 3.1 rejected the untyped
+	# required param; typing it "string" restored the call 5/5 (bd
+	# polyglot-pdf-i9q8, 2026-06-11). 2.5 remains the default for its audio-path
+	# behavior, not its tool-calling. 2.5's known tradeoff is intermittent silence
 	# on the AUDIO path (no-audio turns / 1011 -- bd polyglot-pdf-daa), mitigated
-	# separately. Set USE_PREMIUM_MODEL=true to opt back into 3.1 once a revision
-	# fixes audio-mode tool-calling. (3.1 is modestly pricier -- text-out 4.50 vs
-	# 2.00/1M; audio in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
+	# separately. (3.1 is modestly pricier -- text-out 4.50 vs 2.00/1M; audio
+	# in/out identical -- see GEMINI_PRICING_BY_FAMILY.)
 	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
@@ -130,8 +136,13 @@ class Settings(BaseModel):
 	# peak near ~9k tokens, so the trigger must be low (~5k) to ever fire -- the docs'
 	# 25k example would be inert here.
 	CONTEXT_COMPRESSION_ENABLED: bool = os.getenv("CONTEXT_COMPRESSION_ENABLED", "false").lower() == "true"
-	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS", "5000"))
-	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS", "3000"))
+	# `... or "default"` guards an EMPTY-STRING env value: os.getenv(key, default)
+	# only returns the default when the var is UNSET; if it is set-but-empty (e.g.
+	# CONTEXT_COMPRESSION_TRIGGER_TOKENS= in a deploy env file) it returns "", and
+	# int("") raises ValueError at import -> the backend will not boot. Same hazard
+	# class the VAD_*_MS knobs were hardened against (bd polyglot-pdf-46bu).
+	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS") or "5000")
+	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS") or "3000")
 
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
@@ -173,7 +184,16 @@ class Settings(BaseModel):
 						"description": 'Exact field "id" from schema (e.g., "firstName", "p1_checkbox4")'
 					},
 					"value": {
-						"description": 'For radio/select: exact "value" from option object. For checkbox: boolean. For text: string.'
+						# Declared "string" deliberately: under google-genai 2.8.0 a
+						# REQUIRED param with no type makes gemini-3.1 reject the call
+						# (it verbalizes "I had an issue processing that value" and never
+						# fills) -- 2.5 tolerated the untyped param, 3.1 does not (bd
+						# polyglot-pdf-i9q8). The model already sends radio/select and
+						# checkbox values as the option-value STRING shown in the schema
+						# (e.g. "P1_checkbox4[0]"), and the frontend owns boolean coercion,
+						# so a string type matches real usage without losing information.
+						"type": "string",
+						"description": 'For radio/select: exact "value" from option object. For checkbox: the option value (or "true"/"false"). For text: string.'
 					}
 				},
 				"required": ["field_id", "value"]
