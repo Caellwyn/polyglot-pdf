@@ -148,11 +148,17 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
+    # --timeout: Cloud Run kills any request at this limit, including live
+    # WebSockets. The 300s default terminated every /ws/fill session at exactly
+    # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
+    # lifetime is bounded by Gemini Live session limits (GoAway handling)
+    # instead of the HTTP layer.
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
         --platform managed \
         --allow-unauthenticated \
+        --timeout=3600 \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV"
     

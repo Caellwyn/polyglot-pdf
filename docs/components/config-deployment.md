@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-11. See [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable). Prior: [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
+*Last updated: 2026-06-12. See [../journal/entries/2026-06-12-bd-9w5k-cloudrun-ws-timeout.md](../journal/entries/2026-06-12-bd-9w5k-cloudrun-ws-timeout.md) for the `--timeout=3600` deploy flag (300s default killed every WS at 5 min). Prior: [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -108,12 +108,15 @@ Both delegate to **`deploy-all.sh`** (`--backend`, `--form-kits`, `--frontend`
 stages):
 
 - **Backend** — `gcloud builds submit` to `gcr.io/<project>/polyglot-backend`, then
-  `gcloud run deploy ... --allow-unauthenticated --set-env-vars=` with
+  `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
   `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=false,USE_PREMIUM_MODEL=false`). The
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
-  backend.main:app` on `$PORT` (8080).
+  backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
+  is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,
+  live WebSockets included, and the 300s default terminated every voice session
+  at exactly 5 minutes (bd polyglot-pdf-9w5k).
 - **Form-kits** — uploads the local `form-kits/` tree to
   `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
   `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`.
@@ -153,5 +156,3 @@ gate used by the E2E voice harness; never true in production.
 > is **no active prod**. The agent may run the demo deploy under a three-part gate
 > (local-test-first + per-instance permission + post-deploy test-drive). See
 > [../doctrine/promotion-tiers.md](../doctrine/promotion-tiers.md).
-
-*Last updated: 2026-06-10. See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `config.ts` test-harness gate + localStorage override fallback; [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the 2.5-default switch, [../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md](../journal/entries/2026-06-07-bd-h79-bug-squash-bundle.md) for the h79 bug-squash bundle, and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) for the deploy-scripts setup.*

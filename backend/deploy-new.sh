@@ -38,11 +38,15 @@ gcloud builds submit --tag $IMAGE_URL --project $POLYGLOT_PROJECT_NAME .
 
 # Deploy to Cloud Run
 echo "🌐 Deploying to Cloud Run service: $SERVICE_NAME..."
+# --timeout: Cloud Run kills any request at this limit, including live
+# WebSockets; the 300s default terminated every /ws/fill session at exactly
+# 5 minutes (bd polyglot-pdf-9w5k). 3600s is the Cloud Run maximum.
 gcloud run deploy $SERVICE_NAME \
     --image $IMAGE_URL \
     --region $REGION \
     --platform managed \
     --allow-unauthenticated \
+    --timeout=3600 \
     --project $POLYGLOT_PROJECT_NAME \
     --set-env-vars="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME"
 
