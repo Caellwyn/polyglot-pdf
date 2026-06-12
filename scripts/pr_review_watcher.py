@@ -90,10 +90,10 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
   CLEAN    -- review complete, no findings (the common case). Also covers a
               PR that was closed WITHOUT being merged while nothing was pending.
   MERGED   -- the PR was merged while watching (the merge event lands in the
-              same timeline this script polls). Lets the caller skip a separate
-              `gh pr view` to learn the outcome: treat it as "done + already
-              merged" -> skip the maintainer-merge ping, go straight to bead
-              close. Exit 0, like CLEAN.
+              same timeline this script polls). Treated as terminal success:
+              --close-on-clean fires on MERGED the same as on CLEAN -- the
+              merge IS the approval. Skip the maintainer-merge ping (already
+              done); the bead auto-closes. Exit 0, like CLEAN.
   ERROR    -- the review failed or the bot hit a quota/availability error.
               Surfaced to the user; NO auto-retry (a quota error will not
               clear for hours, so backoff just burns wall-clock). The user
@@ -1219,20 +1219,18 @@ EXIT_CLOSE_FAILED = 3
 
 
 def _close_beads_on_clean(beads: list[str]) -> int:
-    """Run the deterministic bead-close after a CLEAN review (bd hrn.14).
+    """Run the deterministic bead-close on terminal success (CLEAN or MERGED).
 
-    This is the watcher's CLEAN-trigger close: it shells out to the existing,
-    verified ``closeout_finish.py --close-only`` path (which runs ``bd_safe
-    close`` -> ``bd dolt pull/close/push``), so the bead is authoritatively
-    closed and synced to the bead remote. Bead state syncs via ``bd dolt push``,
-    independent of the PR/git -- so there is NOTHING to commit or push here, and
-    no merge-race. ``bd close`` re-exports the tracked ``.beads/*.jsonl`` mirror,
-    leaving the worktree dirty; that is intentionally left for the next manual
-    ``bd`` sync (maintainer's call -- the close is already durable in Dolt).
+    Shells out to ``closeout_finish.py --close-only`` (bd_safe close -> bd dolt
+    pull/close/push) so the bead is authoritatively closed and synced to the bead
+    remote. Bead state syncs via ``bd dolt push``, independent of the PR/git --
+    so there is NOTHING to commit or push here, and no merge-race. ``bd close``
+    re-exports the tracked ``.beads/*.jsonl`` mirror, leaving the worktree dirty;
+    that is intentionally left for the next manual ``bd`` sync (maintainer's call
+    -- the close is already durable in Dolt).
 
     Returns 0 on a clean close, EXIT_CLOSE_FAILED otherwise (so main() can wake
     the orchestrator to triage instead of reporting a false "ready to merge").
-    Called ONLY on the CLEAN terminal state.
     """
     finish = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "closeout_finish.py")
@@ -1288,10 +1286,11 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="BEAD_ID",
-        help="Full bead id to auto-close IF (and only if) the review terminates "
-        "CLEAN -- the deterministic, zero-model-token bead-close (bd hrn.14). "
+        help="Full bead id to auto-close on terminal success: fires on CLEAN "
+        "(genuine passed-review verdict) OR MERGED (maintainer merged the PR). "
+        "The deterministic, zero-model-token bead-close (bd hrn.14). "
         "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
-        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/MERGED. "
+        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT. "
         "FRESH-EYES RACE: do NOT pass this on the ROUND-1 watch while fresh-eyes "
         "is still running -- a fast clean Codex verdict would close the bead before "
         "fresh-eyes fixes are triaged. Pass it on the RE-WATCH instead (after all "
@@ -1321,15 +1320,21 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently
         return _emit("ERROR", "Unexpected crash: {!r}".format(exc))
 
-    # CLEAN-trigger bead close (bd hrn.14). Fire ONLY on a CLEAN that is a
-    # GENUINE passed-review verdict -- not merely on exit 0 (shared with
-    # COMMENTS/MERGED), and not on the "no review pending" CLEAN that an
-    # abandoned PR (closed-without-merge) emits: closing the bead there would
-    # mark un-shipped work done (fresh-eyes PR #60, Finding 1). COMMENTS means
-    # the loop continues; ERROR/TIMEOUT must never close; MERGED is the
-    # maintainer's deliberate action, handled by the orchestrator. A failed
-    # close downgrades the exit so the orchestrator triages it.
-    if args.close_on_clean and _LAST_STATE == "CLEAN" and _LAST_CLEAN_WAS_REVIEW:
+    # Bead close on terminal success (bd hrn.14 + ipnr). Fire on:
+    #   - CLEAN that is a genuine passed-review verdict (not "no review pending"
+    #     on an abandoned/closed-without-merge PR -- that would mark un-shipped
+    #     work done, fresh-eyes PR #60 Finding 1).
+    #   - MERGED: the maintainer merged the PR, which is the ultimate success
+    #     signal. Waiting for a separate CLEAN is redundant -- the merge IS the
+    #     approval. Without this, a fast merge before the watcher sees the review
+    #     leaves the bead open and requires a manual close every time.
+    # COMMENTS means the loop continues; ERROR/TIMEOUT must never close.
+    # A failed close downgrades the exit so the orchestrator triages it.
+    should_close = args.close_on_clean and (
+        (_LAST_STATE == "CLEAN" and _LAST_CLEAN_WAS_REVIEW)
+        or _LAST_STATE == "MERGED"
+    )
+    if should_close:
         if _close_beads_on_clean(args.close_on_clean) != 0:
             return EXIT_CLOSE_FAILED
     return code
