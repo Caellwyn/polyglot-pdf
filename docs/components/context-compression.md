@@ -209,27 +209,41 @@ connection. Both were deferred out of `45o` and resolved separately:
   [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
   (acting on the signal) is a follow-up (`l3a.2`).
 - **Session resumption -- adopt for UNINTENTIONAL disconnects only** (`wnt`). The
-  decision turns on the CAUSE of the reconnect, which already maps onto two distinct
-  code paths:
-  - **Unintentional** (network drop / `GoAway`) -- the client re-handshakes on a
-    genuinely closed WebSocket. Here we WANT the context kept, so resume the same
-    Gemini session: capture `new_handle` from `LiveServerSessionResumptionUpdate`,
-    store it CLIENT-side (`sessionStorage`), and pass it back via
-    `SessionResumptionConfig(handle=...)` on the reconnect handshake. The reconnect
-    is then truly invisible (same context), not merely de-greeted.
-  - **Intentional reset** (section switch -> `finalize`/`start_session`;
-    idle-farewell `restart_gemini_session`) -- the backend restarts the session
-    SERVER-side (the WebSocket stays open) precisely to CLEAR context. Never pass a
-    handle here; a fresh session is the point. No special-casing needed -- only the
-    client re-handshake path ever carries a handle.
+  decision turns on the CAUSE of the reconnect:
+  - **Unintentional** (network drop / `GoAway`) -- the WebSocket genuinely closed and
+    the client AUTO-reconnects. Here we WANT the context kept, so resume the same
+    Gemini session. First connect opts in by setting
+    `LiveConnectConfig.session_resumption = SessionResumptionConfig()` (handle=None);
+    the server then emits `LiveServerSessionResumptionUpdate` messages -- capture
+    `new_handle`, store it CLIENT-side (`sessionStorage`), and pass it back via
+    `SessionResumptionConfig(handle=...)` on the auto-reconnect handshake. The
+    reconnect is then truly invisible (same context), not merely de-greeted.
+  - **Intentional reset** -- a fresh session is the POINT (clear context). Covers two
+    shapes: (a) a SERVER-side restart that keeps the WebSocket open (section switch
+    `finalize`->`start_session`; the Level-3 idle-FAREWELL `restart_gemini_session`),
+    and (b) a CLIENT-side WS close+reopen that is still intentional -- the section
+    advance via `webFormConnection.startSection`/`switchToSection`. Never pass a
+    handle on any of these.
+
+  **The correct hook (verified):** the handle must ride ONLY `handleOpen`'s
+  auto-reconnect handshake -- the same `resume:true` path gated on `hasConnectedOnce`
+  (`webFormConnection.ts`). `startSection`/`switchToSection` deliberately BYPASS
+  `handleOpen` (it early-returns while `isSectionSwitching`) and send their own
+  handshake, so they get a fresh session for free as long as the handle is attached
+  to the `handleOpen` path and nowhere else. (Do NOT key it on "client- vs
+  server-initiated" -- `startSection` is a client-initiated reconnect that must NOT
+  carry a handle.)
 
   Stateless invariant holds (handle lives client-side; backend stores nothing).
   `vmxx`'s `is_reconnect` RESUME override stays as the FALLBACK when no valid handle
-  exists (expired >2h, or first connect). Open implementation edge: an unintentional
-  reconnect carries both a handle AND the client's current form-state handshake; if
-  the handle is stale relative to form state, prefer the fresh handshake as the
-  source of truth (the handle restores conversational continuity, not form state).
-  Decided here; implementation is a separate bead.
+  exists (expired >2h, or first connect). Open implementation edges (for the impl
+  bead): (1) an unintentional reconnect carries both a handle AND the client's
+  current form-state handshake; if the handle is stale relative to form state, prefer
+  the fresh handshake as source of truth (the handle restores conversational
+  continuity, not form state); (2) the idle-TIMEOUT watchdog (distinct from the
+  farewell) closes the WS and requires a MANUAL user reconnect -- treat that like a
+  fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
+  is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
 
 ## Workaround sideline map (hand-off to `7kp`)
 
