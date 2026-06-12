@@ -47,7 +47,7 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schema_contract import SCHEMA_CONTRACT  # noqa: E402
-from structural_enrich import enrich, enriched_field_list  # noqa: E402
+from structural_enrich import SIGNALS, enrich, enriched_field_list  # noqa: E402
 
 
 # Anti-hallucination contract addendum (Q4): the model MUST copy widget names
@@ -158,14 +158,16 @@ def _normalize_schema(schema) -> dict:
 
 
 def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
-                 pdf_path: Optional[str]) -> str:
+                 pdf_path: Optional[str],
+                 disabled: frozenset[str] = frozenset()) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
     enriched bundle). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
-    attaches the bytes separately and ignores this instruction's file path)."""
+    attaches the bytes separately and ignores this instruction's file path).
+    `disabled` drops enrichment signals -- the 7a9.10 ablation knob."""
     with open(acroform_path, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enrich(dump)
+    enrich(dump, disabled=disabled)
 
     parts = [SCHEMA_CONTRACT, "", ANTI_HALLUCINATION, ""]
     if fewshot_truth:
@@ -268,9 +270,11 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
 
 def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
-        send_pdf: bool = True) -> dict:
+        send_pdf: bool = True,
+        disabled: frozenset[str] = frozenset()) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
-    prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt)
+    prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
+                          disabled=disabled)
 
     # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
     # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
@@ -287,6 +291,7 @@ def run(pdf_path: str, acroform_path: str, model: str,
     schema["_bakeoff"].update({
         "arm": "llm-native", "model": model, "backend": backend,
         "enriched": True, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
+        "disabled_signals": sorted(disabled),
     })
     if tok:
         schema["_bakeoff"]["tokens"] = tok
@@ -301,6 +306,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="a DIFFERENT form's gold schema, for the convention few-shot")
     ap.add_argument("--no-pdf", action="store_true",
                     help="ablation: send ONLY the enriched bundle, no PDF pixels")
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=[],
+                    help="ablation: drop this enrichment signal (repeatable; "
+                         "bd 7a9.10)")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
@@ -308,13 +316,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     schema = run(args.pdf, args.acroform, args.model,
-                 fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf)
+                 fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf,
+                 disabled=frozenset(args.disable))
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))
     tok = schema.get("_bakeoff", {}).get("tokens", {})
     print(f"[wrote {args.out}] arm=llm-native model={args.model} "
           f"fewshot={bool(args.fewshot_truth)} pdf={not args.no_pdf} "
+          f"disabled={sorted(frozenset(args.disable))} "
           f"fields={nf} tokens={tok}")
     return 0
 

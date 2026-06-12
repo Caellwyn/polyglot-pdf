@@ -27,6 +27,11 @@ rendering for the prompt. ASCII only (cp1252 safe).
 
 Usage:
     python scripts/bakeoff/structural_enrich.py DUMP.json [--json OUT.json]
+
+Per-signal ablation (bd polyglot-pdf-7a9.10): pass disabled={...} to enrich()/
+enriched_field_list() (or --disable on the CLI) to drop a signal from both the
+computation and the prompt rendering. With tab_order disabled the field list
+falls back to dump (name) order -- the same order the baseline hybrid arm uses.
 """
 from __future__ import annotations
 
@@ -35,6 +40,9 @@ import json
 import re
 import sys
 from typing import Any, Optional
+
+# The ablatable signal names (bd 7a9.10).
+SIGNALS = ("name_decomp", "tab_order", "row_cluster")
 
 
 # --------------------------------------------------------------------------- #
@@ -111,43 +119,56 @@ def _reading_order_key(rec: dict) -> tuple:
     return (r["page"], round(r["y"] / 8.0), r["x"])
 
 
-def enrich(dump: dict) -> dict:
-    """Augment each field with name tokens, tab order, and spatial-cluster ids."""
+def enrich(dump: dict, disabled: frozenset[str] = frozenset()) -> dict:
+    """Augment each field with name tokens, tab order, and spatial-cluster ids.
+
+    `disabled` names signals (from SIGNALS) to SKIP -- the ablation knob
+    (bd 7a9.10). A disabled signal is neither computed nor rendered.
+    """
     # Flatten to per-widget records carrying their parent field, for geometry.
     widget_recs: list[dict] = []
     for fi, f in enumerate(dump.get("fields", [])):
         for wi, w in enumerate(f["widgets"]):
             widget_recs.append({"fi": fi, "wi": wi, "rect": w["rect"]})
 
-    # 2. tab order: global reading-order rank.
+    # Reading-order sort underpins BOTH geometry signals (rank assignment and
+    # deterministic cluster-id numbering), so it always runs.
     widget_recs.sort(key=_reading_order_key)
-    for rank, rec in enumerate(widget_recs):
-        f = dump["fields"][rec["fi"]]
-        f["widgets"][rec["wi"]].setdefault("_tab_order", rank)
+
+    # 2. tab order: global reading-order rank.
+    if "tab_order" not in disabled:
+        for rank, rec in enumerate(widget_recs):
+            f = dump["fields"][rec["fi"]]
+            f["widgets"][rec["wi"]].setdefault("_tab_order", rank)
 
     # 3. spatial clusters: same page + same y-band = one visual row cluster.
     #    A monotonically-increasing cluster id per (page, y-band).
-    row_to_cluster: dict[tuple, int] = {}
     next_cluster = 0
-    for rec in widget_recs:  # already in reading order
-        r = rec["rect"]
-        band = (r["page"], round(r["y"] / 8.0))
-        if band not in row_to_cluster:
-            row_to_cluster[band] = next_cluster
-            next_cluster += 1
-        f = dump["fields"][rec["fi"]]
-        f["widgets"][rec["wi"]].setdefault("_row_cluster", row_to_cluster[band])
+    if "row_cluster" not in disabled:
+        row_to_cluster: dict[tuple, int] = {}
+        for rec in widget_recs:  # already in reading order
+            r = rec["rect"]
+            band = (r["page"], round(r["y"] / 8.0))
+            if band not in row_to_cluster:
+                row_to_cluster[band] = next_cluster
+                next_cluster += 1
+            f = dump["fields"][rec["fi"]]
+            f["widgets"][rec["wi"]].setdefault("_row_cluster", row_to_cluster[band])
 
     # 1. name decomposition: per logical field, from its name.
     for f in dump.get("fields", []):
-        f["_name_decomp"] = decompose_name(f["name"])
-        # Field-level tab order = the EARLIEST reading-order rank among its
-        # widgets (a multi-widget group is reached when its first widget is).
-        f["_tab_order"] = min(w.get("_tab_order", 1 << 30) for w in f["widgets"])
-        f["_row_cluster"] = f["widgets"][0].get("_row_cluster")
+        if "name_decomp" not in disabled:
+            f["_name_decomp"] = decompose_name(f["name"])
+        if "tab_order" not in disabled:
+            # Field-level tab order = the EARLIEST reading-order rank among its
+            # widgets (a multi-widget group is reached when its first widget is).
+            f["_tab_order"] = min(w.get("_tab_order", 1 << 30) for w in f["widgets"])
+        if "row_cluster" not in disabled:
+            f["_row_cluster"] = f["widgets"][0].get("_row_cluster")
 
     dump["_enriched"] = {
-        "signals": ["name_decomp", "tab_order", "row_cluster"],
+        "signals": [s for s in SIGNALS if s not in disabled],
+        "disabled": sorted(disabled),
         "total_widgets": len(widget_recs),
         "total_row_clusters": next_cluster,
     }
@@ -166,7 +187,11 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
     page, geometry, tooltip, choices. This is the deliberately-assembled bundle
     the 7a9.9 thesis feeds the LLM in place of the USCIS heuristic output.
     """
+    enabled = set(dump.get("_enriched", {}).get("signals", SIGNALS))
+
     fields = list(dump.get("fields", []))
+    # With tab_order disabled every key is the same -> stable sort keeps dump
+    # (name) order, matching the baseline hybrid arm's list order.
     fields.sort(key=lambda f: f.get("_tab_order", 1 << 30))
     if max_fields:
         fields = fields[:max_fields]
@@ -179,8 +204,12 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
         bits = [
             f"name={f['name']}",
             f"type={f['logical_type']}",
-            f"tab={f.get('_tab_order')}",
-            f"row={f.get('_row_cluster')}",
+        ]
+        if "tab_order" in enabled:
+            bits.append(f"tab={f.get('_tab_order')}")
+        if "row_cluster" in enabled:
+            bits.append(f"row={f.get('_row_cluster')}")
+        bits += [
             f"page={r['page']}",
             f"xy=({r['x']:.0f},{r['y']:.0f})",
         ]
@@ -209,18 +238,35 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
         lines.append("  " + " | ".join(bits))
 
     e = dump.get("_enriched", {})
-    header = (
+    head_bits = [
         f"ENRICHED FIELD LIST ({dump.get('field_count')} fields, "
-        f"{dump.get('widget_count')} widgets, {dump.get('page_count')} pages; "
-        f"{e.get('total_row_clusters','?')} visual rows). "
-        f"Listed in TAB ORDER (human reading order). Per field: exact name "
-        f"(copy verbatim into pdf_field_name), type, tab=reading-order rank, "
-        f"row=shared visual-row cluster id (fields with the SAME row id sit on "
-        f"one line -- candidates to consolidate or relate), page, xy, "
-        f"tokens=name leaf split into generic tokens (author's own delimiters; "
-        f"YOU interpret them), flags, tooltip, choices."
+        f"{dump.get('widget_count')} widgets, {dump.get('page_count')} pages"
+    ]
+    if "row_cluster" in enabled:
+        head_bits.append(f"; {e.get('total_row_clusters','?')} visual rows")
+    head_bits.append("). ")
+    head_bits.append(
+        "Listed in TAB ORDER (human reading order). " if "tab_order" in enabled
+        else "Listed in source (name) order. "
     )
-    return header + "\n" + "\n".join(lines)
+    head_bits.append(
+        "Per field: exact name (copy verbatim into pdf_field_name), type"
+    )
+    if "tab_order" in enabled:
+        head_bits.append(", tab=reading-order rank")
+    if "row_cluster" in enabled:
+        head_bits.append(
+            ", row=shared visual-row cluster id (fields with the SAME row id "
+            "sit on one line -- candidates to consolidate or relate)"
+        )
+    head_bits.append(", page, xy")
+    if "name_decomp" in enabled:
+        head_bits.append(
+            ", tokens=name leaf split into generic tokens (author's own "
+            "delimiters; YOU interpret them)"
+        )
+    head_bits.append(", flags, tooltip, choices.")
+    return "".join(head_bits) + "\n" + "\n".join(lines)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -228,11 +274,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("dump", help="path to acroform_dump.py JSON")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--text", action="store_true", help="print the prompt field list instead of JSON")
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=[],
+                    help="ablation: drop this signal (repeatable)")
     args = ap.parse_args(argv)
 
     with open(args.dump, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enriched = enrich(dump)
+    enriched = enrich(dump, disabled=frozenset(args.disable))
 
     if args.text:
         print(enriched_field_list(enriched))
