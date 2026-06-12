@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-09. See [journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md](../journal/entries/2026-06-01-bd-gfb.4-rename-section-state-vars-mis-named-part-to.md) for the internal-rename closeout; the wire-format renames (token-log + handshake manifest) landed under bd polyglot-pdf-zun / tb7.*
+*Last updated: 2026-06-12. bd polyglot-pdf-vmxx added `resume: boolean` to the handshake payload (`getHandshakePayload`) -- this is a new handshake key, not a terminology change; see schema-forms.md for the calling convention. The internal-rename closeout (gfb.4) and the wire-format renames (zun / tb7) are unchanged.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
