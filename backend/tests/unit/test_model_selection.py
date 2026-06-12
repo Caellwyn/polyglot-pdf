@@ -34,17 +34,11 @@ def test_premium_tier_resolves_to_3_1_live():
 def test_default_resolves_to_2_5_standard():
     """Regression: with NO flag supplied, the default tier is standard/2.5.
 
-    bd polyglot-pdf-4p0 had set the default to 3.1 (premium) because the 2.5
-    native-audio preview was *believed* flaky on the audio path. bd
-    polyglot-pdf-5oq REVERSED that: 3.1 unreliably emits the update_form_fields
-    tool call in audio mode (~50%, often confabulating "trouble saving" without
-    calling it -- reproduced via backend/scripts/probe_tool_call.py), while 2.5
-    calls it reliably AND measured clean on audio (bd polyglot-pdf-daa: 30/30
-    turns, zero 1011). So the working default is now 2.5. Pin it so a future
-    accidental flip back to 3.1 is caught here. The field default is read from
-    os.getenv at class-definition time, so an explicit `USE_PREMIUM_MODEL` env
-    override would invalidate this assertion -- skip in that case rather than
-    report a false fail.
+    Both models tool-call reliably; 2.5 is the default for latency (~170x faster
+    per turn on the audio path). Pin it so a future accidental flip to 3.1 is
+    caught here. The field default is read from os.getenv at class-definition
+    time, so an explicit `USE_PREMIUM_MODEL` env override would invalidate this
+    assertion -- skip in that case rather than report a false fail.
     """
     if os.getenv("USE_PREMIUM_MODEL") is not None:
         pytest.skip("USE_PREMIUM_MODEL is set in the env; can't assert the code default")
