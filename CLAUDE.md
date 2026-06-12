@@ -55,6 +55,7 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 | Anything logging PII/PHI or audit trails | `docs/standards/hipaa-pii-policy.md` + `docs/standards/confirmation-and-audit.md` |
 | VAD / activity signals (`DISABLE_GEMINI_VAD`, `activity_start/end`) | `docs/standards/voice-and-vad.md` |
 | Planning a feature/epic, filing a bead, or model-tiering a task (`/plan-epic`, exit criteria, SPEAR) | [`docs/doctrine/planning.md`](docs/doctrine/planning.md) |
+| Session drain/handover hooks (`scripts/drain_flag.py`, PreCompact/SessionStart wiring) | [`docs/doctrine/drain-handover.md`](docs/doctrine/drain-handover.md) |
 
 ---
 
