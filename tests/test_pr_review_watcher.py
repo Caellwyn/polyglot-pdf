@@ -1237,9 +1237,11 @@ def test_copilot_closed_without_merge_still_clean(capsys, monkeypatch):
 
 
 # --- --close-on-clean: deterministic CLEAN-trigger bead close (bd hrn.14) ---
-# The close fires ONLY on the CLEAN terminal state, never on COMMENTS / ERROR /
-# TIMEOUT / MERGED, and never without the flag. A failed close downgrades the
-# exit to EXIT_CLOSE_FAILED so the orchestrator triages instead of pinging
+# The close fires on CLEAN (genuine passed-review verdict) and MERGED (bd rlpq:
+# the maintainer merged the PR, which is the definitive success signal -- no
+# separate CLEAN wait needed). It does NOT fire on COMMENTS / ERROR / TIMEOUT,
+# and never without the flag. A failed close downgrades the exit to
+# EXIT_CLOSE_FAILED so the orchestrator triages instead of pinging
 # "ready to merge". These tests stub watch() (to drive the terminal state via
 # _emit, which sets cw._LAST_STATE) and _close_beads_on_clean (to spy on whether
 # the close fired) -- no network, no bd/git.
@@ -1273,13 +1275,24 @@ def _run_main_with_state(monkeypatch, state, close_args, *, close_rc=0,
     return rc, ("beads" in calls), calls.get("beads")
 
 
-@pytest.mark.parametrize("state", ["COMMENTS", "ERROR", "TIMEOUT", "MERGED"])
+@pytest.mark.parametrize("state", ["COMMENTS", "ERROR", "TIMEOUT"])
 def test_close_on_clean_does_not_fire_on_non_clean_state(monkeypatch, state):
     rc, called, _ = _run_main_with_state(
         monkeypatch, state, ["--close-on-clean", "polyglot-pdf-x1"])
     assert called is False, "{} must NOT trigger the bead close".format(state)
     # The exit code stays the review's own state code (close never ran).
     assert rc == cw._EXIT_CODES[state]
+
+
+def test_close_on_clean_fires_on_merged(monkeypatch):
+    # bd polyglot-pdf-rlpq: MERGED is also a valid close trigger (the maintainer
+    # merging the PR is the definitive success signal; waiting for a separate
+    # CLEAN review would leave the bead open after a fast merge).
+    rc, called, beads = _run_main_with_state(
+        monkeypatch, "MERGED", ["--close-on-clean", "polyglot-pdf-x1"])
+    assert called is True, "MERGED must trigger the bead close"
+    assert beads == ["polyglot-pdf-x1"]
+    assert rc == 0
 
 
 def test_close_on_clean_fires_on_clean(monkeypatch):
