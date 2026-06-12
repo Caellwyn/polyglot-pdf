@@ -20,5 +20,18 @@ Added an explicit `newValue === ''` early-return guard to `handleRadioGroup`
 that unchecks all inputs, dispatches change/input events, and returns -- skipping
 the exact and fuzzy match loops entirely. Same guard added to `handleCheckboxGroup`
 (`normalizedCheckbox.includes('')` has the same always-true trap, which would
-have checked every box instead of clearing). Mirrors the existing `handleSelect`
-empty-value branch pattern.
+have checked every box instead of clearing) and to `handleSingleRadio` (a clear
+on a single radio found by id was silently ignored). The checkbox guard also
+covers an all-empty / empty array (`['']`, `['', '']`, `[]`) -- the AI's
+"no selection" shape. Mirrors the existing `handleSelect` empty-value branch.
+New `fieldManager.clear.test.ts` pins all three shapes.
+
+## Closeout notes
+
+- Bundled with bd polyglot-pdf-z6xs (locked-field channel fix) -- both are small
+  frontend bugs in the same fill-path surface.
+- Doc-freshness flagged `docs/components/beads-remote-bootstrap.md` and
+  `docs/components/pdf-filling.md` STALE, but only by wall-clock mtime of
+  `bd_prime.py` / `pdfFiller.ts` -- neither file is in this PR's diff (this PR
+  touches only `fieldManager.ts`, `webFormConnection.ts`, and their tests). No
+  doc update needed.
