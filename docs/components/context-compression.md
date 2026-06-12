@@ -13,8 +13,8 @@ and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries
 > (3/3 twenty-turn runs, 3-4 evictions each, ON sessions 54-74% below the unbounded
 > baseline at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) AND
 > on `gemini-2.5-flash-native-audio-preview-12-2025` (3/3 twenty-turn runs, 2-3
-> evictions each -- full drops ~940-1,100 tokens, incremental partial drops as
-> low as ~220 -- ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500; the
+> evictions each -- drops ~610-1,100 tokens, plus one incremental partial of
+> ~220 -- ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500; the
 > `h04c` matrix). This overturns the 2026-06-04 dead-end verdict (bd `l3a.1`, SDK
 > 1.38.0; the journal keeps that story). **Probe trap:** 2.5 dies with `1011` after
 > turn 1 on any probe that passes `tool_declarations=None` -- identically with
@@ -259,8 +259,9 @@ consistent with the async lag -- see "How eviction actually behaves").
 
 **2.5 (`gemini-2.5-flash-native-audio-preview-12-2025`):** eviction works -- on the
 production-shaped config. With the real `TOOL_DECLARATIONS` passed, 3/3 twenty-turn
-compression-on runs evicted (2-3 drops each, ~900-1,200 tokens, oscillating
-~2,100-3,400) while compression-off compounded to ~6,000-6,500. Note the with-tools
+compression-on runs evicted (2-3 drops each, ~610-1,100 tokens plus one ~220
+incremental partial, oscillating ~2,100-3,400) while compression-off compounded
+to ~6,000-6,500. Note the with-tools
 floor: the unevictable base (system instruction + tool declarations, ~1,137 tokens
 at turn 1) sits under the retained window, so post-eviction prompts land
 ~2,100-2,460 against an 800-token target.
