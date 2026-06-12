@@ -496,9 +496,12 @@ def get_settings() -> Settings:
 # divided to per-token here. Output rates include thinking tokens. Keyed by model
 # FAMILY so the active model (MODEL_NATIVE, set by USE_PREMIUM_MODEL) selects the
 # right row -- this is what makes a 2.5 -> 3.1 A/B comparable on cost.
-# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-05-30 for
-# gemini-2.5-flash-native-audio-preview-12-2025 and gemini-3.1-flash-live-preview.
-# Updated: 2026-05-30.
+# Verified against ai.google.dev/gemini-api/docs/pricing on 2026-06-12 (bd
+# polyglot-pdf-4loz): BOTH rows match the published page exactly (no drift) --
+# 2.5 native-audio, and 3.1 flash-live at the page's
+# #gemini-3.1-flash-live-preview anchor (text in 0.75 / audio in 3.00 / text
+# out 4.50 / audio out 12.00, output incl. thinking tokens).
+# Updated: 2026-06-12.
 #
 # Columns: text_input / audio_input / text_output / audio_output (USD per 1M).
 #   2.5 (native-audio):  0.50 / 3.00 / 2.00 / 12.00

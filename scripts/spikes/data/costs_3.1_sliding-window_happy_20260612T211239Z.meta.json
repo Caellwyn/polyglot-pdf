@@ -1,0 +1,434 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-3.1-flash-live-preview",
+  "tier": "3.1",
+  "arm": "sliding-window",
+  "path": "happy",
+  "questions": 20,
+  "trigger": 12000,
+  "window": 9000,
+  "schema_scope": "full-form",
+  "started": "20260612T211239Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.812
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.875
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.921
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.625
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.125
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.984
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.015
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.859
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.907
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.0
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.078
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.766
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.734
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.047
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.0
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.687
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.75
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.719
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.906
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.875
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.906
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.891
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.062
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.0
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.766
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.281
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.969
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.891
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.672
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "3": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "8": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "9": [
+      "update_form_fields",
+      "update_form_fields"
+    ],
+    "10": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "12": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "13": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "14": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "15": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "16": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "17": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "18": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "19": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "20": [
+      "update_form_fields",
+      "confirm_field"
+    ]
+  },
+  "prompt_curve": [
+    7934,
+    16685,
+    17280,
+    17751,
+    18331,
+    18798,
+    19374,
+    19913,
+    20479,
+    20981,
+    21571,
+    22134,
+    22805,
+    23210,
+    23774,
+    25160,
+    25763,
+    26959,
+    27686,
+    23432,
+    19395,
+    20137,
+    20731,
+    21399,
+    21929,
+    22731,
+    23249,
+    24074,
+    24648,
+    25232,
+    25746,
+    26762,
+    27159,
+    23286,
+    19228,
+    20526,
+    21110,
+    21715,
+    21753,
+    22403,
+    23092
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 7.5e-07,
+    "audio_input": 3e-06,
+    "text_output": 4.5e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 25639,
+  "greeting_tokens": 8167,
+  "eviction_drops": [
+    [
+      20,
+      27686,
+      23432
+    ],
+    [
+      21,
+      23432,
+      19395
+    ],
+    [
+      34,
+      27159,
+      23286
+    ],
+    [
+      35,
+      23286,
+      19228
+    ]
+  ],
+  "client_confirmed_fields": [
+    "firstName",
+    "middleName",
+    "lastName",
+    "preferredName",
+    "pronouns",
+    "dob",
+    "age",
+    "genderIdentity",
+    "sexualOrientation",
+    "maritalStatus",
+    "partnerSpouseName",
+    "legalCustodian",
+    "mandatedBy",
+    "otherReason",
+    "problemStart",
+    "desiredChanges",
+    "strengths",
+    "primaryHousehold",
+    "householdMembers",
+    "member1_name"
+  ]
+}

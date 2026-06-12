@@ -1,0 +1,418 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+  "tier": "2.5",
+  "arm": "section-reset",
+  "path": "happy",
+  "questions": 20,
+  "trigger": null,
+  "window": null,
+  "schema_scope": "per-section",
+  "started": "20260612T192010Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.532
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.5
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.25
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.062
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.531
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.093
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.5
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.281
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 3.656
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.39
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 3.765
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.453
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.0
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.39
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.5
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.766
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.484
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.641
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.75
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.172
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.719
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.156
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 5.078
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.657
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 4.875
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 3.219
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.937
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.89
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.797
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.891
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.953
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 5.0
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 5.078
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.531
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.047
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.828
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "3": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "7": [
+      "confirm_field"
+    ],
+    "8": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "9": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "10": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "12": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "13": [],
+    "14": [],
+    "15": [],
+    "16": [],
+    "17": [],
+    "18": [],
+    "19": [],
+    "20": []
+  },
+  "prompt_curve": [
+    2275,
+    2728,
+    2809,
+    3003,
+    3224,
+    3453,
+    3650,
+    3887,
+    4065,
+    4309,
+    4726,
+    4954,
+    5394,
+    5598,
+    5846,
+    6311,
+    6464,
+    6908,
+    7032,
+    7401,
+    7619,
+    7857,
+    8085,
+    8363,
+    8733,
+    2068,
+    2874,
+    2916,
+    3621,
+    3782,
+    4395,
+    4447,
+    5118,
+    5238,
+    5751,
+    6437,
+    2609,
+    4270,
+    3698,
+    4003,
+    4161,
+    4546,
+    4662
+  ],
+  "errors": [
+    {
+      "level": "error",
+      "event": "tool_callback_error",
+      "fields": {
+        "tool": "update_form_fields",
+        "error_type": "TypeError"
+      }
+    },
+    {
+      "level": "error",
+      "event": "tool_callback_error",
+      "fields": {
+        "tool": "update_form_fields",
+        "error_type": "TypeError"
+      }
+    }
+  ],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 4587,
+  "greeting_tokens": 2485,
+  "eviction_drops": [
+    [
+      26,
+      8733,
+      2068
+    ],
+    [
+      37,
+      6437,
+      2609
+    ],
+    [
+      39,
+      4270,
+      3698
+    ]
+  ],
+  "client_confirmed_fields": [
+    "middleName",
+    "lastName",
+    "preferredName",
+    "pronouns",
+    "dob",
+    "age",
+    "genderIdentity",
+    "sexualOrientation",
+    "maritalStatus",
+    "partnerSpouseName",
+    "problemStart",
+    "desiredChanges",
+    "strengths",
+    "primaryHousehold",
+    "householdMembers",
+    "member1_name"
+  ]
+}
