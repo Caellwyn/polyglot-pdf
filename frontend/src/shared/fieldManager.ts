@@ -351,10 +351,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Example: name="reason[]" with values ["Depressed Mood", "Divorce/Custody"]
 	 */
 	function handleCheckboxGroup(checkboxInputs: NodeListOf<HTMLInputElement>, newValue: any, fieldId: string): void {
-		// Empty string (or ['']) means clear all checkboxes (bd polyglot-pdf-qc46).
-		// Without this guard, ''.includes('') is true for every option in the fuzzy-
-		// match loop below, so every checkbox would be CHECKED instead of cleared.
-		const isEmpty = newValue === '' || (Array.isArray(newValue) && newValue.length === 1 && newValue[0] === '')
+		// Empty string (or an all-empty array like [''] / ['', '']) means clear all
+		// checkboxes (bd polyglot-pdf-qc46). Without this guard,
+		// normalizedCheckbox.includes('') is true for every option in the fuzzy-match
+		// loop below, so every checkbox would be CHECKED instead of cleared.
+		const isEmpty =
+			newValue === '' ||
+			newValue == null ||
+			(Array.isArray(newValue) && newValue.every(v => v === '' || v == null))
 		if (isEmpty) {
 			for (const checkbox of checkboxInputs) {
 				checkbox.checked = false
@@ -589,14 +593,25 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Handle single radio button (fallback)
 	 */
 	function handleSingleRadio(radioEl: HTMLInputElement, newValue: string, fieldId: string): void {
+		// Empty string means clear: uncheck (bd polyglot-pdf-qc46). Without this,
+		// a clear request on a single radio found by id is silently ignored (the
+		// value-mismatch warn branch) instead of unchecking.
+		if (newValue === '') {
+			radioEl.checked = false
+			radioEl.dispatchEvent(new Event('change', { bubbles: true }))
+			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
+			console.log('[VFF FieldManager] ✓ Cleared single radio:', fieldId)
+			return
+		}
+
 		// Check if value matches
 		if (radioEl.value === newValue) {
 			radioEl.checked = true
-			
+
 			// Dispatch events
 			radioEl.dispatchEvent(new Event('change', { bubbles: true }))
 			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
-			
+
 			console.log('[VFF FieldManager] ✓ Selected single radio:', fieldId)
 		} else {
 			console.warn('[VFF FieldManager] ⚠️ Radio value mismatch:', radioEl.value, '!==', newValue)

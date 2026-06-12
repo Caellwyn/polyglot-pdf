@@ -566,10 +566,16 @@ export class WebFormConnection {
             this.state.schema
           );
 
+          // lockedReason is populated for show_if-gated fields (it names the
+          // prerequisite); a statically-hidden field (field.hidden) has none, so
+          // fall back to a short reason that does NOT restate the field name --
+          // the per-field message prefix below already names it, and doubling it
+          // ("Cannot update 'X': The field 'X' is not available yet") reads poorly
+          // and adds no information (bd polyglot-pdf-z6xs, fresh-eyes finding 4).
           lockedFields.push({
             fieldId: field.id,
             field,
-            reason: lockedReason || `The field '${field.spoken_name || field.name}' is not available yet.`
+            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).'
           });
 
           console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
