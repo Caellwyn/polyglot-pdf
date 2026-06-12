@@ -14,7 +14,7 @@ property is independent of how (or whether) the Gemini session is restarted at a
 section boundary, so the spec stays valid through any change to that reset path.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
