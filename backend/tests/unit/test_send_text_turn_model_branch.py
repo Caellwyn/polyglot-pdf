@@ -19,14 +19,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.config import model_family
+from backend.config import model_family, MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD
 from backend.adapters.live_ai_gemini import LiveAIGemini
 
 
-# Concrete model names whose family must resolve as expected; if these drift,
-# the assertion below catches it (and the whole spec rests on the mapping).
-MODEL_3P1 = "gemini-3.1-flash-live-preview"
-MODEL_2P5 = "gemini-2.5-flash-native-audio-preview-12-2025"
+# Use the REAL config model-name constants (the same ones USE_PREMIUM_MODEL
+# flips MODEL_NATIVE between), not hardcoded copies -- so if config renames a
+# model string, this spec tracks the rename instead of silently exercising a
+# stale name. The precondition test then pins that these resolve to the expected
+# families.
+MODEL_3P1 = MODEL_NATIVE_PREMIUM
+MODEL_2P5 = MODEL_NATIVE_STANDARD
 
 
 def _adapter_for(model_name: str) -> LiveAIGemini:
