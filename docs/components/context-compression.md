@@ -8,21 +8,22 @@ bead `polyglot-pdf-h04c`). Session-resumption/GoAway decisions: see
 [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md)
 and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md).*
 
-> **STATUS (2026-06-12): WORKING on 3.1 -- eviction confirmed on SDK 2.8.0; 2.5
-> blocked by unrelated instability.** Sliding-window eviction is real and reliable on
-> `gemini-3.1-flash-live-preview` given enough post-trigger runway (3/3 twenty-turn
-> runs, 3-4 evictions each, ON sessions 54-74% below the unbounded baseline at turn
-> 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`). This overturns the
-> 2026-06-04 dead-end verdict (bd `l3a.1`, SDK 1.38.0; the journal keeps that story).
-> On `gemini-2.5-flash-native-audio-preview-12-2025` compression is UNTESTED: probe
-> sessions die with `1011 Internal error` after turn 1 in ALL arms of a controlled
-> matrix -- compression off included -- so the failure is NOT compression-related
-> (classification in progress, bd `h04c`). **`CONTEXT_COMPRESSION_ENABLED` stays
+> **STATUS (2026-06-12): WORKING on BOTH models -- eviction confirmed on SDK 2.8.0.**
+> Sliding-window eviction is real and reliable on `gemini-3.1-flash-live-preview`
+> (3/3 twenty-turn runs, 3-4 evictions each, ON sessions 54-74% below the unbounded
+> baseline at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) AND
+> on `gemini-2.5-flash-native-audio-preview-12-2025` (3/3 twenty-turn runs, 2-3
+> evictions each, ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500 -- the
+> `h04c` matrix). This overturns the 2026-06-04 dead-end verdict (bd `l3a.1`, SDK
+> 1.38.0; the journal keeps that story). **Probe trap:** 2.5 dies with `1011` after
+> turn 1 on any probe that passes `tool_declarations=None` -- identically with
+> compression off, so it was never compression-related; pass the production tool
+> declarations (`--tools real`) and 2.5 is stable (bd memory
+> `gemini-2p5-1011-needs-tool-declarations`). **`CONTEXT_COMPRESSION_ENABLED` stays
 > `False`** until epic `polyglot-pdf-hcsl` picks production parameters and regression-
 > tests coherence. Re-run the verdict:
 > `backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py`
-> (matrix) or `... scripts/spikes/diag_compression_usage.py --trigger 1500 --window 800
-> --turns 20` (single config; 20 turns minimum -- see "How eviction actually behaves").
+> (matrix; 20 turns minimum -- see "How eviction actually behaves").
 
 The Gemini Live API can bound its own context window server-side via
 `ContextWindowCompressionConfig` (a compression *trigger* + a *sliding window*).
@@ -243,24 +244,31 @@ the 2.5 backend immediately open a 3.1 session rehydrated from client state for 
 seamless model switch (bd `polyglot-pdf-3v5m`). The stateless handshake makes this
 architecturally cheap; it is a separate bead, not part of the compression epic.
 
-## Validation status -- eviction CONFIRMED on 3.1; 2.5 blocked by unrelated 1011s
+## Validation status -- eviction CONFIRMED on both models (SDK 2.8.0)
 
 **3.1 (`gemini-3.1-flash-live-preview`):** eviction works. Evidence:
 `scripts/spikes/eycd_compression_eviction_findings.md` (3x 20-turn runs, full
-per-turn per-modality tables; 54-74% prompt reduction at turn 20) plus the day-1
-matrix (`scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl`: 15/15 3.1
-sessions stable across off/on-inert/on-live arms; its 10-turn on-live runs showed no
-eviction, consistent with the async lag -- see "How eviction actually behaves").
+per-turn per-modality tables; 54-74% prompt reduction at turn 20) plus the `h04c`
+matrix (`scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl`: 3/3 controlled
+20-turn on-live runs evicted, 3-4 drops each; 15/15 3.1 sessions stable across
+off/on-inert/on-live arms; the matrix's 10-turn on-live runs showed no eviction,
+consistent with the async lag -- see "How eviction actually behaves").
 
-**2.5 (`gemini-2.5-flash-native-audio-preview-12-2025`):** compression untestable so
-far. In the day-1 matrix, 14/15 2.5 probe sessions died with `1011 Internal error`
-after turn 1 **identically across compression-off, on-inert, and on-live arms** --
-the OFF control proves the failure is NOT compression-related. Whether it is
-transient server-side instability (the bd `daa` class), specific to this probe
-configuration (no tools / minimal SI -- the 4sv7 reliability spike WITH the full
-tool config got clean 2.5 sessions on 2026-06-11), or routing/alias-sensitive, is
-the open classification question of bd `h04c` (day-2 matrix adds alias, api-version,
-and with-tools cells).
+**2.5 (`gemini-2.5-flash-native-audio-preview-12-2025`):** eviction works -- on the
+production-shaped config. With the real `TOOL_DECLARATIONS` passed, 3/3 twenty-turn
+compression-on runs evicted (2-3 drops each, ~900-1,200 tokens, oscillating
+~2,100-3,400) while compression-off compounded to ~6,000-6,500. Note the with-tools
+floor: the unevictable base (system instruction + tool declarations, ~1,137 tokens
+at turn 1) sits under the retained window, so post-eviction prompts land
+~2,100-2,460 against an 800-token target.
+
+**The 2.5 "instability" was a probe artifact, not the model.** 2.5 dies with `1011
+Internal error` after turn 1 on any probe passing `tool_declarations=None` --
+identically across compression-off/on-inert/on-live (the OFF control), on v1alpha,
+and on the `-09-2025` alias (`-latest` is 1008 not-supported). With real tool
+declarations it is stable (one `1008` in 6 with-tools runs is the residual watch
+item). Production always passes tools, which is why demo traffic ran clean while
+every minimal probe crashed. See bd memory `gemini-2p5-1011-needs-tool-declarations`.
 
 **What changed since the l3a.1 dead-end:** the probes are identical; the SDK moved
 1.38.0 -> 2.8.0 (PR #156) and the server-side behavior changed -- most likely Google
