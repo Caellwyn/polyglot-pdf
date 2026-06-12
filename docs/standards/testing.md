@@ -1,8 +1,8 @@
 # Testing
 
-**Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
+**Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-06-12 (live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). Prior closeout: [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md).*
+*Last updated: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -205,4 +205,11 @@ the logic, but a **real-browser visual check** (the preview tools) is the
 load-bearing verification: `polyglot-pdf-7a9.6` shipped a green 113/113 suite while
 three runtime bugs blocked the actual PDF render, all invisible to jsdom.
 
-*Last updated: 2026-06-12 (live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). Prior closeout: [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md).*
+**A green vitest run does not prove type-correctness either.** vitest transpiles
+(esbuild) without full type-checking, so type errors -- including ones that mask
+real bugs, like a duplicate local type that let `field.required`/`field.options`
+resolve wrong -- pass the suite. The standalone `npm run typecheck`
+(`tsc --noEmit`) gate in CI's frontend job is the only thing that catches this
+class; keep it green (`polyglot-pdf-uov.17`).
+
+*Last updated: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
