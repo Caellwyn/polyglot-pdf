@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-12 (GoAway forward message, bd polyglot-pdf-c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-12 (removed dead `request_next_field_hint` branch from handleFormUpdated, bd dlbr; GoAway forward message, bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -118,18 +118,6 @@ settles to `connected`.
 frontend uses that message to stop auto-reconnecting and show a Reconnect button.
 (`/ws/echo` and `/ws/audio` use a simpler 1s-interval watchdog closing with
 `1001`.)
-
-## GoAway (Gemini-initiated pre-termination)
-
-Distinct from the idle watchdog: the Gemini Live server sends a `GoAway` (with
-`time_left`) before IT terminates the session (a periodic server lifecycle reset).
-The adapter detects `event.go_away` in the receive loop and the backend forwards
-`{"type":"go_away","time_left": ...}` to the client (bd polyglot-pdf-c5t). Unlike
-`idle_timeout`, the client does NOT suppress reconnect on a GoAway -- it is a
-server reset, so reconnect is wanted; the client routes it to an optional
-`onGoAway` callback. The pre-emptive-reconnect POLICY (acting on `time_left`) is a
-follow-on (bd polyglot-pdf-l3a.2). The backend stores nothing -- the client owns
-the reconnect (stateless invariant).
 
 ## Reconnect (no page refresh)
 
