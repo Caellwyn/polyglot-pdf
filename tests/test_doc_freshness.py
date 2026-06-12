@@ -646,8 +646,11 @@ class TestCheckDocConventionsOnTmpDocs:
         # (tier-2 reachable, NOT tier-1), so the current-state-only convention
         # does NOT apply. A plan that WOULD trip both checks (a `Previously:
         # Sprint NN` chain AND an `## Update history` section) must produce NO
-        # findings, because check_doc_conventions skips sprint plans.
-        plan = tmp_path / "sprint_9_some_feature_plan.md"
+        # findings, because check_doc_conventions skips sprint plans. The plan
+        # must live at docs/ root (location-aware exemption).
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        plan = docs / "sprint_9_some_feature_plan.md"
         plan.write_text(
             "# Sprint 9 plan\n\n*Last updated: 2026-06-12.*\n\n"
             "Previously: Sprint 8 took the other approach.\n\n"
@@ -657,21 +660,33 @@ class TestCheckDocConventionsOnTmpDocs:
         findings = freshness.check_doc_conventions(docs=[plan], repo_root=tmp_path)
         assert findings == []
 
-    def test_non_plan_doc_named_like_a_plan_is_still_scanned(self, tmp_path):
-        # Guard the exemption's boundary: a doc that is NOT a sprint plan (does
-        # not match sprint_*.md) is still scanned normally. A regular doc with a
-        # history section is flagged as before -- the exemption is plan-specific.
-        doc = _make_doc(
-            tmp_path,
-            "# Foo\n\n*Last updated: 2026-05-20.*\n\nbody\n\n## Changelog\n\n- x\n",
+    def test_component_doc_named_sprint_is_still_scanned(self, tmp_path):
+        # Guard the exemption's BOUNDARY: the exemption is for sprint PLANS (at
+        # docs/ root or docs/archive/), not for any tier-2 doc whose name starts
+        # with `sprint_`. A `docs/components/sprint_vad.md` is a normal
+        # current-state component doc and must still be flagged for a history
+        # section. (This is the case Finding 3 surfaced -- a basename-only match
+        # would have wrongly exempted it.)
+        comp = tmp_path / "docs" / "components"
+        comp.mkdir(parents=True)
+        plan_named = comp / "sprint_vad.md"
+        plan_named.write_text(
+            "# VAD\n\n*Last updated: 2026-05-20.*\n\nbody\n\n## Changelog\n\n- x\n",
+            encoding="utf-8",
         )
-        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
-        assert len(findings) == 1
+        findings = freshness.check_doc_conventions(docs=[plan_named], repo_root=tmp_path)
+        assert len(findings) == 1  # NOT exempted -- it is a component doc, not a plan
 
     def test_is_sprint_plan_predicate(self):
-        # The single source of truth for the exemption.
+        # The single source of truth for the exemption. Location-aware: only
+        # sprint_*.md at docs/ root or docs/archive/ is a plan.
         assert freshness.is_sprint_plan(pathlib.Path("docs/sprint_1_harness_plan.md"))
         assert freshness.is_sprint_plan(pathlib.Path("docs/archive/sprint_3_voice_plan.md"))
+        # location boundary: a sprint_-named doc NOT at docs/ root or archive/ is
+        # NOT a plan (must still be convention-scanned).
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint_vad.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/standards/sprint_conventions.md"))
+        # non-sprint names are never plans.
         assert not freshness.is_sprint_plan(pathlib.Path("docs/technical_guide.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("CLAUDE.md"))
         assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint.md"))

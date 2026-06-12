@@ -201,7 +201,7 @@ Run this decision procedure for any choice you face:
    internal structure, naming, helper reuse, PR shaping, and process mechanics
    remain **decide-by-default and yours** (step 3 below) even though no plan line
    spells them out. "Not literally in the plan" is not the test -- "commits to a
-   *direction* the plan didn't authorize" is. When unsure which, the Consequence
+   *direction* the plan didn't authorize" is. When unsure which, the consequence
    Test in step 3 governs; decide-by-default wins ties.
 
    **When you DO escalate, isolate the kernel -- never staple a decidable question
