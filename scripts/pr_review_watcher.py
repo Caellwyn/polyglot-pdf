@@ -199,33 +199,40 @@ class ReviewerProfile:
     branching in the classifier.
 
     Fields:
-      key                -- the --reviewer value ("copilot" / "codex").
-      label              -- human name for messages ("Copilot" / "Codex").
-      login_markers      -- case-insensitive substrings that identify the bot's
-                            login. Must match the bot specifically and NOT the
-                            generic "github-actions[bot]" actor (shared by every
-                            Actions workflow -- matching it would misclassify an
-                            unrelated bot's review as this reviewer's verdict).
-      error_body_prefix  -- a review/comment body starting with this is the
-                            bot's failure sentinel (quota/availability), NOT a
-                            finding -> ERROR.
-      uses_timeline      -- True if the bot emits copilot_work_* timeline
-                            events (Copilot). False (Codex) means completion is
-                            inferred from the review surfaces + --since floor.
-      clean_sentinels    -- extra issue-comment phrases that mean "done, no
-                            findings" for THIS reviewer (e.g. Codex's "didn't
-                            find any major issues"). Merged into the shared
-                            approval check; the shared LGTM/no-further-changes
-                            phrases apply to every reviewer.
-      clean_reaction     -- a GitHub reaction (rollup key, e.g. "+1" for thumbs-up) the
-                            bot adds to its OWN comment to signal approval. When
-                            set, a bot comment carrying this reaction with a
-                            positive count classifies CLEAN -- the canonical,
-                            language-independent approval signal. None for a
-                            reviewer that signals approval only in prose
-                            (Copilot). The rollup ships inline on the comment
-                            payload (comment["reactions"]["+1"]), so this costs
-                            no extra API call.
+      key                    -- the --reviewer value ("copilot" / "codex").
+      label                  -- human name for messages ("Copilot" / "Codex").
+      login_markers          -- case-insensitive substrings that identify the bot's
+                                login. Must match the bot specifically and NOT the
+                                generic "github-actions[bot]" actor (shared by every
+                                Actions workflow -- matching it would misclassify an
+                                unrelated bot's review as this reviewer's verdict).
+      error_body_prefix      -- a review/comment body starting with this is the
+                                bot's failure sentinel (quota/availability), NOT a
+                                finding -> ERROR.
+      error_body_substrings  -- case-insensitive substrings that ANYWHERE in the body
+                                identify a non-review notice (quota exhaustion, rate
+                                limit, etc.) that must map to ERROR. Checked BEFORE
+                                the no-inline-findings approval fallback so a quota
+                                notice ("You have reached your Codex usage limits for
+                                code reviews") cannot ride through to CLEAN (bd yic2:
+                                observed live on PR #163).
+      uses_timeline          -- True if the bot emits copilot_work_* timeline
+                                events (Copilot). False (Codex) means completion is
+                                inferred from the review surfaces + --since floor.
+      clean_sentinels        -- extra issue-comment phrases that mean "done, no
+                                findings" for THIS reviewer (e.g. Codex's "didn't
+                                find any major issues"). Merged into the shared
+                                approval check; the shared LGTM/no-further-changes
+                                phrases apply to every reviewer.
+      clean_reaction         -- a GitHub reaction (rollup key, e.g. "+1" for thumbs-up) the
+                                bot adds to its OWN comment to signal approval. When
+                                set, a bot comment carrying this reaction with a
+                                positive count classifies CLEAN -- the canonical,
+                                language-independent approval signal. None for a
+                                reviewer that signals approval only in prose
+                                (Copilot). The rollup ships inline on the comment
+                                payload (comment["reactions"]["+1"]), so this costs
+                                no extra API call.
     """
 
     key: str
@@ -233,6 +240,7 @@ class ReviewerProfile:
     login_markers: tuple[str, ...]
     error_body_prefix: str
     uses_timeline: bool
+    error_body_substrings: tuple[str, ...] = ()
     clean_sentinels: tuple[str, ...] = ()
     clean_reaction: str | None = None
 
@@ -258,11 +266,20 @@ COPILOT_PROFILE = ReviewerProfile(
 # belt-and-suspenders fallback for a clean comment that arrives before/without
 # the reaction. The bot does NOT carry "copilot" in its login, so the markers
 # stay disjoint and a Codex run never matches a Copilot comment.
+# error_body_substrings: non-review quota/usage notices Codex posts instead of
+# a verdict (bd polyglot-pdf-yic2, observed PR #163). These CANNOT start with
+# error_body_prefix ("Codex encountered an error"), so the prefix check alone
+# misses them. The substring list is small and specific -- broad terms that
+# appear in real review prose are NOT added.
 CODEX_PROFILE = ReviewerProfile(
     key="codex",
     label="Codex",
     login_markers=("codex",),
     error_body_prefix="Codex encountered an error",
+    error_body_substrings=(
+        "reached your codex usage limits",  # exact phrase from PR #163
+        "usage dashboard",                  # co-occurs; cross-ref below
+    ),
     uses_timeline=False,
     clean_reaction="+1",  # thumbs-up -- the documented canonical approval signal
     clean_sentinels=(
@@ -278,6 +295,26 @@ CODEX_PROFILE = ReviewerProfile(
 )
 
 PROFILES = {p.key: p for p in (COPILOT_PROFILE, CODEX_PROFILE)}
+
+
+def _is_error_body(body: str, profile: ReviewerProfile) -> bool:
+    """True if `body` is a bot error/quota notice that must map to ERROR.
+
+    Checks two patterns:
+      1. The body starts with the profile's error_body_prefix (the primary
+         "bot failed" sentinel -- "Copilot encountered an error", etc.).
+      2. Any of the profile's error_body_substrings appears anywhere in the
+         lower-cased body (quota exhaustion notices that do NOT begin with the
+         prefix, e.g. "You have reached your Codex usage limits for code
+         reviews" -- bd polyglot-pdf-yic2, observed live on PR #163).
+
+    Called BEFORE the approval fallback in every classification path so a quota
+    notice can never ride through to CLEAN.
+    """
+    if body.startswith(profile.error_body_prefix):
+        return True
+    lo = body.lower()
+    return any(sub in lo for sub in profile.error_body_substrings)
 
 
 def _run_gh_api(path: str) -> object:
@@ -960,8 +997,10 @@ def _classify_issue_comment_round(repo: str, pr: int, since: datetime | None, pr
     # caught (bd polyglot-pdf-x8o; bd polyglot-pdf-pjd1; fresh-eyes PR #134). The
     # full body is still shown in the emitted detail for the human reader.
 
-    # 1. Bot-failed sentinel.
-    if body.startswith(profile.error_body_prefix):
+    # 1. Bot-failed sentinel (prefix match) or quota/usage-limit notice
+    # (substring match, bd yic2). Checked BEFORE the approval fallback so a
+    # quota notice cannot ride through to CLEAN.
+    if _is_error_body(body, profile):
         return _emit("ERROR", "{} could not review this PR: {}".format(profile.label, body))
 
     # 2. PRIMARY signal: a NEW actionable inline finding this round -> COMMENTS.
@@ -1061,7 +1100,7 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: Revi
     body = (review.get("body") or "").strip()
     state = review.get("state", "")
 
-    if body.startswith(profile.error_body_prefix):
+    if _is_error_body(body, profile):
         return _emit("ERROR", "{} could not review this PR: {}".format(profile.label, body))
 
     floor = since

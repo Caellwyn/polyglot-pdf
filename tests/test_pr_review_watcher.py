@@ -1065,6 +1065,79 @@ def test_codex_error_sentinel_is_error(capsys, monkeypatch):
     assert rc == 1 and "RESULT: ERROR" in out
 
 
+# --- bd polyglot-pdf-yic2: quota/usage-limit notice must map to ERROR ---
+# Observed on PR #163 (2026-06-11): Codex replied
+# "You have reached your Codex usage limits for code reviews" -- a quota
+# notice, NOT a review. The no-inline-findings heuristic was treating it as an
+# approval and emitting RESULT: CLEAN (exit 0). These tests verify the new
+# _is_error_body guard fires BEFORE the approval fallback.
+
+def test_codex_quota_notice_is_error_via_issue_comment(capsys, monkeypatch):
+    # The exact quota message observed on PR #163. Must classify ERROR, not CLEAN.
+    body = (
+        "You have reached your Codex usage limits for code reviews. "
+        "Please check your usage dashboard for details."
+    )
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-11T10:00:00Z",
+        "body": body,
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 163, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 1, "quota notice must exit 1 (ERROR), not 0"
+    assert "RESULT: ERROR" in out
+
+
+def test_codex_quota_notice_is_error_via_formal_review(capsys, monkeypatch):
+    # Same quota body arriving as a formal review (not just an issue comment).
+    body = (
+        "You have reached your Codex usage limits for code reviews. "
+        "Please check your usage dashboard for details."
+    )
+    review = {
+        "id": 99, "state": "COMMENTED", "submitted_at": "2026-06-11T10:00:00Z",
+        "body": body, "user": {"login": _CODEX_LOGIN},
+    }
+    _patch_api(monkeypatch, reviews=[review])
+    rc = cw.watch("o/r", 163, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 1, "quota notice in a formal review must exit 1 (ERROR)"
+    assert "RESULT: ERROR" in out
+
+
+def test_is_error_body_prefix_match():
+    # Existing prefix-match behavior is preserved through the helper.
+    assert cw._is_error_body("Codex encountered an error right away.", CODEX) is True
+    assert cw._is_error_body("Codex encountered an error right away.", cw.COPILOT_PROFILE) is False
+    assert cw._is_error_body(
+        "Copilot encountered an error processing the PR.", cw.COPILOT_PROFILE
+    ) is True
+
+
+def test_is_error_body_substring_match():
+    # New substring-based path: quota phrases that do NOT start with the prefix.
+    assert cw._is_error_body(
+        "You have reached your Codex usage limits for code reviews.", CODEX
+    ) is True
+    assert cw._is_error_body(
+        "Please check your usage dashboard for more details.", CODEX
+    ) is True
+    # Must be case-insensitive.
+    assert cw._is_error_body(
+        "You have Reached Your Codex Usage Limits for code reviews.", CODEX
+    ) is True
+
+
+def test_is_error_body_clean_comment_is_not_error():
+    # A normal approval comment must NOT match the error substrings.
+    assert cw._is_error_body("LGTM", CODEX) is False
+    assert cw._is_error_body(
+        "Codex Review: Didn't find any major issues.", CODEX
+    ) is False
+
+
 def test_codex_change_ask_prose_is_comments(capsys, monkeypatch):
     # A Codex issue-comment that asks for a change (no inline) -> COMMENTS, via
     # the same change-ask gate the Copilot path uses.
