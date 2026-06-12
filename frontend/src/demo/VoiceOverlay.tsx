@@ -1134,6 +1134,15 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			try {
 				// Reconnect to backend
 				await handleConnect()
+				// handleConnect() does not throw on timeout -- it calls setError and returns
+				// normally. Re-check status so a silent timeout does not fall through to
+				// switchToFirstSection on a dead connection (bd polyglot-pdf-ppf1).
+				const postReconnectStatus = connectionManager?.getStatus()
+				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
+					console.error('[VoiceOverlay] ❌ Reconnect timed out, status:', postReconnectStatus)
+					setError('Connection lost - please click Reconnect')
+					return
+				}
 				reconnected = true
 				console.log('[VoiceOverlay] ✅ Reconnected after disclaimer acceptance')
 			} catch (err) {

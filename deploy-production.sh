@@ -33,11 +33,13 @@ echo -e "${GREEN}[INFO]${NC} Project: $POLYGLOT_PROJECT_NAME"
 # profile sync on login). Skip on backend/form-kits-only runs, which do not touch
 # the frontend.
 DEPLOY_RULES=false
-if [ $# -eq 0 ] || [ "$1" = "--all" ]; then
+if [ $# -eq 0 ]; then
     DEPLOY_RULES=true
 else
     for arg in "$@"; do
-        [ "$arg" = "--frontend" ] && DEPLOY_RULES=true
+        if [ "$arg" = "--all" ] || [ "$arg" = "--frontend" ]; then
+            DEPLOY_RULES=true
+        fi
     done
 fi
 

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-12. See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](../journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the tool-call-compliance note (both models reliable), [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying untyped-param fix, [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-12 (handleDisclaimerAgree reconnect fall-through guard added to both overlays, bd ppf1; tool-call-compliance note for both models reliable, bd wpw.4). See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](../journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the tool-call-compliance note, [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying untyped-param fix, [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -54,10 +54,10 @@ The `VAD_*` settings in `backend/config.py` were hard-coded literals until bd
 Zero `code=1011` closures were observed across ~24 sessions on 2026-06-11
 (both models), consistent with bd `daa`'s "transient upstream outage" verdict.
 
-Note: the VAD work here fixes turn REGISTRATION. Tool-call COMPLIANCE is
-separate and reliable on both models -- each emits `update_form_fields` +
-`confirm_field` every turn (A/B on native-hi: 8/8 turns + 4/4 short-"yes"
-confirms per model). See [ai-models.md](ai-models.md) for the model rationale.
+Caveat: turn REGISTRATION is fixed by this; tool-call COMPLIANCE under the
+app's full system instruction is a separate, pre-existing defect (2.5 hears the
+"yes" but does not call `confirm_field`; 3.1 skips `update_form_fields`) --
+tracked in bd `polyglot-pdf-i9q8` with the full E2E evidence.
 
 ## Manual mode: client-side VAD, not Gemini's
 
