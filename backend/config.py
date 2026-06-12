@@ -342,6 +342,7 @@ class Settings(BaseModel):
     "- When asking for a field, use natural phrasing without saying 'field' or IDs\n"
     "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
     "- Sanity check dates/phones/ZIP codes\n"
+    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
 
     "CONFIRMATION:\n{confirmation_policy}"
@@ -397,6 +398,7 @@ class Settings(BaseModel):
     "- Never abbreviate spoken names (use full name from schema)\n"
     "- When asking for a field, use natural phrasing without mentioning 'field' or IDs\n"
     "- For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
+    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
     "- Keep interactions conversational and empathetic - this is a medical form\n\n"
 
     "END-OF-SECTION CONFIRMATION:\n"

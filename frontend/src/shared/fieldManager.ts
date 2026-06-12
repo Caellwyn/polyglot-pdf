@@ -269,6 +269,22 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Handle select dropdown
 	 */
 	function handleSelect(selectEl: HTMLSelectElement, newValue: string, fieldId: string): void {
+		// An empty string means "clear this field" (bd polyglot-pdf-jbxm). Prefer
+		// the explicit empty-value option when present (index 0 placeholder); fall
+		// back to selectedIndex = -1 so the DOM reflects no selection.
+		if (newValue === '') {
+			const hasEmptyOption = selectEl.options.length > 0 && selectEl.options[0].value === ''
+			if (hasEmptyOption) {
+				selectEl.selectedIndex = 0
+			} else {
+				selectEl.selectedIndex = -1
+			}
+			selectEl.dispatchEvent(new Event('change', { bubbles: true }))
+			selectEl.dispatchEvent(new Event('input', { bubbles: true }))
+			console.log('[VFF FieldManager] ✓ Cleared select:', fieldId)
+			return
+		}
+
 		// Try exact match first
 		let matched = false
 		for (let i = 0; i < selectEl.options.length; i++) {
@@ -280,7 +296,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				break
 			}
 		}
-		
+
 		// Try fuzzy match if exact match failed
 		if (!matched) {
 			const lowerValue = newValue.toLowerCase()
@@ -288,7 +304,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				const option = selectEl.options[i]
 				const lowerText = option.text.toLowerCase()
 				const lowerOptionValue = option.value.toLowerCase()
-				
+
 				if (lowerText.includes(lowerValue) || lowerValue.includes(lowerText) ||
 				    lowerOptionValue.includes(lowerValue) || lowerValue.includes(lowerOptionValue)) {
 					selectEl.selectedIndex = i
@@ -298,11 +314,11 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				}
 			}
 		}
-		
+
 		if (!matched) {
 			console.warn('[VFF FieldManager] ⚠️ No matching option found for:', newValue, 'in', fieldId)
 		}
-		
+
 		// Dispatch change event for form handlers
 		selectEl.dispatchEvent(new Event('change', { bubbles: true }))
 		selectEl.dispatchEvent(new Event('input', { bubbles: true }))
