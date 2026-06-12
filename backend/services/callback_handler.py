@@ -170,7 +170,31 @@ class CallbackHandler:
             except Exception as e:
                 # Swallow errors to avoid crashing the session loop
                 _log.warning("websocket_audio_send_failed", error=str(e), session_id=self._session_id)
-    
+
+    async def on_go_away(self, time_left: Optional[str]) -> None:
+        """Forward a Gemini Live GoAway to the client (bd polyglot-pdf-c5t).
+
+        The Live server sends GoAway before terminating the connection; relaying
+        it (with time_left, a duration string) lets the client pre-emptively
+        reconnect ahead of the abrupt close. Distinct WS message type so the
+        client can act on it without parsing the generic error/close path. The
+        backend stores nothing -- the client owns the reconnect (stateless
+        invariant holds). Errors are swallowed so a send failure never crashes
+        the session loop (same discipline as on_audio/on_transcript).
+        """
+        # `is not None` (not a truthiness check): a Starlette WebSocket is
+        # Mapping-like (__len__), so `if self._websocket:` is False for an empty
+        # one -- and for a MagicMock(spec=WebSocket) in tests. We want "is a
+        # websocket present", which is an identity check.
+        if self._websocket is not None:
+            try:
+                await self._websocket.send_json(
+                    {"type": "go_away", "time_left": time_left}
+                )
+            except Exception as e:
+                _log.warning("websocket_go_away_send_failed",
+                             error=str(e), session_id=self._session_id)
+
     async def on_tool_call(
         self,
         tool_name: str,

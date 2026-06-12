@@ -224,6 +224,12 @@ class LiveAIGemini(ILiveAI):
         self._on_transcript = None
         self._on_audio = None
         self._on_tool_call = None
+        # Fired when the Live server sends a GoAway message before terminating the
+        # connection (bd polyglot-pdf-c5t). Carries time_left (a duration string)
+        # so the client can pre-emptively reconnect before the abrupt close. The
+        # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
+        # the stateless reconnect path), so no server-side session state is added.
+        self._on_go_away = None
         # Optional diagnostic observer for the RAW per-turn usage_metadata object
         # (default None = production no-op). Lets a measurement harness inspect fields
         # the cost path does not consume -- e.g. cached_content_token_count / traffic_type
@@ -436,6 +442,7 @@ class LiveAIGemini(ILiveAI):
         on_transcript=None,
         on_audio=None,
         on_tool_call=None,
+        on_go_away=None,
         system_instruction: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
@@ -443,13 +450,16 @@ class LiveAIGemini(ILiveAI):
         """Register callbacks and ensure the background session task is running.
 
         Callbacks should be async callables. They will be awaited when invoked.
+        on_go_away is optional (bd polyglot-pdf-c5t): older callers that do not
+        pass it leave GoAway detection logged-only, with no forward.
         """
         # Removed verbose logging - session lifecycle is logged elsewhere
-        
+
         self._on_form_update = on_form_update
         self._on_transcript = on_transcript
         self._on_audio = on_audio
         self._on_tool_call = on_tool_call
+        self._on_go_away = on_go_away
         self._system_instruction = system_instruction
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
         # Honor explicit enable_transcripts flag from the caller (UI/service).
@@ -1381,6 +1391,28 @@ class LiveAIGemini(ILiveAI):
                                         })
                                     except Exception:
                                         pass
+
+                                # GoAway: the Live server sends this BEFORE it
+                                # terminates the connection, with time_left (a
+                                # duration string) (bd polyglot-pdf-c5t). Surface it
+                                # so the client can pre-emptively reconnect ahead of
+                                # the abrupt close instead of hitting a mid-turn drop.
+                                # Detection is best-effort and never breaks the loop:
+                                # the real close still arrives later as ConnectionClosed
+                                # / APIError and takes the graceful-break path below.
+                                go_away = getattr(event, "go_away", None)
+                                if go_away is not None:
+                                    time_left = getattr(go_away, "time_left", None)
+                                    self._log.warning(
+                                        "gemini_go_away_received",
+                                        time_left=time_left,
+                                        event_count=event_count,
+                                    )
+                                    if self._on_go_away is not None:
+                                        try:
+                                            await self._on_go_away(time_left)
+                                        except Exception:
+                                            self._log.exception("on_go_away_callback_error")
 
                                 # Audio/transcript/tool extraction
                                 responses: list[types.FunctionResponse] = []

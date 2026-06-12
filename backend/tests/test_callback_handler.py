@@ -322,3 +322,46 @@ class TestConfirmFieldNextHint:
         # keep going rather than wrap up.
         assert "All fields confirmed" not in response["message"]
         assert "do NOT assume the form is complete" in response["message"]
+
+
+class TestGoAway:
+    """on_go_away forwards a Live GoAway to the client (bd polyglot-pdf-c5t)."""
+
+    @pytest.mark.asyncio
+    async def test_on_go_away_forwards_ws_message_with_time_left(
+        self, callback_handler, mock_websocket
+    ):
+        await callback_handler.on_go_away("3.5s")
+        mock_websocket.send_json.assert_awaited_once_with(
+            {"type": "go_away", "time_left": "3.5s"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_go_away_forwards_none_time_left(
+        self, callback_handler, mock_websocket
+    ):
+        # The SDK field is Optional[str]; a missing time_left still forwards so the
+        # client at least learns a GoAway arrived.
+        await callback_handler.on_go_away(None)
+        mock_websocket.send_json.assert_awaited_once_with(
+            {"type": "go_away", "time_left": None}
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_go_away_swallows_send_failure(
+        self, callback_handler, mock_websocket
+    ):
+        # A WS send failure must never crash the session loop (same discipline as
+        # on_audio / on_transcript).
+        mock_websocket.send_json.side_effect = RuntimeError("ws closed")
+        await callback_handler.on_go_away("1s")  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_on_go_away_noop_without_websocket(self, mock_coordinator):
+        # No websocket -> nothing sent, no crash.
+        handler = CallbackHandler(
+            websocket=None,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        await handler.on_go_away("2s")  # must not raise
