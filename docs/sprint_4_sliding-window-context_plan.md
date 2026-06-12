@@ -33,6 +33,17 @@ Maintainer constraints baked into the design:
 - **All pre-cutover experimental findings are stale hypotheses** (bd memory
   `pre-sdk28-findings-stale-recheck-everything`): re-verify, and update docs
   where stale claims live, as part of each bead.
+- **Deploy fidelity is mandatory for every probe and measurement** (maintainer,
+  2026-06-12, after the h04c classification): probes always pass the production
+  tool declarations, and the phase-2 measurement beads (4loz, wyhh) drive the
+  ACTUAL production system-instruction path (`build_form_context_message` with
+  the real demo schema), realistic in-context answers, and the model's real
+  spoken responses -- the cost comparison and the turn-memory-vs-context-length
+  distribution must reflect the real demo deploy, not a synthetic stand-in. See
+  the rule in [docs/standards/testing.md](standards/testing.md) ("Live-endpoint
+  probes and spikes"). Background: a minimal no-tools probe produced a week of
+  false "2.5 is unstable" verdicts (bd memory
+  `gemini-2p5-1011-needs-tool-declarations`).
 
 ## Exit rubric
 

@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md) for closeout details.*
+*Last updated: 2026-06-12 (live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). Prior closeout: [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -139,6 +139,24 @@ Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
 `filled=0`, a curl recipe against `/api/fill-pdf`); see also
 [pdf-filling.md](../components/pdf-filling.md#debugging).
 
+## Live-endpoint probes and spikes: deploy fidelity is mandatory
+
+**A probe must represent what deploy will actually send** (maintainer directive,
+2026-06-12): the production tool declarations, the real system-instruction path
+(`build_form_context_message` with a real schema — not a one-line stand-in), and
+realistic user-answer content. A "minimal" probe config is a different system with
+different behavior, and its verdicts do not transfer. This rule exists because a
+minimal probe (`tool_declarations=None`) crashed `gemini-2.5` Live sessions with
+1011s for a week across multiple sessions, producing false "2.5 is unstable /
+transient server-side" verdicts — while the deploy-shaped config was stable the
+whole time, and even evicted under compression (bd `h04c`; bd memory
+`gemini-2p5-1011-needs-tool-declarations`). Deviate from deploy config only as a
+deliberate, labeled experimental arm (e.g. an isolation control), never as the
+probe's default. Cost/behavior measurements (token curves, latency, tool-call
+compliance) additionally need realistic CONTENT — production-length system
+instructions and plausible answers — because the unevictable base (SI + tools)
+sets the floor the numbers sit on.
+
 ## Coverage & CI
 
 **Coverage tooling is wired on all three stacks but opt-in (a secondary signal,
@@ -187,4 +205,4 @@ the logic, but a **real-browser visual check** (the preview tools) is the
 load-bearing verification: `polyglot-pdf-7a9.6` shipped a green 113/113 suite while
 three runtime bugs blocked the actual PDF render, all invisible to jsdom.
 
-*Last updated: 2026-06-09. See [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md) for closeout details.*
+*Last updated: 2026-06-12 (live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). Prior closeout: [../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md](../journal/entries/2026-06-09-bd-uov.2-coverage-ci.md).*
