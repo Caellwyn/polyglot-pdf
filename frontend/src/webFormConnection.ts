@@ -1150,8 +1150,20 @@ export class WebFormConnection {
     // it (a deadlock). The REQUIRED case is already handled upstream: validateField
     // treats `[]` as empty, so a required-blank fails the required check at the apply
     // gate and never lands. So hasUsableValue keeps the null/undefined/'' notion only.
+    //
+    // NOTE on empty strings for optional fields (bd polyglot-pdf-w3ic): the same
+    // reasoning applies to text/select/etc. fields whose schema marks them NOT
+    // required. An intentionally blank optional field (e.g. "I have no middle name")
+    // is a legitimate, confirmable end state -- '' means the user explicitly said
+    // this does not apply, and Gemini already called update_form_fields with ''.
+    // Required fields can never arrive here with '' because validateField rejects ''
+    // for required fields at the applyAiValueWithValidation gate, so the value
+    // never lands. Therefore, treat '' as usable when the field is not required.
+    const fieldSchema = this.state.schema.fields.find(f => f.id === field_id);
+    const fieldIsRequired = fieldSchema?.validation?.required === true;
     const hasUsableValue =
-      fieldValue !== null && fieldValue !== undefined && fieldValue !== '';
+      fieldValue !== null && fieldValue !== undefined &&
+      (fieldValue !== '' || !fieldIsRequired);
 
     if (!hasUsableValue) {
       if (field_id === this.lastUnconfirmableFieldId) {
