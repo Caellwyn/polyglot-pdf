@@ -159,7 +159,8 @@ def _normalize_schema(schema) -> dict:
 
 def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
                  pdf_path: Optional[str],
-                 disabled: frozenset[str] = frozenset()) -> str:
+                 disabled: frozenset[str] = frozenset(),
+                 order_caveat: bool = False) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
     enriched bundle). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
@@ -189,7 +190,7 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
             "deterministically from the PDF. No PDF pixels are provided (ablation) "
             "-- reason from the bundle alone.\n"
         )
-    parts.append(enriched_field_list(dump))
+    parts.append(enriched_field_list(dump, order_caveat=order_caveat))
     return "\n".join(parts)
 
 
@@ -260,7 +261,21 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
     envelope = json.loads(proc.stdout)
     if envelope.get("is_error"):
         raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
-    schema = _normalize_schema(_extract_json(envelope.get("result", "")))
+    result_text = envelope.get("result", "")
+    try:
+        schema = _normalize_schema(_extract_json(result_text))
+    except json.JSONDecodeError:
+        # Empty/non-JSON result (e.g. the CLI session hit a turn/length limit
+        # and ended without final text). Dump the envelope for diagnosis.
+        dbg = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "outputs", "_claude_cli_fail_envelope.json")
+        with open(dbg, "w", encoding="utf-8") as fh:
+            json.dump(envelope, fh, indent=2)
+        raise RuntimeError(
+            f"claude CLI returned unparseable result "
+            f"(subtype={envelope.get('subtype')!r}, "
+            f"num_turns={envelope.get('num_turns')}, "
+            f"result_chars={len(result_text)}); envelope dumped to {dbg}")
     usage = envelope.get("usage") or {}
     tok = {"input": usage.get("input_tokens"),
            "output": usage.get("output_tokens"),
@@ -271,10 +286,11 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
 def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
         send_pdf: bool = True,
-        disabled: frozenset[str] = frozenset()) -> dict:
+        disabled: frozenset[str] = frozenset(),
+        order_caveat: bool = False) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
     prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
-                          disabled=disabled)
+                          disabled=disabled, order_caveat=order_caveat)
 
     # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
     # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
@@ -292,6 +308,7 @@ def run(pdf_path: str, acroform_path: str, model: str,
         "arm": "llm-native", "model": model, "backend": backend,
         "enriched": True, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
         "disabled_signals": sorted(disabled),
+        "order_caveat": order_caveat,
     })
     if tok:
         schema["_bakeoff"]["tokens"] = tok
@@ -309,6 +326,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--disable", action="append", choices=SIGNALS, default=[],
                     help="ablation: drop this enrichment signal (repeatable; "
                          "bd 7a9.10)")
+    ap.add_argument("--order-caveat", action="store_true",
+                    help="present the order rank honestly as a geometric sweep "
+                         "with a multi-column interleave warning (bd 7a9.10)")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
@@ -317,7 +337,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     schema = run(args.pdf, args.acroform, args.model,
                  fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf,
-                 disabled=frozenset(args.disable))
+                 disabled=frozenset(args.disable),
+                 order_caveat=args.order_caveat)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))

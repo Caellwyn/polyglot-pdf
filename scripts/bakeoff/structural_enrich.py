@@ -179,7 +179,8 @@ def enrich(dump: dict, disabled: frozenset[str] = frozenset()) -> dict:
 # Prompt rendering: an enriched field list (replaces acroform_field_list)
 # --------------------------------------------------------------------------- #
 
-def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
+def enriched_field_list(dump: dict, max_fields: int | None = None,
+                        order_caveat: bool = False) -> str:
     """Render the enriched dump as a compact text field list for the prompt.
 
     One line per logical field in TAB ORDER (not name order), exposing the
@@ -206,7 +207,8 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
             f"type={f['logical_type']}",
         ]
         if "tab_order" in enabled:
-            bits.append(f"tab={f.get('_tab_order')}")
+            key = "sweep" if order_caveat else "tab"
+            bits.append(f"{key}={f.get('_tab_order')}")
         if "row_cluster" in enabled:
             bits.append(f"row={f.get('_row_cluster')}")
         bits += [
@@ -245,15 +247,25 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
     if "row_cluster" in enabled:
         head_bits.append(f"; {e.get('total_row_clusters','?')} visual rows")
     head_bits.append("). ")
-    head_bits.append(
-        "Listed in TAB ORDER (human reading order). " if "tab_order" in enabled
-        else "Listed in source (name) order. "
-    )
+    if "tab_order" not in enabled:
+        head_bits.append("Listed in source (name) order. ")
+    elif order_caveat:
+        head_bits.append(
+            "Listed in a mechanical GEOMETRIC SWEEP order (top-to-bottom, "
+            "then left-to-right within a y-band). CAUTION: this sweep is NOT "
+            "the human reading order -- on multi-column pages it INTERLEAVES "
+            "the columns. Derive the true logical order YOURSELF from page, "
+            "xy, and the PDF's visual layout; treat the sweep rank only as a "
+            "rough spatial-locality hint. "
+        )
+    else:
+        head_bits.append("Listed in TAB ORDER (human reading order). ")
     head_bits.append(
         "Per field: exact name (copy verbatim into pdf_field_name), type"
     )
     if "tab_order" in enabled:
-        head_bits.append(", tab=reading-order rank")
+        head_bits.append(", sweep=geometric-sweep rank" if order_caveat
+                         else ", tab=reading-order rank")
     if "row_cluster" in enabled:
         head_bits.append(
             ", row=shared visual-row cluster id (fields with the SAME row id "
