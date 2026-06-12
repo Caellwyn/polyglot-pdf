@@ -611,7 +611,6 @@ export class WebFormConnection {
     const data = (message && message.data) || {};
     const formState = data.form_state || {};
     const applied = data.applied_fields || {};
-    const requestId = data.request_id;
     const nextFieldSchema = data.next_field_schema; // JIT mode: backend sends next field schema
 
     if (!formState || typeof formState !== "object") {
