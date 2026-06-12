@@ -33,6 +33,35 @@ planning time.** A blind spot named before execution costs one sentence; named
 after costs a re-do. Silent agreement with a flawed approach is the failure mode
 planning exists to prevent.
 
+## Plan traceability
+
+Every bead traces to a **maintainer-approved plan** -- the scope-of-record that
+authorized the work. This is what makes "implement the maintainer's choices, never
+invent" checkable, and it is the prerequisite for widening autonomy (R4's guarded
+auto-merge; bd `polyglot-pdf-h2r.3`). Two halves:
+
+- **The link is machine-readable: every epic that traces to a sprint plan carries
+  a `plan:` metadata pointer** to that plan file (e.g. `plan:
+  docs/sprint_2_spear-adoption_plan.md`). `/plan-epic` sets it at creation; an
+  epic without one is an incomplete filing (backfill it). The sprint plan is a
+  **tier-2 reachable** doc (NOT always-loaded -- several sprints run in parallel),
+  found via the "Active sprint plans" row in
+  [`INDEX.md`](../INDEX.md) or the epic's `plan:` pointer. Plans are a
+  chronological plan of record and so are exempt from the current-state-only doc
+  convention (see [`doc-architecture.md`](../doc-architecture.md)).
+
+- **Traceability is a LENS on the existing escalation rule, not a new gate.** It
+  sharpens [`CLAUDE.md`](../../CLAUDE.md)'s step-2 trigger: when weighing whether a
+  choice reaches *beyond what the bead authorizes*, ask **"is this derivable from
+  the plan the bead traces to?"** A choice that commits to a direction the plan
+  neither states nor implies is the step-2 "product/direction or beyond-bead
+  commitment" case -- **escalate.** This does **not** pull implementation /
+  internal-structure / process-mechanics choices into escalation: those stay
+  decide-by-default (CLAUDE.md step 3). The traceability lens only sharpens the
+  *existing* beyond-bead line; it never overrides decide-by-default. In-bounds
+  autonomous calls are recorded (not escalated) in the merge report's
+  defended-decision list.
+
 ## The exit rubric
 
 Every epic (and every standalone ticket) carries an **exit rubric**: a small set

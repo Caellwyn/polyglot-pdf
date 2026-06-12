@@ -9,7 +9,7 @@ This project organizes its docs for **progressive discovery**: a small always-lo
 | Tier | What | Loaded |
 |------|------|--------|
 | **1 -- Always loaded** | `CLAUDE.md` (top-level rules + doc map) and `docs/INDEX.md` (the canonical map). | Auto, every session. Keep these LEAN -- they point, they don't duplicate. |
-| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. |
+| **2 -- Easily reached** | `docs/components/<surface>.md` (one per user-facing surface or subsystem), `docs/standards/*.md` (cross-cutting rules: testing, security, performance, conventions, review), `docs/technical_guide.md` (system-wide routes/endpoints/gotchas), and the **active sprint plans** `docs/sprint_<N>_<slug>_plan.md` (each sprint's maintainer-approved scope-of-record). | On demand, when that surface or concern is in scope. A "trigger read" in CLAUDE.md tells the agent when. Reach a plan via the "Active sprint plans" row in [`INDEX.md`](INDEX.md) or the owning epic's `plan:` metadata. |
 | **3 -- Indexed / historical** | `docs/journal/entries/*.md` (one file per sprint/bead, YAML-frontmatter tagged), `docs/journal/TAGS.md` (the controlled tag vocabulary = the per-feature index), `docs/archive/` (completed plans). | On demand, when investigating "why was this built this way?" or "when did X change?" |
 
 **The key move:** tier 1 stays small and stable; everything else is reached only when relevant. The agent never loads the whole corpus -- it loads CLAUDE.md + INDEX.md, then follows pointers. This is what keeps a large doc set from bloating every session's context.
@@ -48,6 +48,8 @@ Tier-1 and tier-2 docs describe CURRENT STATE ONLY:
 - No "Sprint NN did X" narrative threaded through body prose.
 
 Chronological history lives in the **journal** (tier 3), which is append-only at the corpus level (write a new entry file; never edit an old one). The checker's regexes (`PREVIOUSLY_CHAIN_RE`, `HISTORY_HEADING_RE`) flag violations; the CI test fails on them. **Prune-on-bump:** when you update a stamp, replace the old content, don't append.
+
+**Sprint plans are exempt from this rule.** A `docs/sprint_<N>_<slug>_plan.md` is a tier-2 doc (reachable on demand) but a **chronological plan of record** -- it legitimately sequences a sprint (R1 -> R2 -> R3 ...) and records A/B notes. So the current-state-only convention does NOT apply to plans, and `check_doc_freshness.py` deliberately does not convention-scan them (they sit outside the scanned set: `TIER1_DOCS` + `docs/components/*` + `docs/standards/*`). Plans are intentionally **not tier-1 (not always-loaded)**: with several sprints in flight in parallel, a session loads only the plan its bead traces to, not all of them.
 
 ### 4. Trigger reads bake review into the work
 

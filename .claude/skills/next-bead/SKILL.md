@@ -144,6 +144,15 @@ Only after the bead has exit criteria do you start editing. Skipping this gate o
 a criteria-less bead reintroduces the silent-scope-drift problem the rubric
 exists to prevent.
 
+> **Plan-traceability checkpoint (claim time).** As you read the bead body, note
+> the plan it traces to -- the owning epic's `plan:` metadata pointer (`bd show
+> <epic-id>`). As you work, any choice that commits to a *direction the plan
+> neither states nor implies* is a step-2 escalation, not a decide-yourself call;
+> implementation/structure/process choices stay yours (decide-by-default). This is
+> the escalation **lens**, not a new gate -- full rule in
+> [`planning.md`](../../../docs/doctrine/planning.md#plan-traceability) and CLAUDE.md
+> "Escalation vs. autonomy" step 2.
+
 When the work is done, ship it through **`/closeout`** (which closes the bead(s)
 and pings the maintainer to merge -- this skill never merges).
 

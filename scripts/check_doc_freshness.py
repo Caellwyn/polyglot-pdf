@@ -402,6 +402,23 @@ def find_root_sprint_plans(docs_dir: Path = DOCS_DIR) -> set[str]:
     return {p.name for p in docs_dir.glob("sprint_*.md") if p.is_file()}
 
 
+def is_sprint_plan(path: Path) -> bool:
+    """True for a sprint plan doc (``docs/sprint_*.md``, active root or archived).
+
+    Sprint plans are a tier-2 reachable doc but a CHRONOLOGICAL plan of record:
+    they sequence a sprint (R1 -> R2 -> R3 ...) and record A/B notes, so the
+    current-state-only convention (no ``Previously:`` chains / history sections)
+    deliberately does NOT apply to them (bd polyglot-pdf-h2r.3; see
+    docs/doc-architecture.md "Sprint plans are exempt"). This is the single
+    source of truth for that exemption -- ``check_doc_conventions`` skips any
+    target it matches, so the exemption holds even if a plan is ever added to
+    ``TIER1_DOCS`` by a future hand."""
+    name = path.name
+    # docs/sprint_*.md at root OR under archive/. Match on basename so the
+    # check is location-independent (active plan vs archived copy).
+    return name.startswith("sprint_") and name.endswith(".md")
+
+
 def check_sprint_archive(
     docs_dir: Path = DOCS_DIR,
     index_path: Path = INDEX_MD,
@@ -458,6 +475,12 @@ def check_doc_conventions(
         if d not in targets:
             targets.append(d)
     for doc in targets:
+        # Sprint plans are exempt from the current-state-only convention: they
+        # are a chronological plan of record (see is_sprint_plan). Skip them
+        # here even if one is ever in TIER1_DOCS, so the exemption can't silently
+        # lapse (bd polyglot-pdf-h2r.3).
+        if is_sprint_plan(doc):
+            continue
         try:
             text = doc.read_text(encoding="utf-8")
         except OSError:

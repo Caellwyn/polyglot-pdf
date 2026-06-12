@@ -641,6 +641,41 @@ class TestCheckDocConventionsOnTmpDocs:
         assert len(findings) == 1
         assert "Previously" in findings[0][1]
 
+    def test_sprint_plan_is_exempt_from_convention_scan(self, tmp_path):
+        # bd polyglot-pdf-h2r.3: sprint plans are a chronological plan of record
+        # (tier-2 reachable, NOT tier-1), so the current-state-only convention
+        # does NOT apply. A plan that WOULD trip both checks (a `Previously:
+        # Sprint NN` chain AND an `## Update history` section) must produce NO
+        # findings, because check_doc_conventions skips sprint plans.
+        plan = tmp_path / "sprint_9_some_feature_plan.md"
+        plan.write_text(
+            "# Sprint 9 plan\n\n*Last updated: 2026-06-12.*\n\n"
+            "Previously: Sprint 8 took the other approach.\n\n"
+            "## Update history\n\n- 2026-06-01 R1 shipped\n- 2026-06-12 R2 shipped\n",
+            encoding="utf-8",
+        )
+        findings = freshness.check_doc_conventions(docs=[plan], repo_root=tmp_path)
+        assert findings == []
+
+    def test_non_plan_doc_named_like_a_plan_is_still_scanned(self, tmp_path):
+        # Guard the exemption's boundary: a doc that is NOT a sprint plan (does
+        # not match sprint_*.md) is still scanned normally. A regular doc with a
+        # history section is flagged as before -- the exemption is plan-specific.
+        doc = _make_doc(
+            tmp_path,
+            "# Foo\n\n*Last updated: 2026-05-20.*\n\nbody\n\n## Changelog\n\n- x\n",
+        )
+        findings = freshness.check_doc_conventions(docs=[doc], repo_root=tmp_path)
+        assert len(findings) == 1
+
+    def test_is_sprint_plan_predicate(self):
+        # The single source of truth for the exemption.
+        assert freshness.is_sprint_plan(pathlib.Path("docs/sprint_1_harness_plan.md"))
+        assert freshness.is_sprint_plan(pathlib.Path("docs/archive/sprint_3_voice_plan.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/technical_guide.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("CLAUDE.md"))
+        assert not freshness.is_sprint_plan(pathlib.Path("docs/components/sprint.md"))
+
 
 class TestCurrentRepoIsCleanOfChainsAndHistorySections:
     """CI gate: every tier-1 and tier-2 doc in this repo must be clean.

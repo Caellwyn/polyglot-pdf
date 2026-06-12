@@ -191,6 +191,19 @@ Run this decision procedure for any choice you face:
    - **A bead that is ambiguous, self-contradictory, or proven untenable** -- it
      can't proceed without the owner revising it.
 
+   **Traceability lens (a sharpening of the two triggers above, NOT a new
+   trigger).** Every bead traces to a maintainer-approved plan (the epic's `plan:`
+   pointer -- see [`docs/doctrine/planning.md`](docs/doctrine/planning.md#plan-traceability)).
+   When weighing whether a choice "reaches beyond the bead," a sharper test is:
+   **is this derivable from that plan?** A choice that commits to a direction the
+   plan *neither states nor implies* is the beyond-bead / product-direction case
+   above -- escalate. This lens does **NOT** widen what escalates: implementation,
+   internal structure, naming, helper reuse, PR shaping, and process mechanics
+   remain **decide-by-default and yours** (step 3 below) even though no plan line
+   spells them out. "Not literally in the plan" is not the test -- "commits to a
+   *direction* the plan didn't authorize" is. When unsure which, the Consequence
+   Test in step 3 governs; decide-by-default wins ties.
+
    **When you DO escalate, isolate the kernel -- never staple a decidable question
    onto a genuine one.** (This is a *how-to-escalate* rule, not a fourth trigger.)
    Ask ONLY the irreducible part. Do not bundle a step-3 decide-it-yourself choice
