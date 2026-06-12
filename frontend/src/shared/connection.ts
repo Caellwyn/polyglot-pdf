@@ -294,15 +294,21 @@ export function createConnectionManager(
 	fieldManager = createFieldManager({
 		schema: schema,
 		onManualEdit: (fieldId, value) => {
-			// Update sessionStorage immediately using SchemaFormStateManager
-			// Manual edits are marked as confirmed (user explicitly filled them)
+			// Load the latest persisted state so this edit is applied on top of any
+			// AI fills that WebFormConnection saved to sessionStorage since the last
+			// time this closure's `state` variable was refreshed. Without this, a
+			// manual-edit blur would call updateField with a stale base state missing
+			// those AI fills, and the resulting save would clobber them -- making
+			// every other field's value and badge disappear until Gemini's next
+			// message re-fills them.
+			const currentState = SchemaFormStateManager.load() || state
 			const updatedState = SchemaFormStateManager.updateField(
-				state,
+				currentState,
 				fieldId,
 				value,
-				{ confirmed: true }
+				{ confirmed: true, confirmationMethod: 'manual_edit' }
 			)
-			// Update the reference (though SchemaFormStateManager.updateField already saves)
+			// Keep closure reference in sync for subsequent calls
 			Object.assign(state, updatedState)
 
 			// If connected, also notify Gemini
@@ -466,12 +472,14 @@ export function createConnectionManager(
 					fieldManager = createFieldManager({
 						schema: schema,
 						onManualEdit: (fieldId, value) => {
-							// Update sessionStorage immediately using SchemaFormStateManager
+							// Load latest persisted state so this edit lands on top of any
+							// AI fills saved since the closure's `state` was last refreshed.
+							const currentState = SchemaFormStateManager.load() || state
 							const updatedState = SchemaFormStateManager.updateField(
-								state,
+								currentState,
 								fieldId,
 								value,
-								{ confirmed: true }
+								{ confirmed: true, confirmationMethod: 'manual_edit' }
 							)
 							Object.assign(state, updatedState)
 
