@@ -1,0 +1,546 @@
+{
+  "off": [
+    {
+      "prompt_token_count": 272,
+      "cached_content_token_count": null,
+      "response_token_count": 74,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 346,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 158
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 79
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 74
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 447,
+      "cached_content_token_count": null,
+      "response_token_count": 70,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 517,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 177
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 207
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 70
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 608,
+      "cached_content_token_count": null,
+      "response_token_count": 67,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 675,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 195
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 328
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 67
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 809,
+      "cached_content_token_count": null,
+      "response_token_count": 131,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 940,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 218
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 486
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 131
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1068,
+      "cached_content_token_count": null,
+      "response_token_count": 92,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1160,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 250
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 681
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 92
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1322,
+      "cached_content_token_count": null,
+      "response_token_count": 135,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1457,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 275
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 886
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 135
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1580,
+      "cached_content_token_count": null,
+      "response_token_count": 111,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1691,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 304
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1091
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 111
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1829,
+      "cached_content_token_count": null,
+      "response_token_count": 85,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1914,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 331
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1283
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 85
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 2014,
+      "cached_content_token_count": null,
+      "response_token_count": 68,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 2082,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 353
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1418
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 68
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 2189,
+      "cached_content_token_count": null,
+      "response_token_count": 466,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 2655,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 372
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1552
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 466
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    }
+  ],
+  "on": [
+    {
+      "prompt_token_count": 272,
+      "cached_content_token_count": null,
+      "response_token_count": 55,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 327,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 158
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 79
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 55
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 413,
+      "cached_content_token_count": null,
+      "response_token_count": 54,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 467,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 173
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 187
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 54
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 557,
+      "cached_content_token_count": null,
+      "response_token_count": 74,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 631,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 188
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 296
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 74
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 770,
+      "cached_content_token_count": null,
+      "response_token_count": 106,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 876,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 211
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 462
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 106
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 998,
+      "cached_content_token_count": null,
+      "response_token_count": 106,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1104,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 236
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 635
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 106
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1280,
+      "cached_content_token_count": null,
+      "response_token_count": 61,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1341,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 267
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 856
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 61
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1452,
+      "cached_content_token_count": null,
+      "response_token_count": 75,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1527,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 286
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 989
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 75
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1647,
+      "cached_content_token_count": null,
+      "response_token_count": 105,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1752,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 305
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1145
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 105
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 1857,
+      "cached_content_token_count": null,
+      "response_token_count": 79,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 1936,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 330
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1300
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 79
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    },
+    {
+      "prompt_token_count": 2048,
+      "cached_content_token_count": null,
+      "response_token_count": 453,
+      "tool_use_prompt_token_count": null,
+      "thoughts_token_count": null,
+      "total_token_count": 2501,
+      "prompt_tokens_details": [
+        {
+          "modality": "TEXT",
+          "token_count": 352
+        },
+        {
+          "modality": "AUDIO",
+          "token_count": 1445
+        }
+      ],
+      "cache_tokens_details": null,
+      "response_tokens_details": [
+        {
+          "modality": "AUDIO",
+          "token_count": 453
+        }
+      ],
+      "tool_use_prompt_tokens_details": null,
+      "traffic_type": null
+    }
+  ]
+}

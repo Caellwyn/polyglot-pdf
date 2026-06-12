@@ -22,8 +22,10 @@ and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries
 > `gemini-2p5-1011-needs-tool-declarations`). **`CONTEXT_COMPRESSION_ENABLED` stays
 > `False`** until epic `polyglot-pdf-hcsl` picks production parameters and regression-
 > tests coherence. Re-run the verdict:
-> `backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py`
-> (matrix; 20 turns minimum -- see "How eviction actually behaves").
+> `backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py --tools real`
+> -- `--tools real` is LOAD-BEARING (the no-tools default reproduces the 2.5 1011
+> probe trap), and 20 turns (the default) is the minimum for eviction detection;
+> see "How eviction actually behaves".
 
 The Gemini Live API can bound its own context window server-side via
 `ContextWindowCompressionConfig` (a compression *trigger* + a *sliding window*).

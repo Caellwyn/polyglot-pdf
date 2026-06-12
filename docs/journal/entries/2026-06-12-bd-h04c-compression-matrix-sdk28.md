@@ -113,6 +113,9 @@ stale DEAD END story in `docs/components/context-compression.md`.
 - `scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl` (new) -- 51 per-run
   records (curves, drops, error payloads)
 - `scripts/spikes/diag_compression_matrix_sdk28_findings.md` (new) -- verdicts
+- `scripts/spikes/eycd_compression_eviction_findings.md` + `eycd_*.json` (new
+  here) -- the other session's bd-eycd evidence, committed so the docs' cited
+  numbers have in-repo backing (fresh-eyes round-1 finding)
 - `docs/components/context-compression.md` -- revamp + status flip
 - `docs/standards/testing.md` -- deploy-fidelity rule
 - `docs/sprint_4_sliding-window-context_plan.md` (new) + `docs/INDEX.md` --

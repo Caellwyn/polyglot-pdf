@@ -29,9 +29,12 @@ sessions, roughly an hour):
         --repeats 5 --turns 10
 
 Per-run records append to --out (JSONL; default
-scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl) so day-1 and day-2 runs
-accumulate in one file; the summary table prints per cell at the end. The exit
-criteria need the matrix run on 2 SEPARATE days (server-side rollouts drift).
+scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl) so repeated runs
+accumulate in one file; the summary table prints per cell at the end. ALWAYS
+pass --tools real (deploy fidelity: the no-tools default exists only as a
+labeled artifact-control; it reproduces the 2.5 1011 probe trap). The original
+2-separate-days protocol was dropped 2026-06-12 (maintainer; the failure
+classification proved configuration-based, not time-based).
 """
 
 from __future__ import annotations
@@ -266,6 +269,9 @@ def _summarize(records: list[dict]) -> None:
     for (tier, cfg), runs in sorted(cells.items()):
         died = [r for r in runs if r["errors"]]
         evicted = [r for r in runs if r["evicted"]]
+        # Records written before the runway accounting landed lack
+        # post_cross_turns entirely; they count as runway-unknown (0), so an
+        # old cell can read "0/0" -- consult the raw curves for those.
         runway_ok = [r for r in runs if r.get("post_cross_turns", 0) >= 4]
         full = [r for r in runs if r["turns_completed"] >= r["turns_requested"]]
         reasons: list[str] = []

@@ -11,9 +11,11 @@ so a second day adds nothing; rubric change logged on the epic bead).*
 1. **Sliding-window eviction works on BOTH model tiers under google-genai 2.8.0**
    (api_version `v1beta`, the SDK default -- confirmed in every record).
    - **3.1** (`gemini-3.1-flash-live-preview`): 3/3 twenty-turn on-live runs
-     evicted, 3-4 drops each (e.g. 2085->1094, 2207->769), oscillating ~1.0-2.2k
-     vs the off-arm compounding to ~5-6k. Replicates
-     `eycd_compression_eviction_findings.md` (3/3 independent runs).
+     evicted, 3-4 drops each (e.g. 2085->1094, 2207->769), oscillating ~1.0-2.2k.
+     (This matrix's 3.1 OFF cells are 10-turn, peaking ~2.2-3.1k; the 20-turn
+     unbounded baseline is the eycd series' 4,945-5,729 -- see
+     `eycd_compression_eviction_findings.md`, whose 3/3 independent on-live
+     runs this replicates.)
    - **2.5** (`gemini-2.5-flash-native-audio-preview-12-2025`): 3/3 twenty-turn
      on-live runs evicted (WITH production tools -- see verdict 2), 2-3 drops each
      (3336->2397, 3191->2095, 3393->2451), oscillating ~2.1-3.4k vs the off-arm
