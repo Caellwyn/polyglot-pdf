@@ -454,9 +454,11 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
       return triggerValue !== field.show_if.value;
 
     case "contains":
-      // Handle checkbox groups (arrays) - check if specific option is selected
+      // Handle checkbox groups (arrays) - check if specific option is selected.
+      // Compare as strings: the array is string[] and show_if.value is a
+      // string|number|boolean union, so coerce the needle to string to match.
       if (Array.isArray(triggerValue)) {
-        return triggerValue.includes(field.show_if.value);
+        return triggerValue.includes(String(field.show_if.value));
       }
       // Handle text fields - substring matching
       return String(triggerValue).includes(String(field.show_if.value));
@@ -481,14 +483,17 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
       return triggerValue !== null && triggerValue !== undefined && triggerValue !== "";
 
     case "in":
+      // Membership compared as strings: the value list is a mixed
+      // string|number|boolean array and triggerValue is a different union, so
+      // normalize both sides to string for a stable comparison.
       if (Array.isArray(field.show_if.value)) {
-        return field.show_if.value.includes(triggerValue);
+        return field.show_if.value.map(String).includes(String(triggerValue));
       }
       return false;
 
     case "not_in":
       if (Array.isArray(field.show_if.value)) {
-        return !field.show_if.value.includes(triggerValue);
+        return !field.show_if.value.map(String).includes(String(triggerValue));
       }
       return false;
 

@@ -772,9 +772,9 @@ export class SchemaFormStateManager {
    * Called when switching parts/sections to reset tracking
    */
   static clearLoadedFieldIds(state: SchemaFormState): SchemaFormState {
-    const newState = {
+    const newState: SchemaFormState = {
       ...state,
-      loadedFieldIds: new Set(),
+      loadedFieldIds: new Set<string>(),
       lastUpdated: Date.now()
     };
     this.save(newState);

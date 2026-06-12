@@ -149,7 +149,10 @@ export async function fillPDF(
  * @param filename - Desired filename for download
  */
 export function downloadPDF(pdfBytes: Uint8Array, filename: string): void {
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  // Re-wrap in a fresh ArrayBuffer-backed Uint8Array: under TS 5.x lib.dom a
+  // Uint8Array<ArrayBufferLike> (which may be SharedArrayBuffer-backed) is not a
+  // BlobPart. new Uint8Array(view) copies into a plain ArrayBuffer, which is.
+  const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -168,7 +171,8 @@ export function downloadPDF(pdfBytes: Uint8Array, filename: string): void {
  * @param pdfBytes - Filled PDF as Uint8Array
  */
 export function printPDF(pdfBytes: Uint8Array): void {
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  // See downloadPDF: re-wrap so the Uint8Array is a valid BlobPart under TS 5.x.
+  const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
 
   // Open PDF in new window

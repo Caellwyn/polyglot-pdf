@@ -66,6 +66,13 @@ export interface ConnectionCallbacks {
   // null). The handler can pre-emptively reconnect before the abrupt close; the
   // reconnect POLICY is intentionally left to the consumer (see bd follow-on).
   onGoAway?: (timeLeft: string | null) => void;
+  // UI lifecycle hooks fired during the auto-switch at section completion: stop
+  // mic capture just before the section switch, and signal the whole form is
+  // done. Both are optional and defensively guarded at the call sites (no
+  // consumer wires them today; they are the seam for an overlay that wants to
+  // react to those transitions).
+  onStopCapture?: () => void;
+  onFormComplete?: () => void;
 }
 
 export class WebFormConnection {

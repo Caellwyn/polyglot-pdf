@@ -147,13 +147,17 @@ export function SchemaFormDemo() {
       return;
     }
 
+    // Capture the narrowed (non-null) form so the async closure below keeps the
+    // narrowing -- TS does not carry the `if (!selectedForm) return` guard across
+    // the function boundary into loadSchema().
+    const form = selectedForm;
     let cancelled = false;
 
     async function loadSchema() {
       try {
         setSchemaLoading(true);
         setSchemaError(null);
-        const response = await fetch(selectedForm.schemaPath);
+        const response = await fetch(form.schemaPath);
 
         if (!response.ok) {
           throw new Error(`Failed to load schema: ${response.statusText}`);
@@ -166,7 +170,7 @@ export function SchemaFormDemo() {
       } catch (err) {
         if (!cancelled) {
           console.error(
-            `[SchemaFormDemo] Failed to load schema for ${selectedForm.id}:`,
+            `[SchemaFormDemo] Failed to load schema for ${form.id}:`,
             err
           );
           setSchema(null);

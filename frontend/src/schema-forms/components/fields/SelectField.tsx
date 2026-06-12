@@ -51,7 +51,7 @@ export function SelectField({
           onBlur={onBlur}
           disabled={disabled}
           className={`form-field__input ${error ? "form-field__input--error" : ""}`}
-          placeholder={field.help?.format_hint || ""}
+          placeholder={field.help?.inline || field.help?.example || ""}
         />
         {field.help?.instructions && (
           <p className="form-field__instructions">{field.help.instructions}</p>
