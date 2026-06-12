@@ -82,7 +82,8 @@ describe('WebFormConnection auto-reconnect (bd polyglot-pdf-uov.5)', () => {
     MockWebSocket.instances = []
     // @ts-expect-error -- override global WebSocket with the mock for the test
     global.WebSocket = MockWebSocket
-    // @ts-expect-error -- attemptReconnect schedules via window.setTimeout
+    // attemptReconnect schedules via window.setTimeout; alias window to the
+    // global so the timer registers under fake timers.
     global.window = globalThis as any
     const store: Record<string, string> = {}
     global.sessionStorage = {

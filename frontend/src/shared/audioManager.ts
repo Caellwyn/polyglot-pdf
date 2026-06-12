@@ -11,6 +11,16 @@
 const RECORDING_SAMPLE_RATE = 16000 // Gemini input
 const PLAYBACK_SAMPLE_RATE = 24000  // Gemini output
 
+/**
+ * Callback bundle consumed by the dev-only VAD-tuning tool (src/vad-tuning) to
+ * observe live mic energy + calibration. `reason` is an optional human-readable
+ * tag for why the active state changed (e.g. a VAD transition); it is advisory.
+ */
+export interface AudioEnergyCallback {
+  onEnergyChange: (energy: number, isActive: boolean, reason?: string) => void
+  onCalibrationComplete: (baseline: number) => void
+}
+
 export interface AudioManager {
 	startRecording: (onAudioData: (data: ArrayBuffer) => void) => Promise<void>
 	stopRecording: () => void

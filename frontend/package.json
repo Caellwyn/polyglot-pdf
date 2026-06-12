@@ -33,6 +33,7 @@
 		"pretest:run": "npm run form-kits:prepare",
 		"test:coverage": "vitest run --coverage",
 		"pretest:coverage": "npm run form-kits:prepare",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
 		"parse": "tsx scripts/parse-form.ts",
 		"gen:form-manifest": "tsx scripts/generate-form-manifest.ts",
 		"postinstall": "npm run form-kits:prepare",

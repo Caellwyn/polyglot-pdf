@@ -87,6 +87,11 @@ export function unwrapToBoolean(value: any): boolean {
     return unwrapped;
   }
 
-  // Handle string representations
-  return unwrapped === 'true' || unwrapped === '1' || unwrapped === 1;
+  // Handle string/number representations. Coerce to string so a numeric 1
+  // (which can arrive since the input is `any`) still maps to true, without a
+  // `=== 1` comparison the unwrap return type rules out as unreachable.
+  if (typeof unwrapped === 'string' || typeof unwrapped === 'number') {
+    return String(unwrapped) === 'true' || String(unwrapped) === '1';
+  }
+  return false;
 }

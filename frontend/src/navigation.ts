@@ -21,8 +21,14 @@
  */
 
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
-import type { FormSchema } from './schema-forms/types/schema';
+import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
+
+// Navigation operates on the canonical schema FormField (it iterates
+// state.schema.fields and returns those objects). Re-export it under the same
+// name so existing `import { FormField } from './navigation'` consumers keep
+// working, instead of declaring an incompatible local shape.
+export type { FormField };
 
 /**
  * Options for customizing navigation behavior
@@ -36,19 +42,6 @@ export interface NavigationOptions {
   
   /** Skip fields that are already confirmed (default: true) */
   skipConfirmed?: boolean;
-}
-
-/**
- * Field from schema with extracted properties
- */
-export interface FormField {
-  id: string;
-  name: string;
-  type: string;
-  required?: boolean;
-  options?: string[];
-  value?: string | boolean | null;
-  meta?: Record<string, any>;
 }
 
 /**
@@ -345,9 +338,13 @@ export function formatNextFieldHint(
   order?: number
 ): string {
   const orderPrefix = order ? `#${order}` : '';
-  const requiredSuffix = field.required ? ', required' : '';
+  // Required-ness lives under validation on the canonical FormField (the old
+  // local navigation FormField had a flat `required`, which masked this).
+  const requiredSuffix = field.validation?.required ? ', required' : '';
+  // options are FieldOption objects ({value,label}), not bare strings -- list
+  // their labels so the hint reads as option text, not "[object Object]".
   const optionsSuffix = field.options && field.options.length > 0
-    ? `, options: [${field.options.join(', ')}]`
+    ? `, options: [${field.options.map(o => o.label).join(', ')}]`
     : '';
 
   // CRITICAL: Include field_id so Gemini knows exactly which field to update

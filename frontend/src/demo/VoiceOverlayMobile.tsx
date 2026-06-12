@@ -1067,7 +1067,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 			{showLanguageModal && (
 				<LanguageSelectionModal
 					onSelection={handleInitialLanguageSelect}
-					preselectedFormId={schema.id || 'default'}
+					preselectedFormId={schema.form_metadata.form_number || 'default'}
 				/>
 			)}
 

@@ -42,11 +42,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install + test (frontend)
+      - name: Install (frontend)
         working-directory: frontend
-        run: |
-          npm ci
-          npm run test:run
+        run: npm ci
+      - name: Type-check (frontend)
+        # tsc --noEmit gates the type-error class that vitest (transpile-only)
+        # cannot catch (bd polyglot-pdf-uov.17). A new type error fails this
+        # step -> the job goes red. Informational like the rest of this
+        # workflow; not a required check (the uov.3 non-blocking-by-design note
+        # above governs).
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Test (frontend)
+        working-directory: frontend
+        run: npm run test:run
 
   schema-editor-tests:
     name: schema-editor vitest

@@ -2047,7 +2047,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			{showLanguageModal && (
 				<LanguageSelectionModal
 					onSelection={handleInitialLanguageSelect}
-					preselectedFormId={schema.id || 'default'}
+					preselectedFormId={schema.form_metadata.form_number || 'default'}
 				/>
 			)}
 
