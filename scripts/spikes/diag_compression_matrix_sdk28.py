@@ -26,7 +26,7 @@ sessions; a full default matrix is 2 models x 3 configs x 5 repeats = 30 live
 sessions, roughly an hour):
 
     backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py \
-        --repeats 5 --turns 10
+        --repeats 5 --tools real
 
 Per-run records append to --out (JSONL; default
 scripts/spikes/diag_compression_matrix_sdk28_runs.jsonl) so repeated runs

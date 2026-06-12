@@ -13,7 +13,8 @@ and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries
 > (3/3 twenty-turn runs, 3-4 evictions each, ON sessions 54-74% below the unbounded
 > baseline at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) AND
 > on `gemini-2.5-flash-native-audio-preview-12-2025` (3/3 twenty-turn runs, 2-3
-> evictions each, ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500 -- the
+> evictions each -- full drops ~940-1,100 tokens, incremental partial drops as
+> low as ~220 -- ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500; the
 > `h04c` matrix). This overturns the 2026-06-04 dead-end verdict (bd `l3a.1`, SDK
 > 1.38.0; the journal keeps that story). **Probe trap:** 2.5 dies with `1011` after
 > turn 1 on any probe that passes `tool_declarations=None` -- identically with
@@ -101,7 +102,7 @@ trigger=1500/window=800) and the `h04c` matrix day-1 data
 - **Evictions can be incremental:** in 2/3 runs one compression event was spread
   across two consecutive turns (e.g. -221 then -502). Sum across adjacent drops when
   measuring.
-- Steady state oscillates: grow to ~2,000-2,500, drop to ~1,000-1,600, repeat. At
+- Steady state oscillates: grow to ~2,000-2,500, drop to ~770-1,600, repeat. At
   turn 20 the ON prompt was 1,402-2,254 vs OFF 4,945-5,729.
 
 ## The API (verified SDK syntax)

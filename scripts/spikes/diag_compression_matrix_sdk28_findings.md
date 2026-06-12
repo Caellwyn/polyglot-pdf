@@ -12,7 +12,9 @@ so a second day adds nothing; rubric change logged on the epic bead).*
    (api_version `v1beta`, the SDK default -- confirmed in every record).
    - **3.1** (`gemini-3.1-flash-live-preview`): 3/3 twenty-turn on-live runs
      evicted, 3-4 drops each (e.g. 2085->1094, 2207->769), oscillating ~1.0-2.2k.
-     (This matrix's 3.1 OFF cells are 10-turn, peaking ~2.2-3.1k; the 20-turn
+     (This matrix's 3.1 OFF cells are 10-turn, peaking ~2.2-3.1k in 4/5 runs;
+     the fifth jumped 2,808 -> 6,128 on its final turn -- an unexplained
+     single-turn billing spike worth watching in the phase-2 runs. The 20-turn
      unbounded baseline is the eycd series' 4,945-5,729 -- see
      `eycd_compression_eviction_findings.md`, whose 3/3 independent on-live
      runs this replicates.)
