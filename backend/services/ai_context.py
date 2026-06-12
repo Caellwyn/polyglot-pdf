@@ -25,26 +25,34 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
     # model's job is to confirm each field (confirm_field); it must NOT be told
     # to call complete_section.
     if section_number <= 2:
-        # First two sections: Full graduated confirmation
+        # First two sections: Full graduated end-of-section confirmation.
+        # NOTE: per-field read-back ("read back value, ask Is that correct?")
+        # is already in WORKFLOW step 3 of the system instruction -- do NOT
+        # repeat it here or Gemini double-reads every field (bd polyglot-pdf-yn6q).
+        # This block fires only when ALL fields in the section are confirmed.
         return (
+            "When ALL fields in this section are confirmed: "
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "
-            "Then ask 'Is everything correct?' "
-            "Confirm each field with the user before moving on."
+            "Then ask 'Is everything correct?'"
         )
     elif section_number >= total_sections:
-        # Last section: Extra careful final confirmation
+        # Last section: Extra careful final confirmation.
+        # Same caveat as section <= 2: per-field confirm is WORKFLOW step 3;
+        # this block is end-of-section only (bd polyglot-pdf-yn6q).
         return (
+            "When ALL fields in this section are confirmed: "
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "
-            "Then ask 'This is the last section - is everything correct?' "
-            "Confirm each field with the user before moving on."
+            "Then ask 'This is the last section - is everything correct?'"
         )
     else:
-        # Middle sections: Simple confirmation
+        # Middle sections: Simple end-of-section confirmation.
+        # Same caveat as the other branches: per-field confirm is WORKFLOW
+        # step 3; this block is end-of-section only (bd polyglot-pdf-yn6q).
         return (
-            "Say 'Section done. Ready for the next section?' "
-            "Confirm each field with the user before moving on."
+            "When ALL fields in this section are confirmed: "
+            "Say 'Section done. Ready for the next section?'"
         )
 
 
@@ -259,12 +267,14 @@ def build_form_context(
     if section_number is not None and total_sections is not None:
         confirmation_policy = get_confirmation_policy(section_number, total_sections)
     else:
-        # Default policy for non-sectioned forms
+        # Default policy for non-sectioned forms.
+        # Per-field confirm is WORKFLOW step 3; this is end-of-form only
+        # (bd polyglot-pdf-yn6q).
         confirmation_policy = (
+            "When ALL fields are confirmed: "
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "
-            "Then ask 'Is everything correct?' "
-            "Only proceed after user confirms."
+            "Then ask 'Is everything correct?'"
         )
 
     # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled
