@@ -202,6 +202,15 @@ describe('Connection Manager (connection.ts)', () => {
 
       expect(loaded?.currentSectionId).toBe('section-2a')
       expect((loaded as any)?.currentPartId).toBeUndefined()
+
+      // Pin the LAZINESS explicitly (so a future change that starts persisting
+      // the migration -- or one that clobbers the session with a fresh
+      // non-migrated payload -- is a visible diff here, not a silent one): the
+      // factory does NOT re-persist the migration, so the raw bytes still carry
+      // the legacy currentPartId until the next save().
+      const rawBytes = JSON.parse(sessionStorageMock['schema_form_state'])
+      expect(rawBytes.currentPartId).toBe('section-2a')
+      expect(rawBytes.currentSectionId).toBeUndefined()
     })
 
     it('reuses persisted state across manager recreations (survives reconnect)', () => {
@@ -271,6 +280,10 @@ describe('Connection Manager (connection.ts)', () => {
       // No client-side flush/resume: Gemini owns interruption in native mode.
       expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
       expect(audioManagerMock.resumePlayback).not.toHaveBeenCalled()
+      // And the Silero end-path must NOT forward activity_end in native mode --
+      // only the PTT wrapper (manager.sendActivityEnd) does, per criterion 2(b).
+      // Without the nativeVad gate on onVADSpeechEnd this would spuriously fire.
+      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
     })
   })
 
