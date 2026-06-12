@@ -19,7 +19,7 @@ prompt curves, errors). 12/12 cells ran; total live spend ~USD 10.6.*
 | 3.1 | section-reset | happy | 341,266 | $0.627 | 58.1% | (4 restart drops) | 19/20 | 0 | 1.84s |
 | 3.1 | section-reset | unhappy | 840,219 | $1.729 | 46.9% | (22 restart drops) | 20/20 | 0 | 1.75s |
 | 3.1 | sliding-window | happy | 828,400 | $1.023 | 81.2% | 4 | 20/20 | 0 | 1.88s |
-| 3.1 | sliding-window | unhappy (+) | 927,189 | $1.184 | 79.4% | 16 | 12/20 | 29 (+) | 1.81s |
+| 3.1 | sliding-window | unhappy (+) | 927,189 | $1.184 | 79.4% | 16 | 12/20 | 29 (+) | 1.80s |
 | 3.1 | unbounded | happy | 1,047,190 | $1.624 | 67.0% | 4 | 18/20 | 0 | 1.81s |
 | 3.1 | unbounded | unhappy (+) | 1,078,528 | $1.686 | 66.5% | 13 | 10/20 | 34 (+) | 1.72s |
 
@@ -78,7 +78,7 @@ curve -- those are NOT compression evictions.
    (`first_drop_index / len(curve) * 20`), and turn latencies are split at
    that question. Medians before -> after: 3.1 happy 1.85s -> 1.89s (n=18/22);
    2.5 unhappy 2.19s -> 1.59s (n=55/24; faster after -- smaller prompts).
-   3.1 unhappy evicted at ~q1, leaving only n=4 before-turns (1.88s -> 1.81s,
+   3.1 unhappy evicted at ~q1, leaving only n=4 before-turns (1.74s -> 1.80s,
    n=4/48) -- too thin to weight; the happy-path splits and the 2.5 split
    carry the conclusion. The compression event is invisible in turn latency
    at these sizes.
