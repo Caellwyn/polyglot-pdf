@@ -34,9 +34,16 @@ slip-found signal is advisory -- the orchestrator decides what to do.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
+
+# Importing swarm_config applies the npm bd PATH fix at import time (see
+# swarm_config.py) so subprocess.run(["bd", ...]) finds the right binary on
+# Windows without needing the Windows shell.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import swarm_config  # noqa: F401, E402
 
 # bd emits UTF-8 (e.g. a U+2713 check mark in a clean-audit line). Printing
 # that to a cp1252 Windows console crashes with UnicodeEncodeError. Reconfigure

@@ -23,9 +23,14 @@ process cwd, so the hook behaves identically from a git worktree.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+# Apply the npm bd PATH fix so subprocess finds the right binary on Windows.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import swarm_config  # noqa: F401, E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OVERRIDE = REPO_ROOT / ".claude" / "prime-closeout-override.md"
