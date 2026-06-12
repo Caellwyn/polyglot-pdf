@@ -20,8 +20,10 @@ _runtime_dir). Behaviors under test:
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import sys
+import time
 
 import pytest
 
@@ -194,18 +196,66 @@ def test_fresh_session_surfaces_no_note(runtime, monkeypatch, capsys):
     assert not list(runtime.glob("handover-*"))  # no note file is ever created
 
 
+def test_fresh_session_sweeps_aged_orphan_marker(runtime, monkeypatch, capsys):
+    # The age-based sweep: an ORPHAN marker from a DIFFERENT session that crashed
+    # between its precompact and its own SessionStart must be reaped once it is
+    # older than _STALE_MARKER_SECONDS, so it cannot linger and (after a session_id
+    # reuse) drain an unrelated session. Covers the _sweep_stale_markers age path.
+    _raise(runtime, monkeypatch, capsys, "sid-orphan", "/t/orphan.jsonl")
+    orphan = df._marker_path(runtime, "sid-orphan")
+    assert orphan.exists()
+    # Backdate it past the stale threshold.
+    old = time.time() - (df._STALE_MARKER_SECONDS + 60)
+    os.utime(orphan, (old, old))
+
+    rc, out = _run(monkeypatch, capsys, df.cmd_sessionstart, {
+        "source": "startup", "session_id": "sid-different", "transcript_path": "/t/d.jsonl",
+    })
+    assert rc == 0
+    assert orphan.exists() is False          # reaped by the age sweep
+    assert out.strip() == ""
+
+
+def test_fresh_session_keeps_recent_foreign_marker(runtime, monkeypatch, capsys):
+    # Inverse of the above: a RECENT foreign marker (not past the age threshold) is
+    # NOT swept by a fresh session -- only its own marker + aged orphans go. That
+    # foreign session may still be mid-flight and own its marker.
+    _raise(runtime, monkeypatch, capsys, "sid-foreign", "/t/foreign.jsonl")
+    foreign = df._marker_path(runtime, "sid-foreign")
+    rc, out = _run(monkeypatch, capsys, df.cmd_sessionstart, {
+        "source": "startup", "session_id": "sid-me", "transcript_path": "/t/me.jsonl",
+    })
+    assert rc == 0
+    assert foreign.exists() is True          # recent foreign marker left intact
+
+
 # --------------------------------------------------------------------------
 # Robustness: malformed / empty stdin is a silent no-op, never a crash.
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("bad", ["", "   ", "not json", "[1,2,3]", "null"])
-def test_precompact_bad_stdin_is_noop(runtime, monkeypatch, capsys, bad):
+def test_precompact_bad_stdin_never_raises(runtime, monkeypatch, capsys, bad):
+    # Garbage/empty stdin -> {} -> no `trigger` field -> treated as auto under the
+    # settings.json matcher, so an EMPTY-session marker IS written. That is benign:
+    # it carries no session_id/transcript_path, so _marker_matches can never match
+    # a real session and it cannot spuriously drain anyone (see
+    # test_empty_marker_never_drains_a_real_session). The contract here is only
+    # that the hook never raises and always exits 0.
     rc, out = _run(monkeypatch, capsys, df.cmd_precompact, bad)
     assert rc == 0
-    # Empty/garbage stdin -> no trigger field -> treated as auto under the matcher,
-    # so a marker with an empty session id may be written; the point is it never
-    # raises. Garbage that isn't a dict yields {} -> empty-session marker.
+
+
+def test_empty_marker_never_drains_a_real_session(runtime, monkeypatch, capsys):
+    # The ghost marker an empty/garbage PreCompact writes (above) must never drain
+    # a real post-compaction session -- it has no session_id/transcript_path to
+    # match on. Guards criterion 3's "stale/foreign marker never drains" promise.
+    _run(monkeypatch, capsys, df.cmd_precompact, "")          # writes empty marker
+    assert len(_markers(runtime)) == 1
+    rc, out = _run(monkeypatch, capsys, df.cmd_sessionstart, {
+        "source": "compact", "session_id": "real-sid", "transcript_path": "/t/real.jsonl",
+    })
     assert rc == 0
+    assert out.strip() == ""                                  # no drain surfaced
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "not json", "[1,2,3]", "null"])
