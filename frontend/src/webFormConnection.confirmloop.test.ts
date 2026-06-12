@@ -144,16 +144,41 @@ describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y
     expect(p[0].message).toContain('cannot be confirmed')
   })
 
-  it('detects a field whose value entry exists but is EMPTY (the case confirmField would wrongly confirm)', async () => {
-    const ws = await connected()
+  it('keeps a REQUIRED field with an empty value unconfirmable', async () => {
+    // For a REQUIRED field an empty update is rejected at the apply gate
+    // (wpw.3), so an entry-exists-but-empty state cannot land -- which is why
+    // the optional carve-out in hasUsableValue (bd polyglot-pdf-w3ic) is safe.
+    // The confirm of the still-valueless field must keep tripping the
+    // loop-breaker.
+    const requiredSchema = {
+      ...SCHEMA,
+      fields: [{ ...SCHEMA.fields[0], validation: { required: true } }],
+    } as unknown as FormSchema
+    const conn = new WebFormConnection(requiredSchema)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
 
-    // An entry exists but the value is empty -- confirmField() would set confirmed:true
-    // on it, hiding the loop. The value-based guard must still treat it as unconfirmable.
     fireFieldUpdate(ws, '')
+    ws.send.mockClear() // drop the apply-gate rejection prompt; we assert the loop-breaker's
+
     fireConfirm(ws, 'p1_line1_aliennumber')
     fireConfirm(ws, 'p1_line1_aliennumber')
 
     expect(prompts(ws)).toHaveLength(1)
+  })
+
+  it('confirms an empty OPTIONAL field instead of looping (bd polyglot-pdf-w3ic)', async () => {
+    const ws = await connected()
+
+    // The schema field carries no required flag; an intentionally blank value
+    // ("I have no middle name") is a confirmable end state -- the unconfirmable
+    // re-prompt must NOT fire.
+    fireFieldUpdate(ws, '')
+    fireConfirm(ws, 'p1_line1_aliennumber')
+    fireConfirm(ws, 'p1_line1_aliennumber')
+
+    expect(prompts(ws)).toHaveLength(0)
   })
 
   it('stops re-prompting after the hard cap -- does not spin forever even at the reduced rate', async () => {
