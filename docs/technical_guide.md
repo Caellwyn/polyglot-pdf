@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-09. See [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the USE_PREMIUM_MODEL default flip (2.5), and [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for the prior canonicalization.*
+*Last updated: 2026-06-12. See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the model-rationale correction (2.5 default for latency; both models reliable), [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying i9q8 tool-call fix, and [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the original USE_PREMIUM_MODEL default flip.*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -30,7 +30,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard; reliably emits tool calls), `true` -> `gemini-3.1-flash-live-preview` (premium; unreliable tool-calling in audio mode, bd polyglot-pdf-5oq). |
+| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard), `true` -> `gemini-3.1-flash-live-preview` (premium). Both tool-call reliably; 2.5 is the default because it is ~170x faster per turn on the audio path. See [ai-models.md](standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
