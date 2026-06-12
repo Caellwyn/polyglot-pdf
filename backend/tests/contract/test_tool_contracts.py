@@ -15,10 +15,11 @@ mirroring test_live_ai_gemini_integration.py. Run on demand with a key:
 
     GEMINI_API_KEY=... PYTHONPATH=. python -m pytest backend/tests/contract/test_tool_contracts.py -m external
 
-Model A/B: 2.5 native-audio is the demo/prod default and emits both calls
-reliably; 3.1 skips update_form_fields ~50% of the time in audio mode (bd
-polyglot-pdf-5oq / memory gemini-3p1-skips-update-form-fields), so its case is
-xfail(strict=False) -- it is a known model regression we A/B, not a gate.
+Model A/B: 2.5 native-audio is the demo/prod default. BOTH models now emit both
+calls reliably and are gated -- the historic "3.1 skips update_form_fields ~50%"
+(bd polyglot-pdf-5oq) was the UNTYPED update_form_fields.value param rejected
+under google-genai 2.8.0, not a model regression; typing it "string" fixed 3.1
+(bd polyglot-pdf-wpw.4), so 3.1 is no longer xfail'd here.
 
 PII: tool-call args carry the user's field VALUE. As in the probes, we keep
 field_id/name for the in-process assertions but NEVER print the value (no-PII
@@ -237,17 +238,11 @@ async def _drive_fill_then_confirm(model: str) -> dict:
     "model",
     [
         MODEL_NATIVE_STANDARD,
-        pytest.param(
-            MODEL_NATIVE_PREMIUM,
-            marks=pytest.mark.xfail(
-                strict=False,
-                reason=(
-                    "3.1 skips update_form_fields ~50% in audio mode "
-                    "(bd polyglot-pdf-5oq / memory gemini-3p1-skips-update-form-fields); "
-                    "A/B'd, not gated"
-                ),
-            ),
-        ),
+        # 3.1 was previously xfail'd ("skips update_form_fields ~50%") -- that was
+        # the UNTYPED update_form_fields.value param under genai 2.8.0, not a model
+        # regression. With value typed "string" (bd polyglot-pdf-wpw.4) 3.1 emits
+        # the call reliably (4/4 full SI, 2026-06-11), so it is a real gate now.
+        MODEL_NATIVE_PREMIUM,
     ],
     ids=["2.5-standard", "3.1-premium"],
 )
