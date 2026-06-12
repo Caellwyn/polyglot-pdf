@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `go_away_time_left` log in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
+*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (with a `time_left` field) in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -107,4 +107,4 @@ beads; this doc is their canonical home (migrated out of
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `go_away_time_left` log in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
+*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (with a `time_left` field) in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
