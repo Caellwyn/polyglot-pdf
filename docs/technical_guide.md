@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-12. See [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the i9q8 tool-call fix (both models now reliable; 2.5 default for latency), [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the original USE_PREMIUM_MODEL default flip, and [journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md](journal/entries/2026-06-01-bd-4p0-archive-canonical-stale-docs.md) for the prior canonicalization.*
+*Last updated: 2026-06-12. See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the model-rationale correction (2.5 default for latency; both models reliable), [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying i9q8 tool-call fix, and [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the original USE_PREMIUM_MODEL default flip.*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
