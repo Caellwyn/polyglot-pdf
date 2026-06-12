@@ -1121,9 +1121,6 @@ def test_is_error_body_substring_match():
     assert cw._is_error_body(
         "You have reached your Codex usage limits for code reviews.", CODEX
     ) is True
-    assert cw._is_error_body(
-        "Please check your usage dashboard for more details.", CODEX
-    ) is True
     # Must be case-insensitive.
     assert cw._is_error_body(
         "You have Reached Your Codex Usage Limits for code reviews.", CODEX
@@ -1135,6 +1132,16 @@ def test_is_error_body_clean_comment_is_not_error():
     assert cw._is_error_body("LGTM", CODEX) is False
     assert cw._is_error_body(
         "Codex Review: Didn't find any major issues.", CODEX
+    ) is False
+    # Guard against false-positive ERROR on a legitimate review finding that
+    # happens to mention plausible-but-common product terms. "usage dashboard"
+    # was originally considered as a co-occurrence signal from PR #163 but
+    # removed (fresh-eyes yic2 finding 1): too broad -- a real code review
+    # could say "the analytics page lacks a usage dashboard" and get
+    # misclassified as ERROR instead of COMMENTS. Only the highly-specific
+    # quota phrasing is in error_body_substrings.
+    assert cw._is_error_body(
+        "The analytics page lacks a proper usage dashboard for tracking.", CODEX
     ) is False
 
 

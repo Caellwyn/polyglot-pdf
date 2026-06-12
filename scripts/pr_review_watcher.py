@@ -278,7 +278,6 @@ CODEX_PROFILE = ReviewerProfile(
     error_body_prefix="Codex encountered an error",
     error_body_substrings=(
         "reached your codex usage limits",  # exact phrase from PR #163
-        "usage dashboard",                  # co-occurs; cross-ref below
     ),
     uses_timeline=False,
     clean_reaction="+1",  # thumbs-up -- the documented canonical approval signal
