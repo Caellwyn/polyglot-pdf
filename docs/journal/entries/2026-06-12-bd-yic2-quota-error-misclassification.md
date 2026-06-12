@@ -28,9 +28,11 @@ substrings checked ANYWHERE in the body, before the approval fallback. Added
 `_is_error_body()` helper combining the existing prefix check with the new
 substring check. Both classification callsites now call `_is_error_body`.
 
-CODEX_PROFILE gets two quota phrases (observed on PR #163):
+CODEX_PROFILE gets one quota phrase (observed on PR #163):
 - "reached your codex usage limits"
-- "usage dashboard"
+
+("usage dashboard" was considered but dropped -- too broad; could match
+legitimate review prose about product dashboards, risking false ERROR.)
 
 Six new tests cover: quota notice via issue comment, quota notice via formal
 review, `_is_error_body` prefix match, substring match, case-insensitivity,
