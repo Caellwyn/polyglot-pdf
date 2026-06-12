@@ -112,6 +112,15 @@ to the maintainer. **Stop here for approval** -- this is the one planning gate.
    body at creation time (the creation-time norm -- see
    [`workflow.md`](../../../docs/doctrine/workflow.md#bead-creation-requirements)).
    Wire the parent-child deps with `bd_safe.py dep-add --epic/--child`.
+3. **Set the epic's `plan:` metadata pointer** to the plan file just written
+   (`bd update <epic-id> --set-metadata plan=docs/sprint_<N>_<slug>_plan.md`,
+   plus `--set-metadata sprint=<N>`). This is the machine-readable bead->plan link
+   that **plan-traceability** rests on: a child's choice that commits to a
+   *direction the plan neither states nor implies* is a step-2 escalation, while
+   implementation/structure/process choices stay decide-by-default -- it is a
+   *lens* on the existing escalation rule, not a new gate (full rule in
+   [`planning.md`](../../../docs/doctrine/planning.md#plan-traceability)). An epic
+   with no `plan:` pointer is an incomplete filing.
 
 Filing without an approved rubric, or before the gate, defeats the purpose --
 the rubric is the contract every child executes against.

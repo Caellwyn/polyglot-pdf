@@ -402,6 +402,33 @@ def find_root_sprint_plans(docs_dir: Path = DOCS_DIR) -> set[str]:
     return {p.name for p in docs_dir.glob("sprint_*.md") if p.is_file()}
 
 
+def is_sprint_plan(path: Path) -> bool:
+    """True for a sprint plan doc: a ``sprint_*.md`` file living at ``docs/`` root
+    (active) or under ``docs/archive/`` (archived).
+
+    Sprint plans are a tier-2 reachable doc but a CHRONOLOGICAL plan of record:
+    they sequence a sprint (R1 -> R2 -> R3 ...) and record A/B notes, so the
+    current-state-only convention (no ``Previously:`` chains / history sections)
+    deliberately does NOT apply to them (bd polyglot-pdf-h2r.3; see
+    docs/doc-architecture.md "Sprint plans are exempt"). This is the single
+    source of truth for that exemption -- ``check_doc_conventions`` skips any
+    target it matches, so the exemption holds even if a plan is ever added to
+    ``TIER1_DOCS`` by a future hand.
+
+    The LOCATION matters: the exemption is for plans specifically, NOT for any
+    tier-2 doc that happens to start with ``sprint_``. A
+    ``docs/components/sprint_vad.md`` is a normal current-state component doc and
+    must still be convention-scanned -- so we require the file to sit directly in
+    ``docs/`` or ``docs/archive/``, not in ``components/`` / ``standards/``."""
+    if not (path.name.startswith("sprint_") and path.name.endswith(".md")):
+        return False
+    parent = path.parent.name
+    grandparent = path.parent.parent.name
+    # docs/sprint_*.md  -> parent dir is "docs"
+    # docs/archive/sprint_*.md -> parent is "archive", grandparent is "docs"
+    return parent == "docs" or (parent == "archive" and grandparent == "docs")
+
+
 def check_sprint_archive(
     docs_dir: Path = DOCS_DIR,
     index_path: Path = INDEX_MD,
@@ -458,6 +485,12 @@ def check_doc_conventions(
         if d not in targets:
             targets.append(d)
     for doc in targets:
+        # Sprint plans are exempt from the current-state-only convention: they
+        # are a chronological plan of record (see is_sprint_plan). Skip them
+        # here even if one is ever in TIER1_DOCS, so the exemption can't silently
+        # lapse (bd polyglot-pdf-h2r.3).
+        if is_sprint_plan(doc):
+            continue
         try:
             text = doc.read_text(encoding="utf-8")
         except OSError:
