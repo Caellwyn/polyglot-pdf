@@ -68,8 +68,8 @@ the section-reset machinery we already run**:
 
 | | Section resets (current) | Sliding window (candidate) |
 |---|---|---|
-| Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: context capped at `target_tokens` continuously |
-| Session length | Bounded by the 15-min audio cap within a section | Cap lifted -- a whole form can be one session |
+| Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: conversation history capped at `target_tokens` -- but the system instruction is UNEVICTABLE and still re-bills every turn, which caps compression's leverage (the wyhh matrix: sliding-window saved ~0-2% vs unbounded on 2.5 because the whole-form SI floor dominates) |
+| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted -- but the session-duration GoAway STILL arrives (~13-15 min measured, bd wyhh, WITH compression evicting); a whole-form session additionally requires the GoAway -> reconnect -> resumption path (c5t / l3a.2 / wnt) |
 | Conversational continuity | Lost at every boundary (re-greeting suppressed by `vmxx` resume, but context is gone) | Preserved (subject to eviction of old turns) |
 | Moving parts | Reset orchestration: `switch_to_section` finalize/restart, section chopping, carried-over `previous_spoken_names` | One server-side config; eviction timing is the server's |
 
@@ -288,7 +288,11 @@ Success criteria for ENABLING in production (owned by epic `hcsl`):
    (beads `4loz`/`wyhh`/`6x1y`), not probe values.
 2. Behavioral integrity holds after eviction: tool-call compliance and dialog
    coherence measured before/after eviction events (bead `wyhh`).
-3. A session demonstrably survives past the 15-min audio cap with compression on
-   (the headline product win -- whole form in one session).
+3. A whole-form FLOW demonstrably survives past the session-duration limit --
+   which takes compression (context-size cap) PLUS GoAway-triggered reconnect
+   with session resumption (duration limit). Measured 2026-06-12 (bd wyhh): a
+   compression-on 3.1 session with 16 successful evictions was still
+   terminated by the duration GoAway at ~13-15 min; compression alone does not
+   deliver "whole form in one session".
 4. Maintainer go/no-go on relaxing the section-reset machinery, decided on the
    three-arm cost data (bead `6x1y`).
