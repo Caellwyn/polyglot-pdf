@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-12 (session resumption evaluated -> not adopted, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption no-go evaluation and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
+*Last updated: 2026-06-12 (session resumption: adopt for unintentional disconnects only, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption decision and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 
@@ -208,19 +208,42 @@ connection. Both were deferred out of `45o` and resolved separately:
   client so it can reconnect ahead of the close. See
   [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
   (acting on the signal) is a follow-up (`l3a.2`).
-- **Session resumption -- evaluated, NOT adopted** (`wnt`; conditional). The
-  re-greeting that made reconnect jarring is handled at the prompt layer by the
-  `is_reconnect` RESUME override (`vmxx`); and because this is a form-filler, the
-  durable state is the FORM (field values + confirmations), which the
-  client-owns-state design already makes lossless across reconnect. A vmxx
-  reconnect loses only CONVERSATIONAL context (the last few spoken turns), which is
-  low value for a field-at-a-time flow. So native resumption's win does not move the
-  needle here, while it adds a 2h handle lifecycle + a stale-handle failure mode.
-  (Note: the old "adds server-correlated state" objection is weaker than first
-  thought -- the handle can live CLIENT-side in `sessionStorage` and pass back
-  through the stateless backend, so the stateless invariant would hold.) **Re-open
-  if** live verification of `vmxx` shows suppress-greeting is insufficient (e.g.
-  Gemini repeats an answered question or mis-tracks the field on reconnect).
+- **Session resumption -- adopt for UNINTENTIONAL disconnects only** (`wnt`). The
+  decision turns on the CAUSE of the reconnect:
+  - **Unintentional** (network drop / `GoAway`) -- the WebSocket genuinely closed and
+    the client AUTO-reconnects. Here we WANT the context kept, so resume the same
+    Gemini session. First connect opts in by setting
+    `LiveConnectConfig.session_resumption = SessionResumptionConfig()` (handle=None);
+    the server then emits `LiveServerSessionResumptionUpdate` messages -- capture
+    `new_handle`, store it CLIENT-side (`sessionStorage`), and pass it back via
+    `SessionResumptionConfig(handle=...)` on the auto-reconnect handshake. The
+    reconnect is then truly invisible (same context), not merely de-greeted.
+  - **Intentional reset** -- a fresh session is the POINT (clear context). Covers two
+    shapes: (a) a SERVER-side restart that keeps the WebSocket open (section switch
+    `finalize`->`start_session`; the Level-3 idle-FAREWELL `restart_gemini_session`),
+    and (b) a CLIENT-side WS close+reopen that is still intentional -- the section
+    advance via `webFormConnection.startSection`/`switchToSection`. Never pass a
+    handle on any of these.
+
+  **The correct hook (verified):** the handle must ride ONLY `handleOpen`'s
+  auto-reconnect handshake -- the same `resume:true` path gated on `hasConnectedOnce`
+  (`webFormConnection.ts`). `startSection`/`switchToSection` deliberately BYPASS
+  `handleOpen` (it early-returns while `isSectionSwitching`) and send their own
+  handshake, so they get a fresh session for free as long as the handle is attached
+  to the `handleOpen` path and nowhere else. (Do NOT key it on "client- vs
+  server-initiated" -- `startSection` is a client-initiated reconnect that must NOT
+  carry a handle.)
+
+  Stateless invariant holds (handle lives client-side; backend stores nothing).
+  `vmxx`'s `is_reconnect` RESUME override stays as the FALLBACK when no valid handle
+  exists (expired >2h, or first connect). Open implementation edges (for the impl
+  bead): (1) an unintentional reconnect carries both a handle AND the client's
+  current form-state handshake; if the handle is stale relative to form state, prefer
+  the fresh handshake as source of truth (the handle restores conversational
+  continuity, not form state); (2) the idle-TIMEOUT watchdog (distinct from the
+  farewell) closes the WS and requires a MANUAL user reconnect -- treat that like a
+  fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
+  is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
 
 ## Workaround sideline map (hand-off to `7kp`)
 

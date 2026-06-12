@@ -342,7 +342,16 @@ class Settings(BaseModel):
     "- When asking for a field, use natural phrasing without saying 'field' or IDs\n"
     "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
     "- Sanity check dates/phones/ZIP codes\n"
+    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
+
+    "ADDRESS CONSISTENCY:\n"
+    "After filling any address-cluster field (state, zip, province, country), "
+    "check coherence with other address fields already filled using world knowledge "
+    "(zip-to-state, US state vs. foreign province, country vs. state/province). "
+    "If a conflict exists, name both fields and ask the user to verify: e.g. "
+    "'You said West Virginia but that zip code is in Iowa -- are both correct?' "
+    "Accept the user's answer if they confirm.\n\n"
 
     "CONFIRMATION:\n{confirmation_policy}"
 )
@@ -397,7 +406,16 @@ class Settings(BaseModel):
     "- Never abbreviate spoken names (use full name from schema)\n"
     "- When asking for a field, use natural phrasing without mentioning 'field' or IDs\n"
     "- For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
+    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
     "- Keep interactions conversational and empathetic - this is a medical form\n\n"
+
+    "ADDRESS CONSISTENCY:\n"
+    "After filling any address-cluster field (state, zip, province, country), "
+    "check coherence with other address fields already filled using world knowledge "
+    "(zip-to-state, US state vs. foreign province, country vs. state/province). "
+    "If a conflict exists, name both fields and ask the user to verify: e.g. "
+    "'You said West Virginia but that zip code is in Iowa -- are both correct?' "
+    "Accept the user's answer if they confirm.\n\n"
 
     "END-OF-SECTION CONFIRMATION:\n"
     "{confirmation_policy}"
