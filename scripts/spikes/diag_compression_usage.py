@@ -13,12 +13,13 @@ diagnostic _on_raw_usage hook to dump the FULL usage_metadata per turn, and runs
 SAME script twice: compression OFF (baseline) then ON (low trigger so it must fire
 within a few turns). Then it diffs the raw fields.
 
-Interpretation:
-  - If cached_content_token_count (or another field) MOVES with compression on while
-    prompt_token_count still climbs -> compression ACTIVATED; our cost field just
-    doesn't see the saving (look at the real invoice / cached tokens).
-  - If every raw field is identical on/off and prompt_token_count climbs past the
-    trigger unchanged -> the config is a SILENT NO-OP for this model.
+Interpretation (bd polyglot-pdf-h04c):
+  - THE EVICTION SIGNAL IS A DROP IN prompt_token_count ACROSS TURNS with
+    compression on (e.g. 1,972 -> 1,046 crossing trigger=1500/window=800, bd eycd).
+    The server evicts old context, so the next turn re-bills a SMALLER prompt.
+  - cached_content_token_count is a SECONDARY diagnostic only; on SDK 2.8 it stays
+    None even while eviction is demonstrably working. Do not key the verdict on it.
+  - If prompt_token_count climbs past the trigger with no drop -> silent no-op.
 
 No PII: fictional prompts; synthetic form ids. Run from repo root with GEMINI_API_KEY:
     backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_usage.py \
@@ -240,34 +241,43 @@ async def main_async(args: argparse.Namespace) -> int:
     _print_turns("COMPRESSION OFF (baseline) -- raw usage_metadata", off)
     _print_turns("COMPRESSION ON  (low trigger) -- raw usage_metadata", on)
 
-    # Verdict: did ANY field that is NOT prompt/total/response differ between on/off,
-    # and did cached_content_token_count ever become non-zero with compression on?
+    # Verdict (bd polyglot-pdf-h04c): the eviction signal is a turn-over-turn DROP
+    # in prompt_token_count with compression on. cached_content_token_count stays
+    # None on SDK 2.8 even while eviction works -- it is reported as a secondary
+    # diagnostic only, never the verdict.
     print(f"\n{'=' * 78}\nVERDICT\n{'=' * 78}")
+    prompts_on = [d.get("prompt_token_count") or 0 for d in on]
+    # Tolerate small jitter; a real eviction drops by hundreds of tokens.
+    drops = [(i + 2, prompts_on[i], prompts_on[i + 1])
+             for i in range(len(prompts_on) - 1)
+             if prompts_on[i + 1] < prompts_on[i] - 50]
+    evicted = bool(drops)
+    peak_prompt_on = max(prompts_on) if prompts_on else 0
+    crossed = peak_prompt_on > args.trigger
     cached_on = [d.get("cached_content_token_count") for d in on]
     cached_nonzero = any(c for c in cached_on if c)
-    last_prompt_on = on[-1].get("prompt_token_count") if on else None
-    crossed = (last_prompt_on or 0) > args.trigger
 
     # Fields present in the dumps that aren't the three the adapter already uses.
     extra_fields = [f for f in _all_field_union(on, off)
                     if f not in ("prompt_token_count", "response_token_count",
                                  "total_token_count", "prompt_tokens_details",
                                  "response_tokens_details")]
-    print(f"  prompt_token_count (ON) reached {last_prompt_on} "
+    print(f"  prompt_token_count (ON) peaked at {peak_prompt_on} "
           f"({'CROSSED' if crossed else 'did NOT cross'} trigger {args.trigger})")
-    print(f"  cached_content_token_count (ON) ever non-zero: {cached_nonzero}")
+    for turn, before, after in drops:
+        print(f"  prompt DROP at turn {turn}: {before} -> {after} (eviction signal)")
+    print(f"  cached_content_token_count (ON) ever non-zero: {cached_nonzero} (secondary only)")
     print(f"  extra usage_metadata fields seen: {extra_fields or 'NONE'}")
     print("  traffic_type (ON, last): "
           f"{on[-1].get('traffic_type') if on else '-'} | "
           f"(OFF, last): {off[-1].get('traffic_type') if off else '-'}")
 
-    if crossed and not cached_nonzero:
-        print("\n  => Prompt crossed the trigger but NO cached-content signal appeared.")
-        print("     Consistent with a SILENT NO-OP: the model accepted the config but did")
-        print("     not evict/cache. (Confirm against the real invoice if any doubt.)")
-    elif cached_nonzero:
-        print("\n  => cached_content_token_count moved with compression on: compression")
-        print("     ACTIVATED; the saving is in cached tokens, invisible in prompt_token_count.")
+    if evicted:
+        print("\n  => EVICTION CONFIRMED: prompt_token_count dropped across a turn with")
+        print("     compression on. The sliding window is working on this model.")
+    elif crossed:
+        print("\n  => Prompt crossed the trigger but never dropped: SILENT NO-OP on this")
+        print("     model (config accepted, no eviction).")
     else:
         print("\n  => Prompt never crossed the trigger -- inconclusive; lower --trigger or")
         print("     raise --turns so compression is actually eligible to fire.")
