@@ -71,6 +71,10 @@ _spec.loader.exec_module(_diag)
 MODELS = {
     "2.5": MODEL_NATIVE_STANDARD,
     "3.1": MODEL_NATIVE_PREMIUM,
+    # 2.5 routing-hypothesis aliases (bd h04c classification): UNVERIFIED strings --
+    # a connect rejection is itself a data point (rules the alias out).
+    "2.5-latest": "gemini-2.5-flash-native-audio-latest",
+    "2.5-0925": "gemini-2.5-flash-native-audio-preview-09-2025",
 }
 
 # (label, enabled, trigger, window). on-inert trigger is far above anything a short
@@ -138,7 +142,8 @@ def _detect_api_version(adapter) -> str | None:
     return None
 
 
-async def _drive_run(model_name: str, label: str, settings, n_turns: int) -> dict:
+async def _drive_run(model_name: str, label: str, settings, n_turns: int,
+                     tool_declarations=None, trigger: int | None = None) -> dict:
     """Drive one audio session; return the full per-run record."""
     orig_get_settings = _config.get_settings
     _config.get_settings = lambda s=settings: s
@@ -162,7 +167,7 @@ async def _drive_run(model_name: str, label: str, settings, n_turns: int) -> dic
             on_form_update=_noop, on_transcript=_noop, on_audio=_noop,
             on_tool_call=_noop,
             system_instruction="You are a form-filling assistant. Keep spoken replies very short.",
-            tool_declarations=None, enable_transcripts=False,
+            tool_declarations=tool_declarations, enable_transcripts=False,
         )
         record["api_version"] = _detect_api_version(adapter)
 
@@ -176,7 +181,7 @@ async def _drive_run(model_name: str, label: str, settings, n_turns: int) -> dic
                 await adapter.finalize()
             except Exception:
                 pass
-            return _finish_record(record, usage_dumps, log_sink)
+            return _finish_record(record, usage_dumps, log_sink, trigger)
 
         last_total = 0
         consecutive_timeouts = 0
@@ -224,10 +229,11 @@ async def _drive_run(model_name: str, label: str, settings, n_turns: int) -> dic
             pass
     finally:
         _config.get_settings = orig_get_settings
-    return _finish_record(record, usage_dumps, log_sink)
+    return _finish_record(record, usage_dumps, log_sink, trigger)
 
 
-def _finish_record(record: dict, usage_dumps: list[dict], log_sink: list[dict]) -> dict:
+def _finish_record(record: dict, usage_dumps: list[dict], log_sink: list[dict],
+                   trigger: int | None = None) -> dict:
     prompts = [d.get("prompt_token_count") or 0 for d in usage_dumps]
     drops = [[i + 2, prompts[i], prompts[i + 1]]
              for i in range(len(prompts) - 1)
@@ -236,6 +242,13 @@ def _finish_record(record: dict, usage_dumps: list[dict], log_sink: list[dict]) 
     record["peak_prompt"] = max(prompts) if prompts else 0
     record["drops"] = drops
     record["evicted"] = bool(drops)
+    # Compression is ASYNC server-side: the drop lands 1-3 turns after the trigger
+    # is crossed (eycd findings). post_cross_turns < 4 makes "no eviction" an
+    # INCONCLUSIVE-short-runway result, not a negative.
+    first_cross = next((i + 1 for i, p in enumerate(prompts)
+                        if trigger and p > trigger), None)
+    record["first_cross_turn"] = first_cross
+    record["post_cross_turns"] = (len(prompts) - first_cross) if first_cross else 0
     record["errors"] = [s for s in log_sink
                         if s["event"] in _ERROR_EVENTS
                         or s["event"].startswith("probe_")
@@ -253,6 +266,7 @@ def _summarize(records: list[dict]) -> None:
     for (tier, cfg), runs in sorted(cells.items()):
         died = [r for r in runs if r["errors"]]
         evicted = [r for r in runs if r["evicted"]]
+        runway_ok = [r for r in runs if r.get("post_cross_turns", 0) >= 4]
         full = [r for r in runs if r["turns_completed"] >= r["turns_requested"]]
         reasons: list[str] = []
         for r in died:
@@ -261,13 +275,16 @@ def _summarize(records: list[dict]) -> None:
                 short = msg[:60]
                 if short not in reasons:
                     reasons.append(short)
-        print(f"  {tier:>5} {cfg:>9} {len(runs):>5} {len(full):>10} {len(evicted):>8} "
+        print(f"  {tier:>5} {cfg:>9} {len(runs):>5} {len(full):>10} "
+              f"{len(evicted)}/{len(runway_ok):>4} "
               f"{len(died):>5}  {'; '.join(reasons[:3]) or '-'}")
     print()
     print("  Reading the matrix: failures in OFF = baseline instability (bd daa class);")
     print("  failures appearing only in ON-INERT = the config destabilizes; failures only")
-    print("  in ON-LIVE = the eviction path destabilizes. evicted>0 in ON-LIVE = sliding")
-    print("  window works on that model.")
+    print("  in ON-LIVE = the eviction path destabilizes. evicted is shown as x/y where")
+    print("  y = runs with >=4 post-cross turns of runway: compression is ASYNC (drop")
+    print("  lands 1-3 turns after crossing the trigger), so short-runway non-evictions")
+    print("  are inconclusive, not negative. x>0 in ON-LIVE = sliding window works.")
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -283,6 +300,21 @@ async def main_async(args: argparse.Namespace) -> int:
 
     import google.genai as genai
     genai_version = getattr(genai, "__version__", "unknown")
+    if args.api_version:
+        # The adapter constructs genai.Client() directly (and its tests patch that
+        # name), so an api_version override is a probe-side Client wrap.
+        _orig_client = genai.Client
+
+        def _client_with_api_version(*a, **kw):
+            kw.setdefault("http_options", {"api_version": args.api_version})
+            return _orig_client(*a, **kw)
+
+        genai.Client = _client_with_api_version
+        print(f"[api-version override] {args.api_version}")
+    tool_decls = None
+    if args.tools == "real":
+        tool_decls = _config.Settings().TOOL_DECLARATIONS
+        print(f"[tools] passing {len(tool_decls)} production tool declaration(s)")
     model_tiers = [t.strip() for t in args.models.split(",") if t.strip()]
     config_labels = [c.strip() for c in args.configs.split(",") if c.strip()]
     configs = [c for c in CONFIGS if c[0] in config_labels]
@@ -302,7 +334,9 @@ async def main_async(args: argparse.Namespace) -> int:
                 run_label = f"{tier}-{label}-r{rep + 1}"
                 print(f"[{n}/{total}] {run_label} ({model_name}) ...", flush=True)
                 settings = _diag._make_settings(enabled, trigger, window)
-                rec = await _drive_run(model_name, run_label, settings, args.turns)
+                rec = await _drive_run(model_name, run_label, settings, args.turns,
+                                       tool_declarations=tool_decls,
+                                       trigger=trigger if enabled else None)
                 rec.update({
                     "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     "genai_version": genai_version,
@@ -313,6 +347,8 @@ async def main_async(args: argparse.Namespace) -> int:
                     "window": window if enabled else None,
                     "run": rep + 1,
                     "turns_requested": args.turns,
+                    "tools": args.tools,
+                    "api_version_requested": args.api_version,
                 })
                 with out_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(rec) + "\n")
@@ -333,11 +369,20 @@ async def main_async(args: argparse.Namespace) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-model compression support matrix on google-genai 2.8.x (bd h04c).")
-    ap.add_argument("--models", default="2.5,3.1", help="comma list of tiers: 2.5,3.1")
+    ap.add_argument("--models", default="2.5,3.1",
+                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925")
     ap.add_argument("--configs", default="off,on-inert,on-live",
                     help="comma list of: off,on-inert,on-live")
     ap.add_argument("--repeats", type=int, default=5)
-    ap.add_argument("--turns", type=int, default=10)
+    ap.add_argument("--turns", type=int, default=20,
+                    help="20 minimum for eviction verdicts: compression is async "
+                         "(drop lands 1-3 turns post-cross); 10-turn runs under-detect")
+    ap.add_argument("--tools", choices=["none", "real"], default="none",
+                    help="'real' passes the production TOOL_DECLARATIONS "
+                         "(2.5 classification cell: the with-tools 4sv7 spike got "
+                         "clean 2.5 sessions while this no-tools probe dies)")
+    ap.add_argument("--api-version", default=None,
+                    help="override the genai client api_version (e.g. v1alpha)")
     ap.add_argument("--cooldown", type=float, default=3.0,
                     help="seconds between sessions")
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent
