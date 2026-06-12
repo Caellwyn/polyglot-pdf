@@ -20,9 +20,11 @@ explicit re-open condition).** The deferred-decision doc
 deferral was marked DONE.
 
 SDK surface, verified against google-genai 2.8.0:
-- Config IN: `types.SessionResumptionConfig(handle: Optional[str], transparent:
-  Optional[bool])` on `LiveConnectConfig.session_resumption`; first connect passes
-  `handle=None` to opt in, reconnect passes the saved handle.
+- Config IN: opt in by SETTING `LiveConnectConfig.session_resumption` to a
+  `types.SessionResumptionConfig(handle: Optional[str], transparent: Optional[bool])`
+  at all (leaving the field None disables the feature). First connect uses
+  `handle=None` (a fresh session that still emits update messages); reconnect passes
+  the saved handle.
 - Receive: `types.LiveServerSessionResumptionUpdate(new_handle, resumable,
   last_consumed_client_message_index)`; retain `new_handle`. The mechanism is real.
 
@@ -36,9 +38,10 @@ The two approaches solve different layers:
 Why no-go: this is a FORM-FILLER. The durable state is the FORM (field values +
 confirmations), already lossless across reconnect via the client-owns-state design.
 A vmxx reconnect loses only the last few spoken turns, which is low value for a
-field-at-a-time flow (the next-field prompt re-establishes context immediately).
-session_resumption's real win therefore does not move the needle, while it adds a
-2h handle lifecycle to maintain and a stale-handle failure mode.
+field-at-a-time flow (the next-field prompt re-establishes the FIELD context, even
+if not any mid-utterance conversational state). session_resumption's real win
+therefore does not move the needle, while it adds a 2h handle lifecycle to maintain
+and a stale-handle failure mode.
 
 The nv0 "adds server-correlated state" objection turned out weaker than assumed:
 the handle can live CLIENT-side (sessionStorage) and pass back through the

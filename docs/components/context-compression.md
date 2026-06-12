@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-12 (session resumption evaluated -> not adopted, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption no-go evaluation and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path. Earlier: l3a.1 root cause (compression is a no-op on native-audio).*
+*Last updated: 2026-06-12 (session resumption evaluated -> not adopted, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption no-go evaluation and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 
