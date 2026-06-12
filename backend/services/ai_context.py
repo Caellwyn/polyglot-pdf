@@ -47,10 +47,12 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
             "Then ask 'This is the last section - is everything correct?'"
         )
     else:
-        # Middle sections: Simple confirmation
+        # Middle sections: Simple end-of-section confirmation.
+        # Same caveat as the other branches: per-field confirm is WORKFLOW
+        # step 3; this block is end-of-section only (bd polyglot-pdf-yn6q).
         return (
-            "Say 'Section done. Ready for the next section?' "
-            "Confirm each field with the user before moving on."
+            "When ALL fields in this section are confirmed: "
+            "Say 'Section done. Ready for the next section?'"
         )
 
 
