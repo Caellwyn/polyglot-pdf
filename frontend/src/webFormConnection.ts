@@ -61,6 +61,11 @@ export interface ConnectionCallbacks {
   // polyglot-pdf-333). When enabled, the connection layer must stop sending
   // manual activity signals and stream continuous audio.
   onNativeVadMode?: (enabled: boolean) => void;
+  // The Gemini Live server sent a GoAway: it is about to terminate this
+  // connection (bd polyglot-pdf-c5t). timeLeft is a duration string (may be
+  // null). The handler can pre-emptively reconnect before the abrupt close; the
+  // reconnect POLICY is intentionally left to the consumer (see bd follow-on).
+  onGoAway?: (timeLeft: string | null) => void;
 }
 
 export class WebFormConnection {
@@ -441,6 +446,19 @@ export class WebFormConnection {
           this.idleTimedOut = true;
           this.setStatus("idle_timeout", "handleMessage:idle_timeout");
           // WebSocket will close shortly, handleClose() will see idleTimedOut flag
+          break;
+
+        case "go_away":
+          // The Gemini Live server will terminate this connection shortly (bd
+          // polyglot-pdf-c5t). Surface time_left so a consumer can pre-emptively
+          // reconnect before the abrupt close. We only NOTIFY here -- unlike
+          // idle_timeout we do NOT set a no-reconnect flag, because a GoAway is a
+          // server lifecycle reset (reconnect IS wanted), not a user-inactivity
+          // close. The reconnect policy is the consumer's (bd follow-on).
+          console.log('[WebFormConnection] 👋 GoAway received from Gemini; time_left:', message.time_left);
+          if (this.callbacks.onGoAway) {
+            this.callbacks.onGoAway(message.time_left ?? null);
+          }
           break;
 
         default:

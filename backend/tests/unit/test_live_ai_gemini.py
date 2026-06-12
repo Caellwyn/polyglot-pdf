@@ -1194,3 +1194,105 @@ async def test_set_callbacks_resets_close_after_flush_and_event():
     assert adapter._closed_event.is_set()
 
 
+@pytest.mark.asyncio
+async def test_run_session_loop_invokes_on_go_away():
+    """A GoAway event in the receive stream fires on_go_away with time_left
+    (bd polyglot-pdf-c5t). Detection must not break the loop -- the stream ends
+    normally and the callback receives the duration string."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    go_aways_seen = []
+
+    async def on_go_away(time_left):
+        go_aways_seen.append(time_left)
+
+    adapter._on_go_away = on_go_away
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _GoAwaySession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    # Mirror the SDK shape: LiveServerMessage.go_away is a
+                    # LiveServerGoAway with a time_left string (verified against
+                    # google-genai 2.8.0 types).
+                    yield SimpleNamespace(
+                        go_away=SimpleNamespace(time_left="3.5s")
+                    )
+                self._generator = gen()
+            return self._generator
+
+    session = _GoAwaySession()
+    ctx = _DummyContextManager(session)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+
+    assert go_aways_seen == ["3.5s"]
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_run_session_loop_go_away_without_callback_does_not_crash():
+    """If no on_go_away is registered, a GoAway event is logged-only and the
+    loop still completes cleanly (the callback is optional -- bd c5t)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+    adapter._on_go_away = None  # no callback registered
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    class _GoAwaySession:
+        def __init__(self):
+            self._generator = None
+
+        async def send_realtime_input(self, **_kwargs):
+            return None
+
+        async def send_tool_response(self, **_kwargs):
+            return None
+
+        async def send_client_content(self, **_kwargs):
+            return None
+
+        def receive(self):
+            if self._generator is None:
+                async def gen():
+                    yield SimpleNamespace(go_away=SimpleNamespace(time_left="1s"))
+                self._generator = gen()
+            return self._generator
+
+    session = _GoAwaySession()
+    ctx = _DummyContextManager(session)
+    fake_live = MagicMock()
+    fake_live.connect.return_value = ctx
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    # Must not raise despite the absent callback; the warning log still fires.
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=1.0)
+    adapter._log.warning.assert_any_call(
+        "gemini_go_away_received", time_left="1s", event_count=1
+    )
+    await adapter.finalize()
+
+
