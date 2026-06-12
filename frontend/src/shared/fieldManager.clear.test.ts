@@ -114,4 +114,16 @@ describe('fieldManager radio/checkbox clear (bd polyglot-pdf-qc46)', () => {
 
     expect(inputsByName('concerns').filter(i => i.checked)).toHaveLength(0)
   })
+
+  it('clears the checkbox group for a completely empty array value (no selection)', () => {
+    // An empty array is the AI's "user selected none" shape; it is truthy so it
+    // survives the `value || ''` coercion in applyUpdates and reaches the group
+    // handler. It must clear, not fall through to the fuzzy-match check-all trap.
+    checkboxGroup('concerns', ['health', 'safety', 'finance'])
+    inputsByName('concerns').forEach(i => { i.checked = true })
+
+    mgr.applyUpdates([{ fieldId: 'concerns', value: [] }])
+
+    expect(inputsByName('concerns').filter(i => i.checked)).toHaveLength(0)
+  })
 })

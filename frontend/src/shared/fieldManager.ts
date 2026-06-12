@@ -351,13 +351,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Example: name="reason[]" with values ["Depressed Mood", "Divorce/Custody"]
 	 */
 	function handleCheckboxGroup(checkboxInputs: NodeListOf<HTMLInputElement>, newValue: any, fieldId: string): void {
-		// Empty string (or an all-empty array like [''] / ['', '']) means clear all
-		// checkboxes (bd polyglot-pdf-qc46). Without this guard,
+		// Empty means clear all checkboxes (bd polyglot-pdf-qc46): the bare '' that
+		// applyUpdates passes (it coerces null/undefined to '' via `value || ''`), or
+		// an all-empty / empty array (the AI's "no selection" shape, which survives
+		// that coercion as a truthy array). Without this guard,
 		// normalizedCheckbox.includes('') is true for every option in the fuzzy-match
 		// loop below, so every checkbox would be CHECKED instead of cleared.
 		const isEmpty =
 			newValue === '' ||
-			newValue == null ||
 			(Array.isArray(newValue) && newValue.every(v => v === '' || v == null))
 		if (isEmpty) {
 			for (const checkbox of checkboxInputs) {
