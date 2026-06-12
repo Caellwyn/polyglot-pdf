@@ -56,8 +56,8 @@ Content updates made (beyond date bump):
 
 8. **`hipaa-pii-policy.md`** (stamp note): GoAway path adds no new PII/PHI logging.
 
-9. **`logging-and-cost.md`** (stamp note): GoAway adds one structured log entry
-   (`go_away_time_left`, no PII).
+9. **`logging-and-cost.md`** (stamp note): GoAway adds one structured log event
+   (`gemini_go_away_received` with a `time_left` field, no PII).
 
 10. **`risk-rating.md`** (stamp note): c5t, 4sv7, vmxx, w3ic/jbxm landed; none
     change risk classification of their surfaces.
