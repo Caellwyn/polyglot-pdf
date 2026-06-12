@@ -84,21 +84,6 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# On Windows, multiple bd installs can coexist (e.g. npm-installed 1.0.5 and a
-# standalone installer 1.0.4). Python subprocess.run(["bd", ...]) cannot execute
-# .CMD shims directly (they need the Windows shell), so it falls through to the
-# standalone bd.exe which may be an older version. The npm package ships its own
-# bd.exe under node_modules/@beads/bd/bin/; prepend that directory so subprocess
-# always uses the npm-installed version when it is present.
-_NPM_BD_BIN = os.path.join(
-    os.path.expanduser("~"),
-    "AppData", "Roaming", "npm", "node_modules", "@beads", "bd", "bin",
-)
-if os.path.isfile(os.path.join(_NPM_BD_BIN, "bd.exe")) or os.path.isfile(
-    os.path.join(_NPM_BD_BIN, "bd")
-):
-    os.environ["PATH"] = _NPM_BD_BIN + os.pathsep + os.environ.get("PATH", "")
-
 # The repo bd commands target, from swarm.config.json / SWARM_REPO env (see
 # swarm_config.py). PR-title searches use the FULL bead id; branch greps use
 # the SUFFIX only (e.g. "ab12" for myproject-ab12) -- branches are

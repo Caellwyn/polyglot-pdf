@@ -31,6 +31,23 @@ import json
 import os
 from pathlib import Path
 
+# On Windows, Python subprocess.run(["bd", ...]) cannot execute .CMD shims
+# (they need the Windows shell), so it falls through to whichever bd.exe
+# appears first in the subprocess PATH -- which may be an older standalone
+# installer. The npm-installed bd package ships its own bd.exe under
+# node_modules/@beads/bd/bin/; prepend that directory so subprocess always
+# uses the npm-installed version when present. No-op on Linux/Mac (the path
+# doesn't exist there). Runs at import time so every script that does
+# `import swarm_config` gets the fix automatically.
+_NPM_BD_BIN = os.path.join(
+    os.path.expanduser("~"),
+    "AppData", "Roaming", "npm", "node_modules", "@beads", "bd", "bin",
+)
+if os.path.isfile(os.path.join(_NPM_BD_BIN, "bd.exe")) or os.path.isfile(
+    os.path.join(_NPM_BD_BIN, "bd")
+):
+    os.environ["PATH"] = _NPM_BD_BIN + os.pathsep + os.environ.get("PATH", "")
+
 # Last-resort fallbacks. The init script normally writes swarm.config.json so
 # these are never reached; left as obvious placeholders so a misconfigured
 # project fails loudly rather than silently targeting the wrong repo.
