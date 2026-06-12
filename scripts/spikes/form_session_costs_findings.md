@@ -73,10 +73,15 @@ curve -- those are NOT compression evictions.
    2.5 runs finished under the limit (faster turns); this is a wall-clock
    ceiling every long-session design must handle, not a 3.1 quirk.
 
-3. **No latency penalty at eviction events.** Median turn latency
-   before vs after the first eviction: 3.1 happy 1.86s -> 1.89s; 3.1 unhappy
-   1.88s -> 1.81s; 2.5 unhappy 2.19s -> 1.59s (faster after -- smaller
-   prompts). The compression event is invisible in turn latency at these sizes.
+3. **No latency penalty at eviction events.** Method: the first eviction's
+   prompt-curve index is mapped to a question number by curve fraction
+   (`first_drop_index / len(curve) * 20`), and turn latencies are split at
+   that question. Medians before -> after: 3.1 happy 1.86s -> 1.89s (n=18/22);
+   2.5 unhappy 2.19s -> 1.59s (n=55/24; faster after -- smaller prompts).
+   3.1 unhappy evicted at ~q1, leaving only n=4 before-turns (1.88s -> 1.81s,
+   n=4/48) -- too thin to weight; the happy-path splits and the 2.5 split
+   carry the conclusion. The compression event is invisible in turn latency
+   at these sizes.
 
 4. **Tool-call compliance held up across arms; the variance is per-question,
    not per-arm.** Most questions show the expected pattern (update + confirm on
@@ -84,7 +89,14 @@ curve -- those are NOT compression evictions.
    verbal-only confirmation) appear in every arm at similar rates, EXCEPT the
    truncated 3.1 cells whose post-GoAway questions could not comply at all.
    Confirmed-field counts: 13-20/20 on live sessions. Per-question tool logs
-   are in each meta sidecar (`per_question_tools`).
+   are in each meta sidecar (`per_question_tools`). **Caveat discovered in
+   this data (bd `polyglot-pdf-d24n`):** every 2.5 cell's meta records 2-3
+   `tool_callback_error` TypeErrors on `update_form_fields` in the PRODUCTION
+   callback path (zero on 3.1) -- caught and swallowed, so the run continues,
+   but each occurrence is a silently failed save. 2.5's lower confirmed
+   counts (13-16/20 vs 3.1's 18-20/20 on clean cells) may partly reflect this
+   bug rather than model behavior; do not read the 2.5-vs-3.1 compliance gap
+   as purely model-driven until d24n is fixed.
 
 5. **3.1 costs 3-5x more than 2.5 for the same work** ($0.63-1.73 vs
    $0.19-0.80 per run): higher text-out rate (4.50 vs 2.00/1M) on much more
