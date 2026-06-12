@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-12 (session resumption evaluated -> not adopted, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption no-go evaluation and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
+*Last updated: 2026-06-12 (session resumption: adopt for unintentional disconnects only, GoAway done; bd polyglot-pdf-wnt/c5t). See [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md) for the resumption decision and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path.*
 *Design doc for epic `polyglot-pdf-l3a` (phase 2, bead `polyglot-pdf-nv0`).*
 *Implemented by `polyglot-pdf-45o`; workaround sideline owned by `polyglot-pdf-7kp`.*
 
@@ -208,19 +208,28 @@ connection. Both were deferred out of `45o` and resolved separately:
   client so it can reconnect ahead of the close. See
   [websocket-routing.md](websocket-routing.md) ("GoAway"). The reconnect POLICY
   (acting on the signal) is a follow-up (`l3a.2`).
-- **Session resumption -- evaluated, NOT adopted** (`wnt`; conditional). The
-  re-greeting that made reconnect jarring is handled at the prompt layer by the
-  `is_reconnect` RESUME override (`vmxx`); and because this is a form-filler, the
-  durable state is the FORM (field values + confirmations), which the
-  client-owns-state design already makes lossless across reconnect. A vmxx
-  reconnect loses only CONVERSATIONAL context (the last few spoken turns), which is
-  low value for a field-at-a-time flow. So native resumption's win does not move the
-  needle here, while it adds a 2h handle lifecycle + a stale-handle failure mode.
-  (Note: the old "adds server-correlated state" objection is weaker than first
-  thought -- the handle can live CLIENT-side in `sessionStorage` and pass back
-  through the stateless backend, so the stateless invariant would hold.) **Re-open
-  if** live verification of `vmxx` shows suppress-greeting is insufficient (e.g.
-  Gemini repeats an answered question or mis-tracks the field on reconnect).
+- **Session resumption -- adopt for UNINTENTIONAL disconnects only** (`wnt`). The
+  decision turns on the CAUSE of the reconnect, which already maps onto two distinct
+  code paths:
+  - **Unintentional** (network drop / `GoAway`) -- the client re-handshakes on a
+    genuinely closed WebSocket. Here we WANT the context kept, so resume the same
+    Gemini session: capture `new_handle` from `LiveServerSessionResumptionUpdate`,
+    store it CLIENT-side (`sessionStorage`), and pass it back via
+    `SessionResumptionConfig(handle=...)` on the reconnect handshake. The reconnect
+    is then truly invisible (same context), not merely de-greeted.
+  - **Intentional reset** (section switch -> `finalize`/`start_session`;
+    idle-farewell `restart_gemini_session`) -- the backend restarts the session
+    SERVER-side (the WebSocket stays open) precisely to CLEAR context. Never pass a
+    handle here; a fresh session is the point. No special-casing needed -- only the
+    client re-handshake path ever carries a handle.
+
+  Stateless invariant holds (handle lives client-side; backend stores nothing).
+  `vmxx`'s `is_reconnect` RESUME override stays as the FALLBACK when no valid handle
+  exists (expired >2h, or first connect). Open implementation edge: an unintentional
+  reconnect carries both a handle AND the client's current form-state handshake; if
+  the handle is stale relative to form state, prefer the fresh handshake as the
+  source of truth (the handle restores conversational continuity, not form state).
+  Decided here; implementation is a separate bead.
 
 ## Workaround sideline map (hand-off to `7kp`)
 
