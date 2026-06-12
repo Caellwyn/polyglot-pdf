@@ -11,7 +11,7 @@ prompt curves, errors). 12/12 cells ran; total live spend ~USD 10.6.*
 | model | arm | path | total tokens | total cost | text-in share | evictions | confirmed | stalled turns | median turn latency |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | 2.5 | section-reset | happy | 213,867 | $0.188 | 95.0% | (3 restart drops) | 16/20 | 0 | 2.17s |
-| 2.5 | section-reset | unhappy | 444,425 | $0.324 | 96.4% | (2 restart drops) | 15/20 | 11 (*) | 2.61s |
+| 2.5 | section-reset | unhappy | 444,425 | $0.323 | 96.4% | (2 restart drops) | 15/20 | 11 (*) | 2.56s |
 | 2.5 | sliding-window | happy | 534,428 | $0.330 | 98.0% | 0 | 15/20 | 0 | 1.75s |
 | 2.5 | sliding-window | unhappy | 1,342,518 | $0.797 | 97.9% | 2 | 19/20 | 0 | 1.73s |
 | 2.5 | unbounded | happy | 535,613 | $0.338 | 97.9% | 0 | 13/20 | 0 | 1.81s |
@@ -47,7 +47,7 @@ curve -- those are NOT compression evictions.
 
 1. **Section resets beat the sliding window on cost -- decisively -- under the
    current SI architecture.** 2.5 happy: $0.188 vs $0.330 (sliding) vs $0.338
-   (unbounded); 2.5 unhappy: $0.324 vs $0.797/$0.781. The reason is structural:
+   (unbounded); 2.5 unhappy: $0.323 vs $0.797/$0.781. The reason is structural:
    **the dominant cost is the per-turn re-billed system instruction, and
    compression cannot evict it.** The whole-form SI bills ~8.1-8.2k tokens at
    turn 1 (97-98% of 2.5's total spend was text-in); the sliding window only
@@ -76,7 +76,7 @@ curve -- those are NOT compression evictions.
 3. **No latency penalty at eviction events.** Method: the first eviction's
    prompt-curve index is mapped to a question number by curve fraction
    (`first_drop_index / len(curve) * 20`), and turn latencies are split at
-   that question. Medians before -> after: 3.1 happy 1.86s -> 1.89s (n=18/22);
+   that question. Medians before -> after: 3.1 happy 1.85s -> 1.89s (n=18/22);
    2.5 unhappy 2.19s -> 1.59s (n=55/24; faster after -- smaller prompts).
    3.1 unhappy evicted at ~q1, leaving only n=4 before-turns (1.88s -> 1.81s,
    n=4/48) -- too thin to weight; the happy-path splits and the 2.5 split

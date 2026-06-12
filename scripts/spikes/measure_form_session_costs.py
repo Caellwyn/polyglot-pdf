@@ -645,8 +645,14 @@ def main() -> int:
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=20)
-    ap.add_argument("--trigger", type=int, default=1500)
-    ap.add_argument("--window", type=int, default=800)
+    ap.add_argument("--trigger", type=int, default=12_000,
+                    help="sliding-window trigger_tokens; size it ABOVE the "
+                         "unevictable SI+tools base (~8.2k on the full-form "
+                         "scope) or compression fires on turn 1 and the data "
+                         "is incomparable")
+    ap.add_argument("--window", type=int, default=9_000,
+                    help="sliding-window target_tokens; must exceed the SI "
+                         "base for any evictable mass to exist")
     ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "data"))
     ap.add_argument("--synth-only", action="store_true",
                     help="build the audio cache and exit (no live calls)")
