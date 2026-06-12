@@ -132,6 +132,11 @@ creation-time mechanics:
 - **End:** file beads for remaining work, run quality gates, close finished
   beads, final `bd dolt push`, push the branch + open the PR. Work is not done
   until both `bd dolt push` and `git push` succeed.
+- **Auto-triggered end (drain):** when a long session auto-compacts near
+  context-fill, a drain directive is surfaced post-compaction; the orchestrator
+  **finishes or splits** its in-flight bead (close what shipped, file a new bead
+  for the remainder -- the tracker is the handoff, no side-channel note) and stops
+  claiming new work. See [`drain-handover.md`](drain-handover.md).
 
 ## Worktree hazards (scar tissue)
 

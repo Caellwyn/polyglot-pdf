@@ -57,6 +57,9 @@ tmp_*
 .beads/.auto-import-*.jsonl
 # dolt CLI cached by scripts/beads_remote_bootstrap.py (remote-session hydration)
 .beads/.cache/
+# transient R2 drain/handover runtime artifacts (drain markers + handover notes
+# written by scripts/drain_flag.py); session-scoped, never source of truth
+.beads/.runtime/
 # experiment counter is a derived cache (scanned from docs/journal/telemetry/
 # by scripts/harness_ledger.py), not source of truth -- untracked so parallel
 # closeouts can't collide on it
