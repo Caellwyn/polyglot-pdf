@@ -238,44 +238,67 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
     with --add-dir so it can reach the form. Returns (schema, token_info).
     """
     exe = shutil.which("claude") or "claude"
-    cmd = [exe, "-p", "--model", model, "--output-format", "json"]
+    outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "outputs")
+    cmd = [exe, "-p", "--model", model, "--output-format", "json",
+           "--add-dir", outputs_dir]
     if pdf_path:
         cmd += ["--add-dir", os.path.dirname(os.path.abspath(pdf_path))]
-    # Wrap the prompt so the CLI emits ONLY the schema JSON as its result text.
-    # (The CLI model tends to narrate before the JSON; _extract_json tolerates
-    # leading/trailing prose, but ask for clean output anyway.)
+    # The schema for a real form is ~30K+ output tokens -- piping it through the
+    # CLI's final message hits the per-message output ceiling and yields
+    # truncated/pointer results (observed on I-90, bd 7a9.10; certain on I-589).
+    # So the model WRITES the JSON to a scratch file and we read it back.
+    scratch = os.path.join(outputs_dir, f"_cli_schema_{os.getpid()}.json")
+    if os.path.exists(scratch):
+        os.remove(scratch)
     wrapped = (
         prompt
-        + "\n\nIMPORTANT: Your FINAL message must be ONLY the FormSchema JSON "
-        "object -- it must START with '{' and END with '}', with NO prose, NO "
-        "reasoning, NO markdown fences, and NO narration before or after it."
+        + "\n\nIMPORTANT -- how to deliver your output: the FormSchema JSON is "
+        "far too large for a chat message, so do NOT print it. Instead, use "
+        "your Write tool to write the COMPLETE FormSchema JSON object (and "
+        "nothing else -- no fences, no commentary) to this exact file path:\n  "
+        + scratch
+        + "\nThen end with a final message of just: WROTE OK"
     )
     timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "1200"))
-    proc = subprocess.run(
-        cmd, input=wrapped, capture_output=True, text=True,
-        encoding="utf-8", timeout=timeout_s,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI exited {proc.returncode}: "
-                           f"{(proc.stderr or proc.stdout)[:500]}")
-    envelope = json.loads(proc.stdout)
-    if envelope.get("is_error"):
-        raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
-    result_text = envelope.get("result", "")
     try:
-        schema = _normalize_schema(_extract_json(result_text))
-    except json.JSONDecodeError:
-        # Empty/non-JSON result (e.g. the CLI session hit a turn/length limit
-        # and ended without final text). Dump the envelope for diagnosis.
-        dbg = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "outputs", "_claude_cli_fail_envelope.json")
-        with open(dbg, "w", encoding="utf-8") as fh:
-            json.dump(envelope, fh, indent=2)
-        raise RuntimeError(
-            f"claude CLI returned unparseable result "
-            f"(subtype={envelope.get('subtype')!r}, "
-            f"num_turns={envelope.get('num_turns')}, "
-            f"result_chars={len(result_text)}); envelope dumped to {dbg}")
+        proc = subprocess.run(
+            cmd, input=wrapped, capture_output=True, text=True,
+            encoding="utf-8", timeout=timeout_s,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude CLI exited {proc.returncode}: "
+                               f"{(proc.stderr or proc.stdout)[:500]}")
+        envelope = json.loads(proc.stdout)
+        if envelope.get("is_error"):
+            raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
+        result_text = envelope.get("result", "")
+
+        schema = None
+        if os.path.exists(scratch):
+            with open(scratch, encoding="utf-8") as fh:
+                schema = _normalize_schema(_extract_json(fh.read()))
+        else:
+            # Older-behavior fallback: the model printed the JSON instead.
+            try:
+                schema = _normalize_schema(_extract_json(result_text))
+            except json.JSONDecodeError:
+                schema = None
+        if not (isinstance(schema, dict) and schema.get("fields")):
+            # Reject empty/fragment parses (a truncated message can "parse" as
+            # a single field object). Dump the envelope for diagnosis.
+            dbg = os.path.join(outputs_dir, "_claude_cli_fail_envelope.json")
+            with open(dbg, "w", encoding="utf-8") as fh:
+                json.dump(envelope, fh, indent=2)
+            raise RuntimeError(
+                f"claude CLI produced no usable schema "
+                f"(scratch_file={os.path.exists(scratch)}, "
+                f"subtype={envelope.get('subtype')!r}, "
+                f"num_turns={envelope.get('num_turns')}, "
+                f"result_chars={len(result_text)}); envelope dumped to {dbg}")
+    finally:
+        if os.path.exists(scratch):
+            os.remove(scratch)
     usage = envelope.get("usage") or {}
     tok = {"input": usage.get("input_tokens"),
            "output": usage.get("output_tokens"),
