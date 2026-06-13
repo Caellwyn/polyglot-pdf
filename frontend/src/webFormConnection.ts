@@ -1201,6 +1201,13 @@ export class WebFormConnection {
       if (field_id === this.lastUnconfirmableFieldId) {
         this.unconfirmableConfirmCount += 1;
       } else {
+        // A different field -- reset the PER-FIELD counters only. Deliberately do
+        // NOT reset unconfirmableSessionPromptCount here (bd polyglot-pdf-r2hy): the
+        // session-wide cap MUST survive field changes, or cross-field confirm spin
+        // (A,A -> B,B -> ...) would re-arm the per-field re-prompt on every switch
+        // and never engage the cap. Use resetUnconfirmableTracking() (which clears
+        // the session counter too) ONLY at (re)connect / section switch / a
+        // successful confirm of the stuck field -- never on a plain field change.
         this.lastUnconfirmableFieldId = field_id;
         this.unconfirmableConfirmCount = 1;
         this.unconfirmableRepromptCount = 0;

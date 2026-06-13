@@ -273,26 +273,38 @@ describe('WebFormConnection cross-field confirm-spin session cap (bd polyglot-pd
   it('a successful confirm of the stuck field restores the session re-prompt budget', async () => {
     const ws = await connectedTwoField()
 
-    // Spin field A alone until its per-field re-prompts are exhausted (LIMIT=2,
-    // REPROMPT_CAP=3 -> 3 prompts over ~6 confirms), consuming session budget.
-    for (let i = 0; i < 6; i++) {
-      fireConfirm(ws, 'f_a')
+    // FULLY EXHAUST the session cap (=6) with a paired cross-field spin, so the
+    // session counter is at the ceiling and NO field can earn another re-prompt.
+    // (Using a single field would only spend 3 of 6 via its per-field cap, leaving
+    // budget that would let B prompt even WITHOUT a reset -- a vacuous test. The
+    // paired spin is what actually drives the session counter to 6.)
+    const ids = ['f_a', 'f_b']
+    for (let cycle = 0; cycle < 50; cycle++) {
+      const id = ids[cycle % 2]
+      fireConfirm(ws, id)
+      fireConfirm(ws, id)
     }
-    const before = prompts(ws).length
-    expect(before).toBeGreaterThan(0)
+    const exhausted = prompts(ws).length
+    expect(exhausted).toBe(6) // session cap reached -- no more prompts possible
 
-    // Now A finally gets a value and confirms -- genuine progress restores budget.
-    // The field_update is keyed by field NAME ('fieldA'), as in production.
+    // Confirm that the cap is truly spent: more spinning yields ZERO new prompts.
+    for (let i = 0; i < 10; i++) fireConfirm(ws, 'f_a')
+    expect(prompts(ws).length).toBe(exhausted)
+
+    // Now field A finally gets a value and confirms -- genuine progress on the
+    // stuck field calls resetUnconfirmableTracking(), which ZEROES the session
+    // counter (not merely leaves room). The field_update is keyed by field NAME.
     ws.onmessage?.({
       data: JSON.stringify({ type: 'field_update', updates: { fieldA: 'A123456789' } }),
     })
     fireConfirm(ws, 'f_a') // takes -> resetUnconfirmableTracking()
 
-    // A fresh empty field B can now earn re-prompts again (budget was reset).
-    for (let i = 0; i < 4; i++) {
-      fireConfirm(ws, 'f_b')
-    }
-    expect(prompts(ws).length).toBeGreaterThan(before)
+    // With the counter reset to zero, a fresh empty field B can earn re-prompts
+    // again. This is ONLY possible if the stuck-field confirm reset the SESSION
+    // counter -- if it had merely left room, the cap was already at 6 and B would
+    // stay silent.
+    for (let i = 0; i < 4; i++) fireConfirm(ws, 'f_b')
+    expect(prompts(ws).length).toBeGreaterThan(exhausted)
   })
 })
 
