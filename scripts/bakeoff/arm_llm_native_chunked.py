@@ -96,6 +96,9 @@ def run_chunked(pdf_path: str, acroform_path: str, model: str,
     target = pages if pages is not None else all_pages
     outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "outputs")
+    # Derive the temp-file stem from the acroform name + PID so two concurrent
+    # runs (different forms, or parallel terminals) never clobber each other.
+    stem = os.path.splitext(os.path.basename(acroform_path))[0]
     chunks = []
     per_chunk_meta = []
     for pg in target:
@@ -103,7 +106,8 @@ def run_chunked(pdf_path: str, acroform_path: str, model: str,
         if not sub["fields"]:
             print(f"[page {pg}] 0 widgets -- skipped")
             continue
-        sub_path = os.path.join(outputs_dir, f"_i589_chunk_p{pg:02d}.json")
+        sub_path = os.path.join(outputs_dir,
+                                f"_chunk_{stem}_{os.getpid()}_p{pg:02d}.json")
         with open(sub_path, "w", encoding="utf-8") as fh:
             json.dump(sub, fh)
         print(f"[page {pg}] {sub['field_count']} widgets -> extracting...")
