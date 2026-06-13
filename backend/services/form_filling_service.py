@@ -65,6 +65,10 @@ class FormFillingService:
         self._request_coordinator: Optional[RequestCoordinator] = None
         # Callback handler for Gemini Live AI events
         self._callback_handler: Optional[CallbackHandler] = None
+        # Persistent form session ID (survives section switches; stored so
+        # _switch_to_section_locked can thread it into the rebuilt CallbackHandler
+        # without needing to re-derive it from the handshake -- bd rwjy).
+        self._form_session_id: Optional[str] = None
         # Resume flag: True when the handshake carried resume:true (mid-section
         # reconnect). Suppresses the greeting in send_initiating_message so Gemini
         # resumes silently rather than re-introducing the form/section.
@@ -139,6 +143,9 @@ class FormFillingService:
         # Extract form_id here so it can be passed to CallbackHandler (confirmation
         # audit logging guard requires both ids at construction time, bd rwjy).
         form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+        # Store the resolved form_session_id so _switch_to_section_locked can thread
+        # it into the rebuilt CallbackHandler without re-deriving it (fresh-eyes gap).
+        self._form_session_id = form_session_id or session_id
 
         # Initialize callback handler
         self._callback_handler = CallbackHandler(
@@ -147,7 +154,7 @@ class FormFillingService:
             request_coordinator=self._request_coordinator,
             send_transcript=send_transcript,
             form_id=form_id,
-            form_session_id=form_session_id or session_id,
+            form_session_id=self._form_session_id,
         )
 
         # Inject tool handler methods into callback handler
@@ -713,6 +720,9 @@ class FormFillingService:
             schema=section_schema,
             current_values=section_values,
             system_instruction=system_instruction,
+            # Persist the form_session_id across section switches so the rebuilt
+            # CallbackHandler keeps the same audit-log key (bd rwjy fresh-eyes gap).
+            form_session_id=self._form_session_id,
             # Thread the new section id into token-log context (bd polyglot-pdf-tb7)
             current_section_id=section_metadata.get("section_id"),
         )

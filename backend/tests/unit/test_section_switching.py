@@ -209,6 +209,46 @@ async def test_switch_to_section_threads_section_id_into_token_context():
 
 
 @pytest.mark.asyncio
+async def test_switch_to_section_preserves_form_session_id_in_callback_handler():
+    """bd rwjy (fresh-eyes gap): a section switch rebuilds CallbackHandler via
+    start_session, which previously got no form_session_id and silently fell back
+    to the ephemeral session_id -- breaking the audit-log key after the first
+    switch. switch_to_section must thread the persistent self._form_session_id so
+    the rebuilt handler keeps the same audit key across sections.
+    """
+    service = FormFillingService()
+
+    live_ai = AsyncMock()
+    service._live_ai = live_ai
+    service._session_id = "ephemeral-session"
+    service._websocket = AsyncMock()
+    # Simulate the persistent id set by the initial start_session.
+    service._form_session_id = "fss_persistent_rwjy"
+
+    section_metadata = {
+        "section_id": "part_2_1_personal",
+        "section_number": 2,
+        "total_sections": 3,
+        "section_label": "Personal Information",
+        "previous_spoken_names": [],
+    }
+
+    await service.switch_to_section(
+        section_schema={"form_metadata": {"form_number": "I-90"}, "fields": []},
+        section_values={},
+        section_metadata=section_metadata,
+        initial_field_hint=None,
+    )
+
+    # The rebuilt CallbackHandler must carry the PERSISTENT id, not the ephemeral
+    # session_id -- otherwise confirmation audit records use a different key per
+    # section.
+    assert service._callback_handler is not None
+    assert service._callback_handler._form_session_id == "fss_persistent_rwjy"
+    assert service._callback_handler._form_id == "I-90"
+
+
+@pytest.mark.asyncio
 async def test_switch_to_section_handles_no_live_ai():
     """switch_to_section should handle gracefully when no LiveAI configured."""
     service = FormFillingService()

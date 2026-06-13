@@ -192,12 +192,19 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile
   ) {
     // No manager prop -- standalone fresh-mount path.
-    // createConnectionManager is mocked at the module level to a vi.fn() that
-    // returns undefined. The alreadyLive branch (which fires when a prop manager
-    // is provided) is never reached, so rearmAudioCapture must not be called.
+    // createConnectionManager is mocked at the module level; return a manager whose
+    // rearmAudioCapture we can spy on, so we can pin the negative invariant: on a
+    // fresh/standalone mount the alreadyLive branch is NOT taken, so the component
+    // must never call rearmAudioCapture (a guard regression would call it).
+    const standaloneRearmSpy = vi.fn(async () => {})
+    const standaloneManager = makeResizeFlipMock()
+    ;(standaloneManager as any).rearmAudioCapture = standaloneRearmSpy
+    // A fresh standalone mount starts disconnected (no live session to re-arm).
+    ;(standaloneManager as any).getStatus = vi.fn(() => 'disconnected')
+
     const { createConnectionManager } = await import('../shared/connection')
     const createSpy = vi.mocked(createConnectionManager)
-    createSpy.mockReturnValue(undefined as any)
+    createSpy.mockReturnValue(standaloneManager)
     createSpy.mockClear()
 
     render(
@@ -215,8 +222,9 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     // to build its own manager (it never got a prop manager).
     expect(createSpy).toHaveBeenCalled()
     // The alreadyLive re-arm path is only reached when a prop manager is provided
-    // AND status is 'connected'. With no prop manager, rearmAudioCapture is never
-    // called -- a guard regression would throw instead of reaching this line.
+    // AND status is 'connected'. On a fresh/standalone mount it must NOT fire --
+    // pin that explicitly so a guard regression that re-arms unconditionally fails.
+    expect(standaloneRearmSpy).not.toHaveBeenCalled()
   }
 
   it('desktop (VoiceOverlay): calls rearmAudioCapture on alreadyLive remount', async () => {
