@@ -1,6 +1,6 @@
 # Stateless architecture
 
-*Last updated: 2026-06-12. bd polyglot-pdf-vmxx: the handshake now carries `resume:true` on reconnects after the first successful open so the backend selects a no-greeting resume prompt; the stateless invariant is unchanged -- `resume` is a hint that controls the initiating message, not persisted state. The `connection.ts` dev test-injection hook (bd polyglot-pdf-g8w) is a client-side test seam and likewise adds no server-side state.*
+*Last updated: 2026-06-13. bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager -- client-side only, no server-side state. bd b6k4: createMicDropWarn exported from connection.ts -- internal refactor, no protocol change. bd vfb2: send_form_update request_hint param -- client round-trip opt-in, backend stateless invariant unchanged. Prior: bd polyglot-pdf-vmxx: resume:true handshake hint; the stateless invariant is unchanged. The connection.ts dev test-injection hook (bd polyglot-pdf-g8w) adds no server-side state.*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 

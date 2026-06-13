@@ -192,11 +192,21 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile
   ) {
     // No manager prop -- standalone fresh-mount path.
-    // createConnectionManager is mocked at the module level to a vi.fn(), so
-    // the component will call it but get undefined back. That means the component
-    // will render with connectionManager===null, and the alreadyLive branch (which
-    // only runs when a connectionManager prop is provided AND the mount effect fires
-    // with initialLanguage) is never reached. rearmAudioCapture is never called.
+    // createConnectionManager is mocked at the module level; return a manager whose
+    // rearmAudioCapture we can spy on, so we can pin the negative invariant: on a
+    // fresh/standalone mount the alreadyLive branch is NOT taken, so the component
+    // must never call rearmAudioCapture (a guard regression would call it).
+    const standaloneRearmSpy = vi.fn(async () => {})
+    const standaloneManager = makeResizeFlipMock()
+    ;(standaloneManager as any).rearmAudioCapture = standaloneRearmSpy
+    // A fresh standalone mount starts disconnected (no live session to re-arm).
+    ;(standaloneManager as any).getStatus = vi.fn(() => 'disconnected')
+
+    const { createConnectionManager } = await import('../shared/connection')
+    const createSpy = vi.mocked(createConnectionManager)
+    createSpy.mockReturnValue(standaloneManager)
+    createSpy.mockClear()
+
     render(
       <Overlay
         schema={MINIMAL_SCHEMA}
@@ -208,11 +218,13 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     // Give effects a tick to settle.
     await new Promise(resolve => setTimeout(resolve, 50))
 
-    // No re-arm should have happened -- there is no shared manager to call it on.
-    // This is implicitly asserted by the absence of any error; the point is the
-    // test stays passing when connectionManager is undefined (the standalone path).
-    // A regression that unconditionally called rearmAudioCapture (not guarded by
-    // connectionManager?.rearmAudioCapture()) would throw here.
+    // Standalone path: the component should have called createConnectionManager
+    // to build its own manager (it never got a prop manager).
+    expect(createSpy).toHaveBeenCalled()
+    // The alreadyLive re-arm path is only reached when a prop manager is provided
+    // AND status is 'connected'. On a fresh/standalone mount it must NOT fire --
+    // pin that explicitly so a guard regression that re-arms unconditionally fails.
+    expect(standaloneRearmSpy).not.toHaveBeenCalled()
   }
 
   it('desktop (VoiceOverlay): calls rearmAudioCapture on alreadyLive remount', async () => {
