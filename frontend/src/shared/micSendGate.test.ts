@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { shouldSendMicChunk } from './connection'
+import { shouldSendMicChunk, createMicDropWarn } from './connection'
 
 describe('shouldSendMicChunk (connection-level mic send gate)', () => {
   it('(a) status connected -> sends audio', () => {
@@ -43,13 +43,12 @@ describe('shouldSendMicChunk (connection-level mic send gate)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Rate-limit warn test -- exercises the callback path directly (not the pure
-// shouldSendMicChunk, which has no side effects). We replicate the drop-path
-// logic inline to verify the 1-per-second rate limit fires exactly once for
-// two drops within the same second.
+// Rate-limit warn test -- drives the real createMicDropWarn helper exported
+// from connection.ts so the production rate-limit logic has real coverage
+// (bd polyglot-pdf-b6k4, item 3: prior tests used a hand-copied closure).
 // ---------------------------------------------------------------------------
 
-describe('mic chunk drop warn rate-limit', () => {
+describe('mic chunk drop warn rate-limit (createMicDropWarn)', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
   let realDateNow: () => number
 
@@ -64,41 +63,33 @@ describe('mic chunk drop warn rate-limit', () => {
   })
 
   it('(e) two drops within 1 second emit exactly one warn', () => {
-    // Simulate the rate-limit logic that lives in connection.ts's startRecording
-    // callback -- extracted here as a closure so we can exercise it without
-    // needing a full ConnectionManager or WebSocket.
-    let lastWarnMs = 0
+    const warn = createMicDropWarn()
     const t0 = 1_000_000
 
-    function simulateDrop(nowMs: number) {
-      if (nowMs - lastWarnMs >= 1000) {
-        lastWarnMs = nowMs
-        console.warn('[VFF Connection] mic chunk DROPPED -- status=switching_section socketOpen=false')
-      }
-    }
+    Date.now = () => t0
+    warn('switching_section', false)   // first drop -- should warn
 
-    // First drop at t0 -- should warn
-    simulateDrop(t0)
-    // Second drop 500ms later -- within window, should NOT warn
-    simulateDrop(t0 + 500)
+    Date.now = () => t0 + 500
+    warn('switching_section', false)   // within window -- suppressed
 
     expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[VFF Connection] mic chunk DROPPED -- status=switching_section socketOpen=false'
+    )
   })
 
   it('(e) drop after the 1-second window emits a second warn', () => {
-    let lastWarnMs = 0
+    const warn = createMicDropWarn()
     const t0 = 2_000_000
 
-    function simulateDrop(nowMs: number) {
-      if (nowMs - lastWarnMs >= 1000) {
-        lastWarnMs = nowMs
-        console.warn('[VFF Connection] mic chunk DROPPED -- status=reconnecting socketOpen=false')
-      }
-    }
+    Date.now = () => t0
+    warn('reconnecting', false)        // warn 1
 
-    simulateDrop(t0)          // warn 1
-    simulateDrop(t0 + 500)    // suppressed
-    simulateDrop(t0 + 1001)   // warn 2 -- new window
+    Date.now = () => t0 + 500
+    warn('reconnecting', false)        // suppressed
+
+    Date.now = () => t0 + 1001
+    warn('reconnecting', false)        // warn 2 -- new window
 
     expect(warnSpy).toHaveBeenCalledTimes(2)
   })

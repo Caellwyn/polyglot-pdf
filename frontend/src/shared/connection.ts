@@ -208,8 +208,26 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 }
 
 /**
+ * Create a stateful rate-limited mic-drop warn function.
+ * Rate-limits console.warn to at most one call per second so a stranded
+ * connection status does not flood the console (~100 chunks/sec).
+ * Exported so the rate-limit logic is testable without a full ConnectionManager
+ * (bd polyglot-pdf-b6k4).
+ */
+export function createMicDropWarn(): (status: string, socketOpen: boolean) => void {
+	let lastWarnMs = 0
+	return (status: string, socketOpen: boolean) => {
+		const now = Date.now()
+		if (now - lastWarnMs >= 1000) {
+			lastWarnMs = now
+			console.warn('[VFF Connection] mic chunk DROPPED -- status=' + status + ' socketOpen=' + socketOpen)
+		}
+	}
+}
+
+/**
  * Create connection manager for bookmarklet
- * 
+ *
  * @param sharedStream - Optional pre-created MediaStream to share with audioManager (for VAD coordination)
  */
 export function createConnectionManager(
@@ -229,9 +247,6 @@ export function createConnectionManager(
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
-	// Rate-limit audio-drop warns to at most 1 per second so a stranded status
-	// does not flood the console (one line per chunk would be ~100/sec).
-	let _audioDropLastWarnMs = 0
 	// Single mic send callback shared by EVERY arming site (initial startRecording,
 	// rearmAudioCapture, and the startSection/switchToSection re-arms) so the gate
 	// policy (shouldSendMicChunk) and the drop logging stay consistent (bd xroy).
@@ -239,19 +254,14 @@ export function createConnectionManager(
 	// path keeps the WebSocket alive, and the backend drops switch-window audio
 	// server-side on BOTH paths (the WS route's drop_audio flag on the manual path;
 	// FormFillingService.stream_audio's _switch_lock backstop on the AI path).
+	const warnMicDrop = createMicDropWarn()
 	const sendMicChunkToBackend = (audioData: ArrayBuffer) => {
 		if (connection && shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())) {
 			connection.sendAudio(audioData)
 		} else {
-			// Chunk dropped -- emit a rate-limited warn so a stranded status is
-			// visible in devtools without flooding the console (~100 chunks/sec).
-			const now = Date.now()
-			if (now - _audioDropLastWarnMs >= 1000) {
-				_audioDropLastWarnMs = now
-				const st = connection ? connection.getStatus() : 'no-connection'
-				const rs = connection ? connection.isSocketOpen() : false
-				console.warn('[VFF Connection] mic chunk DROPPED -- status=' + st + ' socketOpen=' + rs)
-			}
+			const st = connection ? connection.getStatus() : 'no-connection'
+			const rs = connection ? connection.isSocketOpen() : false
+			warnMicDrop(st, rs)
 		}
 	}
 	// PTT is the DEFAULT (HALLUCINATION_REDUCTION, Oct 30 2025), and this must match
@@ -424,7 +434,13 @@ export function createConnectionManager(
 			paused = false
 			onStatusChange('error')
 		},
-		onNextField: trackedOnNextField
+		onNextField: trackedOnNextField,
+		onStopCapture: () => {
+			audioManager?.stopRecording()
+		},
+		onFormComplete: () => {
+			console.log('[VFF Connection] form complete')
+		},
 	}
 
 	const manager: ConnectionManager = {

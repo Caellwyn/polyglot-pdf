@@ -78,19 +78,20 @@ class CallbackHandler:
         self,
         data: Optional[Dict[str, Any]],
         applied_fields: Optional[list] = None,
-        next_field_schema: Optional[dict] = None
+        next_field_schema: Optional[dict] = None,
+        request_hint: bool = False,
     ) -> Optional[str]:
         """
         Send form state update to frontend.
-
-        Sends the form state to the connected websocket client and includes
-        the list of fields that were actually applied. Also requests next_field_hint
-        in the same message to reduce round trips.
 
         Args:
             data: Form state data to send
             applied_fields: List of field IDs that were actually applied
             next_field_schema: Schema for next field (JIT mode only)
+            request_hint: If True, await a next_field_hint round-trip and return it.
+                Callers on the update_form_fields path leave this False (the hint is
+                always discarded there -- bd polyglot-pdf-vfb2); only callers that
+                actually use the return value should pass True.
 
         Returns:
             Next field hint string or None
@@ -104,11 +105,7 @@ class CallbackHandler:
 
             await self._websocket.send_json({"type": "form_updated", "data": payload})
 
-            # Request next field hint via coordinator. A timeout sentinel is not a
-            # usable hint here (this path's callers ignore the return today); collapse
-            # it to None so this method honors its "string or None" contract and never
-            # leaks the sentinel object (bd polyglot-pdf-tks).
-            if self._request_coordinator:
+            if request_hint and self._request_coordinator:
                 hint = await self._request_coordinator.request_next_field_hint()
                 return None if hint is HINT_REQUEST_TIMEOUT else hint
         return None

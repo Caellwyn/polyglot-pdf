@@ -136,14 +136,20 @@ class FormFillingService:
         if accept_connection:
             await self._websocket.accept()
         
+        # Extract form_id here so it can be passed to CallbackHandler (confirmation
+        # audit logging guard requires both ids at construction time, bd rwjy).
+        form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+
         # Initialize callback handler
         self._callback_handler = CallbackHandler(
             websocket=websocket,
             session_id=session_id,
             request_coordinator=self._request_coordinator,
             send_transcript=send_transcript,
+            form_id=form_id,
+            form_session_id=form_session_id or session_id,
         )
-        
+
         # Inject tool handler methods into callback handler
         self._callback_handler.set_tool_handlers(
             handle_update_fields=self.handle_update_fields_tool_call,
@@ -152,13 +158,12 @@ class FormFillingService:
             request_form_state_from_client=self.request_form_state_from_client,
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
         )
-        
+
         # Use web form tool declarations (stateless)
         tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
 
         if self._live_ai is not None:
             # Set session context for token logging
-            form_id = schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
             _log.info("Setting token logging context",
                      form_id=form_id,
                      session_id=session_id,
