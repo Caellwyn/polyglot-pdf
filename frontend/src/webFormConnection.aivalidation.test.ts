@@ -718,16 +718,26 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
     // Both fields named.
     expect(msg).toContain('Case Number')
     expect(msg).toContain('Marriage Date')
-    // The read_only field's directive: system-managed, NOT a prerequisite wait.
-    expect(msg).toContain('system-managed')
-    // The dependency field still gets prerequisite guidance.
-    expect(msg).toContain('prerequisite')
-    // Critically: the read_only sentence must NOT carry the prerequisite directive.
-    // Split into per-field sentences on "Cannot update" and check the read_only one.
+
+    // Split into per-field sentences on "Cannot update" so each field's guidance
+    // can be checked in isolation.
     const caseSentence = msg
       .split('Cannot update')
       .find(s => s.includes('Case Number')) || ''
+    const marriageSentence = msg
+      .split('Cannot update')
+      .find(s => s.includes('Marriage Date')) || ''
+
+    // The read_only field is permanent/system-managed -- and must NOT be told to
+    // wait for a prerequisite (it has none).
     expect(caseSentence).toContain('system-managed')
-    expect(caseSentence).not.toContain('prerequisite')
+    expect(caseSentence).not.toContain('Marital Status')
+    expect(caseSentence).not.toContain('not updated; do not retry')
+
+    // The dependency-gated field gets the specific prerequisite instruction
+    // (names the trigger field) and the don't-retry-yet directive -- and must NOT
+    // be mislabeled system-managed.
+    expect(marriageSentence).toContain('Marital Status')
+    expect(marriageSentence).not.toContain('system-managed')
   })
 })

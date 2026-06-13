@@ -617,15 +617,17 @@ export class WebFormConnection {
       // and a single batch can mix kinds. A read_only field is system-managed and
       // has NO prerequisite to wait on -- a blanket "complete the prerequisite
       // fields" suffix would send the model chasing upstream fields that don't
-      // exist for it. So each field carries its own correct directive: read_only ->
-      // "do not attempt again" (permanent); dependency-gated -> "wait until the
-      // prerequisite is completed". The per-field reason already names the trigger
-      // field for the dependency case.
+      // exist for it. So each field carries its own directive. The dependency-gated
+      // `lf.reason` is ALREADY a complete, specific instruction ("Complete the 'X'
+      // field first..."), so its directive only adds the don't-retry-now signal
+      // WITHOUT restating the prerequisite (avoids the redundant / double-
+      // "prerequisite" phrasing fresh-eyes flagged). The read_only directive states
+      // the permanence (system-managed, never fillable).
       const errorMessages = lockedFields.map(lf => {
         const name = lf.field.spoken_name || lf.field.name;
         const directive = lf.readOnly
           ? 'It is system-managed and cannot be filled; do not attempt to fill it again.'
-          : 'Do not attempt to fill it again until the prerequisite is completed.';
+          : 'It was not updated; do not retry until then.';
         return `Cannot update '${name}': ${lf.reason} ${directive}`;
       });
 
