@@ -208,6 +208,94 @@ describe('WebFormConnection unconfirmable-field loop-breaker (bd polyglot-pdf-0y
   })
 })
 
+// Two empty fields so the model can ALTERNATE confirm_field across them. Before
+// bd polyglot-pdf-r2hy the per-field counter reset on every switch, so the cap
+// never engaged and the loop re-prompted forever; the session-wide cap bounds it.
+const TWO_FIELD_SCHEMA: FormSchema = {
+  source: 'web',
+  fields: [
+    { id: 'f_a', name: 'fieldA', spoken_name: 'Field A', type: 'text' },
+    { id: 'f_b', name: 'fieldB', spoken_name: 'Field B', type: 'text' },
+  ],
+  sections: [{ id: 's1', label: 'S1', order: 1, fields: ['f_a', 'f_b'] }],
+} as unknown as FormSchema
+
+describe('WebFormConnection cross-field confirm-spin session cap (bd polyglot-pdf-r2hy)', () => {
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  async function connectedTwoField(): Promise<MockWebSocket> {
+    const conn = new WebFormConnection(TWO_FIELD_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    return ws
+  }
+
+  it('bounds the total re-prompts when the model spins confirm_field across DIFFERENT empty fields', async () => {
+    const ws = await connectedTwoField()
+
+    // The per-field gate fires a re-prompt every CONFIRM_LIMIT(=2) CONSECUTIVE
+    // confirms of the SAME field, capped per-field at REPROMPT_CAP(=3). A model
+    // that confirms a field twice (-> prompt), switches to the other field twice
+    // (-> prompt), and keeps alternating in PAIRS re-arms the per-field counter on
+    // every switch, so WITHOUT the session cap each new field would prompt up to
+    // 3 more times and the total would grow without bound. The session-wide cap
+    // (UNCONFIRMABLE_SESSION_CAP=6) bounds the TOTAL re-prompts regardless of how
+    // many fields the spin touches.
+    const ids = ['f_a', 'f_b']
+    for (let cycle = 0; cycle < 50; cycle++) {
+      const id = ids[cycle % 2]
+      // two consecutive confirms of the same field -> trips the per-field gate
+      fireConfirm(ws, id)
+      fireConfirm(ws, id)
+    }
+
+    const p = prompts(ws)
+    // Bounded by the session cap, NOT ~50. A regression to per-field-only would
+    // produce one prompt-burst per field-switch (dozens here).
+    expect(p.length).toBeGreaterThan(0)
+    expect(p.length).toBeLessThanOrEqual(6)
+  })
+
+  it('a successful confirm of the stuck field restores the session re-prompt budget', async () => {
+    const ws = await connectedTwoField()
+
+    // Spin field A alone until its per-field re-prompts are exhausted (LIMIT=2,
+    // REPROMPT_CAP=3 -> 3 prompts over ~6 confirms), consuming session budget.
+    for (let i = 0; i < 6; i++) {
+      fireConfirm(ws, 'f_a')
+    }
+    const before = prompts(ws).length
+    expect(before).toBeGreaterThan(0)
+
+    // Now A finally gets a value and confirms -- genuine progress restores budget.
+    // The field_update is keyed by field NAME ('fieldA'), as in production.
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'field_update', updates: { fieldA: 'A123456789' } }),
+    })
+    fireConfirm(ws, 'f_a') // takes -> resetUnconfirmableTracking()
+
+    // A fresh empty field B can now earn re-prompts again (budget was reset).
+    for (let i = 0; i < 4; i++) {
+      fireConfirm(ws, 'f_b')
+    }
+    expect(prompts(ws).length).toBeGreaterThan(before)
+  })
+})
+
 describe('WebFormConnection synchronous confirm ack (bd polyglot-pdf-wpw.2)', () => {
   beforeEach(() => {
     MockWebSocket.instances = []

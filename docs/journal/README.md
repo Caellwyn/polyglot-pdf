@@ -13,4 +13,10 @@ Files touched.
 `scripts/journal_scaffold.py <bead-id>` emits the skeleton; you fill the prose.
 The tag set is the per-feature index: `grep -l '<tag>' entries/*.md`.
 
+**Harness telemetry** lives in two places: [`harness_ledger.jsonl`](harness_ledger.jsonl)
+is the pre-2026-06-10 archive, and [`telemetry/*.json`](telemetry/) is the current
+per-closeout system. Analyze BOTH (dedup by `session_id` + `recorded_at`) for the
+full cost dataset -- see [`telemetry/README.md`](telemetry/README.md) (bd
+polyglot-pdf-icjr).
+
 See [`../doc-architecture.md`](../doc-architecture.md) for the full system.

@@ -60,7 +60,11 @@ def _merge(chunks: list[dict]) -> dict:
     merged = {"source": "pdf", "fields": []}
     parts: dict[str, dict] = {}
     sections: dict[str, dict] = {}
-    supplements: list = []
+    # Dedup supplements by id (first-seen wins), mirroring parts/sections. Multiple
+    # page-chunks can each emit the same supplement (e.g. supplement_a), so appending
+    # unconditionally produced duplicate entries in the merged output (bd
+    # polyglot-pdf-nzuy). Fall back to name when a supplement carries no id.
+    supplements: dict[str, dict] = {}
     meta = None
     for ch in chunks:
         if ch is None:
@@ -75,7 +79,9 @@ def _merge(chunks: list[dict]) -> dict:
             if s.get("id") and s["id"] not in sections:
                 sections[s["id"]] = s
         for sup in (ch.get("supplements") or []):
-            supplements.append(sup)
+            key = sup.get("id") or sup.get("name")
+            if key and key not in supplements:
+                supplements[key] = sup
     if meta:
         merged["form_metadata"] = meta
     if parts:
@@ -83,7 +89,7 @@ def _merge(chunks: list[dict]) -> dict:
     if sections:
         merged["sections"] = list(sections.values())
     if supplements:
-        merged["supplements"] = supplements
+        merged["supplements"] = list(supplements.values())
     return merged
 
 
