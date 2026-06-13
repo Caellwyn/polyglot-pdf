@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
+*Last updated: 2026-06-13. bd vfb2: send_form_update no longer unconditionally awaits request_next_field_hint (no compression behavior change). Prior: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
 cost-motivation of section resets corrected per maintainer; epic `polyglot-pdf-hcsl`,
 bead `polyglot-pdf-h04c`). Session-resumption/GoAway decisions: see
 [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md)

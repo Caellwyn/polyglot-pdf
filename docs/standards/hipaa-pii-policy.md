@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/log_schemas.py backend/utils/confirmation_logger.py backend/utils/token_file_logger.py backend/utils/dev_file_logger.py backend/routes/pdf_fill_routes.py backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/tests/test_no_pii_logging.py frontend/src/shared/metrics.ts
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t (GoAway) added `on_go_away` in `callback_handler.py` and GoAway detection in `live_ai_gemini.py`; neither path logs PII/PHI -- PII policy unchanged.*
+*Last updated: 2026-06-13. bd rwjy: CallbackHandler now receives form_id/form_session_id; confirmation logging fires field_id + method only, never field value -- PII policy unchanged. Prior: bd polyglot-pdf-c5t (GoAway) added on_go_away in callback_handler.py; neither path logs PII/PHI.*
 
 This is an immigration-form app: it handles A-numbers, names, addresses, and dates
 of birth. Those are PII/PHI. Anything emitted at INFO/WARNING reaches stdout →
@@ -60,4 +60,4 @@ The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed i
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t (GoAway) added `on_go_away` in `callback_handler.py` and GoAway detection in `live_ai_gemini.py`; neither path logs PII/PHI -- PII policy unchanged.*
+*Last updated: 2026-06-13. bd rwjy: CallbackHandler now receives form_id/form_session_id; confirmation logging fires field_id + method only, never field value -- PII policy unchanged. Prior: bd polyglot-pdf-c5t (GoAway) added on_go_away in callback_handler.py; neither path logs PII/PHI.*
