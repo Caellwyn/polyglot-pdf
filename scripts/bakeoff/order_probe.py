@@ -156,18 +156,28 @@ def _extract_json_array(text: str):
 
 
 def ask_order(png_path: str, legend: list[dict], model: str,
-              add_dirs: list[str], answer_dir: str) -> list[int]:
+              add_dirs: list[str], answer_dir: str,
+              blind_legend: bool = False) -> list[int]:
     """Ask the Claude CLI to return the page's markers in human reading order.
 
     The model WRITES the array to a scratch file (read back here) rather than
     printing it: an observed page (48 dense checkboxes) had the model narrate its
     grid reasoning and overflow the per-message ceiling, TRUNCATING the printed
-    array mid-list. The file path sidesteps the message limit (bd 7a9.10)."""
+    array mid-list. The file path sidesteps the message limit (bd 7a9.10).
+
+    `blind_legend` hides the field NAMES from the legend (markers become bare
+    `marker N`), forcing the answer to come from the page IMAGE alone. This is the
+    control that proves the ordering is VISUAL judgment, not name-parsing -- on
+    I-90 the names (P1_Line3a...) leak the order, so the non-blind run cannot rule
+    out name-parsing on its own (bd 7a9.10 fresh-eyes)."""
     exe = shutil.which("claude") or "claude"
     answer_path = os.path.join(answer_dir, f"_order_answer_{os.getpid()}.json")
     if os.path.exists(answer_path):
         os.remove(answer_path)
-    legend_txt = "\n".join(f"  marker {l['tag']} -> {l['name']}" for l in legend)
+    if blind_legend:
+        legend_txt = "\n".join(f"  marker {l['tag']}" for l in legend)
+    else:
+        legend_txt = "\n".join(f"  marker {l['tag']} -> {l['name']}" for l in legend)
     prompt = ORDER_PROMPT.format(png=os.path.abspath(png_path),
                                  legend=legend_txt,
                                  answer_path=answer_path)
@@ -200,7 +210,11 @@ def ask_order(png_path: str, legend: list[dict], model: str,
 # --------------------------------------------------------------------------- #
 
 def _kendall_tau(order_a: list, order_b: list) -> Optional[float]:
-    """Kendall tau-b over the items common to both orders (range -1..1)."""
+    """Concordance ratio (Kendall tau-a) over the items common to both orders.
+
+    (conc - disc) / (conc + disc), range -1..1. This is tau-a, NOT tau-b: there
+    is no tie correction, which is exact here because the field-name sequences
+    have no repeated items (every pair is concordant or discordant)."""
     common = [x for x in order_a if x in set(order_b)]
     rank_b = {x: i for i, x in enumerate(order_b)}
     seq = [rank_b[x] for x in common]
@@ -290,6 +304,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--model", default="claude-opus-4-8")
     ap.add_argument("--dpi", type=int, default=150)
+    ap.add_argument("--blind-legend", action="store_true",
+                    help="hide field NAMES from the legend so the model must "
+                         "order from the page IMAGE alone (the visual-vs-"
+                         "name-parsing control; bd 7a9.10)")
     args = ap.parse_args(argv)
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -305,12 +323,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         ann_pdf = os.path.join(args.outdir, f"page_{pg:02d}_annotated.pdf")
         png = os.path.join(args.outdir, f"page_{pg:02d}_annotated.png")
         legend = annotate_page(args.pdf, json.loads(json.dumps(dump)), pg, ann_pdf)
-        render_pdf_page(ann_pdf, 0, png, dpi=args.dpi)
+        # annotate_page saves the WHOLE multi-page doc with markers on page `pg`;
+        # render THAT page (not page 0) or the model sees the wrong page image.
+        render_pdf_page(ann_pdf, pg, png, dpi=args.dpi)
         sweep = sweep_page_order(json.loads(json.dumps(dump)), pg)
         try:
             model_tags = ask_order(png, legend, args.model,
                                    add_dirs=[os.path.abspath(args.outdir), pdf_dir],
-                                   answer_dir=os.path.abspath(args.outdir))
+                                   answer_dir=os.path.abspath(args.outdir),
+                                   blind_legend=args.blind_legend)
             sc = score_order(model_tags, legend, truth, sweep)
             sc["page"] = pg
             sc["status"] = "ok"

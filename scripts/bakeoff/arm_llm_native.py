@@ -298,7 +298,8 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
                 json.dump(envelope, fh, indent=2)
             raise RuntimeError(
                 f"claude CLI produced no usable schema "
-                f"(scratch_file={os.path.exists(scratch)}, "
+                f"(scratch_file_existed={os.path.exists(scratch)} "
+                f"[deleted on cleanup], "
                 f"subtype={envelope.get('subtype')!r}, "
                 f"num_turns={envelope.get('num_turns')}, "
                 f"result_chars={len(result_text)}); envelope dumped to {dbg}")
