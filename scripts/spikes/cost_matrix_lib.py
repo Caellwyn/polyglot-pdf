@@ -52,11 +52,14 @@ RATES = {
     "3.1": {"text_input": 0.75, "audio_input": 3.00, "text_output": 4.50, "audio_output": 12.00},
 }
 
-# Measured calibration anchors (see module docstring).
-_ANCHOR_FULL = (25_632, 8_165)   # (SI chars, turn-1 prompt tokens), full-form arm
-_ANCHOR_SECTION = (3_831, 2_311)  # 3.1 section-2 restart greeting
-CHAR_RATE = (_ANCHOR_FULL[1] - _ANCHOR_SECTION[1]) / (_ANCHOR_FULL[0] - _ANCHOR_SECTION[0])
-FIXED_OVERHEAD = _ANCHOR_SECTION[1] - CHAR_RATE * _ANCHOR_SECTION[0]
+# Calibration anchors are DERIVED FROM THE DATA at load time (calibrate(),
+# called by load_matrix()), never hardcoded: anchor A = the full-form arm's
+# (system_instruction_chars, prompt_curve[0]); anchor B = the section-reset
+# arm's (system_instruction_chars, greeting_tokens) -- BOTH from the same
+# session (the SECTION-1 whole-session greeting; an earlier hardcoded version
+# paired the greeting tokens with section-2's SI size, fresh-eyes round 1).
+CHAR_RATE: float = float("nan")
+FIXED_OVERHEAD: float = float("nan")
 
 CSV_COLUMNS = [
     "question number",
@@ -109,6 +112,12 @@ def _cell_frames(csv_path: Path):
     expected_updates = 1 if key["path"] == "happy" else 2
     qdf["update_calls"] = qdf["tools"].map(lambda t: sum(1 for x in t if x == "update_form_fields"))
     qdf["confirm_calls"] = qdf["tools"].map(lambda t: sum(1 for x in t if x == "confirm_field"))
+    # APPROXIMATE metric: tool calls are attributed to the question whose
+    # turns were active when they fired, so a confirm landing in the NEXT
+    # question's window under-counts this question (systematically worse for
+    # section-reset, where boundaries cut windows). Use the run-level
+    # confirmed_fields (client end-state) as the primary compliance measure;
+    # this flag is a secondary, per-question signal only.
     qdf["tool_compliant"] = (qdf["update_calls"] >= expected_updates) & (qdf["confirm_calls"] >= 1)
 
     curve = pd.DataFrame({"prompt_tokens": meta["prompt_curve"]})
@@ -116,8 +125,13 @@ def _cell_frames(csv_path: Path):
     drop_idx = {d[0] for d in meta.get("eviction_drops", [])}
     curve["drop"] = curve["event_index"].isin(drop_idx)
     curve["drop_kind"] = None
-    curve.loc[curve["drop"], "drop_kind"] = (
-        "restart" if key["arm"] == "section-reset" else "eviction")
+    # Drop semantics depend on the arm: only the sliding-window arm has
+    # compression, so only ITS drops are evictions. Section-reset drops are
+    # session-restart curve resets; unbounded drops (the GoAway-truncated 3.1
+    # cells) are post-death/billing anomalies, NOT evictions (fresh-eyes r1).
+    _KIND = {"sliding-window": "eviction", "section-reset": "restart",
+             "unbounded": "anomaly"}
+    curve.loc[curve["drop"], "drop_kind"] = _KIND[key["arm"]]
     for col, val in (("model", key["model"]), ("arm", key["arm"]), ("path", key["path"])):
         curve[col] = val
 
@@ -129,6 +143,7 @@ def _cell_frames(csv_path: Path):
         "trigger": meta.get("trigger"), "window": meta.get("window"),
         "dead_from_q": dead_from_q,
         "n_stalled_turns": int(turns["stalled"].sum()) if len(turns) else 0,
+        "n_eviction_drops": len(meta.get("eviction_drops", [])),
         "n_errors": len(meta.get("errors", [])),
         "confirmed_fields": len(meta.get("client_confirmed_fields", [])),
         "schema_scope": meta.get("schema_scope"),
@@ -150,7 +165,31 @@ def load_matrix(data_dir: Path = DATA_DIR):
     curves = pd.concat(cs, ignore_index=True)
     runs = pd.DataFrame(rs)
     _validate(questions)
+    calibrate(curves, runs)
     return questions, turns, curves, runs
+
+
+def calibrate(curves: pd.DataFrame, runs: pd.DataFrame) -> tuple[float, float]:
+    """Solve CHAR_RATE / FIXED_OVERHEAD from two measured (si_chars, prompt
+    tokens) anchors read off the loaded data. Both anchors use the SAME model
+    (2.5) and the SAME metric (the session's first billed PROMPT count,
+    prompt_curve[0]) -- an earlier version mixed a prompt count with a
+    greeting prompt+response TOTAL and a mispaired SI size (fresh-eyes
+    round 1)."""
+    global CHAR_RATE, FIXED_OVERHEAD
+
+    def _first_prompt(arm: str, path: str):
+        run = runs[(runs["arm"] == arm) & (runs["model"] == "2.5")
+                   & (runs["path"] == path)].iloc[0]
+        curve = curves[(curves["arm"] == arm) & (curves["model"] == "2.5")
+                       & (curves["path"] == path)].sort_values("event_index")
+        return float(run["si_chars"]), float(curve["prompt_tokens"].iloc[0])
+
+    a_chars, a_tok = _first_prompt("unbounded", "happy")      # full-form SI
+    b_chars, b_tok = _first_prompt("section-reset", "happy")  # section-1 SI
+    CHAR_RATE = (a_tok - b_tok) / (a_chars - b_chars)
+    FIXED_OVERHEAD = b_tok - CHAR_RATE * b_chars
+    return CHAR_RATE, FIXED_OVERHEAD
 
 
 def _validate(questions: pd.DataFrame) -> None:
@@ -227,7 +266,10 @@ def conversation_growth_per_turn(curves: pd.DataFrame, runs: pd.DataFrame) -> pd
         incs = [b - a for a, b in zip(prompts, prompts[1:]) if b >= a]
         per_event = statistics.median(incs) if incs else 0.0
         n_live_q = (run["dead_from_q"] - 1) if pd.notna(run["dead_from_q"]) else 20
-        events_per_q = len(prompts) / max(n_live_q, 1)
+        # len(prompts) - 1: the first event is the session greeting, not a
+        # question turn (fresh-eyes r1: counting it biased events/question
+        # by ~+2.5%).
+        events_per_q = (len(prompts) - 1) / max(n_live_q, 1)
         rows.append({"model": model, "path": path,
                      "growth_per_event": per_event,
                      "events_per_question": events_per_q,
@@ -237,83 +279,153 @@ def conversation_growth_per_turn(curves: pd.DataFrame, runs: pd.DataFrame) -> pd
 
 # ------------------------------------------------------- what-if window model
 
-# Measured SI sizes (chars) for the schema-feeding scenarios. full/section are
-# the production templates over the real demo schema (computed offline via
-# build_form_context); 'jit' is the same with USE_JIT_SCHEMA=True; 'drip' is
-# the instruction template with NO field schema at all (fields drip in through
-# conversation/tool responses and are therefore EVICTABLE -- maintainer
+# SI sizes (chars) for the schema-feeding scenarios, measured offline by
+# running backend.services.ai_context.build_form_context over the real demo
+# schema (recompute + drift-check with recompute_si_scenarios(); the notebook
+# asserts the literals are current). 'full' is the production legacy template
+# with all 174 fields; 'jit' is the same call with USE_JIT_SCHEMA=True (the
+# manifest path -- built, never measured live); 'drip' is the template built
+# with fields=[] (NO field schema at all -- fields drip in through
+# conversation/tool responses and are therefore EVICTABLE; maintainer
 # scenario, 2026-06-12).
 SI_SCENARIOS_CHARS = {
     "full-dump (today's no-sections port)": 25_632,
     "jit-manifest (built, unmeasured live)": 10_204,
-    "drip-in (instruction only, schema via tools)": 3_289,
+    "drip-in (fields=[]; schema via tools)": 3_069,
 }
-# 15 real sections; per-section legacy SI sizes (chars) for the section-reset
-# extrapolation, measured offline over the real schema.
-SECTION_SI_CHARS = [4_570, 3_831, 5_699, 4_089, 3_542, 3_615, 3_659, 6_313,
-                    3_733, 3_681, 5_237, 3_289, 3_361, 9_496, 4_301]
+# 15 real sections; per-section legacy SI sizes (chars), same offline build
+# (values are recompute_si_scenarios()['sections'] verbatim; the notebook
+# drift-checks them -- the template evolves, cost impact of small drift
+# ~0.1%).
+SECTION_SI_CHARS = [4_571, 3_832, 5_700, 4_090, 3_543, 3_616, 3_660, 6_314,
+                    3_734, 3_682, 5_238, 3_290, 3_362, 9_497, 4_302]
+
+
+def recompute_si_scenarios() -> dict:
+    """Recompute every SI size live from the backend templates + real schema
+    (imports the backend; offline -- no network). The notebook calls this and
+    surfaces any drift from the literals above."""
+    import sys
+    root = str(Path(__file__).resolve().parent.parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from backend import config as _config
+    from backend.services import ai_context
+
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    full = {"form_metadata": schema["form_metadata"], "fields": schema["fields"]}
+    secs: dict[str, list] = {}
+    for f in schema["fields"]:
+        secs.setdefault(f.get("section_id") or "section-1", []).append(f)
+
+    def _si_len(sch, jit):
+        s = _config.Settings(USE_JIT_SCHEMA=jit)
+        orig = ai_context.get_settings
+        ai_context.get_settings = lambda: s  # patch THE MODULE-LOCAL binding
+        try:
+            return len(ai_context.build_form_context(
+                sch, {}, section_number=1, total_sections=15, section_label="X"))
+        finally:
+            ai_context.get_settings = orig
+
+    return {
+        "full": _si_len(full, False),
+        "jit": _si_len(full, True),
+        "drip": _si_len({"form_metadata": schema["form_metadata"], "fields": []}, False),
+        "sections": [_si_len({"form_metadata": schema["form_metadata"],
+                              "fields": fl}, False) for fl in secs.values()],
+    }
+
+
+# Billed usage events per question, measured from the matrix via
+# conversation_growth_per_turn() (the notebook sets this per path before
+# modeling; ~2.0 happy / ~3.9 unhappy).
+_EVENTS_PER_Q = 2.0
+
+
+def set_events_per_question(value: float) -> None:
+    global _EVENTS_PER_Q
+    _EVENTS_PER_Q = float(value)
 
 
 def window_cost_curve(si_chars: float, growth_per_q: float, n_questions: int,
-                      model: str, windows: list[int],
-                      trigger_headroom: float = 1.30,
-                      out_share: float = 0.06) -> pd.DataFrame:
-    """Modeled cumulative TEXT-INPUT cost over n_questions for a sliding-window
-    session, per candidate window size, for one SI scenario.
+                      model: str, configs: list[tuple[int, int]],
+                      eviction_lag_q: float = 1.5) -> pd.DataFrame:
+    """BEST-CASE modeled cumulative TEXT-INPUT cost over n_questions for a
+    sliding-window session, per (trigger_tokens, window_tokens) config, for
+    one SI scenario. "Best-case" means the server evicts as configured: the
+    measured matrix shows firing is not guaranteed (the 2.5 sliding happy
+    cell crossed its 12k trigger around q8 and never evicted), so reality
+    lands BETWEEN this model and the unbounded curve. window_model_check()
+    quantifies that gap against the measured cells.
 
-    Model (stated so review can attack it):
-      base = si_tokens_from_chars(si_chars)            # unevictable floor
-      conversation after q questions: c(q) = growth_per_q * q, capped by the
-      window's evictable budget. The API's target_tokens lands ABOVE the base
-      (h04c/wyhh: landing ~ base + retained conversation), so a window W keeps
-      conv between W_lo and W_hi where W_hi = trigger = W * trigger_headroom
-      and W_lo = W (both measured-from-base, i.e. the evictable budget is
-      max(W - base, 0)). Steady-state per-turn prompt ~= base + midpoint.
-      Per-question prompt billing ~= 2 turns (happy) -- the caller passes
-      growth_per_q for the path it wants; this function works per-question.
-      Output tokens are excluded (out_share kept for sensitivity, default off
-      in the cost: this is the TEXT-IN curve the SI lever moves).
+    Model (stated so review can attack it; trigger/window are TOTAL tokens,
+    exactly as the API counts them -- fresh-eyes round 1 caught an earlier
+    version that wrongly applied the headroom to the evictable budget):
+      base = si_tokens_from_chars(si_chars)         # unevictable floor
+      hi  = trigger - base   # conversation level where eviction is REQUESTED
+      lo  = max(window - base, 0)  # retained conversation after eviction
+                                   # (measured landings sit at/above this)
+      hi <= 0 -> compression can never fire (trigger below the SI floor):
+                 the curve is just unbounded growth (infeasible config).
+      Conversation c(q) = growth_per_q * q until the first eviction COMPLETES
+      at q_evict = hi/growth_per_q + eviction_lag_q (the async 1-3 turn lag,
+      eycd/h04c); after that, steady-state sawtooth midpoint (lo + hi) / 2.
+    Billing: each question re-bills the prompt on each billed event
+    (set_events_per_question; measured ~2.0 happy / ~3.9 unhappy).
 
-    Returns tidy DataFrame: window, q, prompt_tokens_avg, cum_text_in_cost.
+    Returns tidy rows: trigger, window, q, prompt_tokens_avg,
+    cum_text_in_cost, feasible.
     """
     rate = RATES[model]["text_input"] / 1e6
     base = si_tokens_from_chars(si_chars)
     rows = []
-    for w in windows:
-        evictable_budget = max(w - base, 0.0)
-        hi = evictable_budget * trigger_headroom
-        cum_cost = 0.0
+    for trigger, window in configs:
+        hi = trigger - base
+        lo = max(window - base, 0.0)
+        feasible = hi > 0
+        q_evict = (hi / growth_per_q + eviction_lag_q) if feasible and growth_per_q > 0 else float("inf")
+        steady = (lo + hi) / 2 if feasible else 0.0
+        cum = 0.0
         for q in range(1, n_questions + 1):
             conv = growth_per_q * q
-            if evictable_budget <= 0:
-                conv_eff = conv  # window below base: nothing evictable, grows unbounded
-            elif conv <= hi:
-                conv_eff = conv
-            else:
-                conv_eff = (evictable_budget + hi) / 2  # steady-state sawtooth midpoint
+            conv_eff = conv if (not feasible or q <= q_evict) else min(conv, steady)
             prompt = base + conv_eff
-            # Each question re-bills the prompt on each of its turns; the
-            # caller's growth_per_q already encodes the path's turns/question,
-            # so we bill prompt once per TURN via turns-per-question implied
-            # by growth: approximate 2 turns (happy) / 4 (unhappy) is folded
-            # into growth_per_q's calibration -- here we bill per question
-            # using the measured events_per_question from the data instead.
-            cum_cost += prompt * rate * _TURN_BILLS_PER_Q
-            rows.append({"window": w, "q": q,
-                         "prompt_tokens_avg": prompt,
-                         "cum_text_in_cost": cum_cost})
+            cum += prompt * rate * _EVENTS_PER_Q
+            rows.append({"trigger": trigger, "window": window, "q": q,
+                         "prompt_tokens_avg": prompt, "cum_text_in_cost": cum,
+                         "feasible": feasible})
     return pd.DataFrame(rows)
 
 
-# Billed usage events per question, measured from the matrix (median events
-# per question across unbounded cells is ~2.05 happy / ~4.1 unhappy; the
-# notebook sets this per path from conversation_growth_per_turn()).
-_TURN_BILLS_PER_Q = 2.0
-
-
-def set_turn_bills_per_question(value: float) -> None:
-    global _TURN_BILLS_PER_Q
-    _TURN_BILLS_PER_Q = float(value)
+def window_model_check(questions: pd.DataFrame, runs: pd.DataFrame,
+                       growth: pd.DataFrame) -> pd.DataFrame:
+    """Model-vs-measured for the four measured sliding-window cells: the
+    honesty check the notebook must display before any what-if chart.
+    'measured' is the cell's valid-question text-in cost; 'unbounded' is the
+    same model/path unbounded cell (the no-eviction bound)."""
+    rows = []
+    for (model, path), grp in growth.groupby(["model", "path"]):
+        g = grp.iloc[0]
+        set_events_per_question(g["events_per_question"])
+        run = runs[(runs["model"] == model) & (runs["arm"] == "sliding-window")
+                   & (runs["path"] == path)].iloc[0]
+        n_q = int(questions[(questions["model"] == model)
+                            & (questions["arm"] == "sliding-window")
+                            & (questions["path"] == path) & questions["valid"]]["q"].count())
+        pred = window_cost_curve(run["si_chars"], g["growth_per_question"], n_q,
+                                 model, [(int(run["trigger"]), int(run["window"]))])
+        sel = ((questions["model"] == model) & (questions["path"] == path)
+               & questions["valid"])
+        measured = questions[sel & (questions["arm"] == "sliding-window")]["text in token cost"].sum()
+        unbounded = questions[sel & (questions["arm"] == "unbounded")
+                              & (questions["q"] <= n_q)]["text in token cost"].sum()
+        rows.append({"model": model, "path": path, "n_questions": n_q,
+                     "modeled_text_in": pred["cum_text_in_cost"].iloc[-1],
+                     "measured_text_in": measured,
+                     "unbounded_text_in": unbounded,
+                     "measured_evictions": int(run["n_eviction_drops"])})
+    return pd.DataFrame(rows)
 
 
 def section_reset_model_cost(growth_per_q: float, questions_per_section: list[int],
@@ -321,12 +433,16 @@ def section_reset_model_cost(growth_per_q: float, questions_per_section: list[in
                              ) -> float:
     """Modeled cumulative text-in cost for the section-reset flow over a whole
     form: each section starts a fresh session (its own SI base), conversation
-    grows within the section only."""
+    grows within the section only. questions_per_section and the SI list must
+    be the same length (asserted -- zip would truncate silently)."""
     rate = RATES[model]["text_input"] / 1e6
     sis = si_chars_per_section or SECTION_SI_CHARS
+    if len(questions_per_section) != len(sis):
+        raise ValueError("questions_per_section and SI list lengths differ "
+                         f"({len(questions_per_section)} vs {len(sis)})")
     total = 0.0
     for n_q, si_chars in zip(questions_per_section, sis):
         base = si_tokens_from_chars(si_chars)
         for q in range(1, n_q + 1):
-            total += (base + growth_per_q * q) * rate * _TURN_BILLS_PER_Q
+            total += (base + growth_per_q * q) * rate * _EVENTS_PER_Q
     return total
