@@ -16,7 +16,7 @@ import {
   getFieldOrder,
   isFormComplete
 } from "./navigation";
-import { shouldShowField, validateField } from "./schema-forms/utils/validation";
+import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -555,8 +555,15 @@ export class WebFormConnection {
       );
 
       if (field) {
-        // Check if field is locked/hidden due to dependencies (Nov 22, 2025)
-        const isAvailable = !field.hidden && shouldShowField(field, this.state.fieldValues);
+        // Check if field is locked/hidden/read-only due to dependencies.
+        // A read_only field is locked too (bd polyglot-pdf-34wc): the AI must
+        // not write to it, and the gate previously checked only hidden +
+        // show_if visibility, so a visible read_only field slipped through to
+        // the apply path instead of being reported back to the model.
+        const isAvailable =
+          !field.hidden &&
+          shouldShowField(field, this.state.fieldValues) &&
+          !isFieldReadOnly(field, this.state.fieldValues);
 
         if (!isAvailable) {
           // Field is locked - collect dependency info for error message

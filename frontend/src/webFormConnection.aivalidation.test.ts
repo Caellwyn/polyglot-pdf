@@ -547,3 +547,103 @@ describe('WebFormConnection locked-field rejection (bd polyglot-pdf-z6xs)', () =
     expect(completions).toHaveLength(0)
   })
 })
+
+// --- bd polyglot-pdf-34wc: read_only locked-field message names field once ---
+// A read_only field is locked (the AI must not write it). Two bugs were latent:
+// (1) the locked-field gate checked only hidden + show_if visibility, so a
+//     VISIBLE read_only field slipped through to the apply path instead of being
+//     reported back to the model; and
+// (2) the read_only lockedReason restated the field name, which -- composed with
+//     the "Cannot update '<name>': " prefix -- printed the name TWICE.
+
+describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', () => {
+  const READONLY_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'case_number',
+        name: 'caseNumber',
+        spoken_name: 'Case Number',
+        type: 'text',
+        read_only: true,  // visible but not user-editable
+      },
+      {
+        id: 'first_name',
+        name: 'firstName',
+        spoken_name: 'First Name',
+        type: 'text',
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['case_number', 'first_name'] },
+    ],
+  } as unknown as FormSchema
+
+  function onMsgSent(ws: MockWebSocket): any[] {
+    return ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+  }
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('routes a read_only field-fill to completion_message (the AI must not write it)', async () => {
+    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: 'A123' } }) })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    // No dead dependency_error
+    expect(onMsgSent(ws).filter((m: any) => m.type === 'dependency_error')).toHaveLength(0)
+  })
+
+  it('names the read_only field EXACTLY ONCE in the completion_message (bd 34wc)', async () => {
+    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: 'A123' } }) })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    const msg: string = completions[0].message
+    // The exit criterion: the spoken name appears once, not "Cannot update
+    // 'Case Number': The field 'Case Number' is read-only..."
+    const occurrences = msg.split('Case Number').length - 1
+    expect(occurrences).toBe(1)
+    expect(msg).toContain('read-only')
+  })
+
+  it('never echoes the rejected read_only value back to the backend (PII-safe)', async () => {
+    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    const secret = 'super-secret-case-id-9999'
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: secret } }) })
+
+    for (const m of onMsgSent(ws)) {
+      expect(JSON.stringify(m)).not.toContain(secret)
+    }
+  })
+})

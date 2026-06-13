@@ -167,11 +167,15 @@ export function evaluateFieldAvailability(
     return { availability: 'hidden' };
   }
 
-  // Field is read-only (treat as locked since user can't modify it)
+  // Field is read-only (treat as locked since user can't modify it). The reason
+  // is a name-FREE clause: the sole consumer (webFormConnection composes
+  // "Cannot update '<name>': <reason>") already names the field, so restating it
+  // here produced "Cannot update 'X': The field 'X' is read-only..." -- the field
+  // name twice (bd polyglot-pdf-34wc, mirroring the z6xs hidden-field fix).
   if (field.read_only) {
     return {
       availability: 'locked',
-      lockedReason: `The field '${field.spoken_name || field.name}' is read-only and cannot be modified.`
+      lockedReason: 'it is read-only and cannot be modified.'
     };
   }
 
