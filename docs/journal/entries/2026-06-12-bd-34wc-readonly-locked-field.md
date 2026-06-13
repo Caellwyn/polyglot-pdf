@@ -45,20 +45,29 @@ the locked path, so fixing the gate is a prerequisite, not scope creep.
 `webFormConnection.ts` is the only non-test consumer of
 `evaluateFieldAvailability`, so dropping the name from the reason is safe.
 
-3. (Folded in: **polyglot-pdf-2ip6**, fresh-eyes finding 1.) The trailing
-   guidance in the `completion_message` now fits the lock kind. The single fixed
-   suffix ("...until the prerequisite fields are completed.") is correct for a
-   dependency-gated field but wrong for a read_only one -- a read_only field has
+3. (Folded in: **polyglot-pdf-2ip6**, fresh-eyes finding 1.) The guidance in the
+   `completion_message` now fits the lock kind, PER FIELD. The original single
+   fixed suffix ("...until the prerequisite fields are completed.") is correct for
+   a dependency-gated field but wrong for a read_only one -- a read_only field has
    no prerequisite, so that instruction would send the model chasing upstream
-   fields that don't exist. When every locked field in the batch is read_only,
-   the guidance is now "These fields are system-managed and cannot be filled; do
-   not attempt to fill them again." Otherwise the prerequisite guidance stands.
+   fields that don't exist. A first attempt branched the whole message on an
+   `allReadOnly` flag, but fresh-eyes round 2 caught that a MIXED batch (one
+   read_only + one dependency-gated field in the same `field_update`) would still
+   mis-guide the read_only field (`allReadOnly` false -> blanket prerequisite
+   suffix). The final form drops the blanket suffix entirely: each locked field's
+   sentence carries its own directive -- read_only -> "It is system-managed and
+   cannot be filled; do not attempt to fill it again."; dependency-gated -> "Do
+   not attempt to fill it again until the prerequisite is completed." (the reason
+   already names the trigger field). A mixed batch is now correct field-by-field.
    This bug only became reachable for read_only fields because of fix #1 (the
    gate), so it belonged in the same change.
 
-Three regression tests added to `webFormConnection.aivalidation.test.ts`:
+Four regression tests added to `webFormConnection.aivalidation.test.ts`:
 read_only fill routes to `completion_message` (not the dead `dependency_error`)
 AND the value does not land (onFieldUpdate never fires for it -- proving the gate
 rejects it, not just that a message was sent); the spoken name appears exactly
 once and the guidance is read-only-appropriate (no "prerequisite", contains
-"system-managed"); and the rejected value never leaks back (PII-safe).
+"system-managed"); the rejected value never leaks back (PII-safe); and a MIXED
+batch (read_only + dependency-gated in one update) gives each field its own
+correct directive (the read_only sentence carries "system-managed" and NOT
+"prerequisite").

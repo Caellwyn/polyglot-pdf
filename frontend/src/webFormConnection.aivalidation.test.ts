@@ -661,4 +661,73 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
       expect(JSON.stringify(m)).not.toContain(secret)
     }
   })
+
+  // MIXED BATCH (fresh-eyes round 2): one field_update containing BOTH a read_only
+  // field and a dependency-gated field. Guidance is per-field, so the read_only
+  // field must NOT be told to wait for a prerequisite while the dependency-gated
+  // field still is. A single blanket trailing instruction can't satisfy both.
+  const MIXED_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'case_number',
+        name: 'caseNumber',
+        spoken_name: 'Case Number',
+        type: 'text',
+        read_only: true,
+      },
+      {
+        id: 'marriage_date',
+        name: 'marriageDate',
+        spoken_name: 'Marriage Date',
+        type: 'text',
+        // dependency-gated: only shown when maritalStatus === 'married'
+        show_if: { field: 'marital_status', operator: 'equals', value: 'married' },
+      },
+      {
+        id: 'marital_status',
+        name: 'maritalStatus',
+        spoken_name: 'Marital Status',
+        type: 'text',
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['case_number', 'marriage_date', 'marital_status'] },
+    ],
+  } as unknown as FormSchema
+
+  it('gives each field its own lock-kind guidance in a mixed batch (read_only + dependency)', async () => {
+    const conn = new WebFormConnection(MIXED_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // maritalStatus is unset, so marriage_date is dependency-locked; case_number
+    // is read_only. Fire both in one update.
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'field_update',
+        updates: { caseNumber: 'A123', marriageDate: '2020-01-01' },
+      }),
+    })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    const msg: string = completions[0].message
+
+    // Both fields named.
+    expect(msg).toContain('Case Number')
+    expect(msg).toContain('Marriage Date')
+    // The read_only field's directive: system-managed, NOT a prerequisite wait.
+    expect(msg).toContain('system-managed')
+    // The dependency field still gets prerequisite guidance.
+    expect(msg).toContain('prerequisite')
+    // Critically: the read_only sentence must NOT carry the prerequisite directive.
+    // Split into per-field sentences on "Cannot update" and check the read_only one.
+    const caseSentence = msg
+      .split('Cannot update')
+      .find(s => s.includes('Case Number')) || ''
+    expect(caseSentence).toContain('system-managed')
+    expect(caseSentence).not.toContain('prerequisite')
+  })
 })

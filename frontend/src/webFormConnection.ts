@@ -612,26 +612,28 @@ export class WebFormConnection {
     // the model. completion_message -> send_prompt is the proven in-band channel
     // (same path as the validation-reject loop-breaker in handleAiValueRejected).
     if (lockedFields.length > 0) {
-      const errorMessages = lockedFields.map(lf =>
-        `Cannot update '${lf.field.spoken_name || lf.field.name}': ${lf.reason}`
-      );
+      // PER-FIELD guidance, not a single trailing instruction (bd
+      // polyglot-pdf-2ip6 + fresh-eyes): the directive depends on the lock KIND,
+      // and a single batch can mix kinds. A read_only field is system-managed and
+      // has NO prerequisite to wait on -- a blanket "complete the prerequisite
+      // fields" suffix would send the model chasing upstream fields that don't
+      // exist for it. So each field carries its own correct directive: read_only ->
+      // "do not attempt again" (permanent); dependency-gated -> "wait until the
+      // prerequisite is completed". The per-field reason already names the trigger
+      // field for the dependency case.
+      const errorMessages = lockedFields.map(lf => {
+        const name = lf.field.spoken_name || lf.field.name;
+        const directive = lf.readOnly
+          ? 'It is system-managed and cannot be filled; do not attempt to fill it again.'
+          : 'Do not attempt to fill it again until the prerequisite is completed.';
+        return `Cannot update '${name}': ${lf.reason} ${directive}`;
+      });
 
       console.error('[WebFormConnection] Locked field(s):', errorMessages);
 
-      // Trailing guidance must fit the lock kind (bd polyglot-pdf-34wc, finding 1):
-      // a read_only field is system-managed and has NO prerequisite to wait on, so
-      // the "complete the prerequisite fields" instruction (correct for a
-      // dependency-gated field) would send the model chasing upstream fields that
-      // do not exist. Only mention prerequisites when at least one locked field is
-      // actually dependency-gated (not read_only).
-      const allReadOnly = lockedFields.every(lf => lf.readOnly);
-      const guidance = allReadOnly
-        ? ' These fields are system-managed and cannot be filled; do not attempt to fill them again.'
-        : ' These fields were not updated. Do not attempt to fill them again until the prerequisite fields are completed.';
-
       this.send({
         type: 'completion_message',
-        message: errorMessages.join('; ') + guidance,
+        message: errorMessages.join(' '),
       });
     }
 
