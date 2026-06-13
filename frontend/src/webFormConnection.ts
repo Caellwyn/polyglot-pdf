@@ -16,7 +16,7 @@ import {
   getFieldOrder,
   isFormComplete
 } from "./navigation";
-import { shouldShowField, validateField } from "./schema-forms/utils/validation";
+import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -546,7 +546,7 @@ export class WebFormConnection {
 
     // Apply updates to state
     const updatedFields: Array<{ fieldId: string; value: any }> = [];
-    const lockedFields: Array<{ fieldId: string; field: any; reason: string }> = [];
+    const lockedFields: Array<{ fieldId: string; field: any; reason: string; readOnly: boolean }> = [];
 
     for (const [displayName, value] of Object.entries(updates)) {
       // Find field by display name
@@ -555,12 +555,20 @@ export class WebFormConnection {
       );
 
       if (field) {
-        // Check if field is locked/hidden due to dependencies (Nov 22, 2025)
-        const isAvailable = !field.hidden && shouldShowField(field, this.state.fieldValues);
+        // Check if field is locked/hidden/read-only due to dependencies.
+        // A read_only field is locked too (bd polyglot-pdf-34wc): the AI must
+        // not write to it, and the gate previously checked only hidden +
+        // show_if visibility, so a visible read_only field slipped through to
+        // the apply path instead of being reported back to the model.
+        const readOnly = isFieldReadOnly(field, this.state.fieldValues);
+        const isAvailable =
+          !field.hidden &&
+          shouldShowField(field, this.state.fieldValues) &&
+          !readOnly;
 
         if (!isAvailable) {
           // Field is locked - collect dependency info for error message
-          const { availability, lockedReason } = evaluateFieldAvailability(
+          const { lockedReason } = evaluateFieldAvailability(
             field,
             this.state.fieldValues,
             this.state.schema
@@ -572,10 +580,14 @@ export class WebFormConnection {
           // the per-field message prefix below already names it, and doubling it
           // ("Cannot update 'X': The field 'X' is not available yet") reads poorly
           // and adds no information (bd polyglot-pdf-z6xs, fresh-eyes finding 4).
+          // readOnly is carried so the trailing guidance can distinguish a
+          // read_only field (permanently AI-unwritable -- no prerequisite to wait
+          // on) from a dependency-gated one (bd polyglot-pdf-34wc, finding 1).
           lockedFields.push({
             fieldId: field.id,
             field,
-            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).'
+            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).',
+            readOnly
           });
 
           console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
@@ -600,17 +612,30 @@ export class WebFormConnection {
     // the model. completion_message -> send_prompt is the proven in-band channel
     // (same path as the validation-reject loop-breaker in handleAiValueRejected).
     if (lockedFields.length > 0) {
-      const errorMessages = lockedFields.map(lf =>
-        `Cannot update '${lf.field.spoken_name || lf.field.name}': ${lf.reason}`
-      );
+      // PER-FIELD guidance, not a single trailing instruction (bd
+      // polyglot-pdf-2ip6 + fresh-eyes): the directive depends on the lock KIND,
+      // and a single batch can mix kinds. A read_only field is system-managed and
+      // has NO prerequisite to wait on -- a blanket "complete the prerequisite
+      // fields" suffix would send the model chasing upstream fields that don't
+      // exist for it. So each field carries its own directive. The dependency-gated
+      // `lf.reason` is ALREADY a complete, specific instruction ("Complete the 'X'
+      // field first..."), so its directive only adds the don't-retry-now signal
+      // WITHOUT restating the prerequisite (avoids the redundant / double-
+      // "prerequisite" phrasing fresh-eyes flagged). The read_only directive states
+      // the permanence (system-managed, never fillable).
+      const errorMessages = lockedFields.map(lf => {
+        const name = lf.field.spoken_name || lf.field.name;
+        const directive = lf.readOnly
+          ? 'It is system-managed and cannot be filled; do not attempt to fill it again.'
+          : 'It was not updated; do not retry until then.';
+        return `Cannot update '${name}': ${lf.reason} ${directive}`;
+      });
 
       console.error('[WebFormConnection] Locked field(s):', errorMessages);
 
       this.send({
         type: 'completion_message',
-        message:
-          errorMessages.join('; ') +
-          ' These fields were not updated. Do not attempt to fill them again until the prerequisite fields are completed.',
+        message: errorMessages.join(' '),
       });
     }
 

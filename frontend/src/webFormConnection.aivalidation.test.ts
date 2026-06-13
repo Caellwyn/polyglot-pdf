@@ -547,3 +547,197 @@ describe('WebFormConnection locked-field rejection (bd polyglot-pdf-z6xs)', () =
     expect(completions).toHaveLength(0)
   })
 })
+
+// --- bd polyglot-pdf-34wc: read_only locked-field message names field once ---
+// A read_only field is locked (the AI must not write it). Two bugs were latent:
+// (1) the locked-field gate checked only hidden + show_if visibility, so a
+//     VISIBLE read_only field slipped through to the apply path instead of being
+//     reported back to the model; and
+// (2) the read_only lockedReason restated the field name, which -- composed with
+//     the "Cannot update '<name>': " prefix -- printed the name TWICE.
+
+describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', () => {
+  const READONLY_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'case_number',
+        name: 'caseNumber',
+        spoken_name: 'Case Number',
+        type: 'text',
+        read_only: true,  // visible but not user-editable
+      },
+      {
+        id: 'first_name',
+        name: 'firstName',
+        spoken_name: 'First Name',
+        type: 'text',
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['case_number', 'first_name'] },
+    ],
+  } as unknown as FormSchema
+
+  function onMsgSent(ws: MockWebSocket): any[] {
+    return ws.send.mock.calls
+      .map((c: any[]) => c[0])
+      .filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+  }
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('routes a read_only field-fill to completion_message and does NOT apply the value', async () => {
+    // The gate regression (fresh-eyes finding): a VISIBLE read_only field used to
+    // slip past the locked check and reach the apply path. onFieldUpdate fires
+    // ONLY for values that actually land, so asserting it was never called proves
+    // the value was rejected, not merely that a message was also sent.
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(READONLY_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: 'A123' } }) })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    // No dead dependency_error
+    expect(onMsgSent(ws).filter((m: any) => m.type === 'dependency_error')).toHaveLength(0)
+    // The read_only value must NOT have landed.
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('case_number')
+  })
+
+  it('names the read_only field EXACTLY ONCE and gives read-only-appropriate guidance (bd 34wc)', async () => {
+    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: 'A123' } }) })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    const msg: string = completions[0].message
+    // The exit criterion: the spoken name appears once, not "Cannot update
+    // 'Case Number': The field 'Case Number' is read-only..."
+    const occurrences = msg.split('Case Number').length - 1
+    expect(occurrences).toBe(1)
+    expect(msg).toContain('read-only')
+    // A read_only field has NO prerequisite to wait on, so the guidance must not
+    // tell the model to complete upstream fields (fresh-eyes finding 1).
+    expect(msg).not.toContain('prerequisite')
+    expect(msg).toContain('system-managed')
+  })
+
+  it('never echoes the rejected read_only value back to the backend (PII-safe)', async () => {
+    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    const secret = 'super-secret-case-id-9999'
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: secret } }) })
+
+    for (const m of onMsgSent(ws)) {
+      expect(JSON.stringify(m)).not.toContain(secret)
+    }
+  })
+
+  // MIXED BATCH (fresh-eyes round 2): one field_update containing BOTH a read_only
+  // field and a dependency-gated field. Guidance is per-field, so the read_only
+  // field must NOT be told to wait for a prerequisite while the dependency-gated
+  // field still is. A single blanket trailing instruction can't satisfy both.
+  const MIXED_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'case_number',
+        name: 'caseNumber',
+        spoken_name: 'Case Number',
+        type: 'text',
+        read_only: true,
+      },
+      {
+        id: 'marriage_date',
+        name: 'marriageDate',
+        spoken_name: 'Marriage Date',
+        type: 'text',
+        // dependency-gated: only shown when maritalStatus === 'married'
+        show_if: { field: 'marital_status', operator: 'equals', value: 'married' },
+      },
+      {
+        id: 'marital_status',
+        name: 'maritalStatus',
+        spoken_name: 'Marital Status',
+        type: 'text',
+      },
+    ],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['case_number', 'marriage_date', 'marital_status'] },
+    ],
+  } as unknown as FormSchema
+
+  it('gives each field its own lock-kind guidance in a mixed batch (read_only + dependency)', async () => {
+    const conn = new WebFormConnection(MIXED_SCHEMA, {})
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // maritalStatus is unset, so marriage_date is dependency-locked; case_number
+    // is read_only. Fire both in one update.
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'field_update',
+        updates: { caseNumber: 'A123', marriageDate: '2020-01-01' },
+      }),
+    })
+
+    const completions = onMsgSent(ws).filter((m: any) => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+    const msg: string = completions[0].message
+
+    // Both fields named.
+    expect(msg).toContain('Case Number')
+    expect(msg).toContain('Marriage Date')
+
+    // Split into per-field sentences on "Cannot update" so each field's guidance
+    // can be checked in isolation.
+    const caseSentence = msg
+      .split('Cannot update')
+      .find(s => s.includes('Case Number')) || ''
+    const marriageSentence = msg
+      .split('Cannot update')
+      .find(s => s.includes('Marriage Date')) || ''
+
+    // The read_only field is permanent/system-managed -- and must NOT be told to
+    // wait for a prerequisite (it has none).
+    expect(caseSentence).toContain('system-managed')
+    expect(caseSentence).not.toContain('Marital Status')
+    expect(caseSentence).not.toContain('not updated; do not retry')
+
+    // The dependency-gated field gets the specific prerequisite instruction
+    // (names the trigger field) and the don't-retry-yet directive -- and must NOT
+    // be mislabeled system-managed.
+    expect(marriageSentence).toContain('Marital Status')
+    expect(marriageSentence).not.toContain('system-managed')
+  })
+})
