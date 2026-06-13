@@ -566,10 +566,16 @@ export class WebFormConnection {
             this.state.schema
           );
 
+          // lockedReason is populated for show_if-gated fields (it names the
+          // prerequisite); a statically-hidden field (field.hidden) has none, so
+          // fall back to a short reason that does NOT restate the field name --
+          // the per-field message prefix below already names it, and doubling it
+          // ("Cannot update 'X': The field 'X' is not available yet") reads poorly
+          // and adds no information (bd polyglot-pdf-z6xs, fresh-eyes finding 4).
           lockedFields.push({
             fieldId: field.id,
             field,
-            reason: lockedReason || `The field '${field.spoken_name || field.name}' is not available yet.`
+            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).'
           });
 
           console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
@@ -588,23 +594,23 @@ export class WebFormConnection {
       }
     }
 
-    // If any fields were locked, send error message back to backend/Gemini
+    // If any fields were locked, inform Gemini via completion_message (bd z6xs).
+    // dependency_error has no backend handler -- it falls through to
+    // unknown_control_message_type and the locked-field reason never reaches
+    // the model. completion_message -> send_prompt is the proven in-band channel
+    // (same path as the validation-reject loop-breaker in handleAiValueRejected).
     if (lockedFields.length > 0) {
       const errorMessages = lockedFields.map(lf =>
         `Cannot update '${lf.field.spoken_name || lf.field.name}': ${lf.reason}`
       );
 
-      console.error('[WebFormConnection] Dependency errors:', errorMessages);
+      console.error('[WebFormConnection] Locked field(s):', errorMessages);
 
-      // Send dependency error back to backend so it can inform Gemini
       this.send({
-        type: 'dependency_error',
-        locked_fields: lockedFields.map(lf => ({
-          field_id: lf.fieldId,
-          spoken_name: lf.field.spoken_name || lf.field.name,
-          reason: lf.reason
-        })),
-        message: errorMessages.join('; ')
+        type: 'completion_message',
+        message:
+          errorMessages.join('; ') +
+          ' These fields were not updated. Do not attempt to fill them again until the prerequisite fields are completed.',
       });
     }
 
