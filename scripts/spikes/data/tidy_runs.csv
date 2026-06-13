@@ -1,0 +1,13 @@
+model,arm,path,stamp,si_chars,greeting_tokens,trigger,window,dead_from_q,n_stalled_turns,n_eviction_drops,n_errors,confirmed_fields,schema_scope
+2.5,section-reset,happy,20260612T192010Z,4587,2485,,,,0,3,2,16,per-section
+2.5,section-reset,unhappy,20260612T192843Z,4587,2492,,,16.0,11,2,3,15,per-section
+2.5,sliding-window,happy,20260612T194851Z,25639,8307,12000.0,9000.0,,0,0,3,15,full-form
+2.5,sliding-window,unhappy,20260612T195542Z,25639,8319,12000.0,9000.0,,0,2,2,19,full-form
+2.5,unbounded,happy,20260612T185839Z,25639,8291,,,,0,0,2,13,full-form
+2.5,unbounded,unhappy,20260612T190549Z,25639,8304,,,,0,1,2,18,full-form
+3.1,section-reset,happy,20260612T205013Z,4587,2283,,,,0,4,0,19,per-section
+3.1,section-reset,unhappy,20260612T205757Z,4587,2311,,,,0,22,0,20,per-section
+3.1,sliding-window,happy,20260612T211239Z,25639,8167,12000.0,9000.0,,0,4,0,20,full-form
+3.1,sliding-window,unhappy,20260612T212030Z,25639,8142,12000.0,9000.0,14.0,29,16,1,12,full-form
+3.1,unbounded,happy,20260612T200754Z,25639,8163,,,,0,4,0,18,full-form
+3.1,unbounded,unhappy,20260612T201624Z,25639,8150,,,13.0,34,13,1,10,full-form
