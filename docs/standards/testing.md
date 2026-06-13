@@ -212,4 +212,15 @@ resolve wrong -- pass the suite. The standalone `npm run typecheck`
 (`tsc --noEmit`) gate in CI's frontend job is the only thing that catches this
 class; keep it green (`polyglot-pdf-uov.17`).
 
-*Last updated: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
+**Beware the self-fulfilling mock test.** A test that constructs the expected
+payload, calls a mock with it, and then asserts the mock was called with it
+verifies nothing -- deleting the production code under test leaves it green. The
+discriminating question when auditing a "green" test: *does any production symbol
+appear on the path between the arrange and the assert?* If the only thing exercised
+is the mock the test set up, it is fake coverage. The fix is to import and run the
+real unit and let IT drive the mock; a cheap guard against writing the fake version
+is to mutate one production assertion (e.g. flip a close code) and confirm the test
+goes red. (`polyglot-pdf-uov.9` found this in `test_idle_timeout.py`; the honest
+idle-watchdog spec drives the real `_handle_fill_session` watchdog.)
+
+*Last updated: 2026-06-13 (self-fulfilling-mock anti-pattern, bd polyglot-pdf-uov.9). See [../journal/entries/2026-06-13-bd-uov.9-t2-2-ws-auth-lifecycle-spec.md](../journal/entries/2026-06-13-bd-uov.9-t2-2-ws-auth-lifecycle-spec.md).*
