@@ -112,16 +112,30 @@ export class WebFormConnection {
   // asks to confirm_field a field that has no usable value, the confirm cannot make
   // progress, so computeNextField() keeps returning the SAME field and the backend
   // re-requests it forever (a tight confirm/next-field-hint loop that strands the
-  // session). We count consecutive failed confirms of the same field and, every
-  // CONFIRM_LIMIT attempts, re-prompt Gemini to collect the value -- up to a hard
-  // REPROMPT_CAP, after which we stop entirely so a genuinely unfillable field does
-  // not spin forever even at the reduced re-prompt rate (fresh-eyes PR #113). All
-  // three counters reset on a successful confirm and on (re)connect.
+  // session). Two layers cap the re-prompts so the model cannot spin the session:
+  //   1. PER-FIELD: count CONSECUTIVE failed confirms of the same field and, every
+  //      CONFIRM_LIMIT attempts, re-prompt Gemini to collect the value -- up to a
+  //      hard REPROMPT_CAP, after which we stop re-prompting for that field
+  //      (fresh-eyes PR #113). The per-field counters reset when a DIFFERENT field is
+  //      tried (the streak is per-field), so under cross-field alternation the
+  //      per-field cap does NOT bound the total -- layer 2 does.
+  //   2. SESSION-WIDE (bd polyglot-pdf-r2hy, mirroring the wpw.3 validation-reject
+  //      cap): because the per-field counter resets on every field change, a model
+  //      alternating confirm_field calls between DIFFERENT empty fields (A empty ->
+  //      B empty -> A empty ...) would re-arm the per-field re-prompt each switch and
+  //      prompt forever. So a separate counter -- NOT reset on a field change, only on
+  //      (re)connect / section switch / a successful confirm -- caps the TOTAL
+  //      re-prompts per session at SESSION_CAP. This is the real bound on cross-field
+  //      confirm spin; the per-field cap only shapes the cadence within one field.
+  // All counters reset on a successful confirm and on (re)connect / section switch
+  // (resetUnconfirmableTracking).
   private lastUnconfirmableFieldId: string | null = null;
   private unconfirmableConfirmCount = 0;
   private unconfirmableRepromptCount = 0;
+  private unconfirmableSessionPromptCount = 0;
   private static readonly UNCONFIRMABLE_CONFIRM_LIMIT = 2;
   private static readonly UNCONFIRMABLE_REPROMPT_CAP = 3;
+  private static readonly UNCONFIRMABLE_SESSION_CAP = 6;
 
   // Loop-breaker for AI-applied values that FAIL client-side validation
   // (bd polyglot-pdf-wpw.3). When the model fills a field with a value that violates
@@ -333,10 +347,8 @@ export class WebFormConnection {
 
     // Reset the unconfirmable-field loop-breaker on every (re)connect so a counter
     // left mid-window before a drop does not false-trip on the first confirm of the
-    // new session (bd polyglot-pdf-0y7, fresh-eyes PR #113).
-    this.lastUnconfirmableFieldId = null;
-    this.unconfirmableConfirmCount = 0;
-    this.unconfirmableRepromptCount = 0;
+    // new session (bd polyglot-pdf-0y7, fresh-eyes PR #113; session cap bd r2hy).
+    this.resetUnconfirmableTracking();
     // Likewise reset the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3).
     this.resetValidationRejectTracking();
 
@@ -985,9 +997,9 @@ export class WebFormConnection {
       // streak. Defense-in-depth: the streak is keyed on field_id and field ids are
       // globally unique per schema, so a cross-section carry-over can't currently
       // false-trip -- this just removes the reliance on the id-uniqueness invariant.
-      this.lastUnconfirmableFieldId = null;
-      this.unconfirmableConfirmCount = 0;
-      this.unconfirmableRepromptCount = 0;
+      // Also clears the session-wide re-prompt cap (bd polyglot-pdf-r2hy): a section
+      // switch is genuine progress, so the model earns a fresh budget.
+      this.resetUnconfirmableTracking();
       // Same reasoning for the AI-value validation-reject loop-breaker (bd
       // polyglot-pdf-wpw.3): clear it here, after the switch is applied.
       this.resetValidationRejectTracking();
@@ -1189,6 +1201,13 @@ export class WebFormConnection {
       if (field_id === this.lastUnconfirmableFieldId) {
         this.unconfirmableConfirmCount += 1;
       } else {
+        // A different field -- reset the PER-FIELD counters only. Deliberately do
+        // NOT reset unconfirmableSessionPromptCount here (bd polyglot-pdf-r2hy): the
+        // session-wide cap MUST survive field changes, or cross-field confirm spin
+        // (A,A -> B,B -> ...) would re-arm the per-field re-prompt on every switch
+        // and never engage the cap. Use resetUnconfirmableTracking() (which clears
+        // the session counter too) ONLY at (re)connect / section switch / a
+        // successful confirm of the stuck field -- never on a plain field change.
         this.lastUnconfirmableFieldId = field_id;
         this.unconfirmableConfirmCount = 1;
         this.unconfirmableRepromptCount = 0;
@@ -1206,16 +1225,25 @@ export class WebFormConnection {
       // re-prompt is rate-limited rather than fired on every request; capping the
       // total re-prompts means a field Gemini simply cannot fill stops spinning
       // entirely instead of re-prompting forever at half speed (fresh-eyes PR #113).
+      // The SESSION cap (bd polyglot-pdf-r2hy) is NOT reset on a field change, so a
+      // model alternating between different empty fields -- which resets the
+      // per-field counters every switch -- is still bounded: once the total
+      // re-prompts hit SESSION_CAP we stop re-prompting regardless of field.
+      const sessionCapReached =
+        this.unconfirmableSessionPromptCount >= WebFormConnection.UNCONFIRMABLE_SESSION_CAP;
       if (
         this.unconfirmableConfirmCount >= WebFormConnection.UNCONFIRMABLE_CONFIRM_LIMIT &&
-        this.unconfirmableRepromptCount < WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP
+        this.unconfirmableRepromptCount < WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP &&
+        !sessionCapReached
       ) {
         const field = this.state.schema.fields.find(f => f.id === field_id);
         const spokenName = field?.spoken_name || field?.name || field_id;
         this.unconfirmableConfirmCount = 0;
         this.unconfirmableRepromptCount += 1;
+        this.unconfirmableSessionPromptCount += 1;
         const capped =
-          this.unconfirmableRepromptCount >= WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP;
+          this.unconfirmableRepromptCount >= WebFormConnection.UNCONFIRMABLE_REPROMPT_CAP ||
+          this.unconfirmableSessionPromptCount >= WebFormConnection.UNCONFIRMABLE_SESSION_CAP;
         console.error(
           '[WebFormConnection] Breaking confirm/next-field loop for unconfirmable field:',
           field_id,
@@ -1261,11 +1289,14 @@ export class WebFormConnection {
     // was recorded, so the backend reports success and advances.
     this.sendConfirmFieldResponse(request_id, true);
 
-    // Confirm took -- clear any pending unconfirmable tracking for this field.
+    // Confirm took -- clear pending unconfirmable tracking. A successful confirm of
+    // the stuck field is genuine progress, so it restores the session-wide re-prompt
+    // budget too (bd polyglot-pdf-r2hy; mirrors the wpw.3 "stuck field validated ->
+    // reset session cap" rule). We only reset on confirming the TRACKED field: an
+    // unrelated success must NOT refill the budget, or [empty-A, good-B] alternation
+    // would reset the cross-field cap forever (the wpw.3 fresh-eyes-round-4 lesson).
     if (field_id === this.lastUnconfirmableFieldId) {
-      this.lastUnconfirmableFieldId = null;
-      this.unconfirmableConfirmCount = 0;
-      this.unconfirmableRepromptCount = 0;
+      this.resetUnconfirmableTracking();
     }
 
     // 🆕 AUTO-DETECT SECTION COMPLETION
@@ -1457,6 +1488,22 @@ export class WebFormConnection {
     this.validationRejectCount = 0;
     this.validationRejectRepromptCount = 0;
     this.validationRejectSessionPromptCount = 0;
+  }
+
+  /**
+   * Clear the unconfirmable-field loop-breaker counters (bd polyglot-pdf-0y7 +
+   * the session-wide cap added in bd polyglot-pdf-r2hy). Called on (re)connect, on
+   * section switch, and whenever the tracked field is finally confirmed. Resets
+   * BOTH the per-field counters and the session-wide re-prompt cap: a fresh
+   * connection / section is genuine progress, so the model earns a fresh re-prompt
+   * budget -- the pure cross-field confirm spin r2hy flagged never lands a usable
+   * value, so its session counter still climbs to the cap and stops it.
+   */
+  private resetUnconfirmableTracking(): void {
+    this.lastUnconfirmableFieldId = null;
+    this.unconfirmableConfirmCount = 0;
+    this.unconfirmableRepromptCount = 0;
+    this.unconfirmableSessionPromptCount = 0;
   }
 
   /**
@@ -2097,10 +2144,9 @@ export class WebFormConnection {
     // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on this section
     // transition too (the other path besides switchToSection -- called by
     // completeSection), so a stale count can't carry into the new section and trip
-    // the breaker a cycle early on a same field_id.
-    this.lastUnconfirmableFieldId = null;
-    this.unconfirmableConfirmCount = 0;
-    this.unconfirmableRepromptCount = 0;
+    // the breaker a cycle early on a same field_id. Also resets the session-wide
+    // re-prompt cap (bd polyglot-pdf-r2hy).
+    this.resetUnconfirmableTracking();
     // Same for the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3):
     // a reject streak must not carry across a section transition.
     this.resetValidationRejectTracking();
@@ -2215,10 +2261,9 @@ export class WebFormConnection {
     // switch so a stale count can't carry into the new section (e.g. a same
     // field_id in the next section would otherwise trip the breaker one cycle
     // early). The in-session auto-switch keeps the SAME WebSocket open (no
-    // reconnect, so handleOpen's reset does not fire).
-    this.lastUnconfirmableFieldId = null;
-    this.unconfirmableConfirmCount = 0;
-    this.unconfirmableRepromptCount = 0;
+    // reconnect, so handleOpen's reset does not fire). Also resets the session-wide
+    // re-prompt cap (bd polyglot-pdf-r2hy).
+    this.resetUnconfirmableTracking();
     // Same for the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3):
     // a reject streak must not carry across a section switch (this same-socket path
     // does not hit handleOpen's reset).
