@@ -2,7 +2,7 @@
 date: 2026-06-13
 beads: [polyglot-pdf-rwjy, polyglot-pdf-vfb2, polyglot-pdf-0tgc, polyglot-pdf-b6k4]
 pr: TBD
-tags: [bug, backend, frontend, tests, callback, latency, audit]
+tags: [performance, testing, review]
 ---
 
 # Bug-fix bundle: rwjy + vfb2 + 0tgc + b6k4
@@ -16,6 +16,15 @@ confirmation audit guard (`if self._form_id and self._form_session_id: log_field
 But `start_session` was constructing `CallbackHandler` before extracting `form_id`
 from the schema (form_id was extracted later, only for the token-logging context).
 Fix: extract `form_id` before the constructor call and pass both IDs in.
+
+The pre-PR fresh-eyes assess (below) caught a second half of this bug: every
+section switch rebuilds `CallbackHandler` via `start_session`, but the switch path
+(`_switch_to_section_locked`) passed no `form_session_id` -- so after the first
+switch the audit-log key silently reverted to the ephemeral `session_id`, breaking
+cross-section audit-trail correlation on multi-section forms. Fix: store the
+resolved `form_session_id` on `self._form_session_id` in `start_session` and thread
+it from the switch path. Regression test
+`test_switch_to_section_preserves_form_session_id_in_callback_handler` pins it.
 
 ## vfb2 -- wasted next_field_hint round-trip on update path
 
@@ -40,7 +49,24 @@ zero coverage of the production code. Fix: extract `createMicDropWarn()` from
 `connection.ts` (exported), drive tests through it directly.
 `assertNoRearmOnFreshMount` in `VoiceOverlayResizeFlip.test.tsx` had no `expect()`
 calls. Fix: assert `createConnectionManager` was called (standalone path created
-its own manager) so the test actually pins observable behavior.
+its own manager) AND -- after the round-1 fresh-eyes note -- give the standalone
+mock manager a spied `rearmAudioCapture` and assert `not.toHaveBeenCalled()`, so the
+negative invariant (a fresh mount never re-arms the mic) is pinned explicitly rather
+than relying on absence-of-throw.
+
+## Pre-PR assess (rubric + fresh-eyes)
+
+Exit-criteria rubric: all PASS across the four beads (reconstructed at closeout --
+these were legacy beads with descriptions but no `## Exit criteria` section; the
+scorecard is in the PR body). Fresh-eyes (Sonnet) ran two rounds:
+
+- Round 1: `GAPS-FOUND (1)` -- the section-switch `form_session_id` loss described
+  in the rwjy section above. Two further low-confidence notes (a dead `request_hint=True`
+  opt-in path, judged an intentional forward seam; a weak `assertNoRearmOnFreshMount`
+  pin) -- the latter fixed anyway, the former left as designed.
+- Round 2: `NO-GAPS` -- the gap fix verified; the remaining low-confidence notes
+  (`_form_session_id` defaults to None pre-start_session; `onFormComplete` is a
+  console.log stub) confirmed benign / intentional. No out-of-scope beads filed.
 
 ## Doc-freshness triage
 
