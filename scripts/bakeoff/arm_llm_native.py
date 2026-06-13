@@ -47,7 +47,9 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schema_contract import SCHEMA_CONTRACT  # noqa: E402
-from structural_enrich import enrich, enriched_field_list  # noqa: E402
+from structural_enrich import (  # noqa: E402
+    DEFAULT_DISABLED, SIGNALS, enrich, enriched_field_list,
+)
 
 
 # Anti-hallucination contract addendum (Q4): the model MUST copy widget names
@@ -158,14 +160,18 @@ def _normalize_schema(schema) -> dict:
 
 
 def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
-                 pdf_path: Optional[str]) -> str:
+                 pdf_path: Optional[str],
+                 disabled: frozenset[str] = DEFAULT_DISABLED,
+                 order_caveat: bool = True) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
     enriched bundle). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
-    attaches the bytes separately and ignores this instruction's file path)."""
+    attaches the bytes separately and ignores this instruction's file path).
+    `disabled` drops enrichment signals (DEFAULT drops row_cluster per the
+    7a9.10 trim); `order_caveat` (DEFAULT True) labels the sweep rank honestly."""
     with open(acroform_path, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enrich(dump)
+    enrich(dump, disabled=disabled)
 
     parts = [SCHEMA_CONTRACT, "", ANTI_HALLUCINATION, ""]
     if fewshot_truth:
@@ -187,7 +193,7 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
             "deterministically from the PDF. No PDF pixels are provided (ablation) "
             "-- reason from the bundle alone.\n"
         )
-    parts.append(enriched_field_list(dump))
+    parts.append(enriched_field_list(dump, order_caveat=order_caveat))
     return "\n".join(parts)
 
 
@@ -235,30 +241,71 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
     with --add-dir so it can reach the form. Returns (schema, token_info).
     """
     exe = shutil.which("claude") or "claude"
-    cmd = [exe, "-p", "--model", model, "--output-format", "json"]
+    outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "outputs")
+    # acceptEdits auto-approves the model's Write to the scratch file in
+    # outputs/ (an --add-dir grants READ; a headless write would otherwise hang
+    # on a permission prompt the -p session cannot answer -- bd 7a9.10).
+    cmd = [exe, "-p", "--model", model, "--output-format", "json",
+           "--permission-mode", "acceptEdits", "--add-dir", outputs_dir]
     if pdf_path:
         cmd += ["--add-dir", os.path.dirname(os.path.abspath(pdf_path))]
-    # Wrap the prompt so the CLI emits ONLY the schema JSON as its result text.
-    # (The CLI model tends to narrate before the JSON; _extract_json tolerates
-    # leading/trailing prose, but ask for clean output anyway.)
+    # The schema for a real form is ~30K+ output tokens -- piping it through the
+    # CLI's final message hits the per-message output ceiling and yields
+    # truncated/pointer results (observed on I-90, bd 7a9.10; certain on I-589).
+    # So the model WRITES the JSON to a scratch file and we read it back.
+    scratch = os.path.join(outputs_dir, f"_cli_schema_{os.getpid()}.json")
+    if os.path.exists(scratch):
+        os.remove(scratch)
     wrapped = (
         prompt
-        + "\n\nIMPORTANT: Your FINAL message must be ONLY the FormSchema JSON "
-        "object -- it must START with '{' and END with '}', with NO prose, NO "
-        "reasoning, NO markdown fences, and NO narration before or after it."
+        + "\n\nIMPORTANT -- how to deliver your output: the FormSchema JSON is "
+        "far too large for a chat message, so do NOT print it. Instead, use "
+        "your Write tool to write the COMPLETE FormSchema JSON object (and "
+        "nothing else -- no fences, no commentary) to this exact file path:\n  "
+        + scratch
+        + "\nThen end with a final message of just: WROTE OK"
     )
     timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "1200"))
-    proc = subprocess.run(
-        cmd, input=wrapped, capture_output=True, text=True,
-        encoding="utf-8", timeout=timeout_s,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI exited {proc.returncode}: "
-                           f"{(proc.stderr or proc.stdout)[:500]}")
-    envelope = json.loads(proc.stdout)
-    if envelope.get("is_error"):
-        raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
-    schema = _normalize_schema(_extract_json(envelope.get("result", "")))
+    try:
+        proc = subprocess.run(
+            cmd, input=wrapped, capture_output=True, text=True,
+            encoding="utf-8", timeout=timeout_s,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude CLI exited {proc.returncode}: "
+                               f"{(proc.stderr or proc.stdout)[:500]}")
+        envelope = json.loads(proc.stdout)
+        if envelope.get("is_error"):
+            raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
+        result_text = envelope.get("result", "")
+
+        schema = None
+        if os.path.exists(scratch):
+            with open(scratch, encoding="utf-8") as fh:
+                schema = _normalize_schema(_extract_json(fh.read()))
+        else:
+            # Older-behavior fallback: the model printed the JSON instead.
+            try:
+                schema = _normalize_schema(_extract_json(result_text))
+            except json.JSONDecodeError:
+                schema = None
+        if not (isinstance(schema, dict) and schema.get("fields")):
+            # Reject empty/fragment parses (a truncated message can "parse" as
+            # a single field object). Dump the envelope for diagnosis.
+            dbg = os.path.join(outputs_dir, "_claude_cli_fail_envelope.json")
+            with open(dbg, "w", encoding="utf-8") as fh:
+                json.dump(envelope, fh, indent=2)
+            raise RuntimeError(
+                f"claude CLI produced no usable schema "
+                f"(scratch_file_existed={os.path.exists(scratch)} "
+                f"[deleted on cleanup], "
+                f"subtype={envelope.get('subtype')!r}, "
+                f"num_turns={envelope.get('num_turns')}, "
+                f"result_chars={len(result_text)}); envelope dumped to {dbg}")
+    finally:
+        if os.path.exists(scratch):
+            os.remove(scratch)
     usage = envelope.get("usage") or {}
     tok = {"input": usage.get("input_tokens"),
            "output": usage.get("output_tokens"),
@@ -268,9 +315,12 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
 
 def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
-        send_pdf: bool = True) -> dict:
+        send_pdf: bool = True,
+        disabled: frozenset[str] = DEFAULT_DISABLED,
+        order_caveat: bool = True) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
-    prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt)
+    prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
+                          disabled=disabled, order_caveat=order_caveat)
 
     # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
     # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
@@ -287,6 +337,8 @@ def run(pdf_path: str, acroform_path: str, model: str,
     schema["_bakeoff"].update({
         "arm": "llm-native", "model": model, "backend": backend,
         "enriched": True, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
+        "disabled_signals": sorted(disabled),
+        "order_caveat": order_caveat,
     })
     if tok:
         schema["_bakeoff"]["tokens"] = tok
@@ -301,20 +353,38 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="a DIFFERENT form's gold schema, for the convention few-shot")
     ap.add_argument("--no-pdf", action="store_true",
                     help="ablation: send ONLY the enriched bundle, no PDF pixels")
+    # DEFAULT signal set is the 7a9.10 trim: row_cluster dropped (DEFAULT_DISABLED),
+    # honest geometric-sweep order labeling on. The ablation flags below override.
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=None,
+                    help="ablation: drop this enrichment signal on TOP of the "
+                         "default trim (repeatable; bd 7a9.10)")
+    ap.add_argument("--full-bundle", action="store_true",
+                    help="ablation: re-enable ALL signals incl. row_cluster "
+                         "(undo the 7a9.10 default trim)")
+    ap.add_argument("--no-order-caveat", action="store_true",
+                    help="ablation: drop the honest geometric-sweep framing and "
+                         "label the rank as 'reading order' (the old 7a9.9 text)")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
 
+    if args.full_bundle:
+        disabled = frozenset(args.disable or [])
+    else:
+        disabled = DEFAULT_DISABLED | frozenset(args.disable or [])
+
     schema = run(args.pdf, args.acroform, args.model,
-                 fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf)
+                 fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf,
+                 disabled=disabled, order_caveat=not args.no_order_caveat)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))
     tok = schema.get("_bakeoff", {}).get("tokens", {})
     print(f"[wrote {args.out}] arm=llm-native model={args.model} "
           f"fewshot={bool(args.fewshot_truth)} pdf={not args.no_pdf} "
+          f"disabled={sorted(disabled)} order_caveat={not args.no_order_caveat} "
           f"fields={nf} tokens={tok}")
     return 0
 

@@ -27,6 +27,11 @@ rendering for the prompt. ASCII only (cp1252 safe).
 
 Usage:
     python scripts/bakeoff/structural_enrich.py DUMP.json [--json OUT.json]
+
+Per-signal ablation (bd polyglot-pdf-7a9.10): pass disabled={...} to enrich()/
+enriched_field_list() (or --disable on the CLI) to drop a signal from both the
+computation and the prompt rendering. With tab_order disabled the field list
+falls back to dump (name) order -- the same order the baseline hybrid arm uses.
 """
 from __future__ import annotations
 
@@ -35,6 +40,16 @@ import json
 import re
 import sys
 from typing import Any, Optional
+
+# The ablatable signal names (bd 7a9.10).
+SIGNALS = ("name_decomp", "tab_order", "row_cluster")
+
+# Signals DROPPED from the default render after the 7a9.10 ablation on I-90:
+# row_cluster earned no (a) accuracy and was a net-negative on (b) relationship
+# recall (it correlated with the worst show_if recall when isolated). The other
+# two signals stay. The full ablation can still re-enable it: enrich(dump,
+# disabled=frozenset()). See docs/research/2026-06-12-7a9.10-*-findings.md.
+DEFAULT_DISABLED = frozenset({"row_cluster"})
 
 
 # --------------------------------------------------------------------------- #
@@ -111,43 +126,59 @@ def _reading_order_key(rec: dict) -> tuple:
     return (r["page"], round(r["y"] / 8.0), r["x"])
 
 
-def enrich(dump: dict) -> dict:
-    """Augment each field with name tokens, tab order, and spatial-cluster ids."""
+def enrich(dump: dict, disabled: frozenset[str] = DEFAULT_DISABLED) -> dict:
+    """Augment each field with name tokens, reading-order rank, and (optionally)
+    visual-row-cluster ids.
+
+    `disabled` names signals (from SIGNALS) to SKIP -- the ablation knob
+    (bd 7a9.10). A disabled signal is neither computed nor rendered. The DEFAULT
+    drops `row_cluster` (DEFAULT_DISABLED) per the 7a9.10 trim; pass
+    `disabled=frozenset()` to re-enable the full bundle for ablation.
+    """
     # Flatten to per-widget records carrying their parent field, for geometry.
     widget_recs: list[dict] = []
     for fi, f in enumerate(dump.get("fields", [])):
         for wi, w in enumerate(f["widgets"]):
             widget_recs.append({"fi": fi, "wi": wi, "rect": w["rect"]})
 
-    # 2. tab order: global reading-order rank.
+    # Reading-order sort underpins BOTH geometry signals (rank assignment and
+    # deterministic cluster-id numbering), so it always runs.
     widget_recs.sort(key=_reading_order_key)
-    for rank, rec in enumerate(widget_recs):
-        f = dump["fields"][rec["fi"]]
-        f["widgets"][rec["wi"]].setdefault("_tab_order", rank)
+
+    # 2. tab order: global reading-order rank.
+    if "tab_order" not in disabled:
+        for rank, rec in enumerate(widget_recs):
+            f = dump["fields"][rec["fi"]]
+            f["widgets"][rec["wi"]].setdefault("_tab_order", rank)
 
     # 3. spatial clusters: same page + same y-band = one visual row cluster.
     #    A monotonically-increasing cluster id per (page, y-band).
-    row_to_cluster: dict[tuple, int] = {}
     next_cluster = 0
-    for rec in widget_recs:  # already in reading order
-        r = rec["rect"]
-        band = (r["page"], round(r["y"] / 8.0))
-        if band not in row_to_cluster:
-            row_to_cluster[band] = next_cluster
-            next_cluster += 1
-        f = dump["fields"][rec["fi"]]
-        f["widgets"][rec["wi"]].setdefault("_row_cluster", row_to_cluster[band])
+    if "row_cluster" not in disabled:
+        row_to_cluster: dict[tuple, int] = {}
+        for rec in widget_recs:  # already in reading order
+            r = rec["rect"]
+            band = (r["page"], round(r["y"] / 8.0))
+            if band not in row_to_cluster:
+                row_to_cluster[band] = next_cluster
+                next_cluster += 1
+            f = dump["fields"][rec["fi"]]
+            f["widgets"][rec["wi"]].setdefault("_row_cluster", row_to_cluster[band])
 
     # 1. name decomposition: per logical field, from its name.
     for f in dump.get("fields", []):
-        f["_name_decomp"] = decompose_name(f["name"])
-        # Field-level tab order = the EARLIEST reading-order rank among its
-        # widgets (a multi-widget group is reached when its first widget is).
-        f["_tab_order"] = min(w.get("_tab_order", 1 << 30) for w in f["widgets"])
-        f["_row_cluster"] = f["widgets"][0].get("_row_cluster")
+        if "name_decomp" not in disabled:
+            f["_name_decomp"] = decompose_name(f["name"])
+        if "tab_order" not in disabled:
+            # Field-level tab order = the EARLIEST reading-order rank among its
+            # widgets (a multi-widget group is reached when its first widget is).
+            f["_tab_order"] = min(w.get("_tab_order", 1 << 30) for w in f["widgets"])
+        if "row_cluster" not in disabled:
+            f["_row_cluster"] = f["widgets"][0].get("_row_cluster")
 
     dump["_enriched"] = {
-        "signals": ["name_decomp", "tab_order", "row_cluster"],
+        "signals": [s for s in SIGNALS if s not in disabled],
+        "disabled": sorted(disabled),
         "total_widgets": len(widget_recs),
         "total_row_clusters": next_cluster,
     }
@@ -158,15 +189,23 @@ def enrich(dump: dict) -> dict:
 # Prompt rendering: an enriched field list (replaces acroform_field_list)
 # --------------------------------------------------------------------------- #
 
-def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
+def enriched_field_list(dump: dict, max_fields: int | None = None,
+                        order_caveat: bool = True) -> str:
     """Render the enriched dump as a compact text field list for the prompt.
 
-    One line per logical field in TAB ORDER (not name order), exposing the
-    generic structural signals: leaf tokens, reading-order rank, row cluster,
-    page, geometry, tooltip, choices. This is the deliberately-assembled bundle
+    One line per logical field in geometric-sweep order (NOT name order),
+    exposing the generic structural signals: leaf tokens, sweep rank, (optional)
+    row cluster, page, geometry, tooltip, choices. `order_caveat` (DEFAULT True
+    per the 7a9.10 maintainer steer) labels the sweep rank honestly as a
+    mechanical geometric sweep that interleaves columns on multi-column pages,
+    rather than claiming it is human reading order. This is the assembled bundle
     the 7a9.9 thesis feeds the LLM in place of the USCIS heuristic output.
     """
+    enabled = set(dump.get("_enriched", {}).get("signals", SIGNALS))
+
     fields = list(dump.get("fields", []))
+    # With tab_order disabled every key is the same -> stable sort keeps dump
+    # (name) order, matching the baseline hybrid arm's list order.
     fields.sort(key=lambda f: f.get("_tab_order", 1 << 30))
     if max_fields:
         fields = fields[:max_fields]
@@ -179,8 +218,13 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
         bits = [
             f"name={f['name']}",
             f"type={f['logical_type']}",
-            f"tab={f.get('_tab_order')}",
-            f"row={f.get('_row_cluster')}",
+        ]
+        if "tab_order" in enabled:
+            key = "sweep" if order_caveat else "tab"
+            bits.append(f"{key}={f.get('_tab_order')}")
+        if "row_cluster" in enabled:
+            bits.append(f"row={f.get('_row_cluster')}")
+        bits += [
             f"page={r['page']}",
             f"xy=({r['x']:.0f},{r['y']:.0f})",
         ]
@@ -209,18 +253,48 @@ def enriched_field_list(dump: dict, max_fields: int | None = None) -> str:
         lines.append("  " + " | ".join(bits))
 
     e = dump.get("_enriched", {})
-    header = (
+    head_bits = [
         f"ENRICHED FIELD LIST ({dump.get('field_count')} fields, "
-        f"{dump.get('widget_count')} widgets, {dump.get('page_count')} pages; "
-        f"{e.get('total_row_clusters','?')} visual rows). "
-        f"Listed in TAB ORDER (human reading order). Per field: exact name "
-        f"(copy verbatim into pdf_field_name), type, tab=reading-order rank, "
-        f"row=shared visual-row cluster id (fields with the SAME row id sit on "
-        f"one line -- candidates to consolidate or relate), page, xy, "
-        f"tokens=name leaf split into generic tokens (author's own delimiters; "
-        f"YOU interpret them), flags, tooltip, choices."
+        f"{dump.get('widget_count')} widgets, {dump.get('page_count')} pages"
+    ]
+    if "row_cluster" in enabled:
+        head_bits.append(f"; {e.get('total_row_clusters','?')} visual rows")
+    head_bits.append("). ")
+    if "tab_order" not in enabled:
+        head_bits.append("Listed in source (name) order. ")
+    elif order_caveat:
+        # Honest-but-light framing (bd 7a9.10): name the order accurately
+        # without telling the model to DISTRUST it. The heavier "this is wrong,
+        # re-derive it yourself" caveat measurably raised spurious-field churn
+        # on I-90 by suppressing the consolidation cue; this wording keeps the
+        # truthful label and the useful locality hint.
+        head_bits.append(
+            "Listed in GEOMETRIC LAYOUT order (top-to-bottom, then "
+            "left-to-right by position); on multi-column pages this may not "
+            "match human reading order, so use page + xy as the source of "
+            "truth for layout. "
+        )
+    else:
+        head_bits.append("Listed in TAB ORDER (human reading order). ")
+    head_bits.append(
+        "Per field: exact name (copy verbatim into pdf_field_name), type"
     )
-    return header + "\n" + "\n".join(lines)
+    if "tab_order" in enabled:
+        head_bits.append(", sweep=geometric-sweep rank" if order_caveat
+                         else ", tab=reading-order rank")
+    if "row_cluster" in enabled:
+        head_bits.append(
+            ", row=shared visual-row cluster id (fields with the SAME row id "
+            "sit on one line -- candidates to consolidate or relate)"
+        )
+    head_bits.append(", page, xy")
+    if "name_decomp" in enabled:
+        head_bits.append(
+            ", tokens=name leaf split into generic tokens (author's own "
+            "delimiters; YOU interpret them)"
+        )
+    head_bits.append(", flags, tooltip, choices.")
+    return "".join(head_bits) + "\n" + "\n".join(lines)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -228,11 +302,22 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("dump", help="path to acroform_dump.py JSON")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--text", action="store_true", help="print the prompt field list instead of JSON")
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=None,
+                    help="ablation: drop this signal on top of the default trim "
+                         "(repeatable)")
+    ap.add_argument("--full-bundle", action="store_true",
+                    help="re-enable ALL signals incl. row_cluster (undo the "
+                         "7a9.10 default trim)")
     args = ap.parse_args(argv)
+
+    if args.full_bundle:
+        disabled = frozenset(args.disable or [])
+    else:
+        disabled = DEFAULT_DISABLED | frozenset(args.disable or [])
 
     with open(args.dump, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enriched = enrich(dump)
+    enriched = enrich(dump, disabled=disabled)
 
     if args.text:
         print(enriched_field_list(enriched))
