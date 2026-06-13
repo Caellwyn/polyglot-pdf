@@ -1,14 +1,10 @@
 # Bake-off generated artifacts (bd polyglot-pdf-7a9.4) -- throwaway research data.
-# The CODE that produces these is committed (../*.py, ../prior_extractor/); the
-# bulky per-arm drafts, AcroForm dumps, and run logs are regenerable and kept out
-# of git to keep the PR reviewable. The scored SUMMARY (_scores.json) and the
-# human-readable FINDINGS.md (one level up) ARE committed as the deliverable.
-*.json
-*.txt
-*.log
-*.sh
-*.png
-# rendered-page dirs + quarantined stray files from CLI runs (bd 7a9.10)
-i90_pages/
-_stray_cli_files/
+# The CODE that produces these is committed (../*.py, ../prior_extractor/); every
+# generated artifact here (per-arm drafts, AcroForm dumps, run logs/scripts,
+# rendered pages, annotated PDFs, and the LLM agents' own scratch .py/.pkl files
+# from CLI runs) is regenerable and kept out of git to keep PRs reviewable.
+# Rule: ignore EVERYTHING under outputs/ except the committed deliverables below.
+*
+!.gitignore
+# The scored SUMMARY is the one committed artifact (FINDINGS.md lives one level up).
 !_scores.json

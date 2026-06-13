@@ -117,8 +117,12 @@ layout, columns, numbered questions, and grouping. Use your judgment about how a
 person actually reads this page; do not just sweep top-to-bottom ignoring
 columns.
 
-Return ONLY a JSON array of the marker numbers in that human order, e.g.
-[1, 2, 5, 3, 4, ...]. Include every marker exactly once. No prose, no other keys.
+Deliver your answer by WRITING (with your Write tool) a JSON array of the marker
+numbers in human order to this exact file path:
+  {answer_path}
+The file content must be ONLY the array, e.g. [1, 2, 5, 3, 4, ...] -- every
+marker exactly once, no prose, no other keys. (Writing to a file avoids the
+message-length limit; do NOT print the array in chat.) Then end with: WROTE OK
 
 The page image is at: {png}
 The markers map to these internal field ids (for your reference only -- you order
@@ -128,34 +132,67 @@ by VISUAL layout, not by these names):
 
 
 def _extract_json_array(text: str):
+    """Pull the marker-order array out of the model's reply, prose-tolerant.
+
+    The model usually returns a bare `[1, 2, ...]` but sometimes narrates around
+    it or wraps it in a ```json fence. Scan for the LONGEST all-integer array in
+    the text (the real answer; a stray short `[1]` in prose loses)."""
     import re
     t = text.strip()
-    m = re.search(r"\[[\s\d,]+\]", t)
-    if m:
-        return json.loads(m.group(0))
-    return json.loads(t)
+    fence = re.search(r"```(?:json)?\s*(\[[\s\d,]+\])\s*```", t)
+    if fence:
+        return json.loads(fence.group(1))
+    best = None
+    for m in re.finditer(r"\[[\s\d,]+\]", t):
+        try:
+            arr = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            continue
+        if best is None or len(arr) > len(best):
+            best = arr
+    if best is not None:
+        return best
+    return json.loads(t)  # raises a clear JSONDecodeError if truly nothing
 
 
 def ask_order(png_path: str, legend: list[dict], model: str,
-              add_dirs: list[str]) -> list[int]:
-    """Ask the Claude CLI to return the page's markers in human reading order."""
+              add_dirs: list[str], answer_dir: str) -> list[int]:
+    """Ask the Claude CLI to return the page's markers in human reading order.
+
+    The model WRITES the array to a scratch file (read back here) rather than
+    printing it: an observed page (48 dense checkboxes) had the model narrate its
+    grid reasoning and overflow the per-message ceiling, TRUNCATING the printed
+    array mid-list. The file path sidesteps the message limit (bd 7a9.10)."""
     exe = shutil.which("claude") or "claude"
+    answer_path = os.path.join(answer_dir, f"_order_answer_{os.getpid()}.json")
+    if os.path.exists(answer_path):
+        os.remove(answer_path)
     legend_txt = "\n".join(f"  marker {l['tag']} -> {l['name']}" for l in legend)
-    prompt = ORDER_PROMPT.format(png=os.path.abspath(png_path), legend=legend_txt)
+    prompt = ORDER_PROMPT.format(png=os.path.abspath(png_path),
+                                 legend=legend_txt,
+                                 answer_path=answer_path)
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
            "--permission-mode", "acceptEdits"]
     for d in add_dirs:
         cmd += ["--add-dir", d]
     timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "600"))
-    proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
-                          encoding="utf-8", timeout=timeout_s)
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI exited {proc.returncode}: "
-                           f"{(proc.stderr or proc.stdout)[:400]}")
-    env = json.loads(proc.stdout)
-    if env.get("is_error"):
-        raise RuntimeError(f"claude CLI error: {env.get('result')!r}")
-    return _extract_json_array(env.get("result", ""))
+    try:
+        proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                              encoding="utf-8", timeout=timeout_s)
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude CLI exited {proc.returncode}: "
+                               f"{(proc.stderr or proc.stdout)[:400]}")
+        env = json.loads(proc.stdout)
+        if env.get("is_error"):
+            raise RuntimeError(f"claude CLI error: {env.get('result')!r}")
+        if os.path.exists(answer_path):
+            with open(answer_path, encoding="utf-8") as fh:
+                return _extract_json_array(fh.read())
+        # fallback: the model printed it anyway (small pages)
+        return _extract_json_array(env.get("result", ""))
+    finally:
+        if os.path.exists(answer_path):
+            os.remove(answer_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -272,7 +309,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         sweep = sweep_page_order(json.loads(json.dumps(dump)), pg)
         try:
             model_tags = ask_order(png, legend, args.model,
-                                   add_dirs=[os.path.abspath(args.outdir), pdf_dir])
+                                   add_dirs=[os.path.abspath(args.outdir), pdf_dir],
+                                   answer_dir=os.path.abspath(args.outdir))
             sc = score_order(model_tags, legend, truth, sweep)
             sc["page"] = pg
             sc["status"] = "ok"
