@@ -22,13 +22,16 @@ Data-validity rules (encoded, not hand-waved):
   - Section-reset "eviction drops" are session-restart curve resets, never
     compression; they are labeled `restart` in the curves table.
 
-Token model for what-if scenarios (calibrated, both anchors measured):
-  prompt_tokens(turn 1) ~= CHAR_RATE * si_chars + FIXED_OVERHEAD
-  where CHAR_RATE and FIXED_OVERHEAD are solved from two measured pairs:
-  the full-form turn-1 prompt (8,165 tok @ 25,632 SI chars) and the 3.1
-  section-2 restart greeting (2,311 tok @ 3,831 SI chars). FIXED_OVERHEAD
-  (~1.28k tok) is the tool declarations + initiating message, consistent with
-  the h04c with-tools floor (~1,137 tok before the initiating message).
+Token model for what-if scenarios (calibrated from the data at load time):
+  prompt_tokens(first billed event) ~= CHAR_RATE * si_chars + FIXED_OVERHEAD
+  with both anchors taken from the loaded 2.5 cells' (si_chars,
+  prompt_curve[0]) pairs -- full-form (25,639 chars / 8,165 tok) and
+  section-1 (4,587 chars / 2,275 tok) -- giving CHAR_RATE ~0.280 tok/char and
+  FIXED_OVERHEAD ~992 tok (the tool declarations + initiating message).
+  LIMITATION: the calibration is 2.5-only; 3.1 bills ~2.8% fewer tokens for
+  the same SI (7,934 vs 8,165 measured), so 3.1 what-if outputs are
+  systematically a few percent optimistic on top of the model's best-case
+  framing.
 """
 
 from __future__ import annotations
@@ -74,7 +77,11 @@ _NAME_RE = re.compile(r"costs_(?P<model>[\d.]+)_(?P<arm>[\w-]+)_(?P<path>\w+)_(?
 
 
 def si_tokens_from_chars(si_chars: float) -> float:
-    """Estimated turn-1 prompt tokens for a given system-instruction size."""
+    """Estimated first-event prompt tokens for a given system-instruction
+    size. Raises until load_matrix()/calibrate() has run -- silently
+    propagating NaN through a cost table is the failure mode this guards."""
+    if CHAR_RATE != CHAR_RATE:  # NaN check without importing math
+        raise RuntimeError("calibration not loaded -- call load_matrix() first")
     return CHAR_RATE * si_chars + FIXED_OVERHEAD
 
 
@@ -350,7 +357,8 @@ def set_events_per_question(value: float) -> None:
 
 def window_cost_curve(si_chars: float, growth_per_q: float, n_questions: int,
                       model: str, configs: list[tuple[int, int]],
-                      eviction_lag_q: float = 1.5) -> pd.DataFrame:
+                      eviction_lag_q: float = 1.5,
+                      events_per_q: float | None = None) -> pd.DataFrame:
     """BEST-CASE modeled cumulative TEXT-INPUT cost over n_questions for a
     sliding-window session, per (trigger_tokens, window_tokens) config, for
     one SI scenario. "Best-case" means the server evicts as configured: the
@@ -369,16 +377,23 @@ def window_cost_curve(si_chars: float, growth_per_q: float, n_questions: int,
       hi <= 0 -> compression can never fire (trigger below the SI floor):
                  the curve is just unbounded growth (infeasible config).
       Conversation c(q) = growth_per_q * q until the first eviction COMPLETES
-      at q_evict = hi/growth_per_q + eviction_lag_q (the async 1-3 turn lag,
-      eycd/h04c); after that, steady-state sawtooth midpoint (lo + hi) / 2.
+      at q_evict = hi/growth_per_q + eviction_lag_q. NOTE the lag unit is
+      QUESTIONS: the measured async lag is 1-3 TURNS (eycd/h04c), so the 1.5
+      default is calibrated to the ~2-events/question happy path; pass
+      ~0.5-0.8 for a ~4-events/question unhappy path if precision matters
+      (sensitivity over lag in [0.5, 3] does not change any conclusion
+      direction in this dataset -- fresh-eyes round 2).
+      After q_evict: steady-state sawtooth midpoint (lo + hi) / 2.
     Billing: each question re-bills the prompt on each billed event
-    (set_events_per_question; measured ~2.0 happy / ~3.9 unhappy).
+    (events_per_q param, falling back to the module default set by
+    set_events_per_question; measured ~2.0 happy / ~3.9 unhappy).
 
     Returns tidy rows: trigger, window, q, prompt_tokens_avg,
     cum_text_in_cost, feasible.
     """
     rate = RATES[model]["text_input"] / 1e6
     base = si_tokens_from_chars(si_chars)
+    epq = _EVENTS_PER_Q if events_per_q is None else float(events_per_q)
     rows = []
     for trigger, window in configs:
         hi = trigger - base
@@ -391,7 +406,7 @@ def window_cost_curve(si_chars: float, growth_per_q: float, n_questions: int,
             conv = growth_per_q * q
             conv_eff = conv if (not feasible or q <= q_evict) else min(conv, steady)
             prompt = base + conv_eff
-            cum += prompt * rate * _EVENTS_PER_Q
+            cum += prompt * rate * epq
             rows.append({"trigger": trigger, "window": window, "q": q,
                          "prompt_tokens_avg": prompt, "cum_text_in_cost": cum,
                          "feasible": feasible})
@@ -402,24 +417,32 @@ def window_model_check(questions: pd.DataFrame, runs: pd.DataFrame,
                        growth: pd.DataFrame) -> pd.DataFrame:
     """Model-vs-measured for the four measured sliding-window cells: the
     honesty check the notebook must display before any what-if chart.
-    'measured' is the cell's valid-question text-in cost; 'unbounded' is the
-    same model/path unbounded cell (the no-eviction bound)."""
+
+    Like-for-like basis (fresh-eyes round 2): the comparison runs over the
+    questions VALID IN BOTH the sliding cell and the unbounded cell of the
+    same model/path -- both truncated 3.1-unhappy cells died at different
+    questions (q13 vs q12), and comparing unequal spans flipped the sign.
+    Pure function: does NOT touch the module's events-per-question default."""
     rows = []
     for (model, path), grp in growth.groupby(["model", "path"]):
         g = grp.iloc[0]
-        set_events_per_question(g["events_per_question"])
         run = runs[(runs["model"] == model) & (runs["arm"] == "sliding-window")
                    & (runs["path"] == path)].iloc[0]
-        n_q = int(questions[(questions["model"] == model)
-                            & (questions["arm"] == "sliding-window")
-                            & (questions["path"] == path) & questions["valid"]]["q"].count())
+
+        def _valid_qs(arm):
+            sel = ((questions["model"] == model) & (questions["path"] == path)
+                   & (questions["arm"] == arm) & questions["valid"])
+            return set(questions[sel]["q"])
+
+        common_qs = _valid_qs("sliding-window") & _valid_qs("unbounded")
+        n_q = len(common_qs)
         pred = window_cost_curve(run["si_chars"], g["growth_per_question"], n_q,
-                                 model, [(int(run["trigger"]), int(run["window"]))])
-        sel = ((questions["model"] == model) & (questions["path"] == path)
-               & questions["valid"])
-        measured = questions[sel & (questions["arm"] == "sliding-window")]["text in token cost"].sum()
-        unbounded = questions[sel & (questions["arm"] == "unbounded")
-                              & (questions["q"] <= n_q)]["text in token cost"].sum()
+                                 model, [(int(run["trigger"]), int(run["window"]))],
+                                 events_per_q=g["events_per_question"])
+        base_sel = ((questions["model"] == model) & (questions["path"] == path)
+                    & questions["q"].isin(common_qs))
+        measured = questions[base_sel & (questions["arm"] == "sliding-window")]["text in token cost"].sum()
+        unbounded = questions[base_sel & (questions["arm"] == "unbounded")]["text in token cost"].sum()
         rows.append({"model": model, "path": path, "n_questions": n_q,
                      "modeled_text_in": pred["cum_text_in_cost"].iloc[-1],
                      "measured_text_in": measured,
