@@ -36,7 +36,7 @@ model), keeping ~1,750 tokens of recent conversation in memory:
 
 | Flow | Cost per form |
 |---|---|
-| No management at all | ~$10-12 |
+| No management at all (unbounded single session) | ~$13 |
 | Sliding window over today's full instruction dump | ~$2.38 |
 | **Your section system (today's production)** | **~$2.32** |
 | Sliding window over the JIT manifest (already built, never measured live) | ~$1.34 |

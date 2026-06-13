@@ -147,19 +147,35 @@ def _cell_frames(csv_path: Path):
     #   - billing_noise: tiny drops (< ~400 tok) with no mechanism -- turn-to-
     #     turn metering jitter, not a real context reduction.
     floor = float(curve["prompt_tokens"].min())  # ~the smallest greeting/base seen
-    restart_ceiling = max(floor * 1.5, floor + 1500)
+    # A section restart resets to SOME section's SI greeting -- which varies by
+    # section (the demo's sections run ~3.3k-9.5k SI chars), so a restart can
+    # land well above the smallest floor. The reliable restart signature in a
+    # section-reset arm is a substantial drop landing below the run's OWN
+    # turn-1 prompt (the full-form SI was never sent in this arm, but the
+    # turn-1 prompt is this run's largest unavoidable base; a drop below it
+    # means the schema was reset to a smaller section). Uses measured curve
+    # values only -- no dependency on the calibration, which has not run yet
+    # at load time.
+    turn1_prompt = float(curve["prompt_tokens"].iloc[0])
+    restart_ceiling = turn1_prompt + 1500  # tolerate a section larger than section-1
 
     def _classify(ev_idx: int) -> str:
         prev, now = drop_map[ev_idx]
         size = prev - now
         if size < 400:
             return "billing_noise"
-        if key["arm"] == "section-reset" and now <= restart_ceiling:
+        # A real section restart is a LARGE reset (the whole accumulated
+        # section context is flushed, >= ~1k tokens) that lands near a section
+        # base. Requiring BOTH avoids tagging a small within-section dip that
+        # merely lands low as a restart (fresh-eyes: 2.5 ev39, -572 landing at
+        # 3698, is a within-section dip, NOT the section-2 restart at ev37).
+        if (key["arm"] == "section-reset" and size >= 1000
+                and now <= restart_ceiling):
             return "session_restart"
         if key["model"] == "3.1":
             # 3.1's intrinsic audio-context sawtooth: a partial dip that does
-            # NOT reset to the floor (a restart that lands at the floor is
-            # caught above). Applies in every 3.1 arm.
+            # NOT reset the schema (lands above the full-form base, or is in a
+            # non-restart arm). Applies in every 3.1 arm.
             return "audio_context_dip"
         if key["arm"] == "sliding-window":
             return "compression_eviction"
