@@ -263,13 +263,16 @@ def enriched_field_list(dump: dict, max_fields: int | None = None,
     if "tab_order" not in enabled:
         head_bits.append("Listed in source (name) order. ")
     elif order_caveat:
+        # Honest-but-light framing (bd 7a9.10): name the order accurately
+        # without telling the model to DISTRUST it. The heavier "this is wrong,
+        # re-derive it yourself" caveat measurably raised spurious-field churn
+        # on I-90 by suppressing the consolidation cue; this wording keeps the
+        # truthful label and the useful locality hint.
         head_bits.append(
-            "Listed in a mechanical GEOMETRIC SWEEP order (top-to-bottom, "
-            "then left-to-right within a y-band). CAUTION: this sweep is NOT "
-            "the human reading order -- on multi-column pages it INTERLEAVES "
-            "the columns. Derive the true logical order YOURSELF from page, "
-            "xy, and the PDF's visual layout; treat the sweep rank only as a "
-            "rough spatial-locality hint. "
+            "Listed in GEOMETRIC LAYOUT order (top-to-bottom, then "
+            "left-to-right by position); on multi-column pages this may not "
+            "match human reading order, so use page + xy as the source of "
+            "truth for layout. "
         )
     else:
         head_bits.append("Listed in TAB ORDER (human reading order). ")
