@@ -10,6 +10,7 @@ Tests that the confirm_field tool:
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from backend.services.callback_handler import CallbackHandler
+from backend.services.form_filling_service import FormFillingService
 from backend.services.request_coordinator import (
     CONFIRM_REQUEST_TIMEOUT,
     RequestCoordinator,
@@ -295,3 +296,65 @@ class TestConfirmFieldFailsWhenNotRecorded:
                 arguments={"field_id": "p1_line1_firstname", "confirmation_method": "verbal"},
             )
             mock_log.assert_not_called()
+
+
+class TestStartSessionThreadsFormIds:
+    """Regression test for bd polyglot-pdf-rwjy: start_session must pass
+    form_id and form_session_id to CallbackHandler so the confirmation-audit
+    guard (self._form_id and self._form_session_id) is truthy at runtime.
+    Before the fix, CallbackHandler was constructed before form_id was
+    extracted, leaving both attributes as None and silently disabling audit
+    logging on every session."""
+
+    @pytest.mark.asyncio
+    async def test_start_session_threads_form_ids_into_callback_handler(self):
+        """CallbackHandler built by start_session carries the schema's form_number
+        and the provided form_session_id (bd rwjy)."""
+        service = FormFillingService()
+        ws = AsyncMock()
+        ws.accept = AsyncMock()
+        ws.send_json = AsyncMock()
+
+        schema = {
+            "source": "web",
+            "form_metadata": {"form_number": "I-90", "title": "I-90"},
+            "fields": [{"id": "f1", "name": "Field 1", "type": "text"}],
+        }
+
+        with patch.object(service, "_live_ai", None):
+            await service.start_session(
+                websocket=ws,
+                session_id="test-session",
+                schema=schema,
+                form_session_id="fss_rwjy_test",
+            )
+
+        assert service._callback_handler is not None
+        assert service._callback_handler._form_id == "I-90"
+        assert service._callback_handler._form_session_id == "fss_rwjy_test"
+
+    @pytest.mark.asyncio
+    async def test_start_session_uses_session_id_when_form_session_id_absent(self):
+        """When form_session_id is not provided, CallbackHandler falls back to
+        the ephemeral session_id so the guard is still truthy (bd rwjy)."""
+        service = FormFillingService()
+        ws = AsyncMock()
+        ws.accept = AsyncMock()
+        ws.send_json = AsyncMock()
+
+        schema = {
+            "source": "web",
+            "form_metadata": {"form_number": "I-90", "title": "I-90"},
+            "fields": [],
+        }
+
+        with patch.object(service, "_live_ai", None):
+            await service.start_session(
+                websocket=ws,
+                session_id="fallback-session",
+                schema=schema,
+                form_session_id=None,
+            )
+
+        assert service._callback_handler._form_id == "I-90"
+        assert service._callback_handler._form_session_id == "fallback-session"
