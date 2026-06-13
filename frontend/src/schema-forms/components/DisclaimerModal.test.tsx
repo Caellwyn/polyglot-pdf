@@ -126,28 +126,41 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
             expect(ALL_LANGUAGES).toContain('English');
         });
 
+        it('every language has a UNIQUE first paragraph (the per-language anchor)', () => {
+            // The per-language render check below proves "this language's OWN
+            // content rendered" by asserting its p1 -- which only works if p1 is
+            // distinct across languages. Titles are NOT a safe anchor: Spanish and
+            // Portuguese share the title 'Aviso Importante', so a Portuguese ->
+            // Spanish misroute would still render the expected title. p1, by
+            // contrast, is unique per language; assert that invariant up front so
+            // the anchor the loop relies on is guaranteed.
+            const p1s = ALL_LANGUAGES.map((lang) => DISCLAIMER_TRANSLATIONS[lang].p1);
+            expect(new Set(p1s).size).toBe(p1s.length);
+        });
+
         it.each(NON_ENGLISH)(
-            'renders the %s title from its own translation (not the English fallback)',
+            'renders the %s notice from its own translation (not the English fallback)',
             (language) => {
                 const expected = DISCLAIMER_TRANSLATIONS[language];
                 render(<DisclaimerModal {...baseProps} selectedLanguage={language} />);
 
-                // The title for a non-English language must be that language's
-                // own title. Since every language has a DISTINCT title, finding
-                // it proves the entry was wired (not silently English-fallen-back).
+                // Its own title renders. (Title alone is a weak anchor -- some
+                // languages share a title, e.g. Spanish/Portuguese 'Aviso
+                // Importante' -- so the p1 assertion below is what actually proves
+                // THIS language's content rendered, not another's.)
                 expect(screen.getByText(expected.title)).toBeTruthy();
-                // And the English title must NOT appear for a non-English user
-                // whose own title differs (every non-English title here does).
+
+                // Its own first paragraph renders. p1 is unique per language (see
+                // the invariant test above), so finding it proves the entry was
+                // wired to THIS language -- not silently English-fallen-back AND
+                // not misrouted to a same-title sibling (the Portuguese->Spanish
+                // case the title check cannot catch).
+                expect(document.body.textContent).toContain(expected.p1);
+
+                // No language here shares the ENGLISH title, so the English
+                // fallback title must be absent for every non-English user.
                 expect(expected.title).not.toBe(DISCLAIMER_TRANSLATIONS['English'].title);
                 expect(screen.queryByText(DISCLAIMER_TRANSLATIONS['English'].title)).toBeNull();
-            }
-        );
-
-        it.each(NON_ENGLISH)(
-            'renders the first paragraph of the %s notice', (language) => {
-                const expected = DISCLAIMER_TRANSLATIONS[language];
-                render(<DisclaimerModal {...baseProps} selectedLanguage={language} />);
-                expect(document.body.textContent).toContain(expected.p1);
             }
         );
     });
@@ -230,7 +243,7 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
             expect(document.body.style.overflow).toBe('');
         });
 
-        it('suppresses the Escape key (modal is not ESC-dismissable)', () => {
+        it('actively suppresses the Escape key (calls preventDefault on it)', () => {
             const onAgree = vi.fn();
             const onListenAgain = vi.fn();
             render(
@@ -242,11 +255,23 @@ describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', ()
                 />
             );
 
-            // The modal installs a capture-phase Escape handler that
-            // preventDefault/stopPropagation; pressing Escape must neither
-            // dismiss the dialog nor fire either callback.
-            fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+            // The modal installs a capture-phase keydown handler that calls
+            // preventDefault() on Escape (so a parent ESC-to-dismiss can't fire).
+            // Dispatch a REAL cancelable KeyboardEvent and assert defaultPrevented
+            // flipped to true -- this fails if the handler is removed, unlike a
+            // plain "dialog still present" check (the modal has no native ESC
+            // dismissal, so its mere presence proves nothing). This is the
+            // mutation-catching assertion for the suppression behavior.
+            const escEvent = new KeyboardEvent('keydown', {
+                key: 'Escape',
+                code: 'Escape',
+                bubbles: true,
+                cancelable: true,
+            });
+            document.dispatchEvent(escEvent);
+            expect(escEvent.defaultPrevented).toBe(true);
 
+            // And Escape neither dismisses the dialog nor fires a callback.
             expect(screen.getByRole('dialog')).toBeTruthy();
             expect(onAgree).not.toHaveBeenCalled();
             expect(onListenAgain).not.toHaveBeenCalled();
