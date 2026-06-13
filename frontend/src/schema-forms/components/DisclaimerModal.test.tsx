@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { DisclaimerModal } from './DisclaimerModal';
+import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from './DisclaimerModal';
 
 describe('DisclaimerModal', () => {
     afterEach(() => {
@@ -74,5 +74,207 @@ describe('DisclaimerModal', () => {
         render(<DisclaimerModal {...defaultProps} />);
         fireEvent.click(screen.getByText('Listen Again'));
         expect(defaultProps.onListenAgain).toHaveBeenCalled();
+    });
+});
+
+// =====================================================================
+// T1.3 (bd polyglot-pdf-uov.6): the BROADER disclaimer spec audit.
+//
+// The block above (PR #122) asserts the 3 English/Spanish/Chinese body-copy
+// substrings and the 4 open/close/agree/listen-again behaviors. This block
+// covers the remaining scope the bead names: (a) coverage parity across ALL
+// translated languages -- not just the 3 -- so a dropped or English-fallback
+// entry in any of the other ~15 is caught; (b) the p1/p2/p3-vs-fullText
+// rendering distinction; (c) accessibility + modal behavior beyond the 4.
+//
+// The disclaimer is a mandatory legal notice shown before any form work, so
+// these are spec-tests of a load-bearing legal surface: every supported
+// language must show ITS OWN notice (an English fallback for a non-English
+// user is a real defect), and the visual paragraphs shown must be the p1/p2/p3
+// the component renders -- never the longer fullText (that string is the
+// audio/TTS script, read aloud by VoiceOverlay, not painted in the modal).
+//
+// ASCII-only source (scar #6 / AGENTS.md): no assertion hardcodes a
+// non-Latin glyph. Per-language checks read the EXPECTED text from the
+// exported DISCLAIMER_TRANSLATIONS map (the same data the component renders)
+// rather than re-typing each translation, so the test stays ASCII and cannot
+// drift from the source copy.
+// =====================================================================
+describe('DisclaimerModal -- full spec audit (T1.3 / bd polyglot-pdf-uov.6)', () => {
+    afterEach(() => {
+        cleanup();
+    });
+
+    const baseProps = {
+        isOpen: true,
+        onListenAgain: vi.fn(),
+        onAgree: vi.fn(),
+    };
+
+    // The full supported set, derived from the exported map (NOT a hardcoded
+    // list) so adding a language to the component automatically extends the
+    // audit. Drop English: it is the fallback, so "renders its own title, not
+    // the English fallback" is vacuous for it -- it has dedicated tests above.
+    const ALL_LANGUAGES = Object.keys(DISCLAIMER_TRANSLATIONS);
+    const NON_ENGLISH = ALL_LANGUAGES.filter((lang) => lang !== 'English');
+
+    describe('coverage parity: every supported language renders ITS OWN notice', () => {
+        it('exposes more than the 3 spot-checked languages', () => {
+            // Guards the audit's premise: if the map ever shrank to <=3 entries
+            // the per-language loop below would silently cover almost nothing.
+            expect(ALL_LANGUAGES.length).toBeGreaterThan(3);
+            expect(ALL_LANGUAGES).toContain('English');
+        });
+
+        it('every language has a UNIQUE first paragraph (the per-language anchor)', () => {
+            // The per-language render check below proves "this language's OWN
+            // content rendered" by asserting its p1 -- which only works if p1 is
+            // distinct across languages. Titles are NOT a safe anchor: Spanish and
+            // Portuguese share the title 'Aviso Importante', so a Portuguese ->
+            // Spanish misroute would still render the expected title. p1, by
+            // contrast, is unique per language; assert that invariant up front so
+            // the anchor the loop relies on is guaranteed.
+            const p1s = ALL_LANGUAGES.map((lang) => DISCLAIMER_TRANSLATIONS[lang].p1);
+            expect(new Set(p1s).size).toBe(p1s.length);
+        });
+
+        it.each(NON_ENGLISH)(
+            'renders the %s notice from its own translation (not the English fallback)',
+            (language) => {
+                const expected = DISCLAIMER_TRANSLATIONS[language];
+                render(<DisclaimerModal {...baseProps} selectedLanguage={language} />);
+
+                // Its own title renders. (Title alone is a weak anchor -- some
+                // languages share a title, e.g. Spanish/Portuguese 'Aviso
+                // Importante' -- so the p1 assertion below is what actually proves
+                // THIS language's content rendered, not another's.)
+                expect(screen.getByText(expected.title)).toBeTruthy();
+
+                // Its own first paragraph renders. p1 is unique per language (see
+                // the invariant test above), so finding it proves the entry was
+                // wired to THIS language -- not silently English-fallen-back AND
+                // not misrouted to a same-title sibling (the Portuguese->Spanish
+                // case the title check cannot catch).
+                expect(document.body.textContent).toContain(expected.p1);
+
+                // No language here shares the ENGLISH title, so the English
+                // fallback title must be absent for every non-English user.
+                expect(expected.title).not.toBe(DISCLAIMER_TRANSLATIONS['English'].title);
+                expect(screen.queryByText(DISCLAIMER_TRANSLATIONS['English'].title)).toBeNull();
+            }
+        );
+    });
+
+    describe('rendering distinction: the modal shows p1/p2/p3, never fullText', () => {
+        it('renders all three visual paragraphs (p1, p2, p3) for English', () => {
+            const en = DISCLAIMER_TRANSLATIONS['English'];
+            render(<DisclaimerModal {...baseProps} selectedLanguage="English" />);
+            const body = document.body.textContent || '';
+            expect(body).toContain(en.p1);
+            expect(body).toContain(en.p2);
+            expect(body).toContain(en.p3);
+        });
+
+        it('does NOT paint the fullText audio script verbatim in the modal', () => {
+            // fullText is the spoken/TTS version (consumed by VoiceOverlay), a
+            // SUPERSET of p1+p2+p3 concatenated WITHOUT the paragraph breaks the
+            // modal renders. The component maps p1/p2/p3 into three <p> nodes, so
+            // the single-string fullText -- which contains a p1->p2 junction with
+            // no break -- must not appear as one contiguous run in the DOM.
+            const en = DISCLAIMER_TRANSLATIONS['English'];
+            render(<DisclaimerModal {...baseProps} selectedLanguage="English" />);
+            const body = document.body.textContent || '';
+            // The exact fullText string is not a contiguous substring of the
+            // rendered modal (the paragraphs are separate text nodes).
+            expect(body).not.toContain(en.fullText);
+            // Sanity: fullText really is the longer audio script (superset of p1).
+            expect(en.fullText.length).toBeGreaterThan(en.p1.length);
+            expect(en.fullText).toContain(en.p1);
+        });
+    });
+
+    describe('data integrity of DISCLAIMER_TRANSLATIONS (the public contract)', () => {
+        it.each(ALL_LANGUAGES)(
+            '%s has all five non-empty fields (title, p1, p2, p3, fullText)',
+            (language) => {
+                const t = DISCLAIMER_TRANSLATIONS[language];
+                for (const key of ['title', 'p1', 'p2', 'p3', 'fullText'] as const) {
+                    expect(typeof t[key]).toBe('string');
+                    expect(t[key].trim().length).toBeGreaterThan(0);
+                }
+            }
+        );
+
+        it.each(ALL_LANGUAGES)(
+            '%s fullText is the audio superset: it contains p1, p2, and p3',
+            (language) => {
+                const t = DISCLAIMER_TRANSLATIONS[language];
+                // The audio script reads the whole notice, so each visual
+                // paragraph's text appears within fullText. This catches a
+                // translation where the spoken and visual copy drifted apart.
+                expect(t.fullText).toContain(t.p1);
+                expect(t.fullText).toContain(t.p2);
+                expect(t.fullText).toContain(t.p3);
+            }
+        );
+    });
+
+    describe('accessibility + modal behavior', () => {
+        it('exposes the modal as an aria dialog labelled by its title', () => {
+            render(<DisclaimerModal {...baseProps} selectedLanguage="English" />);
+            const dialog = screen.getByRole('dialog');
+            expect(dialog.getAttribute('aria-modal')).toBe('true');
+            // aria-labelledby must point at the rendered title element's id.
+            const labelledBy = dialog.getAttribute('aria-labelledby');
+            expect(labelledBy).toBeTruthy();
+            const title = document.getElementById(labelledBy as string);
+            expect(title?.textContent).toBe(DISCLAIMER_TRANSLATIONS['English'].title);
+        });
+
+        it('locks body scroll while open and restores it on close', () => {
+            const { rerender } = render(
+                <DisclaimerModal {...baseProps} isOpen={true} selectedLanguage="English" />
+            );
+            expect(document.body.style.overflow).toBe('hidden');
+
+            rerender(
+                <DisclaimerModal {...baseProps} isOpen={false} selectedLanguage="English" />
+            );
+            expect(document.body.style.overflow).toBe('');
+        });
+
+        it('actively suppresses the Escape key (calls preventDefault on it)', () => {
+            const onAgree = vi.fn();
+            const onListenAgain = vi.fn();
+            render(
+                <DisclaimerModal
+                    isOpen={true}
+                    selectedLanguage="English"
+                    onAgree={onAgree}
+                    onListenAgain={onListenAgain}
+                />
+            );
+
+            // The modal installs a capture-phase keydown handler that calls
+            // preventDefault() on Escape (so a parent ESC-to-dismiss can't fire).
+            // Dispatch a REAL cancelable KeyboardEvent and assert defaultPrevented
+            // flipped to true -- this fails if the handler is removed, unlike a
+            // plain "dialog still present" check (the modal has no native ESC
+            // dismissal, so its mere presence proves nothing). This is the
+            // mutation-catching assertion for the suppression behavior.
+            const escEvent = new KeyboardEvent('keydown', {
+                key: 'Escape',
+                code: 'Escape',
+                bubbles: true,
+                cancelable: true,
+            });
+            document.dispatchEvent(escEvent);
+            expect(escEvent.defaultPrevented).toBe(true);
+
+            // And Escape neither dismisses the dialog nor fires a callback.
+            expect(screen.getByRole('dialog')).toBeTruthy();
+            expect(onAgree).not.toHaveBeenCalled();
+            expect(onListenAgain).not.toHaveBeenCalled();
+        });
     });
 });
