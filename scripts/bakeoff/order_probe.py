@@ -20,9 +20,9 @@ Pipeline per page:
      tag->pdf_field_name legend (tags are page-local: 1..N).
   2. render to PNG (via render_pages helper / fitz).
   3. ask_order(): Claude CLI reads the PNG and returns the tags in human order.
-  4. score_order(): compare model tag-order to gold order (Kendall tau + the
-     exact-adjacency and head/tail agreement), restricted to fields present on
-     that page.
+  4. score_order(): compare model tag-order to gold order by Kendall tau-a,
+     restricted to the fields present on that page (and to the gold-matched
+     subset), with the deterministic sweep order scored the same way as baseline.
 
 Usage:
   python scripts/bakeoff/order_probe.py --pdf form-kits/i-90/form.pdf \
@@ -125,10 +125,20 @@ marker exactly once, no prose, no other keys. (Writing to a file avoids the
 message-length limit; do NOT print the array in chat.) Then end with: WROTE OK
 
 The page image is at: {png}
-The markers map to these internal field ids (for your reference only -- you order
-by VISUAL layout, not by these names):
+{legend_preamble}
 {legend}
 """
+
+# Legend preambles: the named variant exposes field ids (with an explicit
+# "order by layout, not names" guard); the blind variant has no names at all.
+_LEGEND_PREAMBLE_NAMED = (
+    "The markers map to these internal field ids (for your reference only -- you "
+    "order by VISUAL layout, not by these names):"
+)
+_LEGEND_PREAMBLE_BLIND = (
+    "The markers on the page are (order them purely by the VISUAL layout you see "
+    "in the image):"
+)
 
 
 def _extract_json_array(text: str):
@@ -176,9 +186,12 @@ def ask_order(png_path: str, legend: list[dict], model: str,
         os.remove(answer_path)
     if blind_legend:
         legend_txt = "\n".join(f"  marker {l['tag']}" for l in legend)
+        preamble = _LEGEND_PREAMBLE_BLIND
     else:
         legend_txt = "\n".join(f"  marker {l['tag']} -> {l['name']}" for l in legend)
+        preamble = _LEGEND_PREAMBLE_NAMED
     prompt = ORDER_PROMPT.format(png=os.path.abspath(png_path),
+                                 legend_preamble=preamble,
                                  legend=legend_txt,
                                  answer_path=answer_path)
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
