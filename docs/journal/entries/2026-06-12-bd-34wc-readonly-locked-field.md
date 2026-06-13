@@ -1,7 +1,8 @@
 ---
 date: 2026-06-12
 bead: polyglot-pdf-34wc
-title: "read_only fields are locked to the AI; locked-field message names the field once"
+beads: [polyglot-pdf-34wc, polyglot-pdf-2ip6]
+title: "read_only fields are locked to the AI; locked-field message names the field once + fits the lock kind"
 tags: [bugfix, frontend, webFormConnection]
 ---
 
@@ -44,7 +45,20 @@ the locked path, so fixing the gate is a prerequisite, not scope creep.
 `webFormConnection.ts` is the only non-test consumer of
 `evaluateFieldAvailability`, so dropping the name from the reason is safe.
 
+3. (Folded in: **polyglot-pdf-2ip6**, fresh-eyes finding 1.) The trailing
+   guidance in the `completion_message` now fits the lock kind. The single fixed
+   suffix ("...until the prerequisite fields are completed.") is correct for a
+   dependency-gated field but wrong for a read_only one -- a read_only field has
+   no prerequisite, so that instruction would send the model chasing upstream
+   fields that don't exist. When every locked field in the batch is read_only,
+   the guidance is now "These fields are system-managed and cannot be filled; do
+   not attempt to fill them again." Otherwise the prerequisite guidance stands.
+   This bug only became reachable for read_only fields because of fix #1 (the
+   gate), so it belonged in the same change.
+
 Three regression tests added to `webFormConnection.aivalidation.test.ts`:
-read_only fill routes to `completion_message` (not the dead `dependency_error`),
-the spoken name appears exactly once, and the rejected value never leaks back
-(PII-safe).
+read_only fill routes to `completion_message` (not the dead `dependency_error`)
+AND the value does not land (onFieldUpdate never fires for it -- proving the gate
+rejects it, not just that a message was sent); the spoken name appears exactly
+once and the guidance is read-only-appropriate (no "prerequisite", contains
+"system-managed"); and the rejected value never leaks back (PII-safe).

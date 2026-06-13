@@ -601,11 +601,17 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
     } as unknown as Storage
   })
 
-  it('routes a read_only field-fill to completion_message (the AI must not write it)', async () => {
-    const conn = new WebFormConnection(READONLY_SCHEMA, {})
+  it('routes a read_only field-fill to completion_message and does NOT apply the value', async () => {
+    // The gate regression (fresh-eyes finding): a VISIBLE read_only field used to
+    // slip past the locked check and reach the apply path. onFieldUpdate fires
+    // ONLY for values that actually land, so asserting it was never called proves
+    // the value was rejected, not merely that a message was also sent.
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(READONLY_SCHEMA, { onFieldUpdate })
     await conn.connect('wss://example/ws/fill')
     const ws = lastWs()
     ws.send.mockClear()
+    onFieldUpdate.mockClear()
 
     ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { caseNumber: 'A123' } }) })
 
@@ -613,9 +619,14 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
     expect(completions).toHaveLength(1)
     // No dead dependency_error
     expect(onMsgSent(ws).filter((m: any) => m.type === 'dependency_error')).toHaveLength(0)
+    // The read_only value must NOT have landed.
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('case_number')
   })
 
-  it('names the read_only field EXACTLY ONCE in the completion_message (bd 34wc)', async () => {
+  it('names the read_only field EXACTLY ONCE and gives read-only-appropriate guidance (bd 34wc)', async () => {
     const conn = new WebFormConnection(READONLY_SCHEMA, {})
     await conn.connect('wss://example/ws/fill')
     const ws = lastWs()
@@ -631,6 +642,10 @@ describe('WebFormConnection read_only-field rejection (bd polyglot-pdf-34wc)', (
     const occurrences = msg.split('Case Number').length - 1
     expect(occurrences).toBe(1)
     expect(msg).toContain('read-only')
+    // A read_only field has NO prerequisite to wait on, so the guidance must not
+    // tell the model to complete upstream fields (fresh-eyes finding 1).
+    expect(msg).not.toContain('prerequisite')
+    expect(msg).toContain('system-managed')
   })
 
   it('never echoes the rejected read_only value back to the backend (PII-safe)', async () => {

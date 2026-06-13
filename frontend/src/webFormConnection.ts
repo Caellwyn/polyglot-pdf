@@ -546,7 +546,7 @@ export class WebFormConnection {
 
     // Apply updates to state
     const updatedFields: Array<{ fieldId: string; value: any }> = [];
-    const lockedFields: Array<{ fieldId: string; field: any; reason: string }> = [];
+    const lockedFields: Array<{ fieldId: string; field: any; reason: string; readOnly: boolean }> = [];
 
     for (const [displayName, value] of Object.entries(updates)) {
       // Find field by display name
@@ -560,14 +560,15 @@ export class WebFormConnection {
         // not write to it, and the gate previously checked only hidden +
         // show_if visibility, so a visible read_only field slipped through to
         // the apply path instead of being reported back to the model.
+        const readOnly = isFieldReadOnly(field, this.state.fieldValues);
         const isAvailable =
           !field.hidden &&
           shouldShowField(field, this.state.fieldValues) &&
-          !isFieldReadOnly(field, this.state.fieldValues);
+          !readOnly;
 
         if (!isAvailable) {
           // Field is locked - collect dependency info for error message
-          const { availability, lockedReason } = evaluateFieldAvailability(
+          const { lockedReason } = evaluateFieldAvailability(
             field,
             this.state.fieldValues,
             this.state.schema
@@ -579,10 +580,14 @@ export class WebFormConnection {
           // the per-field message prefix below already names it, and doubling it
           // ("Cannot update 'X': The field 'X' is not available yet") reads poorly
           // and adds no information (bd polyglot-pdf-z6xs, fresh-eyes finding 4).
+          // readOnly is carried so the trailing guidance can distinguish a
+          // read_only field (permanently AI-unwritable -- no prerequisite to wait
+          // on) from a dependency-gated one (bd polyglot-pdf-34wc, finding 1).
           lockedFields.push({
             fieldId: field.id,
             field,
-            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).'
+            reason: lockedReason || 'it is not available yet (a prerequisite field must be completed first).',
+            readOnly
           });
 
           console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
@@ -613,11 +618,20 @@ export class WebFormConnection {
 
       console.error('[WebFormConnection] Locked field(s):', errorMessages);
 
+      // Trailing guidance must fit the lock kind (bd polyglot-pdf-34wc, finding 1):
+      // a read_only field is system-managed and has NO prerequisite to wait on, so
+      // the "complete the prerequisite fields" instruction (correct for a
+      // dependency-gated field) would send the model chasing upstream fields that
+      // do not exist. Only mention prerequisites when at least one locked field is
+      // actually dependency-gated (not read_only).
+      const allReadOnly = lockedFields.every(lf => lf.readOnly);
+      const guidance = allReadOnly
+        ? ' These fields are system-managed and cannot be filled; do not attempt to fill them again.'
+        : ' These fields were not updated. Do not attempt to fill them again until the prerequisite fields are completed.';
+
       this.send({
         type: 'completion_message',
-        message:
-          errorMessages.join('; ') +
-          ' These fields were not updated. Do not attempt to fill them again until the prerequisite fields are completed.',
+        message: errorMessages.join('; ') + guidance,
       });
     }
 
