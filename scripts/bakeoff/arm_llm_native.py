@@ -47,7 +47,9 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schema_contract import SCHEMA_CONTRACT  # noqa: E402
-from structural_enrich import SIGNALS, enrich, enriched_field_list  # noqa: E402
+from structural_enrich import (  # noqa: E402
+    DEFAULT_DISABLED, SIGNALS, enrich, enriched_field_list,
+)
 
 
 # Anti-hallucination contract addendum (Q4): the model MUST copy widget names
@@ -159,13 +161,14 @@ def _normalize_schema(schema) -> dict:
 
 def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
                  pdf_path: Optional[str],
-                 disabled: frozenset[str] = frozenset(),
-                 order_caveat: bool = False) -> str:
+                 disabled: frozenset[str] = DEFAULT_DISABLED,
+                 order_caveat: bool = True) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
     enriched bundle). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
     attaches the bytes separately and ignores this instruction's file path).
-    `disabled` drops enrichment signals -- the 7a9.10 ablation knob."""
+    `disabled` drops enrichment signals (DEFAULT drops row_cluster per the
+    7a9.10 trim); `order_caveat` (DEFAULT True) labels the sweep rank honestly."""
     with open(acroform_path, encoding="utf-8") as fh:
         dump = json.load(fh)
     enrich(dump, disabled=disabled)
@@ -312,8 +315,8 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
 def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
         send_pdf: bool = True,
-        disabled: frozenset[str] = frozenset(),
-        order_caveat: bool = False) -> dict:
+        disabled: frozenset[str] = DEFAULT_DISABLED,
+        order_caveat: bool = True) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
     prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
                           disabled=disabled, order_caveat=order_caveat)
@@ -349,29 +352,38 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="a DIFFERENT form's gold schema, for the convention few-shot")
     ap.add_argument("--no-pdf", action="store_true",
                     help="ablation: send ONLY the enriched bundle, no PDF pixels")
-    ap.add_argument("--disable", action="append", choices=SIGNALS, default=[],
-                    help="ablation: drop this enrichment signal (repeatable; "
-                         "bd 7a9.10)")
-    ap.add_argument("--order-caveat", action="store_true",
-                    help="present the order rank honestly as a geometric sweep "
-                         "with a multi-column interleave warning (bd 7a9.10)")
+    # DEFAULT signal set is the 7a9.10 trim: row_cluster dropped (DEFAULT_DISABLED),
+    # honest geometric-sweep order labeling on. The ablation flags below override.
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=None,
+                    help="ablation: drop this enrichment signal on TOP of the "
+                         "default trim (repeatable; bd 7a9.10)")
+    ap.add_argument("--full-bundle", action="store_true",
+                    help="ablation: re-enable ALL signals incl. row_cluster "
+                         "(undo the 7a9.10 default trim)")
+    ap.add_argument("--no-order-caveat", action="store_true",
+                    help="ablation: drop the honest geometric-sweep framing and "
+                         "label the rank as 'reading order' (the old 7a9.9 text)")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
 
+    if args.full_bundle:
+        disabled = frozenset(args.disable or [])
+    else:
+        disabled = DEFAULT_DISABLED | frozenset(args.disable or [])
+
     schema = run(args.pdf, args.acroform, args.model,
                  fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf,
-                 disabled=frozenset(args.disable),
-                 order_caveat=args.order_caveat)
+                 disabled=disabled, order_caveat=not args.no_order_caveat)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))
     tok = schema.get("_bakeoff", {}).get("tokens", {})
     print(f"[wrote {args.out}] arm=llm-native model={args.model} "
           f"fewshot={bool(args.fewshot_truth)} pdf={not args.no_pdf} "
-          f"disabled={sorted(frozenset(args.disable))} "
+          f"disabled={sorted(disabled)} order_caveat={not args.no_order_caveat} "
           f"fields={nf} tokens={tok}")
     return 0
 

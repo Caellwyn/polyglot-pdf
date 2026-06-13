@@ -44,6 +44,13 @@ from typing import Any, Optional
 # The ablatable signal names (bd 7a9.10).
 SIGNALS = ("name_decomp", "tab_order", "row_cluster")
 
+# Signals DROPPED from the default render after the 7a9.10 ablation on I-90:
+# row_cluster earned no (a) accuracy and was a net-negative on (b) relationship
+# recall (it correlated with the worst show_if recall when isolated). The other
+# two signals stay. The full ablation can still re-enable it: enrich(dump,
+# disabled=frozenset()). See docs/research/2026-06-12-7a9.10-*-findings.md.
+DEFAULT_DISABLED = frozenset({"row_cluster"})
+
 
 # --------------------------------------------------------------------------- #
 # 1. name-token decomposition (generic, no USCIS mapping)
@@ -119,11 +126,14 @@ def _reading_order_key(rec: dict) -> tuple:
     return (r["page"], round(r["y"] / 8.0), r["x"])
 
 
-def enrich(dump: dict, disabled: frozenset[str] = frozenset()) -> dict:
-    """Augment each field with name tokens, tab order, and spatial-cluster ids.
+def enrich(dump: dict, disabled: frozenset[str] = DEFAULT_DISABLED) -> dict:
+    """Augment each field with name tokens, reading-order rank, and (optionally)
+    visual-row-cluster ids.
 
     `disabled` names signals (from SIGNALS) to SKIP -- the ablation knob
-    (bd 7a9.10). A disabled signal is neither computed nor rendered.
+    (bd 7a9.10). A disabled signal is neither computed nor rendered. The DEFAULT
+    drops `row_cluster` (DEFAULT_DISABLED) per the 7a9.10 trim; pass
+    `disabled=frozenset()` to re-enable the full bundle for ablation.
     """
     # Flatten to per-widget records carrying their parent field, for geometry.
     widget_recs: list[dict] = []
@@ -180,12 +190,15 @@ def enrich(dump: dict, disabled: frozenset[str] = frozenset()) -> dict:
 # --------------------------------------------------------------------------- #
 
 def enriched_field_list(dump: dict, max_fields: int | None = None,
-                        order_caveat: bool = False) -> str:
+                        order_caveat: bool = True) -> str:
     """Render the enriched dump as a compact text field list for the prompt.
 
-    One line per logical field in TAB ORDER (not name order), exposing the
-    generic structural signals: leaf tokens, reading-order rank, row cluster,
-    page, geometry, tooltip, choices. This is the deliberately-assembled bundle
+    One line per logical field in geometric-sweep order (NOT name order),
+    exposing the generic structural signals: leaf tokens, sweep rank, (optional)
+    row cluster, page, geometry, tooltip, choices. `order_caveat` (DEFAULT True
+    per the 7a9.10 maintainer steer) labels the sweep rank honestly as a
+    mechanical geometric sweep that interleaves columns on multi-column pages,
+    rather than claiming it is human reading order. This is the assembled bundle
     the 7a9.9 thesis feeds the LLM in place of the USCIS heuristic output.
     """
     enabled = set(dump.get("_enriched", {}).get("signals", SIGNALS))
@@ -286,13 +299,22 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("dump", help="path to acroform_dump.py JSON")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--text", action="store_true", help="print the prompt field list instead of JSON")
-    ap.add_argument("--disable", action="append", choices=SIGNALS, default=[],
-                    help="ablation: drop this signal (repeatable)")
+    ap.add_argument("--disable", action="append", choices=SIGNALS, default=None,
+                    help="ablation: drop this signal on top of the default trim "
+                         "(repeatable)")
+    ap.add_argument("--full-bundle", action="store_true",
+                    help="re-enable ALL signals incl. row_cluster (undo the "
+                         "7a9.10 default trim)")
     args = ap.parse_args(argv)
+
+    if args.full_bundle:
+        disabled = frozenset(args.disable or [])
+    else:
+        disabled = DEFAULT_DISABLED | frozenset(args.disable or [])
 
     with open(args.dump, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enriched = enrich(dump, disabled=frozenset(args.disable))
+    enriched = enrich(dump, disabled=disabled)
 
     if args.text:
         print(enriched_field_list(enriched))
