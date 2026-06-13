@@ -92,8 +92,8 @@ def _cell_frames(csv_path: Path):
     if not m:
         raise ValueError(f"unrecognized data file name: {csv_path.name}")
     key = m.groupdict()
-    meta = json.loads(csv_path.with_suffix("").with_suffix("").name and
-                      (csv_path.parent / (csv_path.stem + ".meta.json")).read_text(encoding="utf-8"))
+    meta = json.loads(
+        (csv_path.parent / (csv_path.stem + ".meta.json")).read_text(encoding="utf-8"))
     qdf = pd.read_csv(csv_path)
     if list(qdf.columns) != CSV_COLUMNS or len(qdf) != 20:
         raise ValueError(f"CSV shape contract violated: {csv_path.name}")
@@ -452,13 +452,17 @@ def window_model_check(questions: pd.DataFrame, runs: pd.DataFrame,
 
 
 def section_reset_model_cost(growth_per_q: float, questions_per_section: list[int],
-                             model: str, si_chars_per_section: list[float] | None = None
-                             ) -> float:
+                             model: str, si_chars_per_section: list[float] | None = None,
+                             events_per_q: float | None = None) -> float:
     """Modeled cumulative text-in cost for the section-reset flow over a whole
     form: each section starts a fresh session (its own SI base), conversation
     grows within the section only. questions_per_section and the SI list must
-    be the same length (asserted -- zip would truncate silently)."""
+    be the same length (asserted -- zip would truncate silently).
+    events_per_q falls back to the module default set by
+    set_events_per_question -- pass it explicitly in mixed-path notebooks
+    (same purity pattern as window_cost_curve; fresh-eyes round 3)."""
     rate = RATES[model]["text_input"] / 1e6
+    epq = _EVENTS_PER_Q if events_per_q is None else float(events_per_q)
     sis = si_chars_per_section or SECTION_SI_CHARS
     if len(questions_per_section) != len(sis):
         raise ValueError("questions_per_section and SI list lengths differ "
@@ -467,5 +471,5 @@ def section_reset_model_cost(growth_per_q: float, questions_per_section: list[in
     for n_q, si_chars in zip(questions_per_section, sis):
         base = si_tokens_from_chars(si_chars)
         for q in range(1, n_q + 1):
-            total += (base + growth_per_q * q) * rate * _EVENTS_PER_Q
+            total += (base + growth_per_q * q) * rate * epq
     return total
