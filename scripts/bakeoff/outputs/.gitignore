@@ -6,4 +6,9 @@
 *.json
 *.txt
 *.log
+*.sh
+*.png
+# rendered-page dirs + quarantined stray files from CLI runs (bd 7a9.10)
+i90_pages/
+_stray_cli_files/
 !_scores.json
