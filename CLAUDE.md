@@ -296,6 +296,48 @@ reviews every merge, so this defended decision list is where they catch anything
 **decided that should have been escalated** -- the real risk of widening autonomy.
 Make the decisions easy to scan; do not bury them.
 
+### Communication with the maintainer (in-session messages and questions)
+
+This rule covers status updates, questions, and anything you say to the
+maintainer during a session. For the PR merge report specifically, see the
+guidance at the end of "Escalation vs. autonomy" above.
+
+**Assume the maintainer is juggling other work and hasn't read this session.**
+Write every message so it can be understood cold, without scrolling back through
+the conversation.
+
+**Three rules:**
+
+1. **Lead with context, not details.** Start with: What is this about? What
+   task or bug triggered this? Why does it matter? Then state your question or
+   status in one sentence. Details follow after.
+
+2. **Use plain language, and spell out anything the maintainer can't look up.**
+   This means two things: (a) never use a bead ID without a plain-English label
+   -- not "zun.4" but "task zun.4 (the fix for the WebSocket naming mismatch)";
+   (b) never use domain jargon, experiment shorthand, or metric names without
+   explaining what they mean in plain terms. If a sentence would confuse someone
+   who hasn't been in this session, rewrite it.
+
+   Bad: "The honest geometric-sweep caveat repeatably costs ~1.5 F1 and ~doubles
+   spurious fields on (a), but the best (b) relationship-recall runs came from
+   it. Which framing should be the default in the trimmed pass?"
+
+   Good: "The form has fields laid out in two columns. The script lists them in
+   a rough top-to-bottom sweep, but that sweep jumps between columns in a way
+   no human would read. I tested two ways of telling the AI about this: warning
+   it that the order is unreliable, vs. just calling it 'reading order' without
+   comment. With the honest warning: accuracy at identifying which fields are
+   related went up slightly (~2%), but basic extraction got worse -- the AI
+   created roughly twice as many duplicate/junk fields. Neither effect is large.
+   Which approach should be the default?"
+
+3. **Don't sacrifice clarity for brevity -- but don't pad either.** If context
+   and explanation require three paragraphs, write three paragraphs. The goal is
+   that the maintainer can understand and respond without a follow-up question.
+   A clear three-paragraph message beats a dense one-liner. But if the message
+   is clear in two sentences, two sentences is right.
+
 ### Task tracking
 - Beads (`bd`) is the canonical tracker. Pull-before-read, push-after-write.
   Full cadence: [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
