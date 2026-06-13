@@ -240,8 +240,11 @@ def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[d
     exe = shutil.which("claude") or "claude"
     outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "outputs")
+    # acceptEdits auto-approves the model's Write to the scratch file in
+    # outputs/ (an --add-dir grants READ; a headless write would otherwise hang
+    # on a permission prompt the -p session cannot answer -- bd 7a9.10).
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
-           "--add-dir", outputs_dir]
+           "--permission-mode", "acceptEdits", "--add-dir", outputs_dir]
     if pdf_path:
         cmd += ["--add-dir", os.path.dirname(os.path.abspath(pdf_path))]
     # The schema for a real form is ~30K+ output tokens -- piping it through the
