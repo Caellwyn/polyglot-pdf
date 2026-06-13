@@ -129,16 +129,45 @@ def _cell_frames(csv_path: Path):
 
     curve = pd.DataFrame({"prompt_tokens": meta["prompt_curve"]})
     curve["event_index"] = range(1, len(curve) + 1)
-    drop_idx = {d[0] for d in meta.get("eviction_drops", [])}
-    curve["drop"] = curve["event_index"].isin(drop_idx)
+    drop_map = {d[0]: (d[1], d[2]) for d in meta.get("eviction_drops", [])}
+    curve["drop"] = curve["event_index"].isin(drop_map)
+    # MECHANISM-based drop classification (fresh-eyes review of the section-4
+    # chart, 2026-06-12). The detector flags any prompt drop > 50 tokens, but
+    # the matrix contains THREE distinct mechanisms that an arm-based label
+    # conflated (and mislabeled, esp. for 3.1). Classify each by WHERE it
+    # lands, measured against this run's own SI floor:
+    #   - session_restart: the curve falls back near a SECTION SI base (a
+    #     near-total reset). Only the section-reset arm restarts; the landing
+    #     is within ~1.5x the smallest prompt seen (the section-1 greeting).
+    #   - audio_context_dip: 3.1 only -- a regular partial dip (3.1 retains and
+    #     re-bills conversation AUDIO, so its prompt sawtooths even with NO
+    #     compression and NO restart; lands HIGH, far above any SI base).
+    #   - compression_eviction: sliding-window arm, a drop that is NOT a
+    #     restart (lands above the section floor; the real compression signal).
+    #   - billing_noise: tiny drops (< ~400 tok) with no mechanism -- turn-to-
+    #     turn metering jitter, not a real context reduction.
+    floor = float(curve["prompt_tokens"].min())  # ~the smallest greeting/base seen
+    restart_ceiling = max(floor * 1.5, floor + 1500)
+
+    def _classify(ev_idx: int) -> str:
+        prev, now = drop_map[ev_idx]
+        size = prev - now
+        if size < 400:
+            return "billing_noise"
+        if key["arm"] == "section-reset" and now <= restart_ceiling:
+            return "session_restart"
+        if key["model"] == "3.1":
+            # 3.1's intrinsic audio-context sawtooth: a partial dip that does
+            # NOT reset to the floor (a restart that lands at the floor is
+            # caught above). Applies in every 3.1 arm.
+            return "audio_context_dip"
+        if key["arm"] == "sliding-window":
+            return "compression_eviction"
+        return "billing_noise"
+
     curve["drop_kind"] = None
-    # Drop semantics depend on the arm: only the sliding-window arm has
-    # compression, so only ITS drops are evictions. Section-reset drops are
-    # session-restart curve resets; unbounded drops (the GoAway-truncated 3.1
-    # cells) are post-death/billing anomalies, NOT evictions (fresh-eyes r1).
-    _KIND = {"sliding-window": "eviction", "section-reset": "restart",
-             "unbounded": "anomaly"}
-    curve.loc[curve["drop"], "drop_kind"] = _KIND[key["arm"]]
+    curve.loc[curve["drop"], "drop_kind"] = [
+        _classify(i) for i in curve.loc[curve["drop"], "event_index"]]
     for col, val in (("model", key["model"]), ("arm", key["arm"]), ("path", key["path"])):
         curve[col] = val
 
