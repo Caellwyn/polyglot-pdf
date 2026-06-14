@@ -705,9 +705,15 @@ class CallbackHandler:
                 if constraint_value is not None:
                     parts.append(f"{constraint}={constraint_value}")
                 elif valid_options:
-                    # Extract just the 'value' from each option for display
-                    # (valid_options is now a list of strings, not dict representations)
-                    opts_sample = ", ".join(valid_options[:3])
+                    # valid_options should already be a list of bare string values
+                    # (the field validator extracts them from {value, label} dict
+                    # options via _option_values). Coerce defensively anyway so a
+                    # stray non-str option can never crash this error formatter --
+                    # an unguarded join here raised "TypeError: sequence item 0:
+                    # expected str instance, dict found" and the Live adapter
+                    # swallowed it, silently failing the save (bd polyglot-pdf-jnjj.1
+                    # / d24n).
+                    opts_sample = ", ".join(str(o) for o in valid_options[:3])
                     if len(valid_options) > 3:
                         opts_sample += f"... ({len(valid_options)} total)"
                     parts.append(f"valid={opts_sample}")
