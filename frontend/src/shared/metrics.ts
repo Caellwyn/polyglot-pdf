@@ -18,8 +18,8 @@ export interface BargeInMetric {
 	ttsPausedAt?: number
 	cancelSentAt?: number
 	geminiAckAt?: number
-	bargeInLatency?: number // micActivityDetected → ttsPausedAt
-	cancelAckLatency?: number // cancelSentAt → geminiAckAt
+	bargeInLatency?: number // micActivityDetected -> ttsPausedAt
+	cancelAckLatency?: number // cancelSentAt -> geminiAckAt
 	result: 'pending' | 'success' | 'timeout' | 'false_start'
 }
 
