@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-14. bd uj57: emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). bd 0tgc: onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires). bd b6k4: createMicDropWarn extracted from connection.ts closure. No routing or protocol change. Prior: 2026-06-12 (removed dead `request_next_field_hint` branch from handleFormUpdated, bd dlbr; GoAway forward message, bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-14 (terminal `reconnect_failed` status + connection-timeout modal on auto-reconnect give-up, bd polyglot-pdf-jf6w). Prior 2026-06-14: bd uj57 emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). Prior 2026-06-13: bd 0tgc onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires); bd b6k4 createMicDropWarn extracted from connection.ts closure (no routing or protocol change); 2026-06-12 removed dead `request_next_field_hint` branch from handleFormUpdated (bd dlbr) + GoAway forward message (bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -134,6 +134,19 @@ against the code:
   `next_field_hint` rather than a full reconnect.
 - **Cold path:** otherwise it dials `wsUrl`, falling back to the cloud URL on
   failure, re-creating the audio + field managers if they were destroyed.
+
+## Terminal reconnect failure (connection-timeout modal)
+
+An unexpected drop triggers silent auto-reconnect with exponential backoff (up to
+`maxReconnectAttempts` in `webFormConnection.ts`). When every attempt is exhausted,
+`handleClose` sets the distinct **`reconnect_failed`** `ConnectionStatus` (separate
+from the generic `disconnected`, which also covers intentional teardown) — the
+explicit "auto-recovery gave up, the user must act" signal. Both voice overlays
+render a translated **connection-timeout modal** (`ConnectionTimeoutModal`) on that
+status; its reconnect button re-runs the same `handleConnect`/restore path, and a
+"not now" dismissal is reset once the connection leaves `reconnect_failed`. A
+transient blip that still has attempts left stays on `reconnecting` and never
+surfaces the modal. (bd polyglot-pdf-jf6w.)
 
 > **Doc-vs-code note:** `RECONNECTION_FLOW_SUMMARY.md` (repo root) is a *design
 > proposal* for auto-sending an initiating message on reconnect, not a description
