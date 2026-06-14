@@ -1,20 +1,32 @@
-"""Repro harness for d24n (bd polyglot-pdf-jnjj.1 / F0).
+"""Repro / hypothesis-elimination harness for d24n (bd polyglot-pdf-jnjj.1 / F0).
 
-Goal: force the `tool_callback_error` TypeError that fires 2-3x per 2.5 run on
-`update_form_fields`, captured PII-free in scripts/spikes/data/costs_2.5_*.meta.json
-(error_type=TypeError, no message -- production strips it). The bug report's
-"likely a signature mismatch" was a hypothesis; a full static read of the
-update_form_fields chain (on_tool_call -> _handle_update_form_fields_tool ->
-handle_update_fields_tool_call -> ValidationHandler.validate_field_updates) found
-no static arg-count/await mismatch, and any value-dependent raise inside the
-validator is caught by validate_field_updates' own try/except and logged as
-`update_validation_error`, NOT `tool_callback_error`. So the TypeError must escape
-on a path OUTSIDE that inner catch.
+Drives the REAL CallbackHandler.on_tool_call("update_form_fields", ...) through the
+REAL FormFillingService validation path, offline, with no browser or live Gemini.
 
-This harness drives the REAL CallbackHandler.on_tool_call("update_form_fields", ...)
-through the REAL FormFillingService validation path with a real I-90-style schema,
-feeding the arg SHAPES the live model actually emits, with dev logging ON so the
-full traceback prints. We try each shape and report which raises.
+This script played TWO roles during the d24n investigation:
+
+  1. ARG-SHAPE ELIMINATION (the ARG_SHAPES block). The bug report guessed "a
+     signature/arg mismatch." This drove ~14 arg shapes a Live model might emit
+     (value=int/None/dict/list/bool, missing value, field_id=None, args-as-list,
+     ...) and showed NONE raise the captured TypeError -- DISPROVING the hypothesis
+     and narrowing the hunt to the validation-ERROR path. (Note: arg-level raises
+     inside the validator are caught by validate_field_updates' own try/except and
+     logged as `update_validation_error`, NOT `tool_callback_error`, so they cannot
+     be the captured failure either.)
+
+  2. ROOT-CAUSE REPRODUCTION (the DICT_OPTION_CASES block). The real d24n failure:
+     a checkbox/select field whose options are {value,label} DICTS, given an INVALID
+     value, built a ValidationError carrying the raw dicts as valid_options;
+     callback_handler._build_update_fields_response then did
+     `", ".join(valid_options[:3])` -> "TypeError: sequence item 0: expected str
+     instance, dict found", swallowed by the Live adapter. These cases reproduce
+     that exact path. PRE-fix they raise the TypeError; POST-fix they return a clean
+     error response. This is the case the ARG_SHAPES block lacked (fresh-eyes PR
+     review, jnjj.1).
+
+The live before/after measurement (zero TypeErrors, 18/20 confirmed) is in
+scripts/spikes/d24n_dict_option_typeerror_findings.md; the committed regression
+test is backend/tests/unit/test_d24n_dict_option_validation.py.
 
 Run: python scripts/spikes/repro_d24n_update_form_fields_typeerror.py
 (ASCII-only output; safe on Windows cp1252.)
@@ -42,7 +54,9 @@ from backend.services.form_filling_service import FormFillingService
 
 
 # A small but representative schema: text, number, date, select -- the field
-# types whose validators differ. Values exercise each branch.
+# types whose validators differ. Values exercise each branch. The dict-option
+# checkbox/select fields (DICT_* below) are the ones that actually reproduce d24n:
+# the form-kits store options as {value, label} dicts.
 SCHEMA = {
     "fields": [
         {"id": "p1_firstName", "name": "First Name", "type": "text"},
@@ -53,8 +67,26 @@ SCHEMA = {
          "options": ["Iowa", "West Virginia"]},
         {"id": "p1_aliennumber", "name": "Alien Registration Number",
          "type": "text", "format_preset": "a_number", "pattern": r"^\d{7,9}$"},
+        # The d24n trigger fields: options are {value, label} DICTS (form-kit shape).
+        {"id": "p1_status", "name": "Status", "type": "checkbox",
+         "options": [{"value": "lpr", "label": "Lawful Permanent Resident"},
+                     {"value": "other", "label": "Other"}]},
+        {"id": "p1_kind", "name": "Kind", "type": "select",
+         "options": [{"value": "a", "label": "Alpha"},
+                     {"value": "b", "label": "Beta"}]},
     ]
 }
+
+# The cases that actually REPRODUCE d24n: a dict-option checkbox/select field given
+# an INVALID value -> ValidationError with dict-shaped valid_options ->
+# ", ".join(dicts) in _build_update_fields_response. PRE-fix these raise the
+# captured TypeError; POST-fix they return a clean error response.
+DICT_OPTION_CASES = [
+    ("checkbox dict-opts, invalid", {"field_id": "p1_status", "value": "bogus"}),
+    ("select dict-opts, invalid", {"field_id": "p1_kind", "value": "bogus"}),
+    ("checkbox dict-opts, VALID (must not false-reject)",
+     {"field_id": "p1_status", "value": "lpr"}),
+]
 
 # The arg shapes worth trying -- what a Live model might actually emit for
 # update_form_fields. The declared schema is {field_id: str, value: str}, but
@@ -109,33 +141,58 @@ def build_handler():
     return handler
 
 
-async def main():
-    handler = build_handler()
+async def _run_block(handler, title, cases):
+    """Drive a list of (label, args) through on_tool_call; collect TypeErrors."""
     print("=" * 78)
-    print("d24n repro: driving update_form_fields with model-realistic arg shapes")
+    print(title)
     print("=" * 78)
     typeerrors = []
-    for label, args in ARG_SHAPES:
+    for label, args in cases:
         try:
             resp = await handler.on_tool_call("update_form_fields", args)
             ok = isinstance(resp, dict)
             applied = resp.get("applied_fields") if isinstance(resp, dict) else None
-            print(f"[ ok ] {label:24} -> resp_ok={ok} applied={applied}")
+            print(f"[ ok ] {label:42} -> resp_ok={ok} applied={applied}")
         except TypeError as e:
             typeerrors.append((label, e))
-            print(f"[TYPE] {label:24} -> TypeError: {e}")
+            print(f"[TYPE] {label:42} -> TypeError: {e}")
             traceback.print_exc()
         except Exception as e:  # noqa: BLE001 -- repro wants to see everything
-            print(f"[ERR ] {label:24} -> {type(e).__name__}: {e}")
+            print(f"[ERR ] {label:42} -> {type(e).__name__}: {e}")
+    return typeerrors
+
+
+async def main():
+    handler = build_handler()
+
+    # Block 1: arg-shape elimination -- proves the arg path is NOT the d24n source.
+    arg_te = await _run_block(
+        handler,
+        "Block 1 -- arg-shape elimination (expect NO TypeError; disproves the "
+        "arg-mismatch hypothesis)",
+        ARG_SHAPES,
+    )
+
+    # Block 2: the ACTUAL d24n repro -- dict-option fields with invalid values.
+    dict_te = await _run_block(
+        handler,
+        "Block 2 -- d24n root-cause repro (dict-option checkbox/select, invalid "
+        "value). PRE-fix: TypeError; POST-fix: clean error response.",
+        DICT_OPTION_CASES,
+    )
+
     print("=" * 78)
-    if typeerrors:
-        print(f"REPRODUCED {len(typeerrors)} TypeError shape(s):")
-        for label, e in typeerrors:
+    print(f"Block 1 (arg shapes):  {len(arg_te)} TypeError(s)  "
+          f"[expected 0 -- arg path is not the bug]")
+    print(f"Block 2 (dict options): {len(dict_te)} TypeError(s)  "
+          f"[PRE-fix: >0 reproduces d24n; POST-fix: 0 confirms the fix]")
+    if dict_te:
+        print("\n>>> d24n REPRODUCED (running against UNFIXED code):")
+        for label, e in dict_te:
             print(f"  - {label}: {e}")
     else:
-        print("No TypeError raised at the on_tool_call boundary for these shapes.")
-        print("Next: the escape may be on the live_ai_gemini event.tool_call path,")
-        print("or in confirm_field; widen the harness or capture a dev .jsonl run.")
+        print("\n>>> No TypeError on the dict-option path -- consistent with the fix "
+              "in field_validator._option_values / _validate_checkbox.")
     print("=" * 78)
 
 
