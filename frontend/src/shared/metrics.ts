@@ -2,8 +2,8 @@
  * Metrics Tracker for VAD Tuning & Barge-In Performance
  * 
  * Tracks:
- * - Barge-in latency (mic activity → TTS paused)
- * - Interruption ack latency (cancel sent → Gemini confirms)
+ * - Barge-in latency (mic activity -> TTS paused)
+ * - Interruption ack latency (cancel sent -> Gemini confirms)
  * - Tool call cancellations (successful vs hallucinated)
  * - VAD false starts
  * 
@@ -18,8 +18,8 @@ export interface BargeInMetric {
 	ttsPausedAt?: number
 	cancelSentAt?: number
 	geminiAckAt?: number
-	bargeInLatency?: number // micActivityDetected → ttsPausedAt
-	cancelAckLatency?: number // cancelSentAt → geminiAckAt
+	bargeInLatency?: number // micActivityDetected -> ttsPausedAt
+	cancelAckLatency?: number // cancelSentAt -> geminiAckAt
 	result: 'pending' | 'success' | 'timeout' | 'false_start'
 }
 
@@ -70,7 +70,7 @@ class MetricsTracker {
 		this.lastBargeInTime = 0
 		
 		if (this.debugEnabled) {
-			console.log('[VFF Metrics] 📊 Session started:', sessionId, '(Debug mode: ON)')
+			console.log('[VFF Metrics] [chart] Session started:', sessionId, '(Debug mode: ON)')
 		}
 	}
 
@@ -88,7 +88,7 @@ class MetricsTracker {
 			result: 'pending',
 		}
 
-		console.log('[VFF Metrics] 🎤 Mic activity detected')
+		console.log('[VFF Metrics] [mic] Mic activity detected')
 	}
 
 	/**
@@ -102,8 +102,8 @@ class MetricsTracker {
 		this.currentBargeIn.bargeInLatency = now - this.currentBargeIn.micActivityDetected
 
 		console.log(
-			`[VFF Metrics] 🔇 TTS paused - Barge-in latency: ${this.currentBargeIn.bargeInLatency.toFixed(1)}ms`,
-			this.currentBargeIn.bargeInLatency < 180 ? '✅' : '⚠️ SLOW'
+			`[VFF Metrics] [mute] TTS paused - Barge-in latency: ${this.currentBargeIn.bargeInLatency.toFixed(1)}ms`,
+			this.currentBargeIn.bargeInLatency < 180 ? '[OK]' : '[warn] SLOW'
 		)
 	}
 
@@ -116,7 +116,7 @@ class MetricsTracker {
 		const now = performance.now()
 		this.currentBargeIn.cancelSentAt = now
 
-		console.log('[VFF Metrics] 📤 Cancel message sent to backend')
+		console.log('[VFF Metrics] [send] Cancel message sent to backend')
 	}
 
 	/**
@@ -131,8 +131,8 @@ class MetricsTracker {
 		if (this.currentBargeIn.cancelSentAt) {
 			this.currentBargeIn.cancelAckLatency = now - this.currentBargeIn.cancelSentAt
 			console.log(
-				`[VFF Metrics] ✅ Gemini acknowledged - Cancel latency: ${this.currentBargeIn.cancelAckLatency.toFixed(1)}ms`,
-				this.currentBargeIn.cancelAckLatency < 150 ? '✅' : '⚠️ SLOW'
+				`[VFF Metrics] [OK] Gemini acknowledged - Cancel latency: ${this.currentBargeIn.cancelAckLatency.toFixed(1)}ms`,
+				this.currentBargeIn.cancelAckLatency < 150 ? '[OK]' : '[warn] SLOW'
 			)
 		}
 
@@ -149,7 +149,7 @@ class MetricsTracker {
 	recordBargeInTimeout(): void {
 		if (!this.sessionMetrics || !this.currentBargeIn) return
 
-		console.warn('[VFF Metrics] ⏱️ Barge-in timeout - Gemini did not acknowledge')
+		console.warn('[VFF Metrics] [timer] Barge-in timeout - Gemini did not acknowledge')
 
 		this.currentBargeIn.result = 'timeout'
 		this.sessionMetrics.timedOutBargeIns++
@@ -163,7 +163,7 @@ class MetricsTracker {
 	recordFalseStart(): void {
 		if (!this.sessionMetrics || !this.currentBargeIn) return
 
-		console.log('[VFF Metrics] 🔄 False start detected')
+		console.log('[VFF Metrics] [reconnect] False start detected')
 
 		this.currentBargeIn.result = 'false_start'
 		this.sessionMetrics.falseStarts++
@@ -179,7 +179,7 @@ class MetricsTracker {
 	checkFalseStart(userSpeaking: boolean, geminiSpeaking: boolean): boolean {
 		// False start: Gemini starts speaking while user is mid-utterance
 		if (geminiSpeaking && userSpeaking) {
-			console.warn('[VFF Metrics] ⚠️ FALSE START: Gemini speaking while user mic active!')
+			console.warn('[VFF Metrics] [warn] FALSE START: Gemini speaking while user mic active!')
 			this.recordFalseStart()
 			return true
 		}
@@ -213,7 +213,7 @@ class MetricsTracker {
 			this.sessionMetrics.toolCalls.push(metric)
 
 			console.warn(
-				`[VFF Metrics] 🚫 Tool call REJECTED (hallucination):`,
+				`[VFF Metrics] [no] Tool call REJECTED (hallucination):`,
 				`${toolName} [${callId.slice(0, 8)}]`,
 				`- ${metric.rejectionReason}`
 			)
@@ -222,7 +222,7 @@ class MetricsTracker {
 
 		this.sessionMetrics.toolCalls.push(metric)
 		console.log(
-			`[VFF Metrics] ✅ Tool call ACCEPTED:`,
+			`[VFF Metrics] [OK] Tool call ACCEPTED:`,
 			`${toolName} [${callId.slice(0, 8)}]`,
 			`- ${timeSinceBargeIn.toFixed(0)}ms after last barge-in`
 		)
@@ -294,24 +294,24 @@ class MetricsTracker {
 		}
 
 		console.log('\n' + '='.repeat(60))
-		console.log('📊 VAD TUNING METRICS SUMMARY')
+		console.log('[chart] VAD TUNING METRICS SUMMARY')
 		console.log('='.repeat(60))
-		console.log('\n🎤 BARGE-IN PERFORMANCE:')
+		console.log('\n[mic] BARGE-IN PERFORMANCE:')
 		console.log(`   Total Barge-Ins: ${stats.totalBargeIns}`)
 		console.log(`   Successful: ${stats.successfulBargeIns} (${(stats.successfulBargeIns / stats.totalBargeIns * 100).toFixed(1)}%)`)
 		console.log(`   Timeouts: ${stats.timedOutBargeIns}`)
 		console.log(`   False Starts: ${stats.falseStarts} (${stats.falseStartRate.toFixed(1)}%)`)
-		console.log(`   Avg Latency: ${stats.avgBargeInLatency.toFixed(1)}ms ${stats.avgBargeInLatency < 180 ? '✅' : '⚠️'}`)
-		console.log(`   P95 Latency: ${stats.p95BargeInLatency.toFixed(1)}ms ${stats.p95BargeInLatency < 180 ? '✅ TARGET MET' : '❌ EXCEEDS TARGET'}`)
+		console.log(`   Avg Latency: ${stats.avgBargeInLatency.toFixed(1)}ms ${stats.avgBargeInLatency < 180 ? '[OK]' : '[warn]'}`)
+		console.log(`   P95 Latency: ${stats.p95BargeInLatency.toFixed(1)}ms ${stats.p95BargeInLatency < 180 ? '[OK] TARGET MET' : '[X] EXCEEDS TARGET'}`)
 
-		console.log('\n🔄 CANCEL ACKNOWLEDGMENT:')
-		console.log(`   Avg Latency: ${stats.avgCancelAckLatency.toFixed(1)}ms ${stats.avgCancelAckLatency < 150 ? '✅' : '⚠️'}`)
-		console.log(`   P95 Latency: ${stats.p95CancelAckLatency.toFixed(1)}ms ${stats.p95CancelAckLatency < 150 ? '✅ TARGET MET' : '❌ EXCEEDS TARGET'}`)
+		console.log('\n[reconnect] CANCEL ACKNOWLEDGMENT:')
+		console.log(`   Avg Latency: ${stats.avgCancelAckLatency.toFixed(1)}ms ${stats.avgCancelAckLatency < 150 ? '[OK]' : '[warn]'}`)
+		console.log(`   P95 Latency: ${stats.p95CancelAckLatency.toFixed(1)}ms ${stats.p95CancelAckLatency < 150 ? '[OK] TARGET MET' : '[X] EXCEEDS TARGET'}`)
 
-		console.log('\n🛠️ TOOL CALL SAFETY:')
+		console.log('\n[tools] TOOL CALL SAFETY:')
 		console.log(`   Total Tool Calls: ${stats.totalToolCalls}`)
 		console.log(`   Hallucinated (rejected): ${stats.hallucinatedToolCalls}`)
-		console.log(`   Hallucination Rate: ${stats.toolCallHallucinationRate.toFixed(1)}% ${stats.toolCallHallucinationRate < 1 ? '✅ EXCELLENT' : stats.toolCallHallucinationRate < 5 ? '⚠️ ACCEPTABLE' : '❌ TOO HIGH'}`)
+		console.log(`   Hallucination Rate: ${stats.toolCallHallucinationRate.toFixed(1)}% ${stats.toolCallHallucinationRate < 1 ? '[OK] EXCELLENT' : stats.toolCallHallucinationRate < 5 ? '[warn] ACCEPTABLE' : '[X] TOO HIGH'}`)
 
 		console.log('\n' + '='.repeat(60) + '\n')
 	}
@@ -322,7 +322,7 @@ class MetricsTracker {
 	endSession(): void {
 		if (!this.sessionMetrics) return
 
-		console.log('[VFF Metrics] 📊 Session ended:', this.sessionMetrics.sessionId)
+		console.log('[VFF Metrics] [chart] Session ended:', this.sessionMetrics.sessionId)
 		this.printSummary()
 		this.sessionMetrics = null
 		this.currentBargeIn = null

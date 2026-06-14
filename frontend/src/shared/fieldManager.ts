@@ -136,7 +136,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	 * Apply AI field updates to DOM
 	 */
 	function applyUpdates(updates: FieldUpdate[]): void {
-		console.log('[VFF FieldManager] 📝 Applying', updates.length, 'field update(s)')
+		console.log('[VFF FieldManager] [note] Applying', updates.length, 'field update(s)')
 		
 		const results = {
 			success: [] as string[],
@@ -189,7 +189,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			}
 			
 			if (!element) {
-				console.warn('[VFF FieldManager] ❌ Field not found:', update.fieldId)
+				console.warn('[VFF FieldManager] [X] Field not found:', update.fieldId)
 				results.notFound.push(update.fieldId)
 				continue
 			}
@@ -220,7 +220,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			
 			// Safe logging with truncation
 			const displayValue = stringValue.substring(0, 50)
-			console.log('[VFF FieldManager] Updated text field:', update.fieldId, '→', displayValue)
+			console.log('[VFF FieldManager] Updated text field:', update.fieldId, '->', displayValue)
 		}
 		
 		// Mark as AI-confirmed
@@ -245,7 +245,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	}
 	
 	// Log summary of results
-	console.log('[VFF FieldManager] 📊 Update summary:', {
+	console.log('[VFF FieldManager] [chart] Update summary:', {
 		total: updates.length,
 		success: results.success.length,
 		notFound: results.notFound.length,
@@ -253,15 +253,15 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 	})
 	
 	if (results.notFound.length > 0) {
-		console.warn('[VFF FieldManager] ⚠️ Fields not found:', results.notFound)
+		console.warn('[VFF FieldManager] [warn] Fields not found:', results.notFound)
 	}
 	
 	if (results.errors.length > 0) {
-		console.error('[VFF FieldManager] ❌ Errors:', results.errors)
+		console.error('[VFF FieldManager] [X] Errors:', results.errors)
 	}
 	
 	if (results.success.length > 0) {
-		console.log('[VFF FieldManager] ✅ Successfully updated:', results.success)
+		console.log('[VFF FieldManager] [OK] Successfully updated:', results.success)
 	}
 }
 	
@@ -281,7 +281,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			}
 			selectEl.dispatchEvent(new Event('change', { bubbles: true }))
 			selectEl.dispatchEvent(new Event('input', { bubbles: true }))
-			console.log('[VFF FieldManager] ✓ Cleared select:', fieldId)
+			console.log('[VFF FieldManager] [check] Cleared select:', fieldId)
 			return
 		}
 
@@ -292,7 +292,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			if (option.value === newValue || option.text === newValue) {
 				selectEl.selectedIndex = i
 				matched = true
-				console.log('[VFF FieldManager] ✓ Exact match for select:', fieldId, '→', option.text)
+				console.log('[VFF FieldManager] [check] Exact match for select:', fieldId, '->', option.text)
 				break
 			}
 		}
@@ -309,14 +309,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				    lowerOptionValue.includes(lowerValue) || lowerValue.includes(lowerOptionValue)) {
 					selectEl.selectedIndex = i
 					matched = true
-					console.log('[VFF FieldManager] ≈ Fuzzy match for select:', fieldId, '→', option.text)
+					console.log('[VFF FieldManager] ~= Fuzzy match for select:', fieldId, '->', option.text)
 					break
 				}
 			}
 		}
 
 		if (!matched) {
-			console.warn('[VFF FieldManager] ⚠️ No matching option found for:', newValue, 'in', fieldId)
+			console.warn('[VFF FieldManager] [warn] No matching option found for:', newValue, 'in', fieldId)
 		}
 
 		// Dispatch change event for form handlers
@@ -343,7 +343,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		checkboxEl.dispatchEvent(new Event('change', { bubbles: true }))
 		checkboxEl.dispatchEvent(new Event('input', { bubbles: true }))
 		
-		console.log('[VFF FieldManager] ✓ Updated checkbox:', fieldId, '→', shouldCheck, `(from ${typeof newValue}: ${newValue})`)
+		console.log('[VFF FieldManager] [check] Updated checkbox:', fieldId, '->', shouldCheck, `(from ${typeof newValue}: ${newValue})`)
 	}
 	
 	/**
@@ -366,14 +366,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				checkbox.dispatchEvent(new Event('change', { bubbles: true }))
 				checkbox.dispatchEvent(new Event('input', { bubbles: true }))
 			}
-			console.log('[VFF FieldManager] ✓ Cleared checkbox group:', fieldId)
+			console.log('[VFF FieldManager] [check] Cleared checkbox group:', fieldId)
 			return
 		}
 
 		// Convert single value to array
 		const values = Array.isArray(newValue) ? newValue : [newValue]
 
-		console.log('[VFF FieldManager] 📋 Checkbox group:', fieldId)
+		console.log('[VFF FieldManager] [clip] Checkbox group:', fieldId)
 		console.log('  Requested values:', values)
 		
 		// Get all available checkbox values for logging
@@ -472,7 +472,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			}
 		}
 		
-		console.log('[VFF FieldManager] ✅ Checkbox group result:', {
+		console.log('[VFF FieldManager] [OK] Checkbox group result:', {
 			fieldId,
 			requested: values.length,
 			matched: matchedValues.length,
@@ -481,12 +481,12 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		})
 		
 		if (matchedValues.length > 0) {
-			console.log('  ✓ Matched & checked:', matchedValues)
+			console.log('  [check] Matched & checked:', matchedValues)
 		}
 		
 		if (unmatchedValues.length > 0) {
-			console.warn('  ⚠️ Could not match:', unmatchedValues)
-			console.warn('  💡 Try one of:', availableValues)
+			console.warn('  [warn] Could not match:', unmatchedValues)
+			console.warn('  [idea] Try one of:', availableValues)
 		}
 	}
 	
@@ -533,7 +533,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				radio.dispatchEvent(new Event('change', { bubbles: true }))
 				radio.dispatchEvent(new Event('input', { bubbles: true }))
 			}
-			console.log('[VFF FieldManager] ✓ Cleared radio group:', fieldId)
+			console.log('[VFF FieldManager] [check] Cleared radio group:', fieldId)
 			return
 		}
 
@@ -555,7 +555,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 				addConfirmationBadge(radio)
 				setupEditListener(radio, fieldId)
 				
-				console.log('[VFF FieldManager] ✓ Selected radio:', fieldId, '→', newValue)
+				console.log('[VFF FieldManager] [check] Selected radio:', fieldId, '->', newValue)
 				break
 			}
 		}
@@ -579,14 +579,14 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 					addConfirmationBadge(radio)
 					setupEditListener(radio, fieldId)
 					
-					console.log('[VFF FieldManager] ≈ Fuzzy match radio:', fieldId, '→', radio.value)
+					console.log('[VFF FieldManager] ~= Fuzzy match radio:', fieldId, '->', radio.value)
 					break
 				}
 			}
 		}
 		
 		if (!matched) {
-			console.warn('[VFF FieldManager] ⚠️ No matching radio option found for:', newValue, 'in', fieldId)
+			console.warn('[VFF FieldManager] [warn] No matching radio option found for:', newValue, 'in', fieldId)
 		}
 	}
 	
@@ -601,7 +601,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			radioEl.checked = false
 			radioEl.dispatchEvent(new Event('change', { bubbles: true }))
 			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
-			console.log('[VFF FieldManager] ✓ Cleared single radio:', fieldId)
+			console.log('[VFF FieldManager] [check] Cleared single radio:', fieldId)
 			return
 		}
 
@@ -613,9 +613,9 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 			radioEl.dispatchEvent(new Event('change', { bubbles: true }))
 			radioEl.dispatchEvent(new Event('input', { bubbles: true }))
 
-			console.log('[VFF FieldManager] ✓ Selected single radio:', fieldId)
+			console.log('[VFF FieldManager] [check] Selected single radio:', fieldId)
 		} else {
-			console.warn('[VFF FieldManager] ⚠️ Radio value mismatch:', radioEl.value, '!==', newValue)
+			console.warn('[VFF FieldManager] [warn] Radio value mismatch:', radioEl.value, '!==', newValue)
 		}
 	}
 	
@@ -630,7 +630,7 @@ export function createFieldManager(options: FieldManagerOptions = {}): FieldMana
 		
 		// This is complex and may not work for all React implementations
 		// For now, just log a warning
-		console.warn('[VFF FieldManager] ⚠️ Combobox filling not fully supported yet:', fieldId)
+		console.warn('[VFF FieldManager] [warn] Combobox filling not fully supported yet:', fieldId)
 		console.log('[VFF FieldManager] Combobox should be filled with:', newValue)
 		
 		// Try to set aria-valuenow or data attribute as fallback

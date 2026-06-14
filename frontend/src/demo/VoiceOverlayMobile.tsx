@@ -106,7 +106,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
 		sharedStreamRef.current = sharedStream || null
-		console.log('[VoiceOverlayMobile] 🔗 Using shared stream from parent:', !!sharedStream)
+		console.log('[VoiceOverlayMobile] [link] Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
 
 	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
@@ -243,7 +243,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const forceReleasePTT = () => {
 		if (!isHoldingPushToTalkRef.current) return
 
-		console.log('[PTT Safety Mobile] ⚠️ Force-releasing PTT due to safety trigger')
+		console.log('[PTT Safety Mobile] [warn] Force-releasing PTT due to safety trigger')
 		setIsHoldingPushToTalk(false)
 
 		// Clear any pending timeouts
@@ -268,7 +268,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		if (isHoldingPushToTalk) {
 			console.log('[PTT Safety Mobile] Starting safety timeout (max 60s)')
 			pttSafetyTimeoutRef.current = window.setTimeout(() => {
-				console.log('[PTT Safety Mobile] ⚠️ Max duration reached - force releasing')
+				console.log('[PTT Safety Mobile] [warn] Max duration reached - force releasing')
 				forceReleasePTT()
 			}, MAX_PTT_DURATION_MS)
 		} else {
@@ -292,7 +292,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.hidden && isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety Mobile] ⚠️ Tab hidden while recording - force releasing')
+				console.log('[PTT Safety Mobile] [warn] Tab hidden while recording - force releasing')
 				forceReleasePTT()
 			}
 		}
@@ -306,7 +306,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		const handleWindowBlur = () => {
 			if (isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety Mobile] ⚠️ Window lost focus while recording - force releasing')
+				console.log('[PTT Safety Mobile] [warn] Window lost focus while recording - force releasing')
 				forceReleasePTT()
 			}
 		}
@@ -322,7 +322,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			status.toLowerCase().startsWith('connected ')
 
 		if (!isCurrentlyConnected && isHoldingPushToTalkRef.current) {
-			console.log('[PTT Safety Mobile] ⚠️ Connection lost while recording - force releasing')
+			console.log('[PTT Safety Mobile] [warn] Connection lost while recording - force releasing')
 			forceReleasePTT()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,7 +332,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		return () => {
 			if (isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety Mobile] ⚠️ Component unmounting while recording - force releasing')
+				console.log('[PTT Safety Mobile] [warn] Component unmounting while recording - force releasing')
 				// Direct cleanup since we're unmounting
 				connectionManager?.sendActivityEnd()
 				connectionManager?.getAudioManager()?.muteInput()
@@ -348,7 +348,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
 			if (pushToTalkModeRef.current) return
 
-			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
+			console.log('[VFF VAD] [mic] User speech started - buffering audio...')
 
 			// Record speech start time
 			speechStartTimeRef.current = Date.now()
@@ -360,10 +360,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		const audioManager = connectionManager?.getAudioManager()
 		if (audioManager && audioManager.isSpeaking()) {
 			audioManager.pauseAudioContext()
-			console.log('[VFF VAD Mobile] 🔇 Tentative pause - waiting to confirm speech duration')
+			console.log('[VFF VAD Mobile] [mute] Tentative pause - waiting to confirm speech duration')
 		}
 
-		// Schedule delayed turn start - only send activity_start + audio if speech lasts ≥450ms
+		// Schedule delayed turn start - only send activity_start + audio if speech lasts >=450ms
 		// This prevents false positives (throat clears, grunts) from creating incomplete turns
 		setTimeout(() => {
 			const speechDuration = speechStartTimeRef.current
@@ -372,15 +372,15 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 			// Only start turn if speech is still active AND duration met
 			if (speechStartTimeRef.current !== null && speechDuration >= MIN_TURN_DURATION_MS) {
-				console.log(`[VFF VAD Mobile] ✅ Valid speech detected (${speechDuration}ms) - starting turn`)
+				console.log(`[VFF VAD Mobile] [OK] Valid speech detected (${speechDuration}ms) - starting turn`)
 				bargeInTriggeredRef.current = true
 
 				// CRITICAL: Send activity_start BEFORE opening audio gate
 				// This ensures Gemini receives the turn signal before any audio chunks
-				// Pattern: activity_start → audio chunks → activity_end (Gemini Live API docs lines 419-435)
+				// Pattern: activity_start -> audio chunks -> activity_end (Gemini Live API docs lines 419-435)
 				if (connectionManager) {
 					connectionManager.sendActivityStart()
-					console.log('[VFF VAD Mobile] 📤 Sent activity_start signal (user turn begins)')
+					console.log('[VFF VAD Mobile] [send] Sent activity_start signal (user turn begins)')
 				}
 
 				// Privacy Gate: Open audio flow (sends pre-buffer + live audio)
@@ -392,7 +392,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
 				const geminiSpeaking = audioManager?.isSpeaking()
 				if (geminiSpeaking && audioManager) {
-					console.log('[VFF VAD Mobile] 🔇 Flushing Gemini audio queue (full barge-in)')
+					console.log('[VFF VAD Mobile] [mute] Flushing Gemini audio queue (full barge-in)')
 					audioManager.flushAudioQueue()
 				}
 			}
@@ -411,9 +411,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// Privacy Gate: Always close audio flow (only if it was opened)
 		const audioManager = connectionManager?.getAudioManager()
 		
-		// Only close gate and send activity_end if we actually started a turn (≥450ms)
+		// Only close gate and send activity_end if we actually started a turn (>=450ms)
 		if (bargeInTriggeredRef.current) {
-			console.log(`[VFF VAD Mobile] ✅ Valid turn completed (${speechDuration}ms) - closing turn`)
+			console.log(`[VFF VAD Mobile] [OK] Valid turn completed (${speechDuration}ms) - closing turn`)
 
 			// Close audio gate
 			if (audioManager) {
@@ -423,20 +423,20 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Send activity_end to signal user is done speaking
 			connectionManager?.onVADSpeechEnd()
 		} else {
-			console.log(`[VFF VAD Mobile] ⚠️ Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
+			console.log(`[VFF VAD Mobile] [warn] Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
 
 			// FALSE POSITIVE: Resume audio playback (speech was too short to start a turn)
 			// Gate was never opened, so nothing to close
 			if (audioManager) {
 				audioManager.resumeAudioContext()
-				console.log('[VFF VAD Mobile] 🔊 Resuming audio - false positive')
+				console.log('[VFF VAD Mobile] [sound] Resuming audio - false positive')
 			}
 		}			// Clear state
 			speechStartTimeRef.current = null
 			bargeInTriggeredRef.current = false
 		},
 		onVADMisfire: () => {
-			console.log('[VFF VAD] ⚠️ VAD misfire detected')
+			console.log('[VFF VAD] [warn] VAD misfire detected')
 			// VAD false positive - clear start time
 			speechStartTimeRef.current = null
 		},
@@ -516,7 +516,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 
 		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
-			console.log('[VoiceOverlayMobile] ✅ Connection ready - requesting disclaimer read')
+			console.log('[VoiceOverlayMobile] [OK] Connection ready - requesting disclaimer read')
 
 			// Clear the flag IMMEDIATELY to prevent double-firing
 			setPendingDisclaimerRead(false)
@@ -546,10 +546,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
-			console.log('[VoiceOverlayMobile] 🎙️ Starting VAD (conditions met)')
+			console.log('[VoiceOverlayMobile] [mic] Starting VAD (conditions met)')
 			vad.start()
 		} else if (!shouldRunVAD && vad.userSpeaking) {
-			console.log('[VoiceOverlayMobile] ⏸️ Pausing VAD (conditions not met)')
+			console.log('[VoiceOverlayMobile] [pause] Pausing VAD (conditions not met)')
 			vad.pause()
 		}
 
@@ -666,13 +666,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		setShowDisclaimerModal(false)
 
 		// Step 1: Send activity_start FIRST to stop backend from sending more audio
-		console.log('[VoiceOverlayMobile] 🎤 Sending activity_start to interrupt Gemini')
+		console.log('[VoiceOverlayMobile] [mic] Sending activity_start to interrupt Gemini')
 		connectionManager?.sendActivityStart()
 
 		// Step 2: THEN flush the local audio queue
 		const audioManager = connectionManager?.getAudioManager()
 		if (audioManager) {
-			console.log('[VoiceOverlayMobile] 🔇 Clearing audio queue on disclaimer agreement')
+			console.log('[VoiceOverlayMobile] [mute] Clearing audio queue on disclaimer agreement')
 			audioManager.flushAudioQueue()
 		}
 
@@ -695,12 +695,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 			if (response.ok) {
 				const result = await response.json()
-				console.log('[VoiceOverlayMobile] ✅ Disclaimer acceptance logged to backend:', result)
+				console.log('[VoiceOverlayMobile] [OK] Disclaimer acceptance logged to backend:', result)
 			} else {
-				console.warn('[VoiceOverlayMobile] ⚠️ Backend logging returned non-OK status:', response.status)
+				console.warn('[VoiceOverlayMobile] [warn] Backend logging returned non-OK status:', response.status)
 			}
 		} catch (err) {
-			console.error('[VoiceOverlayMobile] ❌ Failed to log disclaimer acceptance to backend:', err)
+			console.error('[VoiceOverlayMobile] [X] Failed to log disclaimer acceptance to backend:', err)
 			// Don't block user - logging failure is non-fatal
 		}
 
@@ -711,7 +711,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		let reconnected = false
 		if (!isConnectionActive) {
-			console.log('[VoiceOverlayMobile] 🔄 Connection stale after disclaimer - reconnecting...')
+			console.log('[VoiceOverlayMobile] [reconnect] Connection stale after disclaimer - reconnecting...')
 			console.log('[VoiceOverlayMobile] Current status:', currentStatus)
 
 			try {
@@ -722,27 +722,27 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				// switchToFirstSection on a dead connection (bd polyglot-pdf-ppf1).
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
-					console.error('[VoiceOverlayMobile] ❌ Reconnect timed out, status:', postReconnectStatus)
+					console.error('[VoiceOverlayMobile] [X] Reconnect timed out, status:', postReconnectStatus)
 					setError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
-				console.log('[VoiceOverlayMobile] ✅ Reconnected after disclaimer acceptance')
+				console.log('[VoiceOverlayMobile] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
-				console.error('[VoiceOverlayMobile] ❌ Reconnection failed:', err)
+				console.error('[VoiceOverlayMobile] [X] Reconnection failed:', err)
 				setError('Connection lost - please click Reconnect')
 				return
 			}
 		}
 
 		// Now switch to section 1 to restart Gemini with form-filling context (clean session, no disclaimer leakage)
-		console.log('[VoiceOverlayMobile] ✅ Disclaimer accepted - switching to first section (restarts Gemini session)')
+		console.log('[VoiceOverlayMobile] [OK] Disclaimer accepted - switching to first section (restarts Gemini session)')
 
 		if (connectionManager && selectedLanguage) {
 			// Step 3: Resume audio playback FIRST so we don't miss any response chunks
 			const am = connectionManager.getAudioManager()
 			if (am) {
-				console.log('[VoiceOverlayMobile] 🔊 Resuming audio playback for Gemini response')
+				console.log('[VoiceOverlayMobile] [sound] Resuming audio playback for Gemini response')
 				am.resumePlayback()
 			}
 
@@ -754,7 +754,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// on a turn that never opened). On reconnect, switchToFirstSection below
 			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
 			if (!reconnected) {
-				console.log('[VoiceOverlayMobile] 🎤 Sending activity_end to signal user turn complete')
+				console.log('[VoiceOverlayMobile] [mic] Sending activity_end to signal user turn complete')
 				await connectionManager.sendActivityEnd()
 			}
 
@@ -792,7 +792,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
 
 				if (isActive) {
-					console.log('[VoiceOverlayMobile] ✅ WebSocket connected, setting up audio...')
+					console.log('[VoiceOverlayMobile] [OK] WebSocket connected, setting up audio...')
 					// Update status to indicate audio setup in progress
 					setStatus('Setting up audio...')
 
@@ -801,7 +801,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 					// Now fully connected - update status
 					setStatus('connected')
-					console.log('[VoiceOverlayMobile] ✅ Audio ready - fully connected')
+					console.log('[VoiceOverlayMobile] [OK] Audio ready - fully connected')
 					// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 					break
 				}
@@ -813,7 +813,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// Check final status
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
-				console.error('[VoiceOverlayMobile] ❌ Connection timeout, final status:', finalStatus)
+				console.error('[VoiceOverlayMobile] [X] Connection timeout, final status:', finalStatus)
 				setError('Connection timed out - please try again')
 			}
 		} catch (err) {
@@ -1003,10 +1003,10 @@ useEffect(() => {
 
 	document.addEventListener('mouseup', handleGlobalRelease)
 	document.addEventListener('touchend', handleGlobalRelease)
-	console.log('[PTT Mobile Global] ✅ Global touch/mouse release listeners attached')
+	console.log('[PTT Mobile Global] [OK] Global touch/mouse release listeners attached')
 
 	return () => {
-		console.log('[PTT Mobile Global] ❌ Removing global touch/mouse release listeners')
+		console.log('[PTT Mobile Global] [X] Removing global touch/mouse release listeners')
 		document.removeEventListener('mouseup', handleGlobalRelease)
 		document.removeEventListener('touchend', handleGlobalRelease)
 	}

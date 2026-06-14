@@ -123,7 +123,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
 		sharedStreamRef.current = sharedStream || null
-		console.log('[VoiceOverlay] 🔗 Using shared stream from parent:', !!sharedStream)
+		console.log('[VoiceOverlay] [link] Using shared stream from parent:', !!sharedStream)
 	}, [sharedStream])
 
 	// If language is pre-selected from onboarding, auto-trigger disclaimer flow on mount
@@ -265,7 +265,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const forceReleasePTT = () => {
 		if (!isHoldingPushToTalkRef.current) return
 
-		console.log('[PTT Safety] ⚠️ Force-releasing PTT due to safety trigger')
+		console.log('[PTT Safety] [warn] Force-releasing PTT due to safety trigger')
 		setIsHoldingPushToTalk(false)
 
 		// Clear any pending timeouts
@@ -290,7 +290,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		if (isHoldingPushToTalk) {
 			console.log('[PTT Safety] Starting safety timeout (max 60s)')
 			pttSafetyTimeoutRef.current = window.setTimeout(() => {
-				console.log('[PTT Safety] ⚠️ Max duration reached - force releasing')
+				console.log('[PTT Safety] [warn] Max duration reached - force releasing')
 				forceReleasePTT()
 			}, MAX_PTT_DURATION_MS)
 		} else {
@@ -314,7 +314,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.hidden && isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety] ⚠️ Tab hidden while recording - force releasing')
+				console.log('[PTT Safety] [warn] Tab hidden while recording - force releasing')
 				forceReleasePTT()
 			}
 		}
@@ -328,7 +328,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => {
 		const handleWindowBlur = () => {
 			if (isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety] ⚠️ Window lost focus while recording - force releasing')
+				console.log('[PTT Safety] [warn] Window lost focus while recording - force releasing')
 				forceReleasePTT()
 			}
 		}
@@ -344,7 +344,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			status.toLowerCase().startsWith('connected ')
 
 		if (!isConnected && isHoldingPushToTalkRef.current) {
-			console.log('[PTT Safety] ⚠️ Connection lost while recording - force releasing')
+			console.log('[PTT Safety] [warn] Connection lost while recording - force releasing')
 			forceReleasePTT()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,7 +354,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => {
 		return () => {
 			if (isHoldingPushToTalkRef.current) {
-				console.log('[PTT Safety] ⚠️ Component unmounting while recording - force releasing')
+				console.log('[PTT Safety] [warn] Component unmounting while recording - force releasing')
 				// Direct cleanup since we're unmounting
 				connectionManager?.sendActivityEnd()
 				connectionManager?.getAudioManager()?.muteInput()
@@ -370,22 +370,22 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// CRITICAL: Use ref.current to get CURRENT value, not closure-captured value
 			if (pushToTalkModeRef.current) return
 
-			console.log('[VFF VAD] 🎤 User speech started - buffering audio...')
+			console.log('[VFF VAD] [mic] User speech started - buffering audio...')
 
 			// Record speech start time
 			const speechDetectedTime = performance.now()
 			speechStartTimeRef.current = Date.now()
 			bargeInTriggeredRef.current = false  // Reset flag
-			console.log(`[VFF VAD] 🎤 Speech detected at t=${speechDetectedTime.toFixed(2)}ms`)
+			console.log(`[VFF VAD] [mic] Speech detected at t=${speechDetectedTime.toFixed(2)}ms`)
 
 			// INSTANT FEEDBACK: Pause audio immediately if Gemini is speaking
 			// This gives instant barge-in feel while we wait to confirm speech duration
 			const audioManager = connectionManager?.getAudioManager()
 			if (audioManager && audioManager.isSpeaking()) {
 				audioManager.pauseAudioContext()
-				console.log(`[VFF VAD] 🔇 Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
+				console.log(`[VFF VAD] [mute] Tentative pause at t=${performance.now().toFixed(2)}ms - waiting to confirm speech duration`)
 			}
-			// Schedule delayed turn start - only send activity_start + audio if speech lasts ≥450ms
+			// Schedule delayed turn start - only send activity_start + audio if speech lasts >=450ms
 			// This prevents false positives (throat clears, grunts) from creating incomplete turns
 			setTimeout(() => {
 				const speechDuration = speechStartTimeRef.current
@@ -394,31 +394,31 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 				// Only start turn if speech is still active AND duration met
 				if (speechStartTimeRef.current !== null && speechDuration >= MIN_TURN_DURATION_MS) {
-					console.log(`[VFF VAD] ✅ Valid speech detected (${speechDuration}ms) - starting turn`)
+					console.log(`[VFF VAD] [OK] Valid speech detected (${speechDuration}ms) - starting turn`)
 					bargeInTriggeredRef.current = true
 
 					// CRITICAL: Send activity_start BEFORE opening audio gate
 					// This ensures Gemini receives the turn signal before any audio chunks
-					// Pattern: activity_start → audio chunks → activity_end (Gemini Live API docs lines 419-435)
+					// Pattern: activity_start -> audio chunks -> activity_end (Gemini Live API docs lines 419-435)
 					if (connectionManager) {
 						const startTime = performance.now()
 						connectionManager.sendActivityStart()
-						console.log(`[VFF VAD] 📤 Sent activity_start signal at t=${startTime.toFixed(2)}ms (user turn begins)`)
+						console.log(`[VFF VAD] [send] Sent activity_start signal at t=${startTime.toFixed(2)}ms (user turn begins)`)
 					}
 
 					// Privacy Gate: Open audio flow (sends pre-buffer + live audio)
 					// Must happen AFTER activity_start to ensure proper turn framing
 					if (audioManager) {
 						const gateOpenTime = performance.now()
-						console.log(`[VFF VAD] 🚪 Opening audio gate at t=${gateOpenTime.toFixed(2)}ms`)
+						console.log(`[VFF VAD] [door] Opening audio gate at t=${gateOpenTime.toFixed(2)}ms`)
 						audioManager.setVADActive(true) // Opens gate, flushes 600ms pre-buffer to backend
-						console.log(`[VFF VAD] 🚪 Audio gate opened, pre-buffer flushed, live audio now flowing`)
+						console.log(`[VFF VAD] [door] Audio gate opened, pre-buffer flushed, live audio now flowing`)
 					}
 
 					// Trigger FULL barge-in (flushes audio queue if Gemini speaking)
 					const geminiSpeaking = audioManager?.isSpeaking()
 					if (geminiSpeaking && audioManager) {
-						console.log('[VFF VAD] 🔇 Flushing Gemini audio queue (full barge-in)')
+						console.log('[VFF VAD] [mute] Flushing Gemini audio queue (full barge-in)')
 						audioManager.flushAudioQueue()
 					}
 				}
@@ -437,9 +437,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// Privacy Gate: Always close audio flow (only if it was opened)
 			const audioManager = connectionManager?.getAudioManager()
 
-			// Only close gate and send activity_end if we actually started a turn (≥450ms)
+			// Only close gate and send activity_end if we actually started a turn (>=450ms)
 			if (bargeInTriggeredRef.current) {
-				console.log(`[VFF VAD] ✅ Valid turn completed (${speechDuration}ms) - closing turn`)
+				console.log(`[VFF VAD] [OK] Valid turn completed (${speechDuration}ms) - closing turn`)
 
 				// Close audio gate
 				if (audioManager) {
@@ -449,13 +449,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				// Send activity_end to signal user is done speaking
 				connectionManager?.onVADSpeechEnd()
 			} else {
-				console.log(`[VFF VAD] ⚠️ Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
+				console.log(`[VFF VAD] [warn] Speech too short (${speechDuration}ms < ${MIN_TURN_DURATION_MS}ms) - no turn started, false positive`)
 
 				// FALSE POSITIVE: Resume audio playback (speech was too short to start a turn)
 				// Gate was never opened, so nothing to close
 				if (audioManager) {
 					audioManager.resumeAudioContext()
-					console.log('[VFF VAD] 🔊 Resuming audio - false positive')
+					console.log('[VFF VAD] [sound] Resuming audio - false positive')
 				}
 			}
 			// Clear state
@@ -463,7 +463,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			bargeInTriggeredRef.current = false
 		},
 		onVADMisfire: () => {
-			console.log('[VFF VAD] ⚠️ VAD misfire detected')
+			console.log('[VFF VAD] [warn] VAD misfire detected')
 			// VAD false positive - clear start time
 			speechStartTimeRef.current = null
 		},
@@ -544,7 +544,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 
 		if (isConnected && pendingDisclaimerRead && connectionManager && selectedLanguage) {
-			console.log('[VoiceOverlay] ✅ Connection ready - requesting disclaimer read')
+			console.log('[VoiceOverlay] [OK] Connection ready - requesting disclaimer read')
 
 			// Clear the flag IMMEDIATELY to prevent double-firing
 			setPendingDisclaimerRead(false)
@@ -573,10 +573,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const shouldRunVAD = isConnected && !pushToTalkMode && !nativeVad && !vad.loading && !vad.errored
 
 		if (shouldRunVAD && !vad.userSpeaking) {
-			console.log('[VoiceOverlay] 🎙️ Starting VAD (conditions met)')
+			console.log('[VoiceOverlay] [mic] Starting VAD (conditions met)')
 			vad.start()
 		} else if (!shouldRunVAD && vad.userSpeaking) {
-			console.log('[VoiceOverlay] ⏸️ Pausing VAD (conditions not met)')
+			console.log('[VoiceOverlay] [pause] Pausing VAD (conditions not met)')
 			vad.pause()
 		}
 
@@ -617,7 +617,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				const isActive = currentStatus === 'connected' || currentStatus === 'switching_section'
 
 				if (isActive) {
-					console.log('[VoiceOverlay] ✅ WebSocket connected, setting up audio...')
+					console.log('[VoiceOverlay] [OK] WebSocket connected, setting up audio...')
 					// Update status to indicate audio setup in progress
 					setStatus('Setting up audio...')
 
@@ -626,7 +626,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 					// Now fully connected - update status
 					setStatus('connected')
-					console.log('[VoiceOverlay] ✅ Audio ready - fully connected')
+					console.log('[VoiceOverlay] [OK] Audio ready - fully connected')
 					// FIX #2: VAD will auto-start via consolidated useEffect when status changes
 					break
 				}
@@ -638,7 +638,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// Check final status
 			const finalStatus = connectionManager.getStatus()
 			if (finalStatus !== 'connected' && finalStatus !== 'switching_section') {
-				console.error('[VoiceOverlay] ❌ Connection timeout, final status:', finalStatus)
+				console.error('[VoiceOverlay] [X] Connection timeout, final status:', finalStatus)
 				setError('Connection timed out - please try again')
 			}
 		} catch (err) {
@@ -890,10 +890,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		window.addEventListener('keydown', handleKeyDown)
 		window.addEventListener('keyup', handleKeyUp)
-		console.log('[PTT Keyboard] ✅ Keyboard listeners attached')
+		console.log('[PTT Keyboard] [OK] Keyboard listeners attached')
 
 		return () => {
-			console.log('[PTT Keyboard] ❌ Removing keyboard listeners')
+			console.log('[PTT Keyboard] [X] Removing keyboard listeners')
 			window.removeEventListener('keydown', handleKeyDown)
 			window.removeEventListener('keyup', handleKeyUp)
 		}
@@ -922,10 +922,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		document.addEventListener('mouseup', handleGlobalMouseUp)
 		document.addEventListener('touchend', handleGlobalMouseUp)
-		console.log('[PTT Global] ✅ Global mouse/touch release listeners attached')
+		console.log('[PTT Global] [OK] Global mouse/touch release listeners attached')
 
 		return () => {
-			console.log('[PTT Global] ❌ Removing global mouse/touch release listeners')
+			console.log('[PTT Global] [X] Removing global mouse/touch release listeners')
 			document.removeEventListener('mouseup', handleGlobalMouseUp)
 			document.removeEventListener('touchend', handleGlobalMouseUp)
 		}
@@ -1126,12 +1126,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 			if (response.ok) {
 				const result = await response.json()
-				console.log('[VoiceOverlay] ✅ Disclaimer acceptance logged to backend:', result)
+				console.log('[VoiceOverlay] [OK] Disclaimer acceptance logged to backend:', result)
 			} else {
-				console.warn('[VoiceOverlay] ⚠️ Backend logging returned non-OK status:', response.status)
+				console.warn('[VoiceOverlay] [warn] Backend logging returned non-OK status:', response.status)
 			}
 		} catch (err) {
-			console.error('[VoiceOverlay] ❌ Failed to log disclaimer acceptance to backend:', err)
+			console.error('[VoiceOverlay] [X] Failed to log disclaimer acceptance to backend:', err)
 			// Don't block user - logging failure is non-fatal
 		}
 
@@ -1142,7 +1142,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		let reconnected = false
 		if (!isConnectionActive) {
-			console.log('[VoiceOverlay] 🔄 Connection stale after disclaimer - reconnecting...')
+			console.log('[VoiceOverlay] [reconnect] Connection stale after disclaimer - reconnecting...')
 			console.log('[VoiceOverlay] Current status:', currentStatus)
 
 			try {
@@ -1153,27 +1153,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				// switchToFirstSection on a dead connection (bd polyglot-pdf-ppf1).
 				const postReconnectStatus = connectionManager?.getStatus()
 				if (postReconnectStatus !== 'connected' && postReconnectStatus !== 'switching_section') {
-					console.error('[VoiceOverlay] ❌ Reconnect timed out, status:', postReconnectStatus)
+					console.error('[VoiceOverlay] [X] Reconnect timed out, status:', postReconnectStatus)
 					setError('Connection lost - please click Reconnect')
 					return
 				}
 				reconnected = true
-				console.log('[VoiceOverlay] ✅ Reconnected after disclaimer acceptance')
+				console.log('[VoiceOverlay] [OK] Reconnected after disclaimer acceptance')
 			} catch (err) {
-				console.error('[VoiceOverlay] ❌ Reconnection failed:', err)
+				console.error('[VoiceOverlay] [X] Reconnection failed:', err)
 				setError('Connection lost - please click Reconnect')
 				return
 			}
 		}
 
 		// Now switch to section 1 to restart Gemini with form-filling context (clean session, no disclaimer leakage)
-		console.log('[VoiceOverlay] ✅ Disclaimer accepted - switching to first section (restarts Gemini session)')
+		console.log('[VoiceOverlay] [OK] Disclaimer accepted - switching to first section (restarts Gemini session)')
 
 		if (connectionManager && selectedLanguage) {
 			// Step 3: Resume audio playback FIRST so we don't miss any response chunks
 			const am = connectionManager.getAudioManager()
 			if (am) {
-				console.log('[VoiceOverlay] 🔊 Resuming audio playback for Gemini response')
+				console.log('[VoiceOverlay] [sound] Resuming audio playback for Gemini response')
 				am.resumePlayback()
 			}
 
@@ -1185,7 +1185,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// on a turn that never opened). On reconnect, switchToFirstSection below
 			// restarts Gemini cleanly and drives the turn, so the end is unnecessary.
 			if (!reconnected) {
-				console.log('[VoiceOverlay] 🎤 Sending activity_end to signal user turn complete')
+				console.log('[VoiceOverlay] [mic] Sending activity_end to signal user turn complete')
 				await connectionManager.sendActivityEnd()
 			}
 

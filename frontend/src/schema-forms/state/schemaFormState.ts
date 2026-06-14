@@ -18,10 +18,10 @@ import { normalizeFieldValue } from "../utils/validation";
 
 export interface SchemaFormState {
   schema: FormSchema;
-  fieldValues: Record<string, FieldValue>; // field_id → FieldValue (with confirmed flag)
+  fieldValues: Record<string, FieldValue>; // field_id -> FieldValue (with confirmed flag)
   currentSectionId: string; // Section ID (e.g., "part_1_2_addresses")
   completedSections: Set<string>; // Track completed sections
-  validationErrors: Record<string, string>; // field_id → error message
+  validationErrors: Record<string, string>; // field_id -> error message
   lastUpdated: number;
   sessionId?: string; // Set by backend during handshake (Gemini session ID)
   formSessionId: string; // Persistent ID for this form filling session (survives reconnects)
@@ -115,12 +115,12 @@ export class SchemaFormStateManager {
       if (parsed.completedSections) {
         parsed.completedSections = new Set(parsed.completedSections);
       } else if (parsed.completedParts) {
-        // Backwards compatibility: migrate completedParts → completedSections
+        // Backwards compatibility: migrate completedParts -> completedSections
         parsed.completedSections = new Set(parsed.completedParts);
         delete parsed.completedParts;
       }
 
-      // Backwards compatibility: migrate currentPartId → currentSectionId
+      // Backwards compatibility: migrate currentPartId -> currentSectionId
       if (parsed.currentPartId && !parsed.currentSectionId) {
         parsed.currentSectionId = parsed.currentPartId;
         delete parsed.currentPartId;

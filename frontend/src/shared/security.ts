@@ -8,11 +8,11 @@
  * Escape HTML entities to prevent XSS
  * 
  * Replaces dangerous characters with HTML entities:
- * - & → &amp;
- * - < → &lt;
- * - > → &gt;
- * - " → &quot;
- * - ' → &#x27;
+ * - & -> &amp;
+ * - < -> &lt;
+ * - > -> &gt;
+ * - " -> &quot;
+ * - ' -> &#x27;
  * 
  * @example
  * escapeHtml('<script>alert("xss")</script>')

@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-12. bd polyglot-pdf-vmxx added `resume: boolean` to the handshake payload (`getHandshakePayload`) -- this is a new handshake key, not a terminology change; see schema-forms.md for the calling convention. The internal-rename closeout (gfb.4) and the wire-format renames (zun / tb7) are unchanged.*
+*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in schemaFormState.ts code comments (cosmetic, no terminology change). bd polyglot-pdf-vmxx added `resume: boolean` to the handshake payload (`getHandshakePayload`) -- this is a new handshake key, not a terminology change; see schema-forms.md for the calling convention. The internal-rename closeout (gfb.4) and the wire-format renames (zun / tb7) are unchanged.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 

@@ -111,7 +111,7 @@ export function getBackendUrl(): string {
 
 	// 1. Check for explicit local dev override (window.__VFF_LOCAL_DEV = true)
 	if (config.enabled) {
-		console.log('[VFF Config] 🔧 LOCAL DEV MODE ENABLED')
+		console.log('[VFF Config] [tool] LOCAL DEV MODE ENABLED')
 		console.log('[VFF Config] Backend URL:', config.backendUrl)
 		console.log('[VFF Config] Debug Metrics:', config.debugMetrics)
 		return config.backendUrl
@@ -163,7 +163,7 @@ export function isDebugMetricsEnabled(): boolean {
  */
 export function printDevHelp(): void {
 	console.log('\n' + '='.repeat(60))
-	console.log('🔧 VOICE FORM FILLER - LOCAL DEVELOPMENT MODE')
+	console.log('[tool] VOICE FORM FILLER - LOCAL DEVELOPMENT MODE')
 	console.log('='.repeat(60))
 	console.log('\nTo test locally without deploying:')
 	console.log('\n1. Start backend:')

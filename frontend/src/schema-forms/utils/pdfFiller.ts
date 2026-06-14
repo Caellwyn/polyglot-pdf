@@ -2,7 +2,7 @@
  * PDF Filler Utility
  *
  * Calls backend API to fill PDF forms using PyMuPDF (supports XFA forms).
- * Backend is stateless: receives data → fills PDF → returns bytes.
+ * Backend is stateless: receives data -> fills PDF -> returns bytes.
  *
  * @module pdfFiller
  */
@@ -53,7 +53,7 @@ export function getBackendHttpUrl(): string {
  *
  * @param kitId - Selected form kit identifier (matches manifest entry)
  * @param pdfUrl - URL to the original PDF file (e.g., '/form-kits/i-90/form.pdf')
- * @param fieldValues - Current form values (field_id → value)
+ * @param fieldValues - Current form values (field_id -> value)
  * @param schema - Form schema containing field metadata and PDF mappings
  * @returns Filled PDF as Uint8Array ready for download
  *

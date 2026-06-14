@@ -50,7 +50,7 @@ export function FieldRenderer({
 
   // Debug conditional unlocking
   if (field.read_only && shouldUnlock) {
-    console.log(`[FieldRenderer] 🔓 Unlocking field ${field.id}:`, {
+    console.log(`[FieldRenderer] [unlock] Unlocking field ${field.id}:`, {
       read_only: field.read_only,
       shouldUnlock,
       show_if: field.show_if,
