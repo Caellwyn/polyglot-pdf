@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-06-13. Reviewed for rwjy+vfb2+0tgc+b6k4 bundle PR: pdfFiller.ts mtime newer than this doc but no PDF-filling behavior changed by this PR. Prior: 2026-06-09. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
+*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in pdfFiller.ts code comments/console strings (cosmetic, no PDF-filling change). Prior reviewed for rwjy+vfb2+0tgc+b6k4 bundle PR: pdfFiller.ts mtime newer than this doc but no PDF-filling behavior changed by that PR. Prior: 2026-06-09. See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the

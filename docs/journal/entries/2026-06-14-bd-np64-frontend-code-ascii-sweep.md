@@ -68,10 +68,18 @@ the demo UI. (Scar #6 itself says markdown/content is exempt and the TS rule is 
 
 ## Doc freshness
 
-The 3 docs that track these files (`websocket-routing.md`,
-`stateless-architecture.md`, `voice-and-vad.md`) describe behavior, not log-string
-text; this is a cosmetic string/comment change with no behavior impact. Date notes
-recorded at closeout if the freshness gate flags them.
+Bumped 5 docs that track files this branch touched -- `config-deployment.md`
+(config.ts), `pdf-filling.md` (pdfFiller.ts), `schema-forms.md` (schemaFormState/
+SchemaForm/FieldRenderer), `voice-ai.md` (connection.ts/audioManager.ts),
+`terminology.md` (schemaFormState.ts) -- each with a note that this was a cosmetic
+comment/console-string change, no behavior impact.
+
+Left two flagged docs UNCHANGED because they track files this branch did NOT touch
+(they were stale before this branch, from other merged backend work on dev):
+`context-compression.md` (tracks `form_filling_service.py`, last touched by other
+work) and `tool-call-flow.md` (tracks `request_coordinator.py`). Per the
+doc-freshness rule, a doc stale on a file this branch didn't change is not this
+PR's to bump.
 
 ## Files touched
 
