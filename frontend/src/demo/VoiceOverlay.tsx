@@ -24,6 +24,7 @@ import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
+import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 
@@ -70,6 +71,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)  // Track if disclaimer modal is showing
+	// User dismissed the connection-timeout modal without reconnecting (bd
+	// polyglot-pdf-jf6w.2). Reset whenever status leaves reconnect_failed so a
+	// later terminal drop re-shows the modal.
+	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 	const panelRef = useRef<HTMLDivElement>(null)
 	const isDraggingRef = useRef(false)
@@ -226,6 +231,15 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	useEffect(() => {
 		statusRef.current = status
 	}, [status])
+
+	// Clear the connection-timeout-modal dismissal once the connection leaves the
+	// terminal reconnect_failed state, so a later give-up re-shows the modal (bd
+	// polyglot-pdf-jf6w.2).
+	useEffect(() => {
+		if (status.toLowerCase() !== 'reconnect_failed' && reconnectModalDismissed) {
+			setReconnectModalDismissed(false)
+		}
+	}, [status, reconnectModalDismissed])
 
 	// Keep isHoldingPushToTalk ref updated
 	useEffect(() => {
@@ -2057,6 +2071,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				selectedLanguage={selectedLanguage}
 				onListenAgain={handleDisclaimerListenAgain}
 				onAgree={handleDisclaimerAgree}
+			/>
+
+			{/* Connection-timeout modal - shown on terminal reconnect failure (bd
+			    polyglot-pdf-jf6w.2). The reconnect button re-runs the existing
+			    connect/restore path; vmxx silent-resume picks up the current field. */}
+			<ConnectionTimeoutModal
+				isOpen={status.toLowerCase() === 'reconnect_failed' && !reconnectModalDismissed}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => { setReconnectModalDismissed(false); handleConnect() }}
+				onCancel={() => setReconnectModalDismissed(true)}
 			/>
 		</>
 	)

@@ -1,0 +1,173 @@
+/**
+ * ConnectionTimeoutModal styles (bd polyglot-pdf-jf6w.2).
+ *
+ * Mirrors DisclaimerModal.css (large touch targets, tablet/mobile responsive,
+ * accessibility media queries) but for a shorter single-message recovery prompt.
+ */
+
+.connection-timeout-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.connection-timeout-modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: connection-timeout-modal-slide-in 0.3s ease-out;
+}
+
+@keyframes connection-timeout-modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.connection-timeout-modal-title {
+  margin: 0 0 16px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+.connection-timeout-modal-message {
+  margin: 0 0 32px 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: #333;
+  text-align: center;
+}
+
+.connection-timeout-modal-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.connection-timeout-modal-button {
+  flex: 1;
+  min-width: 140px;
+  padding: 16px 24px;
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.connection-timeout-modal-button:active {
+  transform: scale(0.98);
+}
+
+.connection-timeout-modal-button--secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.connection-timeout-modal-button--secondary:hover {
+  background-color: #4b5563;
+}
+
+.connection-timeout-modal-button--secondary:focus {
+  outline: 3px solid #9ca3af;
+  outline-offset: 2px;
+}
+
+.connection-timeout-modal-button--primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.connection-timeout-modal-button--primary:hover {
+  background-color: #1d4ed8;
+}
+
+.connection-timeout-modal-button--primary:focus {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .connection-timeout-modal-content {
+    padding: 24px;
+    max-width: 100%;
+  }
+
+  .connection-timeout-modal-title {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .connection-timeout-modal-message {
+    font-size: 16px;
+  }
+
+  .connection-timeout-modal-buttons {
+    flex-direction: column;
+  }
+
+  .connection-timeout-modal-button {
+    width: 100%;
+    min-width: unset;
+  }
+}
+
+/* Tablet optimization */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .connection-timeout-modal-button {
+    padding: 18px 28px;
+    font-size: 20px;
+  }
+}
+
+/* High contrast mode for accessibility */
+@media (prefers-contrast: high) {
+  .connection-timeout-modal-overlay {
+    background-color: rgba(0, 0, 0, 0.9);
+  }
+
+  .connection-timeout-modal-content {
+    border: 2px solid #000;
+  }
+
+  .connection-timeout-modal-button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .connection-timeout-modal-content {
+    animation: none;
+  }
+
+  .connection-timeout-modal-button {
+    transition: none;
+  }
+
+  .connection-timeout-modal-button:active {
+    transform: none;
+  }
+}
