@@ -34,12 +34,24 @@ def _repo_root() -> pathlib.Path:
 REPO_ROOT = _repo_root()
 
 # Files that handle raw field values / user-speech transcripts and log heavily.
+# These get an EXPLICIT per-file parametrized test (clear per-file failure
+# messages); the broader `test_no_pii_logging_anywhere_in_backend` sweep below
+# then covers EVERY non-test backend file so a NEW logging site can't escape the
+# guard just because nobody added it here (bd polyglot-pdf-uov.15).
 GUARDED_FILES = [
     "backend/routes/pdf_fill_routes.py",
     "backend/adapters/live_ai_gemini.py",
     # on_tool_call receives Gemini's tool args, which include field VALUES; it
     # previously print()'d them whole (bd polyglot-pdf-oeq).
     "backend/services/callback_handler.py",
+    # Added bd polyglot-pdf-uov.15 after the all-backend sweep caught live leaks
+    # these files had been escaping (they were never in the hand-maintained list):
+    #   request_coordinator.py logged spoken_name=spoken_name (user-speech label);
+    #   form_filling_service.py logged message=message (rendered text w/ field hint);
+    #   websocket_routes.py is the fill/voice control plane.
+    "backend/services/request_coordinator.py",
+    "backend/services/form_filling_service.py",
+    "backend/routes/websocket_routes.py",
 ]
 
 # Kwarg NAMES that must never carry a raw value/text in a log call. We flag the
@@ -219,6 +231,63 @@ def test_no_value_or_transcript_in_logs(rel):
         "lengths / types / counts, never the value or transcript text -- and "
         "never print() raw args/values to stdout:\n  "
         + "\n  ".join(f"{rel}:{ln}: {txt}" for ln, txt in offenders)
+    )
+
+
+# Directories/name-prefixes under backend/ that are NOT production logging sites:
+# tests assert on PII deliberately, and one-off probe/dev scripts are never on the
+# Cloud Run request path (they run locally, by hand). Everything else in backend/
+# CAN reach production stdout -> Cloud Logging, so it must be guarded.
+_SWEEP_SKIP_DIR_PARTS = ("tests", "scripts", "__pycache__")
+_SWEEP_SKIP_NAME_PREFIXES = ("test_", "probe_")
+
+
+def _all_backend_source_files() -> list[pathlib.Path]:
+    """Every production backend .py file (excludes tests, probes, dev scripts).
+
+    This is the completeness backstop: the hand-maintained GUARDED_FILES list
+    inevitably lags new files, and an unguarded new file is exactly how a leak
+    ships silently. Sweeping ALL of backend/ means a new logging site is covered
+    the moment it lands, with no list edit (bd polyglot-pdf-uov.15)."""
+    out = []
+    backend = REPO_ROOT / "backend"
+    for p in sorted(backend.rglob("*.py")):
+        rel_parts = p.relative_to(REPO_ROOT).parts
+        if any(part in _SWEEP_SKIP_DIR_PARTS for part in rel_parts):
+            continue
+        if any(p.name.startswith(pre) for pre in _SWEEP_SKIP_NAME_PREFIXES):
+            continue
+        out.append(p)
+    return out
+
+
+def test_no_pii_logging_anywhere_in_backend():
+    """Completeness sweep: NO production backend file may log a value/transcript.
+
+    Unlike the per-file GUARDED_FILES test, this scans every non-test backend
+    source file, so a leak in a file nobody thought to guard still fails the
+    suite. GUARDED_FILES remains for targeted, well-labelled regression coverage;
+    this is the net under it (bd polyglot-pdf-uov.15)."""
+    files = _all_backend_source_files()
+    # Guard the guard: if the sweep ever finds nothing to scan, the globbing
+    # broke (wrong root) and the whole check is silently vacuous.
+    assert len(files) > 5, (
+        f"backend source sweep found only {len(files)} files -- the path glob is "
+        f"probably wrong (REPO_ROOT={REPO_ROOT}); refusing to pass vacuously."
+    )
+
+    all_offenders: list[str] = []
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        offenders = _scan_leaks(text) + _scan_print_leaks(text)
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        all_offenders.extend(f"{rel}:{ln}: {txt}" for ln, txt in offenders)
+
+    assert not all_offenders, (
+        "PII/PHI logging leak in a backend file (bd polyglot-pdf-uov.15 sweep). "
+        "Log field IDs / lengths / types / counts, never the value or transcript "
+        "text, and never print() raw args/values to stdout:\n  "
+        + "\n  ".join(all_offenders)
     )
 
 
