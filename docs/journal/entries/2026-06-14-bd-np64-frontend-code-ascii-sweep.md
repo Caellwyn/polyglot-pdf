@@ -65,10 +65,22 @@ Rubric (revised criterion): PASS. Fresh-eyes ran 2 rounds:
   found 2 (`schemaFormState.ts:21,24`); re-scanning for the same blind spot
   surfaced 2 more (`metrics.ts:21,22`). All 4 were `U+2192 ->` arrows; fixed.
   Re-verified zero non-ASCII in any comment (full OR trailing) or console string.
-- Round 2: `NO-GAPS`.
+- Round 2: `GAPS-FOUND (1)` -- a SECOND blind spot of the same family: multi-line
+  `console.log`/`console.warn` calls where `console.` is on the opening line but the
+  emoji-bearing string args are on continuation lines (`metrics.ts:105,106,134,135,
+  216,225`). The line-by-line classifier only matched lines with `console.` ON them.
+  Fixed all 6; re-verified with a paren-depth scan that no non-ASCII remains inside
+  any `console.*` call (single or multi-line).
+- Round 3 (ceiling): `NO-GAPS`. Exhaustive classification -- 0 comment violations,
+  0 console-string violations, 41 remaining occurrences all JSX/DOM/dialog content
+  within the exclusion.
 
-Lesson reinforced: a positional classifier ("line starts with //") misses trailing
-inline comments -- match the comment SUBSTRING, not the line prefix.
+Lesson reinforced: a positional, line-by-line classifier has blind spots at every
+structure that spans lines -- trailing inline comments (match the comment SUBSTRING,
+not the line prefix) AND multi-line calls (track paren depth, don't key on the
+keyword line). Two fresh-eyes rounds each surfaced one. For a "find all X in code
+positions" sweep, verify with a structure-aware scan (paren depth + comment
+substring), not the same per-line heuristic that did the edit.
 
 ## Lessons
 
