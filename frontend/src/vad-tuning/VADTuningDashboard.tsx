@@ -45,19 +45,19 @@ export const VADTuningDashboard: React.FC = () => {
 	// Pass stream directly so VAD can access it when it starts
 	const vadCallbacks = {
 		onSpeechStart: () => {
-			console.log('🎤 [VAD] Speech detected!')
+			console.log('[mic] [VAD] Speech detected!')
 			setUserSpeaking(true)
 			monitor.onSpeechStart()
 		},
 		onSpeechEnd: (audio: Float32Array) => {
-			console.log('🎤 [VAD] Speech ended')
+			console.log('[mic] [VAD] Speech ended')
 			setUserSpeaking(false)
 			// Calculate duration from audio length
 			const durationMs = (audio.length / 16000) * 1000
 			monitor.onSpeechEnd(durationMs)
 		},
 		onVADMisfire: () => {
-			console.log('⚠️ [VAD] Misfire detected')
+			console.log('[warn] [VAD] Misfire detected')
 			monitor.onVADMisfire()
 		},
 		onFrameProcessed: (probability: number, frame: Float32Array) => {
@@ -78,13 +78,13 @@ export const VADTuningDashboard: React.FC = () => {
 	// Auto-restart VAD when config changes (if recording)
 	useEffect(() => {
 		if (isRecording && stream && vad) {
-			console.log('🔄 Config changed, restarting VAD...')
+			console.log('[reconnect] Config changed, restarting VAD...')
 			console.log('Current config:', isDebugMode ? debugConfig : vadConfig.config)
 			vad.pause()
 			// Small delay to ensure old VAD is fully stopped
 			setTimeout(() => {
 				vad.start()
-				console.log('✅ VAD restarted with new config')
+				console.log('[OK] VAD restarted with new config')
 			}, 100)
 		}
 	}, [vadConfig.config, isDebugMode])
@@ -125,7 +125,7 @@ export const VADTuningDashboard: React.FC = () => {
 			// Start VAD after a short delay to ensure everything is ready
 			// Note: VAD will use the shared stream we just created
 			setTimeout(() => {
-				console.log('🎙️ Starting VAD...')
+				console.log('[mic] Starting VAD...')
 				console.log('Stream available:', !!newStream)
 				console.log('Stream tracks:', newStream?.getTracks().map(t => ({
 					kind: t.kind,
@@ -138,7 +138,7 @@ export const VADTuningDashboard: React.FC = () => {
 			}, 500)
 
 		} catch (error) {
-			console.error('❌ Failed to start recording:', error)
+			console.error('[X] Failed to start recording:', error)
 			alert(`Failed to access microphone: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 	}, [monitor, vad, isDebugMode, debugConfig, vadConfig.config])

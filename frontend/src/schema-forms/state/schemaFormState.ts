@@ -115,12 +115,12 @@ export class SchemaFormStateManager {
       if (parsed.completedSections) {
         parsed.completedSections = new Set(parsed.completedSections);
       } else if (parsed.completedParts) {
-        // Backwards compatibility: migrate completedParts → completedSections
+        // Backwards compatibility: migrate completedParts -> completedSections
         parsed.completedSections = new Set(parsed.completedParts);
         delete parsed.completedParts;
       }
 
-      // Backwards compatibility: migrate currentPartId → currentSectionId
+      // Backwards compatibility: migrate currentPartId -> currentSectionId
       if (parsed.currentPartId && !parsed.currentSectionId) {
         parsed.currentSectionId = parsed.currentPartId;
         delete parsed.currentPartId;

@@ -6,18 +6,18 @@
  * backend architecture.
  *
  * Implemented Features:
- * - ✅ Linear iteration (field order from schema)
- * - ✅ Skip confirmed fields
- * - ✅ Required field prioritization
- * - ✅ Progress calculation
- * - ✅ Completion detection
- * - ✅ Section-based navigation (Nov 23, 2025)
- * - ✅ Conditional field visibility (Nov 22, 2025)
- * - ✅ Field dependencies (Nov 22, 2025)
+ * - [OK] Linear iteration (field order from schema)
+ * - [OK] Skip confirmed fields
+ * - [OK] Required field prioritization
+ * - [OK] Progress calculation
+ * - [OK] Completion detection
+ * - [OK] Section-based navigation (Nov 23, 2025)
+ * - [OK] Conditional field visibility (Nov 22, 2025)
+ * - [OK] Field dependencies (Nov 22, 2025)
  *
  * Out of Scope:
- * - ❌ Hidden fields (display:none)
- * - ❌ Disabled fields
+ * - [X] Hidden fields (display:none)
+ * - [X] Disabled fields
  */
 
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
@@ -113,7 +113,7 @@ export function computeNextField(
     ? state.schema.fields.filter(f => currentSectionFieldIds.has(f.id))
     : state.schema.fields; // Fallback to all fields if no section structure
 
-  console.log('[computeNextField] 🔍 Current section:', {
+  console.log('[computeNextField] [search] Current section:', {
     sectionId: state.currentSectionId,
     sectionLabel: currentSection?.label,
     totalFieldsInSection: fieldsToCheck.length,

@@ -160,19 +160,19 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 						autoGainControl: true,        // Normalizes microphone volume
 					},
 				})
-				console.log('[AudioManager] 🎤 Created new microphone stream')
+				console.log('[AudioManager] [mic] Created new microphone stream')
 			} else {
-				console.log('[AudioManager] 🔗 Reusing existing microphone stream (shared with VAD)')
+				console.log('[AudioManager] [link] Reusing existing microphone stream (shared with VAD)')
 			}
 
 			// FIX #5: AudioContext Pooling - reuse contexts instead of creating new ones
 			// Browsers limit AudioContext instances (6-8 on desktop, 2-4 on mobile)
 			// Creating new contexts on each startRecording() causes failures on reconnect
 			if (!nodes.recordingContext) {
-				console.log('[AudioManager] 🎵 Creating AudioContext for recording (first time)')
+				console.log('[AudioManager] [note] Creating AudioContext for recording (first time)')
 				nodes.recordingContext = new AudioContext({ sampleRate: RECORDING_SAMPLE_RATE })
 			} else {
-				console.log('[AudioManager] ♻️ Reusing existing recording AudioContext')
+				console.log('[AudioManager] [recycle] Reusing existing recording AudioContext')
 				// Resume if suspended (browsers may suspend contexts to save power)
 				if (nodes.recordingContext.state === 'suspended') {
 					await nodes.recordingContext.resume()
@@ -182,11 +182,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			nodes.source = nodes.recordingContext.createMediaStreamSource(nodes.stream)
 
 			if (!nodes.playbackContext) {
-				console.log('[AudioManager] 🎵 Creating AudioContext for playback (eager initialization)')
+				console.log('[AudioManager] [note] Creating AudioContext for playback (eager initialization)')
 				nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
 				playbackTime = 0
 			} else {
-				console.log('[AudioManager] ♻️ Reusing existing playback AudioContext')
+				console.log('[AudioManager] [recycle] Reusing existing playback AudioContext')
 				// Resume if suspended
 				if (nodes.playbackContext.state === 'suspended') {
 					await nodes.playbackContext.resume()
@@ -349,7 +349,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			playbackChunkCount++
 			
 			if (playbackChunkCount === 1) {
-				console.log(`[AudioManager] 🔊 Playing first audio chunk (${audioData.byteLength} bytes)`)
+				console.log(`[AudioManager] [sound] Playing first audio chunk (${audioData.byteLength} bytes)`)
 			}
 			
 			// CRITICAL: Block new audio playback during barge-in
@@ -361,7 +361,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// Playback context should already exist (created eagerly in startRecording)
 			// But keep fallback for safety
 			if (!nodes.playbackContext) {
-				console.log('[AudioManager] 🎵 Creating AudioContext for playback (lazy fallback)')
+				console.log('[AudioManager] [note] Creating AudioContext for playback (lazy fallback)')
 				nodes.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE })
 				playbackTime = 0
 			}
@@ -370,7 +370,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			// Resume context if suspended (browser autoplay policy)
 			if (ctx.state === 'suspended') {
-				console.log('[AudioManager] ⏸️ Resuming suspended AudioContext')
+				console.log('[AudioManager] [pause] Resuming suspended AudioContext')
 				await ctx.resume()
 			}
 
@@ -379,7 +379,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			const int16Array = new Int16Array(decoded)
 
 			if (int16Array.length === 0) {
-				console.warn(`[AudioManager] ⚠️ Chunk #${playbackChunkCount} decoded to 0 samples`)
+				console.warn(`[AudioManager] [warn] Chunk #${playbackChunkCount} decoded to 0 samples`)
 				return
 			}
 
@@ -523,7 +523,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		if (nodes.playbackContext && nodes.playbackContext.state === 'running') {
 			try {
 				await nodes.playbackContext.suspend()
-				console.log('[AudioManager] 🔇 Audio context paused (tentative barge-in)')
+				console.log('[AudioManager] [mute] Audio context paused (tentative barge-in)')
 			} catch (e) {
 				console.error('[AudioManager] Failed to pause audio context:', e)
 			}
@@ -540,7 +540,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		if (nodes.playbackContext && nodes.playbackContext.state === 'suspended') {
 			try {
 				await nodes.playbackContext.resume()
-				console.log('[AudioManager] 🔊 Audio context resumed (false positive)')
+				console.log('[AudioManager] [sound] Audio context resumed (false positive)')
 			} catch (e) {
 				console.error('[AudioManager] Failed to resume audio context:', e)
 			}
@@ -587,12 +587,12 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	function muteInput(): void {
-		console.log('[AudioManager] 🔇 Muting input - audio processing stopped')
+		console.log('[AudioManager] [mute] Muting input - audio processing stopped')
 		inputMuted = true
 	}
 
 	function unmuteInput(): void {
-		console.log('[AudioManager] 🔊 Unmuting input - audio processing active')
+		console.log('[AudioManager] [sound] Unmuting input - audio processing active')
 		inputMuted = false
 	}
 

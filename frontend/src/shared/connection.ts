@@ -1,7 +1,7 @@
 /**
  * Connection Manager - Step S5
  * 
- * Manages WebSocket connection to backend using warmup → upgrade flow.
+ * Manages WebSocket connection to backend using warmup -> upgrade flow.
  * Reuses WebFormConnection logic from main app.
  */
 
@@ -146,7 +146,7 @@ function restoreDOMFromSessionStorage(state: SchemaFormState, schema: FormSchema
 	}
 
 	if (restoredCount > 0) {
-		console.log(`[VFF Connection] ✅ Restored ${restoredCount} fields from sessionStorage`)
+		console.log(`[VFF Connection] [OK] Restored ${restoredCount} fields from sessionStorage`)
 	}
 }
 
@@ -203,7 +203,7 @@ function capturePreFilledValues(connection: WebFormConnection, schema: FormSchem
 	}
 
 	if (capturedCount > 0) {
-		console.log(`[VFF Connection] ✅ Captured ${capturedCount} pre-filled values`)
+		console.log(`[VFF Connection] [OK] Captured ${capturedCount} pre-filled values`)
 	}
 }
 
@@ -337,7 +337,7 @@ export function createConnectionManager(
 			// Keep paused flag ONLY if status is 'connected' or 'switching_section'
 			if (status !== 'connected' && status !== 'switching_section') {
 				if (paused) {
-					console.log('[VFF Connection] 🔄 Resetting paused flag due to status:', status)
+					console.log('[VFF Connection] [reconnect] Resetting paused flag due to status:', status)
 					paused = false
 				}
 			}
@@ -378,14 +378,14 @@ export function createConnectionManager(
 			}
 		},
 		onFieldUpdate: (updates) => {
-			console.log('[VFF Connection] 🔧 Tool call: update_form_fields (' + updates.length + ' field(s))')
+			console.log('[VFF Connection] [tool] Tool call: update_form_fields (' + updates.length + ' field(s))')
 
 			// Log each update attempt for debugging
 			updates.forEach(update => {
 				const valuePreview = typeof update.value === 'string' && update.value.length > 50
 					? update.value.substring(0, 50) + '...'
 					: update.value
-				console.log(`[VFF Connection]   → ${update.fieldId} = ${JSON.stringify(valuePreview)}`)
+				console.log(`[VFF Connection]   -> ${update.fieldId} = ${JSON.stringify(valuePreview)}`)
 			})
 
 			// Track tool calls in metrics and filter out hallucinations
@@ -408,15 +408,15 @@ export function createConnectionManager(
 			}
 
 			if (rejectedUpdates.length > 0) {
-				console.warn('[VFF Connection] ⚠️ Rejected', rejectedUpdates.length, 'hallucinated update(s)')
+				console.warn('[VFF Connection] [warn] Rejected', rejectedUpdates.length, 'hallucinated update(s)')
 			}
 
 			// S6: Apply ONLY accepted field updates to DOM
 			if (fieldManager && acceptedUpdates.length > 0) {
-				console.log(`[VFF Connection] 📝 Applying ${acceptedUpdates.length} accepted update(s) to DOM`)
+				console.log(`[VFF Connection] [note] Applying ${acceptedUpdates.length} accepted update(s) to DOM`)
 				fieldManager.applyUpdates(acceptedUpdates)
 			} else if (acceptedUpdates.length === 0) {
-				console.warn('[VFF Connection] ⚠️ No updates to apply (all rejected or empty)')
+				console.warn('[VFF Connection] [warn] No updates to apply (all rejected or empty)')
 			}
 		},
 		onAudioData: async (audioData) => {
@@ -454,7 +454,7 @@ export function createConnectionManager(
 			const isWebSocketConnected = connection && connection.getStatus() === 'connected'
 
 			if (isWebSocketConnected && connection) {
-				console.log('[VFF Connection] 🔄 Restarting Gemini session')
+				console.log('[VFF Connection] [reconnect] Restarting Gemini session')
 				// Compute next field hint for smooth progression
 				const nextFieldHint = connection.getNextFieldHint()
 				// Send restart message to backend with hint
@@ -527,7 +527,7 @@ export function createConnectionManager(
 				try {
 					await connection.connect(wsUrl)
 					connectedUrl = wsUrl  // Track successful connection
-					console.log('[VFF Connection] ✅ Connected:', wsUrl)
+					console.log('[VFF Connection] [OK] Connected:', wsUrl)
 				} catch (localError) {
 					// Localhost failed, try cloud fallback
 					const cloudUrl = getCloudBackendUrl()
@@ -545,7 +545,7 @@ export function createConnectionManager(
 
 					await connection.connect(cloudUrl)
 					connectedUrl = cloudUrl  // Track successful connection
-					console.log('[VFF Connection] ✅ Connected to cloud')
+					console.log('[VFF Connection] [OK] Connected to cloud')
 				}
 
 			} catch (error) {
@@ -643,7 +643,7 @@ export function createConnectionManager(
 			if (connection) {
 				connection.sendActivityStart()
 			} else {
-				console.error('[ConnectionManager] ❌ Cannot send activity_start - inner connection is null')
+				console.error('[ConnectionManager] [X] Cannot send activity_start - inner connection is null')
 			}
 		},
 
@@ -825,7 +825,7 @@ export function createConnectionManager(
 					spoken_language: language,
 					next_field_hint: nextFieldHint
 				})
-				console.log('[VFF Connection] ✓ Sent spoken language change to backend:', language)
+				console.log('[VFF Connection] [check] Sent spoken language change to backend:', language)
 			} else {
 				console.warn('[VFF Connection] Cannot change spoken language - not connected')
 			}
@@ -845,7 +845,7 @@ export function createConnectionManager(
 					spoken_language: language,
 					disclaimer_text: disclaimerText
 				})
-				console.log('[VFF Connection] ✓ Sent read_disclaimer to backend:', language)
+				console.log('[VFF Connection] [check] Sent read_disclaimer to backend:', language)
 			} else {
 				console.warn('[VFF Connection] Cannot read disclaimer - not connected')
 			}
@@ -954,7 +954,7 @@ export function createConnectionManager(
 
 			// BARGE-IN: If Gemini is currently talking, flush audio queue for instant UX
 			if (geminiSpeaking) {
-				console.log('[VFF Connection] 🎤 VAD detected speech - flushing audio queue')
+				console.log('[VFF Connection] [mic] VAD detected speech - flushing audio queue')
 
 				// Record metrics
 				metrics.recordMicActivity()
@@ -993,7 +993,7 @@ export function createConnectionManager(
 				})
 			}
 
-			console.log('[VFF Connection] 🎤 VAD speech ended - sent activity_end, audio playback resumed')
+			console.log('[VFF Connection] [mic] VAD speech ended - sent activity_end, audio playback resumed')
 		},
 	}
 

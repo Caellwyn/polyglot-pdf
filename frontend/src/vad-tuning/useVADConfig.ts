@@ -99,7 +99,7 @@ ${JSON.stringify(config, null, 2)}`
 		document.body.removeChild(a)
 		URL.revokeObjectURL(url)
 
-		console.log('📄 Config exported:\n', output)
+		console.log('[page] Config exported:\n', output)
 	}, [config])
 
 	return {

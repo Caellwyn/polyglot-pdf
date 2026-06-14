@@ -97,7 +97,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         }
         // else (resize, within dead zone) -> keep `prev` (no flip)
         if (prev !== next) {
-          console.log('[SchemaForm] 📱 Mobile mode changed:', next, 'width:', w);
+          console.log('[SchemaForm] [phone] Mobile mode changed:', next, 'width:', w);
         }
         return next;
       });
