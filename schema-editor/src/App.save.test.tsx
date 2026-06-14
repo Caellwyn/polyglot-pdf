@@ -105,6 +105,32 @@ describe('App one-step save (File System Access)', () => {
     await waitFor(() => expect(picker).toHaveBeenCalledTimes(2)); // prompted again
   });
 
+  it('reloads from the saved file: reads the handle back and clears unsaved state', async () => {
+    // The reloaded file contents differ from the in-memory schema, so a
+    // successful reload is observable via the handle's getFile being read.
+    const reloaded = { ...SCHEMA, form_metadata: { ...SCHEMA.form_metadata, title: 'RELOADED' } };
+    const writable = makeWritable();
+    const handle = {
+      name: 'a_edited.json',
+      createWritable: vi.fn(async () => writable),
+      getFile: vi.fn(async () => ({ text: async () => JSON.stringify(reloaded) } as unknown as File)),
+    };
+    (window as unknown as Record<string, unknown>).showSaveFilePicker = vi.fn(async () => handle);
+
+    render(<App />);
+    fireEvent.click(screen.getByText('pick-A'));
+    await waitFor(() => expect(loader.loadSchema).toHaveBeenCalled());
+
+    // Save once to establish the handle + reveal the "Reload from file" button.
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    const reloadBtn = await screen.findByText('Reload from file');
+
+    fireEvent.click(reloadBtn);
+    await waitFor(() => expect(handle.getFile).toHaveBeenCalledTimes(1));
+    // After a clean reload the header no longer shows the unsaved-changes flag.
+    await waitFor(() => expect(screen.queryByText(/Unsaved changes/)).toBeNull());
+  });
+
   it('falls back to download when the API is unsupported', async () => {
     // no window.showSaveFilePicker installed -> fsAccess is false
     render(<App />);

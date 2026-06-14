@@ -242,7 +242,7 @@ export const App: React.FC = () => {
               </span>
             ) : savedFileName ? (
               <span className="text-sm text-green-600 font-medium">
-                • Saved to {savedFileName}
+                Saved to {savedFileName}
               </span>
             ) : null}
           </div>
