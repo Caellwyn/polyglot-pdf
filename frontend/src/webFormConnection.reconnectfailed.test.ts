@@ -121,6 +121,21 @@ describe('WebFormConnection terminal reconnect failure (bd polyglot-pdf-jf6w.3)'
     expect(conn.getStatus()).toBe('disconnected')
   })
 
+  it('an intentional teardown with a STALE at-max counter still stays disconnected', () => {
+    // Regression (fresh-eyes): the give-up branch must not fire just because the
+    // counter is at max -- an already-"disconnected" status is the deliberate
+    // teardown and must win, regardless of a leftover reconnectAttempts value.
+    const conn = new WebFormConnection(SCHEMA)
+    ;(conn as any).enableAutoReconnect = true
+    ;(conn as any).status = 'disconnected'
+    ;(conn as any).reconnectAttempts = (conn as any).maxReconnectAttempts
+
+    ;(conn as any).handleClose({ code: 1000 } as CloseEvent)
+
+    expect(conn.getStatus()).toBe('disconnected')
+    expect(conn.getStatus()).not.toBe('reconnect_failed')
+  })
+
   it('an idle timeout takes the idle_timeout path, never reconnect_failed', () => {
     const conn = new WebFormConnection(SCHEMA)
     ;(conn as any).enableAutoReconnect = true
