@@ -269,11 +269,16 @@ def test_no_pii_logging_anywhere_in_backend():
     suite. GUARDED_FILES remains for targeted, well-labelled regression coverage;
     this is the net under it (bd polyglot-pdf-uov.15)."""
     files = _all_backend_source_files()
-    # Guard the guard: if the sweep ever finds nothing to scan, the globbing
-    # broke (wrong root) and the whole check is silently vacuous.
-    assert len(files) > 5, (
-        f"backend source sweep found only {len(files)} files -- the path glob is "
-        f"probably wrong (REPO_ROOT={REPO_ROOT}); refusing to pass vacuously."
+    # Guard the guard: refuse to pass on a partial/empty sweep. The backend has
+    # ~40 production modules today; a floor of 20 catches a broken glob that found
+    # nothing OR a path bug that silently halved the set (a "found >5, looks fine"
+    # partial sweep would otherwise pass while skipping most files -- fresh-eyes
+    # PR for this bead). The floor is deliberately well below the real count so
+    # legitimate refactors don't trip it; it only fires on a gross under-count.
+    assert len(files) >= 20, (
+        f"backend source sweep found only {len(files)} files (expected ~40) -- the "
+        f"path glob is probably wrong (REPO_ROOT={REPO_ROOT}); refusing to pass on "
+        f"a partial sweep."
     )
 
     all_offenders: list[str] = []
