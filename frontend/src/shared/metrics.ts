@@ -102,8 +102,8 @@ class MetricsTracker {
 		this.currentBargeIn.bargeInLatency = now - this.currentBargeIn.micActivityDetected
 
 		console.log(
-			`[VFF Metrics] 🔇 TTS paused - Barge-in latency: ${this.currentBargeIn.bargeInLatency.toFixed(1)}ms`,
-			this.currentBargeIn.bargeInLatency < 180 ? '✅' : '⚠️ SLOW'
+			`[VFF Metrics] [mute] TTS paused - Barge-in latency: ${this.currentBargeIn.bargeInLatency.toFixed(1)}ms`,
+			this.currentBargeIn.bargeInLatency < 180 ? '[OK]' : '[warn] SLOW'
 		)
 	}
 
@@ -131,8 +131,8 @@ class MetricsTracker {
 		if (this.currentBargeIn.cancelSentAt) {
 			this.currentBargeIn.cancelAckLatency = now - this.currentBargeIn.cancelSentAt
 			console.log(
-				`[VFF Metrics] ✅ Gemini acknowledged - Cancel latency: ${this.currentBargeIn.cancelAckLatency.toFixed(1)}ms`,
-				this.currentBargeIn.cancelAckLatency < 150 ? '✅' : '⚠️ SLOW'
+				`[VFF Metrics] [OK] Gemini acknowledged - Cancel latency: ${this.currentBargeIn.cancelAckLatency.toFixed(1)}ms`,
+				this.currentBargeIn.cancelAckLatency < 150 ? '[OK]' : '[warn] SLOW'
 			)
 		}
 
@@ -213,7 +213,7 @@ class MetricsTracker {
 			this.sessionMetrics.toolCalls.push(metric)
 
 			console.warn(
-				`[VFF Metrics] 🚫 Tool call REJECTED (hallucination):`,
+				`[VFF Metrics] [no] Tool call REJECTED (hallucination):`,
 				`${toolName} [${callId.slice(0, 8)}]`,
 				`- ${metric.rejectionReason}`
 			)
@@ -222,7 +222,7 @@ class MetricsTracker {
 
 		this.sessionMetrics.toolCalls.push(metric)
 		console.log(
-			`[VFF Metrics] ✅ Tool call ACCEPTED:`,
+			`[VFF Metrics] [OK] Tool call ACCEPTED:`,
 			`${toolName} [${callId.slice(0, 8)}]`,
 			`- ${timeSinceBargeIn.toFixed(0)}ms after last barge-in`
 		)
