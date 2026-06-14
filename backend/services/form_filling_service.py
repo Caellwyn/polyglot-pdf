@@ -322,11 +322,15 @@ class FormFillingService:
             next_field_hint=spoken_hint
         )
 
+        # Never log the rendered message text: it embeds next_field_hint, which is
+        # derived from form field data (no-PII policy, docs/standards/hipaa-pii-policy.md).
+        # Log only its length so the redacted form passes the never-logged guard
+        # (bd polyglot-pdf-uov.15).
         _log.info("send_initiating_message",
                  session_id=self._session_id,
                  spoken_language=spoken_language,
                  is_resume=self._is_resume_session,
-                 message=message)
+                 message_length=len(message))
 
         # Send to Gemini via session.send_client_content()
         await self._live_ai.send_client_content(message)

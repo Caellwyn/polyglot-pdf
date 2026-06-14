@@ -377,7 +377,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("failed_to_send_get_field_value",
                       session_id=self._session_id,
-                      spoken_name=spoken_name,
+                      spoken_name_length=len(spoken_name),
                       error=str(exc))
             self._discard(request_id)
             return {"found": False, "value": None}
@@ -400,7 +400,7 @@ class RequestCoordinator:
             _coord_fv_ms = round((time.monotonic() - _t_coord_fv) * 1000)
             _log.error("get_field_value_timeout",
                       session_id=self._session_id,
-                      spoken_name=spoken_name,
+                      spoken_name_length=len(spoken_name),
                       request_id=request_id)
             _log.info(
                 "timing_coordinator_roundtrip",
@@ -415,7 +415,7 @@ class RequestCoordinator:
         except Exception as exc:
             _log.error("get_field_value_error",
                       session_id=self._session_id,
-                      spoken_name=spoken_name,
+                      spoken_name_length=len(spoken_name),
                       error=str(exc))
             self._discard(request_id)
             return {"found": False, "value": None}
