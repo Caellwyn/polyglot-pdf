@@ -12,8 +12,19 @@ import type { FormSchema, FormField } from './types/schema';
 
 vi.mock('./components/PDFViewer', () => ({ PDFViewer: () => <div data-testid="pdf" /> }));
 vi.mock('./components/FieldList', () => ({
-  FieldList: ({ onSelectField }: { onSelectField: (id: string) => void }) => (
-    <button onClick={() => onSelectField('f1')}>select-f1</button>
+  // Renders the schema's field-count so we can assert undo/redo propagates to
+  // a SECOND panel (not just FieldEditor) -- criterion 1's "all three panels".
+  FieldList: ({ schema, onSelectField }: {
+    schema: FormSchema | null; onSelectField: (id: string) => void;
+  }) => (
+    <div>
+      {/* render f1's spoken_name FROM the schema so we can assert undo/redo
+          propagates to this panel too (criterion 1's "all three panels"). */}
+      <span data-testid="list-f1-spoken">
+        {schema?.fields.find(f => f.id === 'f1')?.spoken_name ?? '(none)'}
+      </span>
+      <button onClick={() => onSelectField('f1')}>select-f1</button>
+    </div>
   ),
 }));
 vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div /> }));
@@ -55,7 +66,9 @@ async function loadFormAndSelectField() {
   fireEvent.click(screen.getByText('pick-A'));
   await waitFor(() => expect(loader.loadSchema).toHaveBeenCalled());
   fireEvent.click(screen.getByText('select-f1'));
-  await screen.findByText('Original');
+  // FieldEditor shows the selected field's spoken_name once it's loaded+selected.
+  await waitFor(() =>
+    expect(screen.getByTestId('field-spoken').textContent).toBe('Original'));
 }
 
 beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true); });
@@ -66,14 +79,17 @@ describe('App undo/redo', () => {
     render(<App />);
     await loadFormAndSelectField();
 
-    // Edit f1's spoken_name -> EDITED.
+    // Edit f1's spoken_name -> EDITED. BOTH panels (FieldEditor + FieldList)
+    // read from the same `schema`, so both reflect the edit.
     fireEvent.click(screen.getByText('edit-field'));
     expect(screen.getByTestId('field-spoken').textContent).toBe('EDITED');
+    expect(screen.getByTestId('list-f1-spoken').textContent).toBe('EDITED');
     await waitFor(() => expect(screen.getByText(/Unsaved changes/)).toBeTruthy());
 
-    // Undo -> back to Original, dirty cleared (we're at the baseline).
+    // Undo -> back to Original in BOTH panels, dirty cleared (at the baseline).
     fireEvent.click(screen.getByText('Undo'));
     await waitFor(() => expect(screen.getByTestId('field-spoken').textContent).toBe('Original'));
+    expect(screen.getByTestId('list-f1-spoken').textContent).toBe('Original');
     expect(screen.queryByText(/Unsaved changes/)).toBeNull();
 
     // Redo -> EDITED again, dirty set.
@@ -112,9 +128,11 @@ describe('App undo/redo', () => {
     fireEvent.click(screen.getByText('edit-field'));
     await waitFor(() => expect((screen.getByText('Undo') as HTMLButtonElement).disabled).toBe(false));
 
-    // Switch to form B -> history reset, Undo disabled again.
+    // Switch to form B -> history reset, Undo disabled again. Poll the
+    // observable (button disabled) -- the history clears only after the async
+    // load resolves, which is a tick after loadSchema is *called*.
     fireEvent.click(screen.getByText('pick-B'));
-    await waitFor(() => expect(loader.loadSchema).toHaveBeenCalledTimes(2));
-    expect((screen.getByText('Undo') as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() =>
+      expect((screen.getByText('Undo') as HTMLButtonElement).disabled).toBe(true));
   });
 });
