@@ -55,6 +55,21 @@ to avoid a shell/encoding round-trip mangling the keys -- the first dry-run atte
 hit exactly that and produced `?` sentinels). A `--dry-run`/`--apply` one-shot
 helper drove it and was deleted after applying.
 
+### Pre-PR assess (fresh-eyes)
+
+Rubric (revised criterion): PASS. Fresh-eyes ran 2 rounds:
+
+- Round 1: `GAPS-FOUND (1)` -- the classifier's `in_scope()` only matched lines
+  that START with `//` (full-line comments) plus `console.` lines, so a
+  `code; // comment with ->` TRAILING inline comment slipped through. Fresh-eyes
+  found 2 (`schemaFormState.ts:21,24`); re-scanning for the same blind spot
+  surfaced 2 more (`metrics.ts:21,22`). All 4 were `U+2192 ->` arrows; fixed.
+  Re-verified zero non-ASCII in any comment (full OR trailing) or console string.
+- Round 2: `NO-GAPS`.
+
+Lesson reinforced: a positional classifier ("line starts with //") misses trailing
+inline comments -- match the comment SUBSTRING, not the line prefix.
+
 ## Lessons
 
 "Remove all non-ASCII" is the wrong frame for a frontend: a multilingual app
