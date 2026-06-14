@@ -1,5 +1,5 @@
 ---
-date: 2026-06-13
+date: 2026-06-14
 beads: [polyglot-pdf-uj57]
 pr: TBD
 tags: [conventions]
@@ -51,6 +51,13 @@ contain brackets (`p1_checkbox4[0]`; terminology.md L68-77 says keep them), so a
 naive "strip `[N]`" fix would corrupt bracketed fields and is wrong. The fix should
 resolve the incoming key to a canonical schema id by lookup, not by bracket
 surgery.
+
+### Follow-on filed
+
+Fresh-eyes noted ~27 other `frontend/src` files still carry emoji (this bead was
+scoped to `webFormConnection.ts` alone). Filed `np64` to clear the rest, with a
+note to sequence it with/after `tp3` (the console.* spam removal) since some of
+those emoji-bearing log lines may be deleted outright by tp3.
 
 ## Lessons
 
