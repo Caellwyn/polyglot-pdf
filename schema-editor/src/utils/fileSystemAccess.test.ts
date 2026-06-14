@@ -82,7 +82,21 @@ describe('pickSchemaFile', () => {
     expect(got).toBe(handle);
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({
       suggestedName: 'i-90_edited.json',
+      types: expect.arrayContaining([
+        expect.objectContaining({ accept: { 'application/json': ['.json'] } }),
+      ]),
     }));
+  });
+
+  it('invokes showSaveFilePicker with window as the receiver (no Illegal invocation)', async () => {
+    // Real native methods throw "Illegal invocation" when called off a detached
+    // reference. Use a getter that records `this` to prove we call ON window.
+    let receiver: unknown = null;
+    const handle = makeMockHandle();
+    const picker = vi.fn(async function (this: unknown) { receiver = this; return handle; });
+    (window as unknown as Record<string, unknown>).showSaveFilePicker = picker;
+    await pickSchemaFile('x.json');
+    expect(receiver).toBe(window);
   });
 });
 

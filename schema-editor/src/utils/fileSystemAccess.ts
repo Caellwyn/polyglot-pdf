@@ -59,11 +59,14 @@ const JSON_PICKER_TYPES = [{
  * should treat that as a no-op, not an error to surface.
  */
 export async function pickSchemaFile(suggestedName: string): Promise<FsFileHandle> {
-  const picker = (window as WindowWithFsAccess).showSaveFilePicker;
-  if (!picker) {
+  const win = window as WindowWithFsAccess;
+  if (!win.showSaveFilePicker) {
     throw new Error('File System Access API is not supported in this browser');
   }
-  return picker({ suggestedName, types: JSON_PICKER_TYPES });
+  // Call ON window (not via a detached reference): native browser methods bind
+  // their receiver to window, so `const p = window.showSaveFilePicker; p(...)`
+  // throws "Illegal invocation" in real Chrome (a vi.fn() mock would mask it).
+  return win.showSaveFilePicker({ suggestedName, types: JSON_PICKER_TYPES });
 }
 
 /** True when an error is the human cancelling the file picker (not a failure). */

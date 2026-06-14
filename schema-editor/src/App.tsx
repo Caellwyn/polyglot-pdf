@@ -9,6 +9,7 @@ import {
   isFileSystemAccessSupported,
   isUserAbort,
   pickSchemaFile,
+  readSchemaFromHandle,
   writeSchemaToHandle,
   type FsFileHandle,
 } from './utils/fileSystemAccess';
@@ -170,6 +171,29 @@ export const App: React.FC = () => {
     }
   }, [schema, selectedForm, fsAccess, suggestedFileName]);
 
+  // Reload the schema FROM the saved file handle (verifies the round-trip: the
+  // edit just saved is read back, satisfying criterion 1's "reloads cleanly with
+  // the edit present"). Only available once a destination has been chosen.
+  const handleReloadFromFile = React.useCallback(async () => {
+    const handle = fileHandleRef.current;
+    if (!handle) return;
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        'Reload from the saved file? Unsaved changes will be discarded.'
+      );
+      if (!ok) return;
+    }
+    try {
+      const reloaded = await readSchemaFromHandle(handle);
+      setSchema(reloaded);
+      setHasUnsavedChanges(false);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reload schema');
+      console.error('Failed to reload schema from file:', err);
+    }
+  }, [hasUnsavedChanges]);
+
   // Get selected field
   const selectedField = React.useMemo(() => {
     if (!schema || !selectedFieldId) return null;
@@ -230,6 +254,16 @@ export const App: React.FC = () => {
             >
               Reset
             </button>
+            {fsAccess && savedFileName && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => void handleReloadFromFile()}
+                disabled={!schema}
+                title={`Reload the schema from ${savedFileName}`}
+              >
+                Reload from file
+              </button>
+            )}
             {fsAccess && (
               <button
                 className="btn btn-secondary"
