@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/log_schemas.py backend/utils/confirmation_logger.py backend/utils/token_file_logger.py backend/utils/dev_file_logger.py backend/routes/pdf_fill_routes.py backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/tests/test_no_pii_logging.py frontend/src/shared/metrics.ts
 
-*Last updated: 2026-06-13. bd rwjy: CallbackHandler now receives form_id/form_session_id; confirmation logging fires field_id + method only, never field value -- PII policy unchanged. Prior: bd polyglot-pdf-c5t (GoAway) added on_go_away in callback_handler.py; neither path logs PII/PHI.*
+*Last updated: 2026-06-14. bd polyglot-pdf-uov.15: the never-logged guard is now deny-by-default across all backend files (test_no_pii_logging_anywhere_in_backend sweep), which caught + fixed two live leaks (spoken_name=, message=). See [../journal/entries/2026-06-14-bd-uov.15-t3-4-extend-pii-never-logged-guard-coverage.md](../journal/entries/2026-06-14-bd-uov.15-t3-4-extend-pii-never-logged-guard-coverage.md).*
 
 This is an immigration-form app: it handles A-numbers, names, addresses, and dates
 of birth. Those are PII/PHI. Anything emitted at INFO/WARNING reaches stdout →
@@ -49,15 +49,20 @@ non-metadata value in a `_log.*(...)` call; and (2) a sensitive variable
 (`arguments`, `value`, `text`, `field_values`, …) interpolated into a **positional
 `print(...)` sink**. It is a static check, not a runtime scrubber.
 
-The guard's coverage is still **scoped, not exhaustive**: only the `GUARDED_FILES`
-list and only these two shapes (kwargs in `_log.*` calls + `print()` f-strings).
-A leak in an unlisted module, or via a different sink (e.g. `logging.getLogger`,
-`sys.stderr.write`), would not be caught — so widen `GUARDED_FILES` when a new
-value-handling logger appears, and don't read a green guard as proof the whole
-codebase is clean.
+The guard is **deny-by-default across the backend**: alongside the labelled
+per-file `GUARDED_FILES` tests, `test_no_pii_logging_anywhere_in_backend` sweeps
+EVERY non-test / non-probe / non-script backend `.py` with the same detectors, so
+a value-handling logger in a brand-new module is covered the moment it lands — no
+`GUARDED_FILES` edit required (`polyglot-pdf-uov.15`). The sweep self-checks that
+it scanned `>5` files so a broken path glob fails loudly rather than passing
+vacuously. The remaining blind spot is the **sink/shape**, not the file set: only
+two shapes are detected (kwargs in `_log.*` calls + `print()` f-strings), so a
+leak via a different sink (`logging.getLogger`, `sys.stderr.write`) still would
+not be caught. Keep new logging on `_log.*` with redacted (`*_length`/`*_count`)
+kwargs, and don't read a green guard as proof a non-`_log` sink is clean.
 
 The `dev_file_logger.py` gate is the one deliberate PHI sink, and it is closed in
 prod by the absence of `.env.DEV` (auto-detected at import — no manual flag to
 forget to flip).
 
-*Last updated: 2026-06-13. bd rwjy: CallbackHandler now receives form_id/form_session_id; confirmation logging fires field_id + method only, never field value -- PII policy unchanged. Prior: bd polyglot-pdf-c5t (GoAway) added on_go_away in callback_handler.py; neither path logs PII/PHI.*
+*Last updated: 2026-06-14. bd polyglot-pdf-uov.15: the never-logged guard is now deny-by-default across all backend files (test_no_pii_logging_anywhere_in_backend sweep), which caught + fixed two live leaks (spoken_name=, message=). See [../journal/entries/2026-06-14-bd-uov.15-t3-4-extend-pii-never-logged-guard-coverage.md](../journal/entries/2026-06-14-bd-uov.15-t3-4-extend-pii-never-logged-guard-coverage.md).*
