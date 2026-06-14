@@ -15,6 +15,7 @@ import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
+import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
@@ -57,6 +58,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
+	// User dismissed the connection-timeout modal without reconnecting (bd
+	// polyglot-pdf-jf6w.2); reset when status leaves reconnect_failed.
+	const [reconnectModalDismissed, setReconnectModalDismissed] = useState(false)
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
@@ -189,6 +193,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	useEffect(() => {
 		statusRef.current = status
 	}, [status])
+
+	// Clear the connection-timeout-modal dismissal once the connection leaves the
+	// terminal reconnect_failed state (bd polyglot-pdf-jf6w.2).
+	useEffect(() => {
+		if (status.toLowerCase() !== 'reconnect_failed' && reconnectModalDismissed) {
+			setReconnectModalDismissed(false)
+		}
+	}, [status, reconnectModalDismissed])
 
 	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected (mirror of
 	// the desktop overlay). onNativeVadMode fires before status flips to
@@ -1077,6 +1089,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				selectedLanguage={selectedLanguage}
 				onListenAgain={handleDisclaimerListenAgain}
 				onAgree={handleDisclaimerAgree}
+			/>
+			{/* Connection-timeout modal on terminal reconnect failure (bd
+			    polyglot-pdf-jf6w.2). */}
+			<ConnectionTimeoutModal
+				isOpen={status.toLowerCase() === 'reconnect_failed' && !reconnectModalDismissed}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => { setReconnectModalDismissed(false); handleConnect() }}
+				onCancel={() => setReconnectModalDismissed(true)}
 			/>
 			{/* Main FAB */}
 			<div className="vff-fab" onClick={() => setIsExpanded(!isExpanded)}>
