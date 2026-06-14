@@ -46,6 +46,12 @@ export type ConnectionStatus =
   | "switching_section"
   | "reconnecting"
   | "idle_timeout"
+  // Auto-reconnect ran out of attempts (or could not run) on an UNEXPECTED
+  // drop -- a terminal, non-self-healing failure that needs an explicit user
+  // action to recover. Distinct from "disconnected" (which also covers the
+  // intentional/transient cases) so the UI can surface the connection-timeout
+  // modal only on genuine give-up, not on every blip (bd polyglot-pdf-jf6w.3).
+  | "reconnect_failed"
   | "error";
 
 export interface ConnectionCallbacks {
@@ -1698,8 +1704,15 @@ export class WebFormConnection {
     // Attempt reconnect if not intentionally disconnected
     if (this.status !== "disconnected" && this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect();
+    } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      // Auto-reconnect exhausted every attempt on an unexpected drop -- this is
+      // a terminal failure the user must act on, so surface the distinct
+      // reconnect_failed status that drives the connection-timeout modal rather
+      // than the generic disconnected (bd polyglot-pdf-jf6w.3).
+      this.setStatus("reconnect_failed", "handleClose:max-retries");
     } else {
-      this.setStatus("disconnected", "handleClose:max-retries");
+      // status was already "disconnected" (an intentional teardown) -- stay put.
+      this.setStatus("disconnected", "handleClose:intentional");
     }
   }
 
