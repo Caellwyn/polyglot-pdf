@@ -166,6 +166,18 @@ async def test_dispatcher_reads_the_declared_required_args():
     the declared arg name (so a handler that read the wrong key would fail)."""
     handler = _make_handler()
 
+    # update_form_fields reads BOTH declared required args (field_id, value) and
+    # hands the service {field_id: value}. Asserting the exact dict catches a
+    # rename of either key in _parse_update_arguments (e.g. field_id -> field_name
+    # would yield {} and fail this) -- this is the highest-traffic tool, so its
+    # arg-reading must be pinned too (fresh-eyes).
+    await handler.on_tool_call(
+        "update_form_fields", {"field_id": "p1_first_name", "value": "Jane"}
+    )
+    handler._handle_update_fields.assert_called_once_with(
+        handler._session_id, {"p1_first_name": "Jane"}
+    )
+
     await handler.on_tool_call("switch_section", {"section_identifier": "3"})
     handler._handle_switch_section.assert_awaited_once_with("3")
 
