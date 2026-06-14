@@ -146,7 +146,7 @@ describe('WebFormConnection auto-reconnect (bd polyglot-pdf-uov.5)', () => {
     expect(MockWebSocket.instances.length).toBe(4) // attempt 3 fired at 4000ms
   })
 
-  it('stops reconnecting after maxReconnectAttempts (5) and lands on disconnected', async () => {
+  it('stops reconnecting after maxReconnectAttempts (5) and lands on reconnect_failed', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await connectAndOpen(conn)
 
@@ -164,11 +164,14 @@ describe('WebFormConnection auto-reconnect (bd polyglot-pdf-uov.5)', () => {
     }
 
     // The 5th drop hit the cap: reconnectAttempts == maxReconnectAttempts, so
-    // handleClose lands on 'disconnected' rather than scheduling a 6th attempt.
+    // handleClose schedules no 6th attempt and surfaces the distinct terminal
+    // 'reconnect_failed' status (an unexpected-drop give-up the user must act on,
+    // which drives the connection-timeout modal -- bd polyglot-pdf-jf6w.3), not
+    // the generic 'disconnected'.
     const countAtCap = MockWebSocket.instances.length
     vi.advanceTimersByTime(60000) // far past any backoff
     expect(MockWebSocket.instances.length).toBe(countAtCap) // no further sockets
-    expect(conn.getStatus()).toBe('disconnected')
+    expect(conn.getStatus()).toBe('reconnect_failed')
   })
 
   it('resets the attempt counter on a SUCCESSFUL open (the cap is per-outage, not lifetime)', async () => {
