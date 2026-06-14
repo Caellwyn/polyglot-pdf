@@ -274,6 +274,30 @@ def _validate_text(field: Dict[str, Any], value: Any, field_id: str, field_name:
     return errors
 
 
+def _option_values(options: List[Any]) -> List[str]:
+    """Extract the comparable string values from a field's options list.
+
+    Options come in two schema shapes: plain strings, or {value, label} dicts
+    (the generated form-kits use the dict shape). Both select/radio and checkbox
+    validation -- and the error message that lists "valid=..." options -- need the
+    bare string values, never the dict objects. Returning dicts here was the d24n
+    bug: a dict-shaped option reached `", ".join(valid_options)` in
+    callback_handler._build_update_fields_response and raised
+    `TypeError: sequence item 0: expected str instance, dict found`, which the
+    Live adapter swallowed -- silently failing the update_form_fields call
+    (bd polyglot-pdf-jnjj.1 / d24n).
+    """
+    values: List[str] = []
+    for opt in options:
+        if isinstance(opt, dict):
+            opt_value = opt.get("value")
+            if opt_value is not None:
+                values.append(str(opt_value))
+        else:
+            values.append(str(opt))
+    return values
+
+
 def _validate_select(field: Dict[str, Any], value: Any, field_id: str, field_name: str) -> List[ValidationError]:
     """Validate select/radio field against options list
 
@@ -286,16 +310,7 @@ def _validate_select(field: Dict[str, Any], value: Any, field_id: str, field_nam
     value_str = str(value)
 
     # Extract valid values from options (handle both string and dict formats)
-    valid_values = []
-    for opt in options:
-        if isinstance(opt, dict):
-            # Option is {value: "...", label: "..."}
-            opt_value = opt.get("value")
-            if opt_value is not None:
-                valid_values.append(str(opt_value))
-        else:
-            # Option is a plain string
-            valid_values.append(str(opt))
+    valid_values = _option_values(options)
 
     # Check if value is in valid values
     if value_str not in valid_values:
@@ -331,13 +346,18 @@ def _validate_checkbox(field: Dict[str, Any], value: Any, field_id: str, field_n
     else:
         selected_values = [str(value)]
 
+    # Compare against the bare string option values (options may be {value, label}
+    # dicts; comparing a selected string against a dict never matches, and passing
+    # the raw dicts on to the error message crashed the formatter -- d24n).
+    valid_values = _option_values(options)
+
     # Check each selected value is in options
-    invalid_values = [v for v in selected_values if v not in options]
+    invalid_values = [v for v in selected_values if v not in valid_values]
     if invalid_values:
         return [ValidationError(
             field_id, field_name, value, "options",
             f"Invalid: {', '.join(invalid_values)}",
-            valid_options=options
+            valid_options=valid_values
         )]
 
     return []
