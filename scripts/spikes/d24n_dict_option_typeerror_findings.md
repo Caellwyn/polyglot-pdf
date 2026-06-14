@@ -63,4 +63,3 @@ confirmed fields: 18/20`. Both d24n / jnjj.1 exit criteria met (C1: zero TypeErr
 events + `errors: []`; C2: confirmed rate >= 18/20). The raw `costs_*.meta.json`
 sidecar is reproducible from the command above and is intentionally not committed
 (the `data/` dir holds many such run artifacts); this table is the durable record.
-```
