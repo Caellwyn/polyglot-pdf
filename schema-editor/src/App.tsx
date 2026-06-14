@@ -13,15 +13,21 @@ import {
   writeSchemaToHandle,
   type FsFileHandle,
 } from './utils/fileSystemAccess';
-import type { FormSchema, FormField, FormConfig } from './types/schema';
+import { useSchemaHistory } from './hooks/useSchemaHistory';
+import type { FormField, FormConfig } from './types/schema';
 
 export const App: React.FC = () => {
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
-  const [schema, setSchema] = React.useState<FormSchema | null>(null);
+  // Schema + undo/redo history (bd v3y8). `commit` is a user edit, `load` a
+  // fresh load, `markSaved` clears the dirty flag, `clear` drops the schema.
+  const {
+    schema, isDirty: hasUnsavedChanges, canUndo, canRedo,
+    commit: commitSchema, load: loadSchemaState, markSaved, clear: clearSchema,
+    undo, redo,
+  } = useSchemaHistory();
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   // The File System Access handle the human picked: once set, saves write
   // straight to that file with no re-prompt (bd s1e2). Cleared on form switch.
   const fileHandleRef = React.useRef<FsFileHandle | null>(null);
@@ -47,16 +53,15 @@ export const App: React.FC = () => {
 
     try {
       const loadedSchema = await loadSchema(form.schemaPath);
-      setSchema(loadedSchema);
+      loadSchemaState(loadedSchema); // fresh baseline -> history cleared
       setSelectedForm(form);
-      setHasUnsavedChanges(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load schema');
       console.error('Failed to load schema:', err);
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, loadSchemaState]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -67,9 +72,8 @@ export const App: React.FC = () => {
       fields: schema.fields.map(f => (f.id === updatedField.id ? updatedField : f)),
     };
 
-    setSchema(newSchema);
-    setHasUnsavedChanges(true);
-  }, [schema]);
+    commitSchema(newSchema);
+  }, [schema, commitSchema]);
 
   // Reorder fields within a section
   const handleReorderFields = React.useCallback((sectionId: string, fieldIds: string[]) => {
@@ -82,9 +86,8 @@ export const App: React.FC = () => {
       return section;
     });
 
-    setSchema({ ...schema, sections: newSections });
-    setHasUnsavedChanges(true);
-  }, [schema]);
+    commitSchema({ ...schema, sections: newSections });
+  }, [schema, commitSchema]);
 
   // Move option from one field to another
   const handleMoveOption = React.useCallback((sourceFieldId: string, optionIndex: number, targetFieldId: string) => {
@@ -128,9 +131,8 @@ export const App: React.FC = () => {
       return f;
     });
 
-    setSchema({ ...schema, fields: newFields });
-    setHasUnsavedChanges(true);
-  }, [schema]);
+    commitSchema({ ...schema, fields: newFields });
+  }, [schema, commitSchema]);
 
   // Suggested filename for a fresh save (the form's schema basename, *_edited).
   const suggestedFileName = React.useCallback(() => {
@@ -149,7 +151,7 @@ export const App: React.FC = () => {
       // Fallback: browsers without the API get the original download behavior.
       const name = suggestedFileName();
       saveSchema(schema, name);
-      setHasUnsavedChanges(false);
+      markSaved();
       setError(null);
       return;
     }
@@ -162,14 +164,14 @@ export const App: React.FC = () => {
       }
       await writeSchemaToHandle(handle, schema);
       setSavedFileName(handle.name);
-      setHasUnsavedChanges(false);
+      markSaved();
       setError(null);
     } catch (err) {
       if (isUserAbort(err)) return; // human cancelled the picker -- no-op
       setError(err instanceof Error ? err.message : 'Failed to save schema');
       console.error('Failed to save schema:', err);
     }
-  }, [schema, selectedForm, fsAccess, suggestedFileName]);
+  }, [schema, selectedForm, fsAccess, suggestedFileName, markSaved]);
 
   // Reload the schema FROM the saved file handle (verifies the round-trip: the
   // edit just saved is read back, satisfying criterion 1's "reloads cleanly with
@@ -185,14 +187,13 @@ export const App: React.FC = () => {
     }
     try {
       const reloaded = await readSchemaFromHandle(handle);
-      setSchema(reloaded);
-      setHasUnsavedChanges(false);
+      loadSchemaState(reloaded); // fresh baseline -> history cleared
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reload schema');
       console.error('Failed to reload schema from file:', err);
     }
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, loadSchemaState]);
 
   // Get selected field
   const selectedField = React.useMemo(() => {
@@ -203,16 +204,28 @@ export const App: React.FC = () => {
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + S to save; Cmd/Ctrl + Shift + S for Save As (new destination)
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      // Cmd/Ctrl + S to save; + Shift for Save As (new destination)
+      if (e.key === 's') {
         e.preventDefault();
         void handleSave(e.shiftKey);
+        return;
+      }
+      // Cmd/Ctrl + Z = undo; Cmd/Ctrl + Shift + Z (or Cmd/Ctrl + Y) = redo
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        redo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave]);
+  }, [handleSave, undo, redo]);
 
   // Warn on page unload if unsaved changes
   React.useEffect(() => {
@@ -247,6 +260,22 @@ export const App: React.FC = () => {
             ) : null}
           </div>
           <div className="flex gap-2">
+            <button
+              className="btn btn-secondary"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Cmd+Z)"
+            >
+              Undo
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Cmd+Shift+Z)"
+            >
+              Redo
+            </button>
             <button
               className="btn btn-secondary"
               onClick={() => window.location.reload()}
@@ -324,7 +353,7 @@ export const App: React.FC = () => {
               className="btn btn-primary"
               onClick={() => {
                 setError(null);
-                setSchema(null);
+                clearSchema();
               }}
             >
               Dismiss
