@@ -237,7 +237,7 @@ export class WebFormConnection {
 
     // Clear idle timeout flag on reconnect (user manually clicked reconnect)
     if (this.idleTimedOut) {
-      console.log('[WebFormConnection] 🔄 Clearing idle timeout flag for manual reconnect');
+      console.log('[WebFormConnection] [reconnect] Clearing idle timeout flag for manual reconnect');
       this.idleTimedOut = false;
     }
 
@@ -451,7 +451,7 @@ export class WebFormConnection {
 
         case "gemini_session_restarted":
           // Backend confirms Gemini session has been restarted successfully
-          console.log('[WebFormConnection] ✅ Gemini session restarted successfully');
+          console.log('[WebFormConnection] [OK] Gemini session restarted successfully');
           // Trigger callback to update UI (ConnectionManager will set status to 'connected')
           if (this.callbacks.onSessionRestarted) {
             this.callbacks.onSessionRestarted();
@@ -461,7 +461,7 @@ export class WebFormConnection {
         case "idle_timeout":
           // Backend is closing connection due to inactivity
           // Set flag to prevent auto-reconnect, require manual reconnect
-          console.log('[WebFormConnection] ⏱️ Idle timeout received from backend:', message);
+          console.log('[WebFormConnection] [timer] Idle timeout received from backend:', message);
           this.idleTimedOut = true;
           this.setStatus("idle_timeout", "handleMessage:idle_timeout");
           // WebSocket will close shortly, handleClose() will see idleTimedOut flag
@@ -474,7 +474,7 @@ export class WebFormConnection {
           // idle_timeout we do NOT set a no-reconnect flag, because a GoAway is a
           // server lifecycle reset (reconnect IS wanted), not a user-inactivity
           // close. The reconnect policy is the consumer's (bd follow-on).
-          console.log('[WebFormConnection] 👋 GoAway received from Gemini; time_left:', message.time_left);
+          console.log('[WebFormConnection] [wave] GoAway received from Gemini; time_left:', message.time_left);
           if (this.callbacks.onGoAway) {
             this.callbacks.onGoAway(message.time_left ?? null);
           }
@@ -502,7 +502,7 @@ export class WebFormConnection {
     if (jit_mode_enabled !== undefined) {
       this.state = SchemaFormStateManager.setJitMode(this.state, jit_mode_enabled);
       if (jit_mode_enabled) {
-        console.log('[WebFormConnection] ✅ JIT mode enabled by backend');
+        console.log('[WebFormConnection] [OK] JIT mode enabled by backend');
       }
     }
 
@@ -535,7 +535,7 @@ export class WebFormConnection {
           spoken_language: this.state.selectedLanguage,
           next_field_hint: nextFieldHint
         });
-        console.log('[WebFormConnection] ✅ Auto-sent language message for reconnect:', this.state.selectedLanguage);
+        console.log('[WebFormConnection] [OK] Auto-sent language message for reconnect:', this.state.selectedLanguage);
       }
     }
 
@@ -602,7 +602,7 @@ export class WebFormConnection {
             readOnly
           });
 
-          console.warn(`[WebFormConnection] ❌ Field ${field.id} is locked:`, lockedReason);
+          console.warn(`[WebFormConnection] [X] Field ${field.id} is locked:`, lockedReason);
           continue; // Skip applying this update
         }
 
@@ -1299,11 +1299,11 @@ export class WebFormConnection {
       this.resetUnconfirmableTracking();
     }
 
-    // 🆕 AUTO-DETECT SECTION COMPLETION
+    // [NEW] AUTO-DETECT SECTION COMPLETION
     // Check if all fields in current section are now confirmed
     const nextField = computeNextField(this.state, { skipConfirmed: true });
 
-    console.log('[WebFormConnection] 🔍 Section completion check:', {
+    console.log('[WebFormConnection] [check] Section completion check:', {
       currentSectionId: this.state.currentSectionId,
       nextFieldInCurrentSection: nextField?.id || 'NONE',
       allFieldsConfirmed: nextField === null
@@ -1313,17 +1313,17 @@ export class WebFormConnection {
       // All fields in current section are confirmed!
       const nextSection = SchemaFormStateManager.getNextSection(this.state);
 
-      console.log('[WebFormConnection] 🔍 Next section lookup:', {
+      console.log('[WebFormConnection] [check] Next section lookup:', {
         currentSectionId: this.state.currentSectionId,
         nextSectionId: nextSection?.id || 'NONE',
         nextSectionLabel: nextSection?.label || 'N/A'
       });
 
       if (nextSection) {
-        console.log('[WebFormConnection] ✅ Section complete! Auto-switching to:', nextSection.id);
+        console.log('[WebFormConnection] [OK] Section complete! Auto-switching to:', nextSection.id);
 
         // CRITICAL: Stop all audio processing immediately to prevent overlap with new session
-        console.log('[WebFormConnection] 🛑 Stopping audio queue before section switch');
+        console.log('[WebFormConnection] [stop] Stopping audio queue before section switch');
         this.audioQueue = []; // Clear any queued audio from old session
         this.isProcessingAudio = false; // Stop processing loop
 
@@ -1336,7 +1336,7 @@ export class WebFormConnection {
         // Note: wsUrl parameter not used (kept for API compatibility)
         await this.switchToSection(nextSection.id, '');
       } else {
-        console.log('[WebFormConnection] 🎉 Form complete!');
+        console.log('[WebFormConnection] [done] Form complete!');
         // Notify UI that entire form is complete
         if (this.callbacks.onFormComplete) {
           this.callbacks.onFormComplete();
@@ -1561,9 +1561,9 @@ export class WebFormConnection {
 
     // Log first chunk and then every 100th chunk to reduce log spam
     if (this.audioChunkCount === 1) {
-      console.log(`[WebFormConnection] 📥 First audio chunk received from server (${arrayBuffer.byteLength} bytes)`);
+      console.log(`[WebFormConnection] [recv] First audio chunk received from server (${arrayBuffer.byteLength} bytes)`);
     } else if (this.audioChunkCount % 100 === 0) {
-      console.log(`[WebFormConnection] 📥 Audio chunk #${this.audioChunkCount}`);
+      console.log(`[WebFormConnection] [recv] Audio chunk #${this.audioChunkCount}`);
     }
 
     // Queue audio for processing
@@ -1651,7 +1651,7 @@ export class WebFormConnection {
     }
 
     // Log close details for debugging
-    console.log('[WebFormConnection] 🔌 WebSocket closed', {
+    console.log('[WebFormConnection] [plug] WebSocket closed', {
       code: event?.code,
       reason: event?.reason,
       wasClean: event?.wasClean,
@@ -1690,7 +1690,7 @@ export class WebFormConnection {
     // Don't auto-reconnect if connection was closed due to idle timeout
     // User must manually click "Reconnect" button to resume
     if (this.idleTimedOut) {
-      console.log('[WebFormConnection] ⏱️ Idle timeout - no auto-reconnect, user must manually reconnect');
+      console.log('[WebFormConnection] [timer] Idle timeout - no auto-reconnect, user must manually reconnect');
       this.setStatus("idle_timeout", "handleClose:idle-timeout");
       return;
     }
@@ -1772,7 +1772,7 @@ export class WebFormConnection {
 
       // DEBUG: Log full details if type is undefined (suspicious message)
       if (message.type === undefined) {
-        console.error('[WebFormConnection] ⚠️ SUSPICIOUS: Sending message without type!', {
+        console.error('[WebFormConnection] [warn] SUSPICIOUS: Sending message without type!', {
           size: jsonStr.length,
           keys: Object.keys(message),
           preview: jsonStr.substring(0, 200),
@@ -1824,14 +1824,14 @@ export class WebFormConnection {
    * Signals the beginning of user speech before sending audio chunks.
    */
   sendActivityStart(): void {
-    console.log(`[WebFormConnection] 📤 sendActivityStart() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    console.log(`[WebFormConnection] [send] sendActivityStart() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error(`[WebFormConnection] ❌ Cannot send activity_start - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
+      console.error(`[WebFormConnection] [X] Cannot send activity_start - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
     }
 
-    console.log('[WebFormConnection] 📤 Sending activity_start message to backend')
+    console.log('[WebFormConnection] [send] Sending activity_start message to backend')
     this.send({
       type: 'vad_activity_start',
       timestamp: Date.now(),
@@ -1843,10 +1843,10 @@ export class WebFormConnection {
    * Signals the end of user speech and flushes Gemini's cached audio buffer.
    */
   async sendActivityEnd(): Promise<void> {
-    console.log(`[WebFormConnection] 📤 sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
+    console.log(`[WebFormConnection] [send] sendActivityEnd() called - WebSocket state: ${this.ws ? this.ws.readyState : 'null'} (OPEN=${WebSocket.OPEN})`)
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error(`[WebFormConnection] ❌ Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
+      console.error(`[WebFormConnection] [X] Cannot send activity_end - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`)
       return;
     }
 
@@ -1854,11 +1854,11 @@ export class WebFormConnection {
     // This ensures Gemini receives all audio chunks before we close the turn
     const bufferedBefore = this.ws.bufferedAmount;
     if (bufferedBefore > 0) {
-      console.log(`[WebFormConnection] ⏳ Waiting for ${bufferedBefore} bytes of audio to drain before activity_end`)
+      console.log(`[WebFormConnection] [wait] Waiting for ${bufferedBefore} bytes of audio to drain before activity_end`)
       await this.waitForBufferDrain(2000); // Wait up to 2 seconds for audio to send
     }
 
-    console.log('[WebFormConnection] 📤 Sending activity_end message to backend')
+    console.log('[WebFormConnection] [send] Sending activity_end message to backend')
     this.send({
       type: 'vad_activity_end',
       timestamp: Date.now(),
@@ -1913,7 +1913,7 @@ export class WebFormConnection {
       return;
     }
 
-    console.log('[WebFormConnection] 🚪 Ending Gemini session (keeping WebSocket alive)');
+    console.log('[WebFormConnection] [door] Ending Gemini session (keeping WebSocket alive)');
     this.send({
       type: 'end_gemini_session',
     });
