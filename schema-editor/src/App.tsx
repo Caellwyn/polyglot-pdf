@@ -5,6 +5,13 @@ import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
 import { ValidationPanel } from './components/ValidationPanel';
 import { loadSchema, saveSchema } from './utils/schemaLoader';
+import {
+  isFileSystemAccessSupported,
+  isUserAbort,
+  pickSchemaFile,
+  writeSchemaToHandle,
+  type FsFileHandle,
+} from './utils/fileSystemAccess';
 import type { FormSchema, FormField, FormConfig } from './types/schema';
 
 export const App: React.FC = () => {
@@ -14,6 +21,11 @@ export const App: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  // The File System Access handle the human picked: once set, saves write
+  // straight to that file with no re-prompt (bd s1e2). Cleared on form switch.
+  const fileHandleRef = React.useRef<FsFileHandle | null>(null);
+  const [savedFileName, setSavedFileName] = React.useState<string | null>(null);
+  const fsAccess = React.useMemo(isFileSystemAccessSupported, []);
 
   // Load schema when form is selected
   const handleSelectForm = React.useCallback(async (form: FormConfig) => {
@@ -27,6 +39,10 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSelectedFieldId(null);
+    // A new form means a new destination -- drop the prior file handle so the
+    // next save prompts for where to put THIS form's schema.
+    fileHandleRef.current = null;
+    setSavedFileName(null);
 
     try {
       const loadedSchema = await loadSchema(form.schemaPath);
@@ -115,18 +131,44 @@ export const App: React.FC = () => {
     setHasUnsavedChanges(true);
   }, [schema]);
 
-  // Save schema
-  const handleSave = React.useCallback(() => {
+  // Suggested filename for a fresh save (the form's schema basename, *_edited).
+  const suggestedFileName = React.useCallback(() => {
+    const filename = selectedForm?.schemaPath.split('/').pop() || 'schema.json';
+    return filename.replace('.json', '_edited.json');
+  }, [selectedForm]);
+
+  // Save schema. With File System Access support: the FIRST save prompts for a
+  // destination, every subsequent save writes straight to that same file (the
+  // one-step re-save, bd s1e2). Without it: fall back to the download path.
+  // `forcePicker` (Save As) always re-prompts for a new destination.
+  const handleSave = React.useCallback(async (forcePicker = false) => {
     if (!schema || !selectedForm) return;
 
-    const filename = selectedForm.schemaPath.split('/').pop() || 'schema.json';
-    const newFilename = filename.replace('.json', '_edited.json');
+    if (!fsAccess) {
+      // Fallback: browsers without the API get the original download behavior.
+      const name = suggestedFileName();
+      saveSchema(schema, name);
+      setHasUnsavedChanges(false);
+      setError(null);
+      return;
+    }
 
-    saveSchema(schema, newFilename);
-    setHasUnsavedChanges(false);
-
-    alert(`Schema saved as ${newFilename}`);
-  }, [schema, selectedForm]);
+    try {
+      let handle = fileHandleRef.current;
+      if (!handle || forcePicker) {
+        handle = await pickSchemaFile(suggestedFileName());
+        fileHandleRef.current = handle;
+      }
+      await writeSchemaToHandle(handle, schema);
+      setSavedFileName(handle.name);
+      setHasUnsavedChanges(false);
+      setError(null);
+    } catch (err) {
+      if (isUserAbort(err)) return; // human cancelled the picker -- no-op
+      setError(err instanceof Error ? err.message : 'Failed to save schema');
+      console.error('Failed to save schema:', err);
+    }
+  }, [schema, selectedForm, fsAccess, suggestedFileName]);
 
   // Get selected field
   const selectedField = React.useMemo(() => {
@@ -137,10 +179,10 @@ export const App: React.FC = () => {
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + S to save
+      // Cmd/Ctrl + S to save; Cmd/Ctrl + Shift + S for Save As (new destination)
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        void handleSave(e.shiftKey);
       }
     };
 
@@ -170,11 +212,15 @@ export const App: React.FC = () => {
             <h1 className="text-xl font-bold text-gray-900">
               📄 PDF Schema Editor
             </h1>
-            {hasUnsavedChanges && (
+            {hasUnsavedChanges ? (
               <span className="text-sm text-yellow-600 font-medium">
                 • Unsaved changes
               </span>
-            )}
+            ) : savedFileName ? (
+              <span className="text-sm text-green-600 font-medium">
+                • Saved to {savedFileName}
+              </span>
+            ) : null}
           </div>
           <div className="flex gap-2">
             <button
@@ -184,12 +230,27 @@ export const App: React.FC = () => {
             >
               Reset
             </button>
+            {fsAccess && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => void handleSave(true)}
+                disabled={!schema}
+                title="Choose a new destination file (Cmd+Shift+S)"
+              >
+                Save As...
+              </button>
+            )}
             <button
               className="btn btn-primary"
-              onClick={handleSave}
+              onClick={() => void handleSave(false)}
               disabled={!schema || !hasUnsavedChanges}
+              title={fsAccess
+                ? (fileHandleRef.current
+                    ? 'Save to the chosen file (Cmd+S)'
+                    : 'Choose a destination and save (Cmd+S)')
+                : 'Download edited schema (Cmd+S)'}
             >
-              Save Schema (Cmd+S)
+              {fsAccess ? 'Save (Cmd+S)' : 'Download (Cmd+S)'}
             </button>
           </div>
         </div>
@@ -267,7 +328,7 @@ export const App: React.FC = () => {
                 <li>• Click fields in the list or PDF viewer</li>
                 <li>• Edit properties in the right panel</li>
                 <li>• Changes save automatically</li>
-                <li>• Press Cmd+S to download edited schema</li>
+                <li>• Press Cmd+S to save the edited schema (Cmd+Shift+S to save to a new file)</li>
               </ul>
             </div>
           </div>
