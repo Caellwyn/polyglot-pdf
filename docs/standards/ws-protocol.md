@@ -113,6 +113,8 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `disclaimer_read_initiated` | websocket_routes.py:392 | Disclaimer read started; carries `language`. |
 | `language_changed` | websocket_routes.py:449 | Fill language changed. |
 | `spoken_language_changed` | websocket_routes.py:464 | Spoken language changed. |
+| `pong` | websocket_routes.py:285 | Liveness reply to a client `ping`; echoes `ts`. |
+| `stats` | websocket_routes.py:287 | Reply to a client `stats` request (`{message: "ok"}`). |
 | `error` | many sites | Error with `code` (+ `reason`/`message`). |
 
 ### Frontend -> backend
@@ -141,7 +143,8 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `change_spoken_language` | webFormConnection.ts:540 | Change the disclaimer/spoken language. |
 | `vad_activity_start` / `vad_activity_end` | webFormConnection.ts:1851 / :1878 | Manual activity signals (non-native-VAD mode). |
 | `end_gemini_session` | webFormConnection.ts:1933 | Ask the backend to end the Gemini session. |
-| `ping` | -- | Liveness; backend replies `pong`. |
+| `ping` | -- | Liveness; backend replies `pong` (echoing `ts`). |
+| `stats` | -- | Stats/health probe; backend replies `stats` (`{message: "ok"}`). |
 
 ---
 

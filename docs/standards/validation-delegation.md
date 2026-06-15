@@ -90,8 +90,12 @@ The validator's text output, parsed into:
   no-conflict verdict). An empty list is the explicit "all clear" signal, not a
   missing key.
 - Each conflict carries:
-  - `field_ids`: the 2+ field IDs that disagree (always field IDs, never field
-    values -- IDs are the safe-to-log handle per the PII policy).
+  - `field_ids`: the field IDs the conflict implicates -- **1 or more** (always
+    field IDs, never field values -- IDs are the safe-to-log handle per the PII
+    policy). Cross-field contradictions (zip-vs-state) carry 2+; a SINGLE-field
+    semantic error (e.g. a future-dated birthday) carries exactly 1. Requiring 2+
+    would make the single-field checks this validator advertises unrepresentable,
+    so one ID is valid.
   - `reason`: a short, human-readable explanation, in a form the live model can
     relay to the user. It MAY quote the conflicting values (it is an in-band
     instruction to the model, not a log line -- see the PII sign-off below for
@@ -112,8 +116,19 @@ verdict in a typed envelope so sender and receiver agree:
 i.e. the envelope is the raw verdict with a top-level `"type": "validation_result"`
 added (the `conflicts` list is spread at top level, NOT nested under a `verdict`
 key). The STEERING directive (contract 3) is a SEPARATE thing -- it goes to the
-Live model, not over this wire message. A clean verdict (`conflicts: []`) produces
-neither a steer nor (optionally) a `validation_result` push.
+Live model, not over this wire message.
+
+**`validation_result` is sent for EVERY validated boundary, including a clean
+verdict.** A clean verdict is `{"type": "validation_result", "conflicts": []}`.
+This is REQUIRED, not optional: the ordering rule (contract 4) pauses the section
+auto-advance until the validator answers, so the client needs a deterministic
+"clean -> resume" signal. Without a mandatory clean response the no-conflict path
+would stall until the fail-OPEN timeout (or hang, depending on B4). So: clean
+verdict -> `validation_result` with empty `conflicts` (the client resumes the
+switch); conflicts -> `validation_result` with the conflicts AND a steer to the
+Live model (the client stays in-section until resolved); validator outage ->
+fail-OPEN (the client resumes after the timeout). Every boundary gets exactly one
+of these three terminal signals.
 
 ---
 
@@ -145,10 +160,12 @@ NOT confirmation/section bookkeeping.
   (default `false`). **This is how the max-resteer bound survives the stateless
   backend** (contract 3, invariant 2): the backend MUST NOT remember which fields
   it has steered on, so the CLIENT owns that marker in `sessionStorage` alongside
-  the field state and sends it in every payload. B5 suppresses any conflict whose
-  `field_ids` are ALL already `steered: true`; when it does steer, the client sets
-  `steered: true` for those fields. Without this client-sent flag the loop-prevention
-  rule could not be honored without violating the stateless invariant.
+  the field state and sends it in every payload. B5 suppresses any conflict that
+  references an already-`steered: true` field (per-field, not "all field_ids
+  steered" -- see contract 3 invariant 2 for why), and sets `steered: true` on the
+  fields of each conflict it steers. Without this client-sent flag the
+  loop-prevention rule could not be honored without violating the stateless
+  invariant.
 
 The client already holds all of this in `sessionStorage`; the backend rebuilds
 nothing server-side (stateless invariant). The payload is assembled from the same
@@ -200,9 +217,17 @@ Two invariants this shape MUST preserve:
    overrode it, that field is NOT re-flagged on a later validator pass -- no
    infinite zip-vs-state loop. The marker is the `steered` flag on each field in
    the contract-2 payload -- **client-owned** (the stateless backend cannot
-   remember it). B5 suppresses any conflict whose `field_ids` are all already
-   `steered: true`, and sets `steered: true` on the fields it does steer. See
-   contract 2 for the flag's home.
+   remember it). **Suppression is PER-FIELD, not per-conflict:** B5 drops any
+   conflict that REFERENCES AN ALREADY-`steered: true` FIELD (if any of its
+   `field_ids` is already steered, the whole conflict is suppressed), then sets
+   `steered: true` on every field of each conflict it does steer. The naive "all
+   field_ids steered" rule has a hole -- after `addr_state`+`addr_zip` are steered,
+   a later `addr_state`+`country` conflict has one un-steered field and would
+   re-steer `addr_state`; the per-field rule suppresses it because `addr_state` is
+   already steered. (Cost: a genuinely new conflict on `addr_state`+`country` is
+   also suppressed -- accepted, since the user already reviewed `addr_state` once
+   and the override semantics stand; never re-pester about a field the user
+   already adjudicated.) See contract 2 for the flag's home.
 
 The steering mechanism is owned by **bead B5 (polyglot-pdf-jnjj.17)**; this doc
 freezes its payload + the two invariants it must honor.
@@ -260,11 +285,22 @@ confirmed:
 }
 ```
 
-- `form_complete` is **once-only**: the client guards it so it fires a single time
-  per form session, never re-emitted on subsequent state changes.
+- `form_complete` is **once-only per completion**: the client guards it so it does
+  not re-fire on every state change while the form sits complete.
 - `fields`: the contract-2 payload for the WHOLE form (the full-form validator
   pass's input). It is NOT a bare event -- a bare `{type: "form_complete"}` would
   give the stateless backend no values to validate.
+- **Re-validation after post-completion edits (the once-only hole):** the UI allows
+  `manual_field_update` edits to an already-completed form. A strictly once-only
+  guard would let a user change a value after the full-form pass and submit it
+  unchecked -- bypassing the validator entirely. So the guard is on the COMPLETED
+  STATE, not a fire-once latch: when the form re-reaches the complete state AND any
+  field value has changed since the last `form_complete`, the client re-emits
+  `form_complete` (with the updated `fields`) so the full-form pass runs again
+  before submit. (Track a "validated snapshot" client-side -- a dirty-since-last-
+  validation flag -- and re-emit on the complete->edit->complete cycle; do NOT
+  re-emit when nothing changed.) This keeps the no-pester property (no re-emit on a
+  static complete form) while closing the edit-after-complete bypass.
 
 ### Ordering: the validator must run BEFORE the section auto-switch
 

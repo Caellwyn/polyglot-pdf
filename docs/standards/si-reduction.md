@@ -22,8 +22,16 @@ time) and branches on the `USE_JIT_SCHEMA` flag (`backend/config.py`, default
 
 | Mode | Template (`config.py`) | The cost driver |
 |------|------------------------|-----------------|
-| **Legacy** (`USE_JIT_SCHEMA=false`, default today) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the WHOLE form's fields dumped as text (~8,200-token floor). This is what the epic removes. |
-| **JIT** (`USE_JIT_SCHEMA=true`) | `JIT_SYSTEM_INSTRUCTION` | `{manifest_text}` (field_id\|spoken_name pairs) + `{next_field_schema}` (the current field only). ~2k today; the reduction target is lower. |
+| **Legacy** (`USE_JIT_SCHEMA=false`, default today) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the CURRENT SECTION's fields dumped as text. The legacy handshake builder sends `extractSectionFields(currentSectionId)` as `schema` (`schemaFormState.ts:594-607`), so the dump is the active section, NOT the whole form. The ~8,200-token floor is the LARGEST section; smaller sections dump less. This per-section dump is what the epic shrinks. |
+| **JIT** (`USE_JIT_SCHEMA=true`) | `JIT_SYSTEM_INSTRUCTION` | `{manifest_text}` (field_id\|spoken_name pairs) + `{next_field_schema}` (one field only). ~2k today; the reduction target is lower. |
+
+> **The SI is already per-section, not whole-form.** The live model only ever sees
+> the current section's fields, because section-reset is the shipped production flow
+> (each section switch restarts the Live session with a fresh section SI). So the
+> epic's cost target is the rendered SI for the **largest section** (what G2
+> measures), not a whole-form dump -- and pillar A reduces THAT, not a (non-existent)
+> all-fields payload. The cross-section recall the live model needs comes from the
+> exploration tools, not from carrying other sections in the SI.
 
 `build_form_context()` calls `.format(...)` on exactly one template per build with
 the placeholder set below. Adding/removing a placeholder is a change to THIS
@@ -41,20 +49,31 @@ contract -- coordinate it here before editing either template.
 
 **JIT-only:** `{manifest_text}` (from `manifest_service.generate_part_manifest`
 -> `format_manifest_for_context`), `{next_field_schema}` (from
-`manifest_service.get_next_field_schema`, the FIRST unfilled field rendered as one
-line: `ID | Spoken | Name | Type | Required | Options:[...]`).
+`manifest_service.get_next_field_schema`, rendered as one line:
+`ID | Spoken | Name | Type | Required | Options:[...]`).
 
-> **`{manifest_text}` is regenerated server-side from `schema["fields"]`, NOT taken
-> from the handshake manifest.** `build_form_context()` calls
-> `generate_part_manifest(schema, ...)` over `schema["fields"]`, which in JIT mode
-> is just `[first_field_schema]` (the backend synthesizes the JIT `schema` that way
-> -- see [ws-protocol.md](ws-protocol.md)). So TODAY the rendered manifest covers
-> only the current field, not the whole section, and `generate_part_manifest`
-> hardcodes `previous_parts_manifests=[]` (a smell A1 audits). Pillar A (A2) must
-> reconcile this -- feed the section manifest the client already sends -- so the
-> reduced SI actually lists the section's fields. This is the gap between "the JIT
-> path exists" and "the JIT path is good"; the epic does NOT rest on the existing
-> shape.
+> **Two JIT-path bugs A2 must fix -- the contract does NOT bless the current
+> behavior:**
+> 1. **`{manifest_text}` is regenerated server-side from `schema["fields"]`, NOT
+>    taken from the handshake manifest.** `build_form_context()` calls
+>    `generate_part_manifest(schema, ...)` over `schema["fields"]`, which in JIT
+>    mode is just `[first_field_schema]` (the backend synthesizes the JIT `schema`
+>    that way -- see [ws-protocol.md](ws-protocol.md)). So TODAY the rendered
+>    manifest covers only ONE field, not the section, and `generate_part_manifest`
+>    hardcodes `previous_parts_manifests=[]`.
+> 2. **`{next_field_schema}` is the section's FIRST field, not the first UNFILLED
+>    field.** The JIT handshake picks `sectionSchema.fields[0]` and the backend
+>    calls `get_next_field_schema(..., current_field_id=None)` WITHOUT consulting
+>    `current_values`. On a reconnect or a section revisit where earlier fields are
+>    already confirmed, the reduced SI would point the model at an already-filled
+>    field. (The `{next_field_hint}` placeholder, by contrast, IS computed from the
+>    real next-unfilled field on the client -- so the two can disagree today.)
+>
+> Pillar A (A2) must fix BOTH -- feed the real section manifest the client already
+> sends, and select the first-UNFILLED field -- so the reduced SI lists the
+> section's fields and points at the actual next field. This is the gap between
+> "the JIT path exists" and "the JIT path is good"; the epic does NOT rest on the
+> existing shape, and A1's audit catalogs these as fix-now.
 
 > **`fields_json` is a legacy placeholder NAME, not JSON.** It carries
 > pipe-separated field text (the comment at `config.py` notes this -- kept for
@@ -66,11 +85,12 @@ line: `ID | Spoken | Name | Type | Required | Options:[...]`).
 The JIT path is the foundation, but it was built by weaker models and is examined +
 improved under A1/A2 before being trusted. The target SI shape after reduction:
 
-- **`fields=[]` -- no full field dump.** The live model holds only the current
-  field (`{next_field_schema}`) + the lightweight manifest (`{manifest_text}`); it
-  recalls prior answers via the EXISTING exploration tools (`get_field_value`,
-  `get_form_status`) instead of carrying the whole form in context. See
-  [ai-models.md](ai-models.md) for the tools.
+- **`fields=[]` -- no per-section field dump.** Instead of dumping the current
+  section's full field list (today's legacy behavior), the live model holds only the
+  current field (`{next_field_schema}`) + the lightweight section manifest
+  (`{manifest_text}`); it recalls prior answers (in this section AND earlier ones)
+  via the EXISTING exploration tools (`get_field_value`, `get_form_status`) instead
+  of carrying field schemas in the SI. See [ai-models.md](ai-models.md) for the tools.
 - **Floor target: ~1,850 rendered tokens** (the "drip-in" floor). This is a
   *rendered-on-the-real-largest-section* number, NOT a modeled estimate -- it is
   measured by the G2 cost gate (bd polyglot-pdf-jnjj.6) using

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added GoAway detection in the receive loop; this does not affect model selection or A/B logic. The 3.1 "tool-call unreliability" that drove the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`); see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md). Prior context: [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md).*
+*Last updated: 2026-06-14. The `MODEL_LABELING` knob now documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md). See [journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md). Prior: the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`), see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -50,9 +50,16 @@ constants):
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
-- `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the
-  field-labeling/normalizer path (normalizer currently deprecated; kept as an
-  env knob and surfaced on `/health`).
+- `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the cheap,
+  non-Live TEXT model. The original field-labeling/normalizer path it was named for
+  is deprecated; today the knob is read only by `/health` (orphaned). The
+  SI-reduction epic's **cheap-model validator** (`bd polyglot-pdf-jnjj`, pillar B)
+  REUSES this knob for the validator model rather than adding a new one -- so when B
+  lands, set `MODEL_LABELING=gemini-2.5-flash-lite` to run the validator on the lite
+  tier (the default stays `gemini-2.5-flash`). The reuse decision + the "why
+  flash-lite" rationale are owned by
+  [validation-delegation.md](validation-delegation.md) (F3); this doc just records
+  that the validator's model id rides on `MODEL_LABELING`, not a new env var.
 - `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
   `GOOGLE_CLOUD_PROJECT` (compliance-friendly; prod default). `false` -> Gemini
@@ -93,4 +100,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added GoAway detection in the receive loop; this does not affect model selection or A/B logic. The 3.1 "tool-call unreliability" that drove the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`); see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md). Prior context: [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) and [journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md](../journal/entries/2026-06-04-bd-jrl-demo-ai-studio-3.1.md).*
+*Last updated: 2026-06-14. The `MODEL_LABELING` knob now documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md). See [journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md). Prior: the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`), see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md).*
