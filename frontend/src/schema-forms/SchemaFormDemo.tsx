@@ -102,18 +102,26 @@ export function SchemaFormDemo() {
           const response = await fetch(`${backendUrl}/api/form-kits`);
           if (response.ok) {
             const data = await response.json();
-            // Backend returns { forms: [...] }, convert to manifest format
+            // Backend returns { forms: [...] }, convert to manifest format.
+            // Use the backend's schema_path/pdf_path when present (they carry the
+            // kit's REAL filenames -- a kit may declare a custom schema filename,
+            // bd polyglot-pdf-snpi); only fall back to the conventional
+            // `/<id>/schema.json` when an older backend omits them.
             manifest = {
               generatedAt: new Date().toISOString(),
-              forms: data.forms.map((f: any) => ({
-                id: f.id,
-                label: f.label,
-                description: f.description,
-                schemaFile: "schema.json",
-                schemaPath: `/form-kits/${f.id}/schema.json`,
-                pdfFile: "form.pdf",
-                pdfPath: `/form-kits/${f.id}/form.pdf`,
-              })),
+              forms: data.forms.map((f: any) => {
+                const schemaPath: string = f.schema_path || `/form-kits/${f.id}/schema.json`;
+                const pdfPath: string = f.pdf_path || `/form-kits/${f.id}/form.pdf`;
+                return {
+                  id: f.id,
+                  label: f.label,
+                  description: f.description,
+                  schemaFile: schemaPath.split("/").pop() || "schema.json",
+                  schemaPath,
+                  pdfFile: pdfPath.split("/").pop() || "form.pdf",
+                  pdfPath,
+                };
+              }),
             };
           } else {
             throw new Error("Backend unavailable");

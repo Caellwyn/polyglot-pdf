@@ -36,6 +36,33 @@ kit_is_complete() {
     grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "$meta"
 }
 
+# Resolve a kit's schema filename (bd polyglot-pdf-snpi). metadata.json may carry
+# a custom "schema" field (KitMetadata.schema in formKitDirectory.ts); when present
+# the kit's schema lives in that file, NOT the hardcoded schema.json. Echoes the
+# resolved filename; defaults to schema.json when metadata.json is absent or has no
+# "schema" string -- mirroring the editor's `meta?.schema || 'schema.json'`.
+#
+# We FLATTEN newlines (tr -d) BEFORE the grep so a metadata.json with the "schema"
+# key/value split across lines still matches -- a plain line-oriented grep would
+# miss that form and silently fall back to schema.json, leaving the custom-schema
+# kit skipped even though the editor's JSON.parse accepts it (Codex review, bd
+# snpi). Pure POSIX text tools (tr/grep/sed), no jq or python dependency: python3
+# is NOT reliably present (on Windows it can be the no-op Store shim), so the
+# script must not lean on it. The sed also trims whitespace that sat inside the
+# quotes ("schema": " custom.json ").
+kit_schema_file() {
+    local kit_dir="$1"
+    local meta="$kit_dir/metadata.json"
+    local name=""
+    if [ -f "$meta" ]; then
+        name=$(tr -d '\n' < "$meta" \
+            | grep -Eo '"schema"[[:space:]]*:[[:space:]]*"[^"]+"' \
+            | head -1 \
+            | sed -E 's/.*:[[:space:]]*"[[:space:]]*([^"]*[^"[:space:]])[[:space:]]*".*/\1/')
+    fi
+    echo "${name:-schema.json}"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -208,9 +235,10 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
     for kit_dir in "$FORM_KITS_DIR"/*/; do
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
-        
-        if [ ! -f "$kit_dir/schema.json" ]; then
-            log_warn "Skipping $kit_id - no schema.json found"
+
+        schema_file=$(kit_schema_file "$kit_dir")
+        if [ ! -f "$kit_dir/$schema_file" ]; then
+            log_warn "Skipping $kit_id - no $schema_file found"
             continue
         fi
 
@@ -233,7 +261,8 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
 
-        if [ ! -f "$kit_dir/schema.json" ]; then
+        schema_file=$(kit_schema_file "$kit_dir")
+        if [ ! -f "$kit_dir/$schema_file" ]; then
             continue
         fi
 
@@ -243,8 +272,8 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             continue
         fi
 
-        # Extract title from schema.json
-        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        # Extract title from the resolved schema file (custom filename per bd snpi)
+        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/$schema_file" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
         [ -z "$label" ] && label="$kit_id"
         
         # Find PDF file
@@ -259,7 +288,7 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             manifest_content+=','
         fi
         
-        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"schema.json","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/schema.json","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
+        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"'$schema_file'","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$schema_file'","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
     done
     
     manifest_content+=']}'

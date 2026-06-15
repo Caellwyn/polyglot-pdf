@@ -1,0 +1,136 @@
+---
+date: 2026-06-15
+beads: [polyglot-pdf-snpi, polyglot-pdf-979r]
+pr: TBD
+tags: [testing, refactor]
+---
+
+# snpi + 979r: custom kit schema filename in deploy + field-count pluralization
+
+Two small, unrelated bugfixes bundled into one PR (each too tiny for its own
+review cycle; different surfaces -- a deploy script and a schema-editor display
+string -- so they do not interact).
+
+## snpi -- deploy-all.sh ignored a kit's custom schema filename
+
+`deploy-all.sh` has two loops over `form-kits/*/`: an UPLOAD loop and a MANIFEST
+loop. Both hardcoded `schema.json` as the kit's schema file -- the presence check
+(`[ ! -f "$kit_dir/schema.json" ]`), the title extraction, and the manifest's
+`schemaFile`/`schemaPath` entries. But a kit's `metadata.json` may declare a
+custom schema filename via the `schema` field (`KitMetadata.schema`, resolved on
+the editor side in `formKitDirectory.ts` as `meta?.schema || 'schema.json'`). A
+kit with `metadata.json {"schema":"custom.json","status":"complete"}` therefore
+PASSED `kit_is_complete` but was then silently skipped by the schema-file check
+with a misleading "no schema.json found" warning -- never uploaded, never in the
+manifest the voice app reads.
+
+Fix: a new `kit_schema_file()` helper next to `kit_is_complete()`, same
+discipline (whitespace-tolerant `grep -Eo`, no jq dependency), mirroring the TS
+resolution -- it echoes the custom filename when `metadata.json` carries a
+`schema` field, else defaults to `schema.json` (also the default when
+`metadata.json` is absent). The resolved filename now threads through the
+presence check, the title extraction, and the manifest entry in BOTH loops.
+
+### Verification (snpi)
+
+`bash -n deploy-all.sh` parses clean. The helper was unit-exercised by hand
+against four cases -- custom filename, metadata-without-`schema`-field,
+no-metadata, and a whitespace-padded `"schema" : "..."` -- all resolving as
+expected. A proper bats/functional harness for these deploy gates is the SEPARATE
+open bead `polyglot-pdf-45x5` (a bats runner does not exist in the repo yet and
+`bats` is not installed); writing one here would pre-empt that bead's scope, so
+the functional check stayed hand-run.
+
+## 979r -- "1 fields" grammar (green-but-wrong test)
+
+The schema-editor's `PDFViewer` toolbar rendered the positioned-field count as
+`{count} fields` unconditionally, so a single positioned field showed the
+grammatically-wrong "1 fields". This is a clean instance of the green-but-wrong
+pattern the uov.16 re-audit targets: the existing test ASSERTED `'1 fields'`, so
+it encoded the bug as expected output -- a future singular fix would have broken
+the test instead of the bug being caught.
+
+Fix: render `count === 1 ? '1 field' : `${count} fields``. The single-field test
+now asserts the singular `'1 field'` (and that `'1 fields'` is absent), and a NEW
+test gives a second field a `pdf_position` to pin the plural branch ("2 fields").
+
+### Verification (979r)
+
+`schema-editor` vitest: `PDFViewer.test.tsx` 9 tests pass (the 2 pluralization
+tests + the existing 7). `tsc --noEmit` clean. (One-time setup: `schema-editor`'s
+`node_modules` was empty in the main repo -- ran `npm ci` there, then junctioned
+it into the worktree, same pattern as the frontend FE-test harness.)
+
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> NO-GAPS: both exit criteria PASS with file:line evidence
+(snpi: `kit_schema_file` called + used in the presence check, title extraction,
+AND manifest entry of BOTH loops; 979r: the `=== 1` ternary + the singular/plural
+tests). Four non-blocking findings, two fixed (cheap + in-scope), two left:
+- FIXED (snpi): `kit_schema_file` could capture whitespace sitting INSIDE the
+  quotes (`"schema": " custom.json "`), space-padding the `-f` test. The sed now
+  trims it; re-verified against custom / default / no-metadata / padded /
+  multiline.
+- FIXED (979r): hoisted the thrice-evaluated `schema.fields.filter(...).length`
+  into one `positionedFieldCount` const (readability; same value).
+- LEFT (snpi): an unanchored grep could match a NESTED `"schema"` key, and the
+  manifest JSON concatenates `$schema_file` unquoted. Both are theoretical for the
+  current `KitMetadata` type (no nested schema key; filenames have no shell-special
+  chars), both mirror the pre-existing no-jq grep discipline (`kit_is_complete`)
+  and the pre-existing unquoted `$kit_id`/`$label`/`$pdf_file` concat, and
+  `python3 -m json.tool` validates the manifest before it ships. Reworking either
+  would mean adopting jq or a JSON builder across the whole script -- out of scope
+  for this bead.
+
+## Codex round 1 (2 P1) -- scope expansion to make the fix actually work
+
+Codex's outer review surfaced that the deploy-only fix was NOT sufficient -- two
+real P1s, both fixed:
+
+1. **Multiline metadata.json** -- the line-oriented grep in `kit_schema_file`
+   missed a `"schema"` key/value split across lines (which the editor's JSON.parse
+   accepts), so a custom-schema kit still fell back to `schema.json`. Fixed by
+   flattening newlines (`tr -d '\n'`) before the grep. An interim draft parsed with
+   `python3` -- BACKED OUT after discovering `python3` on this Windows box is the
+   no-op Microsoft Store shim (it prints "Python was not found" and exits nonzero;
+   the script's pre-existing `python3 -m json.tool` manifest validation has silently
+   relied on its `||` fallback here too). The helper stays pure POSIX text tools.
+
+2. **The custom path never reached the client (the important one).** Even with the
+   deploy + manifest fixed, the production authed flow broke: `/api/form-kits`
+   (`form_kit_routes.py`) returned only `id`/`label`/`description`, and
+   `SchemaFormDemo.tsx` reconstructed every path as `/form-kits/<id>/schema.json` --
+   so a custom-schema kit was uploaded and listed but still 404'd on load. Fixed by
+   having `FormKitInfo` carry `schema_path`/`pdf_path` from the manifest (falling
+   back to the conventional paths for older manifests) and the frontend use them.
+   3 new route tests pin custom-path propagation, the fallback, and not-found.
+
+**Defended decision (scope grew past the literal bead).** The bead's exit
+criterion named only `deploy-all.sh` ("uploaded and appears in the manifest"),
+which the original change met literally. Codex correctly showed that satisfying the
+literal criterion did NOT achieve the bead's INTENT (a custom-schema kit actually
+being usable). I chose to expand scope to the backend route + frontend consumer
+rather than ship a fix that doesn't function, because: (a) the expansion is small
+and well-contained (one model field-pair + one mapping), (b) the "exposure" it adds
+is a public STORAGE PATH already present in the static `index.json` the fallback
+path fetches -- not schema content, so the route's "no schema content" posture is
+preserved, and (c) shipping the deploy half alone would be a known-nonfunctional
+feature. This crosses into the production voice path, so it is flagged here for the
+merge review rather than folded in silently.
+
+## Closeout notes
+
+- **Doc-freshness:** the freshness gate flagged several STALE docs
+  (`confirmation-and-audit.md`, `hipaa-pii-policy.md`, `stateless-architecture.md`,
+  `schema-forms.md`, `risk-rating.md`, `terminology.md`, `context-compression.md`,
+  `auth.md`). EVERY one tracks backend/frontend files this PR did NOT touch
+  (callback_handler, form_filling_service, websocket_routes, schemaFormState,
+  webFormConnection, connection.ts, manifest_service) -- pre-existing staleness
+  carried in from other merged work. This PR touches only `PDFViewer.tsx`,
+  `PDFViewer.test.tsx`, and `deploy-all.sh`, none of which any tier-2 doc's
+  `**Tracks:**` line covers. Per the doc-freshness rule, a doc stale on files this
+  branch didn't change is not this PR's to bump.
+- **Beads slip:** housekeeping flagged 2 stale IN_PROGRESS beads (`hrn`, `jf6w`) --
+  both belong to OTHER active sessions (the harness-tuning and connection-timeout
+  epics), not this work, and `jf6w` is on the maintainer's do-not-touch list. Left
+  untouched.
