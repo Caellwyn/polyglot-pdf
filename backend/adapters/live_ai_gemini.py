@@ -230,6 +230,16 @@ class LiveAIGemini(ILiveAI):
         # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
         # the stateless reconnect path), so no server-side session state is added.
         self._on_go_away = None
+        # Fired when Gemini's native VAD produces an INPUT transcription -- i.e. it
+        # heard a real user utterance (bd polyglot-pdf-l3a.4). This is the only
+        # reliable "user is present / actually spoke" signal: continuous silence and
+        # background noise stream as audio frames but do NOT yield an input
+        # transcription. The idle-timeout watchdog resets on this (not on raw mic
+        # bytes) so a walk-away with the mic open eventually times out. Optional; a
+        # caller that does not pass it leaves input transcription unsurfaced (the
+        # pre-l3a.4 behavior). The text itself is NEVER passed to the callback --
+        # only the fact a turn occurred -- to keep PHI out of the liveness path.
+        self._on_user_activity = None
         # Optional diagnostic observer for the RAW per-turn usage_metadata object
         # (default None = production no-op). Lets a measurement harness inspect fields
         # the cost path does not consume -- e.g. cached_content_token_count / traffic_type
@@ -443,6 +453,7 @@ class LiveAIGemini(ILiveAI):
         on_audio=None,
         on_tool_call=None,
         on_go_away=None,
+        on_user_activity=None,
         system_instruction: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
@@ -452,6 +463,9 @@ class LiveAIGemini(ILiveAI):
         Callbacks should be async callables. They will be awaited when invoked.
         on_go_away is optional (bd polyglot-pdf-c5t): older callers that do not
         pass it leave GoAway detection logged-only, with no forward.
+        on_user_activity is optional (bd polyglot-pdf-l3a.4): fired on a native-VAD
+        input transcription (a real user turn); callers that omit it leave input
+        transcription unsurfaced.
         """
         # Removed verbose logging - session lifecycle is logged elsewhere
 
@@ -460,6 +474,7 @@ class LiveAIGemini(ILiveAI):
         self._on_audio = on_audio
         self._on_tool_call = on_tool_call
         self._on_go_away = on_go_away
+        self._on_user_activity = on_user_activity
         self._system_instruction = system_instruction
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
         # Honor explicit enable_transcripts flag from the caller (UI/service).
@@ -1523,7 +1538,23 @@ class LiveAIGemini(ILiveAI):
                                         
                                         # Handle input transcription (what Gemini heard from user)
                                         input_transcription = getattr(server_content, "input_transcription", None)
-                                        
+                                        # A non-empty input transcription means native VAD detected a REAL
+                                        # user utterance -- the one reliable "user is present" signal (bd
+                                        # polyglot-pdf-l3a.4). Continuous silence / background noise stream as
+                                        # audio frames but never produce one. Fire on_user_activity so the WS
+                                        # idle watchdog resets on real turns, not on raw mic bytes (a
+                                        # walk-away with the mic open then times out instead of burning the
+                                        # 15-min session). NEVER pass the text -- only signal that a turn
+                                        # occurred -- to keep PHI out of the liveness path (bd hjo).
+                                        if (input_transcription is not None
+                                                and getattr(input_transcription, "text", None)
+                                                and self._on_user_activity is not None):
+                                            try:
+                                                await self._on_user_activity()
+                                            except Exception:
+                                                # Liveness signal must never crash the receive loop.
+                                                self._log.exception("on_user_activity_callback_error")
+
                                         # Handle output transcription (what Gemini said)
                                         transcription = getattr(server_content, "output_transcription", None)
                                         if transcription is not None and getattr(transcription, "text", None):

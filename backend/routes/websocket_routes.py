@@ -202,6 +202,30 @@ async def _handle_fill_session(
 		
 		# Removed verbose logging - just track session start below
 	
+	# Idle-watchdog activity timestamp (bd polyglot-pdf-l3a.4). A 1-element list so
+	# the watchdog, the receive loop, AND the native-VAD user-activity callback all
+	# mutate the SAME value without nonlocal threading across the callback boundary.
+	# CRITICAL: this is reset on MEANINGFUL activity only -- control messages and a
+	# real user turn -- NOT on raw inbound audio frames. In native VAD mode the
+	# client streams continuous audio incl. silence, so resetting on audio bytes (the
+	# pre-l3a.4 behavior) meant a walk-away with the mic open never timed out and
+	# burned Gemini's 15-min audio session. Background noise streams as audio but
+	# does NOT produce a native-VAD input transcription, so it no longer keeps the
+	# session alive.
+	last_rx = [time.time()]
+
+	# Register the user-activity callback BEFORE start_session so it is wired into
+	# the adapter during set_callbacks. Fired when Gemini's native VAD transcribes a
+	# real user utterance (see live_ai_gemini on_user_activity). No PHI crosses here
+	# -- it only bumps the liveness clock.
+	def _on_user_activity_sync():
+		last_rx[0] = time.time()
+
+	async def _on_user_activity():
+		_on_user_activity_sync()
+
+	service._on_user_activity = _on_user_activity
+
 	# Start session with system instruction
 	# This accepts WebSocket and starts Gemini connection
 	await service.start_session(
@@ -224,22 +248,20 @@ async def _handle_fill_session(
 		from backend.config import get_settings
 		settings = get_settings()
 		idle_timeout = settings.WS_IDLE_TIMEOUT_SEC
-		last_rx = time.time()
-		
+
 		async def watchdog_task():
-			nonlocal last_rx
 			while True:
 				await asyncio.sleep(5)  # Check every 5 seconds
-				if time.time() - last_rx > idle_timeout:
-					log.warning("websocket_idle_timeout", 
-					           idle_seconds=int(time.time() - last_rx),
+				if time.time() - last_rx[0] > idle_timeout:
+					log.warning("websocket_idle_timeout",
+					           idle_seconds=int(time.time() - last_rx[0]),
 					           timeout_threshold=idle_timeout)
 					try:
 						# Send idle_timeout message to frontend (graceful shutdown)
 						# This tells frontend to stop auto-reconnecting and show "Reconnect" button
 						await websocket.send_json({
 							"type": "idle_timeout",
-							"idle_seconds": int(time.time() - last_rx),
+							"idle_seconds": int(time.time() - last_rx[0]),
 							"message": "Connection timed out due to inactivity"
 						})
 						# Give frontend time to receive message before closing
@@ -254,13 +276,17 @@ async def _handle_fill_session(
 		
 		while True:
 			msg = await websocket.receive()
-			# Update activity timestamp
-			last_rx = time.time()
-			
+
 			if isinstance(msg, dict) and msg.get("type") == "websocket.disconnect":
 				break
 
 			if "bytes" in msg and msg["bytes"] is not None:
+				# NOTE (bd polyglot-pdf-l3a.4): inbound audio frames deliberately do
+				# NOT bump the idle clock. In native VAD mode the client streams
+				# continuous audio incl. silence, so counting audio as activity made
+				# the idle timeout un-fireable on a walk-away. The watchdog now resets
+				# on a real user turn (the native-VAD on_user_activity callback) and on
+				# control messages below -- not on raw mic bytes.
 				# Drop audio frames during section switch to avoid backlog
 				if drop_audio:
 					continue
@@ -272,6 +298,10 @@ async def _handle_fill_session(
 					first_audio_logged = True
 				asyncio.create_task(service.stream_audio(audio_bytes))
 				continue
+
+			# Any non-audio message (control/text: ping, form_state, hint, etc.) is
+			# explicit client interaction -> bump the idle clock (bd polyglot-pdf-l3a.4).
+			last_rx[0] = time.time()
 
 			if "text" in msg and msg["text"] is not None:
 				try:

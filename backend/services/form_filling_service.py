@@ -58,6 +58,12 @@ class FormFillingService:
         self._on_transcript = None
         self._on_audio = None
         self._on_tool_call = None
+        # Optional liveness callback (bd polyglot-pdf-l3a.4): the WS route sets this
+        # before start_session so a native-VAD user turn (input transcription) bumps
+        # the idle watchdog. Per-connection liveness wiring, not form state -- the
+        # stateless invariant holds (nothing about the user's data is persisted).
+        # Stored so the section-switch re-registration (set_callbacks) keeps it.
+        self._on_user_activity = None
         self._send_transcript = False
         # Audio handler for streaming and activity signals
         self._audio_handler: Optional[AudioHandler] = None
@@ -205,6 +211,7 @@ class FormFillingService:
                     on_audio=self._callback_handler.on_audio,
                     on_tool_call=self._callback_handler.on_tool_call,
                     on_go_away=self._callback_handler.on_go_away,
+                    on_user_activity=self._on_user_activity,
                     system_instruction=system_instruction,
                     tool_declarations=tool_declarations,
                     enable_transcripts=bool(send_transcript),
@@ -503,6 +510,7 @@ class FormFillingService:
             on_audio=self._callback_handler.on_audio,
             on_tool_call=self._callback_handler.on_tool_call,
             on_go_away=self._callback_handler.on_go_away,
+            on_user_activity=self._on_user_activity,
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
             enable_transcripts=bool(self._send_transcript),
