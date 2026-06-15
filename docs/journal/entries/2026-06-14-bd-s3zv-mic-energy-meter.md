@@ -81,10 +81,16 @@ skill in this same PR.
 
 ## Doc freshness
 
-`docs/components/voice-ai.md` tracks `audioManager.ts` + the overlays. Reviewed:
-the energy-callback addition is a new opt-in subscriber, no change to the adapter /
-audio-routing behavior it documents; bumped its date with a note. The run-local
-SKILL.md was edited as part of this work (bash runner preference).
+Bumped the two docs that track files this branch changed: `voice-ai.md`
+(audioManager.ts) and `voice-and-vad.md` (audioManager.ts + VoiceOverlay.tsx) --
+each noting the energy-callback is a new opt-in subscriber that reads the send gate
+but does not alter audio routing / VAD behavior. Left three docs flagged-but-stale
+because they track BACKEND files this branch did NOT touch (other-session work on
+dev): `context-compression.md` + `tool-call-flow.md` (form_filling_service.py /
+callback_handler.py / request_coordinator.py) and `confirmation-and-audit.md`
+(callback_handler.py). Per the doc-freshness rule, a doc stale on a file this branch
+didn't change is not this PR's to bump. The run-local SKILL.md was edited as part of
+this work (bash-runner preference + headless-drive note).
 
 ## Files touched
 
