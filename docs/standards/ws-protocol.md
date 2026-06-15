@@ -17,8 +17,8 @@ on every connect, and the client owns all field state. This doc owns the WIRE
 shape; the SI template shape it feeds lives in
 [si-reduction.md](si-reduction.md) (the manifest/placeholder contract), and the
 validator message shapes (Pillar B) are designed in F3,
-[validation-delegation.md](validation-delegation.md) (forward pointer -- not yet
-written; this doc only RESERVES the names).
+[validation-delegation.md](validation-delegation.md) (this doc RESERVES the wire
+type names; F3 owns their payload shapes).
 
 ---
 
