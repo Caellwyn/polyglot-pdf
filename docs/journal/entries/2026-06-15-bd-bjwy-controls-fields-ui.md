@@ -56,8 +56,8 @@ than vacuous.
    prune empty keys; `validation.ts` iterates the list; tests cover edit/remove +
    a valid multi-array control passing and a ghost ref failing.
 
-**Verification:** new `FieldEditor.controls.test.tsx` (7 tests); full
-schema-editor suite 174/174; `tsc --noEmit` clean. Backend suite untouched
+**Verification:** new `FieldEditor.controls.test.tsx` (8 tests); full
+schema-editor suite 175/175; `tsc --noEmit` clean. Backend suite untouched
 (FE-only) and green from prep.
 
 **Fresh-eyes assess (Sonnet, arm B picker, 1 round to NO-GAPS after fixes):**
@@ -102,9 +102,10 @@ validateSchema bug was already filed as `polyglot-pdf-y61i`.
   references across all six action arrays.
 - `schema-editor/src/components/FieldEditor.tsx` -- "Controls Fields" editing
   section + controls list helpers; operator constant extended.
-- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 7 tests
+- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 8 tests
   (authoring round-trip, target add/remove, empty-key pruning, edit-in-place,
-  validation flags ghost ref / passes valid multi-array control).
+  JSON-serialization-omits-pruned-key, validation flags ghost ref / passes valid
+  multi-array control).
 - `docs/journal/entries/2026-06-15-bd-bjwy-controls-fields-ui.md` -- THIS entry.
 
 ## Follow-ups filed
