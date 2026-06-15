@@ -3,6 +3,7 @@
   "model": "gemini-2.5-flash-native-audio-preview-12-2025",
   "sdk": "google-genai 2.8.0",
   "date": "2026-06-15",
+  "crash_definition": "a Gemini server close (close_code set, e.g. 1011/1008). Sessions that failed LOCALLY before reaching the server (connect_failed, e.g. a local ConnectionResetError) are EXCLUDED from n and crash -- they are not server behavior.",
   "cells": {
     "P1": {
       "shape": "name1",
@@ -18,7 +19,8 @@
       ],
       "n": 30,
       "crash": 24,
-      "crash_rate": 0.8
+      "crash_rate": 0.8,
+      "excluded_local_failures": 0
     },
     "P2": {
       "shape": "typed1",
@@ -52,7 +54,8 @@
       ],
       "n": 10,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "P3": {
       "shape": "omit",
@@ -60,7 +63,8 @@
       "wire_tools": "__ABSENT__",
       "n": 10,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "C1": {
       "shape": "full",
@@ -170,7 +174,8 @@
       ],
       "n": 10,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "C2": {
       "shape": "empty_list",
@@ -178,7 +183,8 @@
       "wire_tools": [],
       "n": 5,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "C3": {
       "shape": "empty_decls",
@@ -190,7 +196,8 @@
       ],
       "n": 5,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "C4": {
       "shape": "stub2",
@@ -207,9 +214,10 @@
           ]
         }
       ],
-      "n": 25,
-      "crash": 9,
-      "crash_rate": 0.36
+      "n": 24,
+      "crash": 8,
+      "crash_rate": 0.333,
+      "excluded_local_failures": 1
     },
     "S1": {
       "shape": "name1",
@@ -225,7 +233,8 @@
       ],
       "n": 5,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     },
     "S2": {
       "shape": "typed1",
@@ -259,7 +268,8 @@
       ],
       "n": 5,
       "crash": 0,
-      "crash_rate": 0.0
+      "crash_rate": 0.0,
+      "excluded_local_failures": 0
     }
   }
 }
