@@ -215,6 +215,41 @@ def section_subschema(schema: dict, section_id: str) -> dict:
     }
 
 
+def jit_handshake_schema(sub: dict, section_id: str, section_label: str) -> dict:
+    """The JIT-shaped schema the backend synthesizes from a handshake_jit, post-A2
+    (bd polyglot-pdf-jnjj.9). Mirrors frontend getJITHandshakePayload +
+    websocket_routes' JIT branch: a manifest carrying the full section
+    field_id|spoken_name pairs, plus only the FIRST field's full schema in `fields`
+    (the rest arrive on demand). This is what build_form_context consumes in JIT
+    mode -- so the cost harness's section-reset-jit arm measures the REAL repaired
+    JIT SI, not the full per-section dump."""
+    section_fields = sub["fields"]
+    manifest_fields = [
+        {"field_id": f["id"], "spoken_name": f.get("spoken_name", f.get("name", f["id"]))}
+        for f in section_fields
+    ]
+    first_field = section_fields[0] if section_fields else None
+    return {
+        "source": "web",
+        "jit_mode": True,
+        "form_metadata": sub.get("form_metadata", {}),
+        # JIT mode carries only the first field's full schema; the rest are in the
+        # manifest (id|spoken_name) and stream in via the confirm_field drip.
+        "fields": [first_field] if first_field else [],
+        "manifest": {
+            "current_section": {
+                "section_id": section_id,
+                "section_label": section_label,
+                "fields": manifest_fields,
+            },
+            "previous_sections": [],
+            "parts": [{"id": section_id, "order": 1, "label": section_label}],
+        },
+        "loaded_field_ids": [],
+        "parts": [{"id": section_id, "order": 1, "label": section_label}],
+    }
+
+
 def _hint_for(field: dict, order: int) -> str:
     """The frontend's hint format (frontend/src/navigation.ts)."""
     required = ", required" if field.get("required") else ""
@@ -355,6 +390,11 @@ def _make_settings(arm: str, trigger: int, window: int):
             "CONTEXT_COMPRESSION_TRIGGER_TOKENS": trigger,
             "CONTEXT_COMPRESSION_WINDOW_TOKENS": window,
         }
+    elif arm == "section-reset-jit":
+        # The JIT cost arm (bd polyglot-pdf-jnjj.6 / G2): same per-section-reset
+        # flow as "section-reset", but build_form_context renders the JIT manifest
+        # SI instead of the full per-section field dump.
+        overrides = {"USE_JIT_SCHEMA": True}
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: neutralize server VAD so explicit
     # activity brackets give deterministic synthetic-turn boundaries (bd p1t /
@@ -441,7 +481,7 @@ async def run(args) -> int:
         "arm": args.arm, "path": args.path, "questions": len(plan),
         "trigger": args.trigger if args.arm == "sliding-window" else None,
         "window": args.window if args.arm == "sliding-window" else None,
-        "schema_scope": ("per-section" if args.arm == "section-reset" else "full-form"),
+        "schema_scope": ("per-section" if args.arm in ("section-reset", "section-reset-jit") else "full-form"),
         "started": stamp, "turns": [], "per_question_tools": {},
         "prompt_curve": [], "errors": [], "rates_per_token": rates,
         "vad": "neutralized (explicit activity brackets; labeled deviation)",
@@ -464,12 +504,20 @@ async def run(args) -> int:
 
         service = FormFillingService(live_ai=adapter, settings=settings)
 
-        # Arm-dependent schema scope: section-reset gets the production
-        # per-section sub-schema; the single-session arms get the whole form
-        # (that is what "no sections" honestly costs with today's SI machinery).
-        if args.arm == "section-reset":
+        # Arm-dependent schema scope: section-reset (full-SI baseline) and
+        # section-reset-jit (JIT manifest SI) BOTH use the production per-section
+        # sub-schema flow; the JIT arm additionally synthesizes the handshake_jit
+        # schema (manifest + one-field `fields`) so build_form_context renders the
+        # reduced JIT SI (bd polyglot-pdf-jnjj.6). The single-session arms get the
+        # whole form (what "no sections" honestly costs with today's SI machinery).
+        is_section_reset = args.arm in ("section-reset", "section-reset-jit")
+        if is_section_reset:
             sec = secs[0]
-            arm_schema = section_subschema(schema, sec["id"])
+            sub = section_subschema(schema, sec["id"])
+            if args.arm == "section-reset-jit":
+                arm_schema = jit_handshake_schema(sub, sec["id"], sec["label"])
+            else:
+                arm_schema = sub
             si_kwargs = dict(section_number=1, total_sections=len(secs),
                              section_label=sec["label"], previous_spoken_names=[])
             current_section_id = sec["id"]
@@ -482,7 +530,7 @@ async def run(args) -> int:
 
         client = FakeClientWebSocket(schema, plan)
         client.service = service
-        if args.arm == "section-reset":
+        if is_section_reset:
             client.set_active_section(
                 [q for q in plan
                  if (client.schema_fields[q["field_id"]].get("section_id")
@@ -551,8 +599,10 @@ async def run(args) -> int:
             fid = q["field_id"]
             f_sec = (client.schema_fields[fid].get("section_id") or "section-1")
 
-            # Section boundary (section-reset arm only): production restart.
-            if args.arm == "section-reset" and f_sec != secs[sec_idx]["id"]:
+            # Section boundary (section-reset + section-reset-jit arms): production
+            # restart. The JIT arm rebuilds the handshake_jit schema for the new
+            # section so the restarted SI is still the reduced JIT SI (jnjj.6).
+            if is_section_reset and f_sec != secs[sec_idx]["id"]:
                 sec_idx += 1
                 sec = secs[sec_idx]
                 spoken_prev = [client.schema_fields[p["field_id"]].get("name", p["field_id"])
@@ -561,8 +611,13 @@ async def run(args) -> int:
                     [p for p in plan
                      if (client.schema_fields[p["field_id"]].get("section_id")
                          or "section-1") == sec["id"]])
+                if args.arm == "section-reset-jit":
+                    switch_schema = jit_handshake_schema(
+                        section_subschema(schema, sec["id"]), sec["id"], sec["label"])
+                else:
+                    switch_schema = section_subschema(schema, sec["id"])
                 await service.switch_to_section(
-                    section_subschema(schema, sec["id"]), {},
+                    switch_schema, {},
                     {"section_id": sec["id"], "section_number": sec["number"],
                      "total_sections": len(secs), "section_label": sec["label"],
                      "previous_spoken_names": spoken_prev},
@@ -641,7 +696,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
-    ap.add_argument("--arm", choices=["unbounded", "section-reset", "sliding-window"],
+    ap.add_argument("--arm",
+                    choices=["unbounded", "section-reset", "section-reset-jit", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=20)
