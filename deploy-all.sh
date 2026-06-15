@@ -22,6 +22,20 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Complete-gate (bd polyglot-pdf-b0pe): only kits explicitly marked
+# status:complete in metadata.json may reach GCS / the voice app. In-progress
+# (draft) and unmarked kits stay LOCAL + git-backed but are never deployed, so a
+# deploy run after a new form is onboarded cannot leak a draft to production.
+# Returns 0 (complete) only when metadata.json exists AND its status is exactly
+# "complete"; absent metadata.json or any other/absent status -> 1 (skip).
+kit_is_complete() {
+    local kit_dir="$1"
+    local meta="$kit_dir/metadata.json"
+    [ -f "$meta" ] || return 1
+    # Match "status": "complete" tolerant of whitespace; no jq dependency.
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "$meta"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -199,7 +213,12 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             log_warn "Skipping $kit_id - no schema.json found"
             continue
         fi
-        
+
+        if ! kit_is_complete "$kit_dir"; then
+            log_warn "Skipping $kit_id - not status:complete (draft kept local; bd b0pe gate)"
+            continue
+        fi
+
         log_info "  Uploading $kit_id..."
         gcloud storage cp -r "$kit_dir"/* "gs://$FORM_KITS_BUCKET/$FORM_KITS_PREFIX/$kit_id/" --project "$POLYGLOT_PROJECT_NAME"
     done
@@ -213,11 +232,17 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
     for kit_dir in "$FORM_KITS_DIR"/*/; do
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
-        
+
         if [ ! -f "$kit_dir/schema.json" ]; then
             continue
         fi
-        
+
+        # Complete-gate: a draft/unmarked kit is uploaded by neither loop, so it
+        # is also absent from the manifest the voice app reads (bd b0pe).
+        if ! kit_is_complete "$kit_dir"; then
+            continue
+        fi
+
         # Extract title from schema.json
         label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
         [ -z "$label" ] && label="$kit_id"
