@@ -2,7 +2,7 @@
 
 **Tracks:** scripts/beads_remote_bootstrap.py scripts/bd_prime.py
 
-*Last updated: 2026-06-13. Reviewed for rwjy+vfb2+0tgc+b6k4 bundle PR: bd_prime.py mtime newer than this doc but no bootstrap behavior changed by this PR. Prior: 2026-06-11. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate; `BEADS_GITHUB_TOKEN` direct-push support added 2026-06-11; dolt-ignored-table repair generalized to all ignored tables (wisps + local_metadata + repo_mtimes) and gated on table presence rather than is_hydrated() 2026-06-11 (polyglot-pdf-080y).*
+*Last updated: 2026-06-15. Reviewed for the 5k32 windowless-spawn PR: both tracked scripts gained a `creationflags=` arg (via `swarm_config.windowless_creationflags()` / an inlined equivalent in the bootstrap's `run()`) that suppresses the Windows git.exe console-window storm, but no bootstrap behavior this doc describes changed. See [../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md](../journal/entries/2026-06-04-bd-0q8-bootstrap-reconcile-stale-seed.md) for the stale-seed reconcile fix and [../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md](../journal/entries/2026-06-04-bd-j47-bootstrap-proxy-sync-fail-loud.md) for the proxy-sync + fail-loud gate.*
 
 How a fresh **remote / web / ephemeral** Claude Code session gets a working beads
 (`bd`) database. Local long-lived checkouts never need this — they already hold a
