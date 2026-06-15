@@ -62,9 +62,37 @@ audio-send state, both overlays, reusing the worklet RMS"): PASS.
   disconnect.
 - tsc clean; full frontend suite green (382, +6 new).
 
-Fresh-eyes (Sonnet, 1 round -> NO-GAPS): all 3 rubric criteria PASS; confirmed the
-send paths are unchanged (only `emitEnergy` calls added), no new AnalyserNode, both
-overlays covered. Three informational notes (not rubric gaps), all addressed:
+### Review trail (Codex x2 + confirming fresh-eyes)
+
+Codex (credits briefly back this session) reviewed in two rounds, both of which
+found REAL issues -- not re-litigation:
+
+- Round 1 (2 P1): the meter could show green "sending" during `reconnecting` (the
+  worklet `sending` flag means the audio-routing gate passed, but the CONNECTION
+  send gate `shouldSendMicChunk` drops bytes then); and the rAF loop ran perpetually
+  even when the meter wasn't rendered. Both fixed.
+- Round 2 (2 P0 CI-breakers + 1 P1): `global.navigator = ...` throws under Node 24 /
+  Vitest ESM (read-only accessor) -- would have failed the whole frontend suite on
+  CI; `Array.prototype.at(-1)` isn't typed under the ES2020 tsconfig lib -- would
+  have failed `npm run typecheck`; and my round-1 grey-for-all-non-`connected` fix
+  was too aggressive (`switching_section` + open socket legitimately sends). Fixed by
+  `vi.stubGlobal`, `[length-1]` indexing, and a new `ConnectionManager.isSendingMicAudio()`
+  -- the single source of truth (`shouldSendMicChunk` over live status + socket
+  state) that `sendMicChunkToBackend` already uses; both overlays now derive the
+  green state from it. `npm run typecheck` confirmed clean.
+
+Codex quota then exhausted, so a **local fresh-eyes confirming round** (Sonnet) ran
+on the round-2 fixes -> NO-GAPS (verified `isSendingMicAudio` delegates correctly +
+is read-only, the rAF gates match each overlay's render condition, the test-env
+stubs are non-vacuous). Lesson: local Node passing != CI Node passing -- the
+`global.navigator` assignment and the `.at()` lib-target mismatch both passed
+locally but would have broken CI; `npm run typecheck` (the exact CI gate) is the
+check to trust, not a bare local run.
+
+The PRE-PR fresh-eyes (Sonnet, 1 round -> NO-GAPS) had already passed: all 3 rubric
+criteria PASS; send paths unchanged (only `emitEnergy` calls added), no new
+AnalyserNode, both overlays covered. Three informational notes (not rubric gaps),
+all addressed:
 (1) the energy subscription captures the manager instance, so a future mid-session
 `disconnect()/connect()` that swaps the inner manager without changing the
 `connectionManager` ref would silently stop the meter -- added a JSDoc invariant
