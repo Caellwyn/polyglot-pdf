@@ -62,7 +62,20 @@ audio-send state, both overlays, reusing the worklet RMS"): PASS.
   disconnect.
 - tsc clean; full frontend suite green (382, +6 new).
 
-Fresh-eyes: see the closeout assess (run after this entry).
+Fresh-eyes (Sonnet, 1 round -> NO-GAPS): all 3 rubric criteria PASS; confirmed the
+send paths are unchanged (only `emitEnergy` calls added), no new AnalyserNode, both
+overlays covered. Three informational notes (not rubric gaps), all addressed:
+(1) the energy subscription captures the manager instance, so a future mid-session
+`disconnect()/connect()` that swaps the inner manager without changing the
+`connectionManager` ref would silently stop the meter -- added a JSDoc invariant
+note on `setEnergyCallback` (re-architecting for a non-existent flow would be
+over-engineering); (2) the JSDoc described only the `!recording` guard when the real
+guard is `!recording || !onAudioDataCallback` -- corrected; (3) the existing overlay
+test stubs lacked `setEnergyCallback`, so nothing asserted the OVERLAY subscribes --
+added `setEnergyCallback` to both stubs and two new tests
+(`assertEnergySubscribed`) pinning subscribe-on-mount + unsubscribe-on-unmount for
+both overlays. Also caught (pre-PR, via the tsc gate) two unused `@ts-expect-error`
+directives in the new test that would have failed CI's `tsc --noEmit` -- removed.
 
 ## Lessons
 

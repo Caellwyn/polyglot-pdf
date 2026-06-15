@@ -60,15 +60,13 @@ describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
     global.AudioContext = FakeAudioContext
     // @ts-expect-error
     global.AudioWorkletNode = FakeWorkletNode
-    // @ts-expect-error
-    global.navigator = global.navigator || {}
-    // @ts-expect-error
+    global.navigator = global.navigator || ({} as Navigator)
+    // @ts-expect-error -- jsdom navigator.mediaDevices is read-only/absent; stub it
     global.navigator.mediaDevices = {
       getUserMedia: vi.fn(async () => ({ id: 'fake-stream' })),
     }
-    // @ts-expect-error
-    global.window = global.window || {}
-    // @ts-expect-error
+    global.window = global.window || ({} as Window & typeof globalThis)
+    // @ts-expect-error -- replace the read-only window.location with a minimal stub
     global.window.location = { hostname: 'localhost', href: 'http://localhost/' }
   })
 

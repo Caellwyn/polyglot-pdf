@@ -696,8 +696,17 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 * already posts a smoothed RMS energy on every frame; this just forwards it to
 	 * an optional UI subscriber, so no extra audio analysis is added. Pass null to
 	 * unsubscribe. The subscription survives stop/rearm cycles (the overlay sets it
-	 * once on mount); the onmessage `if (!recording)` guard already stops emission
-	 * while not recording.
+	 * once on mount); the onmessage `if (!recording || !onAudioDataCallback)` guard
+	 * already stops emission while not recording (both are nulled together in
+	 * stopRecording, so energy never fires once recording has stopped).
+	 *
+	 * NOTE: the callback is captured against the CURRENT manager instance. If a
+	 * caller ever destroys the inner audioManager and creates a fresh one WITHOUT the
+	 * connectionManager reference changing, the new manager has no subscriber and the
+	 * meter would go dark until the consumer re-subscribes. Today the only
+	 * destroy/recreate happens on overlay unmount (which re-subscribes on remount via
+	 * its [connectionManager] effect), so this holds -- but a future mid-session
+	 * disconnect()/connect() flow MUST re-call setEnergyCallback (bd s3zv fresh-eyes).
 	 */
 	function setEnergyCallback(callback: ((energy: number, sending: boolean) => void) | null): void {
 		onEnergyCallback = callback

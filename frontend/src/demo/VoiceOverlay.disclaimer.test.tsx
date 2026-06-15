@@ -72,6 +72,7 @@ function makeMockManager(calls: string[]) {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
     setNativeVad: vi.fn(),
+    setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
     unmuteInput: vi.fn(),
