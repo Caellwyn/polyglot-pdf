@@ -26,9 +26,21 @@ export interface FsWritableStream {
 }
 
 export interface FsFileHandle {
+  readonly kind: 'file';
   readonly name: string;
   createWritable(): Promise<FsWritableStream>;
   getFile(): Promise<File>;
+}
+
+// Directory handle slice (bd b0pe): enough to list a form-kits/ dir, read/create
+// per-kit subdirs, and read/write files within them. The async-iterable
+// `entries()` yields [name, handle] pairs like the real FileSystemDirectoryHandle.
+export interface FsDirectoryHandle {
+  readonly kind: 'directory';
+  readonly name: string;
+  entries(): AsyncIterableIterator<[string, FsFileHandle | FsDirectoryHandle]>;
+  getDirectoryHandle(name: string, opts?: { create?: boolean }): Promise<FsDirectoryHandle>;
+  getFileHandle(name: string, opts?: { create?: boolean }): Promise<FsFileHandle>;
 }
 
 interface SaveFilePickerOptions {
@@ -36,8 +48,13 @@ interface SaveFilePickerOptions {
   types?: Array<{ description?: string; accept: Record<string, string[]> }>;
 }
 
+interface DirectoryPickerOptions {
+  mode?: 'read' | 'readwrite';
+}
+
 type WindowWithFsAccess = Window & {
   showSaveFilePicker?: (opts?: SaveFilePickerOptions) => Promise<FsFileHandle>;
+  showDirectoryPicker?: (opts?: DirectoryPickerOptions) => Promise<FsDirectoryHandle>;
 };
 
 // --------------------------------------------------------------------------- //
@@ -46,6 +63,26 @@ type WindowWithFsAccess = Window & {
 export function isFileSystemAccessSupported(): boolean {
   return typeof window !== 'undefined' &&
     typeof (window as WindowWithFsAccess).showSaveFilePicker === 'function';
+}
+
+/** True when the browser exposes the directory picker (catalogue/onboarding). */
+export function isDirectoryAccessSupported(): boolean {
+  return typeof window !== 'undefined' &&
+    typeof (window as WindowWithFsAccess).showDirectoryPicker === 'function';
+}
+
+/**
+ * Prompt the human to pick a directory (the form-kits/ root) for read+write.
+ * Throws AbortError if cancelled (treat as a no-op). Returns the dir handle.
+ */
+export async function pickDirectory(): Promise<FsDirectoryHandle> {
+  const win = window as WindowWithFsAccess;
+  if (!win.showDirectoryPicker) {
+    throw new Error('Directory access is not supported in this browser');
+  }
+  // Call ON window (receiver binding -- same Illegal-invocation trap as the
+  // save picker; bd s1e2).
+  return win.showDirectoryPicker({ mode: 'readwrite' });
 }
 
 const JSON_PICKER_TYPES = [{
