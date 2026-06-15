@@ -1,0 +1,1269 @@
+{
+  "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+  "sdk_version": "2.8.0",
+  "ts": "2026-06-15T20:54:07+00:00",
+  "summary": [
+    {
+      "cell": "P1",
+      "shape": "name1",
+      "persona": "form",
+      "n": 20,
+      "verdict": "FLAKY (6 survive / 14 crash of 20)",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [
+        1011
+      ],
+      "phases": [
+        "turn_boundary"
+      ]
+    },
+    {
+      "cell": "C4",
+      "shape": "stub2",
+      "persona": "form",
+      "n": 20,
+      "verdict": "FLAKY (13 survive / 7 crash of 20)",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [
+        1008,
+        1011
+      ],
+      "phases": [
+        "receive_predrain",
+        "turn_boundary"
+      ]
+    }
+  ],
+  "records": [
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 6,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 3,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 7,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 8,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 3,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 9,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 10,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 11,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 12,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 3,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 13,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 3,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 14,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 3,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 15,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 16,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 17,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 18,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 19,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "P1",
+      "rep": 20,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 1,
+      "clean_turn_count": 0,
+      "close_code": 1008,
+      "close_payload": "1008 None. Operation is not implemented, or supported, or enabled.",
+      "first_failure_turn": 1,
+      "failure_phase": "receive_predrain",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 6,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 7,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 8,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 9,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 10,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 11,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 12,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 13,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 14,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 15,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 16,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 17,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 0,
+      "clean_turn_count": 0,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": "ConnectionResetError: [WinError 64] The specified network name is no longer available",
+      "wire_setup_tools": null,
+      "wire_assert_ok": null,
+      "cell": "C4",
+      "rep": 18,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 19,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 20,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:54:07+00:00"
+    }
+  ]
+}
