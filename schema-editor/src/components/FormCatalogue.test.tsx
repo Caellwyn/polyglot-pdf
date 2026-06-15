@@ -118,6 +118,23 @@ describe('FormCatalogue', () => {
     expect(onOpenKit).not.toHaveBeenCalled();
   });
 
+  it('clears the "Added" notice when the folder is changed', async () => {
+    const root = mockRoot([]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText(/0 forms/)).toBeTruthy());
+
+    const pdf = { name: 'a.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
+    fireEvent.drop(screen.getByTestId('form-catalogue'), { dataTransfer: { files: [pdf] } });
+    await waitFor(() => expect(screen.getByText(/Added "a"/)).toBeTruthy());
+
+    // Change folder -> the stale success notice must be gone.
+    fireEvent.click(screen.getByText('Change folder'));
+    await waitFor(() => expect(screen.queryByText(/Added "a"/)).toBeNull());
+  });
+
   it('errors when a non-PDF is dropped', async () => {
     const root = mockRoot([]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);

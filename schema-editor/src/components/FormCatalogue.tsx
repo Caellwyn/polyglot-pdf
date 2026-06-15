@@ -48,6 +48,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   }, []);
 
   const handlePickFolder = React.useCallback(async () => {
+    setNotice(null); // a prior "Added X" notice is stale once the folder changes
     try {
       const dir = await pickDirectory();
       setRoot(dir);
@@ -61,6 +62,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const handleDrop = React.useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    setNotice(null); // any drop attempt supersedes a prior "Added X" notice
     if (!root) {
       setError('Open a form-kits folder first, then drop a PDF to add a form.');
       return;
@@ -73,7 +75,6 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     }
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
       const { id } = await onboardPdf(root, pdf);
       await refresh(root);
