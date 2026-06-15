@@ -25,7 +25,7 @@ Sibling contracts:
   handoff; it owns the validator's wire shapes.
 - The WebSocket message-TYPE registry (the reserved type names for the
   section-complete / form-complete events) lives in
-  [ws-protocol.md](ws-protocol.md) (F2, being written in parallel). **F2 owns the
+  [ws-protocol.md](ws-protocol.md) (F2). **F2 owns the
   type names; F3 (this doc) owns the PAYLOAD shapes those messages carry.**
 - The model-selection rule (which model, why flash-lite) lives in
   [ai-models.md](ai-models.md).
