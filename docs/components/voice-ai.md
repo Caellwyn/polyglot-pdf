@@ -159,10 +159,10 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
   calls to the wrong tab. The adapter also warns `bg_task_already_running` if
   `set_callbacks` is called on a live task.
 - **Never log transcript/hint text** — only lengths (bd `polyglot-pdf-hjo`).
-- **2.5 native-audio `1011`s after turn 1 on an INCOMPLETE tool declaration under
+- **2.5 native-audio `1011`s at an early turn boundary on an INCOMPLETE tool declaration under
   tool-soliciting prompts** (bd `polyglot-pdf-daa`/`h04c`; wire-verified isolation
   experiment, `scripts/spikes/diag_native_audio_1011_tools.py`, 2026-06-15). On
-  `gemini-2.5-flash-native-audio-preview-12-2025` the turn-1 `1011` needs BOTH: a
+  `gemini-2.5-flash-native-audio-preview-12-2025` the early-turn `1011` (after the 1st or 2nd clean turn) needs BOTH: a
   `function_declaration` that is present but malformed (a `name` with **no
   `parameters` schema**) AND a system-instruction/prompts that solicit tool use.
   It is a RATE (~80% for one name-only declaration over N=30), not deterministic.
@@ -179,7 +179,7 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
     typed `LiveConnectConfig(tools=[])` is erased to no-tools by the SDK before the
     wire — `live.py` `model_copy(update={'tools': None})` + falsy `[]` — so you
     can't even send a true `[]` through the typed config; both are safe anyway.)
-  - **DON'T** chalk a 2.5 turn-1 `1011` up to "transient Google-side" — it is
+  - **DON'T** chalk a 2.5 early-turn `1011` up to "transient Google-side" — it is
     reproducible and config-driven (the old bd `daa` "transient/untestable" framing
     was the misdiagnosis). A *separate* lower-rate intermittent no-audio/close on
     2.5 is real and NOT addressed by getting tool shape right.

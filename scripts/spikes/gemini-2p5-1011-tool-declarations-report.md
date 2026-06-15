@@ -1,4 +1,4 @@
-# Gemini 2.5 native-audio Live: the `1011 Internal error` after turn 1 is caused by an *incomplete* tool declaration under tool-soliciting prompts -- not by transient server errors, and not by the absence of tools
+# Gemini 2.5 native-audio Live: the early-turn `1011 Internal error` is caused by an *incomplete* tool declaration under tool-soliciting prompts -- not by transient server errors, and not by the absence of tools
 
 *A reproducible, wire-verified diagnosis. Tested 2026-06-15 against the Gemini
 Live API via the `google-genai` Python SDK 2.8.0, default `api_version`
@@ -7,8 +7,9 @@ Live API via the `google-genai` Python SDK 2.8.0, default `api_version`
 ## TL;DR
 
 On `gemini-2.5-flash-native-audio-preview-12-2025`, a Live session reliably
-closes with a WebSocket `1011 Internal error` right after the first model turn
-**when BOTH of these hold**:
+closes with a WebSocket `1011 Internal error` **at an early turn boundary**
+(in our data, after the 1st or 2nd clean turn -- surviving turn 1 does NOT mean
+you are safe) **when BOTH of these hold**:
 
 1. the `tools` you send contain a **structurally incomplete `function_declaration`**
    -- e.g. a declaration that has a `name` but **no `parameters` schema**; and
@@ -61,9 +62,9 @@ shapes the typed config cannot express. Every cell below is reported against the
 
 A voice app streams mic audio to a Gemini Live native-audio model and lets the
 model drive via tool calls. Production was stable, but every stripped-down probe
-died with `1011` right after turn 1 on 2.5, while the same probe ran fine on 3.1.
-For weeks this was written off as "2.5 is unstable / transient Google-side
-errors," which blocked all measurement because no probe survived turn one.
+died with `1011` within the first turn or two on 2.5, while the same probe ran
+fine on 3.1. For weeks this was written off as "2.5 is unstable / transient
+Google-side errors," which blocked all measurement because no probe survived.
 
 ## Observations
 
@@ -80,8 +81,11 @@ errors," which blocked all measurement because no probe survived turn one.
 5. It needs **tool solicitation** -- the same incomplete declaration is safe when
    the prompts/system-instruction do not invite tool use.
 
-The crash lands at the **turn boundary**: the first turn is processed and the
-model responds, then the socket closes with `1011` as the turn completes.
+The crash lands at an **early turn boundary**: the first turn (and sometimes a
+second) is processed and the model responds, then the socket closes with `1011`
+as that turn completes. In our data the close happened after the 1st clean turn
+in ~64% of crashes and after the 2nd in ~36% -- so a single-turn probe that
+survives is NOT proof of safety.
 
 ## Evidence
 
@@ -100,10 +104,15 @@ use tools."
 | 1 fully-typed declaration | form | 10 | **0%** | -- |
 | full production tool set (5, typed) | form | 10 | **0%** | -- |
 | **1 name-only declaration** (no params) | **form** | **30** | **80%** | `1011` |
-| **2 name-only declarations** (no params) | **form** | **25** | **36%** | `1011`/`1008` |
+| **2 name-only declarations** (no params) | **form** | **24** | **33%** | `1011`/`1008` |
 | 1 name-only declaration (no params) | **pirate** | 5 | **0%** | -- |
 | 1 fully-typed declaration | pirate | 5 | **0%** | -- |
 | 3.1 flash-live, any shape | form | -- | **0%** | -- |
+
+(The 2-name-only row is N=24, not 25: one session was excluded because it failed
+with a *local* `ConnectionResetError` before reaching the server -- not a Gemini
+`1011`/`1008`. Counting only sessions that actually reached the wire, the rate is
+8/24 = 33%.)
 
 Reading the matrix:
 
@@ -112,10 +121,15 @@ Reading the matrix:
   "Always pass `[]`" works -- but only because `[]` is not a malformed
   declaration, not because presence matters.
 - **Solicitation is the second, necessary factor.** The identical name-only
-  declaration crashes 80% under form prompts and **0%** under pirate "just chat"
-  prompts. Broken tools are only dangerous when the model is actually steered to
-  use them.
-- **It is a rate, not a certainty.** 80% (name-only) and 36% (two name-only) --
+  declaration crashes 80% under form prompts and **0%** under "just chat" prompts.
+  Broken tools are only dangerous when the model is actually steered to use them.
+  (Caveat: the "chat" cell changed BOTH the system instruction *and* the prompts,
+  and that instruction explicitly said "do not use tools" -- so this isolates
+  "tool use is solicited" vs "tool use is suppressed" as a bundle, not the system
+  instruction and the prompt wording separately. The direction is clear; the
+  precise sub-cause within "solicitation" is not separated. N=5 here is
+  directional, not a rate.)
+- **It is a rate, not a certainty.** 80% (name-only) and 33% (two name-only) --
   both well short of 100%, consistent with a server-side path that *sometimes*
   faults on the incomplete declaration during end-of-turn handling.
 - **Compression, `api_version` (`v1alpha`), and model aliases were all ruled out**
@@ -204,7 +218,7 @@ required parameter an explicit type.**
 `gemini-2.5` native-audio also has a **separate, lower-rate intermittent** failure
 mode -- an occasional no-audio turn or mid-session close unrelated to tool shape
 (we saw a stray `1008` even in a with-tools run). The completeness rule removes
-the turn-1 `1011` driven by malformed declarations; it does not make the audio
+the early-turn `1011` driven by malformed declarations; it does not make the audio
 path perfectly reliable. Budget a reconnect/retry path for the residual.
 
 ## Reproduction notes
