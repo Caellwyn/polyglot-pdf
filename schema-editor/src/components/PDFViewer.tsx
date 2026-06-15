@@ -210,6 +210,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     };
   }, [numPages]);
 
+  // Count of fields placed on the PDF; drives the toolbar's "N field(s)" label.
+  const positionedFieldCount = schema.fields.filter(f => f.pdf_position).length;
+
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-gray-100">
       {/* Toolbar */}
@@ -250,13 +253,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
               </div>
             </>
           )}
-          {schema.fields.filter(f => f.pdf_position).length > 0 && (
+          {positionedFieldCount > 0 && (
             <>
               <span className="text-gray-300">|</span>
               <span className="text-sm text-gray-600">
-                {schema.fields.filter(f => f.pdf_position).length === 1
+                {positionedFieldCount === 1
                   ? '1 field'
-                  : `${schema.fields.filter(f => f.pdf_position).length} fields`}
+                  : `${positionedFieldCount} fields`}
               </span>
             </>
           )}

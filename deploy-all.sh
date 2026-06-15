@@ -47,9 +47,12 @@ kit_schema_file() {
     local meta="$kit_dir/metadata.json"
     local name=""
     if [ -f "$meta" ]; then
+        # Capture the value between the quotes, then strip any whitespace that sat
+        # INSIDE the quotes (e.g. "schema": " custom.json ") so the filename used in
+        # the -f test is not space-padded (fresh-eyes, bd snpi).
         name=$(grep -Eo '"schema"[[:space:]]*:[[:space:]]*"[^"]+"' "$meta" \
             | head -1 \
-            | sed -E 's/.*:[[:space:]]*"([^"]+)".*/\1/')
+            | sed -E 's/.*:[[:space:]]*"[[:space:]]*([^"]*[^"[:space:]])[[:space:]]*".*/\1/')
     fi
     echo "${name:-schema.json}"
 }
