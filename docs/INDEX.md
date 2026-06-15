@@ -52,6 +52,9 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Terminology (parts/sections, field-id brackets, form-session) | [`standards/terminology.md`](standards/terminology.md) |
 | Testing | [`standards/testing.md`](standards/testing.md) |
 | Risk rating (high/med/low; feeds fresh-eyes self-escalation) | [`standards/risk-rating.md`](standards/risk-rating.md) |
+| SI reduction (system-instruction shape + reduced-SI floor) | [`standards/si-reduction.md`](standards/si-reduction.md) |
+| WebSocket protocol (handshake + message-type union) | [`standards/ws-protocol.md`](standards/ws-protocol.md) |
+| Validation delegation (cheap-model validator contracts) | [`standards/validation-delegation.md`](standards/validation-delegation.md) |
 
 ## External references (vendored SDK docs)
 
