@@ -69,8 +69,18 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   current_values).* (F1-flagged.) **Note both next-field placeholders are wrong in
   JIT mode, not just this one:** the JIT handshake ALSO omits `initial_field_hint`
   (`schemaFormState.ts:635-647`), so `{next_field_hint}` falls back to the generic
-  "the first unfilled field" string (`ai_context.py:333`, `:694` reads `None`) rather
-  than the client's computed hint. A2 must fix BOTH the schema and the hint for JIT.
+  "the first unfilled field" string (`ai_context.py:333`; `websocket_routes.py:694`
+  reads it as `None`) rather than the client's computed hint. A2 must fix BOTH the
+  schema and the hint for JIT.
+- **O -- [BREAKS] `{form_title}` always renders the literal "Form" in JIT mode.**
+  `ai_context.py:139` reads `schema.get("form_metadata", {}).get("title", "Form")`,
+  but the JIT schema dict (`websocket_routes.py:661-669`) has no `form_metadata` key
+  and the JIT handshake sends no title (`schemaFormState.ts:635-647`). So the SI
+  header is "Medical assistant: Form | Section N/M..." for EVERY form -- the model
+  never learns which form (I-90, I-485, ...) it is filling, so it cannot name the
+  form to the user or disambiguate by form. Same class as M/N/D: a JIT placeholder
+  reading data the handshake does not carry. *Fix: send the form title on the JIT
+  handshake.* (NEW -- fresh-eyes round 2.)
 - **M -- [BREAKS] `{previous_spoken_names}` is always empty in JIT mode ->
   cross-section `get_field_value` lookups break.** A SEPARATE cross-section-recall
   path from Gap C (which is the manifest's PREVIOUS PARTS block). The JIT handshake
@@ -162,7 +172,12 @@ fix each.
 5. **Select first-unfilled for both next-field placeholders** (D) -- the
    `{next_field_schema}` (consult current_values) AND `{next_field_hint}` (send
    `initial_field_hint` on the JIT handshake); both are wrong in JIT today.
-6. **Seed + honor `loaded_field_ids`** (L + G) -- seed `_loaded_field_ids` from the
+6. **Send the form title + `previous_spoken_names` + `initial_field_hint` on the JIT
+   handshake** (O + the handshake halves of M and D) -- a cluster of "the JIT
+   handshake under-sends" fixes: today it omits the form title (`{form_title}` ->
+   literal "Form"), `previous_spoken_names`, and `initial_field_hint`. Fix the
+   handshake payload once to carry all three.
+7. **Seed + honor `loaded_field_ids`** (L + G) -- seed `_loaded_field_ids` from the
    handshake and actually call the de-dup gate so schemas are sent once across
    reconnects.
 
