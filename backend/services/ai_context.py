@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional
 import json
 from backend.config import get_settings
 from backend.services.manifest_service import (
-    generate_part_manifest,
     format_manifest_for_context,
     get_next_field_schema
 )
@@ -279,12 +278,52 @@ def build_form_context(
 
     # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled
     if settings.USE_JIT_SCHEMA:
-        # Generate manifest instead of full schema
-        # For now, treat entire schema as a single part (future: handle multi-part forms)
-        manifest = generate_part_manifest(schema, previous_parts_manifests=[])
-        manifest_text = format_manifest_for_context(manifest)
+        # Consume the section manifest the CLIENT sent on the handshake
+        # (schema["manifest"]), NOT a manifest regenerated from schema["fields"]
+        # -- in JIT mode schema["fields"] is only the synthesized first-field
+        # schema, so regenerating would describe one field, not the section
+        # (bd polyglot-pdf-jnjj.9; see docs/components/jit-schema.md gaps A/B/C/N).
+        client_manifest = schema.get("manifest") or {}
+        current_section = client_manifest.get("current_section") or {}
+        # Section field list as {field_id, spoken_name} pairs (the real section).
+        section_fields = current_section.get("fields", [])
 
-        # Get first unfilled field's schema to include with next_field_hint
+        # Build the SI manifest text from the real section + previous sections,
+        # so {manifest_text} lists every field in the section and the cheap
+        # cross-section lookup block is populated (gaps A/B/C).
+        manifest_for_context = {
+            "current_part": {
+                "part_id": current_section.get("section_id", section_label_text),
+                "part_label": current_section.get("section_label", section_label_text),
+                "fields": section_fields,
+            },
+            "previous_parts": [
+                {
+                    "part_id": prev.get("section_id", "unknown"),
+                    "part_label": prev.get("section_label", "Unknown"),
+                    "fields": prev.get("fields", []),
+                }
+                for prev in client_manifest.get("previous_sections", [])
+            ],
+        }
+        manifest_text = format_manifest_for_context(manifest_for_context)
+
+        # Recompute progress from the REAL section field set, not the one-field
+        # schema["fields"] (gap N: "Progress: x/1" on every section otherwise).
+        if section_fields:
+            total_fields = len(section_fields)
+            filled_count = sum(
+                1 for f in section_fields if current_values.get(f.get("field_id"))
+            )
+            unfilled_count = total_fields - filled_count
+
+        # Render the field schema the CLIENT sent as schema["fields"][0]. The
+        # frontend now selects the first UNFILLED field (not the section's
+        # positional first field), so on a reconnect/revisit the SI points at the
+        # actual next field, not an already-confirmed one (gap D; the selection
+        # lives in schemaFormState.getJITHandshakePayload). The backend renders
+        # whatever single field-schema the handshake carried -- it does not hold
+        # the other fields' full schemas in JIT mode (that is the point of JIT).
         first_field_schema = get_next_field_schema(schema, current_field_id=None)
 
         # Format first field schema as readable text (similar to fields_text format above)

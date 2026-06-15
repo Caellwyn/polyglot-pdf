@@ -153,6 +153,45 @@ class TestGetNextFieldSchemaForJIT:
 
         assert len(service._loaded_field_ids) == 0
 
+    def test_repeat_confirm_same_field_dedups_schema(self, mock_settings_jit_enabled, sample_schema):
+        """The de-dup gate fires: a second call for the same field returns None.
+
+        This is the bd polyglot-pdf-h2ii / jnjj.9 (gaps G/L) regression. A repeat
+        confirm_field on the same field (the no-value retry path) must NOT
+        re-deliver the next field's schema -- it was already sent. This uses the
+        REAL getter (not a mocked one -- the prior JIT tests mocked it, which is why
+        the dead de-dup gate stayed latent).
+        """
+        service = FormFillingService(settings=mock_settings_jit_enabled)
+        service._schema = sample_schema
+
+        # First confirm of firstName -> delivers lastName's schema, marks it loaded.
+        first = service.get_next_field_schema_for_jit("firstName")
+        assert first is not None and first["id"] == "lastName"
+        assert "lastName" in service._loaded_field_ids
+
+        # Retry: confirm firstName AGAIN. lastName's schema was already sent, so the
+        # gate must suppress re-delivery (return None), not re-send the duplicate.
+        second = service.get_next_field_schema_for_jit("firstName")
+        assert second is None
+
+    def test_seeds_loaded_field_ids_from_handshake(self, mock_settings_jit_enabled, sample_schema):
+        """A field already in the handshake's loaded_field_ids is not re-delivered.
+
+        On a reconnect the client sends loaded_field_ids = the schemas Gemini already
+        has; the service must seed its de-dup set from that (gap L) so the first
+        post-reconnect confirm does not re-send an already-known schema.
+        """
+        service = FormFillingService(settings=mock_settings_jit_enabled)
+        # Simulate start_session having seeded the set from the handshake schema
+        # dict (websocket_routes stores loaded_field_ids there in JIT mode).
+        service._schema = {**sample_schema, "loaded_field_ids": ["lastName"]}
+        service._loaded_field_ids = set(service._schema.get("loaded_field_ids", []))
+
+        # firstName -> lastName, but lastName was already delivered pre-reconnect.
+        result = service.get_next_field_schema_for_jit("firstName")
+        assert result is None
+
 
 class TestCallbackHandlerJITIntegration:
     """Test CallbackHandler integration with JIT schema loading."""

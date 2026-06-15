@@ -15,6 +15,10 @@
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue } from "../utils/validation";
+// Value imports for the JIT handshake's first-unfilled-field selection + hint.
+// navigation.ts back-references SchemaFormState as a TYPE-only import, so this
+// does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
+import { computeNextField, formatNextFieldHint, getFieldOrder } from "../../navigation";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -624,13 +628,30 @@ export class SchemaFormStateManager {
     // Build manifest with current + previous sections
     const manifest = buildHandshakeManifest(state.currentSectionId, state.schema, state);
 
-    // Get first field schema for current section
+    // Send the FIRST UNFILLED field's schema, not the section's positional first
+    // field -- on a reconnect/revisit, fields[0] may already be confirmed, and the
+    // backend renders whatever single schema we send as {next_field_schema}
+    // (bd polyglot-pdf-jnjj.9, gap D). computeNextField(skipConfirmed) is the same
+    // selection the runtime next-field hint uses, so schema and hint agree.
+    const nextField = computeNextField(state, { skipConfirmed: true });
     let firstFieldSchema = null;
-    const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
-    if (sectionSchema.fields.length > 0) {
-      const firstFieldId = sectionSchema.fields[0].id;
-      firstFieldSchema = getFieldSchema(firstFieldId, state.schema);
+    if (nextField) {
+      firstFieldSchema = getFieldSchema(nextField.id, state.schema);
+    } else {
+      // No unfilled field (section already complete / reconnect at the boundary):
+      // fall back to the section's first field so the SI still has a schema.
+      const sectionSchema = this.extractSectionFields(state.schema, state.currentSectionId);
+      if (sectionSchema.fields.length > 0) {
+        firstFieldSchema = getFieldSchema(sectionSchema.fields[0].id, state.schema);
+      }
     }
+
+    // Compute the next-field hint string the same way the runtime path does, so
+    // {next_field_hint} is the real next field on first connect, not the generic
+    // "the first unfilled field" fallback (gap D, hint half).
+    const initialFieldHint = nextField
+      ? formatNextFieldHint(nextField, getFieldOrder(state, nextField.id) || undefined)
+      : null;
 
     return {
       type: 'handshake_jit',
@@ -643,7 +664,13 @@ export class SchemaFormStateManager {
       section_number: currentSection?.order ?? 1,
       section_label: currentSection?.label ?? '',
       total_sections: state.schema.sections?.length ?? 1,
-      fill_language: fillLanguage
+      fill_language: fillLanguage,
+      // The JIT handshake previously UNDER-SENT these three, leaving the JIT SI's
+      // {form_title}, {previous_spoken_names}, and {next_field_hint} wrong
+      // (bd polyglot-pdf-jnjj.9, gaps O / M / D-hint):
+      form_title: state.schema.form_metadata?.title ?? 'Form',
+      previous_spoken_names: this.getPreviousSpokenNames(state),
+      initial_field_hint: initialFieldHint,
     };
   }
 
