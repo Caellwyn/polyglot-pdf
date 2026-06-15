@@ -43,18 +43,29 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
     });
   }
 
-  // Check fields
+  // Build the COMPLETE set of field ids up front so reference checks below see
+  // every field regardless of declaration order. Building it incrementally inside
+  // the reference loop falsely flagged a FORWARD reference -- a show_if /
+  // controls_fields target that appears LATER in schema.fields -- as non-existent
+  // (bd polyglot-pdf-y61i). Duplicate-ID detection still needs an incremental
+  // "seen so far" set, so it keeps its own (`seenIds`) in the loop below.
   const fieldIds = new Set<string>();
   for (const field of schema.fields) {
-    // Check for duplicate IDs
-    if (fieldIds.has(field.id)) {
+    fieldIds.add(field.id);
+  }
+
+  // Check fields
+  const seenIds = new Set<string>();
+  for (const field of schema.fields) {
+    // Check for duplicate IDs (incremental: a dup is an id seen EARLIER in the list)
+    if (seenIds.has(field.id)) {
       errors.push({
         field_id: field.id,
         message: 'Duplicate field ID',
         type: 'error',
       });
     }
-    fieldIds.add(field.id);
+    seenIds.add(field.id);
 
     // Check section references
     if (field.section_id) {
@@ -68,7 +79,7 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       }
     }
 
-    // Check conditional logic references
+    // Check conditional logic references (against the full id set -- forward refs OK)
     if (field.show_if?.field) {
       const targetExists = fieldIds.has(field.show_if.field);
       if (!targetExists) {
@@ -80,7 +91,7 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       }
     }
 
-    // Check controls_fields references
+    // Check controls_fields references (against the full id set -- forward refs OK)
     if (field.controls_fields) {
       const allControlledFields = [
         ...(field.controls_fields.shows || []),

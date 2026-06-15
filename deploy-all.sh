@@ -63,6 +63,15 @@ kit_schema_file() {
     echo "${name:-schema.json}"
 }
 
+# When this file is SOURCED (not executed directly), stop here -- expose only the
+# helper functions above and run none of the deploy flow below. This lets a test
+# harness source the script to exercise kit_is_complete / kit_schema_file in
+# isolation (bd polyglot-pdf-45x5) without triggering a real deploy. Direct
+# execution (`./deploy-all.sh ...`) has BASH_SOURCE[0] == $0 and falls through.
+if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+    return 0
+fi
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
