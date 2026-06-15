@@ -1291,9 +1291,34 @@ export class WebFormConnection {
     );
     SchemaFormStateManager.save(this.state);
 
+    // AUTO-DETECT SECTION COMPLETION. Compute this BEFORE acking so we can tell the
+    // backend whether a section boundary is imminent (bd polyglot-pdf-njvh). If this
+    // was the last unconfirmed field in the section AND there is a NEXT section, the
+    // FE is about to tear down the socket for switchToSection below -- so the
+    // backend's post-confirm request_next_field_hint round-trip would race that
+    // teardown and time out, making Gemini emit a spurious 'do NOT assume the form is
+    // complete' prompt right as the section IS correctly auto-advancing. We flag
+    // section_complete in the ack so the backend SKIPS that doomed hint request (the
+    // new section's first-field hint arrives via the section-switch flow anyway).
+    //
+    // CRITICAL: gate this on a NEXT section EXISTING, not merely "current section
+    // done". When the last field of the LAST section is confirmed there is no next
+    // section -- the FE fires onFormComplete (no switchToSection, no socket teardown),
+    // and the backend SHOULD request the hint so it gets the genuine
+    // "All fields confirmed" answer. Setting section_complete there would wrongly
+    // suppress that. So: section_complete == (current section done) AND (a next
+    // section exists) -- exactly the switchToSection branch below.
+    const nextField = computeNextField(this.state, { skipConfirmed: true });
+    const nextSectionForAck = nextField
+      ? null
+      : SchemaFormStateManager.getNextSection(this.state);
+    const sectionComplete = !nextField && !!nextSectionForAck;
+
     // Ack the synchronous confirm round-trip (bd polyglot-pdf-wpw.2): the confirm
-    // was recorded, so the backend reports success and advances.
-    this.sendConfirmFieldResponse(request_id, true);
+    // was recorded, so the backend reports success and advances. Carry
+    // section_complete so the backend can skip the racing next-field-hint at a
+    // boundary (bd polyglot-pdf-njvh).
+    this.sendConfirmFieldResponse(request_id, true, undefined, sectionComplete);
 
     // Confirm took -- clear pending unconfirmable tracking. A successful confirm of
     // the stuck field is genuine progress, so it restores the session-wide re-prompt
@@ -1305,19 +1330,16 @@ export class WebFormConnection {
       this.resetUnconfirmableTracking();
     }
 
-    // [NEW] AUTO-DETECT SECTION COMPLETION
-    // Check if all fields in current section are now confirmed
-    const nextField = computeNextField(this.state, { skipConfirmed: true });
-
     console.log('[WebFormConnection] [check] Section completion check:', {
       currentSectionId: this.state.currentSectionId,
       nextFieldInCurrentSection: nextField?.id || 'NONE',
-      allFieldsConfirmed: nextField === null
+      allFieldsConfirmed: !nextField
     });
 
     if (!nextField) {
-      // All fields in current section are confirmed!
-      const nextSection = SchemaFormStateManager.getNextSection(this.state);
+      // All fields in current section are confirmed! Reuse the next-section lookup
+      // already done above for the section_complete ack flag (bd polyglot-pdf-njvh).
+      const nextSection = nextSectionForAck;
 
       console.log('[WebFormConnection] [check] Next section lookup:', {
         currentSectionId: this.state.currentSectionId,
@@ -1527,7 +1549,8 @@ export class WebFormConnection {
   private sendConfirmFieldResponse(
     request_id: string | undefined,
     recorded: boolean,
-    reason?: string
+    reason?: string,
+    sectionComplete?: boolean
   ): void {
     if (!request_id) {
       return;
@@ -1537,6 +1560,10 @@ export class WebFormConnection {
       request_id,
       recorded,
       ...(reason ? { reason } : {}),
+      // bd polyglot-pdf-njvh: only present (true) when this confirm completed the
+      // section, so the backend can skip the doomed next-field-hint round-trip that
+      // would race the imminent socket teardown for switchToSection.
+      ...(sectionComplete ? { section_complete: true } : {}),
     });
   }
 
