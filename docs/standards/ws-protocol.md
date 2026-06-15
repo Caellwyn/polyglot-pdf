@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-14. Created as the F2 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.3). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
+*Last updated: 2026-06-15. A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -41,8 +41,8 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 | `section_label` | string | both | Display label for the current section (line 689). |
 | `total_sections` | int | both | Section count (line 690). |
 | `section_id` | string \| null | both* | Section ID, e.g. `"part_1_2_addresses"` (line 687). Used for the token-log context. *See DRIFT note below -- the primary builder does NOT send it. |
-| `previous_spoken_names` | string[] | both* | Spoken names from completed sections; defaults to `[]` (line 691). |
-| `initial_field_hint` | string \| null | both* | First-unfilled-field hint computed by the frontend; `null` when the form is complete (line 694). *Primary builder omits it -- see DRIFT. |
+| `previous_spoken_names` | string[] | both | Spoken names from completed sections; defaults to `[]` (line 691). Sent by both builders (the JIT builder since A2). |
+| `initial_field_hint` | string \| null | both | First-unfilled-field hint computed by the frontend; `null` when the form is complete (line 694). Sent by both builders (the JIT builder since A2, gap D-hint). |
 | `resume` | bool | both | Reconnect flag. Read as `is_reconnect` (line 698); suppresses the greeting/section-intro on a mid-section reconnect (bd polyglot-pdf-vmxx). |
 
 ### Legacy-mode keys (`type: "handshake"`)
@@ -55,9 +55,10 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `manifest` | `HandshakeManifest` (see below) | The frontend builds it as `{current_section, previous_sections, parts}` (`frontend/src/schema-forms/utils/manifestUtils.ts:35-41`) -- NOT a top-level `fields` array. The backend stores the whole object and consumes ONLY `manifest.parts` (the section nav list, copied into `schema["parts"]`, lines 664-668); it does NOT read `manifest.current_section` / `previous_sections`. **Heads-up for Pillar A:** the JIT SI's field manifest is NOT built from this handshake manifest -- `ai_context.build_form_context()` regenerates `manifest_text` from `schema["fields"]` (which in JIT mode is just `[first_field_schema]`, lines 661-663), so today the SI sees only the first field's pairs, not the whole section. (The backend's `jit_handshake_received` log even reads a non-existent `manifest.fields` at line 671, always logging 0 -- a real symptom of this mismatch.) A2 must reconcile this so the reduced SI actually carries the section manifest. Manifest field-entry shape is owned by [si-reduction.md](si-reduction.md). |
-| `first_field_schema` | object \| null | Full schema for the current section's first field only (line 656). |
-| `loaded_field_ids` | string[] | Field IDs whose full schema the client has already sent to Gemini; defaults to `[]` (line 657). |
+| `manifest` | `HandshakeManifest` | The frontend builds it as `{current_section, previous_sections, parts}` (`frontend/src/schema-forms/utils/manifestUtils.ts:35-41`) -- NOT a top-level `fields` array. The backend stores the whole object and (since A2, bd polyglot-pdf-jnjj.9) CONSUMES `manifest.current_section.fields` + `manifest.previous_sections` to build the JIT `{manifest_text}` and progress count, plus `manifest.parts` for the section nav list. Manifest field-entry shape is owned by [si-reduction.md](si-reduction.md). |
+| `first_field_schema` | object \| null | Full schema for the FIRST-UNFILLED field of the section (selected via `computeNextField`, A2 gap D), not the positional first field. The backend renders this as `{next_field_schema}` -- in JIT mode it holds no other field's full schema. |
+| `loaded_field_ids` | string[] | Field IDs whose full schema the client has already sent to Gemini; defaults to `[]`. The backend seeds its de-dup set from this at session start so schemas are not re-sent across reconnects (A2 gap L). |
+| `form_title` | string | The form's display title (`schema.form_metadata.title`). Added by A2 (gap O) so the JIT SI's `{form_title}` is the real form, not the literal "Form"; the backend stores it into `schema["form_metadata"]["title"]`. |
 
 In JIT mode `schema` is synthesized backend-side from `manifest` +
 `first_field_schema` (lines 661-669), so the legacy `schema` key is absent.
@@ -204,25 +205,24 @@ Exit-criterion 3 requires confirming the frontend and backend field names match.
 They match on every key the backend reads, with these real gaps found while
 verifying:
 
-1. **`section_id` and `initial_field_hint` are read by the backend but NOT sent
-   by the primary handshake builders.** `getHandshakePayload` /
-   `getJITHandshakePayload` (`schemaFormState.ts:588-648`) omit both keys. The
-   backend reads them (`websocket_routes.py:687, 694`) and falls back to `None`.
-   They ARE sent by the section-switch handshakes
-   (`webFormConnection.ts:2240, 2246` and `:2387`), so the backend sees them on a
-   switch but not on the initial connect. Benign today (the backend tolerates
-   `None`), but any pillar that starts to DEPEND on `section_id` /
-   `initial_field_hint` being present on the first connect must first close this
-   gap. Flagged, not fixed (this is a doc-only contract bead).
+1. **`section_id` is read by the backend but NOT sent by the primary handshake
+   builders.** `getHandshakePayload` / `getJITHandshakePayload`
+   (`schemaFormState.ts`) omit it; the backend reads it (`websocket_routes.py:687`)
+   and falls back to `None`. It IS sent by the section-switch handshakes
+   (`webFormConnection.ts`), so the backend sees it on a switch but not the initial
+   connect. Benign today (the backend tolerates `None`); a pillar that depends on
+   `section_id` on first connect must close this gap. (`initial_field_hint` was in
+   this same flag -- now RESOLVED for the JIT builder, see below.)
 
-2. **`previous_spoken_names` is sent by the LEGACY builder but NOT the JIT
-   builder.** `getHandshakePayload` includes it (`schemaFormState.ts:611`);
-   `getJITHandshakePayload` (`:635-647`) omits it. The backend reads it
-   (`websocket_routes.py:691`) and defaults to `[]`. Same class of benign
-   asymmetry: a pillar that needs prior-section spoken names in JIT mode on first
-   connect must close this gap first. (Pillar A flips JIT to the default, so this
-   one is the most likely to matter -- A2's manifest work should confirm the JIT
-   handshake carries what the reduced SI needs.)
+2. **RESOLVED (A2, bd polyglot-pdf-jnjj.9): the JIT builder now sends
+   `previous_spoken_names`, `initial_field_hint`, and `form_title`.** These three
+   were previously omitted by `getJITHandshakePayload`, leaving the JIT SI's
+   `{previous_spoken_names}`, `{next_field_hint}`, and `{form_title}` wrong (gaps
+   M/D-hint/O in [../components/jit-schema.md](../components/jit-schema.md)). A2
+   added them to the JIT handshake; the backend already read the first two
+   (`websocket_routes.py:691, 694`) and now stores `form_title` into
+   `schema["form_metadata"]`. The legacy builder always sent `previous_spoken_names`
+   (`schemaFormState.ts:611`); the JIT builder now matches.
 
 3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
    frontend switches on `case "field_update"` (`webFormConnection.ts:397` ->

@@ -153,6 +153,58 @@ class TestGetNextFieldSchemaForJIT:
 
         assert len(service._loaded_field_ids) == 0
 
+    def test_repeat_confirm_same_field_dedups_schema(self, mock_settings_jit_enabled, sample_schema):
+        """The de-dup gate fires: a second call for the same field returns None.
+
+        This is the bd polyglot-pdf-h2ii / jnjj.9 (gaps G/L) regression. A repeat
+        confirm_field on the same field (the no-value retry path) must NOT
+        re-deliver the next field's schema -- it was already sent. This uses the
+        REAL getter (not a mocked one -- the prior JIT tests mocked it, which is why
+        the dead de-dup gate stayed latent).
+        """
+        service = FormFillingService(settings=mock_settings_jit_enabled)
+        service._schema = sample_schema
+
+        # First confirm of firstName -> delivers lastName's schema, marks it loaded.
+        first = service.get_next_field_schema_for_jit("firstName")
+        assert first is not None and first["id"] == "lastName"
+        assert "lastName" in service._loaded_field_ids
+
+        # Retry: confirm firstName AGAIN. lastName's schema was already sent, so the
+        # gate must suppress re-delivery (return None), not re-send the duplicate.
+        second = service.get_next_field_schema_for_jit("firstName")
+        assert second is None
+
+    @pytest.mark.asyncio
+    async def test_start_session_seeds_loaded_field_ids_from_handshake(
+        self, mock_settings_jit_enabled, sample_schema
+    ):
+        """start_session itself seeds _loaded_field_ids from the handshake schema.
+
+        Drives the REAL start_session code path (gap L), not a hand-set field, so
+        deleting the seed line in start_session would fail this test. _live_ai=None
+        + accept_connection=False reaches the seed and skips the live-AI block.
+        On a reconnect the client sends loaded_field_ids = the schemas Gemini already
+        has, and the first post-reconnect confirm must NOT re-send a known schema.
+        """
+        from unittest.mock import AsyncMock, MagicMock
+        from fastapi import WebSocket
+
+        service = FormFillingService(settings=mock_settings_jit_enabled)
+        ws = MagicMock(spec=WebSocket)
+        ws.send_json = AsyncMock()
+        ws.accept = AsyncMock()
+
+        jit_schema = {**sample_schema, "loaded_field_ids": ["lastName"], "jit_mode": True}
+        await service.start_session(
+            ws, "sess-1", accept_connection=False, schema=jit_schema,
+        )
+
+        # The seed ran: lastName is already known.
+        assert service._loaded_field_ids == {"lastName"}
+        # And the de-dup honors it: firstName -> lastName is suppressed.
+        assert service.get_next_field_schema_for_jit("firstName") is None
+
 
 class TestCallbackHandlerJITIntegration:
     """Test CallbackHandler integration with JIT schema loading."""

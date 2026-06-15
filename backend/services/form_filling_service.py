@@ -136,7 +136,15 @@ class FormFillingService:
         # Store schema for context generation
         self._schema = schema
         # Note: current_values are ignored by backend - client is source of truth
-        
+
+        # Seed the JIT schema de-dup set from the handshake's loaded_field_ids --
+        # the field schemas the client has ALREADY delivered to Gemini (this list
+        # survives reconnects on the client). Without this, a mid-session reconnect
+        # reset the set to empty and re-sent schemas Gemini already had
+        # (bd polyglot-pdf-jnjj.9 gap L). Idempotent: a fresh connect sends [].
+        if schema:
+            self._loaded_field_ids = set(schema.get("loaded_field_ids", []))
+
         if accept_connection:
             await self._websocket.accept()
         
@@ -925,9 +933,20 @@ class FormFillingService:
         next_schema = get_next_field_schema(part_data, updated_field_id)
 
         if next_schema and next_schema.get('id'):
-            # Mark as sent to prevent duplicates
-            self._loaded_field_ids.add(next_schema['id'])
-            _log.debug("jit_schema_sent", field_id=next_schema['id'],
+            next_id = next_schema['id']
+            # ACTUALLY gate on the de-dup set before returning. The set was being
+            # populated but never checked, so a repeat confirm_field on the same
+            # field (the no-value retry path) -- or a reconnect -- re-delivered a
+            # schema Gemini already has, the exact duplication JIT exists to avoid
+            # (bd polyglot-pdf-jnjj.9 gaps G/L, bug polyglot-pdf-h2ii;
+            # should_include_schema_in_response was dead code).
+            if not should_include_schema_in_response(next_id, self._loaded_field_ids):
+                _log.debug("jit_schema_deduped", field_id=next_id,
+                           total_loaded=len(self._loaded_field_ids))
+                return None
+            # First delivery: mark as sent so the next call de-dups it.
+            self._loaded_field_ids.add(next_id)
+            _log.debug("jit_schema_sent", field_id=next_id,
                       total_loaded=len(self._loaded_field_ids))
 
         return next_schema

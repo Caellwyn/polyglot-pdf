@@ -179,9 +179,12 @@ def format_manifest_for_context(manifest: dict) -> str:
     current = manifest.get("current_part", {})
     lines.append(f"CURRENT PART: {current.get('part_label', 'Unknown')}")
 
+    # Use .get() with fallbacks: since A2 (bd polyglot-pdf-jnjj.9) this is fed the
+    # CLIENT's handshake manifest fields (WebSocket data), so a malformed entry must
+    # degrade gracefully, not KeyError and drop the connection mid-SI build.
     field_entries = []
     for field in current.get("fields", []):
-        field_entries.append(f"{field['field_id']}|{field['spoken_name']}")
+        field_entries.append(f"{field.get('field_id', '')}|{field.get('spoken_name', '')}")
 
     lines.append("Fields: " + " | ".join(field_entries))
 
@@ -192,7 +195,7 @@ def format_manifest_for_context(manifest: dict) -> str:
         for part in previous_parts:
             part_fields = []
             for field in part.get("fields", []):
-                part_fields.append(f"{field['field_id']}|{field['spoken_name']}")
+                part_fields.append(f"{field.get('field_id', '')}|{field.get('spoken_name', '')}")
             lines.append(f"{part.get('part_label', 'Unknown')}: " + " | ".join(part_fields))
 
     return "\n".join(lines)

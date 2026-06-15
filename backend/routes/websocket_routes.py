@@ -655,6 +655,10 @@ async def fill_form_from_schema(
 		manifest = handshake.get("manifest")
 		first_field_schema = handshake.get("first_field_schema")
 		loaded_field_ids = handshake.get("loaded_field_ids", [])
+		# Form title rides on the JIT handshake so {form_title} in the SI is the
+		# real form, not the literal "Form" (bd polyglot-pdf-jnjj.9, gap O: the JIT
+		# schema dict has no form_metadata, so ai_context fell back to "Form").
+		jit_form_title = handshake.get("form_title")
 
 		# Build minimal schema from manifest for validation
 		# The manifest contains field_id|spoken_name pairs, we'll use it for context
@@ -667,9 +671,20 @@ async def fill_form_from_schema(
 			# Copy parts array from manifest for section list building
 			"parts": manifest.get("parts", []) if manifest else []
 		}
+		# Carry the form title through form_metadata so ai_context.build_form_context
+		# renders it unchanged (same key the legacy full-schema path uses).
+		if jit_form_title:
+			schema["form_metadata"] = {"title": jit_form_title}
+		# manifest_field_count reads the REAL section field list
+		# (manifest.current_section.fields), not a non-existent top-level
+		# manifest.fields that always logged 0 (gap E).
+		_jit_section_fields = (
+			(manifest.get("current_section") or {}).get("fields", []) if manifest else []
+		)
 		log.info("jit_handshake_received",
-		         manifest_fields=len(manifest.get("fields", [])) if manifest else 0,
+		         manifest_field_count=len(_jit_section_fields),
 		         has_first_field=bool(first_field_schema),
+		         has_form_title=bool(jit_form_title),
 		         parts_count=len(manifest.get("parts", [])) if manifest else 0)
 	else:
 		# Legacy mode: Full schema provided
