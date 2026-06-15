@@ -66,6 +66,7 @@ vi.mock('../shared/config', () => ({
     isTestHarnessEnabled: () => mockIsTestHarnessEnabled(),
 }));
 
+import * as AuthModule from './AuthContext';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ProtectedRoute } from '../components/layout/ProtectedRoute';
 
@@ -270,69 +271,56 @@ describe('useAuth guard', () => {
 
 // ===========================================================================
 // 5. ProtectedRoute gate: loading -> spinner, no user -> Login, user -> children
+//
+// ProtectedRoute is tested in ISOLATION by spying on useAuth, so all THREE of
+// its branches run -- including the loading-spinner branch. (Rendering it inside
+// the real AuthProvider would NOT exercise that branch: AuthProvider gates its
+// children on `{!loading && children}`, so ProtectedRoute never even mounts while
+// loading. Driving useAuth directly is the only way to reach the spinner.)
 // ===========================================================================
 describe('ProtectedRoute gate', () => {
+    // Restore the useAuth spy after each case so it cannot leak into the
+    // AuthProvider-based tests (which need the real useAuth). Scoped to this
+    // block so it does not touch the module-level vi.mock factories.
+    afterEach(() => {
+        vi.mocked(AuthModule.useAuth).mockRestore?.();
+    });
+
     function renderGate(authValue: { user: unknown; loading: boolean }) {
-        // Provide the context value directly via a stand-in provider so we drive
-        // the three gate states without the full Firebase lifecycle.
-        const Stub = ({ children }: { children: React.ReactNode }) => {
-            // useAuth reads from AuthContext; emulate by rendering ProtectedRoute
-            // inside a provider whose value we control.
-            return children as React.ReactElement;
-        };
-        void Stub;
-        return authValue;
+        vi.spyOn(AuthModule, 'useAuth').mockReturnValue(
+            authValue as unknown as ReturnType<typeof useAuth>
+        );
+        return render(
+            <ProtectedRoute>
+                <div data-testid="protected">secret</div>
+            </ProtectedRoute>
+        );
     }
-    void renderGate;
 
-    it('renders the loading spinner while auth is loading', async () => {
-        // Hold the listener so loading stays true, then render ProtectedRoute
-        // inside the real provider.
-        mockOnAuthStateChanged.mockImplementation(() => () => {});
-        render(
-            <AuthProvider>
-                <ProtectedRoute>
-                    <div data-testid="protected">secret</div>
-                </ProtectedRoute>
-            </AuthProvider>
-        );
-        // AuthProvider gates children on !loading, so nothing renders while loading
-        // -- including ProtectedRoute. The protected content must be absent.
+    it('renders the loading spinner (not the content) while auth is loading', () => {
+        renderGate({ user: null, loading: true });
+
+        // The real spinner branch (ProtectedRoute.tsx) runs: the auth-loading
+        // container is present, and neither the Login screen nor the protected
+        // content is shown.
+        expect(document.querySelector('.auth-loading')).not.toBeNull();
+        expect(document.querySelector('.auth-spinner')).not.toBeNull();
         expect(screen.queryByTestId('protected')).toBeNull();
+        expect(screen.queryByTestId('login-screen')).toBeNull();
     });
 
-    it('renders the Login screen when there is no user', async () => {
-        mockOnAuthStateChanged.mockImplementation((_a: unknown, cb: (u: unknown) => void) => {
-            cb(null);
-            return () => {};
-        });
-        render(
-            <AuthProvider>
-                <ProtectedRoute>
-                    <div data-testid="protected">secret</div>
-                </ProtectedRoute>
-            </AuthProvider>
-        );
-        await waitFor(() => expect(screen.getByTestId('login-screen')).toBeTruthy());
+    it('renders the Login screen when not loading and there is no user', () => {
+        renderGate({ user: null, loading: false });
+
+        expect(screen.getByTestId('login-screen')).toBeTruthy();
         expect(screen.queryByTestId('protected')).toBeNull();
+        expect(document.querySelector('.auth-loading')).toBeNull();
     });
 
-    it('renders the protected children when a user is present', async () => {
-        const fakeUser = { uid: 'u1', email: 'u@example.com', displayName: null, photoURL: null };
-        mockOnAuthStateChanged.mockImplementation((_a: unknown, cb: (u: unknown) => void) => {
-            cb(fakeUser);
-            return () => {};
-        });
-        mockGetDoc.mockResolvedValue({ exists: () => true });
-        mockSetDoc.mockResolvedValue(undefined);
-        render(
-            <AuthProvider>
-                <ProtectedRoute>
-                    <div data-testid="protected">secret</div>
-                </ProtectedRoute>
-            </AuthProvider>
-        );
-        await waitFor(() => expect(screen.getByTestId('protected')).toBeTruthy());
+    it('renders the protected children when a user is present', () => {
+        renderGate({ user: { uid: 'u1' }, loading: false });
+
+        expect(screen.getByTestId('protected')).toBeTruthy();
         expect(screen.queryByTestId('login-screen')).toBeNull();
     });
 });
