@@ -121,6 +121,9 @@ def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
             encoding="utf-8",
             errors="replace",
             timeout=SUBPROCESS_TIMEOUT_SEC,
+            # Suppress the dozens of git.exe console windows a bd dolt
+            # push/pull conjoin spawns on Windows (bd polyglot-pdf-5k32).
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError(

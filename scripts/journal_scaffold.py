@@ -119,6 +119,9 @@ def _run_bd_show(bead_id: str) -> dict:
             encoding="utf-8",
             errors="replace",
             timeout=SUBPROCESS_TIMEOUT_SEC,
+            # Suppress any transient git.exe console window bd spawns against the
+            # git-backed Dolt cache on Windows (bd polyglot-pdf-5k32).
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("bd show {} timed out".format(bead_id))

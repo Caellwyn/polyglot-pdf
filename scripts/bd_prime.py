@@ -28,9 +28,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Apply the npm bd PATH fix so subprocess finds the right binary on Windows.
+# Apply the npm bd PATH fix so subprocess finds the right binary on Windows,
+# and reuse its windowless-spawn helper (bd polyglot-pdf-5k32).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import swarm_config  # noqa: F401, E402
+import swarm_config  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OVERRIDE = REPO_ROOT / ".claude" / "prime-closeout-override.md"
@@ -50,6 +51,7 @@ def _is_remote_container() -> bool:
             ["git", "remote", "get-url", "origin"], cwd=REPO_ROOT,
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=10,
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
@@ -66,6 +68,7 @@ def _store_empty_or_broken() -> bool:
             ["bd", "stats", "--json"], cwd=REPO_ROOT,
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=30,
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return True
@@ -152,6 +155,7 @@ def main() -> int:
             encoding="utf-8",
             errors="replace",
             timeout=BD_TIMEOUT_SEC,
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except FileNotFoundError:
         sys.stderr.write(

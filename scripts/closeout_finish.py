@@ -165,6 +165,9 @@ def _run(cmd: list[str], *, cwd: str | None = None,
         errors="replace",
         cwd=cwd,
         timeout=SUBPROCESS_TIMEOUT_SEC,
+        # Suppress the dozens of git.exe console windows a bd dolt push/pull
+        # conjoin spawns on Windows (bd polyglot-pdf-5k32).
+        creationflags=swarm_config.windowless_creationflags(),
     )
     if check and proc.returncode != 0:
         raise CloseoutError(
