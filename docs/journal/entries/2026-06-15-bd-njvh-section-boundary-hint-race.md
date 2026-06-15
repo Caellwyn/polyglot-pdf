@@ -103,11 +103,26 @@ Generalizable -- noted in `docs/standards/*` if a home exists for it.
 
 ## Doc freshness
 
-`tool-call-flow.md` tracks `callback_handler.py` + `request_coordinator.py` and
-describes the confirm_field round-trip; reviewed + bumped with a note on the
-section-boundary short-circuit. `websocket-routing.md` tracks
-`websocket_routes.py` + `webFormConnection.ts`; the new `section_complete` key on
-`confirm_field_response` is a control-channel addition -- bumped with a note.
+Bumped the 3 docs that genuinely describe what changed:
+- `ws-protocol.md` -- documented the new optional `section_complete` sub-field on
+  `confirm_field_response` in the message table, with an explicit note that it is a
+  sub-field of the confirm reply, NOT the SI-reduction epic's planned top-level
+  `section_complete` EVENT (same name, different thing -- flagged to avoid collision
+  with that active work).
+- `tool-call-flow.md` -- documented the section-boundary short-circuit in the
+  confirm_field round-trip's "recorded" branch.
+- `websocket-routing.md` -- noted the WS route reads + threads the flag (no dispatch
+  structure change).
+
+Left 6 docs flagged-but-stale: they track files this branch touched but describe
+behavior this PR did NOT change -- `confirmation-and-audit.md` +
+`hipaa-pii-policy.md` (callback_handler: my change is in the next-field-HINT path,
+not the confirmation-audit logging; the new `confirm_section_boundary_skip_hint`
+log is PII-free -- `field_id` + `session_id` only, both always-safe-to-log),
+`context-compression.md` + `stateless-architecture.md` (form_filling_service: I only
+added a param passthrough), and `auth.md` + `risk-rating.md` (websocket_routes
+broadly: no auth/risk change). Per the doc-freshness rule, a doc stale on a file
+this branch didn't behaviorally change is not this PR's to bump.
 
 ## Files touched
 
