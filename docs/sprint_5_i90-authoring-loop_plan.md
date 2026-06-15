@@ -86,6 +86,54 @@ maintainer sourcing a form. A field-merge/split bead is intentionally NOT filed 
 (demand-gated -- file it after the first real touch-up pass if the pipeline leaves
 merge work behind).
 
+### Track D -- Form catalogue + onboarding (added 2026-06-13, maintainer)
+
+The editor's missing FRONT DOOR: today there is no way to onboard a new form (the
+editor reads a hardcoded `AVAILABLE_FORMS` list from its own `public/schemas/`
+static copy, disconnected from `form-kits/` and GCS). The maintainer needs to
+drag-drop an AcroForm PDF to add it to the catalogue, see all forms at a glance,
+and track review progress.
+
+**Storage model (maintainer decision, 2026-06-13):** in-progress forms live LOCALLY
+in `form-kits/<id>/` (the editor reads/writes them via the File System Access
+**directory** API) AND are COMMITTED TO GIT for off-machine durability (the
+"coffee-spill" clause -- a dead laptop must not lose work). Completed forms reach
+the voice app via the EXISTING deploy -> GCS flow; "complete" = a `status` marker
+in `metadata.json` that gates the deploy. This avoids browser<->GCS auth entirely
+(no new backend API for the MVP): local files + git for durability + the existing
+deploy for the complete-gate. Single source of truth: `form-kits/<id>/` holds both
+draft and complete forms, distinguished by `metadata.json` `status`.
+
+**Two corrections from the Codex review of this plan (2026-06-14), both adopted:**
+
+1. **The draft-leak window is closed by folding the MINIMAL deploy gate INTO D1
+   (not deferring it to D2).** The moment D1 can write draft kits into
+   `form-kits/`, an unfiltered deploy would upload them to GCS / the voice app --
+   so the `status != complete` skip in the deploy MUST land in the same bead that
+   introduces drafts. D1 therefore includes the minimal gate; D2 is now only the
+   *editor-side* status UI + richer gating, no longer the thing standing between
+   drafts and production.
+2. **The deploy upload+manifest loop lives in `deploy-all.sh` (~lines 192-237),
+   not `deploy-demo.sh`/`scripts/deploy-form-kit.sh`.** `deploy-demo.sh` delegates
+   to `./deploy-all.sh`; both demo and prod (and a direct `deploy-all.sh
+   --form-kits`) run that loop, which today uploads EVERY `form-kits/*/` with a
+   `schema.json` and writes it into the manifest with no status filter. The gate
+   must go in `deploy-all.sh` to actually hold. Surfaces corrected below.
+
+| bead | title | surfaces | inherits |
+|------|-------|----------|----------|
+| D1 (MVP) | Form catalogue + drag-drop onboarding (editor lists all `form-kits/` forms via the FS-access **directory** API + drag-drop a PDF to add `form-kits/<id>/`, git-backed) **+ the minimal deploy gate** (`deploy-all.sh` skips any kit whose `metadata.json` `status` != `complete`, defaulting absent/`draft` to NOT-deployed) | `schema-editor/src/`, `form-kits/`, `deploy-all.sh` | crit 3 (the loop's front door) |
+| D2 | Editor-side status UI + richer complete-gate: view/set a form's `status` from the editor; confirm the deploy filter (D1) against demo + prod + `deploy-all.sh --form-kits` | `form-kits/`, `schema-editor/src/`, `deploy-all.sh` | (epic 7a9, new) |
+| D3 | Catalogue dashboard: per-form progress (has-extraction / in-progress / complete, % human-review done), multi-form completion counts | `schema-editor/src/` | (epic 7a9, new) |
+
+**D1 is the MVP** the maintainer asked to build now -- now INCLUDING the minimal
+deploy gate so drafts can never reach production (Codex finding adopted). D2
+(editor status UI + richer gating) and D3 (progress dashboard) are the
+"expand later" children, filed but not yet scheduled. D1 depends on nothing new;
+D2/D3 build on D1. The progress-metric signal D3 needs does not exist yet -- D3's
+first task is defining how "review progress" is
+measured.
+
 ## Bead housekeeping (approved)
 
 - **7a9.12** rescoped to B1 (I-90 good-enough; big-form/table work deferred).
@@ -101,7 +149,12 @@ merge work behind).
 - Big-form / table-heavy authoring (I-589 class), table/multi_entry detection,
   supplement-overflow wiring, the chunked pass. Parked.
 - Field merge/split editor UI (demand-gated; not filed until observed need).
-- Server-side schema persistence (the File System Access API is the chosen
-  local-authoring save path; no backend write endpoint).
+- A backend REST API / browser<->GCS auth for form onboarding -- explicitly
+  avoided: Track D uses local `form-kits/` + git for durability + the existing
+  `deploy-demo.sh` for the complete-gate, so no backend write endpoint is needed
+  for the MVP. (A backend API would only return if multi-user / multi-device
+  onboarding is ever required -- not now, single maintainer.)
+- The catalogue progress dashboard (D3) and the explicit complete-gate (D2) are
+  FILED but deferred -- D1 (onboarding MVP) is the scheduled Track-D work.
 - Batch operations, keyboard-nav polish, virtual scrolling (survey's
   medium/low-priority items) -- candidates for a later editor pass, not this one.
