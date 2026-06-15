@@ -34,6 +34,7 @@ doc, drop the _(planned)_ tag and make the name a link.
 | Tool-call flow (code expectation vs. wire; dev-log key) | [`components/tool-call-flow.md`](components/tool-call-flow.md) | `backend/adapters/live_ai_gemini.py`, `backend/services/callback_handler.py` |
 | Context-window compression (session cost/duration bounding) | [`components/context-compression.md`](components/context-compression.md) | `backend/adapters/live_ai_gemini.py`, `backend/config.py`, `backend/services/form_filling_service.py` |
 | Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
+| JIT schema loading (manifest path; A1 audit + fix-list) | [`components/jit-schema.md`](components/jit-schema.md) | `backend/services/manifest_service.py`, `backend/services/ai_context.py` |
 | PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
 | Auth | [`components/auth.md`](components/auth.md) | `frontend/src/contexts/AuthContext.tsx`, `backend/services/auth.py`, `firestore.rules` |
 | Config + deployment | [`components/config-deployment.md`](components/config-deployment.md) | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
