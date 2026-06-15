@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in config.ts code comments/console strings (cosmetic, no config change). bd rwjy: CallbackHandler gains form_id/form_session_id -- no config or deployment change. Prior: 2026-06-12 (deploy-production.sh --all flag now caught at any arg position, bd pub). Prior: 2026-06-11. See [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable). Prior: [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
+*Last updated: 2026-06-15. bd b0pe: form-kit deploy now gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest; drafts stay local. bd np64: non-ASCII -> ASCII in config.ts code comments/console strings (cosmetic, no config change). bd rwjy: CallbackHandler gains form_id/form_session_id -- no config or deployment change. Prior: 2026-06-12 (deploy-production.sh --all flag now caught at any arg position, bd pub). Prior: 2026-06-11. See [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable). Prior: [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -117,9 +117,14 @@ stages):
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,
   live WebSockets included, and the 300s default terminated every voice session
   at exactly 5 minutes (bd polyglot-pdf-9w5k).
-- **Form-kits** — uploads the local `form-kits/` tree to
-  `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
-  `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`.
+- **Form-kits** — uploads the **complete** kits from the local `form-kits/` tree
+  to `gs://<bucket>/<prefix>/` plus an `index.json` manifest. Demo bucket
+  `polyglot-demo-aa709-form-kits`; prod bucket `polyglot-pdf-form-kits`. A kit is
+  uploaded (and listed in the manifest) only when its `metadata.json` has
+  `status: complete` — the `kit_is_complete` gate in `deploy-all.sh` skips draft
+  / unmarked kits so in-progress forms stay local + git-backed and never reach the
+  voice app (bd polyglot-pdf-b0pe). Both the upload loop and the manifest loop are
+  gated, so a draft is absent from GCS *and* the served manifest.
 - **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
   `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
   → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting`. The

@@ -33,6 +33,7 @@ function makeMockHandle(initial = ''): FsFileHandle & {
     close: vi.fn(async () => { state.closed = true; }),
   };
   return {
+    kind: 'file' as const,
     name: 'mock_schema.json',
     createWritable: vi.fn(async () => writable),
     getFile: vi.fn(async () =>
@@ -116,6 +117,7 @@ describe('write/read round-trip', () => {
       close: vi.fn(async () => {}),
     };
     const handle: FsFileHandle = {
+      kind: 'file',
       name: 'x.json',
       createWritable: async () => writable,
       getFile: async () => ({ text: async () => '' } as unknown as File),
