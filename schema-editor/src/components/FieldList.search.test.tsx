@@ -111,6 +111,27 @@ describe('FieldList search/filter', () => {
     expect(screen.getByText('Contact')).toBeInTheDocument();
   });
 
+  it('clicking a section header while filtering does not collapse it on clear', () => {
+    // Regression (fresh-eyes finding, bd j036): the section toggle must be inert
+    // while filtering, else a ghost click silently collapses a section once the
+    // search is cleared -- breaking "clearing restores the full grouped list".
+    render(
+      <FieldList schema={makeSchema()} selectedFieldId={null} onSelectField={vi.fn()} />
+    );
+
+    const input = screen.getByLabelText('Search fields');
+    fireEvent.change(input, { target: { value: 'name' } });
+
+    // Click the "Names" section header while filtering (should be a no-op).
+    fireEvent.click(screen.getByText('Names'));
+
+    // Clear the filter; the section must still be expanded (its fields visible).
+    fireEvent.click(screen.getByLabelText('Clear search'));
+
+    expect(screen.getByText('first_name')).toBeInTheDocument();
+    expect(screen.getByText('last_name')).toBeInTheDocument();
+  });
+
   it('selecting a filtered match calls onSelectField with its id', () => {
     const onSelectField = vi.fn();
     render(

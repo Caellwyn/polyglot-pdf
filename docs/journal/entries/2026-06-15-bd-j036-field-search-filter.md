@@ -45,7 +45,16 @@ A search/filter box at the top of `FieldList.tsx`:
 pass; full schema-editor suite 166/166; `tsc --noEmit` clean. The backend suite
 (prep Step 0) was already green (349 passed) and untouched by this FE-only change.
 
-**Fresh-eyes assess:** (recorded at closeout -- see merge ping for round count).
+**Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** round 1
+scored both rubric criteria PASS and surfaced one in-scope gap -- the section
+chevron mutated the persisted expansion state while filtering (a no-op visually),
+so a stray click during a search could collapse a section once the filter
+cleared, undermining "clearing restores the full list." Adopted: made
+`toggleSection` inert while filtering (+ `cursor-default` on the header so it does
+not look interactive), added a regression test, and (folded in) fixed the count
+badge to show `matches/total` while filtering instead of a misleading bare match
+count. Round 2 returned NO-GAPS. A cosmetic JSX-indentation nit was left (no
+behavior). No out-of-scope beads filed.
 
 ## Lessons
 
@@ -71,7 +80,8 @@ pass; full schema-editor suite 166/166; `tsc --noEmit` clean. The backend suite
 
 - `schema-editor/src/components/FieldList.tsx` -- search input + `searchQuery`
   state; `matchesQuery` predicate; filtered `sectionedFields`; hide-empty +
-  auto-expand-while-filtering section render; no-results message.
-- `schema-editor/src/components/FieldList.search.test.tsx` -- NEW. 6 tests for the
-  filter behavior + both exit criteria.
+  auto-expand-while-filtering section render; no-results message; `toggleSection`
+  inert while filtering; count badge shows `matches/total` while filtering.
+- `schema-editor/src/components/FieldList.search.test.tsx` -- NEW. 7 tests for the
+  filter behavior, both exit criteria, and the no-collapse-on-clear regression.
 - `docs/journal/entries/2026-06-15-bd-j036-field-search-filter.md` -- THIS entry.

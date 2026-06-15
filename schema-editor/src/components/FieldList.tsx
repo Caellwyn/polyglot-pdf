@@ -113,6 +113,10 @@ export const FieldList: React.FC<FieldListProps> = ({
   };
 
   const toggleSection = (sectionId: string) => {
+    // While filtering, every section is force-expanded so matches are visible;
+    // a chevron click must not silently mutate the persisted expansion state
+    // (that would collapse a section unexpectedly once the filter is cleared).
+    if (searchQuery.trim()) return;
     setExpandedSections(prev => {
       const next = new Set(prev);
       if (next.has(sectionId)) {
@@ -310,12 +314,17 @@ export const FieldList: React.FC<FieldListProps> = ({
           // While filtering, hide sections with no matching fields.
           if (isFiltering && fields.length === 0) return null;
           const isExpanded = isFiltering || expandedSections.has(section.id);
+          // Total resolved fields in this section, independent of the filter
+          // (matches the non-filtered count badge so it does not jump on clear).
+          const totalFieldCount = section.fields.filter(id => fieldsById.has(id)).length;
 
           return (
             <div key={section.id} className="bg-white rounded-md shadow-sm">
               {/* Section Header */}
               <button
-                className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50 transition-colors"
+                className={`w-full flex items-center gap-2 p-2 text-left transition-colors ${
+                  isFiltering ? 'cursor-default' : 'hover:bg-gray-50'
+                }`}
                 onClick={() => toggleSection(section.id)}
               >
                 <svg
@@ -334,7 +343,9 @@ export const FieldList: React.FC<FieldListProps> = ({
                 <span className="text-sm font-medium text-gray-700 flex-1">
                   {section.label}
                 </span>
-                <span className="text-xs text-gray-500">({fields.length})</span>
+                <span className="text-xs text-gray-500">
+                  {isFiltering ? `(${fields.length}/${totalFieldCount})` : `(${totalFieldCount})`}
+                </span>
               </button>
 
               {/* Fields */}
