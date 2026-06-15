@@ -61,6 +61,27 @@ tests + the existing 7). `tsc --noEmit` clean. (One-time setup: `schema-editor`'
 `node_modules` was empty in the main repo -- ran `npm ci` there, then junctioned
 it into the worktree, same pattern as the frontend FE-test harness.)
 
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> NO-GAPS: both exit criteria PASS with file:line evidence
+(snpi: `kit_schema_file` called + used in the presence check, title extraction,
+AND manifest entry of BOTH loops; 979r: the `=== 1` ternary + the singular/plural
+tests). Four non-blocking findings, two fixed (cheap + in-scope), two left:
+- FIXED (snpi): `kit_schema_file` could capture whitespace sitting INSIDE the
+  quotes (`"schema": " custom.json "`), space-padding the `-f` test. The sed now
+  trims it; re-verified against custom / default / no-metadata / padded /
+  multiline.
+- FIXED (979r): hoisted the thrice-evaluated `schema.fields.filter(...).length`
+  into one `positionedFieldCount` const (readability; same value).
+- LEFT (snpi): an unanchored grep could match a NESTED `"schema"` key, and the
+  manifest JSON concatenates `$schema_file` unquoted. Both are theoretical for the
+  current `KitMetadata` type (no nested schema key; filenames have no shell-special
+  chars), both mirror the pre-existing no-jq grep discipline (`kit_is_complete`)
+  and the pre-existing unquoted `$kit_id`/`$label`/`$pdf_file` concat, and
+  `python3 -m json.tool` validates the manifest before it ships. Reworking either
+  would mean adopting jq or a JSON builder across the whole script -- out of scope
+  for this bead.
+
 ## Closeout notes
 
 - **Doc-freshness:** the freshness gate flagged several STALE docs
