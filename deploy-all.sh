@@ -36,6 +36,24 @@ kit_is_complete() {
     grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "$meta"
 }
 
+# Resolve a kit's schema filename (bd polyglot-pdf-snpi). metadata.json may carry
+# a custom "schema" field (KitMetadata.schema in formKitDirectory.ts); when present
+# the kit's schema lives in that file, NOT the hardcoded schema.json. Mirrors the
+# TS resolution `meta?.schema || 'schema.json'`. Echoes the resolved filename;
+# defaults to schema.json when metadata.json is absent or has no "schema" field.
+# Whitespace-tolerant, no jq dependency (same discipline as kit_is_complete).
+kit_schema_file() {
+    local kit_dir="$1"
+    local meta="$kit_dir/metadata.json"
+    local name=""
+    if [ -f "$meta" ]; then
+        name=$(grep -Eo '"schema"[[:space:]]*:[[:space:]]*"[^"]+"' "$meta" \
+            | head -1 \
+            | sed -E 's/.*:[[:space:]]*"([^"]+)".*/\1/')
+    fi
+    echo "${name:-schema.json}"
+}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -208,9 +226,10 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
     for kit_dir in "$FORM_KITS_DIR"/*/; do
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
-        
-        if [ ! -f "$kit_dir/schema.json" ]; then
-            log_warn "Skipping $kit_id - no schema.json found"
+
+        schema_file=$(kit_schema_file "$kit_dir")
+        if [ ! -f "$kit_dir/$schema_file" ]; then
+            log_warn "Skipping $kit_id - no $schema_file found"
             continue
         fi
 
@@ -233,7 +252,8 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
 
-        if [ ! -f "$kit_dir/schema.json" ]; then
+        schema_file=$(kit_schema_file "$kit_dir")
+        if [ ! -f "$kit_dir/$schema_file" ]; then
             continue
         fi
 
@@ -243,8 +263,8 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             continue
         fi
 
-        # Extract title from schema.json
-        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        # Extract title from the resolved schema file (custom filename per bd snpi)
+        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/$schema_file" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
         [ -z "$label" ] && label="$kit_id"
         
         # Find PDF file
@@ -259,7 +279,7 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             manifest_content+=','
         fi
         
-        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"schema.json","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/schema.json","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
+        manifest_content+='{"id":"'$kit_id'","label":"'$label'","schemaFile":"'$schema_file'","schemaPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$schema_file'","pdfFile":"'$pdf_file'","pdfPath":"/'$FORM_KITS_PREFIX'/'$kit_id'/'$pdf_file'"}'
     done
     
     manifest_content+=']}'

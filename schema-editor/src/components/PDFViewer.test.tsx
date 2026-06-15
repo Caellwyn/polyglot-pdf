@@ -88,7 +88,9 @@ describe('PDFViewer Integration', () => {
     expect(screen.getByText('100%')).toBeInTheDocument();
   });
 
-  it('should display field count in toolbar', () => {
+  it('should display the singular field count for exactly one positioned field', () => {
+    // mockSchema has 2 fields but only field-1 carries a pdf_position, so the
+    // toolbar counts 1 positioned field -> the singular "1 field" (bd polyglot-pdf-979r).
     render(
       <PDFViewer
         pdfPath="/test.pdf"
@@ -98,7 +100,30 @@ describe('PDFViewer Integration', () => {
       />
     );
 
-    expect(screen.getByText('1 fields')).toBeInTheDocument();
+    expect(screen.getByText('1 field')).toBeInTheDocument();
+    expect(screen.queryByText('1 fields')).not.toBeInTheDocument();
+  });
+
+  it('should display the plural field count for multiple positioned fields', () => {
+    // Give field-2 a pdf_position too -> 2 positioned fields -> plural "2 fields".
+    const multiPositioned: FormSchema = {
+      ...mockSchema,
+      fields: mockSchema.fields.map(f =>
+        f.id === 'field-2'
+          ? { ...f, pdf_position: { page: 1, x: 50, y: 75, width: 120, height: 25 } }
+          : f
+      ),
+    };
+    render(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={multiPositioned}
+        selectedFieldId={null}
+        onSelectField={mockSelectField}
+      />
+    );
+
+    expect(screen.getByText('2 fields')).toBeInTheDocument();
   });
 
   it('should render PDF page after loading', async () => {

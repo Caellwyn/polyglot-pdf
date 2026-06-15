@@ -254,7 +254,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
             <>
               <span className="text-gray-300">|</span>
               <span className="text-sm text-gray-600">
-                {schema.fields.filter(f => f.pdf_position).length} fields
+                {schema.fields.filter(f => f.pdf_position).length === 1
+                  ? '1 field'
+                  : `${schema.fields.filter(f => f.pdf_position).length} fields`}
               </span>
             </>
           )}
