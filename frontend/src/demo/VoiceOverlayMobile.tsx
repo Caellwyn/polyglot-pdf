@@ -200,7 +200,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// overlay. Tap the worklet RMS stream via the audio manager, stash each frame in
 	// a ref, and flush to state on a rAF loop. Decay to 0 after ~250ms of no frames
 	// so a flat meter reads as "no audio reaching the backend".
+	//
+	// Only runs while the meter is rendered (connected) -- no perpetual rAF through
+	// the pre-connect / paused / reconnect-failed states (Codex PR #203). Tears down
+	// + unsubscribes on leaving `connected` (effect re-runs on `status`).
 	useEffect(() => {
+		const s = status.toLowerCase()
+		const meterVisible = s === 'connected' || s.startsWith('connected ')
+		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
 
@@ -213,7 +220,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const { energy, sending, lastFrameAt } = energyRef.current
 			const stale = performance.now() - lastFrameAt > 250
 			const displayEnergy = stale ? 0 : energy
-			const displaySending = stale ? false : sending
+			// "sending" green only when the connection genuinely sends -- the worklet
+			// `sending` flag means the AUDIO gate passed, but the CONNECTION send gate
+			// (shouldSendMicChunk) drops bytes outside `connected`, so the bar must not
+			// claim audio is reaching the backend then (Codex PR #203, P1).
+			const connStatus = (connectionManager?.getStatus?.() || '').toLowerCase()
+			const connectionSends = connStatus === 'connected'
+			const displaySending = stale ? false : (sending && connectionSends)
 			setMicEnergy(prev => (Math.abs(prev - displayEnergy) > 0.5 ? displayEnergy : prev))
 			setMicSending(prev => (prev !== displaySending ? displaySending : prev))
 			rafId = requestAnimationFrame(tick)
@@ -224,7 +237,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			cancelAnimationFrame(rafId)
 			audioManager.setEnergyCallback?.(null)
 		}
-	}, [connectionManager])
+	}, [connectionManager, status])
 
 	// Keep status ref updated
 	useEffect(() => {

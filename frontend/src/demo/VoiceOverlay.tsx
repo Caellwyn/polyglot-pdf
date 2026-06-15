@@ -220,7 +220,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// animates without 50 re-renders/sec. If no frame has arrived for ~250ms the
 	// mic is idle/gone, so we decay the bar to 0 -- a flat meter then reads as
 	// "no audio reaching the backend", the diagnostic this feature is for.
+	//
+	// Only runs while CONNECTED (the meter is only rendered then): no point waking
+	// every frame through the pre-connect language/disclaimer flow, paused/idle, or a
+	// terminal reconnect-failure (Codex PR #203). The effect re-runs on `status`, so
+	// it tears down the rAF + unsubscribes the moment we leave `connected`.
 	useEffect(() => {
+		// Same "is the meter rendered?" condition as the JSX below (connected /
+		// switching / reconnecting). Only then do we wake the rAF loop.
+		const s = status.toLowerCase()
+		const meterVisible = s === 'connected' || s.startsWith('connected ')
+			|| s === 'switching_section' || s.startsWith('reconnecting')
+		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
 
@@ -233,7 +244,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const { energy, sending, lastFrameAt } = energyRef.current
 			const stale = performance.now() - lastFrameAt > 250
 			const displayEnergy = stale ? 0 : energy
-			const displaySending = stale ? false : sending
+			// `sending` from the worklet means the frame passed the audio-routing gate
+			// (mode/PTT/VAD). But the chunk ALSO has to clear the CONNECTION send gate
+			// (shouldSendMicChunk): during `reconnecting`/`switching_section`-with-
+			// closed-socket the bytes are dropped even though the meter is still
+			// rendered. So only show "sending" (green) when the live status is
+			// genuinely `connected`, or the bar would claim audio is reaching the
+			// backend when it isn't (Codex PR #203, P1).
+			const connStatus = (connectionManager?.getStatus?.() || '').toLowerCase()
+			const connectionSends = connStatus === 'connected'
+			const displaySending = stale ? false : (sending && connectionSends)
 			// Functional updates + a small threshold so we don't thrash state when
 			// the value is effectively unchanged.
 			setMicEnergy(prev => (Math.abs(prev - displayEnergy) > 0.5 ? displayEnergy : prev))
@@ -246,7 +266,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			cancelAnimationFrame(rafId)
 			audioManager.setEnergyCallback?.(null)
 		}
-	}, [connectionManager])
+	}, [connectionManager, status])
 
 	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected. The
 	// session_ready handshake fires onNativeVadMode BEFORE flipping status to
