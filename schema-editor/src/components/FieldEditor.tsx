@@ -1,5 +1,11 @@
 import React from 'react';
-import type { FormField, FieldType, FormSchema } from '../types/schema';
+import type {
+  FormField,
+  FieldType,
+  FormSchema,
+  ConditionalControl,
+  ConditionalOperator,
+} from '../types/schema';
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -20,13 +26,29 @@ const FIELD_TYPES: FieldType[] = [
   'signature',
 ];
 
-const CONDITIONAL_OPERATORS = [
+const CONDITIONAL_OPERATORS: ConditionalOperator[] = [
   'equals',
   'not_equals',
   'contains',
+  'greater_than',
+  'less_than',
   'is_checked',
   'is_empty',
   'is_not_empty',
+  'in',
+  'not_in',
+];
+
+// The action kinds a controls_fields entry can apply to its target fields.
+// `key` matches the ConditionalControl array property; mirrors backend
+// ConditionalControl (backend/models/form_models.py).
+const CONTROL_ACTIONS: { key: keyof ConditionalControl; label: string }[] = [
+  { key: 'shows', label: 'Shows' },
+  { key: 'hides', label: 'Hides' },
+  { key: 'unlocks', label: 'Unlocks' },
+  { key: 'locks', label: 'Locks' },
+  { key: 'makes_required', label: 'Makes required' },
+  { key: 'makes_optional', label: 'Makes optional' },
 ];
 
 export const FieldEditor: React.FC<FieldEditorProps> = ({
@@ -59,6 +81,35 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
 
   const updateField = (updates: Partial<FormField>) => {
     onUpdateField({ ...field, ...updates });
+  };
+
+  // --- controls_fields helpers (list of trigger-side conditional controls) --- //
+  const controls = field.controls_fields || [];
+
+  const updateControls = (next: ConditionalControl[]) => {
+    // Drop the key entirely when empty so the exported schema stays clean.
+    updateField({ controls_fields: next.length > 0 ? next : undefined });
+  };
+
+  const updateControlAt = (idx: number, updates: Partial<ConditionalControl>) => {
+    updateControls(controls.map((c, i) => (i === idx ? { ...c, ...updates } : c)));
+  };
+
+  // Toggle a target field id within one action array of one control.
+  const toggleControlTarget = (
+    idx: number,
+    action: keyof ConditionalControl,
+    fieldId: string,
+  ) => {
+    const current = (controls[idx][action] as string[] | undefined) || [];
+    const next = current.includes(fieldId)
+      ? current.filter(id => id !== fieldId)
+      : [...current, fieldId];
+    // Drop the action key when its list goes empty (keeps the shape minimal).
+    const updates: Partial<ConditionalControl> = {
+      [action]: next.length > 0 ? next : undefined,
+    };
+    updateControlAt(idx, updates);
   };
 
   return (
@@ -349,6 +400,123 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               + Add Conditional Logic
             </button>
           )}
+        </div>
+
+        {/* Controls Fields (trigger-side: this field's value affects others) */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-gray-900">
+            Controls Fields
+            <span className="text-xs text-gray-500 ml-2">
+              (this field's value affects others)
+            </span>
+          </h4>
+
+          {controls.length > 0 && (
+            <div className="space-y-4">
+              {controls.map((control, idx) => (
+                <div key={idx} className="space-y-3 p-3 bg-gray-50 rounded-md">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-700">When this field:</span>
+                    <button
+                      className="btn-sm btn-secondary"
+                      onClick={() =>
+                        updateControls(controls.filter((_, i) => i !== idx))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Operator</label>
+                      <select
+                        className="input"
+                        value={control.operator}
+                        onChange={(e) =>
+                          updateControlAt(idx, {
+                            operator: e.target.value as ConditionalOperator,
+                          })
+                        }
+                      >
+                        {CONDITIONAL_OPERATORS.map(op => (
+                          <option key={op} value={op}>
+                            {op.replace(/_/g, ' ')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Value</label>
+                      <input
+                        type="text"
+                        className="input"
+                        value={control.value ?? ''}
+                        onChange={(e) =>
+                          updateControlAt(idx, { value: e.target.value })
+                        }
+                        placeholder="Trigger value"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Per-action target-field pickers */}
+                  <div className="space-y-3">
+                    {CONTROL_ACTIONS.map(action => {
+                      const selected =
+                        (control[action.key] as string[] | undefined) || [];
+                      return (
+                        <div key={action.key}>
+                          <label className="label">
+                            {action.label}
+                            {selected.length > 0 && (
+                              <span className="text-xs text-gray-400 ml-1">
+                                ({selected.length})
+                              </span>
+                            )}
+                          </label>
+                          <div className="max-h-32 overflow-auto border border-gray-200 rounded-md bg-white p-1 space-y-1">
+                            {schema.fields
+                              .filter(f => f.id !== field.id)
+                              .map(f => (
+                                <label
+                                  key={f.id}
+                                  className="flex items-center gap-2 px-1 text-xs text-gray-700 hover:bg-gray-50 rounded cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="rounded"
+                                    checked={selected.includes(f.id)}
+                                    onChange={() =>
+                                      toggleControlTarget(idx, action.key, f.id)
+                                    }
+                                  />
+                                  <span className="truncate">
+                                    {f.spoken_name || f.id}
+                                  </span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            className="btn btn-secondary w-full"
+            onClick={() =>
+              updateControls([
+                ...controls,
+                { operator: 'equals', value: '' },
+              ])
+            }
+          >
+            + Add Control
+          </button>
         </div>
 
         {/* Field Options (for select/radio) */}

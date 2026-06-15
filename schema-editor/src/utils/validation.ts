@@ -80,21 +80,28 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       }
     }
 
-    // Check controls_fields references
+    // Check controls_fields references. controls_fields is a LIST of controls,
+    // each with up to six action arrays of target field ids (see schema.ts /
+    // backend ConditionalControl).
     if (field.controls_fields) {
-      const allControlledFields = [
-        ...(field.controls_fields.shows || []),
-        ...(field.controls_fields.unlocks || []),
-        ...(field.controls_fields.makes_required || []),
-      ];
+      for (const control of field.controls_fields) {
+        const allControlledFields = [
+          ...(control.shows || []),
+          ...(control.hides || []),
+          ...(control.unlocks || []),
+          ...(control.locks || []),
+          ...(control.makes_required || []),
+          ...(control.makes_optional || []),
+        ];
 
-      for (const controlledId of allControlledFields) {
-        if (!fieldIds.has(controlledId)) {
-          errors.push({
-            field_id: field.id,
-            message: `controls_fields references non-existent field: ${controlledId}`,
-            type: 'warning',
-          });
+        for (const controlledId of allControlledFields) {
+          if (!fieldIds.has(controlledId)) {
+            errors.push({
+              field_id: field.id,
+              message: `controls_fields references non-existent field: ${controlledId}`,
+              type: 'warning',
+            });
+          }
         }
       }
     }

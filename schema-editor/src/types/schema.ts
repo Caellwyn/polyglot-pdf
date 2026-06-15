@@ -54,7 +54,7 @@ export interface FormField {
   validation?: ValidationRules;
   options?: FieldOption[];
   show_if?: ConditionalDisplay;
-  controls_fields?: ControlsFields;
+  controls_fields?: ConditionalControl[];
   conditional_logic?: any;
   conditional_behavior?: any;
   copy_to?: string[];
@@ -102,15 +102,27 @@ export type ConditionalOperator =
   | 'equals'
   | 'not_equals'
   | 'contains'
+  | 'greater_than'
+  | 'less_than'
   | 'is_checked'
   | 'is_empty'
-  | 'is_not_empty';
+  | 'is_not_empty'
+  | 'in'
+  | 'not_in';
 
-export interface ControlsFields {
-  when_value: any;
+// Proactive, trigger-side conditional logic. Mirrors backend
+// ConditionalControl (backend/models/form_models.py): a field carries a LIST of
+// these, each saying "when my value satisfies <operator> <value>, apply these
+// actions to the listed target fields". controls_fields is List[ConditionalControl].
+export interface ConditionalControl {
+  operator: ConditionalOperator;
+  value: any;
   shows?: string[];
+  hides?: string[];
   unlocks?: string[];
+  locks?: string[];
   makes_required?: string[];
+  makes_optional?: string[];
 }
 
 export interface PDFPosition {
