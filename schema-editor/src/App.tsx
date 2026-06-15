@@ -1,11 +1,13 @@
 import React from 'react';
 import { FormSelector } from './components/FormSelector';
+import { FormCatalogue } from './components/FormCatalogue';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
 import { ValidationPanel } from './components/ValidationPanel';
 import { loadSchema, saveSchema } from './utils/schemaLoader';
 import {
+  isDirectoryAccessSupported,
   isFileSystemAccessSupported,
   isUserAbort,
   pickSchemaFile,
@@ -13,6 +15,7 @@ import {
   writeSchemaToHandle,
   type FsFileHandle,
 } from './utils/fileSystemAccess';
+import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
 import type { FormField, FormConfig } from './types/schema';
 
@@ -33,6 +36,11 @@ export const App: React.FC = () => {
   const fileHandleRef = React.useRef<FsFileHandle | null>(null);
   const [savedFileName, setSavedFileName] = React.useState<string | null>(null);
   const fsAccess = React.useMemo(isFileSystemAccessSupported, []);
+  const dirAccess = React.useMemo(isDirectoryAccessSupported, []);
+  // The catalogue kit currently open (bd b0pe): its id (to highlight in the
+  // catalogue) and a blob URL for its PDF (revoked when switching forms).
+  const [selectedKitId, setSelectedKitId] = React.useState<string | null>(null);
+  const pdfBlobUrlRef = React.useRef<string | null>(null);
 
   // Load schema when form is selected
   const handleSelectForm = React.useCallback(async (form: FormConfig) => {
@@ -50,6 +58,11 @@ export const App: React.FC = () => {
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
     setSavedFileName(null);
+    setSelectedKitId(null); // leaving catalogue mode
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
+    }
 
     try {
       const loadedSchema = await loadSchema(form.schemaPath);
@@ -58,6 +71,53 @@ export const App: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load schema');
       console.error('Failed to load schema:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [hasUnsavedChanges, loadSchemaState]);
+
+  // Open a kit from the catalogue (bd b0pe): read its schema from the directory
+  // handle and build a blob URL for its PDF, then drive the existing schema +
+  // PDFViewer flow. The kit's own schema file handle becomes the save target, so
+  // Cmd+S writes back in place (no picker).
+  const handleOpenKit = React.useCallback(async (entry: CatalogueEntry) => {
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to switch forms?'
+      );
+      if (!confirmed) return;
+    }
+    setLoading(true);
+    setError(null);
+    setSelectedFieldId(null);
+    try {
+      const loaded = await loadKitSchema(entry);
+      if (!loaded) {
+        throw new Error(`${entry.label} has no schema yet -- run the extraction first.`);
+      }
+      // Save target = the kit's own schema.json handle (in-place save).
+      fileHandleRef.current = await entry.dirHandle.getFileHandle(entry.schemaFile);
+      setSavedFileName(entry.schemaFile);
+
+      // Build a blob URL for the PDF so PDFViewer (which takes a URL) can render
+      // it; revoke any prior one to avoid leaking object URLs.
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      let pdfUrl = '';
+      if (entry.hasPdf) {
+        const pdfHandle = await entry.dirHandle.getFileHandle(entry.pdfFile);
+        const pdfFile = await pdfHandle.getFile();
+        pdfUrl = URL.createObjectURL(pdfFile);
+        pdfBlobUrlRef.current = pdfUrl;
+      } else {
+        pdfBlobUrlRef.current = null;
+      }
+
+      loadSchemaState(loaded); // fresh baseline -> history cleared
+      setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
+      setSelectedKitId(entry.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open form');
+      console.error('Failed to open kit:', err);
     } finally {
       setLoading(false);
     }
@@ -227,6 +287,11 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave, undo, redo]);
 
+  // Revoke the PDF blob URL on unmount (bd b0pe -- avoid leaking object URLs).
+  React.useEffect(() => () => {
+    if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+  }, []);
+
   // Warn on page unload if unsaved changes
   React.useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -318,7 +383,13 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
+        {/* The catalogue (directory-based) is the front door (bd b0pe); the
+            hardcoded FormSelector remains as a fallback for browsers without the
+            directory API (where the catalogue shows its unsupported message). */}
+        <FormCatalogue onOpenKit={handleOpenKit} selectedKitId={selectedKitId} />
+        {!dirAccess && (
+          <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
+        )}
       </header>
 
       {/* Main Content */}
@@ -382,16 +453,17 @@ export const App: React.FC = () => {
               Welcome to PDF Schema Editor
             </h2>
             <p className="text-gray-600 mb-6">
-              Select a form from the dropdown above to start editing its schema
+              Open your form-kits folder above to see the catalogue, or drop an
+              AcroForm PDF to add a new form -- then pick a form to start editing.
             </p>
             <div className="text-left bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Quick Guide:</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Select a PDF form to load</li>
-                <li>• Click fields in the list or PDF viewer</li>
-                <li>• Edit properties in the right panel</li>
-                <li>• Changes save automatically</li>
-                <li>• Press Cmd+S to save the edited schema (Cmd+Shift+S to save to a new file)</li>
+                <li>- Open your form-kits/ folder, or drop a PDF to onboard a new form</li>
+                <li>- Pick a form from the catalogue to load it</li>
+                <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
+                <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z</li>
+                <li>- Press Cmd+S to save (Cmd+Shift+S to save to a new file)</li>
               </ul>
             </div>
           </div>
