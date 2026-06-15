@@ -113,8 +113,14 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   (`form_filling_service.py:23`) but has zero call sites -- the
   "don't re-send a schema Gemini already has" gate is never actually applied. Pairs
   with L: even within a session, the `loaded_field_ids` set isn't consulted via this
-  helper. *Fix: wire the de-dup on the `confirm_field` inline-schema path, or remove
-  the helper if A4 supersedes it.* (NEW.)
+  helper. *Fix: gate `get_next_field_schema_for_jit` (`form_filling_service.py:900-933`)
+  on `should_include_schema_in_response(...)` -- return None when already loaded.*
+  **Also tracked as bug `polyglot-pdf-h2ii`** (found independently by the uov.16
+  green-test re-audit), which adds the `confirm_field`-RETRY repro (a second confirm
+  on the same field re-delivers the schema -- the 0y7 no-value-retry path) and
+  requires a real, non-mocked-getter test. G + L are the same defect as h2ii from two
+  audits; A2 (jnjj.9) implements the fix and must satisfy h2ii's exit criterion,
+  covering BOTH the reconnect (L) and retry (h2ii) duplication paths.
 
 ### Defer (real, but out of the epic's critical path)
 
