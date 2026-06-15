@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-13. bd rwjy+vfb2: CallbackHandler now receives form_id/form_session_id (confirmation audit unblocked); send_form_update gains request_hint=False (no behavior change on the update path -- the "deliberately no hint" note at line 86-87 below is now enforced in code). bd polyglot-pdf-c5t (GoAway): the receive loop now detects `event.go_away` and fires `on_go_away` in `callback_handler.py` -- this is a separate code path that does NOT interrupt in-flight tool calls (detection is best-effort, the real close still arrives later as ConnectionClosed/APIError via the existing graceful path). See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for the client-side AI-value validation gate.*
+*Last updated: 2026-06-15. bd njvh: the confirm_field handler short-circuits the next-field-hint request at a section boundary (when the ack carries section_complete) to stop a spurious timeout/"do NOT assume complete" prompt racing the FE section switch -- documented in the confirm round-trip below. Prior: 2026-06-13. bd rwjy+vfb2: CallbackHandler now receives form_id/form_session_id (confirmation audit unblocked); send_form_update gains request_hint=False (no behavior change on the update path -- the "deliberately no hint" note at line 86-87 below is now enforced in code). bd polyglot-pdf-c5t (GoAway): the receive loop now detects `event.go_away` and fires `on_go_away` in `callback_handler.py` -- this is a separate code path that does NOT interrupt in-flight tool calls (detection is best-effort, the real close still arrives later as ConnectionClosed/APIError via the existing graceful path). See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for the client-side AI-value validation gate.*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -119,6 +119,15 @@ session. This is a second, client-authoritative layer in addition to the backend
      confirmed."), or **`HINT_REQUEST_TIMEOUT`** (frontend did not answer in 2s --
      `next_field_hint` goes out as `None` but the message tells Gemini NOT to
      assume completion and to ask for the next field / call `get_form_status`).
+     **Section-boundary short-circuit (bd polyglot-pdf-njvh):** if the ack carries
+     `section_complete: true` (the confirm completed a section that has a NEXT
+     section), the handler SKIPS `request_next_field_hint()` entirely -- that
+     request would race the FE's `switchToSection` socket teardown and time out,
+     spuriously emitting the "do NOT assume complete" message at the exact moment
+     the section is correctly auto-advancing. Instead it returns a clean
+     "section advancing" message (`next_field_hint: None`, no timeout text) and logs
+     `confirm_section_boundary_skip_hint`. The new section's first-field hint
+     arrives via the section-switch flow.
    - **not recorded** (the field has no value -- `reason: "no_value"`) or the
      confirm-ack **timed out** -> `{success: false, ...}` carrying the WS-C2
      error-envelope keys (`status:"error"`, `retryable`, `error`) plus a corrective

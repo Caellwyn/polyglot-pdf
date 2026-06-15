@@ -500,49 +500,73 @@ class CallbackHandler:
                 confirmation_method=confirmation_method
             )
 
-        # Get next unconfirmed field hint.
-        # request_next_field_hint() returns one of three things (bd polyglot-pdf-tks):
-        #   - a hint string -> there is a next field
-        #   - None          -> frontend answered: form is genuinely complete
-        #   - HINT_REQUEST_TIMEOUT (sentinel) -> frontend did NOT answer in time
-        # A timeout must NOT be reported to Gemini as "All fields confirmed" -- doing
-        # so made a slow round-trip masquerade as completion and Gemini wrapped the
-        # form up early. On timeout we tell Gemini the hint is temporarily unavailable
-        # and to keep going, never that the form is done.
-        #
-        # Guard the coordinator the same way send_form_update does (bd polyglot-pdf-pen).
-        # The constructor takes request_coordinator as a REQUIRED positional, so it is
-        # never None in production -- but a test or racing reconnect that passes None
-        # would AttributeError here. An absent coordinator means "next field unknown",
-        # which is the TIMEOUT semantics (NOT "complete"): we must not let a missing
-        # coordinator masquerade as completion, so collapse it into the timeout path.
-        if self._request_coordinator is None:
-            next_hint_result = HINT_REQUEST_TIMEOUT
-        else:
-            next_hint_result = await self._request_coordinator.request_next_field_hint()
-        hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
-        # The value forwarded to Gemini must be JSON-serializable: collapse the
-        # sentinel to None for the wire, but keep the timeout distinction in the
-        # message text below.
-        next_hint = None if hint_timed_out else next_hint_result
-
-        # Get next field schema for JIT mode (consolidated here to save tokens).
-        # Skip on timeout: we don't know what the next field is.
-        next_field_schema = None
-        if self._get_next_field_schema_for_jit and next_hint:
-            next_field_schema = self._get_next_field_schema_for_jit(field_id)
-
-        if hint_timed_out:
-            message = (
-                f"Field '{field_id}' confirmed. (Could not determine the next field "
-                f"right now -- do NOT assume the form is complete; ask the user for "
-                f"the next piece of information or call get_form_status.)"
+        # SECTION-BOUNDARY SHORT-CIRCUIT (bd polyglot-pdf-njvh). When this confirm
+        # completed the section, the frontend signalled section_complete in the ack
+        # and is ALREADY tearing down the socket for switchToSection. Requesting the
+        # next-field hint now would race that teardown and time out (the coordinator
+        # returns HINT_REQUEST_TIMEOUT on the closing socket), making Gemini emit a
+        # spurious "do NOT assume the form is complete" prompt at the exact moment the
+        # section IS correctly auto-advancing. So we SKIP the hint request entirely:
+        # the new section's first-field hint arrives via the section-switch flow.
+        # This log line is also the section-boundary observability the Gemini I/O
+        # dev-log can't provide (it does not record the FE-driven section switches).
+        section_complete = bool(confirm_ack.get("section_complete"))
+        if section_complete:
+            _log.info(
+                "confirm_section_boundary_skip_hint",
+                field_id=field_id,
+                session_id=self._session_id,
             )
-        elif not next_hint:
-            message = f"Field '{field_id}' confirmed. All fields confirmed."
+            next_hint = None
+            next_field_schema = None
+            message = (
+                f"Field '{field_id}' confirmed -- that completes this section. The "
+                f"form is advancing to the next section; wait for the next field."
+            )
         else:
-            # Don't duplicate hint in message - Gemini sees next_field_hint separately
-            message = f"Field '{field_id}' confirmed."
+            # Get next unconfirmed field hint.
+            # request_next_field_hint() returns one of three things (bd polyglot-pdf-tks):
+            #   - a hint string -> there is a next field
+            #   - None          -> frontend answered: form is genuinely complete
+            #   - HINT_REQUEST_TIMEOUT (sentinel) -> frontend did NOT answer in time
+            # A timeout must NOT be reported to Gemini as "All fields confirmed" -- doing
+            # so made a slow round-trip masquerade as completion and Gemini wrapped the
+            # form up early. On timeout we tell Gemini the hint is temporarily unavailable
+            # and to keep going, never that the form is done.
+            #
+            # Guard the coordinator the same way send_form_update does (bd polyglot-pdf-pen).
+            # The constructor takes request_coordinator as a REQUIRED positional, so it is
+            # never None in production -- but a test or racing reconnect that passes None
+            # would AttributeError here. An absent coordinator means "next field unknown",
+            # which is the TIMEOUT semantics (NOT "complete"): we must not let a missing
+            # coordinator masquerade as completion, so collapse it into the timeout path.
+            if self._request_coordinator is None:
+                next_hint_result = HINT_REQUEST_TIMEOUT
+            else:
+                next_hint_result = await self._request_coordinator.request_next_field_hint()
+            hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
+            # The value forwarded to Gemini must be JSON-serializable: collapse the
+            # sentinel to None for the wire, but keep the timeout distinction in the
+            # message text below.
+            next_hint = None if hint_timed_out else next_hint_result
+
+            # Get next field schema for JIT mode (consolidated here to save tokens).
+            # Skip on timeout: we don't know what the next field is.
+            next_field_schema = None
+            if self._get_next_field_schema_for_jit and next_hint:
+                next_field_schema = self._get_next_field_schema_for_jit(field_id)
+
+            if hint_timed_out:
+                message = (
+                    f"Field '{field_id}' confirmed. (Could not determine the next field "
+                    f"right now -- do NOT assume the form is complete; ask the user for "
+                    f"the next piece of information or call get_form_status.)"
+                )
+            elif not next_hint:
+                message = f"Field '{field_id}' confirmed. All fields confirmed."
+            else:
+                # Don't duplicate hint in message - Gemini sees next_field_hint separately
+                message = f"Field '{field_id}' confirmed."
 
         response = {
             "success": True,

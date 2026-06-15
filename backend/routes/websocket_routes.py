@@ -349,11 +349,15 @@ async def _handle_fill_session(
 					request_id = obj.get("request_id")
 					recorded = obj.get("recorded", False)
 					reason = obj.get("reason")  # fixed category token (e.g. "no_value"), never PII
+					# True only when this confirm completed the section, so the FE is
+					# tearing down the socket for switchToSection -- the backend skips the
+					# doomed next-field-hint round-trip (bd polyglot-pdf-njvh).
+					section_complete = bool(obj.get("section_complete", False))
 					if not request_id:
 						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
 					else:
 						try:
-							service.handle_confirm_field_response(request_id, bool(recorded), reason)
+							service.handle_confirm_field_response(request_id, bool(recorded), reason, section_complete)
 						except Exception as e:
 							# Log the exception TYPE, not str(e): an exception string can embed
 							# PII and this reaches Cloud Logging in production (the p84m principle,

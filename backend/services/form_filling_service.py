@@ -886,7 +886,8 @@ class FormFillingService:
         self._request_coordinator.handle_next_field_hint_response(request_id, hint)
 
     def handle_confirm_field_response(
-        self, request_id: str, recorded: bool, reason: Optional[str] = None
+        self, request_id: str, recorded: bool, reason: Optional[str] = None,
+        section_complete: bool = False,
     ) -> None:
         """
         Handle confirm_field_response message from frontend.
@@ -898,12 +899,16 @@ class FormFillingService:
             request_id: ID matching the original confirm_field request
             recorded: True if the frontend actually recorded the confirmation
             reason: Fixed category token when not recorded (e.g. "no_value")
+            section_complete: True when this confirm completed the section (bd
+                polyglot-pdf-njvh); the confirm handler then skips the racing
+                next-field-hint request.
         """
         if not self._request_coordinator:
             _log.warning("handle_confirm_field_response_no_coordinator", session_id=self._session_id)
             return
 
-        self._request_coordinator.handle_confirm_field_response(request_id, recorded, reason)
+        self._request_coordinator.handle_confirm_field_response(
+            request_id, recorded, reason, section_complete)
 
     def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
         """

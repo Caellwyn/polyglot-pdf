@@ -12,7 +12,7 @@
  * so a genuinely unfillable field does not spin even at the reduced re-prompt rate.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 
@@ -364,5 +364,92 @@ describe('WebFormConnection synchronous confirm ack (bd polyglot-pdf-wpw.2)', ()
     fireConfirm(ws, 'p1_line1_aliennumber') // no request_id -> nothing to ack
 
     expect(confirmAcks(ws)).toHaveLength(0)
+  })
+
+  it('does NOT set section_complete when confirming the only field of the only section (form complete, not a section boundary)', async () => {
+    const ws = await connected()
+
+    fireFieldUpdate(ws, 'A123456789')
+    fireConfirm(ws, 'p1_line1_aliennumber', 'req-formdone')
+
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].recorded).toBe(true)
+    // No NEXT section -> the form is complete, not a section boundary. The
+    // section_complete flag is for "advancing to another section", so it must be
+    // absent here (bd polyglot-pdf-njvh).
+    expect(acks[0].section_complete).toBeUndefined()
+  })
+})
+
+// Two sections, each one field, so confirming the LAST field of section 1 has a
+// section 2 to advance to -- the exact section boundary the njvh race fires on.
+const TWO_SECTION_SCHEMA: FormSchema = {
+  source: 'web',
+  fields: [
+    { id: 'f_s1', name: 'fieldS1', spoken_name: 'Field S1', type: 'text' },
+    { id: 'f_s2', name: 'fieldS2', spoken_name: 'Field S2', type: 'text' },
+  ],
+  sections: [
+    { id: 's1', label: 'S1', order: 1, fields: ['f_s1'] },
+    { id: 's2', label: 'S2', order: 2, fields: ['f_s2'] },
+  ],
+} as unknown as FormSchema
+
+describe('WebFormConnection confirm at a section boundary (bd polyglot-pdf-njvh)', () => {
+  // Holds the live connection so afterEach can tear it down. Confirming the last
+  // field of section 1 triggers an auto-switchToSection whose section_switched ack
+  // never arrives in this mock, so it arms a real ~15s watchdog setTimeout;
+  // disconnect() runs clearSectionSwitchWatchdog so it can't fire into a later test
+  // (fresh-eyes test-isolation note).
+  let conn: WebFormConnection | null = null
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  afterEach(() => {
+    conn?.disconnect()
+    conn = null
+  })
+
+  async function connectedTwoSection(): Promise<MockWebSocket> {
+    conn = new WebFormConnection(TWO_SECTION_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    return ws
+  }
+
+  function fillS1(ws: MockWebSocket, value: string): void {
+    ws.onmessage?.({ data: JSON.stringify({ type: 'field_update', updates: { fieldS1: value } }) })
+  }
+
+  it('acks section_complete:true when confirming the last field of section 1 (a NEXT section exists)', async () => {
+    const ws = await connectedTwoSection()
+
+    fillS1(ws, 'value-one')
+    fireConfirm(ws, 'f_s1', 'req-boundary')
+
+    // Exactly one ack for the boundary confirm -- a double-fire would be a bug.
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    const boundaryAck = acks[0]
+    expect(boundaryAck.request_id).toBe('req-boundary')
+    expect(boundaryAck.recorded).toBe(true)
+    // Section 1 is now fully confirmed AND section 2 exists -> a real section
+    // boundary. The backend reads this to skip the racing next-field-hint request.
+    expect(boundaryAck.section_complete).toBe(true)
   })
 })

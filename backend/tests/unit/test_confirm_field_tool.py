@@ -298,6 +298,79 @@ class TestConfirmFieldFailsWhenNotRecorded:
             mock_log.assert_not_called()
 
 
+class TestConfirmSectionBoundarySkipsHint:
+    """bd polyglot-pdf-njvh: on the LAST field of a section, the FE acks the confirm
+    with section_complete:true (it is about to tear down the socket for
+    switchToSection). The backend must then SKIP the next-field-hint request -- that
+    request would race the teardown, time out, and make Gemini emit a spurious 'do
+    NOT assume the form is complete' prompt right as the section auto-advances.
+    """
+
+    @pytest.mark.asyncio
+    async def test_section_complete_ack_skips_next_field_hint(
+        self, callback_handler, mock_coordinator
+    ):
+        """When the confirm ack carries section_complete, request_next_field_hint is
+        NEVER called and the response is a clean 'section advancing' message (no
+        timeout / 'do NOT assume complete' text)."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": True, "reason": None, "section_complete": True}
+        )
+
+        response = await callback_handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={"field_id": "p1_line5c_middlename", "confirmation_method": "verbal"},
+        )
+
+        # The doomed hint round-trip must NOT fire at the boundary.
+        mock_coordinator.request_next_field_hint.assert_not_called()
+        # Clean success, no hint, no scary "do NOT assume" message.
+        assert response["success"] is True
+        assert response["field_confirmed"] == "p1_line5c_middlename"
+        assert response["next_field_hint"] is None
+        assert "do NOT assume" not in response["message"]
+        assert "completes this section" in response["message"]
+
+    @pytest.mark.asyncio
+    async def test_non_boundary_confirm_still_requests_hint(
+        self, callback_handler, mock_coordinator
+    ):
+        """A mid-section confirm (section_complete absent/false) STILL requests the
+        next-field hint -- the skip is scoped to the boundary only."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": True, "reason": None, "section_complete": False}
+        )
+        mock_coordinator.request_next_field_hint = AsyncMock(
+            return_value="Next, please provide your date of birth"
+        )
+
+        response = await callback_handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={"field_id": "p1_line3a_familyname", "confirmation_method": "verbal"},
+        )
+
+        mock_coordinator.request_next_field_hint.assert_called_once()
+        assert response["next_field_hint"] == "Next, please provide your date of birth"
+
+    @pytest.mark.asyncio
+    async def test_missing_section_complete_key_defaults_to_requesting_hint(
+        self, callback_handler, mock_coordinator
+    ):
+        """Back-compat: an ack WITHOUT the section_complete key (older FE) behaves
+        exactly as before -- the hint is requested."""
+        mock_coordinator.request_confirm_field = AsyncMock(
+            return_value={"recorded": True, "reason": None}  # no section_complete key
+        )
+        mock_coordinator.request_next_field_hint = AsyncMock(return_value="Next field")
+
+        await callback_handler.on_tool_call(
+            tool_name="confirm_field",
+            arguments={"field_id": "p1_line3a_familyname", "confirmation_method": "verbal"},
+        )
+
+        mock_coordinator.request_next_field_hint.assert_called_once()
+
+
 class TestStartSessionThreadsFormIds:
     """Regression test for bd polyglot-pdf-rwjy: start_session must pass
     form_id and form_session_id to CallbackHandler so the confirmation-audit

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-15. A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
+*Last updated: 2026-06-15. bd njvh: `confirm_field_response` gains an optional `section_complete: true` sub-field (backend skips the racing next-field-hint at a section boundary) -- documented in the message table; note it is a sub-field of the confirm reply, NOT the SI-epic's planned top-level `section_complete` event. Also 2026-06-15: A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -135,7 +135,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `section_completed` | websocket_routes.py:551 | Client signals a section completed (the CURRENT reactive ack path); backend replies `section_completed_ack`. NOT the new proactive `section_complete` event B introduces -- see the reserved extension points below. |
 | `section_info_response` | webFormConnection.ts:907 (+others) | Reply with section metadata. |
 | `field_value_response` | webFormConnection.ts:1147 | Reply to backend `get_field_value`. |
-| `confirm_field_response` | webFormConnection.ts:1536 | Reply to backend `confirm_field`. |
+| `confirm_field_response` | webFormConnection.ts:1536 | Reply to backend `confirm_field`. Carries `recorded` (+ optional `reason`), and -- when this confirm completed a section that has a NEXT section to advance to -- an optional `section_complete: true` flag so the backend skips the next-field-hint round-trip that would race the FE's `switchToSection` teardown (bd polyglot-pdf-njvh). This is a SUB-FIELD of the confirm reply, distinct from the SI-reduction epic's planned top-level `section_complete` event (see `section_completed` above + the reserved extension points). |
 | `manual_field_update` | webFormConnection.ts:1828 | User edited a field directly. |
 | `manual_section_switch` | webFormConnection.ts:2375 | User-initiated section switch. |
 | `completion_message` | webFormConnection.ts:655 (+others) | Form/section completion message to the AI. |

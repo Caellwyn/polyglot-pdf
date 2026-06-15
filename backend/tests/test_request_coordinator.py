@@ -535,7 +535,8 @@ class TestRequestConfirmField:
         assert sent_message["field_id"] == "email"
         assert sent_message["confirmation_method"] == "verbal"
         assert "request_id" in sent_message
-        assert result == {"recorded": True, "reason": None}
+        # section_complete defaults to False when the FE omits it (bd polyglot-pdf-njvh).
+        assert result == {"recorded": True, "reason": None, "section_complete": False}
 
     @pytest.mark.asyncio
     async def test_request_confirm_field_not_recorded_with_reason(self):
@@ -553,7 +554,7 @@ class TestRequestConfirmField:
 
         result = await coordinator.request_confirm_field("email", "verbal")
 
-        assert result == {"recorded": False, "reason": "no_value"}
+        assert result == {"recorded": False, "reason": "no_value", "section_complete": False}
 
     @pytest.mark.asyncio
     async def test_request_confirm_field_timeout(self):
@@ -605,6 +606,24 @@ class TestRequestConfirmField:
 
         confirm_result = await t_confirm
         hint_result = await t_hint
-        assert confirm_result == {"recorded": True, "reason": None}
+        assert confirm_result == {"recorded": True, "reason": None, "section_complete": False}
         assert hint_result == "Next field hint"
         assert coordinator._pending == {}
+
+    @pytest.mark.asyncio
+    async def test_confirm_field_response_threads_section_complete(self):
+        """bd polyglot-pdf-njvh: a section_complete:true ack is resolved through to
+        the caller so the confirm handler can skip the racing next-field-hint."""
+        mock_ws = AsyncMock()
+        coordinator = RequestCoordinator(websocket=mock_ws)
+
+        async def send_response():
+            await asyncio.sleep(0.01)
+            request_id = mock_ws.send_json.call_args[0][0]["request_id"]
+            coordinator.handle_confirm_field_response(
+                request_id, True, None, section_complete=True)
+
+        asyncio.create_task(send_response())
+
+        result = await coordinator.request_confirm_field("p1_line5c_middlename", "verbal")
+        assert result == {"recorded": True, "reason": None, "section_complete": True}

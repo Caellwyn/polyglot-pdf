@@ -282,10 +282,14 @@ class RequestCoordinator:
         fire-and-forget send that always read as success.
 
         Returns:
-            - A dict ``{"recorded": bool, "reason": Optional[str]}`` when the
-              frontend answered. ``recorded`` is whether the confirmation was
-              recorded; ``reason`` is a fixed category token (e.g. "no_value")
-              when it was not -- never a field value (PII-free).
+            - A dict ``{"recorded": bool, "reason": Optional[str],
+              "section_complete": bool}`` when the frontend answered. ``recorded``
+              is whether the confirmation was recorded; ``reason`` is a fixed
+              category token (e.g. "no_value") when it was not -- never a field
+              value (PII-free); ``section_complete`` is True when this confirm
+              completed a section that has a NEXT section to advance to, so the
+              confirm handler skips the racing next-field-hint request (bd
+              polyglot-pdf-njvh) -- defaults to False when the FE omits it.
             - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend did
               NOT answer in time / the request could not be sent. Callers must NOT
               treat this as confirmed (bd polyglot-pdf-wpw.2).
@@ -529,7 +533,8 @@ class RequestCoordinator:
                       transform=strip_field_id_from_hint)
 
     def handle_confirm_field_response(
-        self, request_id: str, recorded: bool, reason: Optional[str] = None
+        self, request_id: str, recorded: bool, reason: Optional[str] = None,
+        section_complete: bool = False,
     ) -> None:
         """
         Handle confirm_field_response message from frontend.
@@ -543,9 +548,15 @@ class RequestCoordinator:
             recorded: True if the frontend actually recorded the confirmation.
             reason: Fixed category token when not recorded (e.g. "no_value"); never
                 a field value (PII-free).
+            section_complete: True when this confirm completed the section, so the FE
+                is about to tear down the socket for switchToSection. The confirm
+                handler uses this to SKIP the post-confirm next-field-hint request,
+                which would otherwise race that teardown and time out (bd
+                polyglot-pdf-njvh).
         """
         self._resolve(request_id, "confirm_field",
-                      {"recorded": bool(recorded), "reason": reason})
+                      {"recorded": bool(recorded), "reason": reason,
+                       "section_complete": bool(section_complete)})
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """
