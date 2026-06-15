@@ -125,6 +125,16 @@ export interface ConditionalControl {
   makes_optional?: string[];
 }
 
+// The action keys of ConditionalControl (the string[] target lists only --
+// excludes operator/value). Editing UI iterates over these.
+export type ControlActionKey =
+  | 'shows'
+  | 'hides'
+  | 'unlocks'
+  | 'locks'
+  | 'makes_required'
+  | 'makes_optional';
+
 export interface PDFPosition {
   page: number;
   x?: number;

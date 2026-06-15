@@ -60,7 +60,16 @@ than vacuous.
 schema-editor suite 174/174; `tsc --noEmit` clean. Backend suite untouched
 (FE-only) and green from prep.
 
-**Fresh-eyes assess (recorded at closeout -- see merge ping for round count).**
+**Fresh-eyes assess (Sonnet, arm B picker, 1 round to NO-GAPS after fixes):**
+both rubric criteria scored PASS. Adopted: tightened the `CONTROL_ACTIONS` /
+`toggleControlTarget` typing from `keyof ConditionalControl` to a new
+`ControlActionKey` union (the six action keys only -- the old type let
+operator/value through, runtime-safe but too wide), and added a serialization
+test asserting a pruned action key is ABSENT from the exported JSON (undefined,
+not null -- matters because the backend action fields are `Optional[List]=None`).
+Out-of-scope items fresh-eyes filed itself: `polyglot-pdf-cmcg` (a stale
+`ControlsFields` type name in `schema-editor/EDITOR_GUIDE.md`). The order-dependent
+validateSchema bug was already filed as `polyglot-pdf-y61i`.
 
 ## Lessons
 
@@ -86,8 +95,9 @@ schema-editor suite 174/174; `tsc --noEmit` clean. Backend suite untouched
 
 - `schema-editor/src/types/schema.ts` -- `controls_fields` retyped to
   `ConditionalControl[]`; new `ConditionalControl` interface (operator + value +
-  six action arrays); `ConditionalOperator` extended to the full backend enum
-  (added greater_than / less_than / in / not_in).
+  six action arrays); new `ControlActionKey` union (the six action keys);
+  `ConditionalOperator` extended to the full backend enum (added greater_than /
+  less_than / in / not_in).
 - `schema-editor/src/utils/validation.ts` -- iterate the controls LIST and check
   references across all six action arrays.
 - `schema-editor/src/components/FieldEditor.tsx` -- "Controls Fields" editing
@@ -103,3 +113,6 @@ schema-editor suite 174/174; `tsc --noEmit` clean. Backend suite untouched
   (the known-id set is built incrementally inside the check loop, so a trigger
   listed before its targets is falsely flagged). Pre-existing; affects `show_if`
   too; out of scope for A4 (which preserved existing consistency).
+- `polyglot-pdf-cmcg` -- stale `ControlsFields` type name in
+  `schema-editor/EDITOR_GUIDE.md` (the type was renamed/restructured this bead).
+  Filed by fresh-eyes; out-of-scope docs fix.

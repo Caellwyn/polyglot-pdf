@@ -128,6 +128,30 @@ describe('FieldEditor controls_fields UI', () => {
       })
     );
   });
+
+  it('a pruned action key serializes out of the exported JSON (undefined, not null)', () => {
+    // Backend ConditionalControl actions are Optional[List[str]] = None, so a
+    // dropped action must be ABSENT in JSON, not present-as-null. JSON.stringify
+    // elides undefined; this locks that the write path uses undefined.
+    const trigger = {
+      ...TRIGGER,
+      controls_fields: [{ operator: 'equals' as const, value: 'Yes', unlocks: ['other_family_name'] }],
+    };
+    const schema = makeSchema([trigger, TARGET_A, TARGET_B]);
+    let captured: FormField | null = null;
+    const onUpdateField = vi.fn((f: FormField) => { captured = f; });
+    render(<FieldEditor field={trigger} schema={schema} onUpdateField={onUpdateField} />);
+
+    const unlocksLabel = screen.getByText('Unlocks');
+    const group = unlocksLabel.parentElement as HTMLElement;
+    const targetRow = within(group).getByText('Family name').closest('label') as HTMLElement;
+    fireEvent.click(within(targetRow).getByRole('checkbox')); // uncheck the last target
+
+    const json = JSON.stringify(captured!.controls_fields);
+    expect(json).toBe('[{"operator":"equals","value":"Yes"}]');
+    expect(json).not.toContain('unlocks');
+    expect(json).not.toContain('null');
+  });
 });
 
 describe('validation reference check for list-shaped controls_fields', () => {

@@ -5,6 +5,7 @@ import type {
   FormSchema,
   ConditionalControl,
   ConditionalOperator,
+  ControlActionKey,
 } from '../types/schema';
 
 interface FieldEditorProps {
@@ -42,7 +43,7 @@ const CONDITIONAL_OPERATORS: ConditionalOperator[] = [
 // The action kinds a controls_fields entry can apply to its target fields.
 // `key` matches the ConditionalControl array property; mirrors backend
 // ConditionalControl (backend/models/form_models.py).
-const CONTROL_ACTIONS: { key: keyof ConditionalControl; label: string }[] = [
+const CONTROL_ACTIONS: { key: ControlActionKey; label: string }[] = [
   { key: 'shows', label: 'Shows' },
   { key: 'hides', label: 'Hides' },
   { key: 'unlocks', label: 'Unlocks' },
@@ -98,10 +99,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   // Toggle a target field id within one action array of one control.
   const toggleControlTarget = (
     idx: number,
-    action: keyof ConditionalControl,
+    action: ControlActionKey,
     fieldId: string,
   ) => {
-    const current = (controls[idx][action] as string[] | undefined) || [];
+    const current = controls[idx][action] || [];
     const next = current.includes(fieldId)
       ? current.filter(id => id !== fieldId)
       : [...current, fieldId];
@@ -464,7 +465,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   <div className="space-y-3">
                     {CONTROL_ACTIONS.map(action => {
                       const selected =
-                        (control[action.key] as string[] | undefined) || [];
+                        control[action.key] || [];
                       return (
                         <div key={action.key}>
                           <label className="label">
