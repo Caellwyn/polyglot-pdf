@@ -53,14 +53,18 @@ from structural_enrich import (  # noqa: E402
 
 
 # Anti-hallucination contract addendum (Q4): the model MUST copy widget names
-# verbatim from the enriched list, never invent or normalize them.
+# verbatim from the field list, never invent or normalize them. Mode-neutral
+# wording ("FIELD LIST", not "ENRICHED FIELD LIST") so it is accurate for BOTH
+# the plain claude-hybrid list and the enriched bundle (bd 7a9.12 -- the plain
+# mode does not present an "enriched" list, and a contradictory label in this
+# graded instruction could confuse a literal model).
 ANTI_HALLUCINATION = """\
 CRITICAL -- pdf_field_name fidelity (this is graded): every pdf_field_name you
 emit MUST be copied CHARACTER-FOR-CHARACTER from the `name=` value of a field in
-the ENRICHED FIELD LIST below. Do NOT invent, abbreviate, normalize, or
+the FIELD LIST below. Do NOT invent, abbreviate, normalize, or
 re-case any widget name. If you consolidate several widgets into one logical
 field (e.g. a radio set), put each widget's exact `name=` value on its
-option.pdf_field_name. Every field in the enriched list must appear exactly once
+option.pdf_field_name. Every field in the field list must appear exactly once
 in your output (as a field or as an option of a consolidated field).
 """
 

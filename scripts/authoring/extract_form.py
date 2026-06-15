@@ -106,10 +106,11 @@ def _normalize_for_schema(schema: dict) -> dict:
 def _validate_schema(schema: dict) -> tuple[bool, str]:
     """Validate the draft against the canonical Pydantic FormSchema, if importable.
 
-    Returns (ok, detail). A non-fatal warning path: if the backend model cannot
-    be imported in this environment, we fall back to a structural check (the
-    required top-level keys + a non-empty fields list) so the tool still runs
-    standalone, and say so in the detail."""
+    Returns (ok, detail). `ok=False` is the tool's failure signal -- main() exits
+    non-zero and warns on stderr. The IMPORT failure is handled gracefully (not a
+    crash): if the backend model cannot be imported in this environment, we fall
+    back to a structural check (required top-level keys + a non-empty fields list)
+    so the tool still runs standalone, and say which check ran in the detail."""
     try:
         sys.path.insert(0, _REPO)
         from backend.models.form_models import FormSchema  # noqa: E402
