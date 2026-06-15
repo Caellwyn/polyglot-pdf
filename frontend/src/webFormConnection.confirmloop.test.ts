@@ -12,7 +12,7 @@
  * so a genuinely unfillable field does not spin even at the reduced re-prompt rate.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 
@@ -397,6 +397,13 @@ const TWO_SECTION_SCHEMA: FormSchema = {
 } as unknown as FormSchema
 
 describe('WebFormConnection confirm at a section boundary (bd polyglot-pdf-njvh)', () => {
+  // Holds the live connection so afterEach can tear it down. Confirming the last
+  // field of section 1 triggers an auto-switchToSection whose section_switched ack
+  // never arrives in this mock, so it arms a real ~15s watchdog setTimeout;
+  // disconnect() runs clearSectionSwitchWatchdog so it can't fire into a later test
+  // (fresh-eyes test-isolation note).
+  let conn: WebFormConnection | null = null
+
   beforeEach(() => {
     MockWebSocket.instances = []
     // @ts-expect-error -- override global WebSocket with the mock for the test
@@ -412,8 +419,13 @@ describe('WebFormConnection confirm at a section boundary (bd polyglot-pdf-njvh)
     } as unknown as Storage
   })
 
+  afterEach(() => {
+    conn?.disconnect()
+    conn = null
+  })
+
   async function connectedTwoSection(): Promise<MockWebSocket> {
-    const conn = new WebFormConnection(TWO_SECTION_SCHEMA)
+    conn = new WebFormConnection(TWO_SECTION_SCHEMA)
     await conn.connect('wss://example/ws/fill')
     const ws = lastWs()
     ws.send.mockClear()
@@ -430,10 +442,11 @@ describe('WebFormConnection confirm at a section boundary (bd polyglot-pdf-njvh)
     fillS1(ws, 'value-one')
     fireConfirm(ws, 'f_s1', 'req-boundary')
 
+    // Exactly one ack for the boundary confirm -- a double-fire would be a bug.
     const acks = confirmAcks(ws)
-    expect(acks.length).toBeGreaterThanOrEqual(1)
-    const boundaryAck = acks.find(a => a.request_id === 'req-boundary')
-    expect(boundaryAck).toBeDefined()
+    expect(acks).toHaveLength(1)
+    const boundaryAck = acks[0]
+    expect(boundaryAck.request_id).toBe('req-boundary')
     expect(boundaryAck.recorded).toBe(true)
     // Section 1 is now fully confirmed AND section 2 exists -> a real section
     // boundary. The backend reads this to skip the racing next-field-hint request.

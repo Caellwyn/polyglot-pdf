@@ -282,10 +282,14 @@ class RequestCoordinator:
         fire-and-forget send that always read as success.
 
         Returns:
-            - A dict ``{"recorded": bool, "reason": Optional[str]}`` when the
-              frontend answered. ``recorded`` is whether the confirmation was
-              recorded; ``reason`` is a fixed category token (e.g. "no_value")
-              when it was not -- never a field value (PII-free).
+            - A dict ``{"recorded": bool, "reason": Optional[str],
+              "section_complete": bool}`` when the frontend answered. ``recorded``
+              is whether the confirmation was recorded; ``reason`` is a fixed
+              category token (e.g. "no_value") when it was not -- never a field
+              value (PII-free); ``section_complete`` is True when this confirm
+              completed a section that has a NEXT section to advance to, so the
+              confirm handler skips the racing next-field-hint request (bd
+              polyglot-pdf-njvh) -- defaults to False when the FE omits it.
             - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend did
               NOT answer in time / the request could not be sent. Callers must NOT
               treat this as confirmed (bd polyglot-pdf-wpw.2).

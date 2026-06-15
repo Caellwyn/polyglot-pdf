@@ -84,7 +84,18 @@ below).
   should emit `confirm_section_boundary_skip_hint` in the dev-log and NO "do NOT
   assume complete" message at the boundary.
 
-Fresh-eyes: see the closeout assess.
+Fresh-eyes (Sonnet, 1 round -> NO-GAPS): all 3 rubric criteria PASS; traced the full
+FE->WS-route->service->coordinator->confirm-handler plumb chain (key name consistent
+at every hop), confirmed the form-complete gate, the back-compat default, and the
+confirm-ack-timeout early return. The `section_complete` sub-field vs. the SI-epic's
+planned top-level event was confirmed to be documentation-only (no code collision).
+Three findings, all addressed (none rubric gaps): (1) a stale `request_confirm_field`
+docstring still listing the old 2-key return shape -> updated to document
+`section_complete`; (2) the new FE boundary test's auto-`switchToSection` armed a
+real ~15s watchdog `setTimeout` that could leak into a later test -> added an
+`afterEach` that `disconnect()`s the connection (runs `clearSectionSwitchWatchdog`);
+(3) the boundary ack assertion used `>= 1` -> tightened to exactly `toHaveLength(1)`
+so a double-fire would fail. No out-of-scope beads filed.
 
 ## Lessons
 
