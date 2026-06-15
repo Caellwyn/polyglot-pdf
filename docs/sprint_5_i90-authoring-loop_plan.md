@@ -86,6 +86,36 @@ maintainer sourcing a form. A field-merge/split bead is intentionally NOT filed 
 (demand-gated -- file it after the first real touch-up pass if the pipeline leaves
 merge work behind).
 
+### Track D -- Form catalogue + onboarding (added 2026-06-13, maintainer)
+
+The editor's missing FRONT DOOR: today there is no way to onboard a new form (the
+editor reads a hardcoded `AVAILABLE_FORMS` list from its own `public/schemas/`
+static copy, disconnected from `form-kits/` and GCS). The maintainer needs to
+drag-drop an AcroForm PDF to add it to the catalogue, see all forms at a glance,
+and track review progress.
+
+**Storage model (maintainer decision, 2026-06-13):** in-progress forms live LOCALLY
+in `form-kits/<id>/` (the editor reads/writes them via the A1 File System Access
+path) AND are COMMITTED TO GIT for off-machine durability (the "coffee-spill"
+clause -- a dead laptop must not lose work). Completed forms reach the voice app
+via the EXISTING `deploy-demo.sh` -> GCS flow; "complete" = a `status` marker in
+`metadata.json` that gates the deploy. This avoids browser<->GCS auth entirely (no
+new backend API for the MVP): local files + git for durability + the existing
+deploy for the complete-gate. Single source of truth: `form-kits/<id>/` holds both
+draft and complete forms, distinguished by `metadata.json` `status`.
+
+| bead | title | surfaces | inherits |
+|------|-------|----------|----------|
+| D1 (MVP) | Form catalogue + drag-drop onboarding: editor lists all `form-kits/` forms and lets you drag-drop a new AcroForm PDF to add `form-kits/<id>/` (git-backed) | `schema-editor/src/`, `form-kits/` | crit 3 (the loop's front door) |
+| D2 | `status: draft\|complete` gate in `metadata.json` + `deploy-demo.sh` filters so only `complete` forms reach GCS / the voice app | `form-kits/`, `deploy-demo.sh`, `scripts/deploy-form-kit.sh` | (epic 7a9, new) |
+| D3 | Catalogue dashboard: per-form progress (has-extraction / in-progress / complete, % human-review done), multi-form completion counts | `schema-editor/src/` | (epic 7a9, new) |
+
+**D1 is the MVP** the maintainer asked to build now; D2 (complete-gate) and D3
+(progress dashboard) are the "expand later" children, filed but not yet scheduled.
+D1 depends on nothing new; D2/D3 build on D1. The progress-metric signal D3 needs
+does not exist yet -- D3's first task is defining how "review progress" is
+measured.
+
 ## Bead housekeeping (approved)
 
 - **7a9.12** rescoped to B1 (I-90 good-enough; big-form/table work deferred).
@@ -101,7 +131,12 @@ merge work behind).
 - Big-form / table-heavy authoring (I-589 class), table/multi_entry detection,
   supplement-overflow wiring, the chunked pass. Parked.
 - Field merge/split editor UI (demand-gated; not filed until observed need).
-- Server-side schema persistence (the File System Access API is the chosen
-  local-authoring save path; no backend write endpoint).
+- A backend REST API / browser<->GCS auth for form onboarding -- explicitly
+  avoided: Track D uses local `form-kits/` + git for durability + the existing
+  `deploy-demo.sh` for the complete-gate, so no backend write endpoint is needed
+  for the MVP. (A backend API would only return if multi-user / multi-device
+  onboarding is ever required -- not now, single maintainer.)
+- The catalogue progress dashboard (D3) and the explicit complete-gate (D2) are
+  FILED but deferred -- D1 (onboarding MVP) is the scheduled Track-D work.
 - Batch operations, keyboard-nav polish, virtual scrolling (survey's
   medium/low-priority items) -- candidates for a later editor pass, not this one.
