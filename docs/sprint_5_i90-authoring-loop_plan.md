@@ -95,25 +95,43 @@ drag-drop an AcroForm PDF to add it to the catalogue, see all forms at a glance,
 and track review progress.
 
 **Storage model (maintainer decision, 2026-06-13):** in-progress forms live LOCALLY
-in `form-kits/<id>/` (the editor reads/writes them via the A1 File System Access
-path) AND are COMMITTED TO GIT for off-machine durability (the "coffee-spill"
-clause -- a dead laptop must not lose work). Completed forms reach the voice app
-via the EXISTING `deploy-demo.sh` -> GCS flow; "complete" = a `status` marker in
-`metadata.json` that gates the deploy. This avoids browser<->GCS auth entirely (no
-new backend API for the MVP): local files + git for durability + the existing
+in `form-kits/<id>/` (the editor reads/writes them via the File System Access
+**directory** API) AND are COMMITTED TO GIT for off-machine durability (the
+"coffee-spill" clause -- a dead laptop must not lose work). Completed forms reach
+the voice app via the EXISTING deploy -> GCS flow; "complete" = a `status` marker
+in `metadata.json` that gates the deploy. This avoids browser<->GCS auth entirely
+(no new backend API for the MVP): local files + git for durability + the existing
 deploy for the complete-gate. Single source of truth: `form-kits/<id>/` holds both
 draft and complete forms, distinguished by `metadata.json` `status`.
 
+**Two corrections from the Codex review of this plan (2026-06-14), both adopted:**
+
+1. **The draft-leak window is closed by folding the MINIMAL deploy gate INTO D1
+   (not deferring it to D2).** The moment D1 can write draft kits into
+   `form-kits/`, an unfiltered deploy would upload them to GCS / the voice app --
+   so the `status != complete` skip in the deploy MUST land in the same bead that
+   introduces drafts. D1 therefore includes the minimal gate; D2 is now only the
+   *editor-side* status UI + richer gating, no longer the thing standing between
+   drafts and production.
+2. **The deploy upload+manifest loop lives in `deploy-all.sh` (~lines 192-237),
+   not `deploy-demo.sh`/`scripts/deploy-form-kit.sh`.** `deploy-demo.sh` delegates
+   to `./deploy-all.sh`; both demo and prod (and a direct `deploy-all.sh
+   --form-kits`) run that loop, which today uploads EVERY `form-kits/*/` with a
+   `schema.json` and writes it into the manifest with no status filter. The gate
+   must go in `deploy-all.sh` to actually hold. Surfaces corrected below.
+
 | bead | title | surfaces | inherits |
 |------|-------|----------|----------|
-| D1 (MVP) | Form catalogue + drag-drop onboarding: editor lists all `form-kits/` forms and lets you drag-drop a new AcroForm PDF to add `form-kits/<id>/` (git-backed) | `schema-editor/src/`, `form-kits/` | crit 3 (the loop's front door) |
-| D2 | `status: draft\|complete` gate in `metadata.json` + `deploy-demo.sh` filters so only `complete` forms reach GCS / the voice app | `form-kits/`, `deploy-demo.sh`, `scripts/deploy-form-kit.sh` | (epic 7a9, new) |
+| D1 (MVP) | Form catalogue + drag-drop onboarding (editor lists all `form-kits/` forms via the FS-access **directory** API + drag-drop a PDF to add `form-kits/<id>/`, git-backed) **+ the minimal deploy gate** (`deploy-all.sh` skips any kit whose `metadata.json` `status` != `complete`, defaulting absent/`draft` to NOT-deployed) | `schema-editor/src/`, `form-kits/`, `deploy-all.sh` | crit 3 (the loop's front door) |
+| D2 | Editor-side status UI + richer complete-gate: view/set a form's `status` from the editor; confirm the deploy filter (D1) against demo + prod + `deploy-all.sh --form-kits` | `form-kits/`, `schema-editor/src/`, `deploy-all.sh` | (epic 7a9, new) |
 | D3 | Catalogue dashboard: per-form progress (has-extraction / in-progress / complete, % human-review done), multi-form completion counts | `schema-editor/src/` | (epic 7a9, new) |
 
-**D1 is the MVP** the maintainer asked to build now; D2 (complete-gate) and D3
-(progress dashboard) are the "expand later" children, filed but not yet scheduled.
-D1 depends on nothing new; D2/D3 build on D1. The progress-metric signal D3 needs
-does not exist yet -- D3's first task is defining how "review progress" is
+**D1 is the MVP** the maintainer asked to build now -- now INCLUDING the minimal
+deploy gate so drafts can never reach production (Codex finding adopted). D2
+(editor status UI + richer gating) and D3 (progress dashboard) are the
+"expand later" children, filed but not yet scheduled. D1 depends on nothing new;
+D2/D3 build on D1. The progress-metric signal D3 needs does not exist yet -- D3's
+first task is defining how "review progress" is
 measured.
 
 ## Bead housekeeping (approved)
