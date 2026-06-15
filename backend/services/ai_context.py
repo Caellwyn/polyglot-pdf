@@ -310,7 +310,11 @@ def build_form_context(
 
         # Recompute progress from the REAL section field set, not the one-field
         # schema["fields"] (gap N: "Progress: x/1" on every section otherwise).
-        if section_fields:
+        # Key on the manifest being PRESENT (current_section truthy), not on the
+        # field list being non-empty -- an empty section must read 0/0, not fall
+        # back to the one-field "x/1" symptom (fresh-eyes). With no manifest at all
+        # (e.g. a legacy reconnect hitting this branch) keep the pre-branch values.
+        if current_section:
             total_fields = len(section_fields)
             filled_count = sum(
                 1 for f in section_fields if current_values.get(f.get("field_id"))

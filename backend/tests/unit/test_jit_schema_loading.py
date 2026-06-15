@@ -175,22 +175,35 @@ class TestGetNextFieldSchemaForJIT:
         second = service.get_next_field_schema_for_jit("firstName")
         assert second is None
 
-    def test_seeds_loaded_field_ids_from_handshake(self, mock_settings_jit_enabled, sample_schema):
-        """A field already in the handshake's loaded_field_ids is not re-delivered.
+    @pytest.mark.asyncio
+    async def test_start_session_seeds_loaded_field_ids_from_handshake(
+        self, mock_settings_jit_enabled, sample_schema
+    ):
+        """start_session itself seeds _loaded_field_ids from the handshake schema.
 
+        Drives the REAL start_session code path (gap L), not a hand-set field, so
+        deleting the seed line in start_session would fail this test. _live_ai=None
+        + accept_connection=False reaches the seed and skips the live-AI block.
         On a reconnect the client sends loaded_field_ids = the schemas Gemini already
-        has; the service must seed its de-dup set from that (gap L) so the first
-        post-reconnect confirm does not re-send an already-known schema.
+        has, and the first post-reconnect confirm must NOT re-send a known schema.
         """
-        service = FormFillingService(settings=mock_settings_jit_enabled)
-        # Simulate start_session having seeded the set from the handshake schema
-        # dict (websocket_routes stores loaded_field_ids there in JIT mode).
-        service._schema = {**sample_schema, "loaded_field_ids": ["lastName"]}
-        service._loaded_field_ids = set(service._schema.get("loaded_field_ids", []))
+        from unittest.mock import AsyncMock, MagicMock
+        from fastapi import WebSocket
 
-        # firstName -> lastName, but lastName was already delivered pre-reconnect.
-        result = service.get_next_field_schema_for_jit("firstName")
-        assert result is None
+        service = FormFillingService(settings=mock_settings_jit_enabled)
+        ws = MagicMock(spec=WebSocket)
+        ws.send_json = AsyncMock()
+        ws.accept = AsyncMock()
+
+        jit_schema = {**sample_schema, "loaded_field_ids": ["lastName"], "jit_mode": True}
+        await service.start_session(
+            ws, "sess-1", accept_connection=False, schema=jit_schema,
+        )
+
+        # The seed ran: lastName is already known.
+        assert service._loaded_field_ids == {"lastName"}
+        # And the de-dup honors it: firstName -> lastName is suppressed.
+        assert service.get_next_field_schema_for_jit("firstName") is None
 
 
 class TestCallbackHandlerJITIntegration:

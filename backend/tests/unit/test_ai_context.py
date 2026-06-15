@@ -159,3 +159,29 @@ def test_jit_context_lists_real_section_not_one_field(monkeypatch):
     assert "1/3" in result
     # Real form title, not the literal "Form".
     assert "I-90 Test" in result
+
+
+def test_jit_context_empty_section_reports_zero_not_one(monkeypatch):
+    """An empty section manifest must read 0/0, not fall back to the one-field
+    schema["fields"] "x/1" symptom (fresh-eyes finding on A2; gap N edge case).
+    """
+    import backend.services.ai_context as ai_context_mod
+    monkeypatch.setattr(ai_context_mod, "get_settings", _jit_settings)
+
+    schema = {
+        "source": "web",
+        "jit_mode": True,
+        "form_metadata": {"title": "Empty Section Form"},
+        "fields": [
+            {"id": "placeholder", "name": "P", "spoken_name": "p", "type": "text"},
+        ],
+        "manifest": {
+            "current_section": {"section_id": "s", "section_label": "Empty", "fields": []},
+            "previous_sections": [],
+        },
+    }
+    result = build_form_context(schema, {}, "English")
+
+    # Manifest present but section empty -> 0/0, NOT the "x/1" fallback.
+    assert "0/0" in result
+    assert "0/1" not in result
