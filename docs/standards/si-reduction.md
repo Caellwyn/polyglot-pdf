@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-06-14. Created as the F1 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.2). See [../journal/entries/2026-06-14-bd-jnjj.2-si-contract-standard.md](../journal/entries/2026-06-14-bd-jnjj.2-si-contract-standard.md) for closeout details.*
+*Last updated: 2026-06-14. Created as the F1 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.2). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
 
 This is the FROZEN interface that the SI-reduction pillar (A) and the
 cheap-model-validator pillar (B) build against, so multiple agents can work in
@@ -43,6 +43,18 @@ contract -- coordinate it here before editing either template.
 -> `format_manifest_for_context`), `{next_field_schema}` (from
 `manifest_service.get_next_field_schema`, the FIRST unfilled field rendered as one
 line: `ID | Spoken | Name | Type | Required | Options:[...]`).
+
+> **`{manifest_text}` is regenerated server-side from `schema["fields"]`, NOT taken
+> from the handshake manifest.** `build_form_context()` calls
+> `generate_part_manifest(schema, ...)` over `schema["fields"]`, which in JIT mode
+> is just `[first_field_schema]` (the backend synthesizes the JIT `schema` that way
+> -- see [ws-protocol.md](ws-protocol.md)). So TODAY the rendered manifest covers
+> only the current field, not the whole section, and `generate_part_manifest`
+> hardcodes `previous_parts_manifests=[]` (a smell A1 audits). Pillar A (A2) must
+> reconcile this -- feed the section manifest the client already sends -- so the
+> reduced SI actually lists the section's fields. This is the gap between "the JIT
+> path exists" and "the JIT path is good"; the epic does NOT rest on the existing
+> shape.
 
 > **`fields_json` is a legacy placeholder NAME, not JSON.** It carries
 > pipe-separated field text (the comment at `config.py` notes this -- kept for

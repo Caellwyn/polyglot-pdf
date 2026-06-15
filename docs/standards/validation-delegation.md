@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
 
-*Last updated: 2026-06-14. Created as the F3 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.4). See [../journal/entries/2026-06-14-bd-jnjj.4-validation-delegation-standard.md](../journal/entries/2026-06-14-bd-jnjj.4-validation-delegation-standard.md) for closeout details.*
+*Last updated: 2026-06-14. Created as the F3 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.4). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -97,9 +97,23 @@ The validator's text output, parsed into:
     instruction to the model, not a log line -- see the PII sign-off below for
     why that is acceptable and where it must NOT be logged).
 
-This is the only shape B parsers consume. The flash-lite model is prompted to
-emit exactly this JSON; a parse failure is treated as fail-OPEN (see PII sign-off
-below).
+This is the raw verdict the flash-lite model emits; a parse failure is treated as
+fail-OPEN (see PII sign-off below).
+
+**Two distinct shapes -- do not conflate them.** The raw verdict above is what the
+model returns to the backend. When the backend pushes the verdict to the client
+(the `validation_result` WS type F2 reserves -- e.g. for a UI badge), it wraps the
+verdict in a typed envelope so sender and receiver agree:
+
+```json
+{ "type": "validation_result", "conflicts": [ { "field_ids": [...], "reason": "..." } ] }
+```
+
+i.e. the envelope is the raw verdict with a top-level `"type": "validation_result"`
+added (the `conflicts` list is spread at top level, NOT nested under a `verdict`
+key). The STEERING directive (contract 3) is a SEPARATE thing -- it goes to the
+Live model, not over this wire message. A clean verdict (`conflicts: []`) produces
+neither a steer nor (optionally) a `validation_result` push.
 
 ---
 
@@ -113,9 +127,9 @@ NOT confirmation/section bookkeeping.
 ```json
 {
   "fields": [
-    { "field_id": "addr_state", "name": "State", "value": "West Virginia" },
-    { "field_id": "addr_zip",   "name": "ZIP code", "value": "50301" },
-    { "field_id": "dob",        "name": "Date of birth", "value": "2031-04-02" }
+    { "field_id": "addr_state", "name": "State", "value": "West Virginia", "steered": false },
+    { "field_id": "addr_zip",   "name": "ZIP code", "value": "50301", "steered": false },
+    { "field_id": "dob",        "name": "Date of birth", "value": "2031-04-02", "steered": false }
   ]
 }
 ```
@@ -127,31 +141,52 @@ NOT confirmation/section bookkeeping.
   message can name the field naturally (and so the validator has the semantic
   context -- "ZIP code" vs "State" -- to apply world knowledge).
 - `value`: the current filled value (the canonical stored form).
+- `steered`: the per-field "already steered back about this field once" marker
+  (default `false`). **This is how the max-resteer bound survives the stateless
+  backend** (contract 3, invariant 2): the backend MUST NOT remember which fields
+  it has steered on, so the CLIENT owns that marker in `sessionStorage` alongside
+  the field state and sends it in every payload. B5 suppresses any conflict whose
+  `field_ids` are ALL already `steered: true`; when it does steer, the client sets
+  `steered: true` for those fields. Without this client-sent flag the loop-prevention
+  rule could not be honored without violating the stateless invariant.
 
 The client already holds all of this in `sessionStorage`; the backend rebuilds
 nothing server-side (stateless invariant). The payload is assembled from the same
-client state that drives navigation -- it is a projection of `fieldValues`, not a
-new store.
+client state that drives navigation -- it is a projection of `fieldValues` plus the
+per-field `steered` marker, not a new store.
 
 ---
 
-## Frozen contract 3 -- Steering-message shape
+## Frozen contract 3 -- Steering directive (injected into the Live session)
 
 How a non-empty verdict becomes an in-band instruction that sends the LIVE voice
 model back to the problem field. The validator does not talk to the user; it
 hands the live model a correction directive, which the live model voices.
 
-```json
-{
-  "type": "validator_steer",
-  "field_ids": ["addr_state", "addr_zip"],
-  "reason": "State is West Virginia but ZIP 50301 is in Iowa.",
-  "instruction": "Name both fields and ask the user to verify which is correct. Accept the user's answer if they confirm both are intentional."
-}
+**Routing (critical -- this is NOT a frontend WS message).** The directive goes
+**backend -> Gemini Live session**, injected as a text turn via the adapter's
+existing path (`LiveAIGemini.send_text_message` ->
+`send_client_content` / `send_realtime_input`, the same mechanism the initiating
+message uses). It is NOT sent to the browser: the frontend has no role in voicing
+a steer, and an unknown message type falls through the frontend dispatcher's
+default-ignore path (`webFormConnection.ts:489-491`), so a steer routed to the
+client would simply be dropped and the conflict never voiced. Accordingly there is
+**no `validator_steer` WS message type** -- F2's message-type registry does not list
+one (an earlier draft wrongly reserved it as backend->frontend; removed). The
+shape below is the internal directive the backend builds and injects, not a wire
+envelope:
+
+```text
+field_ids:  ["addr_state", "addr_zip"]
+reason:     "State is West Virginia but ZIP 50301 is in Iowa."
+instruction (the text injected into the Live session):
+  "Name both fields and ask the user to verify which is correct. Accept the
+   user's answer if they confirm both are intentional."
 ```
 
-(The wire `type` name is reserved/owned by [ws-protocol.md](ws-protocol.md) (F2);
-the fields above are the F3-owned payload.)
+The backend composes `instruction` from `reason` + the two invariants below and
+injects it as a Live text turn; `field_ids` / `reason` are the inputs it builds
+from, not separate wire fields.
 
 Two invariants this shape MUST preserve:
 
@@ -163,9 +198,11 @@ Two invariants this shape MUST preserve:
 2. **Max-resteer bound: a given field is re-flagged at most ONCE.** After the
    live model has steered the user back to a field once and the user resolved or
    overrode it, that field is NOT re-flagged on a later validator pass -- no
-   infinite zip-vs-state loop. Track a per-field "already steered" marker
-   (client-side, alongside the field state) and suppress repeat conflicts that
-   reference an already-steered field.
+   infinite zip-vs-state loop. The marker is the `steered` flag on each field in
+   the contract-2 payload -- **client-owned** (the stateless backend cannot
+   remember it). B5 suppresses any conflict whose `field_ids` are all already
+   `steered: true`, and sets `steered: true` on the fields it does steer. See
+   contract 2 for the flag's home.
 
 The steering mechanism is owned by **bead B5 (polyglot-pdf-jnjj.17)**; this doc
 freezes its payload + the two invariants it must honor.
@@ -185,6 +222,13 @@ Bead **B4 (polyglot-pdf-jnjj.16)** makes the client PROACTIVELY emit two events 
 the boundaries where the validator should run. The wire TYPE names are reserved in
 [ws-protocol.md](ws-protocol.md) (F2); the PAYLOADS each carries are frozen here:
 
+Both events **carry their own `fields` payload** -- the backend is stateless and
+keeps NO server-side form values (`FormFillingService.start_session` treats
+`current_values` as client-owned and does not persist them,
+`backend/services/form_filling_service.py:119-120,136-139`), so the validator's
+input MUST ride on the event itself; there is nothing server-side to project from
+after the message arrives.
+
 **Section-complete** -- emitted when the last field in the current section is
 confirmed:
 
@@ -193,27 +237,55 @@ confirmed:
   "type": "section_complete",
   "section_id": "addr_section",
   "fields": [
-    { "field_id": "addr_state", "name": "State", "value": "West Virginia" },
-    { "field_id": "addr_zip",   "name": "ZIP code", "value": "50301" }
+    { "field_id": "addr_state", "name": "State", "value": "West Virginia", "steered": false },
+    { "field_id": "addr_zip",   "name": "ZIP code", "value": "50301", "steered": false }
   ]
 }
 ```
 
 - `section_id`: the just-completed section.
 - `fields`: the minimal client-state payload (contract 2) scoped to that section
-  -- the validator's input for this boundary.
+  -- the validator's input for this boundary (including the `steered` markers).
 
 **Form-complete** -- emitted ONCE when the whole form is confirmed
 (`isFormComplete` true):
 
 ```json
-{ "type": "form_complete" }
+{
+  "type": "form_complete",
+  "fields": [
+    { "field_id": "addr_state", "name": "State", "value": "West Virginia", "steered": false }
+    /* ... the contract-2 projection of the WHOLE form ... */
+  ]
+}
 ```
 
-- `form_complete` is **once-only**: the client guards it so it fires a single
-  time per form session, never re-emitted on subsequent state changes. (A
-  full-form validator pass, if run at this boundary, uses the contract-2 payload
-  for the whole form; the event itself carries no field payload.)
+- `form_complete` is **once-only**: the client guards it so it fires a single time
+  per form session, never re-emitted on subsequent state changes.
+- `fields`: the contract-2 payload for the WHOLE form (the full-form validator
+  pass's input). It is NOT a bare event -- a bare `{type: "form_complete"}` would
+  give the stateless backend no values to validate.
+
+### Ordering: the validator must run BEFORE the section auto-switch
+
+Today, when the last field of a section is confirmed, the client auto-advances to
+the next section IN THE SAME confirm handler
+(`frontend/src/webFormConnection.ts:1318-1343` -> `computeNextField` ->
+`switchToSection`, which restarts the Live session into the next section). If
+`section_complete` simply fires alongside that, **the validator's verdict arrives
+after Gemini has already been restarted into the next section**, and the
+steer-back-to-the-problem-field flow cannot work (the live model is no longer in
+the section that owns the conflicting fields).
+
+So the contract REQUIRES: **B4 gates the auto-switch on the validator round-trip.**
+On section-complete the client emits the event and PAUSES the auto-advance until
+either (a) a clean verdict / `validation_result` returns, or (b) the validator
+fails-OPEN (timeout/error -- contract: advance unchecked, never block). If the
+verdict has conflicts, the steer (contract 3) runs while still in the current
+section, and the switch happens only after the user resolves/overrides. The
+fail-OPEN bound keeps a validator outage from stranding the user mid-form. This
+ordering is owned by B4 (jnjj.16) + B5 (jnjj.17); implementers MUST NOT let the
+existing fire-and-forget auto-switch race the validator.
 
 ---
 

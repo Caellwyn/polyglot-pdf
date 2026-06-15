@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-14. Created as the F2 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.3). See [../journal/entries/2026-06-14-bd-jnjj.3-ws-protocol-standard.md](../journal/entries/2026-06-14-bd-jnjj.3-ws-protocol-standard.md) for closeout details.*
+*Last updated: 2026-06-14. Created as the F2 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.3). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -55,7 +55,7 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `manifest` | object (`{fields: [...], parts: [...]}`) | field_id\|spoken_name pairs + section list. The backend stores it for JIT context building and copies `manifest.parts` into the section list (lines 655-668). Manifest SHAPE is owned by [si-reduction.md](si-reduction.md) -- do not duplicate it here. |
+| `manifest` | `HandshakeManifest` (see below) | The frontend builds it as `{current_section, previous_sections, parts}` (`frontend/src/schema-forms/utils/manifestUtils.ts:35-41`) -- NOT a top-level `fields` array. The backend stores the whole object and consumes ONLY `manifest.parts` (the section nav list, copied into `schema["parts"]`, lines 664-668); it does NOT read `manifest.current_section` / `previous_sections`. **Heads-up for Pillar A:** the JIT SI's field manifest is NOT built from this handshake manifest -- `ai_context.build_form_context()` regenerates `manifest_text` from `schema["fields"]` (which in JIT mode is just `[first_field_schema]`, lines 661-663), so today the SI sees only the first field's pairs, not the whole section. (The backend's `jit_handshake_received` log even reads a non-existent `manifest.fields` at line 671, always logging 0 -- a real symptom of this mismatch.) A2 must reconcile this so the reduced SI actually carries the section manifest. Manifest field-entry shape is owned by [si-reduction.md](si-reduction.md). |
 | `first_field_schema` | object \| null | Full schema for the current section's first field only (line 656). |
 | `loaded_field_ids` | string[] | Field IDs whose full schema the client has already sent to Gemini; defaults to `[]` (line 657). |
 
@@ -125,7 +125,11 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `handshake` / `handshake_jit` | schemaFormState.ts:604 / :636 | Initial + section-switch handshake (see above). |
 | `form_state` | webFormConnection.ts:2018 | Push current form state; backend replies `form_state_ack`. |
 | `form_state_response` | webFormConnection.ts:812 | Reply to backend `get_form_state`. |
+| `next_field_hint` | websocket_routes.py:300 | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). |
 | `next_field_hint_response` | webFormConnection.ts:835 | Reply to backend `get_next_field_hint`. |
+| `read_disclaimer` | websocket_routes.py:377 (sent connection.ts:844) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. |
+| `restart_gemini_session` | websocket_routes.py:480 (sent connection.ts:464) | Client asks the backend to restart the Gemini session; backend replies `gemini_session_restarted`. |
+| `section_completed` | websocket_routes.py:551 | Client signals a section completed (the CURRENT reactive ack path); backend replies `section_completed_ack`. NOT the new proactive `section_complete` event B introduces -- see the reserved extension points below. |
 | `section_info_response` | webFormConnection.ts:907 (+others) | Reply with section metadata. |
 | `field_value_response` | webFormConnection.ts:1147 | Reply to backend `get_field_value`. |
 | `confirm_field_response` | webFormConnection.ts:1536 | Reply to backend `confirm_field`. |
@@ -156,16 +160,24 @@ adds a validator round-trip. Reserved message types:
 |------|-----------|---------------|-------|
 | `section_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive section-complete event (replaces reactive `isFormComplete` polling). |
 | `form_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive form-complete event. |
-| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Cheap-model validator verdict. Shape -> [validation-delegation.md](validation-delegation.md) (F3). |
-| `validator_steer` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Validator-driven steering message back to the form-fill loop. Shape -> [validation-delegation.md](validation-delegation.md) (F3). |
+| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Cheap-model validator verdict pushed to the client (for UI surfacing). Full envelope (`{type, conflicts}`) -> [validation-delegation.md](validation-delegation.md) (F3). |
 
-These four are RESERVED NAMES only. Their payload shapes are designed in F3
+> **The validator STEER is NOT a WS message type.** When a conflict is found, the
+> correction directive is injected **backend -> Gemini Live session** as a text turn
+> (the live model voices it), NOT sent to the browser -- see
+> [validation-delegation.md](validation-delegation.md) (F3, "Steering directive").
+> An earlier draft wrongly reserved a `validator_steer` backend->frontend type; it
+> is removed. The frontend's default-ignore path (`webFormConnection.ts:489-491`)
+> would silently drop such a message, so a steer routed to the client would never be
+> voiced. Only `validation_result` (above) is a real wire message in B.
+
+These three are RESERVED NAMES only. Their payload shapes are designed in F3
 ([validation-delegation.md](validation-delegation.md)); do not invent shapes
 here. (`section_complete`/`form_complete` are NOT the existing
 `section_completed`/`completion_message` control messages -- those are the
 current reactive acks; the new pair are the proactive events B introduces.) The
-backend->frontend steering message is named `validator_steer` -- F3's payload
-example uses the same string; the two docs MUST agree on this exact token.
+validator STEER is deliberately absent from this registry -- it is a
+backend->Gemini Live injection, not a wire message (see the callout above).
 
 ### Pillar C -- restart cadence
 
