@@ -43,7 +43,7 @@ import sys
 # swarm_config.py) so subprocess.run(["bd", ...]) finds the right binary on
 # Windows without needing the Windows shell.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import swarm_config  # noqa: F401, E402
+import swarm_config  # noqa: E402
 
 # bd emits UTF-8 (e.g. a U+2713 check mark in a clean-audit line). Printing
 # that to a cp1252 Windows console crashes with UnicodeEncodeError. Reconfigure
@@ -74,6 +74,9 @@ def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
             encoding="utf-8",
             errors="replace",
             timeout=SUBPROCESS_TIMEOUT_SEC,
+            # Suppress the dozens of git.exe console windows a bd dolt
+            # push/pull conjoin spawns on Windows (bd polyglot-pdf-5k32).
+            creationflags=swarm_config.windowless_creationflags(),
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError(

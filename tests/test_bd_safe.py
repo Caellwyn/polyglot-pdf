@@ -861,3 +861,41 @@ def test_claim_proceeds_when_surfaces_disjoint(monkeypatch):
         id="proj-mine", repo=bs.DEFAULT_REPO, no_surface_check=False
     )
     assert bs.cmd_claim(args) == bs.EXIT_OK
+
+
+# --- windowless subprocess spawn (bd polyglot-pdf-5k32) ---
+
+def test_run_passes_windowless_creationflags(monkeypatch):
+    """_run must forward the swarm_config windowless creationflags to
+    subprocess.run -- this is what stops a bd dolt push/pull conjoin from
+    spawning dozens of git.exe console windows on Windows (bd polyglot-pdf-5k32).
+
+    We force the helper to a sentinel non-zero value so the assertion is
+    meaningful on every platform (the real value is CREATE_NO_WINDOW on Windows,
+    0 elsewhere -- a bare "== 0" check would pass vacuously on CI Linux even if
+    the flag were dropped).
+    """
+    SENTINEL = 0x08000000
+    monkeypatch.setattr(
+        bs.swarm_config, "windowless_creationflags", lambda: SENTINEL
+    )
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["creationflags"] = kwargs.get("creationflags")
+        return _proc(returncode=0, stdout="ok")
+
+    monkeypatch.setattr(bs.subprocess, "run", fake_run)
+    bs._run(["bd", "dolt", "pull"])
+    assert seen["creationflags"] == SENTINEL
+
+
+def test_windowless_creationflags_is_zero_off_windows(monkeypatch):
+    """Off Windows the helper is 0 (a documented, ignored subprocess kwarg), so
+    the same call site is a no-op there. On Windows it is CREATE_NO_WINDOW."""
+    monkeypatch.setattr(bs.swarm_config.sys, "platform", "linux")
+    assert bs.swarm_config.windowless_creationflags() == 0
+    monkeypatch.setattr(bs.swarm_config.sys, "platform", "win32")
+    # CREATE_NO_WINDOW exists on Windows Python; off Windows the getattr default
+    # (0) is what a non-win32 test runner sees, so only assert non-negative here.
+    assert bs.swarm_config.windowless_creationflags() >= 0

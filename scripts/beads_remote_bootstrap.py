@@ -109,10 +109,21 @@ def vlog(msg: str) -> None:
         print(f"[beads-bootstrap]   {_mask(msg)}", flush=True)
 
 
+# CREATE_NO_WINDOW on Windows suppresses the console-window storm a bd dolt /
+# dolt / git conjoin spawns (bd polyglot-pdf-5k32). No-op off Windows. Inlined
+# here (rather than importing swarm_config) so the bootstrap stays standalone --
+# it can run before scripts/ is importable. A caller's explicit creationflags in
+# **kw wins (setdefault, not override).
+_WINDOWLESS_FLAGS = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
+
+
 def run(cmd, cwd=None, check=False, capture=True, timeout=300, **kw):
     """Thin subprocess wrapper. Returns CompletedProcess; never raises on
     non-zero unless check=True."""
     vlog("$ " + " ".join(str(c) for c in cmd) + (f"   (cwd={cwd})" if cwd else ""))
+    kw.setdefault("creationflags", _WINDOWLESS_FLAGS)
     return subprocess.run(
         cmd, cwd=cwd, check=check,
         capture_output=capture, text=True, timeout=timeout, **kw

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 # On Windows, Python subprocess.run(["bd", ...]) cannot execute .CMD shims
@@ -47,6 +49,36 @@ if os.path.isfile(os.path.join(_NPM_BD_BIN, "bd.exe")) or os.path.isfile(
     os.path.join(_NPM_BD_BIN, "bd")
 ):
     os.environ["PATH"] = _NPM_BD_BIN + os.pathsep + os.environ.get("PATH", "")
+
+# Windows console-window suppression for spawned bd/dolt/git subprocesses.
+#
+# A `bd dolt push`/`pull` against this repo's git-backed Dolt remote
+# (git+https://...) makes dolt shell out to git.exe once per chunk during a
+# noms "conjoin" (git cat-file -s <hash>). On Windows every one of those
+# console-subsystem grandchildren (bd.exe -> dolt.exe -> git.exe) pops a
+# visible console window, and a conjoin can fire dozens at once -- the storm
+# that grinds the desktop to a halt (bd polyglot-pdf-5k32). The spawner is
+# third-party Go/Node code we cannot patch, but CREATE_NO_WINDOW on the
+# top-of-tree spawn we DO own (Python -> bd) starts bd with no console; its
+# dolt/git descendants then inherit "no console" and allocate no window.
+# CREATE_NO_WINDOW (not DETACHED_PROCESS) is the right flag here: it suppresses
+# the window without disturbing the captured stdout/stderr pipes the callers
+# rely on. No-op off Windows (the flag does not exist there).
+def windowless_creationflags() -> int:
+    """subprocess creationflags that suppress child console windows on Windows.
+
+    Returns subprocess.CREATE_NO_WINDOW on Windows, else 0. Pass straight into
+    subprocess.run(..., creationflags=windowless_creationflags()) -- this is
+    the single lever that keeps a bd/dolt/git conjoin from spawning dozens of
+    visible console windows (bd polyglot-pdf-5k32).
+    """
+    if sys.platform == "win32":
+        # CREATE_NO_WINDOW is present on every Windows Python that ships the
+        # _winapi-backed subprocess flags (3.7+); guard with getattr so a
+        # surprise build degrades to 0 (windows reappear) rather than crashing.
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
 
 # Last-resort fallbacks. The init script normally writes swarm.config.json so
 # these are never reached; left as obvious placeholders so a misconfigured
