@@ -69,6 +69,7 @@ export interface ConnectionManager {
 	resume: () => Promise<void>  // Resume from pause
 	disconnect: () => void  // True disconnect (cleanup everything)
 	getStatus: () => ConnectionStatus
+	isSendingMicAudio: () => boolean  // bd polyglot-pdf-s3zv: would a mic chunk be forwarded to the backend right now (the real shouldSendMicChunk gate, incl. socket state)? Drives the energy meter's green "sending" state.
 	sendAudio: (audioData: ArrayBuffer) => void
 	sendActivityStart: () => void  // Send activity_start signal (user started speaking)
 	sendActivityEnd: () => Promise<void>    // Send activity_end signal (user stopped speaking) - async to wait for buffer drain
@@ -627,6 +628,18 @@ export function createConnectionManager(
 
 		getStatus() {
 			return connection?.getStatus() ?? 'disconnected'
+		},
+
+		// Whether a mic chunk would actually be forwarded to the backend RIGHT NOW --
+		// the SAME decision sendMicChunkToBackend applies (shouldSendMicChunk over the
+		// live status + socket state). The UI energy meter (bd polyglot-pdf-s3zv) uses
+		// this so "sending" reflects the real connection send gate, including the
+		// valid switching_section + open-socket case, instead of re-deriving a partial
+		// copy of the gate from status alone (Codex PR #203).
+		isSendingMicAudio() {
+			return connection
+				? shouldSendMicChunk(connection.getStatus(), connection.isSocketOpen())
+				: false
 		},
 
 		sendAudio(audioData: ArrayBuffer) {

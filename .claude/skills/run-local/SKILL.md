@@ -1,6 +1,6 @@
 ---
 name: run-local
-description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.ps1. Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "premium" to run the 3.1 model instead of the default 2.5, or "backend" for backend-only.
+description: Spin up the polyglot-pdf frontend + backend LOCALLY (backend uvicorn :8000, frontend vite :5173) for development, full-fidelity Gemini I/O logging, and rapid frontend iteration. Wraps scripts/dev-local.sh (bash -- the agent can run this directly) / scripts/dev-local.ps1 (PowerShell, human-facing). Use when the user asks to "run locally", "start the local stack", capture Gemini logs, A/B the Live model, or make/preview frontend changes without deploying. Optional arg: "premium" to run the 3.1 model instead of the default 2.5, or "backend" for backend-only.
 ---
 
 # Run the local dev stack
@@ -25,44 +25,65 @@ demo-deploy gate in [`docs/doctrine/promotion-tiers.md`](../../../docs/doctrine/
 
 ## What it runs
 
-`scripts/dev-local.ps1` (PowerShell; the repo targets Windows) starts:
+There are TWO equivalent runners -- a bash one and a PowerShell one. They start
+the same stack:
 
 - **Backend** -- `uvicorn backend.main:app` on `http://localhost:8000`.
   Port 8000 is deliberate: the frontend's dev WS URL defaults to
   `ws://localhost:8000/ws/fill` (`frontend/src/shared/config.ts`). It forces
   `VERTEXAI=false` (AI Studio, which has the 3.1 model) so it needs
   `GEMINI_API_KEY` (in the shell or `backend/.env`).
-- **Frontend** -- `npm run dev` (vite) on `http://localhost:5173` -- the
-  schema-forms voice form-filler SPA.
+- **Frontend** -- vite on `http://localhost:5173` -- the schema-forms voice
+  form-filler SPA. (The bash runner uses `--mode demo` so the committed
+  `frontend/.env.demo` Firebase web config loads + the WS URL is overridden to
+  the LOCAL backend; it also bypasses auth, so no Firebase sign-in is needed.)
 
 ## How to invoke
 
-Run the script with the backend venv's environment. From the repo root:
+**PREFER `scripts/dev-local.sh` (bash) -- the agent can run it directly from the
+Bash tool.** `powershell.exe` / `pwsh` is blocked by a deny rule in this
+environment (the auto-mode classifier treats `pwsh` as routing around that rule),
+so the `.ps1` is for a human in a PowerShell window, NOT for the agent. The bash
+script is a full worktree-aware counterpart (it resolves the venv from the main
+repo) and runs the same stack from Git Bash. Launch it with
+`run_in_background: true` so you are notified if it exits; do NOT poll it.
 
-```powershell
-# Default: both servers, 2.5 (standard) model -- the deployed default -- full dev logging ON
-./scripts/dev-local.ps1
+```bash
+# Default: both servers, 2.5 (standard) model, full dev logging ON
+./scripts/dev-local.sh
 
-# A/B on the 3.1 model
-./scripts/dev-local.ps1 -Model premium
+# A/B on the 3.1 (premium) model
+./scripts/dev-local.sh premium
 
-# Backend only (e.g. when driving an already-running frontend, or pure log capture)
-./scripts/dev-local.ps1 -BackendOnly
-
-# Production-style redacted logging locally (no .env.DEV created)
-./scripts/dev-local.ps1 -NoDevLog
+# Backend only / frontend only
+./scripts/dev-local.sh backend
+./scripts/dev-local.sh frontend
 ```
 
-The script is a foreground runner: it stays attached and tears down both child
-processes on Ctrl-C. **It is a long-lived process** -- launch it with
-`run_in_background: true` (Bash tool) so you are notified if it exits, and do NOT
-poll it; the user drives the browser while it runs.
+After launching, confirm both are up before driving the browser:
+`curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health` and the same
+for `:5173` should each return `200` (they usually come up within a few seconds).
 
-> **Permissions note.** Invoking `powershell.exe` / `pwsh` may be blocked by a
-> deny rule in this environment. If you cannot launch the `.ps1` from the Bash
-> tool, STOP and ask the user to run `./scripts/dev-local.ps1` themselves in a
-> PowerShell window, then continue (e.g. read the captured logs). Do not try to
-> route around the deny rule.
+The PowerShell runner is the human-facing equivalent (same servers; flags
+`-Model premium`, `-BackendOnly`, `-NoDevLog`):
+
+```powershell
+./scripts/dev-local.ps1            # both, 2.5
+./scripts/dev-local.ps1 -Model premium
+./scripts/dev-local.ps1 -BackendOnly
+```
+
+Both runners are foreground/long-lived (Ctrl-C tears down both children). If the
+bash runner is somehow unavailable AND you cannot run it, ask the user to run
+`./scripts/dev-local.ps1` in a PowerShell window -- but try `dev-local.sh` first.
+
+> **Aggressive idle timeout when driving headless.** A connected voice session
+> idle-times-out fairly quickly (~30-60s) with no audio being sent (default PTT is
+> muted). If you are driving the browser via Chrome MCP for a UI check, the session
+> will keep disconnecting between multi-step tool calls. Click the in-overlay
+> "Reconnect" control to re-establish it, and do any state inspection in as few
+> tool calls as possible (the meter / overlay re-mounts on reconnect, so cached
+> React fiber/ref handles go stale -- re-acquire them each time).
 
 ## After it's up
 

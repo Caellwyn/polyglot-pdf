@@ -72,6 +72,7 @@ function makeMockManager(calls: string[]) {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
     setNativeVad: vi.fn(),
+    setEnergyCallback: vi.fn(),
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
     unmuteInput: vi.fn(),
@@ -94,6 +95,7 @@ function makeMockManager(calls: string[]) {
     __forceStale: () => { connected = false },
     // tracked for the ordering assertion:
     getStatus: vi.fn(() => (connected ? 'connected' : 'disconnected')),
+    isSendingMicAudio: vi.fn(() => connected),
     sendActivityStart: vi.fn(() => calls.push('sendActivityStart')),
     sendActivityEnd: vi.fn(async () => { calls.push('sendActivityEnd') }),
     switchToFirstSection: vi.fn(async () => { calls.push('switchToFirstSection') }),

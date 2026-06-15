@@ -57,6 +57,13 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// reflects native VAD instead of a stale "PTT".
 	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
+	// Live mic-energy meter (bd polyglot-pdf-s3zv): mirrors the desktop overlay.
+	// `micEnergy` is the worklet's smoothed RMS (0-100); `micSending` is whether the
+	// latest frame passed the send gate. The worklet fires ~50x/sec, so we stash the
+	// latest in a ref and flush to state on an rAF loop (one re-render per frame).
+	const [micEnergy, setMicEnergy] = useState(0)
+	const [micSending, setMicSending] = useState(false)
+	const energyRef = useRef({ energy: 0, sending: false, lastFrameAt: 0 })
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)
 	// User dismissed the connection-timeout modal without reconnecting (bd
 	// polyglot-pdf-jf6w.2); reset when status leaves reconnect_failed.
@@ -188,6 +195,49 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			audioManager?.unmuteInput()
 		}
 	}, [connectionManager, pushToTalkMode])
+
+	// Live mic-energy meter subscription (bd polyglot-pdf-s3zv); mirrors the desktop
+	// overlay. Tap the worklet RMS stream via the audio manager, stash each frame in
+	// a ref, and flush to state on a rAF loop. Decay to 0 after ~250ms of no frames
+	// so a flat meter reads as "no audio reaching the backend".
+	//
+	// Only runs while the meter is rendered (connected) -- no perpetual rAF through
+	// the pre-connect / paused / reconnect-failed states (Codex PR #203). Tears down
+	// + unsubscribes on leaving `connected` (effect re-runs on `status`).
+	useEffect(() => {
+		const s = status.toLowerCase()
+		const meterVisible = s === 'connected' || s.startsWith('connected ')
+		if (!meterVisible) return
+		const audioManager = connectionManager?.getAudioManager()
+		if (!audioManager?.setEnergyCallback) return
+
+		audioManager.setEnergyCallback((energy, sending) => {
+			energyRef.current = { energy, sending, lastFrameAt: performance.now() }
+		})
+
+		let rafId = 0
+		const tick = () => {
+			const { energy, sending, lastFrameAt } = energyRef.current
+			const stale = performance.now() - lastFrameAt > 250
+			const displayEnergy = stale ? 0 : energy
+			// "sending" green only when the connection genuinely forwards bytes. The
+			// worklet `sending` flag means the AUDIO gate passed; ask the manager for
+			// the REAL connection send gate (shouldSendMicChunk over live status +
+			// socket state) so the bar matches what actually reaches the backend,
+			// including the valid switching_section + open-socket case (Codex PR #203).
+			const connectionSends = connectionManager?.isSendingMicAudio?.() ?? false
+			const displaySending = stale ? false : (sending && connectionSends)
+			setMicEnergy(prev => (Math.abs(prev - displayEnergy) > 0.5 ? displayEnergy : prev))
+			setMicSending(prev => (prev !== displaySending ? displaySending : prev))
+			rafId = requestAnimationFrame(tick)
+		}
+		rafId = requestAnimationFrame(tick)
+
+		return () => {
+			cancelAnimationFrame(rafId)
+			audioManager.setEnergyCallback?.(null)
+		}
+	}, [connectionManager, status])
 
 	// Keep status ref updated
 	useEffect(() => {
@@ -1123,12 +1173,26 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					<div className="vff-panel-body">
 						{/* Status */}
 						<div className="vff-status-compact">
-							<div className="vff-status-dot" style={{ 
-								background: status === 'idle_timeout' ? '#6b7280' : statusColor 
+							<div className="vff-status-dot" style={{
+								background: status === 'idle_timeout' ? '#6b7280' : statusColor
 							}}></div>
 							<span className="vff-status-text">
 								{status === 'idle_timeout' ? 'Idle timeout' : status}
 							</span>
+							{/* Live mic-energy meter (bd polyglot-pdf-s3zv) */}
+							{isConnected && (
+								<span
+									className={`vff-mic-meter${micSending ? ' vff-mic-meter--sending' : ''}`}
+									title={micSending
+										? `Sending audio (energy ${micEnergy.toFixed(0)})`
+										: `Mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+								>
+									<span
+										className="vff-mic-meter-bar"
+										style={{ width: `${Math.min(100, micEnergy)}%` }}
+									></span>
+								</span>
+							)}
 						</div>
 
 
@@ -1388,6 +1452,32 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					font-size: 12px;
 					font-weight: 500;
 					color: #374151;
+					flex: 1;
+				}
+
+				/* Live mic-energy meter (bd polyglot-pdf-s3zv) */
+				.vff-mic-meter {
+					display: inline-block;
+					width: 40px;
+					height: 6px;
+					border-radius: 3px;
+					background: #e5e7eb;
+					overflow: hidden;
+					flex-shrink: 0;
+				}
+
+				.vff-mic-meter-bar {
+					display: block;
+					height: 100%;
+					width: 0%;
+					border-radius: 3px;
+					background: #9ca3af;
+					transition: width 80ms linear, background 120ms ease;
+				}
+
+				.vff-mic-meter--sending .vff-mic-meter-bar {
+					background: #10b981;
+					box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
 				}
 
 				.vff-language-selector-mobile {

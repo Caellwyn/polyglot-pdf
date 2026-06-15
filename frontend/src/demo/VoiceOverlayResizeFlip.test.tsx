@@ -57,12 +57,17 @@ const MINIMAL_SCHEMA: FormSchema = {
  * Build a minimal mock ConnectionManager for the resize-flip tests.
  * rearmAudioCapture is tracked; connect must NOT be called on an alreadyLive remount.
  */
-function makeResizeFlipMock(): ConnectionManager & { __rearmSpy: ReturnType<typeof vi.fn> } {
+function makeResizeFlipMock(): ConnectionManager & {
+  __rearmSpy: ReturnType<typeof vi.fn>
+  __setEnergyCbSpy: ReturnType<typeof vi.fn>
+} {
   const rearmSpy = vi.fn(async () => {})
+  const setEnergyCbSpy = vi.fn()
   const audioManager = {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
     setNativeVad: vi.fn(),
+    setEnergyCallback: setEnergyCbSpy,
     isSpeaking: vi.fn(() => false),
     muteInput: vi.fn(),
     unmuteInput: vi.fn(),
@@ -79,11 +84,13 @@ function makeResizeFlipMock(): ConnectionManager & { __rearmSpy: ReturnType<type
   }
   const manager = {
     __rearmSpy: rearmSpy,
+    __setEnergyCbSpy: setEnergyCbSpy,
     connect: vi.fn(async () => {}),
     disconnect: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(async () => {}),
     getStatus: vi.fn(() => 'connected' as const),
+    isSendingMicAudio: vi.fn(() => true),
     sendAudio: vi.fn(),
     sendActivityStart: vi.fn(),
     sendActivityEnd: vi.fn(async () => {}),
@@ -112,7 +119,10 @@ function makeResizeFlipMock(): ConnectionManager & { __rearmSpy: ReturnType<type
     onVADSpeechStart: vi.fn(),
     onVADSpeechEnd: vi.fn(),
   }
-  return manager as unknown as ConnectionManager & { __rearmSpy: ReturnType<typeof vi.fn> }
+  return manager as unknown as ConnectionManager & {
+    __rearmSpy: ReturnType<typeof vi.fn>
+    __setEnergyCbSpy: ReturnType<typeof vi.fn>
+  }
 }
 
 describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
@@ -241,5 +251,61 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
 
   it('mobile (VoiceOverlayMobile): does NOT call rearmAudioCapture on fresh/standalone mount', async () => {
     await assertNoRearmOnFreshMount(VoiceOverlayMobile)
+  })
+
+  /**
+   * Mic-energy meter subscription (bd polyglot-pdf-s3zv). On a connected mount the
+   * overlay must subscribe to the audio manager's energy stream via
+   * setEnergyCallback, and unsubscribe (callback set to null) on unmount. This pins
+   * the OVERLAY side of the wiring -- audioEnergyCallback.test.ts covers the manager
+   * side, but nothing asserted the overlay actually calls setEnergyCallback until a
+   * fresh-eyes note (a stub without the method silently skipped the path).
+   */
+  async function assertEnergySubscribed(
+    Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile
+  ) {
+    const manager = makeResizeFlipMock()
+    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
+      schema: MINIMAL_SCHEMA, fieldValues: {}, currentSectionId: 'section_1',
+      completedSections: new Set<string>(), validationErrors: {}, lastUpdated: 0,
+      formSessionId: 'fss_test', loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false, disclaimerAccepted: true, selectedLanguage: 'English',
+    } as any))
+    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+
+    const { unmount } = render(
+      <Overlay
+        schema={MINIMAL_SCHEMA}
+        connectionManager={manager}
+        status="connected"
+        initialLanguage="English"
+      />
+    )
+
+    // Subscribed on mount with a function callback. (Index from the end with
+    // [length-1] rather than Array.prototype.at -- the tsconfig lib targets ES2020,
+    // where `.at` is not typed; Codex PR #203, P0.)
+    await waitFor(() => {
+      expect(manager.__setEnergyCbSpy).toHaveBeenCalled()
+    })
+    const subCalls = manager.__setEnergyCbSpy.mock.calls
+    const lastSubArg = subCalls[subCalls.length - 1]?.[0]
+    expect(typeof lastSubArg).toBe('function')
+
+    // Unsubscribed (null) on unmount, so a torn-down overlay leaks no callback.
+    unmount()
+    await waitFor(() => {
+      const calls = manager.__setEnergyCbSpy.mock.calls
+      const lastArg = calls[calls.length - 1]?.[0]
+      expect(lastArg).toBeNull()
+    })
+  }
+
+  it('desktop (VoiceOverlay): subscribes to + unsubscribes from the energy stream', async () => {
+    await assertEnergySubscribed(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): subscribes to + unsubscribes from the energy stream', async () => {
+    await assertEnergySubscribed(VoiceOverlayMobile)
   })
 })
