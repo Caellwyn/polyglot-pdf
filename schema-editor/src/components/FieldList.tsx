@@ -21,6 +21,7 @@ export const FieldList: React.FC<FieldListProps> = ({
     new Set(schema.sections.map(s => s.id))
   );
   const [expandedFields, setExpandedFields] = React.useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = React.useState('');
   const [draggedField, setDraggedField] = React.useState<{ fieldId: string; sectionId: string } | null>(null);
   const [draggedOption, setDraggedOption] = React.useState<{ fieldId: string; optionIndex: number } | null>(null);
   const [dragOverField, setDragOverField] = React.useState<string | null>(null);
@@ -185,25 +186,46 @@ export const FieldList: React.FC<FieldListProps> = ({
     return map;
   }, [schema.fields]);
 
-  // Group fields by section
+  // Filter predicate: matches a field by id / spoken_name / pdf_field_name.
+  // An empty/whitespace query matches everything (full list restored).
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const matchesQuery = React.useCallback(
+    (field: FormField) => {
+      if (!normalizedQuery) return true;
+      const haystacks = [field.id, field.spoken_name, field.pdf_field_name];
+      return haystacks.some(
+        h => h != null && h.toLowerCase().includes(normalizedQuery)
+      );
+    },
+    [normalizedQuery]
+  );
+
+  // Group fields by section, applying the search filter while keeping grouping.
   const sectionedFields = React.useMemo(() => {
     const map = new Map<string, FormField[]>();
 
     for (const section of schema.sections) {
       const fields = section.fields
         .map(id => fieldsById.get(id))
-        .filter((f): f is FormField => f !== undefined);
+        .filter((f): f is FormField => f !== undefined)
+        .filter(matchesQuery);
       map.set(section.id, fields);
     }
 
     // Fields without section
-    const orphanFields = schema.fields.filter(f => !f.section_id);
+    const orphanFields = schema.fields.filter(f => !f.section_id).filter(matchesQuery);
     if (orphanFields.length > 0) {
       map.set('_orphan', orphanFields);
     }
 
     return map;
-  }, [schema.sections, schema.fields, fieldsById]);
+  }, [schema.sections, schema.fields, fieldsById, matchesQuery]);
+
+  // Sections that contain at least one matching field while filtering.
+  const matchingSectionCount = React.useMemo(() => {
+    if (!normalizedQuery) return schema.sections.length;
+    return schema.sections.filter(s => (sectionedFields.get(s.id) || []).length > 0).length;
+  }, [normalizedQuery, schema.sections, sectionedFields]);
 
   // Auto-scroll to selected field when selection changes
   React.useEffect(() => {
@@ -232,13 +254,62 @@ export const FieldList: React.FC<FieldListProps> = ({
     }, 100);
   }, [selectedFieldId, fieldsById]);
 
+  const isFiltering = normalizedQuery.length > 0;
+  const hasAnyMatch = matchingSectionCount > 0 || (sectionedFields.get('_orphan') || []).length > 0;
+
   return (
-    <div className="h-full overflow-auto custom-scrollbar bg-gray-50">
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Search / filter box */}
+      <div className="p-2 border-b border-gray-200 bg-gray-50">
+        <div className="relative">
+          <svg
+            className="w-4 h-4 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"
+            />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search fields..."
+            aria-label="Search fields"
+            className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto custom-scrollbar">
       <div className="p-2 space-y-1">
         {/* Render sections */}
         {schema.sections.map(section => {
           const fields = sectionedFields.get(section.id) || [];
-          const isExpanded = expandedSections.has(section.id);
+          // While filtering, hide sections with no matching fields.
+          if (isFiltering && fields.length === 0) return null;
+          const isExpanded = isFiltering || expandedSections.has(section.id);
 
           return (
             <div key={section.id} className="bg-white rounded-md shadow-sm">
@@ -456,6 +527,14 @@ export const FieldList: React.FC<FieldListProps> = ({
             })}
           </div>
         )}
+
+        {/* No-results state while filtering */}
+        {isFiltering && !hasAnyMatch && (
+          <div className="p-4 text-center text-sm text-gray-500">
+            No fields match "{searchQuery.trim()}".
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );
