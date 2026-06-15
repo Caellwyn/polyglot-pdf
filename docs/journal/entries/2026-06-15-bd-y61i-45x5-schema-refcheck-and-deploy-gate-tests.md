@@ -63,6 +63,18 @@ abort the harness), and covers:
 
 10/10 cases pass, exit 0.
 
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> NO-GAPS: both criteria PASS with file:line evidence; confirmed
+the two forward-ref tests would FAIL against the old incremental-set code (not
+vacuous), that dup detection uses the incremental `seenIds` (not the full set), and
+that the sourcing guard + `set -e`/`set +e` ordering is correct. Two findings, both
+fixed: (1) test 4 (controls_fields missing-ref) now asserts `type === 'warning'`
+symmetric with test 3, so a severity regression to 'error' can't slip through; (2)
+the harness's `set +e`-after-source ordering is load-bearing (the sourced `set -e`
+leaks errexit) -- strengthened the comment + an inline marker so a future edit can't
+insert a statement under the leaked errexit.
+
 ## Pre-PR assess + closeout notes
 
 - **Tests:** schema-editor 173 pass (incl. the 5 new validation tests); the
