@@ -1,14 +1,13 @@
-# JIT schema loading -- infra audit (A1)
+# JIT schema loading -- infra (audit + A2 repair)
 
 **Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-14. Created as the A1 audit of the existing JIT (`USE_JIT_SCHEMA`) infra for the SI-reduction epic (bd polyglot-pdf-jnjj.8). See [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for closeout details. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
+*Last updated: 2026-06-15. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
 
-The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models. This
-is the A1 audit: a catalog of every correctness gap in that path, each tagged
-**fix-now** (A2 must address before the JIT default-flip) or **defer** (real but
-out of the epic's critical path). It changes no code -- it is the fix-list A2
-(bd polyglot-pdf-jnjj.9) and the broader Pillar A work build from.
+The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models, audited
+under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** gaps
+(below, marked REPAIRED) are now closed; the **defer** gaps remain live cleanup. The
+"Current JIT data flow" section below describes the path AFTER the A2 repair.
 
 ## Current JIT data flow (what actually happens today)
 
@@ -16,33 +15,44 @@ out of the epic's critical path). It changes no code -- it is the fix-list A2
    `HandshakeManifest = {current_section, previous_sections, parts}` (section_id /
    section_label keys; `current_section.fields` = full field_id|spoken_name list).
 2. **Frontend JIT handshake** -- `schemaFormState.ts::getJITHandshakePayload`
-   (~621-647) sends `{type:"handshake_jit", manifest, first_field_schema,
-   loaded_field_ids, current_values, resume, section_number, section_label,
-   total_sections, fill_language}`. (Note it OMITS `section_id`,
-   `initial_field_hint`, `previous_spoken_names` -- see
-   [../standards/ws-protocol.md](../standards/ws-protocol.md) drift flags.)
-3. **Backend parse** -- `websocket_routes.py` JIT branch (~653-669) reads only
-   `manifest.parts` (-> `schema["parts"]`) and `first_field_schema` (->
-   `schema["fields"] = [first_field_schema]`), stores the whole `manifest` in
-   `schema["manifest"]`, and `loaded_field_ids` in `schema["loaded_field_ids"]`.
-4. **Backend SI build** -- `ai_context.py` JIT branch (~280-336) calls
-   `generate_part_manifest(schema, previous_parts_manifests=[])` over
-   `schema["fields"]` (= one field) and `get_next_field_schema(schema,
-   current_field_id=None)` (= `fields[0]`), then renders `{manifest_text}` +
-   `{next_field_schema}` into `JIT_SYSTEM_INSTRUCTION`.
+   sends `{type:"handshake_jit", manifest, first_field_schema, loaded_field_ids,
+   current_values, resume, section_number, section_label, total_sections,
+   fill_language, form_title, previous_spoken_names, initial_field_hint}`.
+   `first_field_schema` is the FIRST-UNFILLED field's schema (via `computeNextField`),
+   not `fields[0]` (A2 fixed gap D). The form_title / previous_spoken_names /
+   initial_field_hint were added by A2 (gaps O/M/D-hint -- the JIT handshake used to
+   under-send them).
+3. **Backend parse** -- `websocket_routes.py` JIT branch reads `manifest.parts`
+   (-> `schema["parts"]`), `first_field_schema` (-> `schema["fields"] =
+   [first_field_schema]`), the whole `manifest` (-> `schema["manifest"]`),
+   `loaded_field_ids` (-> `schema["loaded_field_ids"]`), and `form_title`
+   (-> `schema["form_metadata"]["title"]`, A2 gap O).
+4. **Backend SI build** -- `ai_context.py` JIT branch CONSUMES the client manifest:
+   `{manifest_text}` is built from `manifest.current_section.fields` +
+   `manifest.previous_sections` (A2 gaps A/B/C), `filled_count`/`total_fields` are
+   computed from the real section field set (gap N), and `{next_field_schema}`
+   renders the client-sent first-unfilled field's schema (gap D). The de-dup gate
+   (`should_include_schema_in_response`) now actually fires in
+   `form_filling_service.get_next_field_schema_for_jit`, seeded from the handshake's
+   `loaded_field_ids` (gaps G/L; bug polyglot-pdf-h2ii).
 
-**The core incoherence:** the frontend builds a full-section manifest and sends it,
-but the backend ignores `manifest.current_section` / `previous_sections` and
-REGENERATES the manifest from `schema["fields"]` -- which in JIT mode is just the
-first field. So the reduced SI today carries ONE field, not the section, and never
-the previous sections. (Confirmed independently by Codex's F1 review, PR #202.)
+**The core incoherence (REPAIRED by A2):** the frontend builds a full-section
+manifest and sends it; the backend used to ignore `manifest.current_section` /
+`previous_sections` and REGENERATE from `schema["fields"]` (= one field in JIT mode),
+so the reduced SI carried ONE field, not the section. A2 made the backend consume the
+client manifest. (The pre-fix incoherence was confirmed independently by Codex's F1
+review, PR #202.)
 
 ## Gap catalog
 
 Severity legend: **[BREAKS]** SI is wrong / model misled -- **[WASTE]** correctness
 OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
 
-### Fix-now (A2 must address before the JIT default-flip)
+### Fix-now -- ALL REPAIRED by A2 (bd polyglot-pdf-jnjj.9)
+
+> Every gap in this subsection (A, B, C, D, E, G, L, M, N, O) was fixed by A2; see
+> the journal entry. The entries below are retained as the record of WHAT was wrong
+> and where; the "Current JIT data flow" section above describes the repaired state.
 
 - **A -- [BREAKS] Handshake manifest is ignored; backend regenerates from one
   field.** `websocket_routes.py:664-668` stores `manifest` but consumes only

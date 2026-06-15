@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-06-14. Created as the F1 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.2). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
+*Last updated: 2026-06-15. A2 (bd polyglot-pdf-jnjj.9) repaired the JIT path the "JIT-path correctness" note below describes; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
 
 This is the FROZEN interface that the SI-reduction pillar (A) and the
 cheap-model-validator pillar (B) build against, so multiple agents can work in
@@ -52,28 +52,22 @@ contract -- coordinate it here before editing either template.
 `manifest_service.get_next_field_schema`, rendered as one line:
 `ID | Spoken | Name | Type | Required | Options:[...]`).
 
-> **Two JIT-path bugs A2 must fix -- the contract does NOT bless the current
-> behavior:**
-> 1. **`{manifest_text}` is regenerated server-side from `schema["fields"]`, NOT
->    taken from the handshake manifest.** `build_form_context()` calls
->    `generate_part_manifest(schema, ...)` over `schema["fields"]`, which in JIT
->    mode is just `[first_field_schema]` (the backend synthesizes the JIT `schema`
->    that way -- see [ws-protocol.md](ws-protocol.md)). So TODAY the rendered
->    manifest covers only ONE field, not the section, and `generate_part_manifest`
->    hardcodes `previous_parts_manifests=[]`.
-> 2. **`{next_field_schema}` is the section's FIRST field, not the first UNFILLED
->    field.** The JIT handshake picks `sectionSchema.fields[0]` and the backend
->    calls `get_next_field_schema(..., current_field_id=None)` WITHOUT consulting
->    `current_values`. On a reconnect or a section revisit where earlier fields are
->    already confirmed, the reduced SI would point the model at an already-filled
->    field. (The `{next_field_hint}` placeholder, by contrast, IS computed from the
->    real next-unfilled field on the client -- so the two can disagree today.)
+> **JIT-path correctness (REPAIRED by A2, bd polyglot-pdf-jnjj.9).** The JIT path was
+> audited (A1) and repaired (A2); see
+> [../components/jit-schema.md](../components/jit-schema.md) for the full catalog.
+> The two load-bearing fixes:
+> 1. **`{manifest_text}` is now built from the handshake manifest's
+>    `current_section.fields` + `previous_sections`**, not regenerated from the
+>    one-field `schema["fields"]` -- so the rendered manifest lists the whole
+>    section (and the cross-section block), not a single field.
+> 2. **`{next_field_schema}` is now the first-UNFILLED field**: the frontend selects
+>    it via `computeNextField` and sends its schema on the JIT handshake, so on a
+>    reconnect/revisit the SI points at the actual next field (and agrees with
+>    `{next_field_hint}`, which the JIT handshake now also sends).
 >
-> Pillar A (A2) must fix BOTH -- feed the real section manifest the client already
-> sends, and select the first-UNFILLED field -- so the reduced SI lists the
-> section's fields and points at the actual next field. This is the gap between
-> "the JIT path exists" and "the JIT path is good"; the epic does NOT rest on the
-> existing shape, and A1's audit catalogs these as fix-now.
+> The reduced-SI cost/correctness this enables is measured by the G2/G3 gates; the
+> epic's flip (A5) gates on those. A1's audit (jit-schema.md) tracks the remaining
+> DEFER-tier cleanup (terminology rename, etc.) that does not gate the flip.
 
 > **`fields_json` is a legacy placeholder NAME, not JSON.** It carries
 > pipe-separated field text (the comment at `config.py` notes this -- kept for
