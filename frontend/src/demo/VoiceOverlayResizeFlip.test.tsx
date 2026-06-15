@@ -90,6 +90,7 @@ function makeResizeFlipMock(): ConnectionManager & {
     pause: vi.fn(),
     resume: vi.fn(async () => {}),
     getStatus: vi.fn(() => 'connected' as const),
+    isSendingMicAudio: vi.fn(() => true),
     sendAudio: vi.fn(),
     sendActivityStart: vi.fn(),
     sendActivityEnd: vi.fn(async () => {}),
@@ -281,17 +282,21 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
       />
     )
 
-    // Subscribed on mount with a function callback.
+    // Subscribed on mount with a function callback. (Index from the end with
+    // [length-1] rather than Array.prototype.at -- the tsconfig lib targets ES2020,
+    // where `.at` is not typed; Codex PR #203, P0.)
     await waitFor(() => {
       expect(manager.__setEnergyCbSpy).toHaveBeenCalled()
     })
-    const lastSubArg = manager.__setEnergyCbSpy.mock.calls.at(-1)?.[0]
+    const subCalls = manager.__setEnergyCbSpy.mock.calls
+    const lastSubArg = subCalls[subCalls.length - 1]?.[0]
     expect(typeof lastSubArg).toBe('function')
 
     // Unsubscribed (null) on unmount, so a torn-down overlay leaks no callback.
     unmount()
     await waitFor(() => {
-      const lastArg = manager.__setEnergyCbSpy.mock.calls.at(-1)?.[0]
+      const calls = manager.__setEnergyCbSpy.mock.calls
+      const lastArg = calls[calls.length - 1]?.[0]
       expect(lastArg).toBeNull()
     })
   }

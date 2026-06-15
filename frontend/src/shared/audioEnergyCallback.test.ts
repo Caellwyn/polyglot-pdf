@@ -56,22 +56,23 @@ const SILENCE = new Int16Array(4) // all zero
 describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
   beforeEach(() => {
     lastWorkletNode = null
-    // @ts-expect-error -- stub the Web Audio + mic APIs for the node test env
-    global.AudioContext = FakeAudioContext
-    // @ts-expect-error
-    global.AudioWorkletNode = FakeWorkletNode
-    global.navigator = global.navigator || ({} as Navigator)
-    // @ts-expect-error -- jsdom navigator.mediaDevices is read-only/absent; stub it
-    global.navigator.mediaDevices = {
-      getUserMedia: vi.fn(async () => ({ id: 'fake-stream' })),
-    }
-    global.window = global.window || ({} as Window & typeof globalThis)
-    // @ts-expect-error -- replace the read-only window.location with a minimal stub
-    global.window.location = { hostname: 'localhost', href: 'http://localhost/' }
+    // Stub the Web Audio + mic APIs for the node test env via vi.stubGlobal -- a
+    // plain `global.navigator = ...` THROWS under Node 24 / Vitest ESM, where
+    // navigator/window are read-only accessors with no setter (Codex PR #203, P0).
+    // vi.stubGlobal handles that and vi.unstubAllGlobals() restores in afterEach.
+    vi.stubGlobal('AudioContext', FakeAudioContext)
+    vi.stubGlobal('AudioWorkletNode', FakeWorkletNode)
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia: vi.fn(async () => ({ id: 'fake-stream' })) },
+    })
+    vi.stubGlobal('window', {
+      location: { hostname: 'localhost', href: 'http://localhost/' },
+    })
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   async function startedManager() {

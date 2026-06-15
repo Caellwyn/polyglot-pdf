@@ -220,12 +220,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			const { energy, sending, lastFrameAt } = energyRef.current
 			const stale = performance.now() - lastFrameAt > 250
 			const displayEnergy = stale ? 0 : energy
-			// "sending" green only when the connection genuinely sends -- the worklet
-			// `sending` flag means the AUDIO gate passed, but the CONNECTION send gate
-			// (shouldSendMicChunk) drops bytes outside `connected`, so the bar must not
-			// claim audio is reaching the backend then (Codex PR #203, P1).
-			const connStatus = (connectionManager?.getStatus?.() || '').toLowerCase()
-			const connectionSends = connStatus === 'connected'
+			// "sending" green only when the connection genuinely forwards bytes. The
+			// worklet `sending` flag means the AUDIO gate passed; ask the manager for
+			// the REAL connection send gate (shouldSendMicChunk over live status +
+			// socket state) so the bar matches what actually reaches the backend,
+			// including the valid switching_section + open-socket case (Codex PR #203).
+			const connectionSends = connectionManager?.isSendingMicAudio?.() ?? false
 			const displaySending = stale ? false : (sending && connectionSends)
 			setMicEnergy(prev => (Math.abs(prev - displayEnergy) > 0.5 ? displayEnergy : prev))
 			setMicSending(prev => (prev !== displaySending ? displaySending : prev))

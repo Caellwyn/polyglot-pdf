@@ -95,6 +95,7 @@ function makeMockManager(calls: string[]) {
     __forceStale: () => { connected = false },
     // tracked for the ordering assertion:
     getStatus: vi.fn(() => (connected ? 'connected' : 'disconnected')),
+    isSendingMicAudio: vi.fn(() => connected),
     sendActivityStart: vi.fn(() => calls.push('sendActivityStart')),
     sendActivityEnd: vi.fn(async () => { calls.push('sendActivityEnd') }),
     switchToFirstSection: vi.fn(async () => { calls.push('switchToFirstSection') }),

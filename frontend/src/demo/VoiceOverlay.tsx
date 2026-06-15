@@ -246,13 +246,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			const displayEnergy = stale ? 0 : energy
 			// `sending` from the worklet means the frame passed the audio-routing gate
 			// (mode/PTT/VAD). But the chunk ALSO has to clear the CONNECTION send gate
-			// (shouldSendMicChunk): during `reconnecting`/`switching_section`-with-
-			// closed-socket the bytes are dropped even though the meter is still
-			// rendered. So only show "sending" (green) when the live status is
-			// genuinely `connected`, or the bar would claim audio is reaching the
-			// backend when it isn't (Codex PR #203, P1).
-			const connStatus = (connectionManager?.getStatus?.() || '').toLowerCase()
-			const connectionSends = connStatus === 'connected'
+			// before any bytes reach the backend. Ask the manager for the REAL gate
+			// decision (shouldSendMicChunk over live status + socket state) rather than
+			// re-deriving a partial copy from status -- that correctly counts the valid
+			// `switching_section` + open-socket case as sending and excludes
+			// `reconnecting` (Codex PR #203).
+			const connectionSends = connectionManager?.isSendingMicAudio?.() ?? false
 			const displaySending = stale ? false : (sending && connectionSends)
 			// Functional updates + a small threshold so we don't thrash state when
 			// the value is effectively unchanged.
