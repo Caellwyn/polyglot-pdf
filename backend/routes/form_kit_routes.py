@@ -22,10 +22,20 @@ router = APIRouter(prefix="/api", tags=["form-kits"])
 
 
 class FormKitInfo(BaseModel):
-    """Public metadata about a form kit (no schema content)"""
+    """Public metadata about a form kit (no schema content).
+
+    schema_path / pdf_path are the manifest-relative URLs the client fetches to
+    load the kit's schema and PDF. They carry the kit's REAL filenames (a kit may
+    declare a custom schema filename via metadata.json -- bd polyglot-pdf-snpi), so
+    the client must use these rather than reconstructing `/<id>/schema.json`, which
+    would 404 for a custom-schema kit. These are public storage paths, not schema
+    CONTENT -- the schema body is still never inlined here.
+    """
     id: str
     label: str
     description: Optional[str] = None
+    schema_path: Optional[str] = None
+    pdf_path: Optional[str] = None
 
 
 class FormKitManifestResponse(BaseModel):
@@ -47,14 +57,20 @@ async def list_form_kits() -> FormKitManifestResponse:
     try:
         manifest = await store.load_manifest()
 
-        # Extract only public metadata (id, label, description)
-        # Do NOT expose schema paths or PDF paths
+        # Extract public metadata: id, label, description, and the storage PATHS
+        # (not the schema CONTENT). The paths are needed so a kit with a custom
+        # schema filename loads (bd polyglot-pdf-snpi); reconstructing
+        # `/<id>/schema.json` client-side 404s for such a kit. Fall back to the
+        # conventional paths when the manifest entry omits them (older manifests).
         forms = []
         for form in manifest.get("forms", []):
+            kit_id = form.get("id", "")
             forms.append(FormKitInfo(
-                id=form.get("id", ""),
+                id=kit_id,
                 label=form.get("label", form.get("id", "Unknown")),
                 description=form.get("description"),
+                schema_path=form.get("schemaPath") or f"/form-kits/{kit_id}/schema.json",
+                pdf_path=form.get("pdfPath") or f"/form-kits/{kit_id}/form.pdf",
             ))
 
         _log.info("form_kits_list_success", count=len(forms))

@@ -38,19 +38,25 @@ kit_is_complete() {
 
 # Resolve a kit's schema filename (bd polyglot-pdf-snpi). metadata.json may carry
 # a custom "schema" field (KitMetadata.schema in formKitDirectory.ts); when present
-# the kit's schema lives in that file, NOT the hardcoded schema.json. Mirrors the
-# TS resolution `meta?.schema || 'schema.json'`. Echoes the resolved filename;
-# defaults to schema.json when metadata.json is absent or has no "schema" field.
-# Whitespace-tolerant, no jq dependency (same discipline as kit_is_complete).
+# the kit's schema lives in that file, NOT the hardcoded schema.json. Echoes the
+# resolved filename; defaults to schema.json when metadata.json is absent or has no
+# "schema" string -- mirroring the editor's `meta?.schema || 'schema.json'`.
+#
+# We FLATTEN newlines (tr -d) BEFORE the grep so a metadata.json with the "schema"
+# key/value split across lines still matches -- a plain line-oriented grep would
+# miss that form and silently fall back to schema.json, leaving the custom-schema
+# kit skipped even though the editor's JSON.parse accepts it (Codex review, bd
+# snpi). Pure POSIX text tools (tr/grep/sed), no jq or python dependency: python3
+# is NOT reliably present (on Windows it can be the no-op Store shim), so the
+# script must not lean on it. The sed also trims whitespace that sat inside the
+# quotes ("schema": " custom.json ").
 kit_schema_file() {
     local kit_dir="$1"
     local meta="$kit_dir/metadata.json"
     local name=""
     if [ -f "$meta" ]; then
-        # Capture the value between the quotes, then strip any whitespace that sat
-        # INSIDE the quotes (e.g. "schema": " custom.json ") so the filename used in
-        # the -f test is not space-padded (fresh-eyes, bd snpi).
-        name=$(grep -Eo '"schema"[[:space:]]*:[[:space:]]*"[^"]+"' "$meta" \
+        name=$(tr -d '\n' < "$meta" \
+            | grep -Eo '"schema"[[:space:]]*:[[:space:]]*"[^"]+"' \
             | head -1 \
             | sed -E 's/.*:[[:space:]]*"[[:space:]]*([^"]*[^"[:space:]])[[:space:]]*".*/\1/')
     fi
