@@ -31,6 +31,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
 
@@ -72,16 +73,20 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const { entry } = await onboardPdf(root, pdf);
+      const { id } = await onboardPdf(root, pdf);
       await refresh(root);
-      onOpenKit(entry); // open the newly-added kit immediately
+      // Do NOT auto-open: a freshly dropped PDF has no schema yet (extraction
+      // runs separately), so opening it would error. Surface it as added; the
+      // human opens it once it has a schema.
+      setNotice(`Added "${id}" -- run the extraction to produce its schema, then open it here.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add form');
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, onOpenKit]);
+  }, [root, refresh]);
 
   if (!supported) {
     return (
@@ -117,6 +122,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       </div>
 
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+      {notice && <div className="mt-2 text-sm text-green-700">{notice}</div>}
 
       {root && kits.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">

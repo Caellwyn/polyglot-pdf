@@ -98,7 +98,7 @@ describe('FormCatalogue', () => {
     expect(onOpenKit).toHaveBeenCalledWith(expect.objectContaining({ id: 'i-90' }));
   });
 
-  it('onboards a dropped PDF into a new kit and opens it', async () => {
+  it('onboards a dropped PDF into a new kit (added, not auto-opened)', async () => {
     const root = mockRoot([]);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
     const onOpenKit = vi.fn();
@@ -109,13 +109,13 @@ describe('FormCatalogue', () => {
 
     const pdf = { name: 'Form I-90.pdf', type: 'application/pdf',
       arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
-    const dropZone = screen.getByTestId('form-catalogue');
-    fireEvent.drop(dropZone, { dataTransfer: { files: [pdf] } });
+    fireEvent.drop(screen.getByTestId('form-catalogue'), { dataTransfer: { files: [pdf] } });
 
-    await waitFor(() => expect(onOpenKit).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'form-i-90', status: 'draft' })));
-    // the new kit folder was created in the root
+    // The new kit folder is created and surfaced as a notice, but NOT auto-opened
+    // (it has no schema yet -- opening it would error; fresh-eyes finding).
+    await waitFor(() => expect(screen.getByText(/Added "form-i-90"/)).toBeTruthy());
     expect(root.created['form-i-90']).toBeTruthy();
+    expect(onOpenKit).not.toHaveBeenCalled();
   });
 
   it('errors when a non-PDF is dropped', async () => {
