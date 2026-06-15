@@ -65,9 +65,31 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   `ai_context.py:288` -> `get_next_field_schema(schema, current_field_id=None)` ->
   `fields[0]` (`manifest_service.py:84-86`), ignoring `current_values`. On a
   reconnect / section revisit with earlier fields confirmed, the SI points at an
-  already-filled field, and disagrees with `{next_field_hint}` (which the client
-  computes correctly). *Fix: select the first unfilled field (consult
-  current_values).* (F1-flagged.)
+  already-filled field. *Fix: select the first unfilled field (consult
+  current_values).* (F1-flagged.) **Note both next-field placeholders are wrong in
+  JIT mode, not just this one:** the JIT handshake ALSO omits `initial_field_hint`
+  (`schemaFormState.ts:635-647`), so `{next_field_hint}` falls back to the generic
+  "the first unfilled field" string (`ai_context.py:333`, `:694` reads `None`) rather
+  than the client's computed hint. A2 must fix BOTH the schema and the hint for JIT.
+- **M -- [BREAKS] `{previous_spoken_names}` is always empty in JIT mode ->
+  cross-section `get_field_value` lookups break.** A SEPARATE cross-section-recall
+  path from Gap C (which is the manifest's PREVIOUS PARTS block). The JIT handshake
+  omits `previous_spoken_names` (`schemaFormState.ts:635-647`; the legacy builder
+  sends it at `:611`), so `previous_names_text` renders "None (this is the first
+  section)" on EVERY section (`ai_context.py:257-264`). The model is told there are
+  no prior-section fields to look up, so it cannot recall earlier values by spoken
+  name even though the tool exists. Fixing Gap C alone does NOT fix this -- they are
+  two independent SI mechanisms. *Fix: send `previous_spoken_names` on the JIT
+  handshake.* (NEW -- fresh-eyes, not in the F1 contract.)
+- **N -- [BREAKS] `{filled_count}/{total_fields}` progress is always wrong in JIT
+  mode.** `total_fields = len(schema.get("fields", []))` (`ai_context.py:140`) and
+  the `filled_count` loop (`:93-112`) both iterate `schema["fields"]`, which in JIT
+  mode is `[first_field_schema]` (length 1). So the SI's "Progress: {filled_count}/
+  {total_fields}" (`config.py:369`) is "0/1" or "1/1" for EVERY section regardless
+  of real size -- the model is misled about how much of the section remains. A
+  SEPARATE code path from the manifest (Gap A/B), so consuming the handshake
+  manifest does not auto-fix it. *Fix: compute filled/total from the real section
+  field set, not the synthesized one-field schema.* (NEW -- fresh-eyes.)
 - **L -- [WASTE] Handshake `loaded_field_ids` is dropped -> schemas re-sent on
   reconnect.** `form_filling_service.py:55` inits `self._loaded_field_ids = set()`
   and only populates it at runtime (`:929`); the client's `loaded_field_ids` (which
@@ -86,10 +108,15 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
 
 ### Defer (real, but out of the epic's critical path)
 
-- **E -- [CLEAN] Telemetry log reads a non-existent key.**
+- **E -- [CLEAN, but fix DURING A2] Telemetry log reads a non-existent key.**
   `websocket_routes.py:671` logs `manifest_fields=len(manifest.get("fields", []))`,
   but the manifest has no top-level `fields` (it is `current_section.fields`), so it
-  always logs 0. A symptom of A; fix alongside A or drop the line. (NEW.)
+  always logs 0. A symptom of A. Tagged CLEAN because it changes no behavior -- BUT
+  fresh-eyes correctly flags an operational hazard: A2 will be DEBUGGED against this
+  log, and a manifest-field count stuck at 0 actively misleads during the very fix
+  cycle that touches the manifest. So fix it AS PART OF A (when A2 reworks the
+  manifest consumption, point the log at the real field count or drop it), not as a
+  separate later cleanup.
 - **F -- [CLEAN] "part" terminology holdout in `manifest_service.py`.**
   `generate_part_manifest` / `current_part` / `part_id` / `part_label` / the
   "CURRENT PART:" SI text (`manifest_service.py` throughout) use part-language where
@@ -117,16 +144,28 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
 
 ## A2 worklist (the fix-now set, in dependency order)
 
+The keystone insight: **the JIT handshake under-sends, and the backend reads
+`schema["fields"]` (one field) for several independent SI pieces.** Fixing the
+manifest path alone leaves the spoken-names, progress-count, and next-hint pieces
+broken -- they read the same one-field schema through DIFFERENT code paths. A2 must
+fix each.
+
 1. **Consume the handshake manifest** (A) so `{manifest_text}` lists the real
-   section -- this is the keystone; B, E, K resolve with it.
+   section -- the keystone; B, E, K resolve with it (fix the E log line here too).
 2. **Populate `previous_parts`** (C) from the handshake's `previous_sections` so
    cross-section recall works in the cheap manifest.
-3. **Select first-unfilled for `{next_field_schema}`** (D) -- consult
-   `current_values`; reconciles with `{next_field_hint}`.
-4. **Seed + honor `loaded_field_ids`** (L + G) -- seed `_loaded_field_ids` from the
+3. **Send + render `previous_spoken_names` in JIT mode** (M) -- a SEPARATE
+   cross-section path from C; without it `get_field_value` lookups for prior sections
+   are dead even after C.
+4. **Fix the JIT progress count** (N) -- compute `filled_count`/`total_fields` from
+   the real section field set, not the one-field `schema["fields"]`.
+5. **Select first-unfilled for both next-field placeholders** (D) -- the
+   `{next_field_schema}` (consult current_values) AND `{next_field_hint}` (send
+   `initial_field_hint` on the JIT handshake); both are wrong in JIT today.
+6. **Seed + honor `loaded_field_ids`** (L + G) -- seed `_loaded_field_ids` from the
    handshake and actually call the de-dup gate so schemas are sent once across
    reconnects.
 
-The defer set (E cleanup, F rename, H/I/J/K cleanliness) can ride along where
-convenient but does not gate the JIT default-flip. None of these are behavioral
-measurements -- they precede G2/G3, which measure the RESULT of A2's fixes.
+The defer set (F rename, H/I/J/K cleanliness) can ride along where convenient but
+does not gate the JIT default-flip. (E is now folded into step 1.) None of these are
+behavioral measurements -- they precede G2/G3, which measure the RESULT of A2's fixes.
