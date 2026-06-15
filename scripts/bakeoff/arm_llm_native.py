@@ -46,7 +46,7 @@ import sys
 from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from schema_contract import SCHEMA_CONTRACT  # noqa: E402
+from schema_contract import SCHEMA_CONTRACT, acroform_field_list  # noqa: E402
 from structural_enrich import (  # noqa: E402
     DEFAULT_DISABLED, SIGNALS, enrich, enriched_field_list,
 )
@@ -162,21 +162,47 @@ def _normalize_schema(schema) -> dict:
 def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
                  pdf_path: Optional[str],
                  disabled: frozenset[str] = DEFAULT_DISABLED,
-                 order_caveat: bool = True) -> str:
+                 order_caveat: bool = True,
+                 plain: bool = False) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
-    enriched bundle). When pdf_path is given, the prompt INSTRUCTS the model to
+    field list). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
     attaches the bytes separately and ignores this instruction's file path).
     `disabled` drops enrichment signals (DEFAULT drops row_cluster per the
-    7a9.10 trim); `order_caveat` (DEFAULT True) labels the sweep rank honestly."""
+    7a9.10 trim); `order_caveat` (DEFAULT True) labels the sweep rank honestly.
+
+    `plain` (bd 7a9.12 / B1) renders the PLAIN AcroForm field list
+    (acroform_field_list, name order) instead of the enriched bundle -- the
+    "claude-hybrid" arm, on the SAME Claude-CLI backend + scorer as the enriched
+    arm, so the I-90 prompt bake-off is apples-to-apples. 7a9.11 found the
+    enriched bundle REGRESSES vs plain hybrid on the (a)/relationship metrics;
+    B1 re-confirms which wins on I-90 and ships it."""
     with open(acroform_path, encoding="utf-8") as fh:
         dump = json.load(fh)
-    enrich(dump, disabled=disabled)
 
     parts = [SCHEMA_CONTRACT, "", ANTI_HALLUCINATION, ""]
     if fewshot_truth:
         parts.append(build_fewshot(fewshot_truth))
         parts.append("")
+
+    if plain:
+        # Plain claude-hybrid: raw AcroForm field list, no enrichment.
+        if pdf_path:
+            parts.append(
+                "Below is the deterministic PyMuPDF AcroForm field list (exact "
+                "widget names, types, flags, tooltips). The source PDF is at: "
+                + os.path.abspath(pdf_path) + " -- READ IT for the printed labels "
+                "and conditional text. Reason over BOTH.\n"
+            )
+        else:
+            parts.append(
+                "Below is the deterministic PyMuPDF AcroForm field list. No PDF "
+                "pixels are provided -- reason from the list alone.\n"
+            )
+        parts.append(acroform_field_list(dump))
+        return "\n".join(parts)
+
+    enrich(dump, disabled=disabled)
     if pdf_path:
         parts.append(
             "Below is the ENRICHED, generic structural bundle extracted "
@@ -317,10 +343,12 @@ def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
         send_pdf: bool = True,
         disabled: frozenset[str] = DEFAULT_DISABLED,
-        order_caveat: bool = True) -> dict:
+        order_caveat: bool = True,
+        plain: bool = False) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
     prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
-                          disabled=disabled, order_caveat=order_caveat)
+                          disabled=disabled, order_caveat=order_caveat,
+                          plain=plain)
 
     # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
     # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
@@ -335,10 +363,11 @@ def run(pdf_path: str, acroform_path: str, model: str,
 
     schema.setdefault("_bakeoff", {})
     schema["_bakeoff"].update({
-        "arm": "llm-native", "model": model, "backend": backend,
-        "enriched": True, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
-        "disabled_signals": sorted(disabled),
-        "order_caveat": order_caveat,
+        "arm": "claude-hybrid-plain" if plain else "llm-native",
+        "model": model, "backend": backend,
+        "enriched": not plain, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
+        "disabled_signals": [] if plain else sorted(disabled),
+        "order_caveat": False if plain else order_caveat,
     })
     if tok:
         schema["_bakeoff"]["tokens"] = tok
@@ -364,6 +393,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-order-caveat", action="store_true",
                     help="ablation: drop the honest geometric-sweep framing and "
                          "label the rank as 'reading order' (the old 7a9.9 text)")
+    ap.add_argument("--plain", action="store_true",
+                    help="claude-hybrid mode (bd 7a9.12/B1): plain AcroForm field "
+                         "list, no enrichment -- the prompt B1 bakes against the "
+                         "enriched arm on I-90 (same backend + scorer)")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
@@ -377,14 +410,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     schema = run(args.pdf, args.acroform, args.model,
                  fewshot_truth=args.fewshot_truth, send_pdf=not args.no_pdf,
-                 disabled=disabled, order_caveat=not args.no_order_caveat)
+                 disabled=disabled, order_caveat=not args.no_order_caveat,
+                 plain=args.plain)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(schema, fh, indent=2)
     nf = len(schema.get("fields", []))
     tok = schema.get("_bakeoff", {}).get("tokens", {})
-    print(f"[wrote {args.out}] arm=llm-native model={args.model} "
+    arm = "claude-hybrid-plain" if args.plain else "llm-native"
+    print(f"[wrote {args.out}] arm={arm} model={args.model} "
           f"fewshot={bool(args.fewshot_truth)} pdf={not args.no_pdf} "
-          f"disabled={sorted(disabled)} order_caveat={not args.no_order_caveat} "
+          f"plain={args.plain} "
           f"fields={nf} tokens={tok}")
     return 0
 
