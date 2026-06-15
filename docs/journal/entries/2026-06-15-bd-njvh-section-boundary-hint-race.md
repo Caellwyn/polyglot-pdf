@@ -84,7 +84,22 @@ below).
   should emit `confirm_section_boundary_skip_hint` in the dev-log and NO "do NOT
   assume complete" message at the boundary.
 
-Fresh-eyes (Sonnet, 1 round -> NO-GAPS): all 3 rubric criteria PASS; traced the full
+**Outer review (Codex quota exhausted -> Codex-substitute fresh-eyes).** PR #211
+opened review-worthy, but Codex returned "reached your usage limits for code
+reviews" (same exhaustion that hit the s3zv PR earlier this session). Per the
+maintainer's standing fallback ("Codex quota is exhausted -- use local fresh-eyes for
+an additional round"), a SECOND fresh-eyes pass ran as the outer layer, framed
+Codex-style (adversarial, runtime-regression-focused, on the full `origin/dev...HEAD`
+diff incl. the rebase merge resolution). Verdict: NO-GAPS -- all 3 criteria PASS;
+every probe cleared (back-compat default at all 4 plumb hops, the confirm-timeout
+sentinel path, the `recorded:false` path, response-dict well-formedness in both
+branches, PII in the new log, the `getNextSection` form-complete gate, no new race,
+test quality). One P2 nit fixed: a dead `hint_timed_out = False` assignment in the
+skip branch (only read inside the `else` branch -- vestigial from the pre-refactor
+message logic). Bead closed by hand (no Codex CLEAN reaction to drive the watcher's
+auto-close).
+
+Pre-PR fresh-eyes (Sonnet, 1 round -> NO-GAPS): all 3 rubric criteria PASS; traced the full
 FE->WS-route->service->coordinator->confirm-handler plumb chain (key name consistent
 at every hop), confirmed the form-complete gate, the back-compat default, and the
 confirm-ack-timeout early return. The `section_complete` sub-field vs. the SI-epic's
