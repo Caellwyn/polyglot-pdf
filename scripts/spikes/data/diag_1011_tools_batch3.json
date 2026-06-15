@@ -1,0 +1,445 @@
+{
+  "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+  "sdk_version": "2.8.0",
+  "ts": "2026-06-15T20:40:51+00:00",
+  "summary": [
+    {
+      "cell": "S1",
+      "shape": "name1",
+      "persona": "pirate",
+      "n": 5,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "S2",
+      "shape": "typed1",
+      "persona": "pirate",
+      "n": 5,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    }
+  ],
+  "records": [
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S1",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S1",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S1",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S1",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "name1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S1",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "typed1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S2",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "typed1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S2",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "typed1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S2",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "typed1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S2",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "typed1",
+      "persona": "pirate",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "S2",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:40:51+00:00"
+    }
+  ]
+}

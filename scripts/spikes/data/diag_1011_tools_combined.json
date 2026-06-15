@@ -1,0 +1,265 @@
+{
+  "experiment": "gemini-2.5-native-audio 1011 tool-shape isolation",
+  "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+  "sdk": "google-genai 2.8.0",
+  "date": "2026-06-15",
+  "cells": {
+    "P1": {
+      "shape": "name1",
+      "persona": "form",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "n": 30,
+      "crash": 24,
+      "crash_rate": 0.8
+    },
+    "P2": {
+      "shape": "typed1",
+      "persona": "form",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "n": 10,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "P3": {
+      "shape": "omit",
+      "persona": "form",
+      "wire_tools": "__ABSENT__",
+      "n": 10,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "C1": {
+      "shape": "full",
+      "persona": "form",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "n": 10,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "C2": {
+      "shape": "empty_list",
+      "persona": "form",
+      "wire_tools": [],
+      "n": 5,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "C3": {
+      "shape": "empty_decls",
+      "persona": "form",
+      "wire_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "n": 5,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "C4": {
+      "shape": "stub2",
+      "persona": "form",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "n": 25,
+      "crash": 9,
+      "crash_rate": 0.36
+    },
+    "S1": {
+      "shape": "name1",
+      "persona": "pirate",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            }
+          ]
+        }
+      ],
+      "n": 5,
+      "crash": 0,
+      "crash_rate": 0.0
+    },
+    "S2": {
+      "shape": "typed1",
+      "persona": "pirate",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "n": 5,
+      "crash": 0,
+      "crash_rate": 0.0
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-15. bd s3zv: audioManager gains setEnergyCallback -- forwards the worklet's existing RMS energy (already posted per frame, previously dropped) to an opt-in UI subscriber, tagged with whether the frame passed the send gate. No change to audio routing / adapter behavior; the demo overlays render it as a mic-energy meter. bd np64: non-ASCII -> ASCII in connection.ts / audioManager.ts code comments + console strings (cosmetic, no adapter behavior change). bd rwjy+vfb2: CallbackHandler gains form_id/form_session_id (confirmation audit); send_form_update adds request_hint opt-in (no behavior change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager. bd b6k4: createMicDropWarn extracted/exported from connection.ts. No adapter behavior change. Prior: bd polyglot-pdf-c5t (on_go_away callback: GoAway detection in the receive loop). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-15 (bd polyglot-pdf-daa: 2.5 native-audio 1011 = incomplete tool declaration x tool solicitation, wire-verified; corrected the scar-tissue note. bd s3zv: audioManager gains setEnergyCallback -- forwards the worklet's existing RMS energy (already posted per frame, previously dropped) to an opt-in UI subscriber, tagged with whether the frame passed the send gate. No change to audio routing / adapter behavior; the demo overlays render it as a mic-energy meter). bd np64: non-ASCII -> ASCII in connection.ts / audioManager.ts code comments + console strings (cosmetic, no adapter behavior change). bd rwjy+vfb2: CallbackHandler gains form_id/form_session_id (confirmation audit); send_form_update adds request_hint opt-in (no behavior change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager. bd b6k4: createMicDropWarn extracted/exported from connection.ts. No adapter behavior change. Prior: bd polyglot-pdf-c5t (on_go_away callback: GoAway detection in the receive loop). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -159,5 +159,35 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
   calls to the wrong tab. The adapter also warns `bg_task_already_running` if
   `set_callbacks` is called on a live task.
 - **Never log transcript/hint text** — only lengths (bd `polyglot-pdf-hjo`).
+- **2.5 native-audio `1011`s after turn 1 on an INCOMPLETE tool declaration under
+  tool-soliciting prompts** (bd `polyglot-pdf-daa`/`h04c`; wire-verified isolation
+  experiment, `scripts/spikes/diag_native_audio_1011_tools.py`, 2026-06-15). On
+  `gemini-2.5-flash-native-audio-preview-12-2025` the turn-1 `1011` needs BOTH: a
+  `function_declaration` that is present but malformed (a `name` with **no
+  `parameters` schema**) AND a system-instruction/prompts that solicit tool use.
+  It is a RATE (~80% for one name-only declaration over N=30), not deterministic.
+  - **DO** declare tools COMPLETELY — every `function_declaration` gets a real
+    typed `parameters` schema. The production `TOOL_DECLARATIONS` are complete, so
+    the real adapter path is safe; a probe/spike that drives 2.5 must pass the same
+    complete declarations (deploy-fidelity rule, `docs/standards/testing.md`).
+  - **DON'T** send a `name`-only / parameter-less declaration to 2.5 — that is the
+    actual hazard (a fallback stub, a placeholder, or a wrapper that injects a
+    name-only tool). It is WORSE than sending no tools.
+  - **DON'T** assume you must "pass an empty tools list." Omitting `tools`, sending
+    `tools=[]`, and sending `tools=[{functionDeclarations: []}]` ALL survive (0%).
+    The trigger is a malformed declaration, not the absence of one. (Caveat: a
+    typed `LiveConnectConfig(tools=[])` is erased to no-tools by the SDK before the
+    wire — `live.py` `model_copy(update={'tools': None})` + falsy `[]` — so you
+    can't even send a true `[]` through the typed config; both are safe anyway.)
+  - **DON'T** chalk a 2.5 turn-1 `1011` up to "transient Google-side" — it is
+    reproducible and config-driven (the old bd `daa` "transient/untestable" framing
+    was the misdiagnosis). A *separate* lower-rate intermittent no-audio/close on
+    2.5 is real and NOT addressed by getting tool shape right.
+  - **DON'T** confuse with the *untyped-`value`* defect (bd `polyglot-pdf-i9q8`):
+    that hit **3.1** (rejected an untyped *required param*), not 2.5. Different
+    model, different cause; same fix direction (type your params).
+  - Verified NOT fixed/changed by `api_version=v1alpha`, the `-latest`/`-09-2025`
+    aliases, or compression config. Full report:
+    `scripts/spikes/gemini-2p5-1011-tool-declarations-report.md`.
 - **Barge-in flush is frontend-side** — the backend only logs+skips on interrupt
   (no flush signal); don't expect a server sentinel.

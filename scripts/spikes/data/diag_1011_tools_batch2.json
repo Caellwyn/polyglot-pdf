@@ -1,0 +1,1794 @@
+{
+  "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+  "sdk_version": "2.8.0",
+  "ts": "2026-06-15T20:25:16+00:00",
+  "summary": [
+    {
+      "cell": "C1",
+      "shape": "full",
+      "persona": "form",
+      "n": 10,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "C2",
+      "shape": "empty_list",
+      "persona": "form",
+      "n": 5,
+      "verdict": "SURVIVE",
+      "wire_tools": [],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "C3",
+      "shape": "empty_decls",
+      "persona": "form",
+      "n": 5,
+      "verdict": "SURVIVE",
+      "wire_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [],
+      "phases": []
+    },
+    {
+      "cell": "C4",
+      "shape": "stub2",
+      "persona": "form",
+      "n": 5,
+      "verdict": "FLAKY (3 survive / 2 crash of 5)",
+      "wire_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "close_codes": [
+        1011
+      ],
+      "phases": [
+        "turn_boundary"
+      ]
+    }
+  ],
+  "records": [
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 6,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 7,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 8,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 9,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "full",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Update ONE field with user's provided value. Call immediately when user answers. Translate values to English. Use exact field_id from schema (with brackets if present). For radio/select fields: Use the 'value' from the option object shown in schema (e.g., if option shows '\"Yes\" (use value: P1_checkbox4[0])', send value: \"P1_checkbox4[0]\"'). For checkboxes: boolean (true/false). For text fields: string. Current section only.",
+              "name": "update_form_fields",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "Exact field \"id\" from schema (e.g., \"firstName\", \"p1_checkbox4\")",
+                    "type": "STRING"
+                  },
+                  "value": {
+                    "description": "For radio/select: exact \"value\" from option object. For checkbox: the option value (or \"true\"/\"false\"). For text: string.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "value"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Check which fields are filled and their values. Acknowledge user first ('One moment while I check the form').",
+              "name": "get_form_status",
+              "parameters": {
+                "properties": {
+                  "field_ids": {
+                    "description": "Field IDs to check",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "type": "ARRAY"
+                  }
+                },
+                "required": [
+                  "field_ids"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
+              "name": "switch_section",
+              "parameters": {
+                "properties": {
+                  "section_identifier": {
+                    "description": "Section number as a string (e.g., '1', '2', '3'). ALWAYS use numbers, not labels.",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "section_identifier"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Look up field value by EXACT spoken name from schema or previous sections. Match exact name shown in context - do not abbreviate.",
+              "name": "get_field_value",
+              "parameters": {
+                "properties": {
+                  "spoken_name": {
+                    "description": "Exact field name from context",
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "spoken_name"
+                ],
+                "type": "OBJECT"
+              }
+            },
+            {
+              "description": "Confirm that a field value is correct after user verification. MUST be called before moving to next field. After filling a field with update_form_fields, ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). If confirmed, call this tool. If user says no/incorrect, ask for correct value.",
+              "name": "confirm_field",
+              "parameters": {
+                "properties": {
+                  "field_id": {
+                    "description": "ID of the field being confirmed",
+                    "type": "STRING"
+                  },
+                  "confirmation_method": {
+                    "description": "How the field was confirmed (verbal: user said yes/correct, manual: user edited field)",
+                    "enum": [
+                      "verbal",
+                      "manual"
+                    ],
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "field_id",
+                  "confirmation_method"
+                ],
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C1",
+      "rep": 10,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_list",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [],
+      "wire_assert_ok": true,
+      "cell": "C2",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_list",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [],
+      "wire_assert_ok": true,
+      "cell": "C2",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_list",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [],
+      "wire_assert_ok": true,
+      "cell": "C2",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_list",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [],
+      "wire_assert_ok": true,
+      "cell": "C2",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_list",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [],
+      "wire_assert_ok": true,
+      "cell": "C2",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_decls",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C3",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_decls",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C3",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_decls",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C3",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_decls",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C3",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "empty_decls",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 3,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": []
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C3",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 1,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 2,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 3,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 2,
+      "clean_turn_count": 1,
+      "close_code": 1011,
+      "close_payload": "1011 None. Internal error occurred.",
+      "first_failure_turn": 2,
+      "failure_phase": "turn_boundary",
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 4,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    },
+    {
+      "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+      "shape": "stub2",
+      "persona": "form",
+      "modalities": [
+        "AUDIO"
+      ],
+      "turns_attempted": 3,
+      "clean_turn_count": 2,
+      "close_code": null,
+      "close_payload": null,
+      "first_failure_turn": null,
+      "failure_phase": null,
+      "connect_failed": null,
+      "wire_setup_tools": [
+        {
+          "functionDeclarations": [
+            {
+              "name": "update_form_fields"
+            },
+            {
+              "name": "get_form_status"
+            }
+          ]
+        }
+      ],
+      "wire_assert_ok": true,
+      "cell": "C4",
+      "rep": 5,
+      "sdk_version": "2.8.0",
+      "ts": "2026-06-15T20:25:16+00:00"
+    }
+  ]
+}
