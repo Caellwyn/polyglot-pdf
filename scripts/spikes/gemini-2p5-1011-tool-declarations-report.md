@@ -83,9 +83,9 @@ Google-side errors," which blocked all measurement because no probe survived.
 
 The crash lands at an **early turn boundary**: the first turn (and sometimes a
 second) is processed and the model responds, then the socket closes with `1011`
-as that turn completes. In our data the close happened after the 1st clean turn
-in ~64% of crashes and after the 2nd in ~36% -- so a single-turn probe that
-survives is NOT proof of safety.
+as that turn completes. In our data (the name-only crash cell, 24 crashes) the
+close happened after the 1st clean turn in 67% of crashes and after the 2nd in
+33% -- so a single-turn probe that survives is NOT proof of safety.
 
 ## Evidence
 
