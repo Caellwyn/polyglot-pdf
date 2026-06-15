@@ -105,7 +105,6 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `get_field_value` | request_coordinator.py:373 | Backend asks the client for a field value. |
 | `confirm_field` | request_coordinator.py:302 | Backend asks the client to confirm a field. |
 | `prepare_section_switch` | request_coordinator.py:445 | Backend asks the client to pre-stage a section switch. |
-| `field_update` | (handled webFormConnection.ts:397) | Single-field update push. |
 | `form_state_ack` | websocket_routes.py:296 | Ack of a client `form_state`; carries `applied_fields`. |
 | `hint_ack` | websocket_routes.py:309 | Ack of a client `next_field_hint`. |
 | `completion_ack` | websocket_routes.py:408 | Ack of a client `completion_message`. |
@@ -158,13 +157,15 @@ adds a validator round-trip. Reserved message types:
 | `section_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive section-complete event (replaces reactive `isFormComplete` polling). |
 | `form_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive form-complete event. |
 | `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Cheap-model validator verdict. Shape -> [validation-delegation.md](validation-delegation.md) (F3). |
-| `steering` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Validator-driven steering message back to the form-fill loop. Shape -> [validation-delegation.md](validation-delegation.md) (F3). |
+| `validator_steer` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Validator-driven steering message back to the form-fill loop. Shape -> [validation-delegation.md](validation-delegation.md) (F3). |
 
 These four are RESERVED NAMES only. Their payload shapes are designed in F3
 ([validation-delegation.md](validation-delegation.md)); do not invent shapes
 here. (`section_complete`/`form_complete` are NOT the existing
 `section_completed`/`completion_message` control messages -- those are the
-current reactive acks; the new pair are the proactive events B introduces.)
+current reactive acks; the new pair are the proactive events B introduces.) The
+backend->frontend steering message is named `validator_steer` -- F3's payload
+example uses the same string; the two docs MUST agree on this exact token.
 
 ### Pillar C -- restart cadence
 
@@ -185,23 +186,40 @@ or message type is reserved for A beyond the existing JIT keys.
 ## DRIFT flags (frontend/backend name verification)
 
 Exit-criterion 3 requires confirming the frontend and backend field names match.
-They match on every key the backend reads, with these two real gaps found while
+They match on every key the backend reads, with these real gaps found while
 verifying:
 
 1. **`section_id` and `initial_field_hint` are read by the backend but NOT sent
-   by the primary handshake builder.** `getHandshakePayload` /
-   `getJITHandshakePayload` (`schemaFormState.ts:603-648`) omit both keys. The
+   by the primary handshake builders.** `getHandshakePayload` /
+   `getJITHandshakePayload` (`schemaFormState.ts:588-648`) omit both keys. The
    backend reads them (`websocket_routes.py:687, 694`) and falls back to `None`.
    They ARE sent by the section-switch handshakes
    (`webFormConnection.ts:2240, 2246` and `:2387`), so the backend sees them on a
-   switch but not on the initial connect. This is a benign asymmetry today (the
-   backend tolerates `None`), but any pillar that starts to DEPEND on
-   `section_id` / `initial_field_hint` being present on the first connect must
-   first close this gap. Flagged, not fixed (this is a doc-only contract bead).
+   switch but not on the initial connect. Benign today (the backend tolerates
+   `None`), but any pillar that starts to DEPEND on `section_id` /
+   `initial_field_hint` being present on the first connect must first close this
+   gap. Flagged, not fixed (this is a doc-only contract bead).
 
-2. **No other drift.** All other keys the backend reads (`type`,
+2. **`previous_spoken_names` is sent by the LEGACY builder but NOT the JIT
+   builder.** `getHandshakePayload` includes it (`schemaFormState.ts:611`);
+   `getJITHandshakePayload` (`:635-647`) omits it. The backend reads it
+   (`websocket_routes.py:691`) and defaults to `[]`. Same class of benign
+   asymmetry: a pillar that needs prior-section spoken names in JIT mode on first
+   connect must close this gap first. (Pillar A flips JIT to the default, so this
+   one is the most likely to matter -- A2's manifest work should confirm the JIT
+   handshake carries what the reduced SI needs.)
+
+3. **`field_update` is a frontend RECEIVE handler with no backend sender.** The
+   frontend switches on `case "field_update"` (`webFormConnection.ts:397` ->
+   `handleFieldUpdate`), but no backend `send_json` ever emits that type -- the
+   live single-field push the backend actually sends is `form_updated`. So
+   `field_update` is a dead/legacy receive path on the client; it is NOT in the
+   backend->frontend table above. Left as-is (cleanup is out of scope for this
+   doc-only bead).
+
+4. **No other drift.** All other keys the backend reads (`type`,
    `form_session_id`, `manifest`, `first_field_schema`, `loaded_field_ids`,
    `schema`, `current_values`, `fill_language`, `section_number`,
-   `section_label`, `total_sections`, `previous_spoken_names`, `resume`) are
-   produced verbatim by the frontend builders, and every backend->frontend type
-   the frontend switches on has a matching backend `send_json`.
+   `section_label`, `total_sections`, `resume`) are produced verbatim by the
+   frontend builders, and every backend->frontend type in the table above has a
+   matching backend `send_json`.
