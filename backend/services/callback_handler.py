@@ -518,7 +518,6 @@ class CallbackHandler:
                 session_id=self._session_id,
             )
             next_hint = None
-            hint_timed_out = False
             next_field_schema = None
             message = (
                 f"Field '{field_id}' confirmed -- that completes this section. The "
