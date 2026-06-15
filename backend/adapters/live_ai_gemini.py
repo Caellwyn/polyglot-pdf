@@ -1077,9 +1077,23 @@ class LiveAIGemini(ILiveAI):
         except Exception as e:
             self._log.warn("failed_to_set_realtime_input_config", error=str(e))
         
-        # Enable input transcription to see what Gemini is hearing
-        if self._enable_transcripts:
+        # Input transcription is needed for TWO independent reasons, so it is
+        # requested if EITHER holds (bd polyglot-pdf-l3a.4):
+        #   1. transcripts are enabled (the client wants to SEE what Gemini heard); or
+        #   2. the idle-liveness callback is registered -- `on_user_activity` fires on
+        #      a non-empty `input_transcription`, the only reliable "user spoke" signal
+        #      (see the receive loop). Without `input_audio_transcription` in the config
+        #      Gemini emits NO input_transcription events, so the callback never fires;
+        #      combined with audio no longer bumping the idle clock, an actively-speaking
+        #      user on the DEFAULT production path (send_transcript=False) would be wrongly
+        #      timed out. Requesting input transcription does NOT forward the text -- the
+        #      callback gets none, and only `output_audio_transcription` (gated below on
+        #      _enable_transcripts) drives the client-visible transcript. So PHI stays
+        #      server-side regardless (bd hjo). (Codex review, PR #214.)
+        if self._enable_transcripts or self._on_user_activity is not None:
             config['input_audio_transcription'] = {}
+        # Output transcription is the client-visible transcript -- only when requested.
+        if self._enable_transcripts:
             config['output_audio_transcription'] = {}
 
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
