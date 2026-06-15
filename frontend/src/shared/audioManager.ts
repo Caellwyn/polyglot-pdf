@@ -37,6 +37,12 @@ export interface AudioManager {
 	setVADActive: (active: boolean) => void // Privacy gate: control audio flow based on VAD state
 	setPTTMode: (enabled: boolean) => void // FIX (Nov 7, 2025): Notify worklet about PTT mode
 	setNativeVad: (enabled: boolean) => void // bd polyglot-pdf-333: stream continuous ungated audio for Gemini's own VAD
+	// Subscribe to the live mic-energy stream the worklet already posts (bd
+	// polyglot-pdf-s3zv). Reuses the worklet's smoothed RMS (0-100) rather than
+	// adding a separate AnalyserNode. `sending` is whether THIS frame actually
+	// passed the send gate (so a UI can distinguish "mic alive but gated/silent"
+	// from a dead mic). Pass null to unsubscribe.
+	setEnergyCallback: (callback: ((energy: number, sending: boolean) => void) | null) => void
 	destroy: () => void
 }
 
@@ -104,6 +110,10 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	let playbackTime = 0
 	let playbackChunkCount = 0 // Track playback chunks for debugging
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
+	// Live mic-energy subscriber (bd polyglot-pdf-s3zv). The worklet posts a
+	// smoothed RMS energy on every frame; we forward it (plus whether the frame
+	// was actually sent) to an optional UI subscriber.
+	let onEnergyCallback: ((energy: number, sending: boolean) => void) | null = null
 	let inputMuted = false // Track if input should be muted (send silence)
 	let pttModeEnabled = false // FIX (Nov 7, 2025): Track PTT mode state
 	// Native-VAD mode (bd polyglot-pdf-333): when true, stream ALL audio (incl.
@@ -224,13 +234,27 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			nodes.workletNode.port.onmessage = (event: MessageEvent) => {
 				if (!recording || !onAudioDataCallback) return
 
-				const { type, pcmData } = event.data
+				const { type, pcmData, energy } = event.data
 				if (type !== 'audio') return
+
+				// Forward the worklet's live energy to an optional UI subscriber
+				// (bd polyglot-pdf-s3zv). Emitted on EVERY frame -- even when the
+				// gate drops it -- so a meter shows the mic is alive while gated
+				// (muted PTT / idle VAD / silence). `sending` is true only on the
+				// paths below that actually forward the chunk, letting the UI tell
+				// "mic alive but gated" from "audio being sent". `energy` is the
+				// worklet's smoothed RMS (0-100); guard the type defensively.
+				const emitEnergy = (sending: boolean) => {
+					if (onEnergyCallback && typeof energy === 'number') {
+						onEnergyCallback(energy, sending)
+					}
+				}
 
 			// Mode-level routing gate (native VAD / PTT / client VAD). PTT is layered
 			// as a client-side gate that works even under native VAD (noisy rooms);
 			// see shouldSendAudioChunk for the full three-way logic.
 			if (!shouldSendAudioChunk({ nativeVadEnabled, pttModeEnabled, inputMuted, vadActive })) {
+				emitEnergy(false)
 				return
 			}
 
@@ -238,6 +262,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			// detect turn boundaries, so we skip the pre-buffer + all-zero silence
 			// skip below and send the chunk straight through.
 			if (nativeVadEnabled) {
+				emitEnergy(true)
 				onAudioDataCallback(pcmData)
 				return
 			}
@@ -268,11 +293,13 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				}
 				if (!hasSignal) {
 					// Skip silent chunks - Gemini doesn't need keepalive audio
+					emitEnergy(false)
 					return
 				}
 
 				// At this point: PTT unmuted OR VAD active, AND chunk has audio signal
 				// Send real audio to Gemini
+				emitEnergy(true)
 				onAudioDataCallback(pcmData)
 			}
 
@@ -569,6 +596,10 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			nodes.playbackContext = null
 		}
 
+		// Drop the energy subscriber on teardown so a destroyed manager holds no
+		// reference into the overlay (bd polyglot-pdf-s3zv).
+		onEnergyCallback = null
+
 		playbackTime = 0
 	}
 
@@ -661,6 +692,18 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	/**
+	 * Subscribe to the live mic-energy stream (bd polyglot-pdf-s3zv). The worklet
+	 * already posts a smoothed RMS energy on every frame; this just forwards it to
+	 * an optional UI subscriber, so no extra audio analysis is added. Pass null to
+	 * unsubscribe. The subscription survives stop/rearm cycles (the overlay sets it
+	 * once on mount); the onmessage `if (!recording)` guard already stops emission
+	 * while not recording.
+	 */
+	function setEnergyCallback(callback: ((energy: number, sending: boolean) => void) | null): void {
+		onEnergyCallback = callback
+	}
+
+	/**
 	 * Set VAD activity state (controls audio flow to backend)
 	 * 
 	 * When VAD detects speech start:
@@ -731,6 +774,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setVADActive,
 		setPTTMode,
 		setNativeVad,
+		setEnergyCallback,
 		destroy,
 	}
 }

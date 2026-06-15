@@ -67,6 +67,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const [nativeVad, setNativeVad] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
+	// Live mic-energy meter (bd polyglot-pdf-s3zv). `micEnergy` is the worklet's
+	// smoothed RMS (0-100); `micSending` is whether the most recent frame actually
+	// passed the send gate (so the meter shows "sending" vs "mic alive but gated").
+	// The worklet posts ~50x/sec; we stash the latest in a ref and flush to state on
+	// an rAF loop so React re-renders at most once per frame, not 50x.
+	const [micEnergy, setMicEnergy] = useState(0)
+	const [micSending, setMicSending] = useState(false)
+	const energyRef = useRef({ energy: 0, sending: false, lastFrameAt: 0 })
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
@@ -205,6 +213,40 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			audioManager?.unmuteInput()
 		}
 	}, [connectionManager, pushToTalkMode])
+
+	// Live mic-energy meter subscription (bd polyglot-pdf-s3zv). Tap the worklet's
+	// existing RMS stream via the audio manager; stash each frame in a ref (the
+	// worklet fires ~50x/sec) and flush to React state on a rAF loop so the meter
+	// animates without 50 re-renders/sec. If no frame has arrived for ~250ms the
+	// mic is idle/gone, so we decay the bar to 0 -- a flat meter then reads as
+	// "no audio reaching the backend", the diagnostic this feature is for.
+	useEffect(() => {
+		const audioManager = connectionManager?.getAudioManager()
+		if (!audioManager?.setEnergyCallback) return
+
+		audioManager.setEnergyCallback((energy, sending) => {
+			energyRef.current = { energy, sending, lastFrameAt: performance.now() }
+		})
+
+		let rafId = 0
+		const tick = () => {
+			const { energy, sending, lastFrameAt } = energyRef.current
+			const stale = performance.now() - lastFrameAt > 250
+			const displayEnergy = stale ? 0 : energy
+			const displaySending = stale ? false : sending
+			// Functional updates + a small threshold so we don't thrash state when
+			// the value is effectively unchanged.
+			setMicEnergy(prev => (Math.abs(prev - displayEnergy) > 0.5 ? displayEnergy : prev))
+			setMicSending(prev => (prev !== displaySending ? displaySending : prev))
+			rafId = requestAnimationFrame(tick)
+		}
+		rafId = requestAnimationFrame(tick)
+
+		return () => {
+			cancelAnimationFrame(rafId)
+			audioManager.setEnergyCallback?.(null)
+		}
+	}, [connectionManager])
 
 	// bd polyglot-pdf-tlc: learn the backend's VAD mode once connected. The
 	// session_ready handshake fires onNativeVadMode BEFORE flipping status to
@@ -1328,6 +1370,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								<span className="vff-vad-label">Listening</span>
 							</span>
 						)}
+						{/* Live mic-energy meter (bd polyglot-pdf-s3zv): shows the mic is
+						    alive and whether audio is actually reaching the backend. */}
+						{isConnected && (
+							<span
+								className={`vff-mic-meter${micSending ? ' vff-mic-meter--sending' : ''}`}
+								title={micSending
+									? `Sending audio (energy ${micEnergy.toFixed(0)})`
+									: `Mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+							>
+								<span
+									className="vff-mic-meter-bar"
+									style={{ width: `${Math.min(100, micEnergy)}%` }}
+								></span>
+							</span>
+						)}
 					</div>
 
 
@@ -1650,6 +1707,34 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						opacity: 0.6;
 						box-shadow: 0 0 12px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
 					}
+				}
+
+				/* Live mic-energy meter (bd polyglot-pdf-s3zv) */
+				.vff-mic-meter {
+					display: inline-block;
+					width: 48px;
+					height: 8px;
+					border-radius: 4px;
+					background: #e5e7eb;
+					overflow: hidden;
+					flex-shrink: 0;
+				}
+
+				.vff-mic-meter-bar {
+					display: block;
+					height: 100%;
+					width: 0%;
+					border-radius: 4px;
+					/* Grey when the mic is alive but the frame is gated (muted PTT /
+					   idle VAD / silence) -- a moving grey bar still proves the mic
+					   works; green only when frames actually reach the backend. */
+					background: #9ca3af;
+					transition: width 80ms linear, background 120ms ease;
+				}
+
+				.vff-mic-meter--sending .vff-mic-meter-bar {
+					background: #10b981;
+					box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 				}
 
 				.vff-section-nav {
