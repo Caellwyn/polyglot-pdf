@@ -13,13 +13,16 @@
 # Exits 0 with all cases listed PASS, non-zero (and prints FAIL) otherwise.
 
 # Source deploy-all.sh for its functions only. The script's sourcing guard returns
-# before any deploy flow runs, but `set -e` in it would leak into this harness and
-# abort on the first non-zero `kit_is_complete` (which is the EXPECTED "skip"
-# result), so disable errexit immediately after sourcing.
+# before any deploy flow runs, but its top-level `set -e` DOES leak errexit into
+# this harness, which would abort on the first non-zero `kit_is_complete` (the
+# EXPECTED "skip" result). The `set +e` below MUST be the very next statement after
+# the source -- it is a load-bearing ordering constraint, NOT cosmetic: any
+# statement inserted between the source and `set +e` runs under the leaked errexit
+# and would abort the harness on its first non-zero return. Keep them adjacent.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/../deploy-all.sh"
-set +e
+set +e  # <-- load-bearing: see the comment above; do not move or precede with code
 
 PASS=0
 FAIL=0

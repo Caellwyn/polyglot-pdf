@@ -88,6 +88,7 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
     const warn = errors.find(e => e.message.includes('controls_fields references non-existent field'));
     expect(warn).toBeDefined();
     expect(warn?.message).toContain('ghost');
+    expect(warn?.type).toBe('warning');
   });
 
   it('still detects a genuine duplicate field ID (incremental seen-set preserved)', () => {
