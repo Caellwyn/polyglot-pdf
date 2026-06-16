@@ -147,4 +147,46 @@ describe('FormCatalogue', () => {
     fireEvent.drop(dropZone, { dataTransfer: { files: [txt] } });
     await waitFor(() => expect(screen.getByText(/Drop an AcroForm PDF/i)).toBeTruthy());
   });
+
+  // --- D3 dashboard: aggregate overview + per-form review % (bd vl3o) -------- //
+
+  it('shows an aggregate overview of complete vs in-progress forms', async () => {
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+      mockKit('n-400', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'N-400', status: 'draft' }) }),
+      mockKit('g-28', { 'metadata.json': JSON.stringify({ label: 'G-28', status: 'draft' }) }), // no schema
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    const summary = await screen.findByTestId('catalogue-summary');
+    expect(summary.textContent).toMatch(/3 forms/);
+    expect(summary.textContent).toMatch(/1 complete/);
+    expect(summary.textContent).toMatch(/1 in progress/);
+    expect(summary.textContent).toMatch(/1 awaiting extraction/);
+  });
+
+  it('shows a per-form review percentage derived from field completion', async () => {
+    // A schema with one fully-complete field -> 100% review.
+    const fullSchema = JSON.stringify({
+      form_metadata: { form_number: 'T-1' }, sections: [],
+      fields: [{
+        id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
+        read_only: false, required: false, spoken_name: 'first',
+        help: { instructions: 'Enter it.' },
+      }],
+    });
+    const root = mockRoot([
+      mockKit('done', { 'schema.json': fullSchema, 'metadata.json': JSON.stringify({ label: 'Done', status: 'complete' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await screen.findByText('Done');
+    await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
+  });
 });

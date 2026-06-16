@@ -13,6 +13,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
+import { getCompletionStats } from './validation';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
 
@@ -127,6 +128,74 @@ export async function loadKitSchema(
   const handle = await tryGetFile(entry.dirHandle, entry.schemaFile);
   if (!handle) return null;
   return readJsonFile<FormSchema>(handle);
+}
+
+// --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
+//
+// "Review progress" for a form is the SAME field-completion signal the editor
+// already shows per field and the ValidationPanel already aggregates: a field is
+// `complete` when checkFieldComplete() passes (has id/type/pdf_field_name, a
+// spoken_name, and non-placeholder help). Per-form progress is the percentage of
+// fields that are complete -- i.e. getCompletionStats(schema).percentage. We reuse
+// that single definition rather than inventing a second one so the catalogue %
+// and the in-editor % can never disagree.
+
+/** A catalogue entry plus its computed review progress (null if no schema). */
+export interface KitProgress {
+  entry: CatalogueEntry;
+  /** % of fields complete (0-100), or null when the kit has no loadable schema. */
+  reviewPercent: number | null;
+  completeFields: number;
+  totalFields: number;
+}
+
+/**
+ * Compute one kit's review progress by loading its schema and reusing
+ * getCompletionStats. A kit with no schema (PDF-only, pre-extraction) or an
+ * unparseable schema yields reviewPercent=null so the UI can show "no schema".
+ */
+export async function readKitProgress(
+  entry: CatalogueEntry,
+): Promise<KitProgress> {
+  if (!entry.hasSchema) {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0 };
+  }
+  const schema = await loadKitSchema(entry);
+  if (!schema) {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0 };
+  }
+  const stats = getCompletionStats(schema);
+  return {
+    entry,
+    reviewPercent: stats.percentage,
+    completeFields: stats.complete,
+    totalFields: stats.total,
+  };
+}
+
+/** An at-a-glance overview an aggregate dashboard header shows. */
+export interface CatalogueSummary {
+  total: number;          // every kit in the folder
+  complete: number;       // metadata status === 'complete'
+  inProgress: number;     // has a schema but not marked complete (drafts/unknown)
+  noSchema: number;       // PDF-only, awaiting extraction
+}
+
+/**
+ * Aggregate counts across the catalogue. A kit is "complete" by its metadata
+ * status (the same flag the deploy gate uses); a schema-bearing non-complete kit
+ * is "in progress"; a schema-less kit is awaiting extraction.
+ */
+export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary {
+  let complete = 0;
+  let inProgress = 0;
+  let noSchema = 0;
+  for (const e of entries) {
+    if (!e.hasSchema) noSchema++;
+    else if (e.status === 'complete') complete++;
+    else inProgress++;
+  }
+  return { total: entries.length, complete, inProgress, noSchema };
 }
 
 async function writeFile(

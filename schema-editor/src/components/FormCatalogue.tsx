@@ -3,7 +3,10 @@ import {
   isDirectoryAccessSupported, pickDirectory, isUserAbort,
   type FsDirectoryHandle,
 } from '../utils/fileSystemAccess';
-import { listKits, onboardPdf, type CatalogueEntry } from '../utils/formKitDirectory';
+import {
+  listKits, onboardPdf, readKitProgress, summarizeCatalogue,
+  type CatalogueEntry, type KitProgress,
+} from '../utils/formKitDirectory';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -30,6 +33,8 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
+  // Per-kit review progress, keyed by kit id (filled in after the list renders).
+  const [progress, setProgress] = React.useState<Record<string, KitProgress>>({});
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -39,13 +44,23 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setBusy(true);
     setError(null);
     try {
-      setKits(await listKits(dir));
+      const entries = await listKits(dir);
+      setKits(entries);
+      // Compute review progress per kit (loads each schema). Done after the list
+      // is set so the catalogue renders immediately and the bars fill in; a kit
+      // whose schema fails to load just shows no bar.
+      const computed = await Promise.all(entries.map(readKitProgress));
+      const byId: Record<string, KitProgress> = {};
+      for (const p of computed) byId[p.entry.id] = p;
+      setProgress(byId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read folder');
     } finally {
       setBusy(false);
     }
   }, []);
+
+  const summary = React.useMemo(() => summarizeCatalogue(kits), [kits]);
 
   const handlePickFolder = React.useCallback(async () => {
     setNotice(null); // a prior "Added X" notice is stale once the folder changes
@@ -125,9 +140,27 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
       {notice && <div className="mt-2 text-sm text-green-700">{notice}</div>}
 
+      {/* Aggregate dashboard overview (bd vl3o, D3): complete vs in-progress at a glance. */}
+      {root && kits.length > 0 && (
+        <div
+          data-testid="catalogue-summary"
+          className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+        >
+          <span className="font-medium text-gray-700">{summary.total} forms</span>
+          <span className="text-green-700">{summary.complete} complete</span>
+          <span className="text-yellow-700">{summary.inProgress} in progress</span>
+          {summary.noSchema > 0 && (
+            <span className="text-gray-500">{summary.noSchema} awaiting extraction</span>
+          )}
+        </div>
+      )}
+
       {root && kits.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {kits.map((kit) => (
+          {kits.map((kit) => {
+            const prog = progress[kit.id];
+            const pct = prog?.reviewPercent ?? null;
+            return (
             <li key={kit.id}>
               <button
                 className={`w-full text-left p-3 rounded border ${
@@ -151,9 +184,26 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   {kit.id} -- {kit.hasSchema ? 'schema' : 'no schema yet'}
                   {kit.hasPdf ? ', pdf' : ', no pdf'}
                 </div>
+
+                {/* Per-form review progress (% of fields complete). */}
+                {pct !== null && (
+                  <div className="mt-2" title={`${prog?.completeFields ?? 0} of ${prog?.totalFields ?? 0} fields complete`}>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>Review</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="mt-0.5 h-1.5 bg-gray-200 rounded overflow-hidden">
+                      <div
+                        className={`h-full ${pct === 100 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>
