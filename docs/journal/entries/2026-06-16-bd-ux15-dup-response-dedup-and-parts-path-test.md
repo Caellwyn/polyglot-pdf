@@ -30,8 +30,10 @@ cheap and safe to ship now that the gate is satisfied.
 id and drops later duplicates; id-less responses (the rare genuinely-id-less call)
 can't be a duplicate-by-id so are always kept. It runs right before the flush and
 returns the dropped ids so the caller logs a PII-free `duplicate_tool_response_dropped`
-(COUNT only, no ids/bodies) -- the "never co-occurs" assumption stays observable if a
-future SDK/model change ever makes it fire. If `polyglot-pdf-tks` later consolidates
+warning -- the dropped COUNT and the dropped CALL IDS (a Gemini call id is a
+model-generated token like `function-call-2110448...`, NOT a field value/PII), but
+NEVER the response body. So the "never co-occurs" assumption stays observable AND
+actionable (which call) if a future SDK/model change ever makes it fire. If `polyglot-pdf-tks` later consolidates
 the two paths to the single SDK-canonical `event.tool_call` one, this dedup becomes
 redundant and can be removed with that change.
 
@@ -54,6 +56,19 @@ The "be wary of the Gemini API" reserved zone is about BEHAVIOR changes to the
 adapter. This is neither: the dedup is a no-op on the observed wire traffic (it only
 fires on a duplicate that does not occur), and the test locks EXISTING behavior. No
 change to what Gemini receives in any real run.
+
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> NO-GAPS on all 10 correctness criteria (the dedup never drops a
+legitimate response: distinct ids all kept, id-less always kept, keep-first safe
+because both paths call the same `on_tool_call` with the same args so the bodies are
+identical, order preserved, no-op on real traffic, no non-FunctionResponse objects,
+the test routes through a REAL CallbackHandler). 3 non-blocking findings fixed: (P1)
+the warning logged count only -> also log the dropped CALL IDS (a Gemini call id is a
+model token, not PII; the body is still never logged) so it is actionable if it ever
+fires; (P2) the test helper hardcoded the tool name -> threaded it through so the
+unknown-tool test really verifies the name echo; (P2) added the mixed id'd+id-less
+dedup case.
 
 ## Verification + closeout
 

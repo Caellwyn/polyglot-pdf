@@ -53,7 +53,8 @@ flush it is deduped by call id (`_dedupe_responses_by_id`, bd polyglot-pdf-ux15)
 a single event that carried the same call on BOTH shapes can never send Gemini two
 `FunctionResponse`s for one id. This is defensive: live evidence shows the two
 shapes do NOT co-occur, so it is a no-op today and logs a PII-free
-`duplicate_tool_response_dropped` (count only) if it ever fires. Every response
+`duplicate_tool_response_dropped` (dropped count + the dropped Gemini call ids, which
+are model-generated tokens not field values; never the response body) if it ever fires. Every response
 **echoes the call's `id`** back (`_build_function_response`): the SDK's AI-Studio
 (`VERTEXAI=false`) path REQUIRES the id and crashes the receive loop without it
 (bd polyglot-pdf-0ux) -- the model does send one (it is NOT matched by order); the
