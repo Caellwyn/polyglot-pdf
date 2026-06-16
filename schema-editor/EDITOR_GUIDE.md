@@ -1492,14 +1492,16 @@ const handleFitPage = () => {
 - **Fit Width**: 800px container - 64px padding = 736px / 612px page = **120% scale**
 - **Fit Page**: Min(width scale, height scale) ensures entire page visible
 
-**Test Coverage** (27 new tests):
 **Test Coverage** (bd polyglot-pdf-840i): the original suite was largely
 `expect(true)` placeholders documenting the scale math; 22 such stubs were removed.
-What remains are tests that assert observable behavior (the Fit Width / Fit Page
-buttons render; manual zoom changes the displayed percentage; the fit logic runs and
-clamps under mocked container dimensions). The pure scale-clamp calculation that is
-not observable under jsdom is a real-browser check, documented in the test file
-header rather than faked.
+What remains asserts real behavior: the Fit Width / Fit Page buttons render, manual
+zoom changes the displayed percentage, AND -- by stubbing the scroll container's
+`clientWidth`/`clientHeight` to non-zero values so the handlers run -- the fit MATH
+and its 0.5..2.0 clamp are exercised with exact-percentage assertions (Fit Width
+153% in-range / 200% upper-clamp / 50% lower-clamp; Fit Page 106% height-constrained
+/ 104% width-constrained / 200% upper-clamp). So the scale-clamp calculation IS
+covered under jsdom via mocked container dimensions -- not deferred to a real
+browser. Run `npm run test:run` for the live count.
 
 ### Technical Decisions
 

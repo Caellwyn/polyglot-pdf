@@ -275,5 +275,39 @@ describe('Phase 5: Zoom Presets', () => {
       });
       expect(screen.queryByText('100%')).not.toBeInTheDocument();
     });
+
+    it('Fit Page is width-constrained when width is the tighter dimension', async () => {
+      const { container } = await renderLoadedViewerWithPage();
+      expect(screen.getByText('100%')).toBeInTheDocument();
+
+      // A tall+narrow container makes WIDTH the limiting dimension:
+      //   scaleForWidth  = (700 - 64) / 612  = 636 / 612  = 1.03921...
+      //   scaleForHeight = (2000 - 64) / 792 = 1936 / 792 = 2.44444... (would clamp)
+      // min = 1.03921 -> Math.round(103.92) = 104 -> "104%". Width constrains, and
+      // the result is taken BEFORE the height scale's would-be 2.0 clamp -- proving
+      // Fit Page uses the smaller scale, not always height.
+      stubScrollContainerSize(container, 700, 2000);
+      fireEvent.click(screen.getByTitle('Fit entire page'));
+
+      await waitFor(() => {
+        expect(screen.getByText('104%')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('100%')).not.toBeInTheDocument();
+    });
+
+    it('Fit Page clamps to the UPPER bound 2.0 when BOTH dimensions are very large', async () => {
+      const { container } = await renderLoadedViewerWithPage();
+
+      // Both dimensions huge -> both scales > 2.0 -> min still > 2.0 ->
+      // Math.min(2.0, ...) pins it to 2.0 -> "200%".
+      //   scaleForWidth  = (3000 - 64) / 612  = 4.797...
+      //   scaleForHeight = (4000 - 64) / 792  = 4.969...
+      stubScrollContainerSize(container, 3000, 4000);
+      fireEvent.click(screen.getByTitle('Fit entire page'));
+
+      await waitFor(() => {
+        expect(screen.getByText('200%')).toBeInTheDocument();
+      });
+    });
   });
 });

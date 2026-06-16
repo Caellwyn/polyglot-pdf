@@ -112,4 +112,56 @@ describe('Phase 4: PDFViewer -> FieldOverlay click-to-select wiring', () => {
     // FieldOverlay forwards an onClick in isolation).
     expect(onSelectField).toHaveBeenCalledWith('field-click-me');
   });
+
+  it('passes isSelected to the overlay so the selected field gets selected styling', async () => {
+    // The other half of click-to-select: when the parent sets selectedFieldId,
+    // PDFViewer must pass isSelected={field.id === selectedFieldId} into
+    // FieldOverlay, which renders a THICKER (4px) border for the selected field.
+    // FieldOverlay.test.tsx proves the styling given isSelected in isolation; this
+    // proves PDFViewer actually DRIVES isSelected from selectedFieldId (bd 840i).
+    const onSelectField = vi.fn();
+
+    // Selecting a positioned field fires the auto-scroll effect, which calls the
+    // scroll container's scrollTo -- jsdom does not implement it, so stub it.
+    Element.prototype.scrollTo = vi.fn();
+
+    const { rerender } = render(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={mockSchema}
+        selectedFieldId={null}
+        onSelectField={onSelectField}
+      />
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('canvas').length).toBe(1);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const overlay = await screen.findByTestId('field-overlay-field-click-me') as HTMLElement;
+    // Unselected: thin 2px border, no selection box-shadow. (The border COLOR is
+    // driven by field status, not selection -- so assert on width + shadow, which
+    // are the selection-specific signals FieldOverlay derives from isSelected.)
+    expect(overlay.style.border).toContain('2px');
+    expect(overlay.style.boxShadow).toBe('none');
+
+    // Parent selects this field -> PDFViewer must propagate isSelected=true.
+    rerender(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={mockSchema}
+        selectedFieldId="field-click-me"
+        onSelectField={onSelectField}
+      />
+    );
+
+    await waitFor(() => {
+      const selected = screen.getByTestId('field-overlay-field-click-me') as HTMLElement;
+      // Selected: thicker 4px border AND the blue selection glow box-shadow --
+      // both flip only when isSelected is true, proving PDFViewer drove it.
+      expect(selected.style.border).toContain('4px');
+      expect(selected.style.boxShadow).toContain('rgba(59, 130, 246');
+    });
+  });
 });
