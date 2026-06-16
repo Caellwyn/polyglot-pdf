@@ -71,6 +71,17 @@ off cwd, breaking when run from a different worktree -- workaround `--transcript
 That is a discovery bug, distinct from the subagent-bucket bug this PR fixes; left
 for a follow-up if it recurs (the `--transcript` workaround holds).
 
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> both criteria PASS; the real-validator coverage claim verified
+(TestANumberNormalization + test_d24n both call validate_updates for real), the
+sidecar path + meta-anchoring confirmed. Two test-coverage gaps on 17k's
+"orchestrator unaffected" prong, both fixed -- and the P1 was fixed in the CODE, not
+just tested: sidecar records now force-bucket to subagent (a row in subagents/ IS a
+subagent turn), so a sidecar assistant row lacking isSidechain cannot leak into the
+orchestrator bucket. Added a test for that leak case + an orchestrator==1 assertion
+to the meta-anchoring test, and documented the no-double-count assumption.
+
 ## Closeout notes
 
 - **Tests:** 72 affected tests pass (the 2 backend files + the harness-ledger
