@@ -2,7 +2,7 @@
 
 **Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-15. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
+*Last updated: 2026-06-15. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). A2 fixed the SI-BUILD path only; the G2 cost spike (bd polyglot-pdf-jnjj.6) then found gap P -- the separate RUNTIME next-field drip is still broken (returns None past field 1), tracked as bug polyglot-pdf-jnjj.22 and blocking A5. See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the A2 repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
 
 The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models, audited
 under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** gaps
@@ -131,6 +131,36 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   requires a real, non-mocked-getter test. G + L are the same defect as h2ii from two
   audits; A2 (jnjj.9) implements the fix and must satisfy h2ii's exit criterion,
   covering BOTH the reconnect (L) and retry (h2ii) duplication paths.
+
+### Discovered post-A2 (NOT repaired by jnjj.9)
+
+- **P -- [BREAKS] The runtime next-field drip returns None for every field past
+  the first, so the model never receives schemas for fields 2..N.** A2 fixed the
+  SI-BUILD path (gaps A/B/C/...) to consume the handshake manifest, but the
+  separate RUNTIME drip was not touched. On each successful update/confirm,
+  `callback_handler` calls `form_filling_service.get_next_field_schema_for_jit(field_id)`
+  (single call site, `callback_handler.py:556-557`; the result is inserted into
+  the tool response at `:776-777`) to compute the next field's full schema. That
+  delegates to
+  `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
+  (`form_filling_service.py:935-938`), which finds "next" by INDEX within
+  `part_data["fields"]` (`manifest_service.py:78-94`) -- it never consults the
+  manifest. But in JIT mode `self._schema["fields"]` is `[first_field_schema]`
+  (length 1, `websocket_routes.py:671`), so the index lookup returns
+  `current_index+1 >= len(fields)` -> None for EVERY field. Nothing ever appends
+  loaded fields back into `self._schema["fields"]`. Net effect: the model gets
+  field 1's schema, then flies blind for fields 2..N -- distinct from Gap D (the
+  SI's `{next_field_schema}` placeholder); this is the per-confirm tool-response
+  drip. **G2 live evidence (bd polyglot-pdf-jnjj.6):** the `section-reset-jit`
+  cost arm confirmed only 2/20 (happy) / 1/20 (unhappy) fields vs the full-SI
+  baseline's 17/20 / 20/20, and cost MORE in real dollars (the non-advancing loop
+  bloats the transcript past the SI savings). Verified empirically (drip returned
+  None after firstName/middleName/lastName/preferredName) and by code path. *Fix:
+  resolve the next field from the manifest's full field list
+  (`current_section.fields`), then look its full schema up in the source part
+  schema, rather than indexing `self._schema["fields"]`.* **Tracked as bug
+  `polyglot-pdf-jnjj.22`; A5 (jnjj.12) is BLOCKED BY it.** (NEW -- G2 cost spike,
+  bd jnjj.6.) See [../../scripts/spikes/jnjj_g2_jit_cost_findings.md](../../scripts/spikes/jnjj_g2_jit_cost_findings.md).
 
 ### Defer (real, but out of the epic's critical path)
 
