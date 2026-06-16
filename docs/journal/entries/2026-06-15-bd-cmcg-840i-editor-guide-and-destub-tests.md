@@ -155,6 +155,26 @@ placeholders had asserted a workflow (click -> select -> highlight, full fit-mat
 matrix) that had to be genuinely rebuilt. Looped past the usual 2-round budget
 because every round surfaced a real coverage hole, not a nit.
 
+## Codex round 3-4 (3 then 2 P1) -- incomplete fixes resurfacing
+
+Rounds 3 and 4 were a different character than 1-2: not new coverage holes but the
+internal CONSISTENCY of what I wrote, and -- the round-4 lesson -- my own
+INCOMPLETE fixes resurfacing. Round 3 corrected a code comment that contradicted the
+tests, hardened the page-ready helper (wait for an overlay = proof pageDimensions is
+populated, not just a canvas), and reconciled the journal summary. Round 4 then
+caught that the round-3 comment fix was incomplete: the wrong "0 clientWidth ->
+early-return" claim appeared in THREE places and I had fixed only one, so the two
+dupes came back as findings; and one test (manual-zoom+preset) still used the old
+non-page-ready helper with a bare not.toThrow(), so it was rewritten to assert the
+preset overrides the manual zoom (125% -> fitted 153% -> zoom-out 128%).
+
+Lesson recorded: when correcting a wrong claim that lives in a COMMENT, grep for ALL
+copies before declaring it fixed -- a partial fix reads as resolved but resurfaces.
+And the deeper one (from rounds 1-2): de-stubbing fake tests is real test-writing,
+because the placeholders asserted a whole workflow that has to be genuinely rebuilt.
+Four Codex rounds on a "small" bundle is the honest cost of that, not churn -- every
+round surfaced a real (if shrinking) gap, never a stylistic nit.
+
 ## Closeout notes
 
 - **Doc-freshness:** 10 docs flagged STALE, all backend/voice-path tier-2 docs from
