@@ -220,11 +220,19 @@ def parse_transcript(transcript: Path) -> dict:
     }
     turns = {"orchestrator": 0, "subagent": 0}
 
-    def _accumulate(rec: dict, *, anchor_meta: bool) -> None:
-        """Fold one record's tokens into the actor buckets. When ``anchor_meta`` is
-        true (the MAIN transcript only) also advance the session id + wall-clock
-        span; sidecar files pass false so a subagent's own session id / timestamps
-        never redefine them."""
+    def _accumulate(rec: dict, *, anchor_meta: bool, force_actor: str | None = None) -> None:
+        """Fold one record's tokens into the actor buckets.
+
+        ``anchor_meta`` true (the MAIN transcript only) also advances the session id
+        + wall-clock span; sidecar files pass false so a subagent's own session id /
+        timestamps never redefine them.
+
+        ``force_actor`` pins the bucket regardless of the record's ``isSidechain``
+        flag. Sidecar files pass ``"subagent"``: a record in
+        ``subagents/agent-*.jsonl`` IS a subagent turn by definition, so it must not
+        leak into the orchestrator bucket even on the (unobserved) chance a sidecar
+        assistant row lacks the flag. Main-transcript records pass None and bucket by
+        the flag as before."""
         nonlocal session_id, first_ts, last_ts
         if anchor_meta:
             if session_id is None and rec.get("sessionId"):
@@ -240,7 +248,7 @@ def parse_transcript(transcript: Path) -> dict:
         usage = message.get("usage") or {}
         if not usage:
             return
-        actor = "subagent" if rec.get("isSidechain") else "orchestrator"
+        actor = force_actor or ("subagent" if rec.get("isSidechain") else "orchestrator")
         turns[actor] += 1
         model = message.get("model") or "unknown"
         for field in (
@@ -255,11 +263,17 @@ def parse_transcript(transcript: Path) -> dict:
 
     for rec in _iter_records(transcript):
         _accumulate(rec, anchor_meta=True)
-    # Fold in spawned-subagent sidecar transcripts (bd polyglot-pdf-17k). Their rows
-    # are isSidechain:true -> they land in the subagent bucket; meta stays on main.
+    # Fold in spawned-subagent sidecar transcripts (bd polyglot-pdf-17k). Sidecar
+    # records are force-bucketed to "subagent" (a row in subagents/ IS a subagent
+    # turn); meta stays anchored to main. This assumes the MAIN transcript holds NO
+    # copy of the sidecar rows -- empirically the main JSONL has zero isSidechain
+    # rows when subagents are spawned (the subagent's turns live only in the
+    # sidecar), so there is no double-count. If a future Claude Code layout wrote a
+    # subagent's turns into BOTH places, this would over-count and need a dedup by
+    # record uuid.
     for sidecar in discover_subagent_transcripts(transcript):
         for rec in _iter_records(sidecar):
-            _accumulate(rec, anchor_meta=False)
+            _accumulate(rec, anchor_meta=False, force_actor="subagent")
 
     total = _zero()
     for actor_tokens in tokens_by_actor.values():

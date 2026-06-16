@@ -187,8 +187,29 @@ class TestSubagentSidecars:
         assert parsed["session_id"] == "main-sess"
         assert parsed["first_ts"] == "2026-06-01T00:00:00Z"
         assert parsed["last_ts"] == "2026-06-01T00:02:00Z"
-        # But the sidecar's TOKENS are still counted.
+        # But the sidecar's TOKENS are still counted...
         assert parsed["tokens"]["subagent"]["input_tokens"] == 9
+        # ...and the orchestrator bucket is UNAFFECTED by the sidecar (the main-only
+        # assistant record's 1 input token, nothing leaked from the sidecar).
+        assert parsed["tokens"]["orchestrator"]["input_tokens"] == 1
+
+    def test_sidecar_row_without_sidechain_flag_still_buckets_as_subagent(self, tmp_path):
+        # A record in a subagents/ sidecar IS a subagent turn by definition. Even if
+        # an assistant row there lacks isSidechain (unobserved today, but a format
+        # assumption we must not depend on), it must NOT leak into orchestrator.
+        main = _write_transcript(tmp_path, [
+            _assistant(_usage(inp=100), sidechain=False),
+        ])
+        _write_subagent_sidecar(main, "ddd444", [
+            # isSidechain absent/false on purpose:
+            _assistant(_usage(inp=50, out=5), sidechain=False, model="claude-sonnet-4-6"),
+        ])
+
+        parsed = ledger.parse_transcript(main)
+
+        assert parsed["tokens"]["orchestrator"]["input_tokens"] == 100  # NOT 150
+        assert parsed["tokens"]["subagent"]["input_tokens"] == 50
+        assert parsed["assistant_turns"]["subagent"] == 1
 
     def test_no_subagents_dir_is_fine(self, tmp_path):
         # A session that spawned no subagents has no sidecar dir -> subagent bucket 0.
