@@ -57,15 +57,17 @@ def real_callback_handler():
     return handler
 
 
-def _parts_path_emit(handler_result, call_id):
+def _parts_path_emit(tool_name, handler_result, call_id):
     """Reproduce the model_turn.parts tail: a recorded tool result becomes a
-    FunctionResponse echoing the call id (live_ai_gemini.py:_build_function_response),
-    collected into the per-event responses list, then deduped before the flush."""
+    FunctionResponse echoing the call id + the TOOL NAME
+    (live_ai_gemini.py:_build_function_response), collected into the per-event
+    responses list, then deduped before the flush. tool_name is threaded through
+    (not hardcoded) so a test asserting the name echo exercises the real value."""
     responses = []
     if handler_result is None:
         handler_result = {}
     # The parts path appends for any named tool (tks: every named call gets a response).
-    responses.append(_build_function_response("update_form_fields", handler_result, call_id))
+    responses.append(_build_function_response(tool_name, handler_result, call_id))
     deduped, dropped = _dedupe_responses_by_id(responses)
     return deduped, dropped
 
@@ -84,7 +86,7 @@ class TestPartsPathThroughRealCallbackHandler:
         assert "firstName" in result["applied_fields"]
 
         # That body flows through the adapter's wire-build with the call id echoed.
-        responses, dropped = _parts_path_emit(result, "function-call-abc123")
+        responses, dropped = _parts_path_emit("update_form_fields", result, "function-call-abc123")
         assert dropped == []
         assert len(responses) == 1
         fr = responses[0]
@@ -100,10 +102,11 @@ class TestPartsPathThroughRealCallbackHandler:
             tool_name="not_a_real_tool",
             arguments={},
         )
-        responses, dropped = _parts_path_emit(result, "function-call-zzz")
+        responses, dropped = _parts_path_emit("not_a_real_tool", result, "function-call-zzz")
         assert dropped == []
         assert len(responses) == 1
         assert responses[0].id == "function-call-zzz"
+        assert responses[0].name == "not_a_real_tool"  # the real tool name is echoed
 
 
 class TestDedupeResponsesById:
@@ -135,3 +138,14 @@ class TestDedupeResponsesById:
         deduped, dropped = _dedupe_responses_by_id([])
         assert deduped == []
         assert dropped == []
+
+    def test_mixed_id_and_id_less_keeps_all_id_less_and_first_of_each_id(self):
+        # The realistic worst case: an event with BOTH id-less and id'd calls, the
+        # id'd one duplicated. id-less responses never dedup; the duplicate id drops.
+        a = _build_function_response("update_form_fields", {"n": 0}, None)
+        b = _build_function_response("update_form_fields", {"n": 1}, "id-1")
+        c = _build_function_response("confirm_field", {"n": 2}, None)
+        d = _build_function_response("update_form_fields", {"n": 3}, "id-1")  # dup of b
+        deduped, dropped = _dedupe_responses_by_id([a, b, c, d])
+        assert deduped == [a, b, c]  # order preserved; both id-less kept; first id-1 kept
+        assert dropped == ["id-1"]

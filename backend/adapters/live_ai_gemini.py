@@ -1991,9 +1991,16 @@ class LiveAIGemini(ILiveAI):
                                         # if it ever fires so the assumption stays observable.
                                         responses, _dropped_dup_ids = _dedupe_responses_by_id(responses)
                                         if _dropped_dup_ids:
+                                            # Log the dropped call ids (NOT bodies): a Gemini call id is a
+                                            # model-generated token like "function-call-2110448..." -- it is
+                                            # NOT a field value / PII, and it is what makes this warning
+                                            # actionable (which call, in which turn) if the no-co-occurrence
+                                            # assumption ever breaks. The response BODY (which can carry PII)
+                                            # is never logged here.
                                             self._log.warning(
                                                 "duplicate_tool_response_dropped",
                                                 dropped_count=len(_dropped_dup_ids),
+                                                dropped_call_ids=_dropped_dup_ids,
                                             )
 
                                         # Log tool responses being sent to Gemini, for token analysis ONLY.
