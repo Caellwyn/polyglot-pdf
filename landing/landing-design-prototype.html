@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Polyglot Forms — Fill out the form by speaking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #EEF1F0;
+    --paper-2: #F6F8F7;
+    --card: #FFFFFF;
+    --ink: #15201D;
+    --ink-2: #3F4D49;
+    --ink-3: #74827D;
+    --line: #DCE3E0;
+    --line-2: #C6D0CC;
+    --red: #0F766E;
+    --red-deep: #0B5A53;
+    --forest: #0E2A27;
+    --forest-2: #163C37;
+    --cta-bg: #0C3833;
+    --green: #2F7D5C;
+    --gold: #C98A2B;
+    --sans: "Public Sans", system-ui, sans-serif;
+    --serif: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --maxw: 1180px;
+    --pad: clamp(20px, 5vw, 64px);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 18px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--red); color: #fff; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad); }
+  .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; }
+  .mono { font-family: var(--mono); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--red);
+    display: inline-flex; align-items: center; gap: 9px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1.5px; background: var(--red); display: inline-block; }
+  .eyebrow.on-dark { color: #7FD8C8; }
+  .eyebrow.on-dark::before { background: #7FD8C8; }
+
+  /* ---------- NAV ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--paper) 86%, transparent);
+    backdrop-filter: blur(12px) saturate(1.2);
+    border-bottom: 1px solid transparent;
+    transition: border-color .3s, background .3s;
+  }
+  header.nav.scrolled { border-bottom-color: var(--line); }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; font-size: 21px; letter-spacing: -0.02em; }
+  .brand .glyph {
+    width: 30px; height: 30px; border-radius: 8px; background: var(--ink); color: var(--paper);
+    display: grid; place-items: center; font-family: var(--serif); font-size: 19px; font-style: italic; font-weight: 500;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .nav-links { display: flex; gap: 34px; align-items: center; font-size: 15px; font-weight: 500; color: var(--ink-2); }
+  .nav-links a { transition: color .2s; }
+  .nav-links a:hover { color: var(--ink); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px; font-family: var(--sans);
+    font-weight: 600; font-size: 15px; padding: 11px 20px; border-radius: 999px;
+    cursor: pointer; border: none; transition: transform .15s ease, background .2s, color .2s, box-shadow .2s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--red); color: #fff; box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 8px 22px -10px rgba(15,118,110,.6); }
+  .btn-primary:hover { background: var(--red-deep); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line-2); }
+  .btn-ghost:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .btn-light { background: var(--paper); color: var(--ink); }
+  .btn-light:hover { background: #fff; transform: translateY(-1px); }
+  .btn .arrow { transition: transform .2s; }
+  .btn:hover .arrow { transform: translateX(3px); }
+  .nav-cta { display: flex; gap: 12px; align-items: center; }
+
+  /* ---------- HERO ---------- */
+  .hero { padding: clamp(48px, 8vw, 96px) 0 clamp(40px, 6vw, 72px); position: relative; }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
+  .hero h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 6vw, 70px); line-height: 1.02; letter-spacing: -0.025em; }
+  .hero h1 em { font-style: italic; color: var(--red); }
+  .hero .lede { margin-top: 26px; font-size: clamp(18px, 1.5vw, 20.5px); line-height: 1.55; color: var(--ink-2); max-width: 30em; }
+  .hero-cta { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero-meta { margin-top: 30px; display: flex; gap: 26px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-3); font-weight: 500; }
+  .hero-meta span { display: inline-flex; align-items: center; gap: 8px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  /* conversation card */
+  .convo {
+    background: var(--card); border-radius: 20px; padding: 26px;
+    box-shadow: 0 1px 0 var(--line), 0 40px 80px -50px rgba(26,22,17,.5), 0 8px 24px -18px rgba(26,22,17,.3);
+    border: 1px solid var(--line);
+    position: relative;
+  }
+  .convo-top { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .convo-doc { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 14.5px; }
+  .convo-doc .ficon { width: 30px; height: 38px; border-radius: 5px; background: var(--paper); border: 1px solid var(--line-2); position: relative; flex: none; }
+  .convo-doc .ficon::before { content: ""; position: absolute; top: 6px; left: 6px; right: 6px; height: 2px; background: var(--line-2); box-shadow: 0 5px 0 var(--line-2), 0 10px 0 var(--line-2); }
+  .lang-pill { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 7px; }
+  .lang-pill .live { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: pulse 1.8s infinite; }
+  @keyframes pulse { 0%,100%{ opacity:1; transform: scale(1);} 50%{ opacity:.4; transform: scale(.8);} }
+
+  .q-label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .q-text { font-family: var(--serif); font-size: 22px; line-height: 1.25; margin-top: 7px; letter-spacing: -0.01em; }
+  .bubble {
+    margin-top: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px 14px 14px 4px;
+    padding: 13px 16px; font-size: 16px; color: var(--ink-2); position: relative; max-width: 90%;
+  }
+  .bubble .who { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 4px; }
+  .bubble .said { color: var(--ink); font-weight: 500; min-height: 1.5em; }
+  .bubble .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--red); margin-left: 1px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .field-out { margin-top: 18px; border: 1.5px solid var(--line-2); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--paper-2); transition: border-color .4s, background .4s; }
+  .field-out.filled { border-color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--paper-2)); }
+  .field-out .fl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+  .field-out .fv { font-weight: 600; font-size: 17px; margin-top: 3px; }
+  .field-out .check { width: 26px; height: 26px; border-radius: 50%; background: var(--green); display: grid; place-items: center; flex: none; opacity: 0; transform: scale(.6); transition: opacity .3s, transform .3s; }
+  .field-out.filled .check { opacity: 1; transform: scale(1); }
+  .check svg { width: 14px; height: 14px; stroke: #fff; stroke-width: 2.5; fill: none; }
+  .confirm-note { margin-top: 13px; font-size: 13px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+  .confirm-note .spk { width: 15px; height: 15px; stroke: var(--ink-3); fill: none; stroke-width: 1.6; flex: none; }
+
+  /* floating script chips */
+  .scripts { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .chip {
+    position: absolute; font-family: var(--serif); font-size: 17px; color: var(--ink);
+    background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
+    box-shadow: 0 12px 26px -16px rgba(26,22,17,.45); white-space: nowrap; opacity: 0;
+    animation: floatIn .6s ease forwards;
+  }
+  @keyframes floatIn { from { opacity: 0; transform: translateY(8px) scale(.96);} to { opacity: 1; transform: none;} }
+
+  /* ---------- MARQUEE ---------- */
+  .marquee { border-block: 1px solid var(--line); background: var(--paper-2); padding: 17px 0; overflow: hidden; }
+  .marquee-track { display: flex; gap: 46px; width: max-content; animation: scroll-x 38s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  @keyframes scroll-x { to { transform: translateX(-50%); } }
+  .mq-item { display: inline-flex; align-items: baseline; gap: 12px; font-size: 16px; color: var(--ink-2); white-space: nowrap; }
+  .mq-item .native { font-family: var(--serif); font-size: 19px; color: var(--ink); }
+  .mq-item .sep { color: var(--line-2); }
+
+  /* ---------- SECTION SHELL ---------- */
+  section.block { padding: clamp(64px, 9vw, 120px) 0; position: relative; }
+  .sec-head { max-width: 760px; }
+  .sec-head h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 4.2vw, 50px); line-height: 1.06; letter-spacing: -0.02em; margin-top: 20px; }
+  .sec-head h2 em { font-style: italic; color: var(--red); }
+  .sec-head .sub { margin-top: 20px; font-size: clamp(17px, 1.4vw, 19px); color: var(--ink-2); line-height: 1.6; max-width: 60ch; }
+
+  /* ---------- BARRIER ---------- */
+  .barrier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 4vw, 56px); align-items: center; margin-top: 56px; }
+  .form-mock { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 30px; box-shadow: 0 30px 60px -45px rgba(26,22,17,.5); position: relative; }
+  .form-mock .stamp { position: absolute; top: 22px; right: 22px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; }
+  .form-mock h4 { font-size: 17px; margin-bottom: 4px; direction: rtl; text-align: right; }
+  .form-mock .fm-sub { font-size: 13px; color: var(--ink-3); direction: rtl; text-align: right; margin-bottom: 22px; }
+  .fm-row { padding: 13px 0; border-top: 1px dashed var(--line-2); display: flex; gap: 14px; align-items: flex-start; direction: rtl; }
+  .fm-row .num { font-family: var(--mono); font-size: 13px; color: var(--ink-3); font-weight: 500; flex: none; width: 22px; }
+  .fm-row .fm-q { font-size: 15px; color: var(--ink); flex: 1; }
+  .fm-row .fm-line { height: 1px; background: var(--line-2); margin-top: 14px; }
+  .fm-row.hot { background: color-mix(in srgb, var(--red) 8%, #fff); margin-inline: -14px; padding-inline: 14px; border-radius: 8px; border-top-color: transparent; }
+  .fm-row.hot .fm-q { font-weight: 600; }
+  .fm-tag { position: absolute; left: -10px; bottom: 40px; background: var(--red); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px 999px 999px 3px; box-shadow: 0 14px 30px -16px rgba(15,118,110,.8); }
+  .barrier-copy .big { font-family: var(--serif); font-size: clamp(26px, 3.2vw, 38px); line-height: 1.12; letter-spacing: -0.02em; }
+  .barrier-copy .big em { font-style: italic; color: var(--red); }
+  .barrier-copy p.note { margin-top: 22px; color: var(--ink-2); font-size: 17px; }
+
+  /* ---------- STAT BAND ---------- */
+  .stat-band { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 64px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: #fff; }
+  .stat { padding: 34px clamp(20px,3vw,38px); border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: none; }
+  .stat .num { font-family: var(--serif); font-size: clamp(38px, 5vw, 56px); line-height: 1; letter-spacing: -0.03em; }
+  .stat .num .u { font-size: .5em; color: var(--red); font-style: italic; }
+  .stat .lbl { margin-top: 14px; font-size: 15px; color: var(--ink-2); line-height: 1.45; }
+  .stat .src { margin-top: 10px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+
+  /* ---------- SHORTAGE ---------- */
+  .shortage { background: var(--paper-2); border-block: 1px solid var(--line); }
+  .short-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(30px,5vw,70px); align-items: center; margin-top: 52px; }
+  .cost-list { display: grid; gap: 0; border-top: 1px solid var(--line-2); }
+  .cost-row { display: flex; justify-content: space-between; align-items: baseline; gap: 18px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+  .cost-row .ck { font-size: 16px; color: var(--ink); font-weight: 500; }
+  .cost-row .ck small { display: block; color: var(--ink-3); font-weight: 400; font-size: 13px; margin-top: 2px; }
+  .cost-row .cv { font-family: var(--mono); font-size: 17px; font-weight: 600; color: var(--red-deep); white-space: nowrap; }
+  .wait-card { background: var(--ink); color: var(--paper); border-radius: 16px; padding: 32px; }
+  .wait-card .wk { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: #B4C2BD; }
+  .wait-card .wv { font-family: var(--serif); font-size: clamp(30px,3.6vw,42px); line-height: 1.1; margin-top: 14px; }
+  .wait-card .wv em { font-style: italic; color: #7FD8C8; }
+  .wait-card .wd { margin-top: 18px; color: #B4C2BD; font-size: 15.5px; line-height: 1.55; }
+
+  /* ---------- HOW IT WORKS ---------- */
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin-top: 58px; counter-reset: step; }
+  .step { padding: 0 22px; border-left: 1px solid var(--line-2); position: relative; }
+  .step:first-child { padding-left: 0; border-left: none; }
+  .step .si { font-family: var(--mono); font-size: 12px; color: var(--red); font-weight: 600; }
+  .step h4 { font-size: 18px; margin-top: 14px; letter-spacing: -0.01em; }
+  .step p { margin-top: 9px; font-size: 14.5px; color: var(--ink-2); line-height: 1.5; }
+  .trust-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 56px; }
+  .trust-chip { display: inline-flex; align-items: center; gap: 9px; font-size: 14.5px; font-weight: 500; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 10px 17px; }
+  .trust-chip svg { width: 16px; height: 16px; stroke: var(--green); fill: none; stroke-width: 1.8; flex: none; }
+
+  /* ---------- LEVERAGE (DARK) ---------- */
+  .leverage { background: var(--forest); color: var(--paper); }
+  .leverage .sec-head h2 { color: var(--paper); }
+  .leverage .sec-head h2 em { color: #7FD8C8; }
+  .lev-quote { font-family: var(--serif); font-size: clamp(26px, 3.4vw, 42px); line-height: 1.18; letter-spacing: -0.02em; max-width: 18ch; }
+  .lev-quote em { font-style: italic; color: #7FD8C8; }
+  .lev-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: clamp(34px,5vw,70px); align-items: center; margin-top: 14px; }
+  .lev-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 40px; }
+  .lev-metric .lm-num { font-family: var(--serif); font-size: clamp(34px,4.4vw,50px); line-height: 1; letter-spacing: -0.03em; color: #fff; }
+  .lev-metric .lm-num .u { font-size: .46em; color: #7FD8C8; font-style: italic; }
+  .lev-metric .lm-lbl { margin-top: 10px; font-size: 14px; color: #C7D2CC; line-height: 1.45; }
+
+  .compare { background: var(--forest-2); border: 1px solid rgba(255,255,255,.1); border-radius: 18px; overflow: hidden; }
+  .compare .ct-head { display: grid; grid-template-columns: 1.4fr 1fr 1fr; background: rgba(0,0,0,.18); }
+  .compare .ct-head div { padding: 16px 18px; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #C7D2CC; }
+  .compare .ct-head .h-now { color: #C7D2CC; }
+  .compare .ct-head .h-poly { color: #7FD8C8; }
+  .ct-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; border-top: 1px solid rgba(255,255,255,.08); }
+  .ct-row div { padding: 15px 18px; font-size: 15px; }
+  .ct-row .ct-k { color: #C7D2CC; }
+  .ct-row .ct-now { color: #fff; font-weight: 500; font-family: var(--mono); font-size: 14.5px; }
+  .ct-row .ct-poly { color: #fff; font-weight: 600; font-family: var(--mono); font-size: 14.5px; background: rgba(127,216,200,.1); }
+  .illus { margin-top: 22px; font-size: 13px; color: #9FB0A8; display: flex; align-items: center; gap: 9px; }
+  .illus svg { width: 15px; height: 15px; stroke: #9FB0A8; fill: none; stroke-width: 1.6; flex: none; }
+
+  /* ---------- USE CASES ---------- */
+  .use-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 56px; }
+  .use-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 28px; transition: transform .25s ease, box-shadow .25s ease, border-color .25s; }
+  .use-card:hover { transform: translateY(-3px); box-shadow: 0 24px 50px -36px rgba(26,22,17,.5); border-color: var(--line-2); }
+  .use-card .uc-icon { width: 46px; height: 46px; border-radius: 11px; background: var(--paper); border: 1px solid var(--line); display: grid; place-items: center; margin-bottom: 18px; }
+  .use-card .uc-icon svg { width: 23px; height: 23px; stroke: var(--red); fill: none; stroke-width: 1.6; }
+  .use-card h4 { font-size: 20px; letter-spacing: -0.01em; }
+  .use-card p { margin-top: 9px; font-size: 15px; color: var(--ink-2); line-height: 1.55; }
+  .use-card .forms { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 7px; }
+  .use-card .forms span { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+
+  /* ---------- MARKET ---------- */
+  .market { background: var(--paper-2); border-block: 1px solid var(--line); }
+  .tam-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; margin-top: 56px; }
+  .tam { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 30px; position: relative; overflow: hidden; }
+  .tam .tk { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+  .tam .tn { font-family: var(--serif); font-size: clamp(34px,4vw,46px); line-height: 1; letter-spacing: -0.03em; margin-top: 12px; }
+  .tam .td { margin-top: 14px; font-size: 14.5px; color: var(--ink-2); line-height: 1.5; }
+  .tam.feature { background: var(--ink); color: var(--paper); }
+  .tam.feature .tk { color: #B4C2BD; }
+  .tam.feature .td { color: #B4C2BD; }
+  .tam.feature .tn .u { color: #7FD8C8; }
+  .market-foot { margin-top: 26px; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; color: var(--ink-3); }
+
+  /* ---------- WHY NOW ---------- */
+  .why-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 18px; margin-top: 56px; }
+  .why { padding-top: 22px; border-top: 2px solid var(--ink); }
+  .why .wn { font-family: var(--mono); font-size: 12px; color: var(--red); font-weight: 600; }
+  .why h4 { font-size: 16.5px; margin-top: 12px; letter-spacing: -0.01em; }
+  .why p { margin-top: 9px; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+
+  /* ---------- CTA ---------- */
+  .cta { background: var(--cta-bg); color: #fff; }
+  .cta-inner { padding: clamp(64px,9vw,110px) 0; text-align: center; }
+  .cta h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(32px,5vw,60px); line-height: 1.05; letter-spacing: -0.025em; max-width: 16ch; margin-inline: auto; }
+  .cta .csub { margin-top: 24px; font-size: clamp(17px,1.5vw,20px); color: rgba(255,255,255,.9); max-width: 52ch; margin-inline: auto; line-height: 1.55; }
+  .cta-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; max-width: 720px; margin: 46px auto 0; text-align: left; }
+  .path { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); border-radius: 16px; padding: 26px; }
+  .path .pk { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.75); }
+  .path h4 { font-size: 20px; margin-top: 10px; color: #fff; }
+  .path p { margin-top: 8px; font-size: 14.5px; color: rgba(255,255,255,.85); line-height: 1.5; }
+  .path .btn { margin-top: 18px; }
+  .cta-foot { margin-top: 38px; font-size: 14px; color: rgba(255,255,255,.8); }
+  .cta-foot a { text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+
+  /* demo request form */
+  .demo-form { max-width: 600px; margin: 44px auto 0; background: #fff; border-radius: 18px; padding: clamp(24px, 3vw, 34px); text-align: left; box-shadow: 0 40px 80px -50px rgba(0,0,0,.55); }
+  .df-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .demo-form label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .demo-form label.full { margin-top: 16px; }
+  .demo-form input, .demo-form textarea { width: 100%; margin-top: 7px; font-family: var(--sans); font-size: 15px; color: var(--ink); background: var(--paper-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; transition: border-color .2s, box-shadow .2s; }
+  .demo-form input::placeholder, .demo-form textarea::placeholder { color: var(--ink-3); }
+  .demo-form input:focus, .demo-form textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 16%, transparent); }
+  .demo-form input.invalid, .demo-form textarea.invalid { border-color: #C4453A; }
+  .demo-form textarea { resize: vertical; min-height: 88px; }
+  .demo-form .btn { margin-top: 22px; width: 100%; justify-content: center; }
+  .df-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); text-align: center; }
+  .df-success { max-width: 600px; margin: 44px auto 0; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.26); border-radius: 18px; padding: clamp(30px,4vw,44px); text-align: center; }
+  .df-success h4 { font-family: var(--serif); font-weight: 400; font-size: clamp(24px,3vw,30px); color: #fff; letter-spacing: -0.01em; }
+  .df-success p { margin-top: 12px; color: rgba(255,255,255,.85); font-size: 15.5px; line-height: 1.55; max-width: 44ch; margin-inline: auto; }
+
+  /* ---------- FOOTER ---------- */
+  footer.site { background: var(--ink); color: #B4C2BD; padding: 64px 0 40px; }
+  .foot-top { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+  .foot-brand { max-width: 32ch; }
+  .foot-brand .brand { color: var(--paper); margin-bottom: 16px; }
+  .foot-brand .glyph { background: var(--paper); color: var(--ink); }
+  .foot-brand p { font-size: 14.5px; line-height: 1.6; color: #90A09A; }
+  .foot-cols { display: flex; gap: 64px; flex-wrap: wrap; }
+  .foot-col h5 { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #6C7A75; font-weight: 500; margin-bottom: 16px; }
+  .foot-col a, .foot-col span { display: block; font-size: 14.5px; color: #B4C2BD; margin-bottom: 11px; transition: color .2s; }
+  .foot-col a:hover { color: var(--paper); }
+  .foot-bottom { margin-top: 54px; padding-top: 26px; border-top: 1px solid rgba(255,255,255,.1); display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 13px; color: #6C7A75; }
+  .foot-bottom .sources { max-width: 70ch; line-height: 1.6; }
+
+  /* reveal — visible by default; entrance is progressive enhancement only */
+  @keyframes revealIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+  .reveal { opacity: 1; transform: none; }
+  .reveal.in { animation: revealIn .7s cubic-bezier(.16,.84,.44,1) both; }
+
+  @media (max-width: 920px) {
+    .hero-grid, .barrier-grid, .short-grid, .lev-grid { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr 1fr; gap: 28px 22px; }
+    .step { border-left: none; padding-left: 0; }
+    .why-grid { grid-template-columns: 1fr 1fr; gap: 26px; }
+    .stat-band { grid-template-columns: 1fr; }
+    .stat { border-right: none; border-bottom: 1px solid var(--line); }
+    .stat:last-child { border-bottom: none; }
+    .tam-grid { grid-template-columns: 1fr; }
+    .use-grid, .cta-paths { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+    .convo { margin-top: 8px; }
+  }
+  @media (max-width: 560px) {
+    .steps, .why-grid { grid-template-columns: 1fr; }
+    .ct-row, .compare .ct-head { grid-template-columns: 1.2fr .9fr .9fr; }
+    .ct-row div, .compare .ct-head div { padding: 12px 12px; font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal, .reveal.in { opacity: 1; transform: none; animation: none; }
+    .marquee-track { animation: none; }
+    * { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== NAV ===== -->
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><span class="glyph">P</span>Polyglot Forms</a>
+    <nav class="nav-links">
+      <a href="#barrier">The barrier</a>
+      <a href="#how">How it works</a>
+      <a href="#leverage">The leverage</a>
+      <a href="#market">Market</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-primary" href="#cta">Request a demo <span class="arrow">→</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow">Conversational form completion</span>
+      <h1>Fill out the form by <em>speaking</em>—in your own language.</h1>
+      <p class="lede">Polyglot Forms turns complex government, medical, and legal forms into a guided conversation in 18+ languages, then produces a validated, ready-to-file PDF. People start immediately—no interpreter required to begin.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#cta">Request a demo <span class="arrow">→</span></a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+      <div class="hero-meta">
+        <span><span class="dot"></span>HIPAA-compliant by design</span>
+        <span><span class="dot"></span>Stateless · zero PHI stored</span>
+        <span><span class="dot"></span>Voice + keyboard</span>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <div class="convo" id="convo">
+        <div class="scripts" id="scripts"></div>
+        <div class="convo-top">
+          <div class="convo-doc"><span class="ficon"></span>USCIS Form I-589</div>
+          <div class="lang-pill"><span class="live"></span><span id="langName">Español</span></div>
+        </div>
+        <div class="q-label">Question 7 of 41 · Section B</div>
+        <div class="q-text" id="qText">What is your country of birth?</div>
+        <div class="bubble">
+          <span class="who" id="whoLabel">Applicant · speaking Spanish</span>
+          <span class="said"><span id="saidText"></span><span class="caret"></span></span>
+        </div>
+        <div class="field-out" id="fieldOut">
+          <div>
+            <div class="fl">Country of birth</div>
+            <div class="fv" id="fieldVal">—</div>
+          </div>
+          <div class="check"><svg viewBox="0 0 24 24"><polyline points="4 12 10 18 20 6"></polyline></svg></div>
+        </div>
+        <div class="confirm-note">
+          <svg class="spk" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg>
+          <span id="confirmText">Polyglot reads each answer back aloud before moving on.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== LANGUAGE MARQUEE ===== -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track" id="marquee"></div>
+</div>
+
+<!-- ===== BARRIER ===== -->
+<section class="block" id="barrier">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The problem</span>
+      <h2>Now imagine this is <em>your</em> green-card application.</h2>
+      <p class="sub">Most people have never had to complete a high-stakes legal or medical form in a language they can't read. For 1 in 12 U.S. residents, that's every appointment, every application, every deadline.</p>
+    </div>
+
+    <div class="barrier-grid">
+      <div class="form-mock reveal">
+        <span class="stamp">USCIS · I-589</span>
+        <h4>طلب اللجوء وحجب الترحيل</h4>
+        <div class="fm-sub">القسم ب — معلومات عن طلبك</div>
+        <div class="fm-row"><span class="num">5.</span><div class="fm-q">ما هي جنسيتك الحالية؟<div class="fm-line"></div></div></div>
+        <div class="fm-row"><span class="num">6.</span><div class="fm-q">ما هو تاريخ ميلادك؟<div class="fm-line"></div></div></div>
+        <div class="fm-row hot"><span class="num">7.</span><div class="fm-q">اشرح بالتفصيل سبب خوفك من العودة إلى بلدك.<div class="fm-line"></div><div class="fm-line" style="margin-top:8px"></div></div></div>
+        <div class="fm-row"><span class="num">8.</span><div class="fm-q">هل سبق أن تقدمت بطلب لجوء من قبل؟<div class="fm-line"></div></div></div>
+        <div class="fm-tag">Fill in question 7.</div>
+      </div>
+
+      <div class="barrier-copy reveal">
+        <p class="big">For our users this isn't a quiz. It's their <em>green card</em>, their <em>asylum claim</em>, their child's medical history.</p>
+        <p class="note">A wrong box can mean a denial, a delay, or a deportation. Today the only bridge is a human interpreter—scarce, expensive, and booked weeks out. So people wait, reschedule, and too often give up.</p>
+      </div>
+    </div>
+
+    <div class="stat-band">
+      <div class="stat reveal">
+        <div class="num">25.7<span class="u">M</span></div>
+        <div class="lbl">people in the U.S. have limited English proficiency—about 1 in 12 residents age 5+.</div>
+        <div class="src">MPI / KFF · 2021 ACS</div>
+      </div>
+      <div class="stat reveal">
+        <div class="num">1 in 5</div>
+        <div class="lbl">U.S. residents speak a language other than English at home—a population growing every year.</div>
+        <div class="src">U.S. Census</div>
+      </div>
+      <div class="stat reveal">
+        <div class="num">$75<span class="u">B+</span></div>
+        <div class="lbl">global language-services market in 2024, projected to ~$111–132B by 2033.</div>
+        <div class="src">IMARC · Research &amp; Markets</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SHORTAGE ===== -->
+<section class="block shortage">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Why it stays broken</span>
+      <h2>There aren't enough humans to translate the world's forms.</h2>
+      <p class="sub">The people who bridge the language gap are scarce, expensive, and growing slower than the population that needs them.</p>
+    </div>
+
+    <div class="short-grid">
+      <div class="reveal">
+        <div class="cost-list">
+          <div class="cost-row"><div class="ck">Interpreters &amp; translators in the entire U.S.<small>Roughly one for every ~340 people with limited English (BLS, 2024)</small></div><div class="cv">75,300</div></div>
+          <div class="cost-row"><div class="ck">In-person interpreting<small>Typically a 1–2 hour minimum</small></div><div class="cv">$45–150/hr</div></div>
+          <div class="cost-row"><div class="ck">Certified medical interpreters<small>Often a 3-hour minimum</small></div><div class="cv">$100–140/hr</div></div>
+          <div class="cost-row"><div class="ck">Phone &amp; video interpreting<small>Per-minute, with connection waits</small></div><div class="cv">$1.50–4.00/min</div></div>
+          <div class="cost-row"><div class="ck">Workforce growth<small>~6,900 openings/yr—nowhere near enough</small></div><div class="cv">~2%/decade</div></div>
+        </div>
+      </div>
+
+      <div class="wait-card reveal">
+        <div class="wk">The real cost is the wait</div>
+        <div class="wv">A client often can't <em>start</em> a form until an interpreter is free—which can mean <em>days or weeks</em>.</div>
+        <div class="wd">Appointments get rescheduled. Care and legal work are delayed. Without proper interpretation, people face misdiagnoses, medication errors, and denied or delayed services. The shortage isn't a staffing line item—it's a barrier to care, status, and safety.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section class="block" id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The product</span>
+      <h2>Polyglot turns form-filling into a <em>conversation</em>.</h2>
+      <p class="sub">A person speaks naturally in their own language. Polyglot explains each question, captures the answer, confirms it aloud, and assembles a clean, schema-compliant PDF—accurate enough to file.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal"><div class="si">01</div><h4>Explains</h4><p>Reads each question in plain language—translating terminology the form takes for granted.</p></div>
+      <div class="step reveal"><div class="si">02</div><h4>Listens</h4><p>Accepts natural speech or typing in 18+ languages, in any order, at the user's pace.</p></div>
+      <div class="step reveal"><div class="si">03</div><h4>Confirms</h4><p>Reads every answer back aloud for verbal confirmation before moving to the next field.</p></div>
+      <div class="step reveal"><div class="si">04</div><h4>Validates</h4><p>Detects missing or illogical answers and asks again—so submissions are complete.</p></div>
+      <div class="step reveal"><div class="si">05</div><h4>Outputs</h4><p>Generates a finished, schema-compliant PDF with embedded metadata to resume later.</p></div>
+    </div>
+
+    <div class="trust-row reveal">
+      <span class="trust-chip"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6z"></path></svg>HIPAA-compliant by design</span>
+      <span class="trust-chip"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>Stateless · zero PHI storage</span>
+      <span class="trust-chip"><svg viewBox="0 0 24 24"><path d="M12 1v22M5 8h14M5 16h14"></path></svg>Voice + keyboard, interchangeable</span>
+      <span class="trust-chip"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H4z"></path><path d="M8 20h8"></path></svg>Runs on an 8-inch tablet</span>
+      <span class="trust-chip"><svg viewBox="0 0 24 24"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9"></path><path d="M3 15h18l-2 4H5z"></path></svg>Resume from your own PDF</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== LEVERAGE ===== -->
+<section class="block leverage" id="leverage">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow on-dark">The leverage</span>
+    </div>
+    <div class="lev-grid">
+      <div>
+        <p class="lev-quote reveal">We don't have to produce 250,000 new interpreters. We make the <em>75,000 we have</em> go 4–5× further.</p>
+        <div class="lev-metrics">
+          <div class="lev-metric reveal"><div class="lm-num">78<span class="u">%</span></div><div class="lm-lbl">less human interpreter time per client</div></div>
+          <div class="lev-metric reveal"><div class="lm-num">~$117</div><div class="lm-lbl">saved in interpreter cost per client</div></div>
+          <div class="lev-metric reveal"><div class="lm-num">4–5<span class="u">×</span></div><div class="lm-lbl">more clients served by the same interpreter</div></div>
+          <div class="lev-metric reveal"><div class="lm-num">0<span class="u">→now</span></div><div class="lm-lbl">wait to start—immediate, in their own language</div></div>
+        </div>
+      </div>
+
+      <div class="reveal">
+        <div class="compare">
+          <div class="ct-head">
+            <div>Per client</div>
+            <div class="h-now">Today · 1:1</div>
+            <div class="h-poly">With Polyglot</div>
+          </div>
+          <div class="ct-row"><div class="ct-k">Interpreter time</div><div class="ct-now">90 min</div><div class="ct-poly">~20 min</div></div>
+          <div class="ct-row"><div class="ct-k">Interpreter cost</div><div class="ct-now">~$150</div><div class="ct-poly">~$33</div></div>
+          <div class="ct-row"><div class="ct-k">Clients / interpreter-day</div><div class="ct-now">~4</div><div class="ct-poly">~18</div></div>
+          <div class="ct-row"><div class="ct-k">Wait to start</div><div class="ct-now">days–weeks</div><div class="ct-poly">immediate</div></div>
+        </div>
+        <div class="illus">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+          Illustrative model—every figure to be replaced with real pilot data.
+        </div>
+      </div>
+    </div>
+    <p class="lev-quote reveal" style="margin-top:54px; max-width:34ch; color:#C7D2CC; font-size:clamp(20px,2.2vw,28px)">Polyglot is the <em>first line of service</em>—not a replacement for interpreters, but the reason each scarce one can help far more people.</p>
+  </div>
+</section>
+
+<!-- ===== USE CASES ===== -->
+<section class="block" id="use">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Where it works</span>
+      <h2>One platform, every high-stakes form.</h2>
+      <p class="sub">Polyglot is built for the moments where a misunderstood question carries real consequences—and where multilingual demand already outpaces staff.</p>
+    </div>
+
+    <div class="use-grid">
+      <div class="use-card reveal">
+        <div class="uc-icon"><svg viewBox="0 0 24 24"><path d="M12 2 3 6v6c0 5 4 8 9 10 5-2 9-5 9-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></div>
+        <h4>Immigration &amp; asylum</h4>
+        <p>Complex federal forms with legal terminology, completed by voice and reviewed by an advocate before filing.</p>
+        <div class="forms"><span>USCIS I-90</span><span>I-589</span><span>I-485</span><span>N-400</span></div>
+      </div>
+      <div class="use-card reveal">
+        <div class="uc-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path><circle cx="12" cy="12" r="9"></circle></svg></div>
+        <h4>Healthcare intake</h4>
+        <p>Patient registration, medical history, and consent collected accurately in the patient's language—no interpreter to begin.</p>
+        <div class="forms"><span>Patient intake</span><span>Medical history</span><span>Consent</span></div>
+      </div>
+      <div class="use-card reveal">
+        <div class="uc-icon"><svg viewBox="0 0 24 24"><path d="M3 21h18"></path><path d="M5 21V8l7-5 7 5v13"></path><path d="M10 21v-6h4v6"></path></svg></div>
+        <h4>Government benefits</h4>
+        <p>High-volume public-sector enrollment where completion and accuracy directly affect access to support.</p>
+        <div class="forms"><span>SNAP</span><span>WIC</span><span>Medicaid</span><span>Housing</span></div>
+      </div>
+      <div class="use-card reveal">
+        <div class="uc-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"></path></svg></div>
+        <h4>Legal aid intake</h4>
+        <p>Nonprofit and legal-aid organizations capture client information faster, freeing staff for casework that needs them.</p>
+        <div class="forms"><span>Client intake</span><span>Eligibility</span><span>Declarations</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== MARKET ===== -->
+<section class="block market" id="market">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The opportunity</span>
+      <h2>A universal, high-cost problem—and a market measured in tens of billions.</h2>
+      <p class="sub">The language-services market is the floor under us. The category we're building—conversational intake and multilingual workflow automation—sits on top of it.</p>
+    </div>
+
+    <div class="tam-grid">
+      <div class="tam reveal">
+        <div class="tk">TAM · blended</div>
+        <div class="tn">$10–20<span class="u">B+</span></div>
+        <div class="td">Addressable across language services, conversational AI, GovTech, and healthcare administrative tech.</div>
+      </div>
+      <div class="tam feature reveal">
+        <div class="tk">SAM · serviceable</div>
+        <div class="tn">$1<span class="u">B+</span></div>
+        <div class="td">U.S. government intake, healthcare enrollment, immigration, legal aid, and accessibility-driven workflows.</div>
+      </div>
+      <div class="tam reveal">
+        <div class="tk">SOM · 5-year</div>
+        <div class="tn">$25–100<span class="u">M</span></div>
+        <div class="td">200–500 enterprise &amp; public-sector customers at $50K–$250K ACV. 75%+ gross margin target.</div>
+      </div>
+    </div>
+    <p class="market-foot">Sources: IMARC Group; Research &amp; Markets; internal category estimates. Blended TAM is an estimate to be refined with bottoms-up modeling.</p>
+  </div>
+</section>
+
+<!-- ===== WHY NOW ===== -->
+<section class="block" id="why">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Why now</span>
+      <h2>Five shifts just converged.</h2>
+      <p class="sub">Voice AI has only now reached production readiness for regulated, high-stakes workflows—and the live demo proves it.</p>
+    </div>
+    <div class="why-grid">
+      <div class="why reveal"><div class="wn">01</div><h4>Foundation models</h4><p>Modern LLMs can explain forms conversationally, not just answer trivia.</p></div>
+      <div class="why reveal"><div class="wn">02</div><h4>Real-time speech</h4><p>Latency now supports natural, interruptible conversation by voice.</p></div>
+      <div class="why reveal"><div class="wn">03</div><h4>Translation quality</h4><p>Multilingual performance has improved dramatically across high-value languages.</p></div>
+      <div class="why reveal"><div class="wn">04</div><h4>Compliance pressure</h4><p>ADA, Section 508, Title VI, and the European Accessibility Act keep expanding.</p></div>
+      <div class="why reveal"><div class="wn">05</div><h4>Interpreter &amp; access-staff shortages</h4><p>Too few interpreters, translators, and accessibility specialists for the demand—organizations need automation that preserves service quality, not replaces it.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CTA ===== -->
+<section class="cta" id="cta">
+  <div class="wrap cta-inner">
+    <span class="eyebrow on-dark" style="color:rgba(255,255,255,.85); justify-content:center; display:inline-flex">Partner with Polyglot Forms</span>
+    <h2 class="reveal">Give 26 million people a way to start—right now.</h2>
+    <p class="csub reveal">Polyglot is invite-only while we run controlled, high-stakes deployments. Tell us about your work and we'll set you up with an access account and a guided walkthrough.</p>
+
+    <form class="demo-form reveal" id="demoForm" novalidate>
+      <div class="df-grid">
+        <label>Name<input name="name" type="text" autocomplete="name" required /></label>
+        <label>Work email<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Organization<input name="org" type="text" autocomplete="organization" /></label>
+        <label>Role<input name="role" type="text" /></label>
+      </div>
+      <label class="full">What would you like to see?<textarea name="message" rows="3" placeholder="Tell us about the forms, languages, or population you serve."></textarea></label>
+      <button class="btn btn-primary" type="submit">Request a demo <span class="arrow">→</span></button>
+      <p class="df-note">We respond within two business days and set up your access account. No marketing—just access.</p>
+    </form>
+
+    <div class="df-success" id="dfSuccess" hidden>
+      <h4>Thanks—your request is on its way.</h4>
+      <p>Your email app should open with the details pre-filled. We'll follow up with an access account and a time for your walkthrough.</p>
+    </div>
+
+    <p class="cta-foot">Already have an access account? <a href="https://polyglot-demo-aa709.web.app" target="_blank" rel="noopener">Sign in to the live demo →</a></p>
+  </div>
+</section>
+
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a class="brand" href="#top"><span class="glyph">P</span>Polyglot Forms</a>
+        <p>Conversational form completion. We turn complex forms into guided conversations—so language, literacy, and disability stop standing between people and the services they need.</p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h5>Contact</h5>
+          <a href="mailto:admin@polyglotforms.com">admin@polyglotforms.com</a>
+          <span>HIPAA-compliant · stateless</span>
+          <span>18+ languages</span>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Polyglot Forms. Mission-driven multilingual access.</span>
+      <span class="sources">Figures from MPI, KFF (2021 ACS), U.S. BLS (2024), IMARC Group, and Research &amp; Markets. The per-client leverage model is illustrative and pending pilot data.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // nav shadow on scroll
+  const nav = document.getElementById('nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 12), { passive: true });
+
+  // reveal on scroll — with a guaranteed fallback so content is never stuck hidden
+  const reveals = Array.from(document.querySelectorAll('.reveal'));
+  reveals.forEach((el, i) => { el.style.transitionDelay = ((i % 4) * 70) + 'ms'; });
+
+  const revealInView = () => {
+    const h = innerHeight || document.documentElement.clientHeight;
+    for (let i = reveals.length - 1; i >= 0; i--) {
+      const el = reveals[i];
+      if (el.getBoundingClientRect().top < h * 0.92) {
+        el.classList.add('in');
+        reveals.splice(i, 1);
+      }
+    }
+  };
+
+  // primary path: IntersectionObserver (progressive enhancement)
+  let io = null;
+  if ('IntersectionObserver' in window) {
+    io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+          const idx = reveals.indexOf(e.target);
+          if (idx > -1) reveals.splice(idx, 1);
+        }
+      });
+    }, { threshold: 0.14, rootMargin: '0px 0px -8% 0px' });
+    reveals.slice().forEach(el => io.observe(el));
+  }
+
+  // fallback path: scroll/resize + initial pass (covers environments where IO never fires)
+  addEventListener('scroll', revealInView, { passive: true });
+  addEventListener('resize', revealInView, { passive: true });
+  revealInView();
+  // safety net: if anything is still hidden shortly after load, show it outright
+  setTimeout(() => { document.querySelectorAll('.reveal:not(.in)').forEach(el => el.classList.add('in')); }, 1200);
+
+  // ---- language marquee ----
+  const langs = [
+    ['Español', 'Hola'], ['日本語', 'こんにちは'], ['العربية', 'مرحبا'], ['Tiếng Việt', 'Xin chào'],
+    ['中文', '你好'], ['한국어', '안녕하세요'], ['Русский', 'Здравствуйте'], ['Português', 'Olá'],
+    ['Tagalog', 'Kamusta'], ['हिन्दी', 'नमस्ते'], ['Kreyòl', 'Bonjou'], ['Français', 'Bonjour'],
+    ['Soomaali', 'Salaan'], ['ภาษาไทย', 'สวัสดี'], ['فارسی', 'سلام'], ['Українська', 'Вітаю'],
+    ['Polski', 'Cześć'], ['বাংলা', 'নমস্কার']
+  ];
+  const mq = document.getElementById('marquee');
+  const build = () => langs.map(([name, hi]) =>
+    `<span class="mq-item"><span class="native">${hi}</span>${name}<span class="sep">/</span></span>`).join('');
+  mq.innerHTML = build() + build();
+
+  // ---- hero conversation cycle ----
+  const scenes = [
+    { lang: 'Español', who: 'speaking Spanish', q: 'What is your country of birth?', said: 'Nací en Guatemala, en la ciudad de Quetzaltenango.', val: 'Guatemala' },
+    { lang: '日本語', who: 'speaking Japanese', q: 'What is your date of birth?', said: '1991年の3月14日に生まれました。', val: 'March 14, 1991' },
+    { lang: 'العربية', who: 'speaking Arabic', q: 'What is your current nationality?', said: 'جنسيتي سورية، من مدينة حلب.', val: 'Syrian' },
+    { lang: 'Tiếng Việt', who: 'speaking Vietnamese', q: 'What is your preferred language?', said: 'Tôi nói tiếng Việt và một ít tiếng Anh.', val: 'Vietnamese' }
+  ];
+  const elLang = document.getElementById('langName');
+  const elQ = document.getElementById('qText');
+  const elWho = document.getElementById('whoLabel');
+  const elSaid = document.getElementById('saidText');
+  const elVal = document.getElementById('fieldVal');
+  const elField = document.getElementById('fieldOut');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let si = 0;
+  function typeText(text, done) {
+    elSaid.textContent = '';
+    if (reduce) { elSaid.textContent = text; done(); return; }
+    let i = 0;
+    const iv = setInterval(() => {
+      elSaid.textContent = text.slice(0, ++i);
+      if (i >= text.length) { clearInterval(iv); setTimeout(done, 650); }
+    }, 34);
+  }
+  function playScene() {
+    const s = scenes[si];
+    elLang.textContent = s.lang;
+    elQ.textContent = s.q;
+    elWho.textContent = 'Applicant · ' + s.who;
+    elVal.textContent = '—';
+    elField.classList.remove('filled');
+    typeText(s.said, () => {
+      elVal.textContent = s.val;
+      elField.classList.add('filled');
+      setTimeout(() => { si = (si + 1) % scenes.length; playScene(); }, reduce ? 2600 : 2200);
+    });
+  }
+  playScene();
+
+  // floating script chips near hero card
+  const chipData = [
+    { t: 'Español', x: '-8%', y: '12%', d: 200 },
+    { t: '日本語', x: '88%', y: '6%', d: 420 },
+    { t: 'العربية', x: '90%', y: '64%', d: 640 },
+    { t: 'Tiếng Việt', x: '-12%', y: '78%', d: 860 }
+  ];
+  const sc = document.getElementById('scripts');
+  if (!reduce && innerWidth > 920) {
+    chipData.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'chip';
+      el.textContent = c.t;
+      el.style.left = c.x; el.style.top = c.y; el.style.animationDelay = c.d + 'ms';
+      sc.appendChild(el);
+    });
+  }
+
+  // ---- demo request form -> compose email ----
+  const demoForm = document.getElementById('demoForm');
+  if (demoForm) {
+    demoForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = demoForm;
+      const name = f.name.value.trim();
+      const email = f.email.value.trim();
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      let bad = false;
+      [['name', !!name], ['email', emailOk]].forEach(([k, ok]) => {
+        f[k].classList.toggle('invalid', !ok);
+        if (!ok) bad = true;
+      });
+      if (bad) { f[!name ? 'name' : 'email'].focus(); return; }
+
+      const org = f.org.value.trim();
+      const role = f.role.value.trim();
+      const msg = f.message.value.trim();
+      const subject = 'Demo request — ' + (org || name);
+      const body =
+        'Name: ' + name + '\n' +
+        'Work email: ' + email + '\n' +
+        'Organization: ' + (org || '—') + '\n' +
+        'Role: ' + (role || '—') + '\n\n' +
+        (msg || '(No additional detail provided.)');
+      window.location.href = 'mailto:admin@polyglotforms.com?subject=' +
+        encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+
+      demoForm.hidden = true;
+      const ok = document.getElementById('dfSuccess');
+      ok.hidden = false;
+      ok.classList.add('reveal', 'in');
+    });
+    ['name', 'email'].forEach(k => demoForm[k].addEventListener('input', () => demoForm[k].classList.remove('invalid')));
+  }
+</script>
+</body>
+</html>
