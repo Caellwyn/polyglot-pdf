@@ -1,4 +1,10 @@
-# Research plan: the "secretary" agent (principal/assistant SI reduction)
+# Research plan: principal/secretary architecture (SI reduction via task delegation)
+
+> Two halves of ONE system: a thin **principal** (the live voice model) fed the
+> current question via **Dynamic Turn Injection**, and a cheap **secretary**
+> (flash-lite) that holds the form catalog + values and answers the principal's
+> prose memory/navigation queries. The big win is a TINY principal SI; the
+> secretary is what makes a tiny principal still able to navigate.
 
 *2026-06-16. Epic polyglot-pdf-jnjj (SI reduction via task delegation; epic plan:
 `~/.claude/plans/stateless-tinkering-zebra.md`). Written for the product owner.
@@ -33,8 +39,53 @@ expensive per-turn context: the catalog lives with the cheap model instead.
 The principal/secretary split is the general form of the same lever the
 section-reset flow already pulls (cap the principal's context to less than the
 whole form). JIT/manifest was one compromise point on that spectrum
-(section-sized context); the secretary pushes toward the per-question end while
-keeping navigation.
+(section-sized context); this architecture pushes to the per-question end while
+keeping navigation (via the secretary).
+
+## The principal: Dynamic Turn Injection (replaces the JIT schema-drip)
+
+The principal's SI is **tiny and static** (~behavioral rules only, target <=200
+tokens): "you are a voice intake assistant; fill one field at a time; the backend
+injects the current field's guidance before each turn; for anything about past
+answers or other fields, call `ask_secretary`." It carries NO form catalog and NO
+field schemas.
+
+The current field's guidance (spoken_name, help.instructions, format_hint,
+options, validation hints) is supplied as a **`client_content` text turn**, NOT in
+the SI and NOT via a tool-response schema drip. The backend injects the active
+field's guidance before the user answers it; when the field is done, it injects
+the next field's guidance. This is the same mechanism the cost harness already
+exercises at SECTION granularity (`switch_to_section` + activity brackets) -- just
+finer-grained, per field.
+
+**Why this REPLACES the JIT schema-drip (bd jnjj.22).** The Live API WebSocket
+cannot change the SI mid-session, and the old JIT plan tried to drip field
+schemas through tool responses -- which is the mechanism that is broken (the
+backend only ever holds one field's schema; bd jnjj.22). Dynamic Turn Injection
+sidesteps it entirely: guidance arrives as conversation turns, so there is no
+schema-drip to fix. jnjj.22 is therefore reframed from "fix the drip" to "replace
+the schema-drip with per-question injection."
+
+**Anti-accumulation (a sub-decision, NOT the main win).** Injected guidance must
+not pile up across questions. Options, in priority order of importance (all
+second-order to "shrink the SI"):
+- **Calibrated-eviction (the candidate):** size the context-compression window to
+  ~the static SI, so each turn's injected guidance is deterministically evicted
+  after its turn and the backend re-injects the NEXT field's guidance fresh. This
+  turns eviction from "hope it fires" into a mechanism. Builds directly on the l3a
+  finding: compression was useless ONLY because the SI was huge and unevictable;
+  with a tiny SI and the guidance in evictable `client_content`, compression
+  finally has the right target. (UNVERIFIED on 2.5 native-audio -- a measured
+  gate, see Gate 1.5.)
+- **Per-turn re-injection:** inject the current field's guidance EVERY turn (so the
+  window only ever needs to hold one field's worth) -- robust but chattier.
+- **Session-reset / explicit "disregard prior guidance" prompt:** fallbacks if
+  calibrated eviction does not behave.
+
+These anti-accumulation choices are explicitly **small fish.** The BIG win is the
+tiny principal SI + offloading catalog/value awareness to the secretary; how we
+prevent accumulation (compression vs. reset vs. per-turn re-inject) is a
+second-order calibration we pick by measurement.
 
 ## What we've settled (design decisions, 2026-06-16)
 
@@ -121,44 +172,63 @@ live API): explicit-cache token MINIMUM (does our ~2.7-5.9k-token catalog clear
 it?), explicit storage cost vs. implicit discount at flash-lite pricing, and
 cache-creation latency. Then measures cached-query latency.
 
-### Gate 3 -- COST: does delegating to the secretary actually save money?
+### Gate 1.5 -- PRINCIPAL VIABILITY: does Dynamic Turn Injection hold together?
 
-Only if Gates 1-2 pass. **Measure** the full-session cost of the
-principal/secretary system vs. today's section-reset baseline (re-measured on the
-I-90, bd jnjj.25): the thin principal SI should shrink the 95% text-in bill
-dramatically, net of the (cheap, possibly-cached) secretary calls. KILL if the
-net is not a clear win over section-reset.
+Runs alongside the secretary gates (it is the principal half). Two UNVERIFIED
+claims must be measured on the real I-90 before the architecture is trusted (we
+have been wrong about 2.5 native-audio behavior before -- treat as hypotheses):
+1. **Calibrated eviction works.** With a tiny static SI and per-question guidance
+   in `client_content`, does sizing the compression window to ~the SI actually
+   evict old guidance turn-over-turn WITHOUT degrading fill behavior (the model
+   doesn't lose the CURRENT field's guidance, and doesn't bleed the PREVIOUS
+   field's)? Builds on l3a (compression was useless only because the SI was huge);
+   this is the "now there's something evictable" re-test.
+2. **Per-turn injection cost is what we expect.** Injecting ~150-200 tokens of
+   guidance per turn (vs. carrying the form catalog) should be a large net
+   reduction; measure it, don't assume.
+KILL/adjust the anti-accumulation mechanism (calibrated eviction -> per-turn
+re-inject -> session reset) based on what behaves.
+
+### Gate 3 -- COST: does the principal/secretary architecture save money?
+
+Only if the prior gates pass. **Measure** the full-session cost of the
+injection-principal + secretary system vs. today's section-reset baseline
+(re-measured on the I-90): the tiny principal SI should shrink the 95% text-in
+bill dramatically, net of the (cheap, possibly-cached) secretary calls + the
+per-turn guidance injection. KILL if the net is not a clear win over section-reset.
 
 ## Relationship to the rest of epic jnjj
 
-- **The JIT/manifest cost question is NOT settled.** The merged G2 (bd jnjj.6)
-  NO-GO is **invalidated** (wrong schema, starved payload, blocking drip bug) --
-  it means "JIT-as-built is broken," NOT "JIT isn't worth it." A valid go/no-go
-  is bd jnjj.25 (G2-REDO), gated on jnjj.22 + jnjj.23 + jnjj.24.
-- **The secretary and JIT are points on the same spectrum** (how much of the form
-  the principal carries: whole-form -> section -> current-question-only). G2-REDO
-  measures the section/JIT end; this plan researches the current-question +
-  secretary-navigation end. They inform each other; neither presupposes the other.
+- **The JIT schema-drip is being REPLACED, not repaired.** The merged G2 (bd
+  jnjj.6) NO-GO measured the JIT-manifest mechanism, which is now superseded by
+  Dynamic Turn Injection. jnjj.6's NO-GO stands only as "JIT-as-built is broken";
+  it does not bear on this architecture. **G2-REDO (jnjj.25) is repurposed** from
+  "measure JIT-as-built on the I-90" to "measure the injection+secretary
+  architecture vs. the section-reset baseline" (Gate 3 above) -- the baseline
+  comparison survives; the thing compared is what we will actually ship.
+- **The spectrum:** how much of the form the principal carries (whole-form ->
+  section -> current-question-only). Section-reset is today's baseline;
+  injection+secretary is the current-question end. This plan pursues that end
+  directly rather than the section/JIT middle.
 - **Shared infra with the B pillar:** the secretary reuses the cheap-model adapter
   and client-state payload the validator (bd jnjj.14, `TextAIGemini`) establishes,
   but is a distinct agent.
 
-## Prerequisite beads (must land before secretary measurement)
+## Prerequisite beads
 
-- **jnjj.22** -- fix the JIT next-field drip (so any per-question context delivery
-  works).
-- **jnjj.23** -- fix the voice-model SI to carry `help.instructions`/`help.*` (the
-  principal's current-question context must be production-faithful; today it is
-  silently dropped on real forms).
+- **jnjj.22** -- REFRAMED from "fix the JIT next-field drip" to "replace the
+  schema-drip with per-question Dynamic Turn Injection" (the drip mechanism is
+  deleted, not fixed; see the principal section above).
+- **jnjj.23** -- fix the voice-model SI to carry `help.instructions`/`help.*`.
+  This is the CONTENT injected per question (the principal's current-field
+  guidance); today it is silently dropped on real forms.
 - **jnjj.24** -- port the cost/measurement harness to the real I-90 schema (shared
-  by G2-REDO and the secretary recall/latency tests).
+  by every gate here).
 
-## Open question for the owner
+## Sequencing
 
-The secretary research and G2-REDO both depend on the same three prerequisite
-fixes. Sequencing options once those land: (a) run G2-REDO first (does the
-section/JIT approach become viable on the real I-90 with correct context?), then
-research the secretary only if JIT still disappoints; or (b) research the
-secretary in parallel, since it is a different architecture that may win
-regardless of the JIT verdict. To be decided when the prerequisites are closer to
-done.
+The prerequisites (jnjj.22 reframed, jnjj.23, jnjj.24) gate the measurement gates.
+G2-REDO is repurposed as the Gate-3 injection-vs-baseline comparison (no separate
+"is JIT-as-built viable" run -- that mechanism is being replaced). Open: whether
+to build the principal (injection) and secretary in lockstep or stagger them; to
+decide once the prerequisites are closer to done.
