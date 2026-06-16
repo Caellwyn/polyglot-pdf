@@ -129,9 +129,11 @@ async function renderLoadedViewerWithPage() {
 }
 
 // Define a non-zero clientWidth/clientHeight on the live `.overflow-auto` scroll
-// container so handleFitWidth/handleFitPage read real dimensions instead of jsdom's
-// default 0 (which makes them early-return). The handlers query the node fresh on
-// each click, so defining the property on the node itself is sufficient.
+// container so handleFitWidth/handleFitPage compute an IN-RANGE / upper-clamp scale
+// instead of the negative-then-lower-clamped 0.5 they produce at jsdom's default 0
+// (the handlers do NOT early-return on a 0 clientWidth -- only on empty
+// pageDimensions). The handlers query the node fresh on each click, so defining the
+// property on the node itself is sufficient.
 function stubScrollContainerSize(
   container: HTMLElement,
   width: number,
@@ -204,27 +206,41 @@ describe('Phase 5: Zoom Presets', () => {
       });
     });
 
-    it('manual zoom changes the displayed scale and presets click in cleanly alongside it', async () => {
-      await renderLoadedViewer();
+    it('manual zoom and a Fit Width preset both change the scale, interleaved', async () => {
+      // Use the page-ready helper + a stubbed container size so the preset actually
+      // RUNS the fit math (not the pageDimensions-empty early return) and we can
+      // assert the readout CHANGES to the fitted value -- a bare not.toThrow() would
+      // pass even if Fit Width lost its onClick (Codex review).
+      const { container } = await renderLoadedViewerWithPage();
 
-      // Manual zoom IS observable: the displayed percentage changes.
+      // Manual zoom is observable: 100% -> 125%.
       expect(screen.getByText('100%')).toBeInTheDocument();
       fireEvent.click(screen.getByTitle('Zoom in'));
       expect(screen.getByText('125%')).toBeInTheDocument();
 
-      // A preset click in the middle of manual zoom must not throw.
-      expect(() => fireEvent.click(screen.getByTitle('Fit to width'))).not.toThrow();
+      // A Fit Width preset mid-zoom OVERRIDES the manual scale with the fitted value:
+      // clientWidth 1000 -> (1000 - 64) / 612 = 1.52941... -> "153%".
+      stubScrollContainerSize(container, 1000, 800);
+      fireEvent.click(screen.getByTitle('Fit to width'));
+      await waitFor(() => {
+        expect(screen.getByText('153%')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('125%')).not.toBeInTheDocument();
 
-      // Manual zoom still works afterwards.
+      // Manual zoom still works AFTER the preset: 153% -> zoom out one step (0.25).
+      // 1.52941 - 0.25 = 1.27941 -> round(127.94) = "128%".
       fireEvent.click(screen.getByTitle('Zoom out'));
-      expect(screen.getByTitle('Zoom in')).toBeInTheDocument();
-      expect(screen.getByTitle('Zoom out')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('128%')).toBeInTheDocument();
+      });
     });
   });
 
   // These tests stub the scroll container's clientWidth/clientHeight to non-zero
-  // values so the fit MATH actually runs (it early-returns at 0), then assert the
-  // EXACT percentage the readout shows. The page is letter size: getViewport at
+  // values so the fit math produces an IN-RANGE / upper-clamp scale (at the jsdom
+  // default of 0 it would instead clamp to the 0.5 lower bound -- see the no-stub
+  // tests above; the handlers never early-return on a 0 clientWidth), then assert
+  // the EXACT percentage the readout shows. The page is letter size: getViewport at
   // scale 1.0 returns width 612, height 792 (mockSinglePagePdf), so the fit math's
   // pageWidth = 612, pageHeight = 792. Padding subtracted is 64 (p-8 = 32px * 2).
   describe('Fit math (clientWidth/clientHeight stubbed)', () => {
