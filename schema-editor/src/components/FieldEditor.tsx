@@ -55,6 +55,16 @@ function operatorOptionsFor(current: ConditionalOperator): ConditionalOperator[]
     : [...CONDITIONAL_OPERATORS, current];
 }
 
+// `in`/`not_in` take an ARRAY value. The editors here only have a scalar (text)
+// value input, so a rule using these operators is shown READ-ONLY: editing the
+// operator or value through a scalar control would silently flatten the array to
+// a string and break the runtime membership check. Authoring these is gated on a
+// real list-value editor (bd polyglot-pdf-jplx).
+const ARRAY_VALUED_OPERATORS: ConditionalOperator[] = ['in', 'not_in'];
+function isArrayValuedOperator(op: ConditionalOperator): boolean {
+  return ARRAY_VALUED_OPERATORS.includes(op);
+}
+
 // The action kinds a controls_fields entry can apply to its target fields.
 // `key` matches the ConditionalControl array property; mirrors backend
 // ConditionalControl (backend/models/form_models.py).
@@ -346,11 +356,20 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 </button>
               </div>
 
+              {isArrayValuedOperator(field.show_if.operator) && (
+                <p className="text-xs text-amber-600">
+                  This condition uses the "{field.show_if.operator.replace(/_/g, ' ')}"
+                  operator (a list value) and is read-only here until a list-value
+                  editor exists. Remove and re-add it to change it.
+                </p>
+              )}
+
               <div>
                 <label className="label">Trigger Field</label>
                 <select
                   className="input"
                   value={field.show_if.field}
+                  disabled={isArrayValuedOperator(field.show_if.operator)}
                   onChange={(e) =>
                     updateField({
                       show_if: { ...field.show_if!, field: e.target.value },
@@ -371,6 +390,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 <select
                   className="input"
                   value={field.show_if.operator}
+                  disabled={isArrayValuedOperator(field.show_if.operator)}
                   onChange={(e) =>
                     updateField({
                       show_if: { ...field.show_if!, operator: e.target.value as any },
@@ -390,7 +410,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 <input
                   type="text"
                   className="input"
-                  value={field.show_if.value || ''}
+                  value={
+                    Array.isArray(field.show_if.value)
+                      ? field.show_if.value.join(', ')
+                      : field.show_if.value ?? ''
+                  }
+                  disabled={isArrayValuedOperator(field.show_if.operator)}
                   onChange={(e) =>
                     updateField({
                       show_if: { ...field.show_if!, value: e.target.value },
@@ -443,12 +468,28 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     </button>
                   </div>
 
+                  {(() => {
+                    // A rule using an array-valued operator (in/not_in) is shown
+                    // read-only: the scalar editors here can't safely edit it
+                    // without flattening the array (bd jplx for a real editor).
+                    const locked = isArrayValuedOperator(control.operator);
+                    return (
+                  <>
+                  {locked && (
+                    <p className="text-xs text-amber-600">
+                      This rule uses the "{control.operator.replace(/_/g, ' ')}"
+                      operator (a list value) and is read-only here until a
+                      list-value editor exists. Remove and re-add the control to
+                      change it.
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="label">Operator</label>
                       <select
                         className="input"
                         value={control.operator}
+                        disabled={locked}
                         onChange={(e) =>
                           updateControlAt(idx, {
                             operator: e.target.value as ConditionalOperator,
@@ -468,8 +509,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         type="text"
                         className="input"
                         // value can be scalar or (for in/not_in) an array; show
-                        // arrays comma-joined. Authoring writes a string back --
-                        // the array-valued operators are not offered here (bd jplx).
+                        // arrays comma-joined. Array-valued rules are read-only
+                        // (see `locked`) so editing can't flatten the array (bd jplx).
                         value={
                           Array.isArray(control.value)
                             ? control.value.join(', ')
@@ -477,6 +518,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             ? ''
                             : String(control.value)
                         }
+                        disabled={locked}
                         onChange={(e) =>
                           updateControlAt(idx, { value: e.target.value })
                         }
@@ -490,6 +532,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     {CONTROL_ACTIONS.map(action => {
                       const selected =
                         control[action.key] || [];
+                      // Include selected-but-missing ids so a stale target can be
+                      // unchecked in place (it would otherwise never render).
+                      const presentIds = new Set(schema.fields.map(f => f.id));
+                      const missingSelected = selected.filter(id => !presentIds.has(id));
                       return (
                         <div key={action.key}>
                           <label className="label">
@@ -512,6 +558,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                     type="checkbox"
                                     className="rounded"
                                     checked={selected.includes(f.id)}
+                                    disabled={locked}
                                     onChange={() =>
                                       toggleControlTarget(idx, action.key, f.id)
                                     }
@@ -521,11 +568,32 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                                   </span>
                                 </label>
                               ))}
+                            {/* Stale (missing) targets: shown so they can be removed. */}
+                            {missingSelected.map(id => (
+                              <label
+                                key={id}
+                                className="flex items-center gap-2 px-1 text-xs text-red-600 hover:bg-gray-50 rounded cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="rounded"
+                                  checked={true}
+                                  disabled={locked}
+                                  onChange={() =>
+                                    toggleControlTarget(idx, action.key, id)
+                                  }
+                                />
+                                <span className="truncate">{id} (missing)</span>
+                              </label>
+                            ))}
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                  </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

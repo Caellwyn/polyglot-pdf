@@ -56,9 +56,9 @@ than vacuous.
    prune empty keys; `validation.ts` iterates the list; tests cover edit/remove +
    a valid multi-array control passing and a ghost ref failing.
 
-**Verification:** new `FieldEditor.controls.test.tsx` (11 tests); full
-schema-editor suite 179/179; `tsc --noEmit` clean. Backend suite untouched
-(FE-only) and green from prep.
+**Verification:** new `FieldEditor.controls.test.tsx` (13 tests); full
+schema-editor suite 187/187 (post-merge with dev); `tsc --noEmit` clean. Backend
+suite untouched (FE-only) and green from prep.
 
 **Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** both rubric
 criteria scored PASS. Adopted: tightened the `CONTROL_ACTIONS` /
@@ -92,6 +92,29 @@ when it's outside the authoring set, so existing `in`/`not_in` rules display
 faithfully (applied to both the controls and show_if dropdowns); (4) the
 regression test carried a stale comment describing the old incremental-id-set
 behavior -- corrected.
+Round 3 surfaced the cluster that round-2's preserve-for-display fix created: the
+scalar value editor would flatten an `in`/`not_in` rule's array value to a string
+on any edit (same issue in controls + show_if), plus a stale target id could not
+be removed because the picker only rendered ids present in `schema.fields`.
+Resolved at the ROOT (maintainer delegated the call): a rule using an array-valued
+operator (`in`/`not_in`) is now rendered READ-ONLY in both editors
+(operator/value/targets disabled, amber "remove and re-add to change" hint) so no
+scalar edit can corrupt the array; authoring such rules is gated on the future
+list-value editor (`polyglot-pdf-jplx`). Selected-but-missing target ids now
+render as removable red "(missing)" rows so the validation warning is fixable in
+place. Two tests added.
+This PR ran 3 Codex rounds (the 2-round cap plus one maintainer-authorized extra)
+because each round found genuine follow-ons of the prior fix, not re-litigation.
+
+**Merge-conflict resolution:** mid-closeout, `dev` independently shipped a fix for
+the same `y61i` order-dependency (a two-set `fieldIds`/`seenIds` validateSchema
+rewrite + a `ConditionalControl` type). Rebasing replayed per-commit conflicts, so
+I aborted and did a single `git merge origin/dev`, resolving `schema.ts` and
+`validation.ts` once against this branch's final state: took dev's stricter
+`value` type and its `flatMap` validation (functionally equal to mine, better
+commented), kept this branch's `ControlActionKey` + the read-only UI. A scalar
+`<input value>` then needed string coercion for the now-array-typed `value`.
+Mechanical/overlapping resolution, decided inline per the closeout conflict rule.
 
 ## Lessons
 
@@ -124,14 +147,17 @@ behavior -- corrected.
   references across all six action arrays; restructured into two passes (build
   the full field-id set, THEN check references) so forward refs are not flagged.
 - `schema-editor/src/components/FieldEditor.tsx` -- "Controls Fields" editing
-  section + controls list helpers; `operatorOptionsFor` helper excludes
-  `in`/`not_in` from fresh authoring but keeps an existing rule's own operator
-  selectable (applied to controls + show_if dropdowns).
-- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 11 tests
+  section + controls list helpers; `operatorOptionsFor` (excludes `in`/`not_in`
+  from fresh authoring, keeps an existing rule's own operator selectable);
+  `isArrayValuedOperator` -> read-only render for `in`/`not_in` rules (controls +
+  show_if); missing target ids rendered as removable rows; scalar `value`
+  coercion for the now array-or-scalar `value` type.
+- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 13 tests
   (authoring round-trip, target add/remove, empty-key pruning, edit-in-place,
   JSON-serialization-omits-pruned-key, no in/not_in offered for authoring,
-  existing in/not_in rule preserved, validation flags ghost ref / passes valid
-  multi-array control / passes forward refs).
+  existing in/not_in rule preserved + rendered read-only, missing target
+  removable, validation flags ghost ref / passes valid multi-array control /
+  passes forward refs).
 - `docs/journal/entries/2026-06-15-bd-bjwy-controls-fields-ui.md` -- THIS entry.
 
 ## Follow-ups filed

@@ -162,6 +162,45 @@ describe('FieldEditor controls_fields UI', () => {
     expect(optionTexts).toContain('in');
   });
 
+  it('renders an existing in/not_in control read-only (no scalar-edit corruption)', () => {
+    // Codex PR #216 round 3: preserving in/not_in for display must not allow
+    // scalar editing, which would flatten the array value. The operator + value
+    // inputs are disabled until a list-value editor exists (bd jplx).
+    const trigger = {
+      ...TRIGGER,
+      controls_fields: [{ operator: 'in' as const, value: ['A', 'B'], unlocks: ['other_family_name'] }],
+    };
+    const schema = makeSchema([trigger, TARGET_A]);
+    render(<FieldEditor field={trigger} schema={schema} onUpdateField={vi.fn()} />);
+
+    const valueInput = screen.getByDisplayValue('A, B') as HTMLInputElement;
+    expect(valueInput.disabled).toBe(true);
+    const operatorSelect = screen.getByDisplayValue('in') as HTMLSelectElement;
+    expect(operatorSelect.disabled).toBe(true);
+  });
+
+  it('renders a missing control target as a removable row', () => {
+    // Codex PR #216 round 3: a stale target id must be removable in place, else
+    // the validation warning can't be fixed without recreating the control.
+    const trigger = {
+      ...TRIGGER,
+      controls_fields: [{ operator: 'equals' as const, value: 'Yes', unlocks: ['ghost_target'] }],
+    };
+    const schema = makeSchema([trigger, TARGET_A]);
+    const onUpdateField = vi.fn();
+    render(<FieldEditor field={trigger} schema={schema} onUpdateField={onUpdateField} />);
+
+    const missingRow = screen.getByText(/ghost_target \(missing\)/).closest('label') as HTMLElement;
+    const cb = within(missingRow).getByRole('checkbox') as HTMLInputElement;
+    expect(cb.checked).toBe(true);
+    fireEvent.click(cb); // uncheck -> remove the stale target
+    expect(onUpdateField).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        controls_fields: [{ operator: 'equals', value: 'Yes', unlocks: undefined }],
+      })
+    );
+  });
+
   it('a pruned action key serializes out of the exported JSON (undefined, not null)', () => {
     // Backend ConditionalControl actions are Optional[List[str]] = None, so a
     // dropped action must be ABSENT in JSON, not present-as-null. JSON.stringify
