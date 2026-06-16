@@ -50,9 +50,12 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
   });
 
   it('does NOT flag a controls_fields entry that targets fields declared LATER', () => {
+    // controls_fields is an ARRAY of control rules (the real schema shape).
     const schema = schemaWith([
       field('controller', {
-        controls_fields: { when_value: 'yes', shows: ['shown_later'], makes_required: ['required_later'] },
+        controls_fields: [
+          { operator: 'equals', value: 'yes', shows: ['shown_later'], makes_required: ['required_later'] },
+        ],
       }),
       field('shown_later'),
       field('required_later'),
@@ -79,7 +82,9 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
 
   it('STILL flags a controls_fields entry that targets a field that does not exist', () => {
     const schema = schemaWith([
-      field('controller', { controls_fields: { when_value: 'yes', unlocks: ['ghost'] } }),
+      field('controller', {
+        controls_fields: [{ operator: 'equals', value: 'yes', unlocks: ['ghost'] }],
+      }),
       field('other'),
     ]);
 
@@ -89,6 +94,27 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
     expect(warn).toBeDefined();
     expect(warn?.message).toContain('ghost');
     expect(warn?.type).toBe('warning');
+  });
+
+  it('checks references across MULTIPLE control rules + hides/locks/makes_optional', () => {
+    // A field with two control rules; the second targets a ghost via makes_optional.
+    const schema = schemaWith([
+      field('controller', {
+        controls_fields: [
+          { operator: 'equals', value: 'a', shows: ['real_a'] },
+          { operator: 'equals', value: 'b', hides: ['real_b'], makes_optional: ['ghost2'] },
+        ],
+      }),
+      field('real_a'),
+      field('real_b'),
+    ]);
+
+    const errors = validateSchema(schema);
+
+    // real_a / real_b resolve; ghost2 (in the SECOND rule, via makes_optional) is flagged.
+    const ghostWarns = errors.filter(e => e.message.includes('controls_fields references non-existent field'));
+    expect(ghostWarns).toHaveLength(1);
+    expect(ghostWarns[0].message).toContain('ghost2');
   });
 
   it('still detects a genuine duplicate field ID (incremental seen-set preserved)', () => {

@@ -54,7 +54,7 @@ export interface FormField {
   validation?: ValidationRules;
   options?: FieldOption[];
   show_if?: ConditionalDisplay;
-  controls_fields?: ControlsFields;
+  controls_fields?: ConditionalControl[];
   conditional_logic?: any;
   conditional_behavior?: any;
   copy_to?: string[];
@@ -106,11 +106,21 @@ export type ConditionalOperator =
   | 'is_empty'
   | 'is_not_empty';
 
-export interface ControlsFields {
-  when_value: any;
+// A single conditional-control rule. controls_fields is an ARRAY of these on a
+// field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488)
+// and the runtime contract (frontend/src/schema-forms/types/schema.ts
+// ConditionalControl). The previous single-object shape with a `when_value` key
+// did NOT match any real data, so validateSchema's controlled-id reference check
+// silently did nothing on real form kits (Codex review, bd polyglot-pdf-y61i).
+export interface ConditionalControl {
+  operator: ConditionalOperator;
+  value: string | number | boolean | Array<string | number | boolean>;
   shows?: string[];
+  hides?: string[];
   unlocks?: string[];
+  locks?: string[];
   makes_required?: string[];
+  makes_optional?: string[];
 }
 
 export interface PDFPosition {

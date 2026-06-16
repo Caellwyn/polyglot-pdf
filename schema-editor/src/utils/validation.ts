@@ -91,13 +91,21 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       }
     }
 
-    // Check controls_fields references (against the full id set -- forward refs OK)
+    // Check controls_fields references (against the full id set -- forward refs OK).
+    // controls_fields is an ARRAY of control rules; each rule lists controlled ids
+    // across shows/hides/unlocks/locks/makes_required/makes_optional. Iterating the
+    // array is load-bearing: the previous code read `.shows` off the array itself
+    // (undefined), so the check silently did nothing on real form kits (bd
+    // polyglot-pdf-y61i).
     if (field.controls_fields) {
-      const allControlledFields = [
-        ...(field.controls_fields.shows || []),
-        ...(field.controls_fields.unlocks || []),
-        ...(field.controls_fields.makes_required || []),
-      ];
+      const allControlledFields = field.controls_fields.flatMap(control => [
+        ...(control.shows || []),
+        ...(control.hides || []),
+        ...(control.unlocks || []),
+        ...(control.locks || []),
+        ...(control.makes_required || []),
+        ...(control.makes_optional || []),
+      ]);
 
       for (const controlledId of allControlledFields) {
         if (!fieldIds.has(controlledId)) {
