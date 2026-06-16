@@ -4,7 +4,8 @@
 
 Version: 1.0.0  
 Last Updated: November 5, 2025  
-Status: Production Ready - All 5 phases complete (113/113 tests passing)
+Status: Production Ready - All 5 phases complete (see the test suites under
+`src/` for current coverage; run `npm run test:run` for the live count)
 
 ---
 
@@ -1113,7 +1114,10 @@ interface ConditionalControl {
 **Authoring controls_fields.** A field that drives others (a checkbox, a yes/no
 radio) carries a `controls_fields` LIST -- one `ConditionalControl` per distinct
 trigger value. For example, an "Are you filing for someone else?" checkbox whose
-checked state reveals and unlocks the representative-name fields:
+checked state UNLOCKS (makes editable) the representative-name fields -- the real
+I-90 targets are already visible, so this rule only clears their read-only bit. To
+also reveal a hidden target, add it to `shows` (use `hides`/`locks`/
+`makes_required`/`makes_optional` for the inverse actions):
 
 ```json
 "controls_fields": [
@@ -1371,7 +1375,7 @@ export const pdfToScreenCoords = (
 
 **Completion Date:** November 5, 2025  
 **Duration:** ~1 hour (documentation and testing)  
-**Status:** ✅ Complete (86/86 tests passing)
+**Status:** Complete
 
 ### Key Insight
 
@@ -1422,21 +1426,24 @@ const [isHovered, setIsHovered] = useState(false);
 />
 ```
 
-**Test Coverage** (13 new tests):
-- Integration documentation (4 tests)
-- Workflow verification (2 tests)
-- Features completed (5 tests)
-- Limitations & future enhancements (2 tests)
+**Test Coverage** (bd polyglot-pdf-840i): the original `PDFViewer.phase4.test.tsx`
+was deleted -- all 13 of its tests were `expect(true)` placeholders that documented
+the workflow but ran no production code. Click/hover/selection behavior is covered
+with real `fireEvent` assertions in `FieldOverlay.test.tsx`, and the
+PDFViewer-to-FieldOverlay click-to-select wiring (that `PDFViewer` passes
+`onClick={() => onSelectField(field.id)}`) is covered by a real test in
+`PDFViewer.phase4.test.tsx` (rewritten -- see below).
 
-### Files Created
+### Files
 
-- `src/components/PDFViewer.phase4.test.tsx` (143 lines)
+- `src/components/PDFViewer.phase4.test.tsx` -- click-to-select wiring regression
+  (rewritten under bd 840i; the prior all-`expect(true)` version was removed)
 
 ## Phase 5: Zoom Presets
 
 **Completion Date:** November 5, 2025  
 **Duration:** ~2 hours  
-**Status:** ✅ Complete (113/113 tests passing)
+**Status:** Complete
 
 ### Objectives
 
@@ -1486,12 +1493,13 @@ const handleFitPage = () => {
 - **Fit Page**: Min(width scale, height scale) ensures entire page visible
 
 **Test Coverage** (27 new tests):
-- Fit Width functionality (7 tests)
-- Fit Page functionality (6 tests)
-- Button interactions (3 tests)
-- Implementation details (4 tests)
-- Edge cases and safety (4 tests)
-- Integration (3 tests)
+**Test Coverage** (bd polyglot-pdf-840i): the original suite was largely
+`expect(true)` placeholders documenting the scale math; 22 such stubs were removed.
+What remains are tests that assert observable behavior (the Fit Width / Fit Page
+buttons render; manual zoom changes the displayed percentage; the fit logic runs and
+clamps under mocked container dimensions). The pure scale-clamp calculation that is
+not observable under jsdom is a real-browser check, documented in the test file
+header rather than faked.
 
 ### Technical Decisions
 
@@ -1504,7 +1512,8 @@ const handleFitPage = () => {
 ### Files Modified
 
 - `src/components/PDFViewer.tsx` (Added fit-width/fit-page logic)
-- `src/components/PDFViewer.phase5.test.tsx` (NEW, 578 lines)
+- `src/components/PDFViewer.phase5.test.tsx` (de-stubbed under bd 840i: 22
+  `expect(true)` placeholders removed, the real assertions kept/strengthened)
 
 ---
 

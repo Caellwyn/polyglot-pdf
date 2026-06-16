@@ -307,16 +307,16 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
   });
 
   describe('Auto-scroll to Field Page', () => {
-    it('scrolls when a field with a pdf_position is selected', async () => {
-      // NOTE (bd polyglot-pdf-840i): this asserts only THAT the auto-scroll fires
-      // on field-select -- NOT which page it lands on. Under jsdom every
-      // getBoundingClientRect / offset returns 0, so a page-1 target and a page-2
-      // target produce the same (0) scrollTo coordinates and are indistinguishable
-      // here; a separate "page 2" copy of this test would pass even if page routing
-      // were reversed, so it was removed rather than encode a false guarantee. The
-      // page-SPECIFIC scroll TARGET is a real-browser check (the viewer is a
-      // canvas-rendered surface; see docs/standards/testing.md). The negative case
-      // (no pdf_position -> no scroll) IS observable and is asserted below.
+    it('scrolls AND sets the current page to the selected field page (page 2)', async () => {
+      // NOTE (bd polyglot-pdf-840i): the pixel scroll TARGET is not observable
+      // under jsdom (every getBoundingClientRect / offset returns 0, so a page-1
+      // and page-2 target produce the same 0 coordinates). But the auto-scroll
+      // effect ALSO calls setCurrentPage(field.pdf_position.page), and that IS
+      // observable: the page-number input (role spinbutton, value={currentPage})
+      // reflects it. So selecting field-page2 (pdf_position.page === 2) must drive
+      // the input to "2" -- this catches page-routing regressions that the bare
+      // "scrollTo was called" assertion could not (it would pass even if the wrong
+      // page were selected).
       const { rerender } = render(
         <PDFViewer
           pdfPath="/test.pdf"
@@ -335,12 +335,15 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       // a user can select a field, in jsdom we flush it explicitly.
       await act(async () => { await Promise.resolve(); });
 
+      // Sanity: starts on page 1 before any field is selected.
+      expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('1');
+
       // The auto-scroll effect centers the field via the scroll container's
       // scrollTo (jsdom does not implement it, so it must be mocked).
       const scrollToSpy = vi.fn();
       Element.prototype.scrollTo = scrollToSpy;
 
-      // Select a field that HAS a pdf_position.
+      // Select a field that HAS a pdf_position on PAGE 2.
       rerender(
         <PDFViewer
           pdfPath="/test.pdf"
@@ -352,6 +355,11 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
 
       await waitFor(() => {
         expect(scrollToSpy).toHaveBeenCalled();
+      });
+      // The selected field is on page 2, so currentPage -- and the page-number
+      // input -- must read "2", not the page-1 default.
+      await waitFor(() => {
+        expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('2');
       });
     });
 
