@@ -16,6 +16,7 @@ import {
   type FsFileHandle,
 } from './utils/fileSystemAccess';
 import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
+import { getCompletionStats } from './utils/validation';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
 import type { FormField, FormConfig } from './types/schema';
 
@@ -386,7 +387,18 @@ export const App: React.FC = () => {
         {/* The catalogue (directory-based) is the front door (bd b0pe); the
             hardcoded FormSelector remains as a fallback for browsers without the
             directory API (where the catalogue shows its unsupported message). */}
-        <FormCatalogue onOpenKit={handleOpenKit} selectedKitId={selectedKitId} />
+        <FormCatalogue
+          onOpenKit={handleOpenKit}
+          selectedKitId={selectedKitId}
+          liveProgress={
+            // Keep the open kit's catalogue bar in sync with in-editor edits:
+            // the disk-scanned % is stale after an edit/save, so feed the live
+            // in-memory % (same getCompletionStats the ValidationPanel uses).
+            selectedKitId && schema
+              ? { kitId: selectedKitId, percent: getCompletionStats(schema).percentage }
+              : null
+          }
+        />
         {!dirAccess && (
           <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
         )}

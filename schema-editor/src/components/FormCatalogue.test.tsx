@@ -208,4 +208,39 @@ describe('FormCatalogue', () => {
     // ...and there is exactly one "Review" bar (the no-schema 'raw' kit has none).
     expect(screen.getAllByText('Review')).toHaveLength(1);
   });
+
+  it('overrides the open kit bar with the live in-editor percentage', async () => {
+    // The disk schema is empty (0%); liveProgress reports 75% for the open kit, so
+    // the card must show 75% (tracks unsaved edits), not the stale 0% (Codex finding).
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        selectedKitId="i-90"
+        liveProgress={{ kitId: 'i-90', percent: 75 }}
+      />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await screen.findByText('I-90');
+    await waitFor(() => expect(screen.getByText('75%')).toBeTruthy());
+    expect(screen.queryByText('0%')).toBeNull();
+  });
+
+  it('shows an unreadable-schema notice (distinct from no schema)', async () => {
+    const root = mockRoot([
+      mockKit('broken', { 'schema.json': 'not json{', 'metadata.json': JSON.stringify({ label: 'Broken', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await screen.findByText('Broken');
+    await waitFor(() => expect(screen.getByText(/Schema present but unreadable/i)).toBeTruthy());
+  });
 });

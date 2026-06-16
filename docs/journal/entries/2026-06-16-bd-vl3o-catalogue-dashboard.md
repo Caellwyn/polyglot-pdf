@@ -59,13 +59,25 @@ criteria PASS; round 1 found four in-scope robustness gaps, all adopted:
 (1) a structurally-malformed-but-parseable schema (no `fields` array) threw inside
 `getCompletionStats`, which would reject the catalogue-wide `Promise.all` and wipe
 every progress bar -- wrapped `readKitProgress`'s stats call in try/catch ->
-null; (2) `summarizeCatalogue` classified a `status:complete`+`hasSchema:false`
-kit as "awaiting extraction" -- reordered so the complete metadata status (the
-deploy-gate flag) wins; (3) a stale-folder race where a slow progress load from a
-prior folder could overwrite the current one -- added a monotonic refresh token
+null; (2) `summarizeCatalogue`'s complete-vs-no-schema ordering for a
+`status:complete`+`hasSchema:false` kit (initially flipped to status-first, then
+CORRECTED below by Codex); (3) a stale-folder race where a slow progress load from
+a prior folder could overwrite the current one -- added a monotonic refresh token
 guard; (4) clarified/locked that a 0-field schema reports 0% (bar renders),
-distinct from a no-schema kit (no bar). Round 2 returned NO-GAPS. No out-of-scope
-beads filed.
+distinct from a no-schema kit (no bar). Round 2 returned NO-GAPS.
+
+**Codex outer review (PR #224):** round 1 raised three P1s, all adopted as
+blockers: (a) it CORRECTED fresh-eyes gap (2) -- `deploy-all.sh` skips a
+schema-less kit BEFORE the complete check, so a complete-marked kit with no schema
+is NOT deployable and must count as "awaiting extraction", not complete. Codex's
+deploy-flow evidence overrode fresh-eyes' metadata-only reasoning; reverted to
+hasSchema-first ordering. (b) the catalogue % went stale after an in-editor
+edit/save (only computed on folder-scan) -- added a `liveProgress` prop fed from
+App's in-memory schema (same `getCompletionStats`) so the open kit's bar tracks
+unsaved edits, preserving the "can't disagree with the in-editor %" guarantee.
+(c) a present-but-unreadable schema collapsed into the same null as no-schema --
+added a `schemaError` flag so the card shows "Schema present but unreadable"
+instead of silently hiding the row.
 
 ## Lessons
 
@@ -93,8 +105,13 @@ beads filed.
   `readKitProgress`, `CatalogueSummary`, `summarizeCatalogue`; import
   `getCompletionStats`.
 - `schema-editor/src/components/FormCatalogue.tsx` -- per-kit progress state +
-  computation after list (with a monotonic refresh-token guard against the
-  stale-folder race); aggregate overview header; per-card review bar + %.
+  computation after list (monotonic refresh-token guard vs the stale-folder
+  race); aggregate overview header; per-card review bar + %; `liveProgress` prop
+  override for the open kit; "schema present but unreadable" notice.
+- `schema-editor/src/App.tsx` -- passes `liveProgress` (the open kit's live
+  in-memory review %) to FormCatalogue so the bar tracks unsaved edits.
+- `schema-editor/src/utils/formKitDirectory.ts` adds a `schemaError` flag to
+  KitProgress (present-but-broken vs no-schema).
 - `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 8 unit
   tests (aggregate counts incl. complete-without-schema, percent from completion,
   null for no/unparseable/malformed schema, 0% for empty schema).

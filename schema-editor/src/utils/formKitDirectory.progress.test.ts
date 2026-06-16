@@ -68,15 +68,16 @@ describe('summarizeCatalogue', () => {
     expect(summarizeCatalogue([])).toEqual({ total: 0, complete: 0, inProgress: 0, noSchema: 0 });
   });
 
-  it('counts a complete-status kit as complete even if its schema is missing', () => {
-    // The deploy gate reads metadata status; a kit marked complete must not show
-    // as "awaiting extraction" just because its schema file is momentarily absent
-    // (fresh-eyes finding).
+  it('counts a complete-status kit WITHOUT a schema as awaiting extraction', () => {
+    // deploy-all.sh skips a kit with no resolved schema BEFORE the complete check,
+    // so a complete-marked, schema-less kit is not actually deployable -- it must
+    // count as awaiting extraction, not complete (Codex finding, deploy-flow
+    // evidence overrides the earlier metadata-only reasoning).
     const entries: CatalogueEntry[] = [
       entry({ id: 'a', status: 'complete', hasSchema: false }),
     ];
     expect(summarizeCatalogue(entries)).toEqual({
-      total: 1, complete: 1, inProgress: 0, noSchema: 0,
+      total: 1, complete: 0, inProgress: 0, noSchema: 1,
     });
   });
 });
@@ -96,10 +97,11 @@ describe('readKitProgress', () => {
     expect(prog.totalFields).toBe(4);
   });
 
-  it('returns null percent for a kit with no schema', async () => {
+  it('returns null percent (no schemaError) for a kit with no schema', async () => {
     const prog = await readKitProgress(entry({ id: 'k', hasSchema: false }));
     expect(prog.reviewPercent).toBeNull();
     expect(prog.totalFields).toBe(0);
+    expect(prog.schemaError).toBe(false); // pre-extraction, not broken
   });
 
   it('returns null percent when the schema cannot be parsed', async () => {
@@ -110,14 +112,18 @@ describe('readKitProgress', () => {
     } as unknown as CatalogueEntry['dirHandle'];
     const prog = await readKitProgress(entry({ id: 'k', hasSchema: true, dirHandle }));
     expect(prog.reviewPercent).toBeNull();
+    expect(prog.schemaError).toBe(true); // present but unparseable
   });
 
-  it('returns null percent (does not throw) for a structurally malformed schema', async () => {
+  it('flags schemaError (does not throw) for a structurally malformed schema', async () => {
     // Valid JSON but no `fields` array -> getCompletionStats would throw. Must be
     // swallowed so it cannot reject the catalogue-wide Promise.all (fresh-eyes
-    // finding: a single bad schema would otherwise wipe every progress bar).
+    // finding: a single bad schema would otherwise wipe every progress bar), and
+    // flagged schemaError so the UI distinguishes it from a pre-extraction kit
+    // (Codex finding).
     const prog = await readKitProgress(entryServingSchema('k', { form_metadata: {} }));
     expect(prog.reviewPercent).toBeNull();
+    expect(prog.schemaError).toBe(true);
   });
 
   it('reports 0% (not null) for a valid schema with zero fields', async () => {
