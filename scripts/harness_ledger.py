@@ -131,6 +131,28 @@ def discover_transcript(cwd: str | None = None) -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
+def discover_subagent_transcripts(transcript: Path) -> list[Path]:
+    """Find the spawned-subagent sidecar transcripts for a main transcript.
+
+    A spawned subagent (e.g. fresh-eyes, an Agent/Task call) does NOT write its
+    turns into the main session JSONL as ``isSidechain`` rows -- it writes its OWN
+    transcript under a ``subagents/`` directory keyed by the main transcript's stem:
+
+        ~/.claude/projects/<sanitized-cwd>/<session-uuid>.jsonl          (main)
+        ~/.claude/projects/<sanitized-cwd>/<session-uuid>/subagents/agent-<id>.jsonl
+
+    So the main transcript alone has zero subagent tokens (bd polyglot-pdf-17k);
+    the per-actor split needs these sidecars folded in. The sidecar records DO
+    carry ``isSidechain: true``, so once their lines are read the existing actor
+    bucketing files them under ``subagent`` automatically. Returns the sidecar
+    paths (empty list if the dir is absent -- a session with no spawned subagents).
+    """
+    subagents_dir = transcript.with_suffix("") / "subagents"
+    if not subagents_dir.is_dir():
+        return []
+    return sorted(p for p in subagents_dir.glob("agent-*.jsonl") if p.is_file())
+
+
 # --------------------------------------------------------------------------- #
 # Transcript parsing
 # --------------------------------------------------------------------------- #
@@ -169,6 +191,14 @@ def parse_transcript(transcript: Path) -> dict:
     records; we sum input/output/cache fields. Cache reads are tracked
     separately because they are billed differently and conflating them with
     fresh input would distort cross-arm cost comparison.
+
+    Spawned-subagent tokens are read from the ``subagents/agent-*.jsonl`` sidecars
+    next to the main transcript (bd polyglot-pdf-17k) -- the main JSONL has no
+    subagent rows, so without the sidecars the ``subagent`` bucket reads 0. The
+    sidecar rows carry ``isSidechain: true``, so they bucket as ``subagent`` via the
+    same actor rule. Sidecar ``sessionId``/``timestamp`` are ignored for the
+    session id and wall-clock span -- those stay anchored to the MAIN transcript so
+    a subagent's own session id / a late-finishing subagent does not redefine them.
     """
     session_id: str | None = None
     first_ts: str | None = None
@@ -190,21 +220,35 @@ def parse_transcript(transcript: Path) -> dict:
     }
     turns = {"orchestrator": 0, "subagent": 0}
 
-    for rec in _iter_records(transcript):
-        if session_id is None and rec.get("sessionId"):
-            session_id = rec["sessionId"]
-        ts = rec.get("timestamp")
-        if ts:
-            if first_ts is None:
-                first_ts = ts
-            last_ts = ts
+    def _accumulate(rec: dict, *, anchor_meta: bool, force_actor: str | None = None) -> None:
+        """Fold one record's tokens into the actor buckets.
+
+        ``anchor_meta`` true (the MAIN transcript only) also advances the session id
+        + wall-clock span; sidecar files pass false so a subagent's own session id /
+        timestamps never redefine them.
+
+        ``force_actor`` pins the bucket regardless of the record's ``isSidechain``
+        flag. Sidecar files pass ``"subagent"``: a record in
+        ``subagents/agent-*.jsonl`` IS a subagent turn by definition, so it must not
+        leak into the orchestrator bucket even on the (unobserved) chance a sidecar
+        assistant row lacks the flag. Main-transcript records pass None and bucket by
+        the flag as before."""
+        nonlocal session_id, first_ts, last_ts
+        if anchor_meta:
+            if session_id is None and rec.get("sessionId"):
+                session_id = rec["sessionId"]
+            ts = rec.get("timestamp")
+            if ts:
+                if first_ts is None:
+                    first_ts = ts
+                last_ts = ts
         if rec.get("type") != "assistant":
-            continue
+            return
         message = rec.get("message") or {}
         usage = message.get("usage") or {}
         if not usage:
-            continue
-        actor = "subagent" if rec.get("isSidechain") else "orchestrator"
+            return
+        actor = force_actor or ("subagent" if rec.get("isSidechain") else "orchestrator")
         turns[actor] += 1
         model = message.get("model") or "unknown"
         for field in (
@@ -216,6 +260,20 @@ def parse_transcript(transcript: Path) -> dict:
             val = usage.get(field) or 0
             tokens_by_actor[actor][field] += val
             models_by_actor[actor][model][field] += val
+
+    for rec in _iter_records(transcript):
+        _accumulate(rec, anchor_meta=True)
+    # Fold in spawned-subagent sidecar transcripts (bd polyglot-pdf-17k). Sidecar
+    # records are force-bucketed to "subagent" (a row in subagents/ IS a subagent
+    # turn); meta stays anchored to main. This assumes the MAIN transcript holds NO
+    # copy of the sidecar rows -- empirically the main JSONL has zero isSidechain
+    # rows when subagents are spawned (the subagent's turns live only in the
+    # sidecar), so there is no double-count. If a future Claude Code layout wrote a
+    # subagent's turns into BOTH places, this would over-count and need a dedup by
+    # record uuid.
+    for sidecar in discover_subagent_transcripts(transcript):
+        for rec in _iter_records(sidecar):
+            _accumulate(rec, anchor_meta=False, force_actor="subagent")
 
     total = _zero()
     for actor_tokens in tokens_by_actor.values():
