@@ -102,16 +102,22 @@ export type ConditionalOperator =
   | 'equals'
   | 'not_equals'
   | 'contains'
+  | 'greater_than'
+  | 'less_than'
   | 'is_checked'
   | 'is_empty'
-  | 'is_not_empty';
+  | 'is_not_empty'
+  | 'in'
+  | 'not_in';
 
 // A single conditional-control rule. controls_fields is an ARRAY of these on a
-// field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488)
-// and the runtime contract (frontend/src/schema-forms/types/schema.ts
-// ConditionalControl). The previous single-object shape with a `when_value` key
-// did NOT match any real data, so validateSchema's controlled-id reference check
-// silently did nothing on real form kits (Codex review, bd polyglot-pdf-y61i).
+// field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488),
+// the runtime contract (frontend/src/schema-forms/types/schema.ts
+// ConditionalControl), and backend ConditionalControl
+// (backend/models/form_models.py). The previous single-object shape with a
+// `when_value` key did NOT match any real data, so validateSchema's
+// controlled-id reference check silently did nothing on real form kits
+// (Codex review, bd polyglot-pdf-y61i).
 export interface ConditionalControl {
   operator: ConditionalOperator;
   value: string | number | boolean | Array<string | number | boolean>;
@@ -122,6 +128,16 @@ export interface ConditionalControl {
   makes_required?: string[];
   makes_optional?: string[];
 }
+
+// The action keys of ConditionalControl (the string[] target lists only --
+// excludes operator/value). Editing UI iterates over these.
+export type ControlActionKey =
+  | 'shows'
+  | 'hides'
+  | 'unlocks'
+  | 'locks'
+  | 'makes_required'
+  | 'makes_optional';
 
 export interface PDFPosition {
   page: number;
