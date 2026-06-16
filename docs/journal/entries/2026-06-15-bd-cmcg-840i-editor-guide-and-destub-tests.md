@@ -42,18 +42,23 @@ per the bead's "real assertion OR delete-with-a-note" rule:
   tests assert observable behavior: the Fit Width / Fit Page buttons render, manual
   zoom changes the displayed percentage (100% -> 125%), and a preset click mid-zoom
   does not throw. The fit-width/fit-page scale-clamp MATH (the
-  `(containerWidth - padding) / pageWidth` calc + 0.5..2.0 clamp) depends on
-  container rects, which are 0 under jsdom -- so it is documented in the file header
-  as a real-browser check rather than faked with an `expect(true)` that asserts
-  jsdom's 0-rect behavior.
+  `(containerWidth - padding) / pageWidth` calc + 0.5..2.0 clamp) IS exercised
+  under jsdom by stubbing the scroll container's `clientWidth`/`clientHeight` to
+  non-zero values so the handlers run, then asserting the EXACT fitted percentage
+  (Fit Width 153% / 200% upper-clamp / 50% lower-clamp; Fit Page 106%
+  height-constrained / 104% width-constrained / 200% upper-clamp). (This is the
+  final state; the Codex rounds below record how it got there -- an early pass left
+  these as "does not throw" smoke tests before the container-size stub made the math
+  observable.)
 - **`PDFViewer.phase2.test.tsx` -- two fixes.** The "clamp page input" test fired a
   change event and asserted NOTHING; it now asserts the controlled input clamps to
   `'3'` (over-max) and `'1'` (below-min). The duplicate "scroll to page 2" test was
-  removed: under jsdom every rect is 0, so a page-1 target and a page-2 target
-  produce identical (0) `scrollTo` coordinates -- the two tests were
-  indistinguishable and would both pass even if page routing were reversed. The
-  remaining scroll test asserts only what IS observable (a positioned field fires
-  the scroll), with the page-specific target documented as a real-browser check.
+  collapsed into one, which now asserts the PAGE-SPECIFIC outcome: selecting
+  `field-page2` drives `currentPage` to 2, so the page-number input reads `'2'`
+  (plus the `scrollTo` call). The page NUMBER is observable in jsdom even though the
+  scroll COORDINATE is 0 -- so this catches a page-routing regression (an earlier
+  pass wrongly deferred the page target to a browser check; the Codex rounds below
+  record the correction).
 - **`usePDFDocument.test.ts` -- cleanup test fixed.** It asserted
   `expect(mockDoc).toBeTruthy()` (the test's own local, always true) and never
   checked the document was destroyed. It now waits for the load to resolve
@@ -61,19 +66,26 @@ per the bead's "real assertion OR delete-with-a-note" rule:
   is called once on unmount (the real cleanup at `usePDFDocument.ts:87`).
 
 After: no schema-editor test file is `expect(true)` stubs or act-without-assert.
-Full schema-editor suite 138 pass (down from 174 by the removed fake tests); tsc
-clean.
+Full schema-editor suite passes (run `npm run test:run` in `schema-editor/` for the
+live count -- it grew through the Codex rounds below as fake stubs were replaced by
+real wiring/fit/page-routing tests); tsc clean.
 
 ## The honest-vs-faked line (the uov.16 thesis)
 
 The judgment call running through 840i: a green vitest run on a canvas/PDF UI does
-NOT prove the UI works (the testing-standards doc says as much). Where behavior is
-observable in jsdom (button presence, controlled-input clamp, manual-zoom
-percentage, destroy-on-unmount) I added a real assertion. Where it is NOT (the
-fitted scale value, the per-page scroll target -- both rect-dependent) I deleted the
-fake guarantee and pointed at the real-browser check rather than encode jsdom's
-0-rect behavior as if it were the feature. Deleting a misleading test is a coverage
-INCREASE, not a decrease: the suite no longer claims to cover what it cannot.
+NOT prove the UI works (the testing-standards doc says as much). The first instinct
+was to split behavior into "observable in jsdom -> assert it" vs "rect-dependent ->
+defer to a browser check." The Codex rounds below pushed that line MUCH further than
+the first pass: much of what looked rect-dependent IS observable once the jsdom
+environment is set up properly -- stub `clientWidth`/`clientHeight` on the scroll
+container and the fit MATH + clamp produce exact, assertable percentages; the page
+NUMBER (not the scroll coordinate) is observable, so page-routing is testable;
+overlay click-to-select + selected styling are testable by rendering the full
+viewer. So the FINAL suite asserts the fitted scale, the page target, and the
+click/select wiring for real -- very little was genuinely deferred. The lesson:
+"jsdom can't test this" is often "I haven't set jsdom up to test this yet." Deleting
+a misleading stub AND replacing it with a real assertion is the coverage increase;
+deleting alone (the first pass) only got partway.
 
 ## Pre-PR fresh-eyes
 

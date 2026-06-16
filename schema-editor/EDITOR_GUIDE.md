@@ -1426,13 +1426,14 @@ const [isHovered, setIsHovered] = useState(false);
 />
 ```
 
-**Test Coverage** (bd polyglot-pdf-840i): the original `PDFViewer.phase4.test.tsx`
-was deleted -- all 13 of its tests were `expect(true)` placeholders that documented
-the workflow but ran no production code. Click/hover/selection behavior is covered
-with real `fireEvent` assertions in `FieldOverlay.test.tsx`, and the
-PDFViewer-to-FieldOverlay click-to-select wiring (that `PDFViewer` passes
-`onClick={() => onSelectField(field.id)}`) is covered by a real test in
-`PDFViewer.phase4.test.tsx` (rewritten -- see below).
+**Test Coverage** (bd polyglot-pdf-840i): `PDFViewer.phase4.test.tsx` is PRESENT and
+holds real tests -- its original 13 `expect(true)` placeholders (which documented
+the workflow but ran no production code) were removed and the file rebuilt.
+Click/hover/selection behavior on the overlay in isolation is covered with real
+`fireEvent` assertions in `FieldOverlay.test.tsx`; the PDFViewer-to-FieldOverlay
+WIRING -- that `PDFViewer` passes `onClick={() => onSelectField(field.id)}` and
+drives `isSelected` from `selectedFieldId` -- is covered by the rebuilt
+`PDFViewer.phase4.test.tsx`.
 
 ### Files
 
