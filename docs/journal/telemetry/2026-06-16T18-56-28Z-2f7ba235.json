@@ -1,0 +1,83 @@
+{
+  "recorded_at": "2026-06-16T18:56:28Z",
+  "session_id": "2f7ba235-09ac-4499-b157-4d1e27a7ffba",
+  "beads": [
+    "polyglot-pdf-n6ks"
+  ],
+  "arm": "BC",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-06-16T16:18:04.950Z",
+    "last_ts": "2026-06-16T18:56:11.533Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 66150,
+      "output_tokens": 123830,
+      "cache_read_input_tokens": 29624015,
+      "cache_creation_input_tokens": 583025
+    },
+    "subagent": {
+      "input_tokens": 413,
+      "output_tokens": 21765,
+      "cache_read_input_tokens": 6228571,
+      "cache_creation_input_tokens": 637603
+    },
+    "total": {
+      "input_tokens": 66563,
+      "output_tokens": 145595,
+      "cache_read_input_tokens": 35852586,
+      "cache_creation_input_tokens": 1220628
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 66093,
+        "output_tokens": 105812,
+        "cache_read_input_tokens": 25928140,
+        "cache_creation_input_tokens": 505827
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "claude-sonnet-4-6": {
+        "input_tokens": 57,
+        "output_tokens": 18018,
+        "cache_read_input_tokens": 3695875,
+        "cache_creation_input_tokens": 77198
+      }
+    },
+    "subagent": {
+      "claude-sonnet-4-6": {
+        "input_tokens": 105,
+        "output_tokens": 17817,
+        "cache_read_input_tokens": 5524663,
+        "cache_creation_input_tokens": 330617
+      },
+      "claude-haiku-4-5-20251001": {
+        "input_tokens": 308,
+        "output_tokens": 3948,
+        "cache_read_input_tokens": 703908,
+        "cache_creation_input_tokens": 306986
+      }
+    }
+  },
+  "subagent_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 220,
+    "subagent": 117
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 1,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": null,
+  "errors_shipped": null
+}
