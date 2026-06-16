@@ -9,9 +9,11 @@ cheap-model-validator pillar (B) build against, so multiple agents can work in
 parallel without colliding on the system-instruction templates. It pins: the SI
 template shapes, the surviving placeholder set after reduction, the reduced-SI
 token-floor target + how it is measured, and the ownership of the
-ADDRESS-CONSISTENCY removal. The cost rationale (why the SI is the lever) lives in
-the epic plan; the model-selection rule lives in
-[ai-models.md](ai-models.md); this doc owns the **SI shape** contract.
+ADDRESS-CONSISTENCY removal. The cost rationale (why the SI is the lever -- the
+measured "text-in is 95-98% of 2.5 cost, and it's the per-turn SI" invariant)
+lives in [logging-and-cost.md](logging-and-cost.md) (MANDATORY read before SI/cost
+work); the model-selection rule lives in [ai-models.md](ai-models.md); this doc
+owns the **SI shape** contract.
 
 ## Current state: two templates, one builder
 

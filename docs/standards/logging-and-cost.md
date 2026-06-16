@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (with a `time_left` field) in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
+*Last updated: 2026-06-16. Added the MEASURED COST INVARIANT (on 2.5, text-in = the per-turn SI = 95-98% of session cost; audio is negligible) from bd polyglot-pdf-wyhh / polyglot-pdf-jnjj.6; see [journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md](../journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md). Earlier: bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (`time_left` field) in the adapter's GoAway path (no PII).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -60,6 +60,23 @@ offline analysis. Counts and costs only — no field values, no transcript text.
 > (`polyglot-pdf-l3a`). The cumulative cost in `token_usage.jsonl` is the baseline
 > that work measures against.
 
+> **MEASURED COST INVARIANT (do not re-derive from the rate table — this is
+> counterintuitive and was expensive to establish).** On the **2.5** native-audio
+> model, **text-input is 95-98% of total session cost** (measured: bd
+> `polyglot-pdf-wyhh` / `polyglot-pdf-jnjj.6`, 20-question live sessions). That
+> text-input is overwhelmingly the **system instruction (SI) re-sent as context
+> every turn** — NOT audio, and NOT the user/model transcript. **Audio tokens are
+> a near-rounding-error on 2.5** (hundreds of tokens/turn vs. thousands of text-in
+> tokens), *even though* the rate table above makes audio-in look 6× pricier than
+> text-in per token: the SI's per-turn *volume* dwarfs the per-token rate gap.
+> **Implication: the SI re-sent every turn IS the 2.5 cost lever** — shrinking it
+> is the highest-value cost work (the premise of epic `polyglot-pdf-jnjj`). Do not
+> assume audio or transcript growth dominates; the data disproves that on 2.5.
+> (On **3.1** the split shifts — reasoning/thinking bills as *output*, so text-in
+> drops to ~47-81% and output rises; but 2.5 is the production tier.) Source
+> tables: `scripts/spikes/form_session_costs_findings.md` and
+> `scripts/spikes/jnjj_g2_jit_cost_findings.md`.
+
 ## Structured event schemas (defined, not yet emitting)
 
 `backend/utils/log_schemas.py` defines `TypedDict` shapes for a structured event
@@ -107,4 +124,4 @@ beads; this doc is their canonical home (migrated out of
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (with a `time_left` field) in the adapter's GoAway path (no PII); see [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the round-trip timing checkpoints (bd cwsy).*
+*Last updated: 2026-06-16. Added the MEASURED COST INVARIANT (on 2.5, text-in = the per-turn SI = 95-98% of session cost; audio is negligible) from bd polyglot-pdf-wyhh / polyglot-pdf-jnjj.6; see [journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md](../journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md). Earlier: bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (`time_left` field) in the adapter's GoAway path (no PII).*
