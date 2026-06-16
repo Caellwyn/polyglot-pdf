@@ -51,30 +51,51 @@ $0.323). The baseline is stable post-A2/d24n.
 ## Exit criterion 1: rendered per-turn SI token floor
 
 The per-turn SI floor is **deterministic** (a pure function of section size and
-mode), so it is measured analytically -- not contaminated by the live drip bug
-that bloats the JIT runs' live text-in tokens. The JIT SI is ~constant (~3150
-chars: the manifest's `field_id|spoken_name` pairs + ONE field's full schema);
-the full-SI dump scales linearly with the section's field count. The reduction
-is therefore monotonic in section size and peaks on the LARGEST I-90 section:
+mode), so it is measured by rendering the real `build_form_context_message` per
+section -- not contaminated by the live drip bug that bloats the JIT runs' live
+text-in tokens. **The JIT SI is NOT constant:** post-A2 (bd jnjj.9) the manifest
+SI lists every section field as a `field_id|spoken_name` pair, so the rendered
+`{manifest_text}` grows ~linearly with field count (plus the JIT scaffolding
+overhead). The full-SI dump grows faster (full per-field schemas), so the
+reduction still increases with section size and peaks on the LARGEST I-90
+section -- but it is materially smaller than an earlier (retracted) estimate of
+~66.9%, and on SMALL sections JIT is actually LARGER than full-SI:
 
 | section | fields | full-SI chars | JIT-SI chars | reduction |
 |---|---:|---:|---:|---:|
-| **section-medical** (largest) | **54** | **9503** | **3149** | **66.9%** |
-| section-substance-history | 25 | 6339 | 3220 | 49.2% |
-| section-living-situation | 21 | 5718 | 3356 | 41.3% |
-| section-trauma-history | 17 | 5251 | 3169 | 39.6% |
-| section-client-info | 12 | 4588 | 3156 | 31.2% |
-| section-demographics | 9 | 4313 | 3267 | 24.3% |
-| ... (smaller sections) | <=6 | ~3300-4100 | ~3200-3300 | 0.6-21.0% |
-| section-safety-risk (smallest) | 1 | 3307 | 3288 | 0.6% |
+| **section-medical** (largest) | **54** | **9503** | **5382** | **43.4%** |
+| section-substance-history | 25 | 6339 | 4426 | 30.2% |
+| section-living-situation | 21 | 5718 | 4466 | 21.9% |
+| section-trauma-history | 17 | 5251 | 4198 | 20.1% |
+| section-client-info | 12 | 4588 | 3699 | 19.4% |
+| section-demographics | 9 | 4313 | 3879 | 10.1% |
+| section-relationships | 6 | 4113 | 3785 | 8.0% |
+| section-legal-history | 5 | 3746 | 3611 | 3.6% |
+| section-functioning / -family-history | 4 | ~3650 | ~3630 | ~0% |
+| section-reasons-counseling | 6 | 3863 | 4054 | **-4.9%** |
+| section-spirituality | 2 | ~3420 | ~3680 | **~-8%** |
+| section-safety-risk (smallest) | 1 | ~3350 | ~3740 | **~-12%** |
+
+(Measured per section in an ISOLATED process each -- `get_settings` is
+`@lru_cache(maxsize=1)` and `ai_context` imports it by reference, so an
+in-process loop that monkeypatches `_config.get_settings` leaks the JIT/full
+mode across calls and yields WRONG numbers. The negatives on small sections are
+real: JIT's manifest + scaffolding overhead exceeds a small full-dump.
+Break-even is ~9-12 fields, NOT ~1-2.)
 
 Headline: on section-medical (54 fields, the bead's target "REAL LARGEST I-90
-section") the rendered SI drops 9503 -> 3149 chars (~2376 -> ~787 tok/turn at
-~4 chars/tok), a **66.9%** per-turn SI reduction. Break-even (JIT's fixed
-manifest overhead) is ~1-2 fields. So the SI reduction the manifest swap buys is
-REAL and large on big sections -- it just does not convert to a real-dollar win
-today because of the drip defect, which forces the model into a non-advancing
-loop whose growing transcript dwarfs the SI savings.
+section") the rendered SI drops 9503 -> 5382 chars (~2376 -> ~1346 tok/turn at
+~4 chars/tok), a **43.4%** per-turn SI reduction. So the SI reduction the
+manifest swap buys is real on big sections (and NEGATIVE on small ones) -- but
+even on the largest section it does not convert to a real-dollar win today
+because of the drip defect, which forces the model into a non-advancing loop
+whose growing transcript dwarfs the SI savings.
+
+> **Correction (post fresh-eyes):** an earlier version of this doc claimed the
+> JIT SI was "~constant (~3150 chars)" and reported 66.9% on section-medical via
+> a 3149-char JIT SI. That was a measurement artifact (the lru_cache/by-reference
+> `get_settings` leak above). The correct, process-isolated number is 5382 chars
+> / 43.4%. The NO-GO verdict is unaffected (both legs are live-measured).
 
 ## Root cause of the JIT correctness collapse (BLOCKING for A5)
 
@@ -86,9 +107,9 @@ both empirically (drip returns `None` for every field) and by code path:
   -- only the FIRST field is in `fields`; the rest live only in the manifest
   (`backend/routes/websocket_routes.py:671-678`).
 - On each successful update/confirm, `callback_handler` calls
-  `FormFillingService.get_next_field_schema_for_jit(field_id)` to drip the next
-  field's schema into the tool response
-  (`backend/services/callback_handler.py:556-557`, `:776-777`).
+  `FormFillingService.get_next_field_schema_for_jit(field_id)` (single call site,
+  `backend/services/callback_handler.py:556-557`) to compute the next field's
+  schema; it is later inserted into the tool response at `:776-777`.
 - But that method delegates to `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
   (`form_filling_service.py:935-938`), and `get_next_field_schema` finds "next"
   by INDEX within `part_data["fields"]` (`manifest_service.py:78-94`) -- it never
@@ -120,7 +141,13 @@ non-advancing loop, not the SI.
   one-field-in-`fields` shape that triggers the drip defect.
 - The live plan exercises the first three sections (client-info -> reasons ->
   living-situation), so the live run's per-turn SI delta is the smaller
-  first-section case (4587 vs 3698); the LARGEST-section SI floor is the
-  analytic section-medical number above (the bead's headline). A live run that
-  reaches section-medical would only widen the SI gap further -- but is moot
-  until the drip defect is fixed.
+  first-section case (full 4588 vs jit 3699 chars on client-info); the
+  LARGEST-section SI floor is the rendered section-medical number above (the
+  bead's headline, 43.4%). A live run that reaches section-medical would widen
+  the SI gap -- but is moot until the drip defect is fixed.
+- **SI-floor measurement gotcha:** `get_settings` is `@lru_cache(maxsize=1)` and
+  `ai_context` imports it by reference, so rendering all sections in one process
+  while monkeypatching `_config.get_settings` leaks the JIT/full mode between
+  calls and produces WRONG (mode-swapped) numbers. Measure each section in its
+  OWN process (set `USE_JIT_SCHEMA` in env + `get_settings.cache_clear()` at
+  start). This is why an earlier in-process table reported a bogus ~66.9%.

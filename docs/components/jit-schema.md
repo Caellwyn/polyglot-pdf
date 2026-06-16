@@ -139,8 +139,9 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   SI-BUILD path (gaps A/B/C/...) to consume the handshake manifest, but the
   separate RUNTIME drip was not touched. On each successful update/confirm,
   `callback_handler` calls `form_filling_service.get_next_field_schema_for_jit(field_id)`
-  (`callback_handler.py:556-557`, `:776-777`) to drip the next field's full schema
-  into the tool response. That delegates to
+  (single call site, `callback_handler.py:556-557`; the result is inserted into
+  the tool response at `:776-777`) to compute the next field's full schema. That
+  delegates to
   `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
   (`form_filling_service.py:935-938`), which finds "next" by INDEX within
   `part_data["fields"]` (`manifest_service.py:78-94`) -- it never consults the
