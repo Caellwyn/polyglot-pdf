@@ -143,6 +143,25 @@ describe('FieldEditor controls_fields UI', () => {
     expect(optionTexts).not.toContain('not in');
   });
 
+  it('preserves an existing control whose operator is in/not_in (display, not rewrite)', () => {
+    // Codex PR #216 round 2: in/not_in are excluded from fresh authoring, but a
+    // rule already using them must still display its own operator -- otherwise
+    // the select shows its first option and merely rendering misrepresents the
+    // saved rule.
+    const trigger = {
+      ...TRIGGER,
+      controls_fields: [{ operator: 'in' as const, value: 'A', unlocks: ['other_family_name'] }],
+    };
+    const schema = makeSchema([trigger, TARGET_A]);
+    render(<FieldEditor field={trigger} schema={schema} onUpdateField={vi.fn()} />);
+
+    // The select reflects the saved 'in' operator (its option is present).
+    const select = screen.getByDisplayValue('in') as HTMLSelectElement;
+    expect(select.value).toBe('in');
+    const optionTexts = Array.from(select.options).map(o => o.value);
+    expect(optionTexts).toContain('in');
+  });
+
   it('a pruned action key serializes out of the exported JSON (undefined, not null)', () => {
     // Backend ConditionalControl actions are Optional[List[str]] = None, so a
     // dropped action must be ABSENT in JSON, not present-as-null. JSON.stringify
@@ -212,10 +231,9 @@ describe('validation reference check for list-shaped controls_fields', () => {
         },
       ],
     });
-    // validateSchema builds its known-id set incrementally as it iterates
-    // schema.fields, so a trigger must follow its targets to be checked against
-    // the full set (a pre-existing order-dependency shared with show_if; filed
-    // separately). Real i-90 data lists controlled fields before the trigger.
+    // Order-independent since validateSchema builds the full field-id set before
+    // checking references (bd y61i); the forward-reference case is covered by the
+    // separate "forward-referencing control" test above.
     const schema = makeSchema([TARGET_A, TARGET_B, trigger]);
     const errors = validateSchema(schema);
     const refError = errors.find(e =>

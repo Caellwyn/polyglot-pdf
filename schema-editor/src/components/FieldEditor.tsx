@@ -44,6 +44,17 @@ const CONDITIONAL_OPERATORS: ConditionalOperator[] = [
   'is_not_empty',
 ];
 
+// Operator options to render for a dropdown currently set to `current`. We don't
+// OFFER in/not_in for fresh authoring (no array-value editor, bd jplx), but an
+// existing rule already using them must still display its own operator -- else
+// the select falls back to its first option and merely touching it silently
+// rewrites a valid rule. So include `current` if it's outside the authoring set.
+function operatorOptionsFor(current: ConditionalOperator): ConditionalOperator[] {
+  return CONDITIONAL_OPERATORS.includes(current)
+    ? CONDITIONAL_OPERATORS
+    : [...CONDITIONAL_OPERATORS, current];
+}
+
 // The action kinds a controls_fields entry can apply to its target fields.
 // `key` matches the ConditionalControl array property; mirrors backend
 // ConditionalControl (backend/models/form_models.py).
@@ -366,7 +377,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     })
                   }
                 >
-                  {CONDITIONAL_OPERATORS.map(op => (
+                  {operatorOptionsFor(field.show_if.operator).map(op => (
                     <option key={op} value={op}>
                       {op.replace(/_/g, ' ')}
                     </option>
@@ -444,7 +455,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           })
                         }
                       >
-                        {CONDITIONAL_OPERATORS.map(op => (
+                        {operatorOptionsFor(control.operator).map(op => (
                           <option key={op} value={op}>
                             {op.replace(/_/g, ' ')}
                           </option>

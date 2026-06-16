@@ -56,8 +56,8 @@ than vacuous.
    prune empty keys; `validation.ts` iterates the list; tests cover edit/remove +
    a valid multi-array control passing and a ghost ref failing.
 
-**Verification:** new `FieldEditor.controls.test.tsx` (10 tests); full
-schema-editor suite 178/178; `tsc --noEmit` clean. Backend suite untouched
+**Verification:** new `FieldEditor.controls.test.tsx` (11 tests); full
+schema-editor suite 179/179; `tsc --noEmit` clean. Backend suite untouched
 (FE-only) and green from prep.
 
 **Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** both rubric
@@ -70,7 +70,7 @@ not null -- the backend action fields are `Optional[List]=None`). Out-of-scope
 filed by fresh-eyes: `polyglot-pdf-cmcg` (stale `ControlsFields` type name in
 `schema-editor/EDITOR_GUIDE.md`).
 
-**Codex outer review (PR #216, 2 rounds to CLEAN):** round 1 raised two real P1
+**Codex outer review (PR #216, looped to CLEAN):** round 1 raised two real P1
 findings, both adopted as blockers:
 (1) extending `ConditionalOperator` with `in`/`not_in` made them selectable in
 the show_if + controls editors, whose `value` is a plain-text (scalar) input --
@@ -84,6 +84,14 @@ targets, the i-90 ordering) were spuriously flagged on the live form. Fix: build
 the COMPLETE field-id set in a first pass, then check references (fixes show_if
 too); this resolves the pre-filed `polyglot-pdf-y61i`, now CLOSED, with a
 regression test.
+Round 2 caught two follow-ons from those fixes, both adopted: (3) excluding
+`in`/`not_in` from the dropdown meant an EXISTING rule using them rendered a
+select with no matching option, so merely touching it would silently rewrite a
+valid operator -- fix: a `operatorOptionsFor` helper appends the current operator
+when it's outside the authoring set, so existing `in`/`not_in` rules display
+faithfully (applied to both the controls and show_if dropdowns); (4) the
+regression test carried a stale comment describing the old incremental-id-set
+behavior -- corrected.
 
 ## Lessons
 
@@ -116,12 +124,14 @@ regression test.
   references across all six action arrays; restructured into two passes (build
   the full field-id set, THEN check references) so forward refs are not flagged.
 - `schema-editor/src/components/FieldEditor.tsx` -- "Controls Fields" editing
-  section + controls list helpers; operator dropdown excludes `in`/`not_in`
-  (need an array value the scalar editor can't author).
-- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 10 tests
+  section + controls list helpers; `operatorOptionsFor` helper excludes
+  `in`/`not_in` from fresh authoring but keeps an existing rule's own operator
+  selectable (applied to controls + show_if dropdowns).
+- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 11 tests
   (authoring round-trip, target add/remove, empty-key pruning, edit-in-place,
-  JSON-serialization-omits-pruned-key, no in/not_in operators offered, validation
-  flags ghost ref / passes valid multi-array control / passes forward refs).
+  JSON-serialization-omits-pruned-key, no in/not_in offered for authoring,
+  existing in/not_in rule preserved, validation flags ghost ref / passes valid
+  multi-array control / passes forward refs).
 - `docs/journal/entries/2026-06-15-bd-bjwy-controls-fields-ui.md` -- THIS entry.
 
 ## Follow-ups filed
