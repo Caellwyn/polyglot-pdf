@@ -86,6 +86,44 @@ a convention. Fresh-eyes also confirmed (out of scope, not fixed) a pre-existing
 `ConditionalOperator` member gap between the editor and runtime type files -- noted,
 not this bead's.
 
+## Codex round 1 (5 P1) -- the de-stubbing was incomplete
+
+Codex's outer review was the sharp one this PR: it found that the first pass at 840i
+deleted/shrank fake tests but did NOT replace 3 of them with real coverage, and left
+the guide asserting stale counts. All 5 P1s were correct:
+
+1. **phase5 fit tests never ran the fit logic.** My "does not throw" tests didn't
+   stub container dimensions, so `handleFitWidth`/`handleFitPage` early-returned --
+   the assertion would have passed even if the button had no `onClick`. Root cause
+   (found while fixing): `PDFPage.onPageLoad` (which populates `pageDimensions`, the
+   page-size reference the fit math divides by) only fires when the canvas 2d context
+   is non-null, and jsdom returns null. Stubbing `getContext` + defining non-zero
+   `clientWidth`/`clientHeight` on the `.overflow-auto` node makes the math run; the
+   tests now assert EXACT readouts (153% in-range, 200% upper clamp, 50% lower clamp,
+   106% Fit-Page height-constrained), so deleting the handler body or a clamp fails.
+2. **phase4 deletion left the wiring untested.** `FieldOverlay.test.tsx` only proves
+   a directly-supplied `onClick` fires -- NOT that `PDFViewer` wires
+   `onClick={() => onSelectField(field.id)}` to each overlay. My "covered elsewhere"
+   claim was wrong. Recreated `PDFViewer.phase4.test.tsx` with a real test: render
+   the full viewer, wait for the overlay to mount, click it, assert
+   `onSelectField('field-click-me')`.
+3. **phase2 scroll test asserted only "some scroll".** `currentPage` IS observable
+   (set from `pdf_position.page`), so my "indistinguishable under jsdom" claim was
+   wrong for the page NUMBER (only the scroll COORDINATE is 0). Now asserts the
+   spinbutton reads `'2'` after selecting `field-page2`.
+4. **EDITOR_GUIDE stale coverage claims.** The guide still said Phase 4 added 13
+   tests / created the deleted file, Phase 5 was 578 lines / 27 tests, and
+   "113/113 passing". Reconciled to current reality and replaced the brittle exact
+   counts with "run `npm run test:run`" so they cannot rot again.
+5. **EDITOR_GUIDE example mismatch.** The new example said "reveals and unlocks" but
+   the JSON only used `unlocks`. Corrected to unlock-only with a note on
+   `shows`/`hides` for hidden targets.
+
+**Lesson (recorded):** "delete a fake test because it's covered elsewhere" demands
+PROVING the elsewhere actually covers the SAME wiring -- an isolation test of a child
+component does not cover the parent's wiring to it. And de-stubbing a doc-heavy area
+means reconciling the doc's own coverage claims in the same change.
+
 ## Closeout notes
 
 - **Doc-freshness:** 10 docs flagged STALE, all backend/voice-path tier-2 docs from
