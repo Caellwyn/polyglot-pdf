@@ -133,8 +133,17 @@ export const App: React.FC = () => {
 
   // When the catalogue switches to a different folder, drop the open-kit state so
   // a same-named kit in the new folder can't inherit the old form's live progress
-  // (Codex PR #224). The user re-opens a kit from the new folder explicitly.
-  const handleFolderChange = React.useCallback(() => {
+  // (Codex PR #224). Returns false to ABORT the switch when the user declines to
+  // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
+  // silently drop dirty work -- Codex P0). The user re-opens a kit from the new
+  // folder explicitly.
+  const handleFolderChange = React.useCallback((): boolean => {
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to switch folders?'
+      );
+      if (!confirmed) return false;
+    }
     setSelectedKitId(null);
     setSelectedForm(null);
     clearSchema();
@@ -143,7 +152,8 @@ export const App: React.FC = () => {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-  }, [clearSchema]);
+    return true;
+  }, [hasUnsavedChanges, clearSchema]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {

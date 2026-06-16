@@ -11,8 +11,12 @@ import {
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
   onOpenKit: (entry: CatalogueEntry) => void;
-  /** Called when the user switches to a different form-kits folder. */
-  onFolderChange?: () => void;
+  /**
+   * Called when the user is about to switch to a different form-kits folder.
+   * Returns false to ABORT the switch (e.g. the user declined to discard unsaved
+   * edits), in which case the folder picker is not opened.
+   */
+  onFolderChange?: () => boolean;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
   /**
@@ -79,12 +83,14 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const summary = React.useMemo(() => summarizeCatalogue(kits), [kits]);
 
   const handlePickFolder = React.useCallback(async () => {
+    // Confirm/clear the open-kit state BEFORE opening the picker: this both
+    // guards unsaved edits (returns false to abort) and prevents a same-named kit
+    // in the new folder from inheriting the previous form's live progress
+    // (Codex PR #224). Only the first folder-open (no prior state) skips it.
+    if (onFolderChange && onFolderChange() === false) return;
     setNotice(null); // a prior "Added X" notice is stale once the folder changes
     try {
       const dir = await pickDirectory();
-      // Drop the open-kit state BEFORE loading the new folder so a same-named kit
-      // there can't inherit the previous form's live progress (Codex PR #224).
-      onFolderChange?.();
       setRoot(dir);
       await refresh(dir);
     } catch (err) {

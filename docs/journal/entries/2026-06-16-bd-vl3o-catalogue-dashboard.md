@@ -88,6 +88,18 @@ its detail share one source; (f) the malformed-schema guard relied on
 `getCompletionStats` throwing, but an iterable-but-invalid `fields` (e.g.
 `"abc"`) would not throw and reported a bogus % -- added an explicit
 `Array.isArray(schema.fields)` check that surfaces `schemaError` instead.
+Round 3 caught two more (and one deferred): (g, P0) `onFolderChange` cleared the
+schema without the unsaved-edits confirmation `handleOpenKit` has, so switching
+folders could silently drop dirty work -- `handleFolderChange` now runs the same
+confirm and returns false to ABORT the switch (the picker isn't even opened);
+(h, P1) the `fields` guard accepted an array of non-objects (`["abc"]`), which
+`getCompletionStats` reads props off without throwing -- tightened to require
+every entry be an object. (i, P1 DEFERRED to `polyglot-pdf-8srh`) after editing
+kit A, saving, and opening kit B, A's card falls back to its stale folder-scan %
+because `handleSave` never updates the catalogue progress map -- a real live-sync
+gap, but the third consecutive sibling of the same refinement, so deferred rather
+than looped on; the core dashboard (metric, per-form %, aggregate counts) is
+complete and correct.
 
 ## Lessons
 
@@ -119,7 +131,9 @@ its detail share one source; (f) the malformed-schema guard relied on
   race); aggregate overview header; per-card review bar + %; `liveProgress` prop
   override for the open kit; "schema present but unreadable" notice.
 - `schema-editor/src/App.tsx` -- passes `liveProgress` (the open kit's live
-  in-memory review %) to FormCatalogue so the bar tracks unsaved edits.
+  in-memory review %/counts) to FormCatalogue so the bar tracks unsaved edits;
+  `handleFolderChange` (confirms unsaved edits, clears open-kit state, returns
+  false to abort).
 - `schema-editor/src/utils/formKitDirectory.ts` adds a `schemaError` flag to
   KitProgress (present-but-broken vs no-schema).
 - `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 8 unit

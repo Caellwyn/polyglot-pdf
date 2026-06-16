@@ -243,4 +243,21 @@ describe('FormCatalogue', () => {
     await screen.findByText('Broken');
     await waitFor(() => expect(screen.getByText(/Schema present but unreadable/i)).toBeTruthy());
   });
+
+  it('aborts the folder switch (does not open the picker) when onFolderChange returns false', async () => {
+    // Codex P0: switching folders with unsaved edits must be confirmable; a
+    // false return (user declined) means the picker is never opened.
+    const root = mockRoot([mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90' }) })]);
+    const picker = vi.fn(async () => root);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = picker;
+    const onFolderChange = vi.fn(() => false); // user declined to discard edits
+
+    render(
+      <FormCatalogue onOpenKit={vi.fn()} onFolderChange={onFolderChange} selectedKitId="i-90" />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    expect(onFolderChange).toHaveBeenCalled();
+    expect(picker).not.toHaveBeenCalled(); // aborted before opening the picker
+  });
 });

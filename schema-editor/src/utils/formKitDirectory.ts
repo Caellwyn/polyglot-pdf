@@ -175,10 +175,14 @@ export async function readKitProgress(
   }
   // Validate the shape BEFORE measuring: a schema can parse as JSON yet be
   // structurally wrong in ways that don't throw -- e.g. `fields: "abc"` is
-  // iterable, so getCompletionStats would silently report a bogus % with
-  // schemaError=false. Require an actual fields array (an empty [] is a valid
-  // 0% schema). Anything else is a broken extraction, surfaced as schemaError.
-  if (!Array.isArray(schema.fields)) {
+  // iterable, and `fields: ["abc"]` is an array whose entries getCompletionStats
+  // reads properties off without throwing -- either would silently report a bogus
+  // % with schemaError=false. Require an actual array of objects (an empty [] is a
+  // valid 0% schema). Anything else is a broken extraction, surfaced as schemaError.
+  const fieldsOk =
+    Array.isArray(schema.fields) &&
+    schema.fields.every(f => f !== null && typeof f === 'object');
+  if (!fieldsOk) {
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
   }
   try {
