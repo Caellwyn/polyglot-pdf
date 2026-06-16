@@ -59,12 +59,14 @@ def test_exit_code_map():
         "MERGED": 0,
         "TIMEOUT": 2,
         "ERROR": 1,
+        "NO-ACK": 4,
     }
 
 
 @pytest.mark.parametrize(
     "state,code",
-    [("COMMENTS", 0), ("CLEAN", 0), ("MERGED", 0), ("TIMEOUT", 2), ("ERROR", 1)],
+    [("COMMENTS", 0), ("CLEAN", 0), ("MERGED", 0), ("TIMEOUT", 2), ("ERROR", 1),
+     ("NO-ACK", 4)],
 )
 def test_emit_returns_matching_exit_code(state, code, capsys):
     assert cw._emit(state, "detail") == code
@@ -1205,7 +1207,7 @@ def test_default_reviewer_is_codex(monkeypatch):
     # to capture the profile main() selected from the default.
     seen = {}
 
-    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile, ack_timeout_min=0):
         seen["profile"] = profile
         return cw._emit("CLEAN", "stub")
     monkeypatch.setattr(cw, "watch", fake_watch)
@@ -1218,7 +1220,7 @@ def test_reviewer_copilot_still_selectable(monkeypatch):
     # (kept for the generic watcher; the cutover only changed the default).
     seen = {}
 
-    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile, ack_timeout_min=0):
         seen["profile"] = profile
         return cw._emit("CLEAN", "stub")
     monkeypatch.setattr(cw, "watch", fake_watch)
@@ -1258,7 +1260,7 @@ def _run_main_with_state(monkeypatch, state, close_args, *, close_rc=0,
     monkeypatch.setattr(cw, "_LAST_STATE", None)
     monkeypatch.setattr(cw, "_LAST_CLEAN_WAS_REVIEW", False)
 
-    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile):
+    def fake_watch(repo, pr, timeout_min, poll_sec, since, profile, ack_timeout_min=0):
         return cw._emit(state, "{} (stubbed)".format(state),
                         review_verdict=review_verdict)
     monkeypatch.setattr(cw, "watch", fake_watch)
@@ -1443,3 +1445,146 @@ def test_close_beads_on_clean_invokes_close_only(monkeypatch):
     # contract (bead state syncs via bd dolt push, not the PR).
     for forbidden in ("--review-worthy", "--branch", "--pr-title", "--arm"):
         assert forbidden not in cmd
+
+
+# --- acknowledgment phase + NO-ACK state (bd polyglot-pdf-<this-bead>) ---
+#
+# The "begun work" signal is an eyeballs ("eyes") reaction Codex adds to the
+# trigger comment, distinct from the "+1" thumbs-up CLEAN verdict. When closeout
+# passes --ack-timeout-min, the watcher runs an ack phase BEFORE the verdict wait:
+# eyes-present -> proceed to verdict; eyes-absent in the window -> NO-ACK (exit 4)
+# so the caller routes to the Opus-4.8 fallback reviewer; a quota notice during
+# the window -> ERROR (the bot responded but refused). --ack-timeout-min 0 (the
+# default) skips the phase entirely, so every existing caller is unchanged.
+
+_TRIGGER = "@codex review"
+
+
+def test_codex_ack_reaction_is_eyes():
+    # The profile carries the ack reaction; Copilot has none.
+    assert CODEX.ack_reaction == "eyes"
+    assert PROFILE.ack_reaction is None
+
+
+def test_has_ack_reaction_detects_eyes():
+    has = {"reactions": {"eyes": 1, "+1": 0}}
+    none_ = {"reactions": {"eyes": 0, "+1": 1}}
+    assert cw._has_ack_reaction(has, CODEX) is True
+    assert cw._has_ack_reaction(none_, CODEX) is False
+    assert cw._has_ack_reaction({}, CODEX) is False          # no rollup -> False
+    assert cw._has_ack_reaction(has, PROFILE) is False        # Copilot: no ack signal
+
+
+def test_ack_present_proceeds_to_verdict_clean(capsys, monkeypatch):
+    # The trigger comment has the eyes reaction (acked), AND Codex's verdict comment
+    # carries a thumbs-up. The ack phase must pass through and the verdict wait must
+    # then classify CLEAN -- i.e. an acked bot is NOT pre-empted by NO-ACK.
+    issue = [
+        {  # the gh-user trigger comment, now acked with eyeballs
+            "user": {"login": "some-human"},
+            "created_at": "2026-06-16T10:00:00Z",
+            "body": _TRIGGER,
+            "reactions": {"eyes": 1},
+        },
+        {  # Codex's verdict comment with the thumbs-up CLEAN signal
+            "user": {"login": _CODEX_LOGIN},
+            "created_at": "2026-06-16T10:01:00Z",
+            "body": "Codex Review: Didn't find any major issues.",
+            "reactions": {"+1": 1},
+        },
+    ]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+                  ack_timeout_min=2)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_no_ack_within_window_is_no_ack(capsys, monkeypatch):
+    # The trigger comment exists but has NO eyes reaction, and the ack deadline
+    # passes -> NO-ACK (exit 4). Force the deadline past by advancing monotonic.
+    issue = [{
+        "user": {"login": "some-human"},
+        "created_at": "2026-06-16T10:00:00Z",
+        "body": _TRIGGER,
+        # no "reactions" -> not acked
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    # First monotonic() seeds the deadline; the next read must be at/after it so the
+    # loop terminates on its first deadline check (mirrors the verdict-timeout test
+    # style without relying on wall-clock).
+    ticks = iter([0.0, 0.0, 999.0, 999.0, 999.0])
+    monkeypatch.setattr(cw.time, "monotonic", lambda: next(ticks))
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+                  ack_timeout_min=2)
+    out = capsys.readouterr().out
+    assert rc == 4, "no eyes reaction in the ack window must exit 4 (NO-ACK)"
+    assert "RESULT: NO-ACK" in out
+
+
+def test_quota_during_ack_phase_is_error_not_no_ack(capsys, monkeypatch):
+    # Codex posts the quota notice instead of reacting. The ack phase must classify
+    # ERROR (the bot responded but refused), NOT NO-ACK (never responded).
+    issue = [
+        {  # the trigger comment, unacked
+            "user": {"login": "some-human"},
+            "created_at": "2026-06-16T10:00:00Z",
+            "body": _TRIGGER,
+        },
+        {  # Codex's quota refusal
+            "user": {"login": _CODEX_LOGIN},
+            "created_at": "2026-06-16T10:00:30Z",
+            "body": "You have reached your Codex usage limits for code reviews.",
+        },
+    ]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+                  ack_timeout_min=2)
+    out = capsys.readouterr().out
+    assert rc == 1, "quota during ack phase must exit 1 (ERROR), not 4 (NO-ACK)"
+    assert "RESULT: ERROR" in out
+
+
+def test_ack_phase_disabled_by_default(capsys, monkeypatch):
+    # ack_timeout_min defaults to 0 -> the ack phase is skipped entirely and the
+    # watcher behaves exactly as before. A Codex CLEAN verdict with NO trigger
+    # comment acked still classifies CLEAN (regression guard for every existing
+    # caller, none of which pass --ack-timeout-min).
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-16T10:00:00Z",
+        "body": "Codex Review: Didn't find any major issues.",
+        "reactions": {"+1": 1},
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out
+
+
+def test_no_ack_does_not_close_beads(monkeypatch):
+    # --close-on-clean must NOT fire on NO-ACK (only CLEAN/MERGED close). Drive a
+    # NO-ACK through main() with --close-on-clean and assert the close shell-out
+    # never runs.
+    issue = [{
+        "user": {"login": "some-human"},
+        "created_at": "2026-06-16T10:00:00Z",
+        "body": _TRIGGER,
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    ticks = iter([0.0, 0.0, 999.0, 999.0, 999.0])
+    monkeypatch.setattr(cw.time, "monotonic", lambda: next(ticks))
+
+    closed = {"called": False}
+
+    def fake_close(beads):
+        closed["called"] = True
+        return 0
+    monkeypatch.setattr(cw, "_close_beads_on_clean", fake_close)
+
+    rc = cw.main([
+        "1", "--reviewer", "codex", "--ack-timeout-min", "2",
+        "--poll-sec", "0", "--close-on-clean", "polyglot-pdf-x",
+    ])
+    assert rc == 4, "NO-ACK exits 4 even with --close-on-clean"
+    assert closed["called"] is False, "NO-ACK must never close beads"
