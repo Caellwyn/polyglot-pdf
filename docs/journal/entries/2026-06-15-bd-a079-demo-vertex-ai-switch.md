@@ -30,18 +30,26 @@ Live model is published under DIFFERENT ids on AI Studio vs Vertex, and a Live
   which connects and returns audio on `us-central1` (the adapter's default
   location). Still a 2.5-family native-audio model.
 
-So the change is `VERTEXAI=true` PLUS `MODEL_NATIVE=gemini-live-2.5-flash-native-audio`
-pinned in `deploy-demo.sh`'s `BACKEND_EXTRA_ENV`. The pin wins over
-`USE_PREMIUM_MODEL` in `config.py` `_resolve_model` (a non-empty `MODEL_NATIVE`
-short-circuits the flag). `model_family()` still classifies it as `2.5`, so
-pricing bills at the 2.5 rate -- no cost-tracking drift.
+The fix evolved across two iterations:
 
-First deploy used `VERTEXAI=true` with the OLD (AI Studio) model and broke the
-demo voice path -- the model 1008'd on the Live connect. Caught by the fresh-eyes
-reviewer, who flagged that the local "auth works" proof used `generate_content`
-(text REST), not `bidiGenerateContent` (the Live WebSocket the app actually
-uses). Re-probing the Live path surfaced the id difference; the model pin is the
-fix.
+1. **First deploy** used `VERTEXAI=true` with the OLD (AI Studio) model id and
+   broke the demo voice path -- the model `1008`'d on the Live connect. Caught by
+   the fresh-eyes reviewer, who flagged that the local "auth works" proof used
+   `generate_content` (text REST), not `bidiGenerateContent` (the Live WebSocket
+   the app actually uses). Re-probing the Live path surfaced the id difference.
+2. **First fix** pinned `MODEL_NATIVE=gemini-live-2.5-flash-native-audio` in
+   `deploy-demo.sh`. That worked, but Codex review of PR #220 flagged that the
+   code DEFAULT (`config.py`) still resolved the standard tier to the AI-Studio
+   id regardless of backend, so any un-pinned Vertex deploy (a bare
+   `deploy-all.sh`) would still `1008` -- and a stale pin would block flipping
+   back to AI Studio for 3.1.
+3. **Final fix** (what shipped): made `config.py` `_resolve_model` **backend-aware**
+   -- with the standard tier and no explicit pin, `VERTEXAI=true` resolves to the
+   Vertex id and `VERTEXAI=false` to the AI Studio id (new constant
+   `MODEL_NATIVE_STANDARD_VERTEX`). So `deploy-demo.sh` carries only
+   `VERTEXAI=true,USE_PREMIUM_MODEL=false` (no pin), any Vertex deploy self-selects
+   the right model, and flipping back to AI Studio is clean. Both ids are
+   2.5-family, so `model_family()` bills them identically -- no cost drift.
 
 No code or IAM change was needed beyond the env. The Vertex path is the code
 default and fully implemented (`live_ai_gemini.py`
