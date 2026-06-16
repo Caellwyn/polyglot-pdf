@@ -18,7 +18,14 @@ import {
 import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
 import { getCompletionStats } from './utils/validation';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
-import type { FormField, FormConfig } from './types/schema';
+import type { FormField, FormConfig, FormSchema } from './types/schema';
+
+// Live review stats for the open kit's catalogue bar (percent + the matching
+// complete/total counts, so the bar AND its hover detail both track edits).
+function liveStats(schema: FormSchema): { percent: number; complete: number; total: number } {
+  const s = getCompletionStats(schema);
+  return { percent: s.percentage, complete: s.complete, total: s.total };
+}
 
 export const App: React.FC = () => {
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
@@ -123,6 +130,20 @@ export const App: React.FC = () => {
       setLoading(false);
     }
   }, [hasUnsavedChanges, loadSchemaState]);
+
+  // When the catalogue switches to a different folder, drop the open-kit state so
+  // a same-named kit in the new folder can't inherit the old form's live progress
+  // (Codex PR #224). The user re-opens a kit from the new folder explicitly.
+  const handleFolderChange = React.useCallback(() => {
+    setSelectedKitId(null);
+    setSelectedForm(null);
+    clearSchema();
+    fileHandleRef.current = null;
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
+    }
+  }, [clearSchema]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -389,13 +410,14 @@ export const App: React.FC = () => {
             directory API (where the catalogue shows its unsupported message). */}
         <FormCatalogue
           onOpenKit={handleOpenKit}
+          onFolderChange={handleFolderChange}
           selectedKitId={selectedKitId}
           liveProgress={
             // Keep the open kit's catalogue bar in sync with in-editor edits:
             // the disk-scanned % is stale after an edit/save, so feed the live
-            // in-memory % (same getCompletionStats the ValidationPanel uses).
+            // in-memory stats (same getCompletionStats the ValidationPanel uses).
             selectedKitId && schema
-              ? { kitId: selectedKitId, percent: getCompletionStats(schema).percentage }
+              ? { kitId: selectedKitId, ...liveStats(schema) }
               : null
           }
         />

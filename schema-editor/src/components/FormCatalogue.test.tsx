@@ -221,7 +221,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue
         onOpenKit={vi.fn()}
         selectedKitId="i-90"
-        liveProgress={{ kitId: 'i-90', percent: 75 }}
+        liveProgress={{ kitId: 'i-90', percent: 75, complete: 3, total: 4 }}
       />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));

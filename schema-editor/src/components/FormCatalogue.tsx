@@ -11,13 +11,16 @@ import {
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
   onOpenKit: (entry: CatalogueEntry) => void;
+  /** Called when the user switches to a different form-kits folder. */
+  onFolderChange?: () => void;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
   /**
-   * Live in-editor review % for the open kit, so its catalogue bar tracks
-   * unsaved edits instead of the stale disk-scan value. Null when no kit is open.
+   * Live in-editor review stats for the open kit, so its catalogue bar AND hover
+   * detail track unsaved edits instead of the stale disk-scan value. Null when no
+   * kit is open.
    */
-  liveProgress?: { kitId: string; percent: number } | null;
+  liveProgress?: { kitId: string; percent: number; complete: number; total: number } | null;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -33,7 +36,7 @@ const STATUS_STYLE: Record<string, string> = {
  * the browser lacks the File System Access directory API.
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
-  onOpenKit, selectedKitId, liveProgress,
+  onOpenKit, onFolderChange, selectedKitId, liveProgress,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
@@ -79,13 +82,16 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null); // a prior "Added X" notice is stale once the folder changes
     try {
       const dir = await pickDirectory();
+      // Drop the open-kit state BEFORE loading the new folder so a same-named kit
+      // there can't inherit the previous form's live progress (Codex PR #224).
+      onFolderChange?.();
       setRoot(dir);
       await refresh(dir);
     } catch (err) {
       if (isUserAbort(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to open folder');
     }
-  }, [refresh]);
+  }, [refresh, onFolderChange]);
 
   const handleDrop = React.useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -172,14 +178,17 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {kits.map((kit) => {
             const prog = progress[kit.id];
-            // The open kit shows its LIVE in-editor % (tracks unsaved edits);
-            // others show the disk-scanned value.
-            const pct = (liveProgress && liveProgress.kitId === kit.id)
-              ? liveProgress.percent
-              : (prog?.reviewPercent ?? null);
+            // The open kit shows its LIVE in-editor stats (tracks unsaved edits);
+            // others show the disk-scanned value. Percent AND the complete/total
+            // hover counts come from the same source so they never disagree.
+            const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
+            const pct = live ? live.percent : (prog?.reviewPercent ?? null);
+            const completeFields = live ? live.complete : (prog?.completeFields ?? 0);
+            const totalFields = live ? live.total : (prog?.totalFields ?? 0);
             // Present-but-unreadable schema: show a notice instead of nothing, so
-            // a broken schema isn't mistaken for a pre-extraction kit.
-            const showSchemaError = prog?.schemaError && pct === null;
+            // a broken schema isn't mistaken for a pre-extraction kit. A live
+            // override (open kit) always has measurable stats, so suppress it then.
+            const showSchemaError = !live && prog?.schemaError && pct === null;
             return (
             <li key={kit.id}>
               <button
@@ -207,7 +216,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
 
                 {/* Per-form review progress (% of fields complete). */}
                 {pct !== null && (
-                  <div className="mt-2" title={`${prog?.completeFields ?? 0} of ${prog?.totalFields ?? 0} fields complete`}>
+                  <div className="mt-2" title={`${completeFields} of ${totalFields} fields complete`}>
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>Review</span>
                       <span>{pct}%</span>

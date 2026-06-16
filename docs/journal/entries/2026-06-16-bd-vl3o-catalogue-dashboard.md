@@ -78,6 +78,16 @@ unsaved edits, preserving the "can't disagree with the in-editor %" guarantee.
 (c) a present-but-unreadable schema collapsed into the same null as no-schema --
 added a `schemaError` flag so the card shows "Schema present but unreadable"
 instead of silently hiding the row.
+Round 2 caught three follow-ons of those fixes, all adopted: (d) `liveProgress`
+matched the open kit by bare id, so after a Change-folder a same-named kit in the
+new folder could inherit the old form's % -- added an `onFolderChange` callback
+that clears the open-kit state before the new folder loads; (e) the card title's
+complete/total hover counts still came from the disk scan while `pct` was
+live-overridden -- `liveProgress` now carries `complete`/`total` so the bar and
+its detail share one source; (f) the malformed-schema guard relied on
+`getCompletionStats` throwing, but an iterable-but-invalid `fields` (e.g.
+`"abc"`) would not throw and reported a bogus % -- added an explicit
+`Array.isArray(schema.fields)` check that surfaces `schemaError` instead.
 
 ## Lessons
 

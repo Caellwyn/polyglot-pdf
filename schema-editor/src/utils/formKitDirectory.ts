@@ -173,11 +173,18 @@ export async function readKitProgress(
     // schema, not a pre-extraction kit.
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
   }
+  // Validate the shape BEFORE measuring: a schema can parse as JSON yet be
+  // structurally wrong in ways that don't throw -- e.g. `fields: "abc"` is
+  // iterable, so getCompletionStats would silently report a bogus % with
+  // schemaError=false. Require an actual fields array (an empty [] is a valid
+  // 0% schema). Anything else is a broken extraction, surfaced as schemaError.
+  if (!Array.isArray(schema.fields)) {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+  }
   try {
-    // A schema can parse as JSON yet be structurally malformed (e.g. no `fields`
-    // array), which would throw inside getCompletionStats. Treat any such failure
-    // as a measurable-progress failure (schemaError) rather than letting it reject
-    // the whole catalogue-wide Promise.all and wipe every bar.
+    // Belt-and-suspenders: any remaining failure inside getCompletionStats is a
+    // measurable-progress failure (schemaError), never an unhandled rejection
+    // that would reject the catalogue-wide Promise.all and wipe every bar.
     const stats = getCompletionStats(schema);
     return {
       entry,

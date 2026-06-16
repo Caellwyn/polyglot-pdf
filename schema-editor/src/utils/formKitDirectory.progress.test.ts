@@ -126,6 +126,17 @@ describe('readKitProgress', () => {
     expect(prog.schemaError).toBe(true);
   });
 
+  it('flags schemaError for a non-array fields value (iterable but invalid)', async () => {
+    // Codex finding: `fields: "abc"` is iterable, so getCompletionStats would NOT
+    // throw -- it would report a bogus % with schemaError=false. The Array.isArray
+    // guard must catch this and surface it as a broken schema.
+    const prog = await readKitProgress(
+      entryServingSchema('k', { form_metadata: { form_number: 'T' }, fields: 'abc' }),
+    );
+    expect(prog.reviewPercent).toBeNull();
+    expect(prog.schemaError).toBe(true);
+  });
+
   it('reports 0% (not null) for a valid schema with zero fields', async () => {
     // An extracted-but-empty schema is distinct from a pre-extraction kit: it has
     // a measurable (0%) progress, so the bar renders rather than being hidden.
