@@ -57,16 +57,24 @@ async def test_live_ai_gemini_real_connection():
     also 1007s -- bd polyglot-pdf-1g6).
     """
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        pytest.skip("GEMINI_API_KEY is not configured")
-
     settings = get_settings()
     model = os.getenv("GEMINI_LIVE_MODEL", settings.MODEL_NATIVE)
 
+    # Smoke-test the SELECTED backend, not always AI Studio. settings.MODEL_NATIVE
+    # is backend-aware (the standard tier resolves to the Vertex id when
+    # VERTEXAI=true and the AI Studio id when false -- bd polyglot-pdf-a079), and
+    # the model id 1008s on the wrong backend. So the adapter must be built with
+    # the SAME vertexai flag the id was resolved under, or this smoke run connects
+    # the AI Studio client to a Vertex-only id (or vice versa) and 1008s.
+    #   - Vertex (vertexai=True): authenticates via ADC, no API key.
+    #   - AI Studio (vertexai=False): requires GEMINI_API_KEY.
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not settings.VERTEXAI and not api_key:
+        pytest.skip("AI Studio path (VERTEXAI=false) requires GEMINI_API_KEY")
+
     last_failure = None
     for attempt in range(1, _ATTEMPTS + 1):
-        adapter = LiveAIGemini(api_key=api_key, model=model)
+        adapter = LiveAIGemini(api_key=api_key, model=model, vertexai=settings.VERTEXAI)
         adapter._function_declarations = settings.TOOL_DECLARATIONS
         adapter._system_instruction = (
             "You are a diagnostics bot. When contacted, say the word ACK."

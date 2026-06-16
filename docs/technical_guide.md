@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-15. bd b0pe touched deploy-all.sh (the form-kit complete-gate); that behavior is documented in components/config-deployment.md, not here (this guide only lists the deploy flow + FORM_KITS_* env vars, both unchanged). See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the model-rationale correction (2.5 default for latency; both models reliable), [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying i9q8 tool-call fix, and [journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) for the original USE_PREMIUM_MODEL default flip.*
+*Last updated: 2026-06-16. The `USE_PREMIUM_MODEL` row now records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -30,7 +30,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> `gemini-2.5-flash-native-audio-preview-12-2025` (standard), `true` -> `gemini-3.1-flash-live-preview` (premium). Both tool-call reliably; 2.5 is the default because it is ~170x faster per turn on the audio path. See [ai-models.md](standards/ai-models.md). |
+| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> 2.5 standard, `true` -> `gemini-3.1-flash-live-preview` (premium). The standard 2.5 id is **backend-aware** (`_resolve_model`): `gemini-live-2.5-flash-native-audio` on Vertex (`VERTEXAI=true`), `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio (`VERTEXAI=false`) -- each 1008s on the other backend. Both tool-call reliably; 2.5 is the default because it is ~170x faster per turn on the audio path. 3.1 is AI-Studio-only. See [ai-models.md](standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |

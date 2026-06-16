@@ -15,8 +15,14 @@ constants):
 
 | Tier | Model id | Family |
 |------|----------|--------|
-| **standard** (default) | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
-| **premium** (opt-in) | `gemini-3.1-flash-live-preview` | `3.1` |
+| **standard** (default), AI Studio | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
+| **standard** (default), Vertex | `gemini-live-2.5-flash-native-audio` | `2.5` |
+| **premium** (opt-in), AI Studio only | `gemini-3.1-flash-live-preview` | `3.1` |
+
+The standard tier's id is **backend-aware** (`_resolve_model` picks by `VERTEXAI`)
+because the native-audio Live model is published under a different id on each
+backend and each `1008`s on the other. The premium (3.1) tier has no Vertex id as
+of 2026-06.
 
 > **Why 2.5 is the default.** **Both models now emit `update_form_fields`
 > reliably.** The historic "3.1 only calls the tool ~50% of the time and
