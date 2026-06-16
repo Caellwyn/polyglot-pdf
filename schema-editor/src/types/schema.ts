@@ -110,13 +110,17 @@ export type ConditionalOperator =
   | 'in'
   | 'not_in';
 
-// Proactive, trigger-side conditional logic. Mirrors backend
-// ConditionalControl (backend/models/form_models.py): a field carries a LIST of
-// these, each saying "when my value satisfies <operator> <value>, apply these
-// actions to the listed target fields". controls_fields is List[ConditionalControl].
+// A single conditional-control rule. controls_fields is an ARRAY of these on a
+// field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488),
+// the runtime contract (frontend/src/schema-forms/types/schema.ts
+// ConditionalControl), and backend ConditionalControl
+// (backend/models/form_models.py). The previous single-object shape with a
+// `when_value` key did NOT match any real data, so validateSchema's
+// controlled-id reference check silently did nothing on real form kits
+// (Codex review, bd polyglot-pdf-y61i).
 export interface ConditionalControl {
   operator: ConditionalOperator;
-  value: any;
+  value: string | number | boolean | Array<string | number | boolean>;
   shows?: string[];
   hides?: string[];
   unlocks?: string[];

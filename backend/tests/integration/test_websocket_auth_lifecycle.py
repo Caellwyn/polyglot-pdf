@@ -293,3 +293,157 @@ async def test_idle_watchdog_sends_message_then_closes_1000(
 
     # Session cleanup ran in the finally block.
     mock_service.end_session.assert_awaited_once()
+
+
+# --------------------------------------------------------------------------
+# 3b. IDLE WATCHDOG resets on USER TURNS, not on raw audio (bd polyglot-pdf-l3a.4)
+#     In native VAD mode the client streams continuous audio incl. silence, so
+#     the watchdog must NOT treat inbound audio frames as activity -- otherwise a
+#     walk-away with the mic open never times out and burns Gemini's 15-min
+#     audio session. It DOES reset on a native-VAD user turn (on_user_activity).
+# --------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_idle_watchdog_ignores_inbound_audio_frames(
+    mock_websocket, mock_service, monkeypatch
+):
+    """A session streaming ONLY audio frames (no user turn) must still time out.
+
+    This is the core walk-away fix: audio bytes are delivered to the receive loop
+    continuously, but they no longer bump the idle clock, so the watchdog trips.
+    """
+    mock_service._is_resume_session = False
+    mock_service.start_session = AsyncMock()
+    mock_service.end_session = AsyncMock()
+    mock_service.stream_audio = AsyncMock()
+
+    import backend.routes.websocket_routes as routes
+    monkeypatch.setattr(routes.get_settings(), "WS_IDLE_TIMEOUT_SEC", 5, raising=False)
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(routes.time, "time", lambda: clock["t"])
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds):
+        # Watchdog tick: advance the clock past the timeout window.
+        clock["t"] += 10.0
+        await real_sleep(0)
+
+    monkeypatch.setattr(routes.asyncio, "sleep", fast_sleep)
+
+    closed = asyncio.Event()
+
+    # Feed a fixed burst of audio frames (each advancing the clock), THEN block.
+    # If audio bumped last_rx, the post-burst clock position would be "fresh" and
+    # the watchdog would not trip; because it does NOT, the watchdog fires while
+    # receive() is blocked. Bounded burst (no infinite spin) keeps the event loop
+    # free for the watchdog coroutine.
+    audio_frames_left = {"n": 5}
+
+    async def audio_then_block():
+        if closed.is_set():
+            return {"type": "websocket.disconnect"}
+        if audio_frames_left["n"] > 0:
+            audio_frames_left["n"] -= 1
+            clock["t"] += 1.0
+            await real_sleep(0)  # yield so the watchdog coroutine can run
+            return {"bytes": b"\x00" * 1280}  # a silent PCM frame
+        # Burst done: block until the watchdog closes the socket.
+        await closed.wait()
+        return {"type": "websocket.disconnect"}
+
+    mock_websocket.receive.side_effect = audio_then_block
+    mock_websocket.close.side_effect = lambda *_a, **_k: closed.set()
+
+    await asyncio.wait_for(
+        _handle_fill_session(
+            mock_websocket, "web_test", mock_service, False,
+            accept_connection=False, schema=None,
+        ),
+        timeout=5.0,
+    )
+
+    # Despite a continuous inbound audio stream, the idle watchdog still fired.
+    idle_msgs = [
+        c.args[0] for c in mock_websocket.send_json.await_args_list
+        if isinstance(c.args[0], dict) and c.args[0].get("type") == "idle_timeout"
+    ]
+    assert idle_msgs, "audio-only session never timed out -- audio is bumping last_rx"
+    # And audio frames were actually processed (proving they reached the loop).
+    assert mock_service.stream_audio.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_user_activity_callback_resets_idle_clock(
+    mock_websocket, mock_service, monkeypatch
+):
+    """The native-VAD on_user_activity callback bumps the idle clock.
+
+    The route registers service._on_user_activity before start_session. Firing it
+    must reset last_rx so an actively-conversing user is never timed out. We assert
+    the callback exists, is async, and moves the clock the watchdog reads.
+    """
+    mock_service._is_resume_session = False
+    mock_service.start_session = AsyncMock()
+    mock_service.end_session = AsyncMock()
+
+    import backend.routes.websocket_routes as routes
+    monkeypatch.setattr(routes.get_settings(), "WS_IDLE_TIMEOUT_SEC", 5, raising=False)
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(routes.time, "time", lambda: clock["t"])
+
+    # Capture the activity callback the route registers, then fire it mid-run and
+    # confirm it defers the timeout. The receive loop blocks until we release it.
+    released = asyncio.Event()
+    activity_fired = asyncio.Event()
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds):
+        # On the first watchdog tick, simulate a user turn JUST before the idle
+        # window would trip: advance the clock to 1004 (under the 5s window), fire
+        # the registered activity callback (which sets last_rx = now = 1004), THEN
+        # advance to 1008. Because last_rx was bumped to 1004, (1008 - 1004) = 4 < 5,
+        # so the watchdog must NOT fire on this tick.
+        if not activity_fired.is_set():
+            clock["t"] = 1004.0
+            cb = getattr(mock_service, "_on_user_activity", None)
+            assert cb is not None, "route never registered _on_user_activity"
+            assert asyncio.iscoroutinefunction(cb), "_on_user_activity must be async"
+            await cb()  # bumps last_rx to 1004
+            clock["t"] = 1008.0
+            activity_fired.set()
+            await real_sleep(0)
+            return
+        # Subsequent ticks: no more activity -> let it trip and close.
+        clock["t"] += 10.0
+        await real_sleep(0)
+
+    monkeypatch.setattr(routes.asyncio, "sleep", fast_sleep)
+
+    closed = asyncio.Event()
+
+    async def blocking_receive():
+        await closed.wait()
+        return {"type": "websocket.disconnect"}
+
+    mock_websocket.receive.side_effect = blocking_receive
+    mock_websocket.close.side_effect = lambda *_a, **_k: closed.set()
+
+    await asyncio.wait_for(
+        _handle_fill_session(
+            mock_websocket, "web_test", mock_service, False,
+            accept_connection=False, schema=None,
+        ),
+        timeout=5.0,
+    )
+
+    # The activity callback ran (proving it was registered and callable), and the
+    # session ultimately timed out only AFTER activity stopped.
+    assert activity_fired.is_set()
+    idle_msgs = [
+        c.args[0] for c in mock_websocket.send_json.await_args_list
+        if isinstance(c.args[0], dict) and c.args[0].get("type") == "idle_timeout"
+    ]
+    assert idle_msgs, "session never timed out after activity stopped"

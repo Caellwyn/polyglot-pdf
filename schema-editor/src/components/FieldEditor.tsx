@@ -467,7 +467,16 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                       <input
                         type="text"
                         className="input"
-                        value={control.value ?? ''}
+                        // value can be scalar or (for in/not_in) an array; show
+                        // arrays comma-joined. Authoring writes a string back --
+                        // the array-valued operators are not offered here (bd jplx).
+                        value={
+                          Array.isArray(control.value)
+                            ? control.value.join(', ')
+                            : control.value == null
+                            ? ''
+                            : String(control.value)
+                        }
                         onChange={(e) =>
                           updateControlAt(idx, { value: e.target.value })
                         }
