@@ -120,20 +120,22 @@ describe('Phase 5: Zoom Presets', () => {
   });
 
   describe('Button interactions (observable in jsdom)', () => {
-    it('clicking Fit Width does not throw and keeps the toolbar mounted', async () => {
+    it('clicking Fit Width does not throw and keeps the viewer rendered', async () => {
       await renderLoadedViewer();
       const fitWidthButton = screen.getByTitle('Fit to width');
       // jsdom container rects are 0, so the fitted scale itself is not observable
-      // here; what we assert is that the click is wired and does not error.
+      // here; what we assert is that the click is wired and does not error, and
+      // that the viewer is still rendered afterward (the scale readout survives --
+      // catches a click that error-boundary-unmounts the viewer).
       expect(() => fireEvent.click(fitWidthButton)).not.toThrow();
-      expect(fitWidthButton).toBeInTheDocument();
+      expect(screen.getByText('100%')).toBeInTheDocument();
     });
 
-    it('clicking Fit Page does not throw and keeps the toolbar mounted', async () => {
+    it('clicking Fit Page does not throw and keeps the viewer rendered', async () => {
       await renderLoadedViewer();
       const fitPageButton = screen.getByTitle('Fit entire page');
       expect(() => fireEvent.click(fitPageButton)).not.toThrow();
-      expect(fitPageButton).toBeInTheDocument();
+      expect(screen.getByText('100%')).toBeInTheDocument();
     });
 
     it('manual zoom changes the displayed scale and presets click in cleanly alongside it', async () => {

@@ -1125,6 +1125,13 @@ checked state reveals and unlocks the representative-name fields:
 ]
 ```
 
+Here `value` is the controlling field's STORED value to match against (under
+`operator`), NOT a target field id. The example value `"P1_checkbox4[0]"` is taken
+verbatim from the real I-90 schema, where this checkbox stores its own PDF widget
+name as its checked value -- so for a new form, set `value` to whatever the
+controlling field actually stores when the rule should fire (often `"true"` /
+`"Yes"` / an option value), not a widget name by convention.
+
 Every id listed in `shows`/`hides`/`unlocks`/`locks`/`makes_required`/
 `makes_optional` must be a real field id in the schema -- the editor's validator
 flags any that is not (a `controls_fields references non-existent field` warning),

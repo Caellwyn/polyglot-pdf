@@ -224,7 +224,15 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
         />
       );
 
-      const pageInput = await waitFor(() => screen.getByRole('spinbutton') as HTMLInputElement);
+      // Wait for ALL 3 pages to render before firing input: handlePageInput ->
+      // scrollToPage only calls setCurrentPage when the target page's ref is
+      // registered (pageRefs.get(page)), which happens as each page div commits.
+      // Gating on the spinbutton alone would race the page-ref registration and
+      // flake (fresh-eyes, bd 840i).
+      await waitFor(() => {
+        expect(document.querySelectorAll('canvas').length).toBe(3);
+      });
+      const pageInput = screen.getByRole('spinbutton') as HTMLInputElement;
 
       // The input is controlled by currentPage, which handlePageInput clamps to
       // [1, numPages] (here numPages = 3). An over-max entry must NOT leave the
