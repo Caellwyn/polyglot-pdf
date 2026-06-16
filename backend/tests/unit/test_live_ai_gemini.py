@@ -1296,3 +1296,52 @@ async def test_run_session_loop_go_away_without_callback_does_not_crash():
     await adapter.finalize()
 
 
+def test_build_live_config_input_transcription_for_liveness(mock_google_ai_client):
+    """`input_audio_transcription` is requested whenever the idle-liveness callback
+    is registered, EVEN with transcripts off (bd polyglot-pdf-l3a.4; Codex PR #214).
+
+    The idle watchdog's `on_user_activity` callback fires on a native-VAD
+    `input_transcription`, which Gemini only emits when `input_audio_transcription`
+    is in the connect config. In the DEFAULT production path send_transcript=False,
+    so without this the callback never fires and an actively-speaking user would be
+    wrongly idle-timed-out (audio no longer bumps the clock). Output transcription
+    stays gated on transcripts (it is the client-visible text -- PHI).
+    """
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend.config import get_settings
+
+    settings = get_settings()
+
+    # 1. transcripts OFF, liveness callback OFF -> NO input transcription.
+    a = LiveAIGemini(api_key="test_key")
+    a._enable_transcripts = False
+    a._on_user_activity = None
+    cfg = a._build_live_config(settings)
+    assert "input_audio_transcription" not in cfg
+    assert "output_audio_transcription" not in cfg
+
+    # 2. transcripts OFF, liveness callback ON -> input transcription ON, output OFF.
+    #    This is the regression: the production default path must still detect turns.
+    async def _noop():
+        return None
+
+    b = LiveAIGemini(api_key="test_key")
+    b._enable_transcripts = False
+    b._on_user_activity = _noop
+    cfg = b._build_live_config(settings)
+    assert "input_audio_transcription" in cfg, (
+        "liveness callback registered but Gemini won't emit input_transcription"
+    )
+    assert "output_audio_transcription" not in cfg, (
+        "output transcription (client-visible PHI) must stay gated on transcripts"
+    )
+
+    # 3. transcripts ON -> both (unchanged behavior).
+    c = LiveAIGemini(api_key="test_key")
+    c._enable_transcripts = True
+    c._on_user_activity = None
+    cfg = c._build_live_config(settings)
+    assert "input_audio_transcription" in cfg
+    assert "output_audio_transcription" in cfg
+
+

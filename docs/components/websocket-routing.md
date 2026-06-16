@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-15. bd njvh: the `confirm_field_response` control message now carries an optional `section_complete` flag that the WS route reads and threads to the confirm handler (which skips the racing next-field-hint at a section boundary) -- see ws-protocol.md for the field, tool-call-flow.md for the handler behavior. (No change to route dispatch structure.) Prior: 2026-06-14 (terminal `reconnect_failed` status + connection-timeout modal on auto-reconnect give-up, bd polyglot-pdf-jf6w). Prior 2026-06-14: bd uj57 emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). Prior 2026-06-13: bd 0tgc onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires); bd b6k4 createMicDropWarn extracted from connection.ts closure (no routing or protocol change); 2026-06-12 removed dead `request_next_field_hint` branch from handleFormUpdated (bd dlbr) + GoAway forward message (bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-15. bd polyglot-pdf-l3a.4: the idle watchdog now resets on MEANINGFUL activity (a native-VAD user turn via the adapter `on_user_activity` callback, or a non-audio control/text message) -- NOT on raw inbound audio frames, which in native VAD mode stream continuously incl. silence and previously kept a walked-away session alive (see "Idle watchdog" below). Prior 2026-06-15: bd njvh: the `confirm_field_response` control message now carries an optional `section_complete` flag that the WS route reads and threads to the confirm handler (which skips the racing next-field-hint at a section boundary) -- see ws-protocol.md for the field, tool-call-flow.md for the handler behavior. (No change to route dispatch structure.) Prior 2026-06-14 (terminal `reconnect_failed` status + connection-timeout modal on auto-reconnect give-up, bd polyglot-pdf-jf6w). Prior 2026-06-14: bd uj57 emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). Prior 2026-06-13: bd 0tgc onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires); bd b6k4 createMicDropWarn extracted from connection.ts closure (no routing or protocol change); 2026-06-12 removed dead `request_next_field_hint` branch from handleFormUpdated (bd dlbr) + GoAway forward message (bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -113,11 +113,22 @@ settles to `connected`.
 ## Idle watchdog
 
 `_handle_fill_session` runs a watchdog that checks every 5s; after
-`WS_IDLE_TIMEOUT_SEC` (config.py) of no received frame it sends
+`WS_IDLE_TIMEOUT_SEC` (config.py) of no **meaningful activity** it sends
 `{"type":"idle_timeout", ...}`, waits 0.5s, then closes with code `1000`. The
 frontend uses that message to stop auto-reconnecting and show a Reconnect button.
 (`/ws/echo` and `/ws/audio` use a simpler 1s-interval watchdog closing with
 `1001`.)
+
+**"Meaningful activity" excludes raw inbound audio frames (bd polyglot-pdf-l3a.4).**
+In native VAD mode the client streams continuous audio incl. silence, so counting
+audio bytes as activity made the timeout un-fireable when a user walked away with
+the mic open (the session then burned Gemini's 15-min audio cap at ~$0.0045/min).
+The idle clock now resets only on: (a) a real user turn -- the adapter's
+`on_user_activity` callback, fired when Gemini's native VAD produces an
+`input_transcription` (background noise/silence do NOT produce one); and (b)
+non-audio control/text messages (ping, form_state, hint). Gemini's OUTPUT audio
+(model speaking) does not count. Server-side only; no client-side VAD, no new
+per-session server state.
 
 ## Reconnect (no page refresh)
 
