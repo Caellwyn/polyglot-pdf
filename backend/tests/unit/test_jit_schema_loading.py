@@ -207,7 +207,15 @@ class TestGetNextFieldSchemaForJIT:
 
 
 class TestCallbackHandlerJITIntegration:
-    """Test CallbackHandler integration with JIT schema loading."""
+    """CallbackHandler ROUTING around the JIT getter (mocked), bd polyglot-pdf-nx6g.
+
+    These tests inject `get_next_field_schema_for_jit=MagicMock` and verify WHEN the
+    handler calls it and how it attaches/omits the returned schema -- i.e. the
+    handler's routing contract. They do NOT exercise the real JIT/manifest_service
+    production code that BUILDS a field schema (that getter is mocked); the actual
+    schema construction is covered by FormFillingService/manifest tests + the
+    TestJITSchemaLoading class above (which calls the real get_next_field_schema).
+    So 'integration' here means handler<->getter wiring, not end-to-end JIT."""
 
     @pytest.fixture
     def mock_websocket(self):
@@ -389,8 +397,18 @@ class TestCallbackHandlerJITIntegration:
         assert "next_field_schema" not in response
 
     @pytest.mark.asyncio
-    async def test_validation_error_does_not_call_jit(self, mock_websocket, mock_coordinator):
-        """Should not call JIT getter when validation fails."""
+    async def test_update_validation_failure_shapes_failure_response(self, mock_websocket, mock_coordinator):
+        """A validation failure on update_form_fields shapes a success=False response
+        with no next_field_schema.
+
+        NOTE (bd polyglot-pdf-nx6g): this was `test_validation_error_does_not_call_jit`,
+        whose `mock_jit_getter.assert_not_called()` was TAUTOLOGICAL -- the
+        update_form_fields path NEVER calls the JIT getter (JIT schema is delivered
+        only on the confirm_field path, callback_handler.py:556-557), so the
+        not-called assertion held by construction on success OR failure and proved
+        nothing about validation handling. The structural "update never JITs" fact is
+        covered meaningfully by test_update_does_not_include_next_field_schema above.
+        This test now asserts only what is real here: the failure-response shape."""
         handler = CallbackHandler(
             websocket=mock_websocket,
             session_id="test-session",
@@ -410,14 +428,12 @@ class TestCallbackHandlerJITIntegration:
             }]
         })
 
-        mock_jit_getter = MagicMock()
-
         handler.set_tool_handlers(
             handle_update_fields=mock_update_handler,
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
-            get_next_field_schema_for_jit=mock_jit_getter
+            get_next_field_schema_for_jit=MagicMock(),
         )
 
         response = await handler.on_tool_call("update_form_fields", {
@@ -425,10 +441,7 @@ class TestCallbackHandlerJITIntegration:
             "value": ""
         })
 
-        # Should NOT call JIT getter on validation error
-        mock_jit_getter.assert_not_called()
-
-        # Response should indicate failure
+        # Real assertions: a validation failure shapes a failure response with no schema.
         assert response is not None
         assert response["success"] is False
         assert "next_field_schema" not in response

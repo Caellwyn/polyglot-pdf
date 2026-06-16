@@ -128,6 +128,77 @@ class TestParseTranscript:
         assert parsed["assistant_turns"]["orchestrator"] == 1
 
 
+def _write_subagent_sidecar(main_transcript, agent_id, records):
+    """Write a subagents/agent-<id>.jsonl sidecar next to the main transcript,
+    mirroring Claude Code's layout (<stem>/subagents/agent-<id>.jsonl)."""
+    sub_dir = main_transcript.with_suffix("") / "subagents"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    p = sub_dir / f"agent-{agent_id}.jsonl"
+    with p.open("w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+    return p
+
+
+class TestSubagentSidecars:
+    """bd polyglot-pdf-17k: spawned-subagent tokens live in subagents/agent-*.jsonl,
+    not as isSidechain rows in the main transcript, and must be folded in."""
+
+    def test_subagent_sidecar_tokens_fold_into_subagent_bucket(self, tmp_path):
+        # Main transcript: orchestrator only, NO subagent rows (the bug condition).
+        main = _write_transcript(tmp_path, [
+            _assistant(_usage(inp=100, out=10), sidechain=False),
+        ])
+        # Two spawned-subagent sidecars, each with isSidechain:true rows.
+        _write_subagent_sidecar(main, "aaa111", [
+            _assistant(_usage(inp=200, out=20), sidechain=True, model="claude-sonnet-4-6"),
+        ])
+        _write_subagent_sidecar(main, "bbb222", [
+            _assistant(_usage(inp=300, out=30), sidechain=True, model="claude-haiku-4-5"),
+        ])
+
+        parsed = ledger.parse_transcript(main)
+
+        # Orchestrator unchanged; subagent bucket now reflects BOTH sidecars.
+        assert parsed["tokens"]["orchestrator"]["input_tokens"] == 100
+        assert parsed["tokens"]["subagent"]["input_tokens"] == 500  # 200 + 300
+        assert parsed["tokens"]["subagent"]["output_tokens"] == 50  # 20 + 30
+        assert parsed["tokens"]["total"]["input_tokens"] == 600
+        assert parsed["assistant_turns"]["subagent"] == 2
+        # Per-model subagent breakdown (the arm-B signal) sees both models.
+        assert ledger.subagent_models(parsed) == ["claude-haiku-4-5", "claude-sonnet-4-6"]
+
+    def test_meta_stays_anchored_to_main_not_sidecars(self, tmp_path):
+        # Main defines the session id + the wall-clock span.
+        main = _write_transcript(tmp_path, [
+            {"type": "user", "sessionId": "main-sess", "timestamp": "2026-06-01T00:00:00Z"},
+            _assistant(_usage(inp=1), ts="2026-06-01T00:01:00Z"),
+            {"type": "user", "sessionId": "main-sess", "timestamp": "2026-06-01T00:02:00Z"},
+        ])
+        # A sidecar with a DIFFERENT session id and timestamps OUTSIDE the main span.
+        _write_subagent_sidecar(main, "ccc333", [
+            {"type": "user", "sessionId": "sub-sess", "timestamp": "2025-01-01T00:00:00Z"},
+            _assistant(_usage(inp=9), sidechain=True, ts="2030-12-31T23:59:59Z"),
+        ])
+
+        parsed = ledger.parse_transcript(main)
+
+        # Session id + span come from MAIN only; the sidecar's id/timestamps are ignored.
+        assert parsed["session_id"] == "main-sess"
+        assert parsed["first_ts"] == "2026-06-01T00:00:00Z"
+        assert parsed["last_ts"] == "2026-06-01T00:02:00Z"
+        # But the sidecar's TOKENS are still counted.
+        assert parsed["tokens"]["subagent"]["input_tokens"] == 9
+
+    def test_no_subagents_dir_is_fine(self, tmp_path):
+        # A session that spawned no subagents has no sidecar dir -> subagent bucket 0.
+        main = _write_transcript(tmp_path, [_assistant(_usage(inp=7), sidechain=False)])
+        assert ledger.discover_subagent_transcripts(main) == []
+        parsed = ledger.parse_transcript(main)
+        assert parsed["tokens"]["subagent"]["input_tokens"] == 0
+        assert parsed["tokens"]["orchestrator"]["input_tokens"] == 7
+
+
 # --------------------------------------------------------------------------- #
 # Transcript discovery
 # --------------------------------------------------------------------------- #

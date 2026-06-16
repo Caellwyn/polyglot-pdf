@@ -1,13 +1,23 @@
 """
-Unit tests for field validation responses to Gemini.
+Unit tests for how CallbackHandler SHAPES a field-update result into the tool
+response sent back to Gemini.
 
-Tests verify that:
-1. Valid field updates pass through correctly
-2. Invalid field updates return informative error messages to Gemini
-3. Frontend receives correct form_state (empty on failure, populated on success)
+SCOPE (bd polyglot-pdf-nx6g): the classes that inject a mocked
+`handle_update_fields` (TestUpdateResponseShaping_Valid /
+TestUpdateResponseShaping_Invalid / TestUpdateErrorMessageFormatting /
+TestUpdateResponseShaping_SingleField below) test ONLY the response-shaping /
+formatter wiring -- given a validator RESULT (applied/unknown/validation_errors),
+does on_tool_call produce the right success flag, applied_fields, unknown_fields,
+and the "ERRORS:" message envelope. The real validator (backend/utils/field_validator
+.validate_updates) is NOT exercised by these classes (it is replaced by the mock),
+so any value/pattern string they assert comes from the injected FIXTURE, not from
+validating the input. They would stay green if the real validator changed.
 
-This addresses the critical path requirement: validation must catch invalid inputs
-(e.g., A-number with 4 digits instead of 7-9) and provide clear feedback to Gemini.
+The REAL validator behavior IS covered, deliberately, elsewhere:
+- `TestANumberNormalization` (this file) calls `validate_updates` directly.
+- `backend/tests/unit/test_d24n_dict_option_validation.py` covers enum/option
+  validation against the real validator.
+So the formatter tests below are honest formatter coverage, not validator coverage.
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -102,14 +112,18 @@ def create_callback_handler(mock_websocket, mock_coordinator, update_handler):
     return handler
 
 
-class TestValidFieldUpdates:
-    """Test that valid field updates pass through correctly."""
+class TestUpdateResponseShaping_Valid:
+    """FORMATTER-ONLY (mocked validator): given an APPLIED result, on_tool_call
+    shapes a success tool response. Does NOT test the validator -- see module
+    docstring; the real accept-path is in TestANumberNormalization."""
 
     @pytest.mark.asyncio
-    async def test_valid_a_number_passes_validation(
+    async def test_applied_result_shapes_success_response(
         self, mock_websocket, mock_coordinator, validation_handler_valid
     ):
-        """Valid A-number (7 digits) should pass validation and update form."""
+        """Given the (mocked) handler reports the field applied, the tool response
+        to Gemini is success=True with the field in applied_fields. The '1234567'
+        below is the FIXTURE's return value, not a validated input."""
         handler = create_callback_handler(
             mock_websocket, mock_coordinator, validation_handler_valid
         )
@@ -129,14 +143,20 @@ class TestValidFieldUpdates:
         # The key validation logic is verified through the tool response
 
 
-class TestInvalidFieldUpdates:
-    """Test that invalid field updates return informative error messages to Gemini."""
+class TestUpdateResponseShaping_Invalid:
+    """FORMATTER-ONLY (mocked validator): given a REJECTED result, on_tool_call
+    shapes a failure tool response with the error envelope. Does NOT test the
+    validator -- the asserted '1234'/pattern strings come from the injected
+    FIXTURE, not from validating '1234'. Real reject-path: TestANumberNormalization."""
 
     @pytest.mark.asyncio
-    async def test_a_number_too_short_returns_error_to_gemini(
+    async def test_rejected_result_shapes_error_response_for_gemini(
         self, mock_websocket, mock_coordinator, validation_handler_invalid_pattern
     ):
-        """A-number with 4 digits should fail validation with clear error message."""
+        """Given the (mocked) handler reports a pattern rejection, the tool response
+        is success=False with the validation_errors surfaced in an 'ERRORS:'
+        message. The '1234' / pattern text below is the FIXTURE's content, asserting
+        the FORMATTER passes it through -- not that the validator rejected '1234'."""
         handler = create_callback_handler(
             mock_websocket, mock_coordinator, validation_handler_invalid_pattern
         )
@@ -197,14 +217,19 @@ class TestInvalidFieldUpdates:
         assert "unknown" in error_message.lower()
 
 
-class TestValidationErrorMessageQuality:
-    """Test that validation error messages are informative for Gemini."""
+class TestUpdateErrorMessageFormatting:
+    """FORMATTER-ONLY (mocked validator): the 'ERRORS:' message envelope shape --
+    prefix, the field identifier, the quoted value, and the constraint text are
+    carried through from the (mocked) validation_errors into the Gemini message.
+    The pattern/value strings asserted are the FIXTURE's, not a real validation
+    outcome. Real validator: TestANumberNormalization."""
 
     @pytest.mark.asyncio
     async def test_pattern_error_includes_constraint_value(
         self, mock_websocket, mock_coordinator, validation_handler_invalid_pattern
     ):
-        """Pattern validation errors should include the regex pattern for context."""
+        """The formatter carries the (fixture-provided) regex pattern into the
+        error message so Gemini sees the constraint."""
         handler = create_callback_handler(
             mock_websocket, mock_coordinator, validation_handler_invalid_pattern
         )
@@ -241,15 +266,21 @@ class TestValidationErrorMessageQuality:
         assert "'1234'" in error_message or "1234" in error_message, "Error should quote or show the invalid value"
 
 
-class TestMultiFieldRejection:
-    """Test that multi-field updates are properly rejected (single-field constraint)."""
+class TestUpdateResponseShaping_SingleField:
+    """FORMATTER-ONLY (mocked validator): the single-field update format shapes a
+    success response. (Was named TestMultiFieldRejection /
+    test_multiple_fields_rejected_with_clear_message -- a MISLABEL fixed under bd
+    polyglot-pdf-nx6g: it sends exactly ONE field and asserts the happy path, never
+    a multi-field rejection. update_form_fields only takes one field_id/value, so
+    there is no multi-field path to reject.)"""
 
     @pytest.mark.asyncio
-    async def test_multiple_fields_rejected_with_clear_message(
+    async def test_single_field_update_shapes_success_response(
         self, mock_websocket, mock_coordinator
     ):
-        """Sending multiple fields should reject extras with clear error."""
-        # Mock handler that would accept valid single field
+        """The single-field update format (one field_id/value) yields a success
+        response with the field applied."""
+        # Mock handler that reports the single field applied.
         handler_mock = MagicMock()
         handler_mock.return_value = {
             "form_state": {"field1": "value1"},
@@ -260,13 +291,13 @@ class TestMultiFieldRejection:
 
         handler = create_callback_handler(mock_websocket, mock_coordinator, handler_mock)
 
-        # Gemini sends single field (new format only supports one field)
+        # update_form_fields takes a SINGLE field_id/value (the only supported format).
         tool_response = await handler.on_tool_call(
             tool_name="update_form_fields",
             arguments={"field_id": "field1", "value": "value1"}
         )
 
-        # Field should be processed successfully (single-field format is correct)
+        # Field is processed successfully (single-field format is correct).
         assert tool_response["success"] is True
         assert "field1" in tool_response["applied_fields"]
         # Success responses don't include validation_errors key
