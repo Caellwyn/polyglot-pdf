@@ -198,6 +198,19 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
+    # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
+    # Cloud Run runtime identity IN THIS SAME deploy, so the new revision is
+    # created+routed under the correct SA from the start. The demo needs a custom
+    # SA (polyglot-backend-sa, holds roles/aiplatform.user for the Vertex path);
+    # applying it here -- rather than in a SEPARATE post-deploy
+    # `gcloud run services update` -- means a fresh service (or one whose identity
+    # drifted) never briefly serves a Vertex revision under the wrong/default
+    # identity, and a failed follow-up update can't strand the demo on a revision
+    # that can't call Vertex (bd polyglot-pdf-ignt). Empty (the default, e.g. a
+    # bare deploy-all.sh run) -> no --service-account, behavior unchanged.
+    SA_FLAG=()
+    [ -n "$BACKEND_SERVICE_ACCOUNT" ] && SA_FLAG=(--service-account "$BACKEND_SERVICE_ACCOUNT")
+
     # --timeout: Cloud Run kills any request at this limit, including live
     # WebSockets. The 300s default terminated every /ws/fill session at exactly
     # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
@@ -210,7 +223,8 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --allow-unauthenticated \
         --timeout=3600 \
         --project "$POLYGLOT_PROJECT_NAME" \
-        --set-env-vars="$BACKEND_ENV"
+        --set-env-vars="$BACKEND_ENV" \
+        "${SA_FLAG[@]}"
     
     BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)')
     log_success "✅ Backend deployed successfully!"

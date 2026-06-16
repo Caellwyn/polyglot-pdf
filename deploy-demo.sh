@@ -80,14 +80,16 @@ if [ "$DEPLOY_GCP" = true ]; then
     # AI Studio path (VERTEXAI=false, USE_PREMIUM_MODEL=true). GEMINI_API_KEY
     # (still injected via Secret Manager) is unused on this Vertex path. See
     # docs/standards/ai-models.md.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" ./deploy-all.sh "${GCP_ARGS[@]}"
-
-    # Update Cloud Run to use the custom Service Account
-    echo -e "${GREEN}[INFO]${NC} 🔑 Ensuring Cloud Run uses service account $SA_NAME..."
-    gcloud run services update polyglot-backend \
-        --service-account="$SA_EMAIL" \
-        --region="$REGION" \
-        --project="$GCP_PROJECT"
+    # BACKEND_SERVICE_ACCOUNT pins the Cloud Run runtime identity (the custom SA
+    # that holds roles/aiplatform.user for the Vertex path) IN the deploy itself,
+    # so the new revision is created+routed under the right SA from the start --
+    # no separate post-deploy `gcloud run services update`, which could briefly
+    # serve a Vertex revision under the wrong identity or strand the demo if it
+    # failed (bd polyglot-pdf-ignt). deploy-all.sh adds --service-account only when
+    # this is non-empty, so other channels/bare runs are unchanged.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" \
+        BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
+        ./deploy-all.sh "${GCP_ARGS[@]}"
 fi
 
 # 2. Deploy Firestore rules + Frontend to Firebase project
