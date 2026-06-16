@@ -101,6 +101,13 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
   TIMEOUT  -- no completed review appeared within --timeout-min. Distinct
               from ERROR (exit code 2 vs 1) so a caller can retry-later on a
               timeout but investigate on a genuine failure.
+  NO-ACK   -- the reviewer's acknowledgment reaction did not appear within
+              --ack-timeout-min (opt-in, default 0=disabled). Only emitted when
+              --ack-timeout-min > 0 AND the reviewer profile has an ack_reaction
+              configured (Codex: "eyes"). Distinct from TIMEOUT (which means the
+              reviewer acknowledged but never delivered a verdict); here the
+              reviewer never picked up the work at all. Route to the reviewer of
+              last resort rather than waiting for the full verdict window.
 
 Any unexpected crash is caught and reported as RESULT: ERROR with the
 exception text, so the agent is woken with a real signal rather than the
@@ -110,6 +117,7 @@ Usage
 -----
     python scripts/pr_review_watcher.py <pr-number> [--reviewer copilot|codex]
         [--repo OWNER/REPO] [--timeout-min N] [--poll-sec N] [--since ISO8601]
+        [--ack-timeout-min N]
 
 `--since` lets the caller scope detection to reviews/comments created after
 a known timestamp, so a re-review loop does not re-detect the previous round's
@@ -117,10 +125,11 @@ verdict. For Copilot (requested via the reviewer API) the floor is a UTC
 timestamp captured just BEFORE the reviewer request (there is no comment
 created_at); for Codex it is the "@codex review" comment's created_at.
 
-Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
-ERROR are distinct so a shell caller can retry-later on a timeout but
-investigate on a genuine error. The RESULT line is the contract; the exit
-code mirrors it for shell callers.
+Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT, 4 for
+NO-ACK. TIMEOUT and ERROR are distinct so a shell caller can retry-later on a
+timeout but investigate on a genuine error. NO-ACK (exit 4) means the reviewer
+never acknowledged the work within --ack-timeout-min. The RESULT line is the
+contract; the exit code mirrors it for shell callers.
 """
 
 from __future__ import annotations
@@ -1552,7 +1561,7 @@ def main(argv: list[str] | None = None) -> int:
         "(genuine passed-review verdict) OR MERGED (maintainer merged the PR). "
         "The deterministic, zero-model-token bead-close (bd hrn.14). "
         "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
-        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT. "
+        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/NO-ACK. "
         "FRESH-EYES RACE: do NOT pass this on the ROUND-1 watch while fresh-eyes "
         "is still running -- a fast clean Codex verdict would close the bead before "
         "fresh-eyes fixes are triaged. Pass it on the RE-WATCH instead (after all "
