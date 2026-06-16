@@ -124,6 +124,32 @@ PROVING the elsewhere actually covers the SAME wiring -- an isolation test of a 
 component does not cover the parent's wiring to it. And de-stubbing a doc-heavy area
 means reconciling the doc's own coverage claims in the same change.
 
+## Codex round 2 (3 P1) -- "covered N but not N+1"
+
+Codex held the de-stubbing to the standard of the coverage the FAKE tests had
+claimed, and found 3 completeness gaps:
+- **Selected-state propagation (phase4):** my new click test proved `onSelectField`
+  fires but not that PDFViewer passes `isSelected={id === selectedFieldId}` to the
+  overlay -- the selected STYLING could break silently. Added a rerender-with-
+  selection test asserting the overlay flips to the 4px border + blue selection
+  box-shadow (status-independent selection signals; the border COLOR is driven by
+  field status, not selection -- a wrong first assertion I corrected).
+- **Fit Page width + upper clamp (phase5):** my Fit Page coverage was only
+  height-constrained + lower-clamp. Added a width-constrained case (700x2000 ->
+  104%, proving `min()` picks width not always height) and an upper-clamp case
+  (3000x4000 -> 200%).
+- **Stale guide block (EDITOR_GUIDE):** my round-1 edit left the Phase 5 section
+  with a leftover "27 new tests" heading AND text saying the clamp math was "not
+  observable under jsdom" -- directly contradicting the new exact-percentage
+  assertions. Removed the heading, corrected the text to state the clamp IS covered
+  via stubbed container dimensions.
+
+Two Codex rounds (5 P1 then 3 P1) on a nominally-small bundle: the signal is that
+de-stubbing a fake-coverage area is real test-writing, not a doc tweak -- the
+placeholders had asserted a workflow (click -> select -> highlight, full fit-math
+matrix) that had to be genuinely rebuilt. Looped past the usual 2-round budget
+because every round surfaced a real coverage hole, not a nit.
+
 ## Closeout notes
 
 - **Doc-freshness:** 10 docs flagged STALE, all backend/voice-path tier-2 docs from
