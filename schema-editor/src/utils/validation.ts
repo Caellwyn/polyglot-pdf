@@ -43,10 +43,12 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
     });
   }
 
-  // Check fields
+  // First pass: build the COMPLETE field-id set (and flag duplicates). Reference
+  // checks below must see every field id, not just the ones visited so far --
+  // otherwise a control/show_if pointing forward in schema.fields is falsely
+  // flagged as missing (the i-90 form orders triggers before their targets).
   const fieldIds = new Set<string>();
   for (const field of schema.fields) {
-    // Check for duplicate IDs
     if (fieldIds.has(field.id)) {
       errors.push({
         field_id: field.id,
@@ -55,7 +57,10 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       });
     }
     fieldIds.add(field.id);
+  }
 
+  // Second pass: check references against the complete field-id set.
+  for (const field of schema.fields) {
     // Check section references
     if (field.section_id) {
       const sectionExists = schema.sections.some(s => s.id === field.section_id);

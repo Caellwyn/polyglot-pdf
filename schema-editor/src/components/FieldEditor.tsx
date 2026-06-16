@@ -27,6 +27,12 @@ const FIELD_TYPES: FieldType[] = [
   'signature',
 ];
 
+// Operators offered in the editor dropdowns. `in`/`not_in` are valid in the
+// schema/type but need an ARRAY value; both editors here write `value` from a
+// plain text (scalar) input, so offering them would save a string the runtime
+// never matches. They are intentionally excluded until a list-value editor
+// exists (bd polyglot-pdf-jplx); existing data using them still loads and
+// validates -- only authoring is restricted.
 const CONDITIONAL_OPERATORS: ConditionalOperator[] = [
   'equals',
   'not_equals',
@@ -36,8 +42,6 @@ const CONDITIONAL_OPERATORS: ConditionalOperator[] = [
   'is_checked',
   'is_empty',
   'is_not_empty',
-  'in',
-  'not_in',
 ];
 
 // The action kinds a controls_fields entry can apply to its target fields.

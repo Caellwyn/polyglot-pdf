@@ -129,6 +129,20 @@ describe('FieldEditor controls_fields UI', () => {
     );
   });
 
+  it('does not offer in/not_in operators (no scalar editor for array values)', () => {
+    // Codex PR #216: in/not_in need an array value, but the value input is plain
+    // text, so authoring them would save a string the runtime never matches.
+    const trigger = { ...TRIGGER, controls_fields: [{ operator: 'equals' as const, value: 'Yes' }] };
+    const schema = makeSchema([trigger, TARGET_A]);
+    render(<FieldEditor field={trigger} schema={schema} onUpdateField={vi.fn()} />);
+
+    // The control's operator <select> must not contain 'in'/'not in' options.
+    const optionTexts = screen.getAllByRole('option').map(o => o.textContent);
+    expect(optionTexts).toContain('equals');
+    expect(optionTexts).not.toContain('in');
+    expect(optionTexts).not.toContain('not in');
+  });
+
   it('a pruned action key serializes out of the exported JSON (undefined, not null)', () => {
     // Backend ConditionalControl actions are Optional[List[str]] = None, so a
     // dropped action must be ABSENT in JSON, not present-as-null. JSON.stringify
@@ -166,6 +180,23 @@ describe('validation reference check for list-shaped controls_fields', () => {
       e.message.includes('controls_fields references non-existent field: ghost_field')
     );
     expect(refError).toBeTruthy();
+  });
+
+  it('does not flag a forward-referencing control (trigger before its targets)', () => {
+    // Codex PR #216 / bd y61i: validateSchema must build the full field-id set
+    // before checking references, so a trigger listed BEFORE its targets (the
+    // i-90 ordering) is not falsely flagged.
+    const trigger = field({
+      id: 'has_other_name',
+      controls_fields: [{ operator: 'equals', value: 'Yes', unlocks: ['other_family_name'] }],
+    });
+    // trigger FIRST, target after -> the forward-reference case.
+    const schema = makeSchema([trigger, TARGET_A]);
+    const errors = validateSchema(schema);
+    const refError = errors.find(e =>
+      e.message.includes('controls_fields references non-existent field')
+    );
+    expect(refError).toBeFalsy();
   });
 
   it('does not flag a control whose targets all exist (across multiple action arrays)', () => {

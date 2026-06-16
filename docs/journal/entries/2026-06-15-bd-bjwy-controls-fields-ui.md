@@ -56,20 +56,34 @@ than vacuous.
    prune empty keys; `validation.ts` iterates the list; tests cover edit/remove +
    a valid multi-array control passing and a ghost ref failing.
 
-**Verification:** new `FieldEditor.controls.test.tsx` (8 tests); full
-schema-editor suite 175/175; `tsc --noEmit` clean. Backend suite untouched
+**Verification:** new `FieldEditor.controls.test.tsx` (10 tests); full
+schema-editor suite 178/178; `tsc --noEmit` clean. Backend suite untouched
 (FE-only) and green from prep.
 
-**Fresh-eyes assess (Sonnet, arm B picker, 1 round to NO-GAPS after fixes):**
-both rubric criteria scored PASS. Adopted: tightened the `CONTROL_ACTIONS` /
+**Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** both rubric
+criteria scored PASS. Adopted: tightened the `CONTROL_ACTIONS` /
 `toggleControlTarget` typing from `keyof ConditionalControl` to a new
 `ControlActionKey` union (the six action keys only -- the old type let
 operator/value through, runtime-safe but too wide), and added a serialization
 test asserting a pruned action key is ABSENT from the exported JSON (undefined,
-not null -- matters because the backend action fields are `Optional[List]=None`).
-Out-of-scope items fresh-eyes filed itself: `polyglot-pdf-cmcg` (a stale
-`ControlsFields` type name in `schema-editor/EDITOR_GUIDE.md`). The order-dependent
-validateSchema bug was already filed as `polyglot-pdf-y61i`.
+not null -- the backend action fields are `Optional[List]=None`). Out-of-scope
+filed by fresh-eyes: `polyglot-pdf-cmcg` (stale `ControlsFields` type name in
+`schema-editor/EDITOR_GUIDE.md`).
+
+**Codex outer review (PR #216, 2 rounds to CLEAN):** round 1 raised two real P1
+findings, both adopted as blockers:
+(1) extending `ConditionalOperator` with `in`/`not_in` made them selectable in
+the show_if + controls editors, whose `value` is a plain-text (scalar) input --
+so authoring `in` would save a string the runtime (which expects an array) never
+matches. Fix: exclude `in`/`not_in` from the dropdown (they stay in the
+type/schema so existing data loads + validates); filed `polyglot-pdf-jplx` for a
+future array-value editor.
+(2) the new list-shaped controls validation checked references while the field-id
+set was still being built incrementally, so forward references (trigger before
+targets, the i-90 ordering) were spuriously flagged on the live form. Fix: build
+the COMPLETE field-id set in a first pass, then check references (fixes show_if
+too); this resolves the pre-filed `polyglot-pdf-y61i`, now CLOSED, with a
+regression test.
 
 ## Lessons
 
@@ -99,21 +113,27 @@ validateSchema bug was already filed as `polyglot-pdf-y61i`.
   `ConditionalOperator` extended to the full backend enum (added greater_than /
   less_than / in / not_in).
 - `schema-editor/src/utils/validation.ts` -- iterate the controls LIST and check
-  references across all six action arrays.
+  references across all six action arrays; restructured into two passes (build
+  the full field-id set, THEN check references) so forward refs are not flagged.
 - `schema-editor/src/components/FieldEditor.tsx` -- "Controls Fields" editing
-  section + controls list helpers; operator constant extended.
-- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 8 tests
+  section + controls list helpers; operator dropdown excludes `in`/`not_in`
+  (need an array value the scalar editor can't author).
+- `schema-editor/src/components/FieldEditor.controls.test.tsx` -- NEW. 10 tests
   (authoring round-trip, target add/remove, empty-key pruning, edit-in-place,
-  JSON-serialization-omits-pruned-key, validation flags ghost ref / passes valid
-  multi-array control).
+  JSON-serialization-omits-pruned-key, no in/not_in operators offered, validation
+  flags ghost ref / passes valid multi-array control / passes forward refs).
 - `docs/journal/entries/2026-06-15-bd-bjwy-controls-fields-ui.md` -- THIS entry.
 
 ## Follow-ups filed
 
-- `polyglot-pdf-y61i` -- `validateSchema` reference checks are order-dependent
-  (the known-id set is built incrementally inside the check loop, so a trigger
-  listed before its targets is falsely flagged). Pre-existing; affects `show_if`
-  too; out of scope for A4 (which preserved existing consistency).
+- `polyglot-pdf-y61i` -- `validateSchema` reference checks were order-dependent
+  (id set built incrementally inside the check loop -> forward refs falsely
+  flagged). Initially filed as out-of-scope/pre-existing, but Codex showed it
+  was a live regression on the i-90 form via this PR's list-loop, so FIXED here
+  (two-pass) and CLOSED.
 - `polyglot-pdf-cmcg` -- stale `ControlsFields` type name in
   `schema-editor/EDITOR_GUIDE.md` (the type was renamed/restructured this bead).
   Filed by fresh-eyes; out-of-scope docs fix.
+- `polyglot-pdf-jplx` -- array-value editor for the `in`/`not_in` operators
+  (excluded from the authoring dropdown until a list-value input exists). Filed
+  from a Codex finding; P3 enhancement.
