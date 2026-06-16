@@ -73,6 +73,35 @@ def _build_function_response(tool_name, response_payload, call_id):
     return types.FunctionResponse(**fr_kwargs)
 
 
+def _dedupe_responses_by_id(responses):
+    """Drop duplicate FunctionResponses that share a call id, keeping the first.
+
+    Defensive hardening (bd polyglot-pdf-ux15): a single event is handled by BOTH
+    the model_turn.parts path and the event.tool_call path, each appending to the
+    same per-event ``responses`` list. If one event ever carried the SAME call in
+    both shapes, Gemini would receive TWO FunctionResponses for one call id -- a
+    protocol violation. Live evidence (3 instrumented native-audio runs, bd ux15
+    notes) shows the two shapes do NOT co-occur today, so this is a no-op in
+    practice; it exists so a future SDK/model change that DID emit both cannot send
+    a duplicate. Responses with no id (the rare genuinely-id-less call) cannot be a
+    duplicate-by-id and are always kept. Returns ``(deduped_list, dropped_ids)`` so
+    the caller can LOG a dropped duplicate -- the assumption staying observable
+    matters more than the silent drop.
+    """
+    seen_ids: set = set()
+    deduped = []
+    dropped_ids = []
+    for resp in responses:
+        rid = getattr(resp, "id", None)
+        if rid and rid in seen_ids:
+            dropped_ids.append(rid)
+            continue
+        if rid:
+            seen_ids.add(rid)
+        deduped.append(resp)
+    return deduped, dropped_ids
+
+
 def _tool_error_envelope(message: str = "The tool call failed; ask the user to repeat.") -> dict:
     """Structured, PII-free error body for a FunctionResponse when a tool callback
     RAISES (bd polyglot-pdf-wpw.1 / WS-C2).
@@ -1955,6 +1984,25 @@ class LiveAIGemini(ILiveAI):
                                                 )
 
                                     if responses:
+                                        # Defensive dedup (bd polyglot-pdf-ux15): never send two
+                                        # FunctionResponses for one call id, even if a future event carried
+                                        # the same call on BOTH the model_turn.parts and event.tool_call
+                                        # paths. A no-op today (the shapes do not co-occur live); log loudly
+                                        # if it ever fires so the assumption stays observable.
+                                        responses, _dropped_dup_ids = _dedupe_responses_by_id(responses)
+                                        if _dropped_dup_ids:
+                                            # Log the dropped call ids (NOT bodies): a Gemini call id is a
+                                            # model-generated token like "function-call-2110448..." -- it is
+                                            # NOT a field value / PII, and it is what makes this warning
+                                            # actionable (which call, in which turn) if the no-co-occurrence
+                                            # assumption ever breaks. The response BODY (which can carry PII)
+                                            # is never logged here.
+                                            self._log.warning(
+                                                "duplicate_tool_response_dropped",
+                                                dropped_count=len(_dropped_dup_ids),
+                                                dropped_call_ids=_dropped_dup_ids,
+                                            )
+
                                         # Log tool responses being sent to Gemini, for token analysis ONLY.
                                         # NEVER print resp.response -- a tool response (e.g. get_field_value /
                                         # get_form_status) can carry field VALUES = PII/PHI, and stdout ->
