@@ -189,4 +189,23 @@ describe('FormCatalogue', () => {
     await screen.findByText('Done');
     await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
   });
+
+  it('shows a 0% bar for an extracted-but-empty schema, and no bar for a no-schema kit', async () => {
+    const root = mockRoot([
+      // empty-fields schema -> 0% (bar renders)
+      mockKit('empty', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Empty', status: 'draft' }) }),
+      // no schema -> no bar
+      mockKit('raw', { 'metadata.json': JSON.stringify({ label: 'Raw', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    await screen.findByText('Empty');
+    // The empty-schema kit shows a 0% review bar...
+    await waitFor(() => expect(screen.getByText('0%')).toBeTruthy());
+    // ...and there is exactly one "Review" bar (the no-schema 'raw' kit has none).
+    expect(screen.getAllByText('Review')).toHaveLength(1);
+  });
 });

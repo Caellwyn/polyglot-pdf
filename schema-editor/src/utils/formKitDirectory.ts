@@ -164,13 +164,21 @@ export async function readKitProgress(
   if (!schema) {
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0 };
   }
-  const stats = getCompletionStats(schema);
-  return {
-    entry,
-    reviewPercent: stats.percentage,
-    completeFields: stats.complete,
-    totalFields: stats.total,
-  };
+  try {
+    // A schema can parse as JSON yet be structurally malformed (e.g. no `fields`
+    // array), which would throw inside getCompletionStats. Treat any such failure
+    // as "no measurable progress" rather than letting it reject the whole
+    // catalogue-wide Promise.all and wipe every bar.
+    const stats = getCompletionStats(schema);
+    return {
+      entry,
+      reviewPercent: stats.percentage,
+      completeFields: stats.complete,
+      totalFields: stats.total,
+    };
+  } catch {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0 };
+  }
 }
 
 /** An at-a-glance overview an aggregate dashboard header shows. */
@@ -191,8 +199,11 @@ export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary 
   let inProgress = 0;
   let noSchema = 0;
   for (const e of entries) {
-    if (!e.hasSchema) noSchema++;
-    else if (e.status === 'complete') complete++;
+    // "complete" is the metadata status the deploy gate reads, so it wins
+    // regardless of hasSchema -- a kit marked complete must not show as
+    // "awaiting extraction" just because its schema file is momentarily absent.
+    if (e.status === 'complete') complete++;
+    else if (!e.hasSchema) noSchema++;
     else inProgress++;
   }
   return { total: entries.length, complete, inProgress, noSchema };

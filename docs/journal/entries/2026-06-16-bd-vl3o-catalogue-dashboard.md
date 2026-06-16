@@ -50,11 +50,22 @@ catalogue appears immediately and the bars fill in.
    vs in-progress counts. PASS -- `summarizeCatalogue` header + per-card status
    badge and %; component-tested (`FormCatalogue.test.tsx`).
 
-**Verification:** 7 new tests (5 metric/aggregate units, 2 dashboard component);
-full schema-editor suite 194/194; `tsc --noEmit` clean. Backend suite untouched
+**Verification:** 11 new tests (8 metric/aggregate units, 3 dashboard component);
+full schema-editor suite 198/198; `tsc --noEmit` clean. Backend suite untouched
 (FE-only) and green from prep.
 
-**Fresh-eyes assess (recorded at closeout -- see merge ping for round count).**
+**Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** both rubric
+criteria PASS; round 1 found four in-scope robustness gaps, all adopted:
+(1) a structurally-malformed-but-parseable schema (no `fields` array) threw inside
+`getCompletionStats`, which would reject the catalogue-wide `Promise.all` and wipe
+every progress bar -- wrapped `readKitProgress`'s stats call in try/catch ->
+null; (2) `summarizeCatalogue` classified a `status:complete`+`hasSchema:false`
+kit as "awaiting extraction" -- reordered so the complete metadata status (the
+deploy-gate flag) wins; (3) a stale-folder race where a slow progress load from a
+prior folder could overwrite the current one -- added a monotonic refresh token
+guard; (4) clarified/locked that a 0-field schema reports 0% (bar renders),
+distinct from a no-schema kit (no bar). Round 2 returned NO-GAPS. No out-of-scope
+beads filed.
 
 ## Lessons
 
@@ -82,12 +93,13 @@ full schema-editor suite 194/194; `tsc --noEmit` clean. Backend suite untouched
   `readKitProgress`, `CatalogueSummary`, `summarizeCatalogue`; import
   `getCompletionStats`.
 - `schema-editor/src/components/FormCatalogue.tsx` -- per-kit progress state +
-  computation after list; aggregate overview header; per-card review bar + %.
-- `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 5 unit
-  tests (aggregate counts, percent from completion, null for no/unparseable
-  schema).
-- `schema-editor/src/components/FormCatalogue.test.tsx` -- 2 new dashboard tests
-  (aggregate overview, per-form %).
+  computation after list (with a monotonic refresh-token guard against the
+  stale-folder race); aggregate overview header; per-card review bar + %.
+- `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 8 unit
+  tests (aggregate counts incl. complete-without-schema, percent from completion,
+  null for no/unparseable/malformed schema, 0% for empty schema).
+- `schema-editor/src/components/FormCatalogue.test.tsx` -- 3 new dashboard tests
+  (aggregate overview, per-form %, 0%-bar-vs-no-bar distinction).
 - `docs/journal/telemetry/2026-06-16T05-11-51Z-1639d1bb.json` -- carried-forward
   telemetry row for PR #216 (bd bjwy), recorded after that PR had merged; rides
   this PR for completeness.

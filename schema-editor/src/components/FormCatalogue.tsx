@@ -39,24 +39,32 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  // Monotonic token: each refresh bumps it so a slow progress load from a prior
+  // folder cannot overwrite the current folder's progress (stale-folder race).
+  const refreshSeq = React.useRef(0);
 
   const refresh = React.useCallback(async (dir: FsDirectoryHandle) => {
+    const seq = ++refreshSeq.current;
     setBusy(true);
     setError(null);
     try {
       const entries = await listKits(dir);
+      if (seq !== refreshSeq.current) return; // superseded by a newer refresh
       setKits(entries);
+      setProgress({}); // clear prior folder's bars while this folder's compute
       // Compute review progress per kit (loads each schema). Done after the list
       // is set so the catalogue renders immediately and the bars fill in; a kit
       // whose schema fails to load just shows no bar.
       const computed = await Promise.all(entries.map(readKitProgress));
+      if (seq !== refreshSeq.current) return; // a newer refresh won; drop these
       const byId: Record<string, KitProgress> = {};
       for (const p of computed) byId[p.entry.id] = p;
       setProgress(byId);
     } catch (err) {
+      if (seq !== refreshSeq.current) return;
       setError(err instanceof Error ? err.message : 'Failed to read folder');
     } finally {
-      setBusy(false);
+      if (seq === refreshSeq.current) setBusy(false);
     }
   }, []);
 

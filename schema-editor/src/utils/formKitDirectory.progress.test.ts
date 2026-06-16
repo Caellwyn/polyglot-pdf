@@ -67,6 +67,18 @@ describe('summarizeCatalogue', () => {
   it('is all-zero-ish for an empty catalogue', () => {
     expect(summarizeCatalogue([])).toEqual({ total: 0, complete: 0, inProgress: 0, noSchema: 0 });
   });
+
+  it('counts a complete-status kit as complete even if its schema is missing', () => {
+    // The deploy gate reads metadata status; a kit marked complete must not show
+    // as "awaiting extraction" just because its schema file is momentarily absent
+    // (fresh-eyes finding).
+    const entries: CatalogueEntry[] = [
+      entry({ id: 'a', status: 'complete', hasSchema: false }),
+    ];
+    expect(summarizeCatalogue(entries)).toEqual({
+      total: 1, complete: 1, inProgress: 0, noSchema: 0,
+    });
+  });
 });
 
 describe('readKitProgress', () => {
@@ -98,5 +110,23 @@ describe('readKitProgress', () => {
     } as unknown as CatalogueEntry['dirHandle'];
     const prog = await readKitProgress(entry({ id: 'k', hasSchema: true, dirHandle }));
     expect(prog.reviewPercent).toBeNull();
+  });
+
+  it('returns null percent (does not throw) for a structurally malformed schema', async () => {
+    // Valid JSON but no `fields` array -> getCompletionStats would throw. Must be
+    // swallowed so it cannot reject the catalogue-wide Promise.all (fresh-eyes
+    // finding: a single bad schema would otherwise wipe every progress bar).
+    const prog = await readKitProgress(entryServingSchema('k', { form_metadata: {} }));
+    expect(prog.reviewPercent).toBeNull();
+  });
+
+  it('reports 0% (not null) for a valid schema with zero fields', async () => {
+    // An extracted-but-empty schema is distinct from a pre-extraction kit: it has
+    // a measurable (0%) progress, so the bar renders rather than being hidden.
+    const prog = await readKitProgress(
+      entryServingSchema('k', { form_metadata: { form_number: 'T' }, sections: [], fields: [] }),
+    );
+    expect(prog.reviewPercent).toBe(0);
+    expect(prog.totalFields).toBe(0);
   });
 });
