@@ -75,6 +75,41 @@ the harness's `set +e`-after-source ordering is load-bearing (the sourced `set -
 leaks errexit) -- strengthened the comment + an inline marker so a future edit can't
 insert a statement under the leaked errexit.
 
+## Codex round 1 (2 P1) -- a hidden no-op + a non-running test
+
+Codex's outer review caught two real P1s the pre-PR pass missed:
+
+1. **controls_fields is an ARRAY, and the check never ran on real data.** The
+   editor's `ControlsFields` type was a single object with a `when_value` key that
+   matches NO real schema. The actual data (`schemas/i-90/i-90_schema.json:488`) and
+   the runtime contract (`ConditionalControl[]`) use an ARRAY of control rules. So
+   `validateSchema` read `.shows`/`.unlocks` off the ARRAY (undefined) -- the
+   controlled-id reference check silently did NOTHING on real form kits, and the
+   y61i fix faithfully preserved that no-op. Corrected the editor type to
+   `ConditionalControl[]` (matching the runtime, adding `hides`/`locks`/
+   `makes_optional`), made the validator `flatMap` over the array, fixed the two
+   tests to the real shape, and added a multi-rule test. `tsc` confirmed
+   `ControlsFields` had no other consumer, so the type rename was safe. This was the
+   important catch: the bead's `controls_fields` work was untestable-as-written
+   because it ran against a shape that never occurs.
+
+2. **The harness ran nowhere automated.** A `.sh` test that only runs by hand
+   guards nothing; CI's `pytest backend/tests tests` does not collect a `.sh`, so a
+   regressed gate would still pass PR checks. Added
+   `tests/test_deploy_all_kit_gates_wrapper.py` -- a pytest-discovered wrapper that
+   shells out to the harness and asserts exit 0 (the existing CI job now collects
+   it). It SKIPs when bash cannot launch (the local Windows WSL-bash shim fails
+   `execvpe`) so it never false-reds locally; on ubuntu-latest CI bash runs natively
+   and a genuine gate regression fails it.
+
+**Defended decision (scope grew).** Fixing P1 #1 properly meant changing the
+editor's `ControlsFields` type, not just the validator -- a type change beyond the
+literal y61i scope. I made it because the alternative was shipping a "fix" to a code
+path that provably never executes on real data; correcting the type is what makes
+the bead's controlled-reference validation actually function. The change is
+contained (the type had a single consumer, confirmed by tsc) and brings the editor
+type into agreement with the already-authoritative runtime type.
+
 ## Pre-PR assess + closeout notes
 
 - **Tests:** schema-editor 173 pass (incl. the 5 new validation tests); the
