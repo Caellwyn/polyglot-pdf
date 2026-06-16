@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-15. bd b0pe: form-kit deploy now gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest; drafts stay local. bd np64: non-ASCII -> ASCII in config.ts code comments/console strings (cosmetic, no config change). bd rwjy: CallbackHandler gains form_id/form_session_id -- no config or deployment change. Prior: 2026-06-12 (deploy-production.sh --all flag now caught at any arg position, bd pub). Prior: 2026-06-11. See [../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the `USE_PREMIUM_MODEL` row update (3.1 now tool-call-reliable). Prior: [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) (`config.ts` harness gate), [../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md](../journal/entries/2026-06-07-bd-5oq-default-to-2p5-tool-call-reliability.md) (2.5-default switch), and [../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md](../journal/entries/2026-06-04-bd-zm4-commit-deploy-scripts.md) (deploy scripts).*
+*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -63,11 +63,15 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 ## Required & dev-only env vars
 
 - **`VERTEXAI`** (env, default `true`) — picks the auth/service mode. `true` →
-  Vertex AI via `GOOGLE_CLOUD_PROJECT` + service-account ADC (no key needed; prod
-  default). `false` → Gemini Developer API (**AI Studio**), which authenticates
-  **only** via `GEMINI_API_KEY` (no ADC/SA path). The demo runs `VERTEXAI=false`
-  to reach `gemini-3.1-flash-live-preview` (not yet on Vertex). See
-  [ai-models.md](../standards/ai-models.md).
+  Vertex AI via `GOOGLE_CLOUD_PROJECT` + service-account ADC (no key needed;
+  keeps request data private). `false` → Gemini Developer API (**AI Studio**),
+  which authenticates **only** via `GEMINI_API_KEY` (no ADC/SA path). The demo
+  runs `VERTEXAI=true` (the privacy path). The standard native-audio model id
+  differs by backend, so `_resolve_model` is backend-aware: on Vertex the
+  standard tier resolves to `gemini-live-2.5-flash-native-audio` (the AI Studio
+  id 1008s on Vertex), so a Vertex deploy needs no `MODEL_NATIVE` pin. 3.1 is
+  AI-Studio-only as of 2026-06, so reaching it still requires `VERTEXAI=false`.
+  See [ai-models.md](../standards/ai-models.md).
 - **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
   the Vertex path. On the demo Cloud Run service it is injected via **Secret
   Manager** (`--set-secrets`), never as a plaintext env var.
@@ -111,7 +115,7 @@ stages):
   `gcloud run deploy ... --allow-unauthenticated --timeout=3600 --set-env-vars=` with
   `GOOGLE_CLOUD_PROJECT`, `FORM_KITS_MODE=gcs`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, plus any channel-specific vars the wrapper passes via
-  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=false,USE_PREMIUM_MODEL=false`). The
+  `BACKEND_EXTRA_ENV` (demo: `VERTEXAI=true,USE_PREMIUM_MODEL=false`). The
   container (`backend/Dockerfile`, `python:3.12-slim`) runs `uvicorn
   backend.main:app` on `$PORT` (8080). `--timeout=3600` (the Cloud Run maximum)
   is load-bearing for `/ws/fill`: Cloud Run kills any request at the timeout,

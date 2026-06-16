@@ -63,9 +63,10 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 ### Working Features
 - ✅ Firebase Authentication (Google sign-in + email/password)
 - ✅ Authorized-email gating for sign-up (Firestore `authorized_emails` collection)
-- ✅ Gemini Live API voice integration (native audio-to-audio); default
-  `gemini-2.5-flash-native-audio-preview-12-2025`, with `gemini-3.1-flash-live-preview`
-  selectable via `USE_PREMIUM_MODEL`
+- ✅ Gemini Live API voice integration (native audio-to-audio); default 2.5
+  native-audio (backend-aware id: `gemini-live-2.5-flash-native-audio` on Vertex,
+  `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio), with
+  `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only)
 - ✅ Schema-driven form filling with section navigation
 - ✅ 18+ spoken languages with real-time switching
 - ✅ Stateless backend architecture (HIPAA compliant)
@@ -382,7 +383,7 @@ sessionStorage.clear()
 - ❌ Modify `.venv` or example files
 
 **Always Do:**
-- ✅ Use the configured native-audio model (`MODEL_NATIVE`); current default `gemini-2.5-flash-native-audio-preview-12-2025`
+- ✅ Use the configured native-audio model (`MODEL_NATIVE`); default is the 2.5 native-audio tier, resolved backend-aware (`gemini-live-2.5-flash-native-audio` on Vertex, `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio)
 - ✅ Create unit tests before making changes
 - ✅ Maintain stateless backend (client = source of truth)
 - ✅ Update the relevant tier-2 doc + add a journal entry after code changes

@@ -62,15 +62,25 @@ if [ "$DEPLOY_GCP" = true ]; then
     done
     [ ${#GCP_ARGS[@]} -eq 0 ] && GCP_ARGS=("--backend" "--form-kits")
 
-    # Demo runs on AI Studio (Gemini Developer API): VERTEXAI=false selects the
-    # API-key path. USE_PREMIUM_MODEL=false selects 2.5
-    # (gemini-2.5-flash-native-audio-preview). Both models tool-call reliably;
-    # 2.5 is chosen here for latency (~170x faster per turn than 3.1 on the audio
-    # path). Flip to USE_PREMIUM_MODEL=true to run 3.1. GEMINI_API_KEY is injected
-    # via Secret Manager (--set-secrets), out-of-band. Prod stays on Vertex (no
-    # override) -- 2.5 is on both Vertex and AI Studio. See
-    # docs/standards/ai-models.md for the model rationale.
-    BACKEND_EXTRA_ENV="VERTEXAI=false,USE_PREMIUM_MODEL=false" ./deploy-all.sh "${GCP_ARGS[@]}"
+    # Demo runs on Vertex AI: VERTEXAI=true selects the service-account ADC path
+    # (authenticates via GOOGLE_CLOUD_PROJECT + the Cloud Run SA's
+    # roles/aiplatform.user; no API key), which keeps request data private --
+    # the reason for moving off AI Studio.
+    #
+    # We do NOT pin MODEL_NATIVE: config.py _resolve_model is backend-aware and,
+    # with VERTEXAI=true and the standard tier, resolves to the Vertex native-audio
+    # id (gemini-live-2.5-flash-native-audio) on its own. The model strings differ
+    # by backend -- the AI Studio native-audio id 1008s on Vertex and vice versa --
+    # so letting the resolver pick keeps demo and a bare deploy-all.sh Vertex run
+    # consistent, and means flipping BACK to AI Studio (VERTEXAI=false) for 3.1
+    # needs no stale pin cleared. Both ids are 2.5-family, so model_family() bills
+    # them identically and the audio/VAD tuning carries over (bd polyglot-pdf-a079).
+    #
+    # 3.1 is not available on Vertex as of 2026-06; running it still requires the
+    # AI Studio path (VERTEXAI=false, USE_PREMIUM_MODEL=true). GEMINI_API_KEY
+    # (still injected via Secret Manager) is unused on this Vertex path. See
+    # docs/standards/ai-models.md.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" ./deploy-all.sh "${GCP_ARGS[@]}"
 
     # Update Cloud Run to use the custom Service Account
     echo -e "${GREEN}[INFO]${NC} 🔑 Ensuring Cloud Run uses service account $SA_NAME..."

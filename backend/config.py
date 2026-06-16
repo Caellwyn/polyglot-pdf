@@ -28,6 +28,17 @@ from pathlib import Path
 # verify against the live endpoint. See docs/genai_docs/README.md.
 MODEL_NATIVE_PREMIUM = "gemini-3.1-flash-live-preview"
 MODEL_NATIVE_STANDARD = "gemini-2.5-flash-native-audio-preview-12-2025"
+# Vertex publishes the 2.5 native-audio Live model under a DIFFERENT id than AI
+# Studio: the AI Studio id above is NOT available on Vertex in any region (a Live
+# bidiGenerateContent connect 1008s), and this Vertex id is not on AI Studio.
+# Both are 2.5-family native-audio, so model_family() bills them identically; only
+# the service-specific id differs. Verified connecting + returning audio on Vertex
+# us-central1 (the adapter's default location), bd polyglot-pdf-a079. _resolve_model
+# selects this when VERTEXAI=true and the standard tier is active, so a Vertex
+# deploy works WITHOUT having to pin MODEL_NATIVE by hand. There is no Vertex 3.1
+# (premium) id yet: 3.1 is AI-Studio-only as of 2026-06, so the premium tier still
+# requires VERTEXAI=false.
+MODEL_NATIVE_STANDARD_VERTEX = "gemini-live-2.5-flash-native-audio"
 
 # --- DEV FEATURE: model A/B toggle (bd polyglot-pdf-kbf) -----------------------
 # To A/B these two models for tool-call reliability (e.g. "does 3.1 emit
@@ -147,11 +158,22 @@ class Settings(BaseModel):
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
-		# explicit MODEL_NATIVE was pinned via env (non-empty wins).
+		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard
+		# (2.5) tier is BACKEND-AWARE: the native-audio Live model has a different id
+		# on Vertex than on AI Studio (see MODEL_NATIVE_STANDARD_VERTEX), and the
+		# AI Studio id 1008s on Vertex. So when VERTEXAI=true and no explicit pin is
+		# set, resolve to the Vertex id -- this makes ANY Vertex deploy work without
+		# hand-pinning MODEL_NATIVE (bd polyglot-pdf-a079). The premium (3.1) tier is
+		# AI-Studio-only as of 2026-06, so it is unaffected; USE_PREMIUM_MODEL=true on
+		# the Vertex path will 1008 until Vertex ships 3.1 (an explicit, documented
+		# limitation, not this resolver's concern).
 		if not self.MODEL_NATIVE:
-			self.MODEL_NATIVE = (
-				MODEL_NATIVE_PREMIUM if self.USE_PREMIUM_MODEL else MODEL_NATIVE_STANDARD
-			)
+			if self.USE_PREMIUM_MODEL:
+				self.MODEL_NATIVE = MODEL_NATIVE_PREMIUM
+			elif self.VERTEXAI:
+				self.MODEL_NATIVE = MODEL_NATIVE_STANDARD_VERTEX
+			else:
+				self.MODEL_NATIVE = MODEL_NATIVE_STANDARD
 		# The Live API requires target_tokens (window) < trigger_tokens. If a misconfig
 		# inverts them, clamp the window below the trigger rather than send a config the
 		# API rejects. Only clamp when compression is ENABLED: otherwise the values are

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-14. The `MODEL_LABELING` knob now documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md). See [journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md). Prior: the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`), see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md).*
+*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware, so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) with no `MODEL_NATIVE` pin -- the AI Studio id 1008s on Vertex (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). The `MODEL_LABELING` knob documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -15,8 +15,14 @@ constants):
 
 | Tier | Model id | Family |
 |------|----------|--------|
-| **standard** (default) | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
-| **premium** (opt-in) | `gemini-3.1-flash-live-preview` | `3.1` |
+| **standard** (default), AI Studio | `gemini-2.5-flash-native-audio-preview-12-2025` | `2.5` |
+| **standard** (default), Vertex | `gemini-live-2.5-flash-native-audio` | `2.5` |
+| **premium** (opt-in), AI Studio only | `gemini-3.1-flash-live-preview` | `3.1` |
+
+The standard tier's id is **backend-aware** (`_resolve_model` picks by `VERTEXAI`)
+because the native-audio Live model is published under a different id on each
+backend and each `1008`s on the other. The premium (3.1) tier has no Vertex id as
+of 2026-06.
 
 > **Why 2.5 is the default.** **Both models now emit `update_form_fields`
 > reliably.** The historic "3.1 only calls the tool ~50% of the time and
@@ -50,6 +56,14 @@ constants):
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
+- **Backend-aware standard tier.** When `MODEL_NATIVE` is unset and the standard
+  tier is active (`USE_PREMIUM_MODEL=false`), `_resolve_model` picks the id by
+  backend: `VERTEXAI=true` -> `gemini-live-2.5-flash-native-audio` (Vertex),
+  `VERTEXAI=false` -> `gemini-2.5-flash-native-audio-preview-12-2025` (AI Studio).
+  The native-audio Live model is published under different ids on each backend and
+  each `1008`s on the other, so this lets a Vertex deploy work with **no pin**.
+  Both are 2.5-family, so `model_family()` bills them identically. The premium
+  (3.1) tier has no Vertex id (AI-Studio-only as of 2026-06), so it is unaffected.
 - `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the cheap,
   non-Live TEXT model. The original field-labeling/normalizer path it was named for
   is deprecated; today the knob is read only by `/health` (orphaned). The
@@ -62,15 +76,28 @@ constants):
   that the validator's model id rides on `MODEL_LABELING`, not a new env var.
 - `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
-  `GOOGLE_CLOUD_PROJECT` (compliance-friendly; prod default). `false` -> Gemini
-  Developer API (**AI Studio**) via `GEMINI_API_KEY` -- the *only* credential AI
-  Studio accepts (no ADC/SA path). This matters because **model availability
-  differs by service**: as of 2026-06 `gemini-3.1-flash-live-preview` is NOT on
-  Vertex (it `1008`s -- "policy violation"), but IS on AI Studio. The **demo**
-  runs `VERTEXAI=false` (AI Studio, key injected via Secret Manager) with
-  `USE_PREMIUM_MODEL=false` -- i.e. the 2.5 default (`bd polyglot-pdf-5oq`); the
-  AI-Studio path is kept so 3.1 stays reachable for A/B (`USE_PREMIUM_MODEL=true`)
-  without a Vertex round-trip. Surfaced on `/health` as `vertexai`.
+  `GOOGLE_CLOUD_PROJECT` (compliance-friendly; keeps request data private). `false`
+  -> Gemini Developer API (**AI Studio**) via `GEMINI_API_KEY` -- the *only*
+  credential AI Studio accepts (no ADC/SA path). This matters because **model
+  availability AND the model id differ by service**: the native-audio Live models
+  are published under DIFFERENT ids on each backend, and a Live
+  (`bidiGenerateContent`) connect with the wrong-backend id `1008`s. As of 2026-06:
+  - **AI Studio:** native-audio is `gemini-2.5-flash-native-audio-preview-12-2025`
+    (the `config.py` default selected by `USE_PREMIUM_MODEL=false`), and
+    `gemini-3.1-flash-live-preview` is available (the only backend with 3.1).
+  - **Vertex:** the AI Studio native-audio id above is NOT published in any region
+    (Live connect `1008`s); the Vertex native-audio Live model is
+    `gemini-live-2.5-flash-native-audio` (verified on `us-central1`, the adapter's
+    default location). 3.1 is NOT on Vertex (it `1008`s -- "policy violation").
+
+  The **demo** runs `VERTEXAI=true` (Vertex, SA ADC) with `USE_PREMIUM_MODEL=false`
+  -- the privacy-preserving path, on a 2.5-family native-audio model
+  (`bd polyglot-pdf-a079`). It does **not** pin `MODEL_NATIVE`: `_resolve_model` is
+  backend-aware, so the standard tier on Vertex resolves to
+  `gemini-live-2.5-flash-native-audio` on its own (see "Backend-aware standard tier"
+  below). To A/B 3.1 you flip back to the AI-Studio path (`VERTEXAI=false`,
+  `USE_PREMIUM_MODEL=true`) -- a Vertex round-trip can't reach 3.1, and with no pin
+  to clear the flip is clean. Surfaced on `/health` as `vertexai`.
 
 `backend/dependencies.py` is the **one** place the model reaches the adapter:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
@@ -100,4 +127,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-06-14. The `MODEL_LABELING` knob now documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md). See [journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md). Prior: the 2.5-default switch (`bd polyglot-pdf-5oq`) was root-caused to an untyped tool param and fixed (`bd polyglot-pdf-wpw.4`), see [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md).*
+*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware, so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) with no `MODEL_NATIVE` pin -- the AI Studio id 1008s on Vertex (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). The `MODEL_LABELING` knob documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md).*
