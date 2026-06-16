@@ -36,13 +36,18 @@ def test_deploy_all_kit_gates_harness_passes():
     except OSError as exc:
         pytest.skip(f"bash present but could not launch: {exc}")
 
-    # A bash that resolves to the WSL shim can "run" but fail to exec the harness,
-    # printing a CreateProcessCommon/execvpe error to stderr with NO harness output.
-    # That is an environment defect, not a gate regression -- skip it. A real run
-    # emits the harness's PASS/FAIL lines on stdout.
-    if result.returncode != 0 and "PASS" not in result.stdout and "FAIL" not in result.stdout:
+    # Skip ONLY the specific local-Windows WSL-shim failure: `shutil.which` can
+    # resolve the WSL ``bash`` stub, which fails to exec the harness and prints a
+    # recognizable CreateProcessCommon/execvpe/WSL error to stderr. We must NOT skip
+    # on "any nonzero with no PASS/FAIL output" -- a real regression (a syntax error
+    # while sourcing deploy-all.sh, an early abort before the first assertion) has
+    # exactly that shape, and skipping it would defeat the CI coverage this wrapper
+    # exists to add (Codex review). On Linux CI bash execs natively, so this branch
+    # never fires there and a genuine no-output failure falls through to the assert.
+    _WSL_SHIM_MARKERS = ("execvpe", "CreateProcessCommon", "WSL (")
+    if result.returncode != 0 and any(m in result.stderr for m in _WSL_SHIM_MARKERS):
         pytest.skip(
-            "bash could not execute the harness (no harness output); "
+            "bash resolved to the WSL shim and could not exec the harness; "
             f"stderr: {result.stderr.strip()}"
         )
 
