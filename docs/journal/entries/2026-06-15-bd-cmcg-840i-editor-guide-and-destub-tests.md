@@ -70,6 +70,22 @@ fake guarantee and pointed at the real-browser check rather than encode jsdom's
 0-rect behavior as if it were the feature. Deleting a misleading test is a coverage
 INCREASE, not a decrease: the suite no longer claims to cover what it cannot.
 
+## Pre-PR fresh-eyes
+
+Sonnet, 1 round -> both criteria PASS (cmcg grep clean + ConditionalControl shape
+field-for-field correct; 840i no stub/act-without-assert remaining, the phase4
+deletion verified safe against FieldOverlay.test.tsx's 17 real tests). 3 findings,
+all fixed: (1) the phase2 clamp test waited only for the spinbutton, racing the
+page-ref registration `scrollToPage` depends on -> now waits for all 3 canvases
+(flake fix); (2) the phase5 click tests asserted `toBeInTheDocument()` on the
+just-found button (circular) -> now assert the `100%` scale readout survives the
+click (catches an error-boundary unmount); (3) the EDITOR_GUIDE example's
+`value: "P1_checkbox4[0]"` could mislead new authors -> added a note that `value` is
+the controlling field's STORED value and the widget-name value is I-90-specific, not
+a convention. Fresh-eyes also confirmed (out of scope, not fixed) a pre-existing
+`ConditionalOperator` member gap between the editor and runtime type files -- noted,
+not this bead's.
+
 ## Closeout notes
 
 - **Doc-freshness:** 10 docs flagged STALE, all backend/voice-path tier-2 docs from
