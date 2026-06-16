@@ -5,24 +5,30 @@
  *
  * NOTE (bd polyglot-pdf-840i): the fit-width/fit-page SCALE MATH (the
  * (containerWidth - padding) / pageWidth calculation and the 0.5..2.0 clamp in
- * PDFViewer.handleFitWidth / handleFitPage) IS exercised here. The scroll
- * container's clientWidth/clientHeight default to 0 under jsdom -- which is why
- * handleFitWidth/handleFitPage early-return unless those dimensions are stubbed.
- * The "Fit math (clientWidth/clientHeight stubbed)" describe block below defines
- * non-zero clientWidth/clientHeight on the real `.overflow-auto` scroll-container
- * node so the fit calculation runs, then asserts the EXACT percentage the scale
- * readout shows. This proves the (containerWidth - 64) / pageWidth math and the
- * Math.max(0.5, Math.min(2.0, ...)) clamp both run -- deleting the handler body or
- * the clamp would change the asserted percentage and fail the test.
+ * PDFViewer.handleFitWidth / handleFitPage) IS exercised here.
  *
- * pageDimensions (read by the fit math as the page WIDTH/HEIGHT reference) is only
- * populated when PDFPage's onPageLoad fires, and that fires only when the canvas
- * 2d context exists -- jsdom has no canvas backend, so getContext is stubbed in
- * beforeEach (the same stub phase2 uses).
+ * What gates the handlers (read the handler bodies in PDFViewer.tsx): they
+ * early-return ONLY when `pageDimensions` is empty / page-1 dims are missing / the
+ * `.overflow-auto` scroll container is absent -- NOT on a zero clientWidth. So with
+ * pageDimensions populated, a click ALWAYS runs the math: at the jsdom-default
+ * clientWidth/clientHeight of 0 it computes (0 - 64) / pageWidth (negative) and
+ * Math.max(0.5, ...) clamps it to 0.5 -- which the two "no-stub -> 50%" tests below
+ * assert (that is real lower-clamp coverage, not a degenerate no-op). The "Fit math
+ * (clientWidth/clientHeight stubbed)" describe block then defines NON-zero
+ * clientWidth/clientHeight on the real scroll-container node to drive the in-range
+ * and upper-clamp cases, asserting the EXACT readout percentage. Deleting the
+ * handler body or the clamp changes an asserted percentage and fails a test.
+ *
+ * The gating dependency is therefore pageDimensions, which PDFPage fills LATER via
+ * renderTask.promise.then(onPageLoad) -- so the helper below waits for the canvas
+ * AND flushes that promise chain before any fit click, or the handler would take
+ * its pageDimensions-empty early return and the assertions would flake. onPageLoad
+ * itself fires only when the canvas 2d context exists -- jsdom has no canvas
+ * backend, so getContext is stubbed in beforeEach (the same stub phase2 uses).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { PDFViewer } from './PDFViewer';
 import type { FormSchema } from '../types/schema';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -101,19 +107,24 @@ async function renderLoadedViewer() {
   });
 }
 
-// Render the loaded viewer AND wait until the single page's canvas has committed,
-// so PDFPage.onPageLoad has populated pageDimensions (the fit math's page-size
-// reference). Returns the render() result so callers can reach the container.
+// Render the loaded viewer AND wait until pageDimensions is actually populated --
+// the fit handlers early-return on pageDimensions.size === 0, and pageDimensions is
+// filled LATER (a ref set in PDFPage's renderTask.promise.then(onPageLoad)), so a
+// canvas being present does NOT prove it is ready (Codex review). We flush that
+// promise chain, then wait for a pageDimensions-DRIVEN signal: the field overlays
+// only mount once pageDimensions.has(pageNum) is true (PDFViewer gates them on it),
+// so an overlay in the DOM is direct proof the fit math will not take its empty
+// early return. Returns the render() result so callers can reach the container.
 async function renderLoadedViewerWithPage() {
   const result = renderViewer();
   await waitFor(() => {
     expect(document.querySelectorAll('canvas').length).toBe(1);
   });
-  // Flush the page-render microtask chain so onPageLoad fires and pageDimensions
-  // is set before the fit handler reads it.
-  await waitFor(() => {
-    expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-  });
+  // Flush the render-task promise chain so onPageLoad fires and pageDimensions is set.
+  await act(async () => { await Promise.resolve(); });
+  // Overlays mount only after pageDimensions is populated -- wait for one (mockSchema
+  // has field1 on page 1), proving the fit handlers will read real page dims.
+  await screen.findByTestId('field-overlay-field1');
   return result;
 }
 

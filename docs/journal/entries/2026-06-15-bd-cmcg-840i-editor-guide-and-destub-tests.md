@@ -27,12 +27,17 @@ returns nothing -- the cmcg exit criterion.
 The uov.16 re-audit found schema-editor tests that pass against nothing. Fixed each
 per the bead's "real assertion OR delete-with-a-note" rule:
 
-- **`PDFViewer.phase4.test.tsx` -- DELETED.** All 13 tests were
-  `expect(true).toBe(true)` with a comment block; the file documented the
-  click/hover/select workflow but ran zero production code (it would stay green if
-  the click+hover impl were deleted). The real behavior is covered with `fireEvent`
-  in `FieldOverlay.test.tsx` (17 asserting tests, 0 stubs -- verified before
-  deleting), so the file was pure redundant documentation-as-suite.
+- **`PDFViewer.phase4.test.tsx` -- all 13 `expect(true)` stubs removed, then the
+  file was REBUILT with a real suite (see "Codex round 1" below for why).** The
+  original 13 tests were `expect(true).toBe(true)` comment blocks that ran zero
+  production code. My first instinct was to delete the file outright as "covered by
+  `FieldOverlay.test.tsx`" -- but Codex correctly showed that file only covers
+  `FieldOverlay` IN ISOLATION (a directly-supplied `onClick`), NOT the PDFViewer
+  wiring. So the file now holds two real tests: PDFViewer wires
+  `onClick={() => onSelectField(id)}` to each overlay (click -> callback with the
+  right id), and PDFViewer propagates `isSelected` from `selectedFieldId` (the
+  selected overlay flips to a 4px border + blue glow). Final state: a real
+  PDFViewer-to-FieldOverlay wiring suite, NOT a deletion.
 - **`PDFViewer.phase5.test.tsx` -- 22 stubs removed, 5 real tests kept.** The kept
   tests assert observable behavior: the Fit Width / Fit Page buttons render, manual
   zoom changes the displayed percentage (100% -> 125%), and a preset click mid-zoom
