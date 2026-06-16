@@ -1074,7 +1074,7 @@ interface FormField {
   validation?: ValidationRules;    // Patterns and constraints
   options?: FieldOption[];         // For select/radio
   show_if?: ConditionalDisplay;    // Conditional visibility
-  controls_fields?: ControlsFields; // Field dependencies
+  controls_fields?: ConditionalControl[]; // Field dependencies (a LIST of rules)
   pdf_position?: PDFPosition;      // Coordinates on PDF
   question_number?: string;        // Order in form
   // ... other properties
@@ -1091,6 +1091,45 @@ interface PDFPosition {
   height?: number; // Height (PDF points)
 }
 ```
+
+**ConditionalControl** (Field dependencies):
+```typescript
+// A field's `controls_fields` is an ARRAY of these rules. Each rule fires when
+// the controlling field's value matches `value` under `operator`, and then acts
+// on the listed target field ids. This matches the runtime contract
+// (frontend/src/schema-forms/types/schema.ts) -- it is NOT a single object.
+interface ConditionalControl {
+  operator: ConditionalOperator;  // equals | not_equals | contains | is_checked | ...
+  value: string | number | boolean | Array<string | number | boolean>;
+  shows?: string[];          // field ids to reveal
+  hides?: string[];          // field ids to hide
+  unlocks?: string[];        // field ids to make editable (clear read_only)
+  locks?: string[];          // field ids to make read_only
+  makes_required?: string[]; // field ids to mark required
+  makes_optional?: string[]; // field ids to mark optional
+}
+```
+
+**Authoring controls_fields.** A field that drives others (a checkbox, a yes/no
+radio) carries a `controls_fields` LIST -- one `ConditionalControl` per distinct
+trigger value. For example, an "Are you filing for someone else?" checkbox whose
+checked state reveals and unlocks the representative-name fields:
+
+```json
+"controls_fields": [
+  {
+    "operator": "equals",
+    "value": "P1_checkbox4[0]",
+    "unlocks": ["p1_line5a_familyname", "p1_line5b_givenname"]
+  }
+]
+```
+
+Every id listed in `shows`/`hides`/`unlocks`/`locks`/`makes_required`/
+`makes_optional` must be a real field id in the schema -- the editor's validator
+flags any that is not (a `controls_fields references non-existent field` warning),
+checking across all rules in the list and tolerating forward references (a target
+declared later in `fields`).
 
 ### Validation Types
 
