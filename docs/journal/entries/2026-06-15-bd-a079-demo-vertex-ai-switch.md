@@ -5,88 +5,78 @@ pr: TBD
 tags: [deployment, voice-ai, ai-models]
 ---
 
-# a079: switch the demo Gemini backend from AI Studio back to Vertex AI
+# a079: switch the demo Gemini backend from AI Studio to Vertex AI
 
 ## Why
 
-The demo was running on AI Studio (the Gemini Developer API, API-key auth) for
-one reason only: Gemini 3.1 preview access. As of 2026-06 the 3.1 native-audio
-model is available on AI Studio but NOT on Vertex AI (it 1008s "policy
-violation" on the Vertex path -- see the `VERTEXAI` note in `backend/config.py`).
-We are not using 3.1. Staying on AI Studio therefore bought nothing and cost
-data privacy: AI Studio request data is not covered by the Vertex AI data
-governance the project wants. Moving back to Vertex keeps request data private.
+The demo ran on AI Studio (the Gemini Developer API, API-key auth) for one
+reason: Gemini 3.1 preview access. We are not using 3.1. Staying on AI Studio
+bought nothing and cost data privacy -- AI Studio request data is not covered by
+the Vertex AI data governance we want. Moving to Vertex keeps request data
+private.
 
-## What changed
+## What changed -- and the wrinkle that grew the scope
 
-One env flip in `deploy-demo.sh` (the only thing pinning the demo to AI Studio):
+The bead was scoped as a one-line env flip (`VERTEXAI=false` -> `true`). That
+turned out to be insufficient, for a reason worth recording: **the native-audio
+Live model is published under DIFFERENT ids on AI Studio vs Vertex, and a Live
+(`bidiGenerateContent`) connect with the wrong-backend id `1008`s.**
 
-```
--    BACKEND_EXTRA_ENV="VERTEXAI=false,USE_PREMIUM_MODEL=false" ...
-+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" ...
-```
+- AI Studio native-audio (the `config.py` default selected by
+  `USE_PREMIUM_MODEL=false`): `gemini-2.5-flash-native-audio-preview-12-2025`.
+- That id is **NOT published on Vertex in any region** -- I probed
+  `us-central1`, `us-east5`, and `global`; every Live connect `1008`d.
+- The Vertex native-audio Live model is **`gemini-live-2.5-flash-native-audio`**,
+  which connects and returns audio on `us-central1` (the adapter's default
+  location). Still a 2.5-family native-audio model.
 
-`USE_PREMIUM_MODEL=false` is unchanged -- that selects the 2.5 native-audio
-model (`gemini-2.5-flash-native-audio-preview-12-2025`), which runs on Vertex.
-The stale "Demo runs on AI Studio" comment block was rewritten to describe the
-Vertex path and to record that 3.1 still requires `VERTEXAI=false` until Vertex
-ships it.
+So the change is `VERTEXAI=true` PLUS `MODEL_NATIVE=gemini-live-2.5-flash-native-audio`
+pinned in `deploy-demo.sh`'s `BACKEND_EXTRA_ENV`. The pin wins over
+`USE_PREMIUM_MODEL` in `config.py` `_resolve_model` (a non-empty `MODEL_NATIVE`
+short-circuits the flag). `model_family()` still classifies it as `2.5`, so
+pricing bills at the 2.5 rate -- no cost-tracking drift.
 
-No code or IAM change was needed. The Vertex path is already the code default
-(`VERTEXAI` defaults to `true`) and fully implemented:
-`backend/adapters/live_ai_gemini.py` builds
-`genai.Client(vertexai=True, project=..., location=...)`, authenticating via
-Application Default Credentials (service-account on Cloud Run), no API key.
-Preconditions that were already satisfied:
+First deploy used `VERTEXAI=true` with the OLD (AI Studio) model and broke the
+demo voice path -- the model 1008'd on the Live connect. Caught by the fresh-eyes
+reviewer, who flagged that the local "auth works" proof used `generate_content`
+(text REST), not `bidiGenerateContent` (the Live WebSocket the app actually
+uses). Re-probing the Live path surfaced the id difference; the model pin is the
+fix.
 
-- `GOOGLE_CLOUD_PROJECT` is set in the backend Cloud Run env
-  (`deploy-all.sh` `BACKEND_ENV`).
-- `aiplatform.googleapis.com` is enabled by the deploy
-  (`deploy-all.sh` `gcloud services enable`).
-- The demo Cloud Run service account
-  (`polyglot-backend-sa@polyglot-demo-aa709.iam.gserviceaccount.com`) already
-  holds `roles/aiplatform.user`.
-
-The `GEMINI_API_KEY` secret is still injected via Secret Manager but is unused
-on the Vertex path -- left in place (harmless) rather than removed, so a future
-3.1 A/B (which needs `VERTEXAI=false`) still has its key.
+No code or IAM change was needed beyond the env. The Vertex path is the code
+default and fully implemented (`live_ai_gemini.py`
+`genai.Client(vertexai=True, project=..., location=...)`). Preconditions already
+satisfied: `GOOGLE_CLOUD_PROJECT` set in the backend env; `aiplatform.googleapis.com`
+enabled by the deploy; the demo Cloud Run SA (`polyglot-backend-sa`) already
+holds `roles/aiplatform.user`. `GEMINI_API_KEY` is still injected via Secret
+Manager but unused on this path (kept for a future AI-Studio 3.1 A/B).
 
 ## Verification
 
-1. Local boot: ran the backend with `VERTEXAI=true USE_PREMIUM_MODEL=false
-   GOOGLE_CLOUD_PROJECT=polyglot-demo-aa709`; `/health` returned
-   `"vertexai":true` with the 2.5 model, and the boot log showed
-   `firebase_admin_initialized method=ADC` (no API-key auth).
-2. Real Vertex auth: a standalone `genai.Client(vertexai=True,
-   project="polyglot-demo-aa709", location="us-central1")` `generate_content`
-   call -- the adapter's exact client construction, ADC-only -- returned "OK".
-   This proves ADC -> Vertex authentication works against the demo project.
-3. Deployed: `./deploy-demo.sh` ran clean through all stages (Cloud Build
-   SUCCESS, Cloud Run revision `polyglot-backend-00061-tm5` serving 100% as
-   `polyglot-backend-sa`, frontend + Firestore rules deployed). The LIVE
-   deployed backend `/health` reports `"vertexai":true`.
+1. Standalone Vertex Live connect (the adapter's exact client construction,
+   ADC-only): `gemini-live-2.5-flash-native-audio` on `us-central1` connected and
+   returned audio 3/3 runs.
+2. Deployed: `./deploy-demo.sh` ran clean (Cloud Build SUCCESS; Cloud Run
+   revision `polyglot-backend-00063-2w4` serving 100% as `polyglot-backend-sa`).
+   Live `/health` reports `"vertexai":true` and
+   `"native":"gemini-live-2.5-flash-native-audio"`.
+3. **End-to-end voice (exit criterion 2): maintainer live test-drive on the
+   deployed demo.** Full cycle works -- disclaimer, ask for A-number, fill,
+   verify, confirm, advance. An apparent "silence after the first fill" during
+   testing was traced to **push-to-talk timing**, not the model: the Cloud Run
+   logs show the first `update_form_fields` round-trip completing cleanly
+   (`tool_call_received` -> `field_update_success` -> `tool_response_sent`, no
+   crash), with the conversation continuing once PTT was used correctly.
 
-The one gap local verification cannot close is a full live voice form-fill turn
-over the WebSocket (the SA invoking Gemini Live on the audio path). `/health`
-boot + the standalone Vertex call cover auth and config; the audio round-trip is
-a manual/voice-harness test-drive left to the operator.
+## 3.1 note
 
-## Doc-freshness note (closeout prep)
-
-`check_doc_freshness.py` flagged ~12 stale tier-2 docs (auth.md,
-context-compression.md, ai-models.md, stateless-architecture.md, etc.). These
-are NOT triggered by this change: this branch's diff vs `origin/dev` is only
-`deploy-demo.sh` and the regenerated `.firebase` hosting cache. The flags come
-from unrelated source-file mtimes dated 2026-06-15 (other in-flight work /
-checkout touches), not from anything in this PR. No doc update is warranted by
-the Vertex env flip; reviewed and noted here per the checker's "or note the
-review in the closeout journal entry" path.
+3.1 is not on Vertex as of 2026-06 (it `1008`s -- "policy violation"). Running it
+still requires the AI-Studio path (`VERTEXAI=false`, `USE_PREMIUM_MODEL=true`).
 
 ## Out of scope
 
-- Stale `in_progress` beads `polyglot-pdf-hrn` and `polyglot-pdf-jf6w` (flagged
-  by `bd stale`) are pre-existing and unrelated; not touched by this PR.
-- The obsolete production channel (`polyglot-forms-919f2`,
-  `deploy-production.sh`) is being abandoned (no live customers, pre-MVP). The
-  earlier prod-deploy-account fix (bd `polyglot-pdf-dwvb`) was reverted and
-  closed as moot in the same session.
+- The obsolete production channel (`polyglot-forms-919f2`, `deploy-production.sh`)
+  is being abandoned (no live customers, pre-MVP). The earlier prod-deploy-account
+  fix (bd `polyglot-pdf-dwvb`) was reverted and closed as moot in the same session.
+- `deploy-all.sh` has a stale `BACKEND_EXTRA_ENV` example comment (still says the
+  demo runs AI Studio); filed as bd `polyglot-pdf-5rpo`.

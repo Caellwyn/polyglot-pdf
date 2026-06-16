@@ -65,13 +65,24 @@ if [ "$DEPLOY_GCP" = true ]; then
     # Demo runs on Vertex AI: VERTEXAI=true selects the service-account ADC path
     # (authenticates via GOOGLE_CLOUD_PROJECT + the Cloud Run SA's
     # roles/aiplatform.user; no API key), which keeps request data private --
-    # the reason for moving off AI Studio. USE_PREMIUM_MODEL=false selects 2.5
-    # (gemini-2.5-flash-native-audio-preview), which runs on Vertex. We are NOT
-    # using 3.1, so the AI Studio path (the only one with 3.1 as of 2026-06) is
-    # no longer needed. To run 3.1 you would need both USE_PREMIUM_MODEL=true AND
-    # VERTEXAI=false until Vertex ships 3.1. GEMINI_API_KEY (still injected via
-    # Secret Manager) is unused on this path. See docs/standards/ai-models.md.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" ./deploy-all.sh "${GCP_ARGS[@]}"
+    # the reason for moving off AI Studio.
+    #
+    # MODEL_NATIVE is PINNED here because the model strings differ by backend.
+    # The AI Studio native-audio id (gemini-2.5-flash-native-audio-preview-12-2025,
+    # the config.py default selected by USE_PREMIUM_MODEL=false) does NOT exist on
+    # Vertex in any region -- a Live (bidiGenerateContent) connect 1008s. The
+    # Vertex native-audio Live model is `gemini-live-2.5-flash-native-audio`,
+    # verified to connect and return audio on Vertex us-central1 (the adapter's
+    # default location; bd polyglot-pdf-a079). It is still a 2.5-family
+    # native-audio model, so model_family() bills it at the 2.5 rate and the audio
+    # path/VAD tuning carry over. USE_PREMIUM_MODEL is irrelevant once MODEL_NATIVE
+    # is pinned (the explicit id wins in config.py _resolve_model).
+    #
+    # 3.1 is not available on Vertex as of 2026-06; running it still requires the
+    # AI Studio path (VERTEXAI=false, USE_PREMIUM_MODEL=true). GEMINI_API_KEY
+    # (still injected via Secret Manager) is unused on this Vertex path. See
+    # docs/standards/ai-models.md.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,MODEL_NATIVE=gemini-live-2.5-flash-native-audio" ./deploy-all.sh "${GCP_ARGS[@]}"
 
     # Update Cloud Run to use the custom Service Account
     echo -e "${GREEN}[INFO]${NC} 🔑 Ensuring Cloud Run uses service account $SA_NAME..."
