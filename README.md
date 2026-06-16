@@ -49,24 +49,31 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 ## 📊 Current Status
 
 **Status**: Live Demo Available
-**Last Updated**: March 2026
+**Last Updated**: June 2026
+
+> There is **no active production** environment for this project today; the demo
+> is the live target. The production-project plumbing below remains wired for
+> when one is stood up.
 
 ### Live Demo
 
 - **Demo site**: [polyglot-demo-aa709.web.app](https://polyglot-demo-aa709.web.app)
-- **Production site**: [polyglot-forms-919f2.web.app](https://polyglot-forms-919f2.web.app)
+- **Production site (inactive)**: [polyglot-forms-919f2.web.app](https://polyglot-forms-919f2.web.app)
 
 ### Working Features
 - ✅ Firebase Authentication (Google sign-in + email/password)
 - ✅ Authorized-email gating for sign-up (Firestore `authorized_emails` collection)
-- ✅ Gemini Live API voice integration (`gemini-2.5-flash-native-audio-preview-12-2025`)
+- ✅ Gemini Live API voice integration (native audio-to-audio); default
+  `gemini-2.5-flash-native-audio-preview-12-2025`, with `gemini-3.1-flash-live-preview`
+  selectable via `USE_PREMIUM_MODEL`
 - ✅ Schema-driven form filling with section navigation
 - ✅ 18+ spoken languages with real-time switching
 - ✅ Stateless backend architecture (HIPAA compliant)
-- ✅ WebSocket real-time communication
+- ✅ WebSocket real-time communication (`/ws/fill`)
 - ✅ Hybrid voice/keyboard workflow
 - ✅ GCS-backed form kit storage for deployed environments
-- ✅ PDF generation from filled forms
+- ✅ PDF generation/filling from filled forms (PyMuPDF, `/api/fill-pdf`)
+- ✅ Visual schema editor (`schema-editor/`)
 - ✅ Dual deployment paths (demo vs production)
 
 ## 🚀 Quick Start
@@ -125,13 +132,18 @@ Frontend available at: <http://localhost:5173>
 
 ### Quick Test (Current Voice System)
 
-1. Open <http://localhost:5173/test-demo-new.html>
-2. Click "Connect to Voice" (grant microphone permission if prompted)
-3. Select a language from the dropdown (e.g., "Spanish")
-4. Gemini will greet you and ask for the first field
-5. Speak naturally: "My ID is 12345" or manually type values
-6. Watch fields auto-fill with confirmation!
-7. Try switching sections or changing languages mid-session
+1. Open <http://localhost:5173/> (the Schema Form Demo SPA)
+2. Sign in, then pick a form kit from the schema dropdown
+3. Start the voice assistant (grant microphone permission if prompted)
+4. Select a language from the dropdown (e.g., "Spanish")
+5. Gemini will greet you and ask for the first field
+6. Speak naturally: "My ID is 12345" or manually type values
+7. Watch fields auto-fill with confirmation!
+8. Try switching sections or changing languages mid-session
+
+> The convenience launcher [`scripts/dev-local.ps1`](scripts/dev-local.ps1) (or
+> the `/run-local` skill) starts the backend + frontend together; pass
+> `-Model premium` to A/B the 3.1 model.
 
 ### Form Kit Workflow (Schemas + PDFs)
 
@@ -182,15 +194,13 @@ This workflow keeps dev and prod aligned: the frontend manifest and the backend 
 └─────────────────────────────────────────────┘
 ```
 
-### Target Architecture (Polyglot PDF System)
+### Supporting Surfaces
 
-**New Components to be Added:**
-- Admin UI for schema creation
-- PDF generation service with metadata embedding
-- PDF upload and extraction service
-- Session management system
-- Schema CRUD API
-- Enhanced form renderer with numbered paragraphs
+Beyond the voice form-filler above, the repo ships:
+- **Schema editor** (`schema-editor/`) - visual builder for creating/editing form schemas without code
+- **PDF filling** (`backend/routes/pdf_fill_routes.py`, PyMuPDF) - renders filled forms to PDF via `/api/fill-pdf`
+- **Form kits** (`form-kits/`) - the single source of truth for schema/PDF pairs (see the workflow above)
+- **VAD tuning harness** (`frontend/src/vad-tuning/`) and **token monitor** (`token-monitor/`) - dev/observability tooling
 
 See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`docs/technical_guide.md`](docs/technical_guide.md) for the detailed architecture reference.
 
@@ -198,10 +208,11 @@ See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`d
 
 **Backend:**
 - FastAPI 0.117.1 - Modern async web framework
-- google-genai 1.38.0 - Gemini Live API integration
-- Pydantic - Data validation and settings
+- google-genai 2.8.0 - Gemini Live API integration
+- Pydantic 2.x - Data validation and settings
+- PyMuPDF 1.24.14 - PDF rendering / form filling
+- structlog - Structured (metadata-only) logging
 - pytest - Testing framework
-- PDF Library - TBD (ReportLab, WeasyPrint, or similar)
 
 **Frontend:**
 - React 18+ - UI framework
@@ -212,7 +223,8 @@ See [`docs/INDEX.md`](docs/INDEX.md) for the canonical documentation map and [`d
 **Key Dependencies:**
 - librosa 0.10.1 - Audio processing
 - soundfile 0.12.1 - Audio I/O
-- WebSockets 13-15 - Real-time communication
+- websockets 13-15 - Real-time communication
+- google-cloud-storage / firebase-admin - GCS form-kit storage + auth
 
 ## 🧪 Testing
 
@@ -309,24 +321,26 @@ entry points and follow them on demand:
 
 **State Lost on Refresh:**
 - Check sessionStorage in DevTools (Application tab)
-- Verify webFormState.ts persistence logic
+- The client holds all field state under the `schema_form_state` key
 - Clear sessionStorage and reconnect if corrupted
 
 ### Debug Tools
 
 **Backend Logs:**
-```bash
-# Check tool call interactions
-cat .logs/gemini_tool_calls.log
 
-# Watch live
-tail -f .logs/gemini_tool_calls.log
+Production logs are structured (structlog JSON) and metadata-only — no field
+values/PII. For local dev I/O capture, enable the dev file logger via
+`backend/.env.DEV`; it writes daily `backend/logs/gemini_<date>.jsonl` files.
+
+```bash
+# Watch the day's dev capture (local only)
+tail -f backend/logs/gemini_$(date +%F).jsonl
 ```
 
 **Browser Console:**
 ```javascript
 // View stored state
-console.log(sessionStorage.getItem('webFormState'))
+console.log(sessionStorage.getItem('schema_form_state'))
 
 // Clear state
 sessionStorage.clear()
@@ -376,21 +390,33 @@ sessionStorage.clear()
 
 ## 🚢 Deployment
 
-Two independent deployment paths exist — demo and production — targeting separate Firebase/GCP projects.
+Two independent deployment paths exist — demo and production — targeting separate Firebase/GCP projects. Deploy is **local/manual**; there is no active production environment today.
 
-### Frontend
+### Top-level deploy scripts (canonical)
 
 ```bash
-cd frontend
-
 # Deploy to demo (polyglot-demo-aa709)
-npm run deploy:demo
+./deploy-demo.sh
 
-# Deploy to production (polyglot-forms-919f2)
-npm run deploy
+# Deploy to production (polyglot-forms-919f2) — inactive target
+./deploy-production.sh
 ```
 
-Each command runs `form-kits:prepare` → Vite build → `firebase deploy --only hosting`. The demo build loads `frontend/.env.demo`; production loads `frontend/.env.production`.
+These wrap the frontend build (`build:schema:demo` / production Vite build) plus
+`firebase deploy`, and also ship the Firestore security rules
+(`firebase deploy --only firestore:rules`) on any frontend/full deploy. The demo
+build loads `frontend/.env.demo`; production loads `frontend/.env.production`.
+
+> Demo deploys are gated: test the change locally first, get explicit
+> per-instance permission, then test-drive the live demo afterward (see
+> [`CLAUDE.md`](CLAUDE.md) "Deployment / promotion").
+
+The underlying npm scripts in `frontend/` build then call `firebase deploy`
+directly: `npm run deploy:demo` is hosting-only (`--only hosting`), while
+`npm run deploy` (production) runs an unscoped `firebase deploy` that ships every
+configured target (hosting **and** Firestore rules). Prefer the top-level scripts:
+`deploy-demo.sh` runs a separate `firebase deploy --only firestore:rules` step so
+the demo path ships rules too (the hosting-only `npm run deploy:demo` would not).
 
 ### Backend (Google Cloud Run)
 
@@ -445,4 +471,7 @@ See `firestore.rules` (wired into `firebase.json`) — users can only read/write
 
 **For AI Assistants**: Read [`CLAUDE.md`](CLAUDE.md) and [`docs/INDEX.md`](docs/INDEX.md) before making changes to this codebase.
 
-**For Developers**: This project is currently in a major refactor phase. The existing voice form filler is functional, and we're building new PDF and admin UI features around it. See the implementation plan for the roadmap.
+**For Developers**: The voice form filler, schema editor, and PDF filling are all
+functional and deployed to the demo. Work is tracked in beads (`bd ready`); see
+[`CLAUDE.md`](CLAUDE.md) and [`docs/INDEX.md`](docs/INDEX.md) for the workflow and
+architecture.
