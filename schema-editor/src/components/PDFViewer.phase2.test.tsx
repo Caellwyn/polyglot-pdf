@@ -212,7 +212,7 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
     });
 
     it('should clamp page input to valid range', async () => {
-      // Mock scrollIntoView
+      // Mock scrollIntoView (handlePageInput -> scrollToPage calls it)
       Element.prototype.scrollIntoView = vi.fn();
 
       render(
@@ -224,14 +224,25 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
         />
       );
 
+      // Wait for ALL 3 pages to render before firing input: handlePageInput ->
+      // scrollToPage only calls setCurrentPage when the target page's ref is
+      // registered (pageRefs.get(page)), which happens as each page div commits.
+      // Gating on the spinbutton alone would race the page-ref registration and
+      // flake (fresh-eyes, bd 840i).
       await waitFor(() => {
-        const pageInput = screen.getByRole('spinbutton') as HTMLInputElement;
-
-        // Try to go beyond max page
-        fireEvent.change(pageInput, { target: { value: '10' } });
-        // Should be clamped to 3 (max pages)
-        // Note: The clamping happens in handlePageInput
+        expect(document.querySelectorAll('canvas').length).toBe(3);
       });
+      const pageInput = screen.getByRole('spinbutton') as HTMLInputElement;
+
+      // The input is controlled by currentPage, which handlePageInput clamps to
+      // [1, numPages] (here numPages = 3). An over-max entry must NOT leave the
+      // displayed value at the raw input; it clamps to the max page.
+      fireEvent.change(pageInput, { target: { value: '10' } });
+      await waitFor(() => expect(pageInput.value).toBe('3'));
+
+      // A below-min entry clamps up to page 1 (the `|| 1` + Math.max(1, ...)).
+      fireEvent.change(pageInput, { target: { value: '0' } });
+      await waitFor(() => expect(pageInput.value).toBe('1'));
     });
   });
 
@@ -296,7 +307,16 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
   });
 
   describe('Auto-scroll to Field Page', () => {
-    it('should scroll to page 1 when field on page 1 is selected', async () => {
+    it('scrolls AND sets the current page to the selected field page (page 2)', async () => {
+      // NOTE (bd polyglot-pdf-840i): the pixel scroll TARGET is not observable
+      // under jsdom (every getBoundingClientRect / offset returns 0, so a page-1
+      // and page-2 target produce the same 0 coordinates). But the auto-scroll
+      // effect ALSO calls setCurrentPage(field.pdf_position.page), and that IS
+      // observable: the page-number input (role spinbutton, value={currentPage})
+      // reflects it. So selecting field-page2 (pdf_position.page === 2) must drive
+      // the input to "2" -- this catches page-routing regressions that the bare
+      // "scrollTo was called" assertion could not (it would pass even if the wrong
+      // page were selected).
       const { rerender } = render(
         <PDFViewer
           pdfPath="/test.pdf"
@@ -315,50 +335,15 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
       // a user can select a field, in jsdom we flush it explicitly.
       await act(async () => { await Promise.resolve(); });
 
-      // The auto-scroll effect centers the field via the scroll container's
-      // scrollTo (jsdom does not implement it, so it must be mocked).
-      const scrollToSpy = vi.fn();
-      Element.prototype.scrollTo = scrollToSpy;
-
-      // Select field on page 1
-      rerender(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockMultiPageSchema}
-          selectedFieldId="field-page1"
-          onSelectField={mockSelectField}
-        />
-      );
-
-      await waitFor(() => {
-        // scrollTo should have been called to center the selected field
-        expect(scrollToSpy).toHaveBeenCalled();
-      });
-    });
-
-    it('should scroll to page 2 when field on page 2 is selected', async () => {
-      const { rerender } = render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockMultiPageSchema}
-          selectedFieldId={null}
-          onSelectField={mockSelectField}
-        />
-      );
-
-      await waitFor(() => {
-        expect(document.querySelectorAll('canvas').length).toBe(3);
-      });
-      // Flush page-render promises so pageDimensions is populated before select
-      // (see page-1 test for the full explanation).
-      await act(async () => { await Promise.resolve(); });
+      // Sanity: starts on page 1 before any field is selected.
+      expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('1');
 
       // The auto-scroll effect centers the field via the scroll container's
       // scrollTo (jsdom does not implement it, so it must be mocked).
       const scrollToSpy = vi.fn();
       Element.prototype.scrollTo = scrollToSpy;
 
-      // Select field on page 2
+      // Select a field that HAS a pdf_position on PAGE 2.
       rerender(
         <PDFViewer
           pdfPath="/test.pdf"
@@ -370,6 +355,11 @@ describe('PDFViewer Phase 2: Multi-page Support', () => {
 
       await waitFor(() => {
         expect(scrollToSpy).toHaveBeenCalled();
+      });
+      // The selected field is on page 2, so currentPage -- and the page-number
+      // input -- must read "2", not the page-1 default.
+      await waitFor(() => {
+        expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('2');
       });
     });
 

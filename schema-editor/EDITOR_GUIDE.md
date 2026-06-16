@@ -4,7 +4,8 @@
 
 Version: 1.0.0  
 Last Updated: November 5, 2025  
-Status: Production Ready - All 5 phases complete (113/113 tests passing)
+Status: Production Ready - All 5 phases complete (see the test suites under
+`src/` for current coverage; run `npm run test:run` for the live count)
 
 ---
 
@@ -1074,7 +1075,7 @@ interface FormField {
   validation?: ValidationRules;    // Patterns and constraints
   options?: FieldOption[];         // For select/radio
   show_if?: ConditionalDisplay;    // Conditional visibility
-  controls_fields?: ControlsFields; // Field dependencies
+  controls_fields?: ConditionalControl[]; // Field dependencies (a LIST of rules)
   pdf_position?: PDFPosition;      // Coordinates on PDF
   question_number?: string;        // Order in form
   // ... other properties
@@ -1091,6 +1092,55 @@ interface PDFPosition {
   height?: number; // Height (PDF points)
 }
 ```
+
+**ConditionalControl** (Field dependencies):
+```typescript
+// A field's `controls_fields` is an ARRAY of these rules. Each rule fires when
+// the controlling field's value matches `value` under `operator`, and then acts
+// on the listed target field ids. This matches the runtime contract
+// (frontend/src/schema-forms/types/schema.ts) -- it is NOT a single object.
+interface ConditionalControl {
+  operator: ConditionalOperator;  // equals | not_equals | contains | is_checked | ...
+  value: string | number | boolean | Array<string | number | boolean>;
+  shows?: string[];          // field ids to reveal
+  hides?: string[];          // field ids to hide
+  unlocks?: string[];        // field ids to make editable (clear read_only)
+  locks?: string[];          // field ids to make read_only
+  makes_required?: string[]; // field ids to mark required
+  makes_optional?: string[]; // field ids to mark optional
+}
+```
+
+**Authoring controls_fields.** A field that drives others (a checkbox, a yes/no
+radio) carries a `controls_fields` LIST -- one `ConditionalControl` per distinct
+trigger value. For example, an "Are you filing for someone else?" checkbox whose
+checked state UNLOCKS (makes editable) the representative-name fields -- the real
+I-90 targets are already visible, so this rule only clears their read-only bit. To
+also reveal a hidden target, add it to `shows` (use `hides`/`locks`/
+`makes_required`/`makes_optional` for the inverse actions):
+
+```json
+"controls_fields": [
+  {
+    "operator": "equals",
+    "value": "P1_checkbox4[0]",
+    "unlocks": ["p1_line5a_familyname", "p1_line5b_givenname"]
+  }
+]
+```
+
+Here `value` is the controlling field's STORED value to match against (under
+`operator`), NOT a target field id. The example value `"P1_checkbox4[0]"` is taken
+verbatim from the real I-90 schema, where this checkbox stores its own PDF widget
+name as its checked value -- so for a new form, set `value` to whatever the
+controlling field actually stores when the rule should fire (often `"true"` /
+`"Yes"` / an option value), not a widget name by convention.
+
+Every id listed in `shows`/`hides`/`unlocks`/`locks`/`makes_required`/
+`makes_optional` must be a real field id in the schema -- the editor's validator
+flags any that is not (a `controls_fields references non-existent field` warning),
+checking across all rules in the list and tolerating forward references (a target
+declared later in `fields`).
 
 ### Validation Types
 
@@ -1325,7 +1375,7 @@ export const pdfToScreenCoords = (
 
 **Completion Date:** November 5, 2025  
 **Duration:** ~1 hour (documentation and testing)  
-**Status:** ✅ Complete (86/86 tests passing)
+**Status:** Complete
 
 ### Key Insight
 
@@ -1376,21 +1426,25 @@ const [isHovered, setIsHovered] = useState(false);
 />
 ```
 
-**Test Coverage** (13 new tests):
-- Integration documentation (4 tests)
-- Workflow verification (2 tests)
-- Features completed (5 tests)
-- Limitations & future enhancements (2 tests)
+**Test Coverage** (bd polyglot-pdf-840i): `PDFViewer.phase4.test.tsx` is PRESENT and
+holds real tests -- its original 13 `expect(true)` placeholders (which documented
+the workflow but ran no production code) were removed and the file rebuilt.
+Click/hover/selection behavior on the overlay in isolation is covered with real
+`fireEvent` assertions in `FieldOverlay.test.tsx`; the PDFViewer-to-FieldOverlay
+WIRING -- that `PDFViewer` passes `onClick={() => onSelectField(field.id)}` and
+drives `isSelected` from `selectedFieldId` -- is covered by the rebuilt
+`PDFViewer.phase4.test.tsx`.
 
-### Files Created
+### Files
 
-- `src/components/PDFViewer.phase4.test.tsx` (143 lines)
+- `src/components/PDFViewer.phase4.test.tsx` -- click-to-select wiring regression
+  (rewritten under bd 840i; the prior all-`expect(true)` version was removed)
 
 ## Phase 5: Zoom Presets
 
 **Completion Date:** November 5, 2025  
 **Duration:** ~2 hours  
-**Status:** ✅ Complete (113/113 tests passing)
+**Status:** Complete
 
 ### Objectives
 
@@ -1439,13 +1493,16 @@ const handleFitPage = () => {
 - **Fit Width**: 800px container - 64px padding = 736px / 612px page = **120% scale**
 - **Fit Page**: Min(width scale, height scale) ensures entire page visible
 
-**Test Coverage** (27 new tests):
-- Fit Width functionality (7 tests)
-- Fit Page functionality (6 tests)
-- Button interactions (3 tests)
-- Implementation details (4 tests)
-- Edge cases and safety (4 tests)
-- Integration (3 tests)
+**Test Coverage** (bd polyglot-pdf-840i): the original suite was largely
+`expect(true)` placeholders documenting the scale math; 22 such stubs were removed.
+What remains asserts real behavior: the Fit Width / Fit Page buttons render, manual
+zoom changes the displayed percentage, AND -- by stubbing the scroll container's
+`clientWidth`/`clientHeight` to non-zero values so the handlers run -- the fit MATH
+and its 0.5..2.0 clamp are exercised with exact-percentage assertions (Fit Width
+153% in-range / 200% upper-clamp / 50% lower-clamp; Fit Page 106% height-constrained
+/ 104% width-constrained / 200% upper-clamp). So the scale-clamp calculation IS
+covered under jsdom via mocked container dimensions -- not deferred to a real
+browser. Run `npm run test:run` for the live count.
 
 ### Technical Decisions
 
@@ -1458,7 +1515,8 @@ const handleFitPage = () => {
 ### Files Modified
 
 - `src/components/PDFViewer.tsx` (Added fit-width/fit-page logic)
-- `src/components/PDFViewer.phase5.test.tsx` (NEW, 578 lines)
+- `src/components/PDFViewer.phase5.test.tsx` (de-stubbed under bd 840i: 22
+  `expect(true)` placeholders removed, the real assertions kept/strengthened)
 
 ---
 

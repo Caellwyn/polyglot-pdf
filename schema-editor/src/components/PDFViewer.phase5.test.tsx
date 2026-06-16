@@ -1,11 +1,34 @@
 /**
  * Phase 5: Zoom Presets - Tests
  *
- * Tests for fit-width and fit-page zoom preset functionality
+ * Real, asserting coverage for the Fit Width / Fit Page toolbar and manual zoom.
+ *
+ * NOTE (bd polyglot-pdf-840i): the fit-width/fit-page SCALE MATH (the
+ * (containerWidth - padding) / pageWidth calculation and the 0.5..2.0 clamp in
+ * PDFViewer.handleFitWidth / handleFitPage) IS exercised here.
+ *
+ * What gates the handlers (read the handler bodies in PDFViewer.tsx): they
+ * early-return ONLY when `pageDimensions` is empty / page-1 dims are missing / the
+ * `.overflow-auto` scroll container is absent -- NOT on a zero clientWidth. So with
+ * pageDimensions populated, a click ALWAYS runs the math: at the jsdom-default
+ * clientWidth/clientHeight of 0 it computes (0 - 64) / pageWidth (negative) and
+ * Math.max(0.5, ...) clamps it to 0.5 -- which the two "no-stub -> 50%" tests below
+ * assert (that is real lower-clamp coverage, not a degenerate no-op). The "Fit math
+ * (clientWidth/clientHeight stubbed)" describe block then defines NON-zero
+ * clientWidth/clientHeight on the real scroll-container node to drive the in-range
+ * and upper-clamp cases, asserting the EXACT readout percentage. Deleting the
+ * handler body or the clamp changes an asserted percentage and fails a test.
+ *
+ * The gating dependency is therefore pageDimensions, which PDFPage fills LATER via
+ * renderTask.promise.then(onPageLoad) -- so the helper below waits for the canvas
+ * AND flushes that promise chain before any fit click, or the handler would take
+ * its pageDimensions-empty early return and the assertions would flake. onPageLoad
+ * itself fires only when the canvas 2d context exists -- jsdom has no canvas
+ * backend, so getContext is stubbed in beforeEach (the same stub phase2 uses).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { PDFViewer } from './PDFViewer';
 import type { FormSchema } from '../types/schema';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -52,517 +75,266 @@ const mockSchema: FormSchema = {
   ],
 };
 
+// Mock a single-page letter-size PDF document and return it as the loaded doc.
+function mockSinglePagePdf() {
+  const mockGetPage = vi.fn().mockResolvedValue({
+    getViewport: ({ scale }: { scale: number }) => ({
+      width: 612 * scale, // standard letter width (points)
+      height: 792 * scale,
+    }),
+    // render task exposes both promise and cancel (PDFPage's cleanup calls
+    // renderTaskRef.current.cancel() on rerender/unmount).
+    render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
+    cleanup: vi.fn(),
+  });
+  const mockDocument = { numPages: 1, getPage: mockGetPage, destroy: vi.fn() };
+  vi.mocked(pdfjsLib.getDocument).mockReturnValue({
+    promise: Promise.resolve(mockDocument as any),
+    destroy: vi.fn(),
+  } as any);
+}
+
+function renderViewer() {
+  return render(
+    <PDFViewer pdfPath="/test.pdf" schema={mockSchema} selectedFieldId={null} onSelectField={vi.fn()} />
+  );
+}
+
+async function renderLoadedViewer() {
+  renderViewer();
+  await waitFor(() => {
+    expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
+  });
+}
+
+// Render the loaded viewer AND wait until pageDimensions is actually populated --
+// the fit handlers early-return on pageDimensions.size === 0, and pageDimensions is
+// filled LATER (a ref set in PDFPage's renderTask.promise.then(onPageLoad)), so a
+// canvas being present does NOT prove it is ready (Codex review). We flush that
+// promise chain, then wait for a pageDimensions-DRIVEN signal: the field overlays
+// only mount once pageDimensions.has(pageNum) is true (PDFViewer gates them on it),
+// so an overlay in the DOM is direct proof the fit math will not take its empty
+// early return. Returns the render() result so callers can reach the container.
+async function renderLoadedViewerWithPage() {
+  const result = renderViewer();
+  await waitFor(() => {
+    expect(document.querySelectorAll('canvas').length).toBe(1);
+  });
+  // Flush the render-task promise chain so onPageLoad fires and pageDimensions is set.
+  await act(async () => { await Promise.resolve(); });
+  // Overlays mount only after pageDimensions is populated -- wait for one (mockSchema
+  // has field1 on page 1), proving the fit handlers will read real page dims.
+  await screen.findByTestId('field-overlay-field1');
+  return result;
+}
+
+// Define a non-zero clientWidth/clientHeight on the live `.overflow-auto` scroll
+// container so handleFitWidth/handleFitPage compute an IN-RANGE / upper-clamp scale
+// instead of the negative-then-lower-clamped 0.5 they produce at jsdom's default 0
+// (the handlers do NOT early-return on a 0 clientWidth -- only on empty
+// pageDimensions). The handlers query the node fresh on each click, so defining the
+// property on the node itself is sufficient.
+function stubScrollContainerSize(
+  container: HTMLElement,
+  width: number,
+  height: number
+) {
+  const scrollContainer = container.querySelector('.overflow-auto');
+  if (!scrollContainer) {
+    throw new Error('scroll container (.overflow-auto) not found');
+  }
+  Object.defineProperty(scrollContainer, 'clientWidth', {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(scrollContainer, 'clientHeight', {
+    configurable: true,
+    value: height,
+  });
+}
+
 describe('Phase 5: Zoom Presets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // jsdom has no canvas backend, so getContext returns null and PDFPage bails
+    // before onPageLoad -- which is what populates pageDimensions (the page-size
+    // reference the fit math divides by). Stub a minimal 2d context so onPageLoad
+    // fires. (Same stub phase2 uses.)
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({})) as any;
+    mockSinglePagePdf();
   });
 
-  describe('Fit Width Functionality', () => {
-    it('should have a Fit Width button in the toolbar', async () => {
-      // Mock PDF document
-      const mockGetPage = vi.fn().mockResolvedValue({
-        getViewport: ({ scale }: { scale: number }) => ({
-          width: 612 * scale, // Standard letter width in points
-          height: 792 * scale, // Standard letter height in points
-        }),
-        render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
-        cleanup: vi.fn(),
-      });
-
-      const mockDocument = {
-        numPages: 1,
-        getPage: mockGetPage,
-        destroy: vi.fn(),
-      };
-
-      vi.mocked(pdfjsLib.getDocument).mockReturnValue({
-        promise: Promise.resolve(mockDocument as any),
-        destroy: vi.fn(),
-      } as any);
-
-      render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockSchema}
-          selectedFieldId={null}
-          onSelectField={vi.fn()}
-        />
-      );
-
-      // Wait for PDF to load
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-      });
-
-      // Check Fit Width button exists
+  describe('Toolbar presence', () => {
+    it('renders the Fit Width button', async () => {
+      await renderLoadedViewer();
       const fitWidthButton = screen.getByTitle('Fit to width');
       expect(fitWidthButton).toBeInTheDocument();
       expect(fitWidthButton).toHaveTextContent('Fit Width');
     });
 
-    it('should calculate fit-width scale based on container and page width', async () => {
-      // This test documents the calculation logic:
-      // newScale = (containerWidth - padding) / pageWidth
-      // Where padding = 64px (p-8 class = 32px * 2)
-
-      // Example:
-      // - Container width: 800px
-      // - Padding: 64px
-      // - Available width: 736px
-      // - Page width: 612px (standard letter)
-      // - Scale: 736 / 612 = 1.203
-
-      expect(true).toBe(true); // Calculation documented
-    });
-
-    it('should clamp fit-width scale to minimum 0.5', () => {
-      // If calculated scale would be < 0.5 (very narrow container),
-      // scale should be clamped to 0.5
-
-      // Example:
-      // - Container width: 400px
-      // - Padding: 64px
-      // - Available width: 336px
-      // - Page width: 612px
-      // - Calculated: 336 / 612 = 0.549 ✓ (above min)
-      //
-      // Extreme case:
-      // - Container width: 200px
-      // - Available width: 136px
-      // - Calculated: 136 / 612 = 0.222
-      // - Clamped to: 0.5 ✓
-
-      expect(true).toBe(true); // Clamping logic documented
-    });
-
-    it('should clamp fit-width scale to maximum 2.0', () => {
-      // If calculated scale would be > 2.0 (very wide container),
-      // scale should be clamped to 2.0
-
-      // Example:
-      // - Container width: 1500px
-      // - Padding: 64px
-      // - Available width: 1436px
-      // - Page width: 612px
-      // - Calculated: 1436 / 612 = 2.346
-      // - Clamped to: 2.0 ✓
-
-      expect(true).toBe(true); // Clamping logic documented
-    });
-
-    it('should use first page dimensions as reference', () => {
-      // Most PDF forms have consistent page sizes across all pages
-      // Fit Width uses page 1 dimensions as reference
-      // This works well for standard forms (I-90, I-589, etc.)
-
-      expect(true).toBe(true); // Implementation detail documented
-    });
-
-    it('should do nothing if container ref is not available', () => {
-      // Edge case: If PDFViewer hasn't mounted yet or container is null
-      // handleFitWidth should return early without error
-
-      expect(true).toBe(true); // Safety check documented
-    });
-
-    it('should do nothing if page dimensions are not loaded yet', () => {
-      // Edge case: If PDF pages haven't rendered yet
-      // handleFitWidth should return early without error
-
-      expect(true).toBe(true); // Safety check documented
-    });
-  });
-
-  describe('Fit Page Functionality', () => {
-    it('should have a Fit Page button in the toolbar', async () => {
-      // Mock PDF document
-      const mockGetPage = vi.fn().mockResolvedValue({
-        getViewport: ({ scale }: { scale: number }) => ({
-          width: 612 * scale,
-          height: 792 * scale,
-        }),
-        render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
-        cleanup: vi.fn(),
-      });
-
-      const mockDocument = {
-        numPages: 1,
-        getPage: mockGetPage,
-        destroy: vi.fn(),
-      };
-
-      vi.mocked(pdfjsLib.getDocument).mockReturnValue({
-        promise: Promise.resolve(mockDocument as any),
-        destroy: vi.fn(),
-      } as any);
-
-      render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockSchema}
-          selectedFieldId={null}
-          onSelectField={vi.fn()}
-        />
-      );
-
-      // Wait for PDF to load
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-      });
-
-      // Check Fit Page button exists
+    it('renders the Fit Page button', async () => {
+      await renderLoadedViewer();
       const fitPageButton = screen.getByTitle('Fit entire page');
       expect(fitPageButton).toBeInTheDocument();
       expect(fitPageButton).toHaveTextContent('Fit Page');
     });
-
-    it('should calculate fit-page scale to fit both width and height', () => {
-      // Fit Page calculates scale for both dimensions and uses the smaller
-      // This ensures the entire page fits in the viewport
-
-      // Example:
-      // - Container: 800px × 1000px
-      // - Padding: 64px each direction
-      // - Available: 736px × 936px
-      // - Page: 612px × 792px (standard letter)
-      // - Scale for width: 736 / 612 = 1.203
-      // - Scale for height: 936 / 792 = 1.182
-      // - Use smaller: 1.182 ✓ (entire page visible)
-
-      expect(true).toBe(true); // Calculation documented
-    });
-
-    it('should use the smaller scale to ensure entire page is visible', () => {
-      // Wide container example:
-      // - Container: 1200px × 800px
-      // - Available: 1136px × 736px
-      // - Page: 612px × 792px
-      // - Scale for width: 1136 / 612 = 1.856
-      // - Scale for height: 736 / 792 = 0.929
-      // - Use smaller: 0.929 ✓ (height is limiting factor)
-
-      // Tall container example:
-      // - Container: 600px × 1200px
-      // - Available: 536px × 1136px
-      // - Page: 612px × 792px
-      // - Scale for width: 536 / 612 = 0.876
-      // - Scale for height: 1136 / 792 = 1.434
-      // - Use smaller: 0.876 ✓ (width is limiting factor)
-
-      expect(true).toBe(true); // Logic documented
-    });
-
-    it('should clamp fit-page scale to minimum 0.5', () => {
-      // If both dimensions would result in scale < 0.5,
-      // scale should be clamped to 0.5
-
-      // Extreme narrow case:
-      // - Container: 200px × 300px
-      // - Available: 136px × 236px
-      // - Page: 612px × 792px
-      // - Width scale: 0.222, Height scale: 0.298
-      // - Use smaller: 0.222
-      // - Clamped to: 0.5 ✓
-
-      expect(true).toBe(true); // Clamping documented
-    });
-
-    it('should clamp fit-page scale to maximum 2.0', () => {
-      // If both dimensions would result in scale > 2.0,
-      // scale should be clamped to 2.0
-
-      // Extreme large case:
-      // - Container: 1500px × 2000px
-      // - Available: 1436px × 1936px
-      // - Page: 612px × 792px
-      // - Width scale: 2.346, Height scale: 2.444
-      // - Use smaller: 2.346
-      // - Clamped to: 2.0 ✓
-
-      expect(true).toBe(true); // Clamping documented
-    });
   });
 
-  describe('Button Interactions', () => {
-    it('should update scale when Fit Width button is clicked', async () => {
-      // Mock PDF document
-      const mockGetPage = vi.fn().mockResolvedValue({
-        getViewport: ({ scale }: { scale: number }) => ({
-          width: 612 * scale,
-          height: 792 * scale,
-        }),
-        render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
-        cleanup: vi.fn(),
-      });
-
-      const mockDocument = {
-        numPages: 1,
-        getPage: mockGetPage,
-        destroy: vi.fn(),
-      };
-
-      vi.mocked(pdfjsLib.getDocument).mockReturnValue({
-        promise: Promise.resolve(mockDocument as any),
-        destroy: vi.fn(),
-      } as any);
-
-      render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockSchema}
-          selectedFieldId={null}
-          onSelectField={vi.fn()}
-        />
-      );
-
-      // Wait for PDF to load
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-      });
-
-      // Initial scale should be 100%
-      expect(screen.getByText('100%')).toBeInTheDocument();
-
-      // Click Fit Width button
+  describe('Button interactions (observable in jsdom)', () => {
+    it('clicking Fit Width with no stubbed container size clamps to the 0.5 lower bound', async () => {
+      await renderLoadedViewerWithPage();
       const fitWidthButton = screen.getByTitle('Fit to width');
-      fireEvent.click(fitWidthButton);
-
-      // Scale should change (exact value depends on container size in test env)
-      // Just verify the button is clickable and doesn't error
-      expect(fitWidthButton).toBeInTheDocument();
+      // No clientWidth stub here, so the live `.overflow-auto` node reports the
+      // jsdom default clientWidth = 0. The math then computes
+      // (0 - 64) / 612 = -0.1045, which Math.max(0.5, ...) clamps up to 0.5 -> "50%".
+      // This proves the handler runs end-to-end (no throw) AND that the lower clamp
+      // protects against a degenerate/zero container width.
+      expect(() => fireEvent.click(fitWidthButton)).not.toThrow();
+      await waitFor(() => {
+        expect(screen.getByText('50%')).toBeInTheDocument();
+      });
     });
 
-    it('should update scale when Fit Page button is clicked', async () => {
-      // Mock PDF document
-      const mockGetPage = vi.fn().mockResolvedValue({
-        getViewport: ({ scale }: { scale: number }) => ({
-          width: 612 * scale,
-          height: 792 * scale,
-        }),
-        render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
-        cleanup: vi.fn(),
-      });
-
-      const mockDocument = {
-        numPages: 1,
-        getPage: mockGetPage,
-        destroy: vi.fn(),
-      };
-
-      vi.mocked(pdfjsLib.getDocument).mockReturnValue({
-        promise: Promise.resolve(mockDocument as any),
-        destroy: vi.fn(),
-      } as any);
-
-      render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockSchema}
-          selectedFieldId={null}
-          onSelectField={vi.fn()}
-        />
-      );
-
-      // Wait for PDF to load
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-      });
-
-      // Click Fit Page button
+    it('clicking Fit Page with no stubbed container size clamps to the 0.5 lower bound', async () => {
+      await renderLoadedViewerWithPage();
       const fitPageButton = screen.getByTitle('Fit entire page');
-      fireEvent.click(fitPageButton);
-
-      // Button should be clickable and not error
-      expect(fitPageButton).toBeInTheDocument();
+      // Same as above: clientWidth = clientHeight = 0 -> both scaleForWidth and
+      // scaleForHeight are negative -> min is negative -> Math.max(0.5, ...) -> "50%".
+      expect(() => fireEvent.click(fitPageButton)).not.toThrow();
+      await waitFor(() => {
+        expect(screen.getByText('50%')).toBeInTheDocument();
+      });
     });
 
-    it('should work alongside manual zoom controls', async () => {
-      // Mock PDF document
-      const mockGetPage = vi.fn().mockResolvedValue({
-        getViewport: ({ scale }: { scale: number }) => ({
-          width: 612 * scale,
-          height: 792 * scale,
-        }),
-        render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
-        cleanup: vi.fn(),
-      });
+    it('manual zoom and a Fit Width preset both change the scale, interleaved', async () => {
+      // Use the page-ready helper + a stubbed container size so the preset actually
+      // RUNS the fit math (not the pageDimensions-empty early return) and we can
+      // assert the readout CHANGES to the fitted value -- a bare not.toThrow() would
+      // pass even if Fit Width lost its onClick (Codex review).
+      const { container } = await renderLoadedViewerWithPage();
 
-      const mockDocument = {
-        numPages: 1,
-        getPage: mockGetPage,
-        destroy: vi.fn(),
-      };
-
-      vi.mocked(pdfjsLib.getDocument).mockReturnValue({
-        promise: Promise.resolve(mockDocument as any),
-        destroy: vi.fn(),
-      } as any);
-
-      render(
-        <PDFViewer
-          pdfPath="/test.pdf"
-          schema={mockSchema}
-          selectedFieldId={null}
-          onSelectField={vi.fn()}
-        />
-      );
-
-      // Wait for PDF to load
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument();
-      });
-
-      // User can mix manual zoom and presets:
-      // 1. Start at 100%
+      // Manual zoom is observable: 100% -> 125%.
       expect(screen.getByText('100%')).toBeInTheDocument();
-
-      // 2. Zoom in manually
-      const zoomInButton = screen.getByTitle('Zoom in');
-      fireEvent.click(zoomInButton);
+      fireEvent.click(screen.getByTitle('Zoom in'));
       expect(screen.getByText('125%')).toBeInTheDocument();
 
-      // 3. Use Fit Width preset
-      const fitWidthButton = screen.getByTitle('Fit to width');
-      fireEvent.click(fitWidthButton);
+      // A Fit Width preset mid-zoom OVERRIDES the manual scale with the fitted value:
+      // clientWidth 1000 -> (1000 - 64) / 612 = 1.52941... -> "153%".
+      stubScrollContainerSize(container, 1000, 800);
+      fireEvent.click(screen.getByTitle('Fit to width'));
+      await waitFor(() => {
+        expect(screen.getByText('153%')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('125%')).not.toBeInTheDocument();
 
-      // 4. Can zoom out manually again
-      const zoomOutButton = screen.getByTitle('Zoom out');
-      fireEvent.click(zoomOutButton);
-
-      // All controls work together seamlessly
-      expect(zoomInButton).toBeInTheDocument();
-      expect(zoomOutButton).toBeInTheDocument();
-      expect(fitWidthButton).toBeInTheDocument();
+      // Manual zoom still works AFTER the preset: 153% -> zoom out one step (0.25).
+      // 1.52941 - 0.25 = 1.27941 -> round(127.94) = "128%".
+      fireEvent.click(screen.getByTitle('Zoom out'));
+      await waitFor(() => {
+        expect(screen.getByText('128%')).toBeInTheDocument();
+      });
     });
   });
 
-  describe('Implementation Details', () => {
-    it('should account for padding when calculating available space', () => {
-      // PDFViewer has p-8 padding on the content area
-      // p-8 = 32px = 2rem
-      // Total padding: 32px * 2 = 64px per axis
+  // These tests stub the scroll container's clientWidth/clientHeight to non-zero
+  // values so the fit math produces an IN-RANGE / upper-clamp scale (at the jsdom
+  // default of 0 it would instead clamp to the 0.5 lower bound -- see the no-stub
+  // tests above; the handlers never early-return on a 0 clientWidth), then assert
+  // the EXACT percentage the readout shows. The page is letter size: getViewport at
+  // scale 1.0 returns width 612, height 792 (mockSinglePagePdf), so the fit math's
+  // pageWidth = 612, pageHeight = 792. Padding subtracted is 64 (p-8 = 32px * 2).
+  describe('Fit math (clientWidth/clientHeight stubbed)', () => {
+    it('Fit Width sets scale to (clientWidth - 64) / pageWidth, rounded for display', async () => {
+      const { container } = await renderLoadedViewerWithPage();
+      expect(screen.getByText('100%')).toBeInTheDocument();
 
-      // Fit Width: availableWidth = containerWidth - 64
-      // Fit Page: availableWidth = containerWidth - 64
-      //           availableHeight = containerHeight - 64
+      // clientWidth 1000 -> (1000 - 64) / 612 = 936 / 612 = 1.52941...
+      // -> Math.round(1.52941 * 100) = 153 -> "153%". In [0.5, 2.0], so no clamp.
+      stubScrollContainerSize(container, 1000, 800);
+      fireEvent.click(screen.getByTitle('Fit to width'));
 
-      expect(true).toBe(true); // Padding logic documented
+      await waitFor(() => {
+        expect(screen.getByText('153%')).toBeInTheDocument();
+      });
+      // The old 100% readout is gone -- proves the scale actually changed.
+      expect(screen.queryByText('100%')).not.toBeInTheDocument();
     });
 
-    it('should use querySelector to find scroll container', () => {
-      // The scroll container has class 'overflow-auto'
-      // This is the element whose clientWidth/clientHeight we use
+    it('Fit Width clamps to the UPPER bound 2.0 when the container is very wide', async () => {
+      const { container } = await renderLoadedViewerWithPage();
 
-      // containerRef.current.querySelector('.overflow-auto')
-      // This ensures we measure the right element
+      // clientWidth 3000 -> (3000 - 64) / 612 = 2936 / 612 = 4.797... -> the
+      // Math.min(2.0, ...) clamp pins it to 2.0 -> "200%".
+      stubScrollContainerSize(container, 3000, 4000);
+      fireEvent.click(screen.getByTitle('Fit to width'));
 
-      expect(true).toBe(true); // Container selection documented
+      await waitFor(() => {
+        expect(screen.getByText('200%')).toBeInTheDocument();
+      });
     });
 
-    it('should update overlays automatically when scale changes', () => {
-      // Field overlays use the scale prop from PDFViewer state
-      // When scale changes (via Fit Width/Fit Page), overlays re-render
-      // Coordinate transformation automatically uses new scale
+    it('Fit Width clamps to the LOWER bound 0.5 when the container is very narrow', async () => {
+      const { container } = await renderLoadedViewerWithPage();
 
-      // From FieldOverlay.tsx:
-      // const screenPos = pdfToScreenCoords(pdf_position, pageHeight, scale)
+      // clientWidth 200 -> (200 - 64) / 612 = 136 / 612 = 0.2222... -> the
+      // Math.max(0.5, ...) clamp pins it to 0.5 -> "50%".
+      stubScrollContainerSize(container, 200, 300);
+      fireEvent.click(screen.getByTitle('Fit to width'));
 
-      // No manual intervention needed - React handles updates
-      expect(true).toBe(true); // Auto-update behavior documented
+      await waitFor(() => {
+        expect(screen.getByText('50%')).toBeInTheDocument();
+      });
     });
 
-    it('should not maintain scroll position on zoom (expected behavior)', () => {
-      // Current implementation: Scale changes but scroll position is not adjusted
-      //
-      // This is acceptable for Phase 5 because:
-      // - Fit Width/Fit Page are typically used when first viewing a page
-      // - User can manually navigate to desired location after zoom
-      //
-      // Phase 6 could add scroll position maintenance if needed
+    it('Fit Page uses the smaller of width-fit and height-fit (height-constrained here)', async () => {
+      const { container } = await renderLoadedViewerWithPage();
+      expect(screen.getByText('100%')).toBeInTheDocument();
 
-      expect(true).toBe(true); // Behavior documented
-    });
-  });
+      // Fit Page = min(scaleForWidth, scaleForHeight), then clamped to [0.5, 2.0].
+      //   scaleForWidth  = (1000 - 64) / 612 = 936 / 612  = 1.52941...
+      //   scaleForHeight = (900  - 64) / 792 = 836 / 792  = 1.05555...
+      // min = 1.05555 -> Math.round(105.55) = 106 -> "106%". Height constrains.
+      stubScrollContainerSize(container, 1000, 900);
+      fireEvent.click(screen.getByTitle('Fit entire page'));
 
-  describe('Edge Cases and Safety', () => {
-    it('should handle case where container is not mounted', () => {
-      // If containerRef.current is null (component unmounted or not yet mounted)
-      // Functions should return early without error
-
-      // Both handleFitWidth and handleFitPage check:
-      // if (!containerRef.current || pageDimensions.current.size === 0) return;
-
-      expect(true).toBe(true); // Safety check documented
+      await waitFor(() => {
+        expect(screen.getByText('106%')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('100%')).not.toBeInTheDocument();
     });
 
-    it('should handle case where scroll container is not found', () => {
-      // If querySelector('.overflow-auto') returns null
-      // Functions should return early without error
+    it('Fit Page is width-constrained when width is the tighter dimension', async () => {
+      const { container } = await renderLoadedViewerWithPage();
+      expect(screen.getByText('100%')).toBeInTheDocument();
 
-      // Both functions check:
-      // if (!scrollContainer) return;
+      // A tall+narrow container makes WIDTH the limiting dimension:
+      //   scaleForWidth  = (700 - 64) / 612  = 636 / 612  = 1.03921...
+      //   scaleForHeight = (2000 - 64) / 792 = 1936 / 792 = 2.44444... (would clamp)
+      // min = 1.03921 -> Math.round(103.92) = 104 -> "104%". Width constrains, and
+      // the result is taken BEFORE the height scale's would-be 2.0 clamp -- proving
+      // Fit Page uses the smaller scale, not always height.
+      stubScrollContainerSize(container, 700, 2000);
+      fireEvent.click(screen.getByTitle('Fit entire page'));
 
-      expect(true).toBe(true); // Safety check documented
+      await waitFor(() => {
+        expect(screen.getByText('104%')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('100%')).not.toBeInTheDocument();
     });
 
-    it('should handle case where page dimensions are not available', () => {
-      // If pageDimensions.current.get(1) returns undefined
-      // (PDF not loaded yet or page 1 not rendered)
-      // Functions should return early without error
+    it('Fit Page clamps to the UPPER bound 2.0 when BOTH dimensions are very large', async () => {
+      const { container } = await renderLoadedViewerWithPage();
 
-      // Both functions check:
-      // const firstPageDims = pageDimensions.current.get(1);
-      // if (!firstPageDims) return;
+      // Both dimensions huge -> both scales > 2.0 -> min still > 2.0 ->
+      // Math.min(2.0, ...) pins it to 2.0 -> "200%".
+      //   scaleForWidth  = (3000 - 64) / 612  = 4.797...
+      //   scaleForHeight = (4000 - 64) / 792  = 4.969...
+      stubScrollContainerSize(container, 3000, 4000);
+      fireEvent.click(screen.getByTitle('Fit entire page'));
 
-      expect(true).toBe(true); // Safety check documented
-    });
-
-    it('should handle PDFs with different page sizes', () => {
-      // Current implementation uses first page as reference
-      // If later pages have different sizes (uncommon for forms),
-      // they will scale the same as page 1
-
-      // For most government forms (I-90, I-589, etc.),
-      // all pages are the same size, so this works well
-
-      // Alternative approach (future enhancement):
-      // Calculate scale per-page for maximum flexibility
-
-      expect(true).toBe(true); // Limitation documented
-    });
-  });
-
-  describe('Integration with Existing Features', () => {
-    it('should work with multi-page PDFs', () => {
-      // Fit Width and Fit Page calculate scale based on page 1
-      // All pages render at the same scale (as expected)
-      // Navigation controls continue to work
-
-      expect(true).toBe(true); // Multi-page compatibility confirmed
-    });
-
-    it('should work with field overlays', () => {
-      // Field overlays automatically update when scale changes
-      // pdfToScreenCoords uses the scale parameter
-      // Overlays remain correctly positioned at any zoom level
-
-      expect(true).toBe(true); // Overlay compatibility confirmed
-    });
-
-    it('should work with field selection', () => {
-      // Selecting a field scrolls to its page
-      // Zoom presets don't interfere with field selection
-      // User can zoom, then select fields normally
-
-      expect(true).toBe(true); // Selection compatibility confirmed
-    });
-
-    it('should respect zoom bounds from Phase 1', () => {
-      // Phase 1 established zoom bounds: 0.5 (50%) to 2.0 (200%)
-      // Fit Width and Fit Page respect these bounds
-      // Math.max(0.5, Math.min(2.0, calculatedScale))
-
-      expect(true).toBe(true); // Bounds compatibility confirmed
+      await waitFor(() => {
+        expect(screen.getByText('200%')).toBeInTheDocument();
+      });
     });
   });
 });

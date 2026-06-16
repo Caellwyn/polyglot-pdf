@@ -1,143 +1,167 @@
 /**
- * Phase 4: Click Interaction Tests
- * Tests for clicking PDF field overlays to select fields
+ * Phase 4: PDFViewer -> FieldOverlay click-to-select wiring (bd polyglot-pdf-840i)
  *
- * Note: Click functionality is already integrated in Phase 3.
- * Phase 4 focuses on documenting and testing the interaction workflow.
+ * This is the WIRING regression test that FieldOverlay.test.tsx cannot cover.
+ * FieldOverlay.test.tsx proves a directly-supplied `onClick` prop fires when the
+ * overlay is clicked -- but it constructs the overlay in isolation, so it does NOT
+ * prove that PDFViewer renders an overlay per positioned field and wires
+ * `onClick={() => onSelectField(field.id)}` to it. If that wiring were dropped (or
+ * passed the wrong field id), FieldOverlay.test.tsx would still pass. This test
+ * renders the FULL PDFViewer, waits for the real overlay to mount, clicks it, and
+ * asserts PDFViewer called onSelectField with the field's id -- closing that gap.
+ *
+ * The overlay only mounts once pageDimensions is populated (PDFViewer gates each
+ * page's overlays on pageDimensions.current.has(pageNum)), which in turn requires
+ * PDFPage.onPageLoad to fire -- and that only fires when the canvas 2d context
+ * exists. jsdom has no canvas backend, so getContext is stubbed in beforeEach.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { PDFViewer } from './PDFViewer';
+import type { FormSchema } from '../types/schema';
+import * as pdfjsLib from 'pdfjs-dist';
 
-describe('Phase 4: Click Interactions', () => {
-  describe('Integration Documentation', () => {
-    it('confirms click handlers are connected from Phase 3', () => {
-      // The click functionality was integrated in Phase 3:
-      // - FieldOverlay has onClick prop
-      // - PDFViewer passes onClick={() => onSelectField(field.id)}
-      // - User clicks overlay → onSelectField called → field selected
-      expect(true).toBe(true);
-    });
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: { workerSrc: '' },
+  getDocument: vi.fn(),
+}));
 
-    it('confirms hover effects are implemented', () => {
-      // Hover effects implemented in FieldOverlay:
-      // - isHovered state tracks mouse enter/leave
-      // - Background color shows on hover (bgColor vs transparent)
-      // - Tooltip appears/disappears on hover
-      // - Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+// A single-page schema with one positioned field on page 1.
+const mockSchema: FormSchema = {
+  source: 'pdf',
+  form_metadata: {
+    title: 'Test PDF Form',
+    form_number: 'TEST-001',
+    total_widgets: 1,
+    total_fields: 1,
+    version: '1.0',
+    language: 'en',
+  },
+  parts: [],
+  sections: [],
+  fields: [
+    {
+      id: 'field-click-me',
+      name: 'Clickable Field',
+      type: 'text',
+      pdf_field_name: 'field_click_me',
+      read_only: false,
+      required: false,
+      spoken_name: 'Clickable Field',
+      pdf_position: { page: 1, x: 100, y: 500, width: 200, height: 20 },
+    },
+  ],
+};
 
-    it('confirms visual feedback for selection is working', () => {
-      // Selection feedback in FieldOverlay:
-      // - isSelected prop controls appearance
-      // - Selected: 3px border, darker color, z-index 20
-      // - Not selected: 2px border, lighter color, z-index 10
-      // - Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+function mockSinglePagePdf() {
+  const mockGetPage = vi.fn().mockResolvedValue({
+    getViewport: ({ scale }: { scale: number }) => ({
+      width: 612 * scale,
+      height: 792 * scale,
+    }),
+    // render task exposes promise + cancel (PDFPage's cleanup calls cancel()).
+    render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
+    cleanup: vi.fn(),
+  });
+  const mockDocument = { numPages: 1, getPage: mockGetPage, destroy: vi.fn() };
+  vi.mocked(pdfjsLib.getDocument).mockReturnValue({
+    promise: Promise.resolve(mockDocument as any),
+    destroy: vi.fn(),
+  } as any);
+}
 
-    it('confirms accessibility features are present', () => {
-      // Accessibility in FieldOverlay:
-      // - Pointer cursor on all overlays
-      // - Title attribute with field name
-      // - data-field-id for testing
-      // - data-testid for e2e testing
-      // - Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+describe('Phase 4: PDFViewer -> FieldOverlay click-to-select wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // jsdom has no canvas backend; stub a minimal 2d context so PDFPage renders
+    // and onPageLoad fires (which populates pageDimensions and lets overlays mount).
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({})) as any;
+    mockSinglePagePdf();
   });
 
-  describe('Workflow Verification', () => {
-    it('documents the click-to-select workflow', () => {
-      // Complete workflow:
-      // 1. User loads PDF → PDFViewer renders pages
-      // 2. PDFViewer stores page dimensions on load
-      // 3. FieldOverlay components render over PDF
-      // 4. User clicks overlay → FieldOverlay.onClick fires
-      // 5. onClick calls PDFViewer.onSelectField(fieldId)
-      // 6. onSelectField bubbles to App → updates selectedFieldId state
-      // 7. PDFViewer re-renders with new selectedFieldId
-      // 8. FieldOverlay with matching ID gets isSelected=true
-      // 9. Overlay shows thicker border and darker color
-      expect(true).toBe(true);
-    });
+  it('clicking a rendered field overlay calls onSelectField with that field id', async () => {
+    const onSelectField = vi.fn();
 
-    it('documents the hover tooltip workflow', () => {
-      // Hover workflow:
-      // 1. User hovers over overlay → mouseEnter event
-      // 2. FieldOverlay sets isHovered=true
-      // 3. Background color changes from transparent to bgColor
-      // 4. Tooltip renders with field name and type
-      // 5. User moves mouse away → mouseLeave event
-      // 6. FieldOverlay sets isHovered=false
-      // 7. Background returns to transparent
-      // 8. Tooltip disappears
-      expect(true).toBe(true);
+    render(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={mockSchema}
+        selectedFieldId={null}
+        onSelectField={onSelectField}
+      />
+    );
+
+    // Wait for the page canvas to commit.
+    await waitFor(() => {
+      expect(document.querySelectorAll('canvas').length).toBe(1);
     });
+    // Flush the page-render microtask chain so onPageLoad fires and pageDimensions
+    // is populated -- the overlay is gated on that.
+    await act(async () => { await Promise.resolve(); });
+
+    // The overlay mounts only after pageDimensions is set; wait for it.
+    const overlay = await screen.findByTestId('field-overlay-field-click-me');
+    expect(overlay).toBeInTheDocument();
+
+    // Click the overlay (the overlay root carries the onClick PDFViewer wired).
+    fireEvent.click(overlay);
+
+    // PDFViewer wires onClick={() => onSelectField(field.id)} -- so the spy must
+    // have been called with this field's id, proving the wiring (not just that
+    // FieldOverlay forwards an onClick in isolation).
+    expect(onSelectField).toHaveBeenCalledWith('field-click-me');
   });
 
-  describe('Phase 4 Features Completed', () => {
-    it('click-to-select: Already working from Phase 3 integration', () => {
-      // ✅ onClick handler connected in PDFViewer
-      // ✅ Calls onSelectField with correct field ID
-      // ✅ Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+  it('passes isSelected to the overlay so the selected field gets selected styling', async () => {
+    // The other half of click-to-select: when the parent sets selectedFieldId,
+    // PDFViewer must pass isSelected={field.id === selectedFieldId} into
+    // FieldOverlay, which renders a THICKER (4px) border for the selected field.
+    // FieldOverlay.test.tsx proves the styling given isSelected in isolation; this
+    // proves PDFViewer actually DRIVES isSelected from selectedFieldId (bd 840i).
+    const onSelectField = vi.fn();
 
-    it('hover effects: Background color and cursor implemented', () => {
-      // ✅ isHovered state in FieldOverlay
-      // ✅ Transparent → bgColor on hover
-      // ✅ Pointer cursor on all overlays
-      // ✅ Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+    // Selecting a positioned field fires the auto-scroll effect, which calls the
+    // scroll container's scrollTo -- jsdom does not implement it, so stub it.
+    Element.prototype.scrollTo = vi.fn();
 
-    it('tooltips: Show field name and type on hover', () => {
-      // ✅ Tooltip renders on mouseEnter
-      // ✅ Shows field.spoken_name or field.id
-      // ✅ Shows field.type in brackets
-      // ✅ Hides on mouseLeave
-      // ✅ Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
+    const { rerender } = render(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={mockSchema}
+        selectedFieldId={null}
+        onSelectField={onSelectField}
+      />
+    );
 
-    it('visual feedback: Thicker border and darker color when selected', () => {
-      // ✅ isSelected prop controls appearance
-      // ✅ 3px border when selected vs 2px
-      // ✅ Darker color when selected
-      // ✅ Higher z-index when selected (20 vs 10)
-      // ✅ Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
+    await waitFor(() => {
+      expect(document.querySelectorAll('canvas').length).toBe(1);
     });
+    await act(async () => { await Promise.resolve(); });
 
-    it('accessibility: Cursor, title, and data attributes present', () => {
-      // ✅ cursor: pointer on all overlays
-      // ✅ title attribute for screen readers
-      // ✅ data-field-id for debugging
-      // ✅ data-testid for e2e tests
-      // ✅ Tested in FieldOverlay.test.tsx
-      expect(true).toBe(true);
-    });
-  });
+    const overlay = await screen.findByTestId('field-overlay-field-click-me') as HTMLElement;
+    // Unselected: thin 2px border, no selection box-shadow. (The border COLOR is
+    // driven by field status, not selection -- so assert on width + shadow, which
+    // are the selection-specific signals FieldOverlay derives from isSelected.)
+    expect(overlay.style.border).toContain('2px');
+    expect(overlay.style.boxShadow).toBe('none');
 
-  describe('Known Limitations & Future Enhancements', () => {
-    it('documents keyboard navigation as future enhancement', () => {
-      // Future: Keyboard navigation (Phase 6)
-      // - Tab to cycle through fields
-      // - Arrow keys to navigate
-      // - Enter to select
-      // - Escape to deselect
-      // Not yet implemented
-      expect(true).toBe(true);
-    });
+    // Parent selects this field -> PDFViewer must propagate isSelected=true.
+    rerender(
+      <PDFViewer
+        pdfPath="/test.pdf"
+        schema={mockSchema}
+        selectedFieldId="field-click-me"
+        onSelectField={onSelectField}
+      />
+    );
 
-    it('documents scroll-field-list-to-selected as future enhancement', () => {
-      // Future: Scroll field list when PDF clicked
-      // - Click overlay on PDF
-      // - Field list scrolls to show selected field
-      // - Requires communication between PDFViewer and FieldList
-      // Not yet implemented (would be App.tsx level integration)
-      expect(true).toBe(true);
+    await waitFor(() => {
+      const selected = screen.getByTestId('field-overlay-field-click-me') as HTMLElement;
+      // Selected: thicker 4px border AND the blue selection glow box-shadow --
+      // both flip only when isSelected is true, proving PDFViewer drove it.
+      expect(selected.style.border).toContain('4px');
+      expect(selected.style.boxShadow).toContain('rgba(59, 130, 246');
     });
   });
 });

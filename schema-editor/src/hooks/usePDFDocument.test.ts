@@ -87,15 +87,19 @@ describe('usePDFDocument', () => {
       destroy: vi.fn(),
     } as any);
 
-    const { unmount } = renderHook(() => usePDFDocument('/test.pdf'));
+    const { result, unmount } = renderHook(() => usePDFDocument('/test.pdf'));
 
+    // Wait for the load to RESOLVE so the effect captured loadedDoc -- the cleanup
+    // only destroys a doc it actually loaded. Asserting on result.current (the
+    // hook's real output), not the test's own mockDoc local (bd polyglot-pdf-840i).
     await waitFor(() => {
-      expect(mockDoc).toBeTruthy();
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.document).toBe(mockDoc);
     });
 
     unmount();
 
-    // Cleanup is called in useEffect cleanup
-    // Note: The actual cleanup happens asynchronously
+    // The effect's cleanup must destroy the loaded document (usePDFDocument.ts:87).
+    expect(destroyMock).toHaveBeenCalledTimes(1);
   });
 });
