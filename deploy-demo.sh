@@ -26,7 +26,6 @@ FIREBASE_PROJECT="$CONSOLIDATED_PROJECT"
 BUCKET_NAME="$CONSOLIDATED_PROJECT-form-kits"
 SA_NAME="polyglot-backend-sa"
 SA_EMAIL="$SA_NAME@$GCP_PROJECT.iam.gserviceaccount.com"
-REGION="us-central1"
 
 # Determine which components to deploy
 DEPLOY_GCP=true
