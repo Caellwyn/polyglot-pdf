@@ -110,6 +110,19 @@ the bead's controlled-reference validation actually function. The change is
 contained (the type had a single consumer, confirmed by tsc) and brings the editor
 type into agreement with the already-authoritative runtime type.
 
+## Codex round 2 (1 P1) -- the CI skip was too broad
+
+Codex caught that round 1's hardening over-corrected: the wrapper skipped ANY
+nonzero harness run with no PASS/FAIL output. But a genuine regression (a syntax
+error sourcing `deploy-all.sh`, an early abort before the first assertion) has
+exactly that shape -- so CI would have SKIPPED a real gate break instead of failing
+it, defeating the very coverage P1 #2 added. Restricted the skip to the specific
+local-Windows WSL-shim failure by matching its stderr signature (`execvpe` /
+`CreateProcessCommon` / `WSL (`); any other nonzero-no-output run now falls through
+to the assert and fails. Verified both branches: a WSL-shim stderr skips, a
+syntax-error stderr does not. On Linux CI bash execs natively, so the skip branch
+never fires there.
+
 ## Pre-PR assess + closeout notes
 
 - **Tests:** schema-editor 173 pass (incl. the 5 new validation tests); the
