@@ -78,6 +78,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       const byId: Record<string, KitProgress> = {};
       for (const p of computed) byId[p.entry.id] = p;
       setProgress(byId);
+      // A completed scan is authoritative disk truth, so drop remembered edited
+      // values -- otherwise a Refresh (after extraction reruns or a manual JSON
+      // edit) could not update a previously-cached kit's bar (Codex PR #224 r6).
+      // The OPEN kit keeps its live override (liveProgress), which is separate.
+      setEditedProgress({});
     } catch (err) {
       if (seq !== refreshSeq.current) return;
       setError(err instanceof Error ? err.message : 'Failed to read folder');

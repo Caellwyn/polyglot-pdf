@@ -244,6 +244,38 @@ describe('FormCatalogue', () => {
     expect(screen.queryByText('0%')).toBeNull();
   });
 
+  it('lets Refresh replace a cached kit percentage with the fresh disk scan', async () => {
+    // Codex round 6: after a saved edit caches 60%, if the schema changes on disk
+    // and the user clicks Refresh, the scan's value (0% for the empty fixture)
+    // must win -- the cache cannot outrank a deliberate Refresh.
+    const root = mockRoot([
+      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    const { rerender } = render(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('Kit A');
+
+    // Save an edit -> 60% cached for A.
+    rerender(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        selectedKitId="a"
+        liveProgress={{ kitId: 'a', saved: true, percent: 60, complete: 3, total: 5 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
+
+    // Deselect (cache holds 60%) then click Refresh -> disk scan (0%) wins.
+    rerender(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />);
+    fireEvent.click(screen.getByText('Refresh'));
+    await waitFor(() => expect(screen.getByText('0%')).toBeTruthy());
+    expect(screen.queryByText('60%')).toBeNull();
+  });
+
   it('does NOT persist an UNSAVED edit after the kit is deselected (discard flow)', async () => {
     // Codex round 5: an unsaved edit shows live on the open card, but if the user
     // discards it (switches kits without saving), the card must revert to the

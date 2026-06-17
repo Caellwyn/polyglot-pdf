@@ -49,6 +49,10 @@ export const App: React.FC = () => {
   // catalogue) and a blob URL for its PDF (revoked when switching forms).
   const [selectedKitId, setSelectedKitId] = React.useState<string | null>(null);
   const pdfBlobUrlRef = React.useRef<string | null>(null);
+  // True while the active save target is the OPEN kit's own schema file. A
+  // "Save As..." to an arbitrary file flips this false, so the catalogue won't
+  // cache progress that was never written back to the kit (Codex PR #224 r6).
+  const [savingToKit, setSavingToKit] = React.useState(false);
 
   // Load schema when form is selected
   const handleSelectForm = React.useCallback(async (form: FormConfig) => {
@@ -123,6 +127,8 @@ export const App: React.FC = () => {
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
+      setSavingToKit(true); // save target is the kit's own schema until a Save As
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open form');
       console.error('Failed to open kit:', err);
@@ -153,6 +159,7 @@ export const App: React.FC = () => {
     setSelectedKitId(null);
     setSelectedForm(null);
     setSavedFileName(null);
+    setSavingToKit(false);
     clearSchema();
     fileHandleRef.current = null;
     if (pdfBlobUrlRef.current) {
@@ -259,6 +266,9 @@ export const App: React.FC = () => {
       if (!handle || forcePicker) {
         handle = await pickSchemaFile(suggestedFileName());
         fileHandleRef.current = handle;
+        // A picked destination (Save As) is no longer the kit's own schema, so
+        // its progress must not be cached against the kit id (Codex PR #224 r6).
+        setSavingToKit(false);
       }
       await writeSchemaToHandle(handle, schema);
       setSavedFileName(handle.name);
@@ -437,7 +447,7 @@ export const App: React.FC = () => {
             // edit still shows live on the open card, but is not remembered after
             // the kit closes (else a discarded edit would leave phantom progress).
             selectedKitId && schema
-              ? { kitId: selectedKitId, saved: !hasUnsavedChanges, ...liveStats(schema) }
+              ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
               : null
           }
         />

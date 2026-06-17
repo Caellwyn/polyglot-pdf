@@ -115,6 +115,15 @@ kits left phantom progress on the card. `liveProgress` now carries a `saved` fla
 card still shows unsaved edits live via the override. A discarded edit reverts to
 the disk scan once the kit closes.
 
+Round 6 -- two findings, fixed: (o, P1) `saved` was true for ANY clean editor
+state, including after a "Save As..." to an arbitrary file (which leaves the kit's
+own schema unchanged) -- added a `savingToKit` flag (true on kit-open, false once
+a Save As redirects the handle) so only writes back to the kit's own schema are
+cached; (p, P1) the `editedProgress` cache always beat a fresh scan, so a manual
+Refresh after an external/on-disk schema change couldn't update a cached kit's bar
+-- a completed scan now clears the cache (disk truth wins), while the OPEN kit
+keeps its separate live override.
+
 ## Lessons
 
 - **Reuse the one metric, don't mint a parallel one.** "Review progress" could
