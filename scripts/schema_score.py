@@ -246,12 +246,21 @@ def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, in
     This is the Rand index of the two partitions over matched fields: for every
     unordered pair of matched fields, draft and gold AGREE if they either both put
     the two fields in the same section or both put them in different sections.
-    Naming-agnostic, symmetric, robust to any future id convention.
+    Naming-symmetric (invariant to relabeling sections), robust to any future id
+    convention.
 
     Only fields whose TRUTH side carries a section participate (a field the gold
-    never sectioned can't inform a grouping judgment). Returns
-    (agreeing_pairs, comparable_pairs); comparable_pairs is 0 (-> n/a) when fewer
-    than two such fields matched.
+    never sectioned can't inform a grouping judgment).
+
+    A draft field with NO section_id is treated as its own SINGLETON -- it is never
+    "in the same section" as any other field, including other unsectioned draft
+    fields. This is deliberate: an extractor that emits NO sections has not
+    reproduced any grouping, so on a single-section gold it must score ~0%, not
+    100% (which a naive ""=="" equality would wrongly give -- the whole point of
+    the metric is to discriminate, so null-conflation would defeat it).
+
+    Returns (agreeing_pairs, comparable_pairs); comparable_pairs is 0 (-> n/a) when
+    fewer than two truth-sectioned fields matched.
     """
     # (truth_section, draft_section) for each matched field the gold sectioned.
     sectioned = [
@@ -259,13 +268,20 @@ def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, in
         for t, d in pairs
         if _norm_text(t.get("section_id"))
     ]
+
+    def _same_section(a: str, b: str) -> bool:
+        # Empty draft section = a singleton: never "same" as anything (incl. "").
+        return a != "" and a == b
+
     agree = comparable = 0
     for i in range(len(sectioned)):
         t_i, d_i = sectioned[i]
         for j in range(i + 1, len(sectioned)):
             t_j, d_j = sectioned[j]
             comparable += 1
-            if (t_i == t_j) == (d_i == d_j):
+            # truth ids always exist here (filtered above), so t-side uses plain
+            # equality; the d-side uses the singleton rule for empty drafts.
+            if (t_i == t_j) == _same_section(d_i, d_j):
                 agree += 1
     return agree, comparable
 

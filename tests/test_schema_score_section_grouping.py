@@ -91,6 +91,36 @@ def test_fields_without_a_gold_section_are_ignored():
     assert agree == 1
 
 
+def test_unsectioned_draft_does_not_score_100_on_single_section_gold():
+    # Regression (fresh-eyes): a draft that emits NO sections must NOT score 100%
+    # against a one-section gold via ""=="" conflation -- an unsectioned field is a
+    # singleton, never "same" as another. Gold lumps all 3 together; draft groups
+    # none -> every same-section gold pair disagrees -> 0%.
+    pairs = _pairs(("A", None), ("A", None), ("A", None))
+    agree, comparable = _grouping(pairs)
+    assert comparable == 3      # C(3,2)
+    assert agree == 0           # NOT 3; the null-draft singletons reproduce nothing
+    assert schema_score._pct(agree, comparable) == 0.0
+
+
+def test_unsectioned_draft_agrees_only_where_gold_also_separates():
+    # Mixed gold: f0,f1 share a section, f2 is separate; draft has no sections.
+    # Draft singletons: (f0,f1) gold-same/draft-diff DISAGREE; (f0,f2) and (f1,f2)
+    # gold-diff/draft-diff AGREE. -> 2/3.
+    pairs = _pairs(("A", None), ("A", None), ("B", None))
+    agree, comparable = _grouping(pairs)
+    assert comparable == 3
+    assert agree == 2
+
+
+def test_two_unsectioned_draft_fields_are_distinct_not_grouped():
+    # Even two empty-string draft sections are NOT the same section as each other.
+    pairs = _pairs(("A", ""), ("A", ""))
+    agree, comparable = _grouping(pairs)
+    assert comparable == 1
+    assert agree == 0  # gold-same but draft singletons -> disagree
+
+
 def test_fewer_than_two_sectioned_fields_is_not_applicable():
     # No pair to compare -> comparable 0 -> _pct yields the n/a sentinel (nan).
     import math
