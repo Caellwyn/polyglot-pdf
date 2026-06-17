@@ -7,7 +7,9 @@ SEPARATELY:
 
   (a) FIELD extraction -- did the extractor find the right fields, with the right
       per-field attributes (type, pdf_field_name, pdf_position, options,
-      validation, section_id)?
+      validation) and section GROUPING (which fields share a section -- a
+      partition-agreement metric, NOT exact section_id string match; bd
+      polyglot-pdf-7a9.13)?
   (b) RELATIONSHIP/logic -- did it recover the parts/sections structure and the
       conditional dependencies (show_if, controls_fields, conditional_fields,
       copy_to, supplements + overflow_to_supplement, tables/multi_entry)?
@@ -231,6 +233,43 @@ def _pos_match(t: dict, d: dict, tol: float = 5.0) -> Optional[bool]:
             and abs((tp.get("y") or 0) - (dp.get("y") or 0)) <= tol)
 
 
+def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, int]:
+    """Score section GROUPING, not the section_id STRING (bd polyglot-pdf-7a9.13).
+
+    Exact section_id matching was a broken metric: the I-90 gold section_ids are
+    inconsistent hand-authored noise (prose mixed with slugs), so every extractor
+    scored 0%, while the LLM's clean-but-different ids were punished for not
+    reproducing that noise. What actually matters for the UX is whether the draft
+    GROUPS the same fields together -- the partition -- regardless of what the
+    section is named.
+
+    This is the Rand index of the two partitions over matched fields: for every
+    unordered pair of matched fields, draft and gold AGREE if they either both put
+    the two fields in the same section or both put them in different sections.
+    Naming-agnostic, symmetric, robust to any future id convention.
+
+    Only fields whose TRUTH side carries a section participate (a field the gold
+    never sectioned can't inform a grouping judgment). Returns
+    (agreeing_pairs, comparable_pairs); comparable_pairs is 0 (-> n/a) when fewer
+    than two such fields matched.
+    """
+    # (truth_section, draft_section) for each matched field the gold sectioned.
+    sectioned = [
+        (_norm_text(t.get("section_id")), _norm_text(d.get("section_id")))
+        for t, d in pairs
+        if _norm_text(t.get("section_id"))
+    ]
+    agree = comparable = 0
+    for i in range(len(sectioned)):
+        t_i, d_i = sectioned[i]
+        for j in range(i + 1, len(sectioned)):
+            t_j, d_j = sectioned[j]
+            comparable += 1
+            if (t_i == t_j) == (d_i == d_j):
+                agree += 1
+    return agree, comparable
+
+
 def score_fields(match: MatchResult) -> dict[str, Any]:
     """(a) half: detection P/R/F1 + per-attribute accuracy over matched pairs."""
     tp = len(match.pairs)
@@ -244,7 +283,7 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
     # Per-attribute accuracy across matched pairs only (you can't grade an
     # attribute of a field that wasn't detected).
     attrs = {k: [0, 0] for k in
-             ("type", "pdf_field_name", "options", "validation", "section_id")}
+             ("type", "pdf_field_name", "options", "validation")}
     pos = [0, 0]  # [correct, applicable]
 
     for t, d in match.pairs:
@@ -273,12 +312,9 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
             pat_ok = _norm_text(tv.get("pattern")) == _norm_text(dv.get("pattern"))
             if dv and req_ok and pat_ok:
                 attrs["validation"][0] += 1
-        # section_id: only applicable when the truth field HAS a section (else a
-        # both-None pair would count as a correct hit and pad the metric).
-        if _norm_text(t.get("section_id")):
-            attrs["section_id"][1] += 1
-            if _norm_text(t.get("section_id")) == _norm_text(d.get("section_id")):
-                attrs["section_id"][0] += 1
+        # section grouping is scored AFTER the loop (it is a pairwise partition
+        # metric over all matched fields, not a per-field attribute) -- see
+        # _section_grouping_agreement and bd polyglot-pdf-7a9.13.
         # pdf_position
         pm = _pos_match(t, d)
         if pm is not None:
@@ -290,6 +326,11 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
                    for k, (c, n) in attrs.items()}
     attr_scores["pdf_position"] = {"correct": pos[0], "applicable": pos[1],
                                    "pct": _pct(pos[0], pos[1])}
+    # section GROUPING (partition agreement), replacing exact section_id matching.
+    sg_correct, sg_applicable = _section_grouping_agreement(match.pairs)
+    attr_scores["section_grouping"] = {"correct": sg_correct,
+                                       "applicable": sg_applicable,
+                                       "pct": _pct(sg_correct, sg_applicable)}
 
     return {
         "detection": {"true_positive": tp, "false_negative": fn,
