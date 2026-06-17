@@ -83,7 +83,14 @@ from backend.services.form_filling_service import FormFillingService  # noqa: E4
 
 MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
 
-SCHEMA_PATH = _REPO_ROOT / "frontend" / "public" / "adult_intake_demo_schema.json"
+# Schema sources (bd polyglot-pdf-jnjj.24). The harness was hardcoded to the DEMO
+# schema, which is non-representative (flat 'description' on 2/174 fields, no nested
+# 'help', no parts/sections arrays). The REAL I-90 (form-kits/i-90/schema.json:
+# parts/sections arrays, help.instructions on 132/132 fields) is what forward
+# cost/JIT/DTI/secretary measurement must use. --schema selects the source +
+# its matching question plan.
+DEMO_SCHEMA_PATH = _REPO_ROOT / "frontend" / "public" / "adult_intake_demo_schema.json"
+I90_SCHEMA_PATH = _REPO_ROOT / "form-kits" / "i-90" / "schema.json"
 AUDIO_CACHE = Path(__file__).resolve().parent / "fixtures" / "audio_cache"
 _AUDIO_RATE = 16000
 _CHUNK_MS = 40
@@ -91,10 +98,10 @@ _CHUNK_MS = 40
 CONFIRM_YES = "Yes, that's correct."
 REJECT = "No, that's not right."
 
-# The 20-question plan: 12 client-info + 5 reasons + 3 living-situation fields
-# from the real demo schema, in schema order, with realistic FICTIONAL answers
+# The DEMO 20-question plan: 12 client-info + 5 reasons + 3 living-situation fields
+# from the demo schema, in schema order, with realistic FICTIONAL answers
 # (no real PII). "wrong" is the unhappy path's first (rejected) value.
-QUESTIONS = [
+DEMO_QUESTIONS = [
     {"field_id": "firstName", "say": "My first name is Maria.",
      "wrong": "My first name is Mario."},
     {"field_id": "middleName", "say": "My middle name is Elena.",
@@ -144,6 +151,85 @@ QUESTIONS = [
      "wrong": "The first household member is David Vasquez."},
 ]
 
+# The REAL I-90 question plan (bd polyglot-pdf-jnjj.24): the first 3 sections of
+# form-kits/i-90/schema.json -- Part 1 "Information About You" (sec 1), the mailing
+# address (sec 2), and the physical address (sec 3). FICTIONAL answers (no real PII).
+# spoken_name is the natural phrasing the model asks by. The plan scripts EVERY
+# field that is visible in a section given the scripted conditional answers, in
+# SCHEMA ORDER, so the section-reset SI's field list and the next-field hint never
+# contradict -- otherwise the model could ask for an SI-listed field the plan never
+# answers and stall the run (fresh-eyes for this bead):
+#   - the name-change radio (p1_checkbox4) is answered "no", so the show_if
+#     previous-name fields (p1_line5a/b/c) stay HIDDEN and are correctly NOT scripted;
+#   - each unit-type radio (p1_unit_type6c/7b) IS answered, which makes its show_if
+#     apt-number field (p1_line6c/7b_aptsteflrnumber) VISIBLE -- so that apt-number
+#     field IS scripted (a real apartment filer fills it);
+#   - the always-visible optional province/postalcode fields are scripted too, with
+#     a US-filer "not applicable" answer, so no visible field is left unanswered.
+I90_QUESTIONS = [
+    # --- Section 1: Part 1 - Information About You ---
+    {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is A12345678.",
+     "wrong": "My alien registration number is A87654321."},
+    {"field_id": "p1_line2_acctidentifier", "say": "My USCIS online account number is 1234567890.",
+     "wrong": "My USCIS online account number is 9876543210."},
+    {"field_id": "p1_line3a_familyname", "say": "My current family name is Vasquez.",
+     "wrong": "My current family name is Vargas."},
+    {"field_id": "p1_line3b_givenname", "say": "My current given name is Maria.",
+     "wrong": "My current given name is Mario."},
+    {"field_id": "p1_line3c_middlename", "say": "My current middle name is Elena.",
+     "wrong": "My current middle name is Elaine."},
+    {"field_id": "p1_checkbox4", "say": "No, my name has not changed.",
+     "wrong": "Yes, my name has changed."},
+    # --- Section 2: mailing address ---
+    {"field_id": "p1_line6a_incareofname", "say": "In care of Daniel Vasquez.",
+     "wrong": "In care of David Vasquez."},
+    {"field_id": "p1_line6b_streetnumbername", "say": "Twelve thirty four Maple Street.",
+     "wrong": "Fifty six seventy eight Oak Street."},
+    {"field_id": "p1_unit_type6c_unit", "say": "Apartment.",
+     "wrong": "Suite."},
+    # apt-number is show_if (unit_type is_not_empty) -- now visible, so scripted.
+    {"field_id": "p1_line6c_aptsteflrnumber", "say": "Apartment number twelve B.",
+     "wrong": "Apartment number fourteen C."},
+    {"field_id": "p1_line6d_cityortown", "say": "My mailing city is Austin.",
+     "wrong": "My mailing city is Houston."},
+    {"field_id": "p1_line6e_state", "say": "Texas.",
+     "wrong": "Florida."},
+    {"field_id": "p1_line6f_zipcode", "say": "My mailing zip code is seven three seven zero one.",
+     "wrong": "My mailing zip code is seven seven zero zero one."},
+    {"field_id": "p1_line6g_province", "say": "I do not have a province, I am in the United States.",
+     "wrong": "My province is Ontario."},
+    {"field_id": "p1_line6h_postalcode", "say": "I do not have a postal code, I am in the United States.",
+     "wrong": "My postal code is K1A 0B1."},
+    {"field_id": "p1_line6i_country", "say": "United States.",
+     "wrong": "Canada."},
+    # --- Section 3: physical address (schema order: ...zipcode, province, postalcode, country) ---
+    {"field_id": "p1_line7a_streetnumbername", "say": "Twelve thirty four Maple Street.",
+     "wrong": "Ninety nine Pine Avenue."},
+    {"field_id": "p1_unit_type7b_unit", "say": "Apartment.",
+     "wrong": "Floor."},
+    {"field_id": "p1_line7b_aptsteflrnumber", "say": "Apartment number twelve B.",
+     "wrong": "Apartment number fifteen D."},
+    {"field_id": "p1_line7c_cityortown", "say": "My physical city is Austin.",
+     "wrong": "My physical city is Dallas."},
+    {"field_id": "p1_line7d_state", "say": "Texas.",
+     "wrong": "Arizona."},
+    {"field_id": "p1_line7e_zipcode", "say": "My physical zip code is seven three seven zero one.",
+     "wrong": "My physical zip code is eight five zero zero one."},
+    {"field_id": "p1_line7f_province", "say": "I do not have a province, I am in the United States.",
+     "wrong": "My province is Quebec."},
+    {"field_id": "p1_line7g_postalcode", "say": "I do not have a postal code, I am in the United States.",
+     "wrong": "My postal code is K1A 0B1."},
+    {"field_id": "p1_line7h_country", "say": "United States.",
+     "wrong": "Mexico."},
+]
+
+# --schema registry: source path + matching question plan. Default is "demo" for
+# back-compat with the pre-jnjj.24 callers; "i90" is the production-faithful set.
+SCHEMAS = {
+    "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS},
+    "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS},
+}
+
 CSV_COLUMNS = [
     "question number",
     "audio in tokens", "audio in token cost",
@@ -188,20 +274,29 @@ def _pcm_chunks(pcm: bytes) -> list[bytes]:
 
 # ------------------------------------------------------------- schema helpers
 
-def load_schema() -> dict:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+def load_schema(schema_key: str = "demo") -> dict:
+    return json.loads(SCHEMAS[schema_key]["path"].read_text(encoding="utf-8"))
 
 
 def sections_in_plan(schema: dict, plan: list[dict]) -> list[dict]:
-    """Ordered distinct sections covered by the plan, with labels from the schema."""
+    """Ordered distinct sections covered by the plan, with labels from the schema.
+
+    Label resolution prefers, in order: a field's own `section_label` (the demo
+    schema shape), then the schema-root `sections[]` entry's `label` (the I-90 shape
+    -- its fields carry no section_label, so without this the SI would announce the
+    raw snake_case section_id like "part_1_2_addresses" instead of the production
+    "Part 1.2 Mailing Address"; bd polyglot-pdf-jnjj.24 fresh-eyes), then the id.
+    """
     by_id = {f["id"]: f for f in schema["fields"]}
+    section_labels = {s.get("id"): s.get("label")
+                      for s in schema.get("sections", []) if s.get("id")}
     seen: list[dict] = []
     for q in plan:
         f = by_id[q["field_id"]]
         sid = f.get("section_id") or "section-1"
         if not any(s["id"] == sid for s in seen):
-            seen.append({"id": sid, "label": f.get("section_label") or sid,
-                         "number": len(seen) + 1})
+            label = f.get("section_label") or section_labels.get(sid) or sid
+            seen.append({"id": sid, "label": label, "number": len(seen) + 1})
     return seen
 
 
@@ -449,8 +544,13 @@ async def run(args) -> int:
     if not os.getenv("GEMINI_API_KEY"):
         print("GEMINI_API_KEY not set; cannot run.")
         return 1
-    schema = load_schema()
-    plan = QUESTIONS[: args.questions]
+    schema = load_schema(args.schema)
+    # Default (args.questions is None) runs the WHOLE plan for the chosen schema, so
+    # a default --schema i90 run exercises all 3 sections completely (a fixed default
+    # of 20 silently truncated the 25-question I-90 plan mid-section-3; fresh-eyes
+    # bd jnjj.24). An explicit --questions N still caps the run.
+    _all_questions = SCHEMAS[args.schema]["questions"]
+    plan = _all_questions if args.questions is None else _all_questions[: args.questions]
     secs = sections_in_plan(schema, plan)
 
     # Pre-synth all audio (cache-aware).
@@ -475,9 +575,10 @@ async def run(args) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    base_name = f"costs_{args.model}_{args.arm}_{args.path}_{stamp}"
+    base_name = f"costs_{args.schema}_{args.model}_{args.arm}_{args.path}_{stamp}"
     meta: dict = {
         "bead": "polyglot-pdf-4loz", "model": model_name, "tier": args.model,
+        "schema": args.schema,
         "arm": args.arm, "path": args.path, "questions": len(plan),
         "trigger": args.trigger if args.arm == "sliding-window" else None,
         "window": args.window if args.arm == "sliding-window" else None,
@@ -496,7 +597,8 @@ async def run(args) -> int:
     try:
         adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
         adapter.set_session_context(
-            form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}", form_id="INTAKE-DEMO")
+            form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
+            form_id=f"INTAKE-{args.schema.upper()}")
         adapter._log = _LogTap(adapter._log, log_sink)
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
@@ -696,11 +798,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
+    ap.add_argument("--schema", choices=["demo", "i90"], default="demo",
+                    help="form schema + question plan: 'demo' (the legacy "
+                         "adult-intake demo, default for back-compat) or 'i90' "
+                         "(the REAL form-kits/i-90 first 3 sections -- the "
+                         "production-faithful set; bd polyglot-pdf-jnjj.24)")
     ap.add_argument("--arm",
                     choices=["unbounded", "section-reset", "section-reset-jit", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
-    ap.add_argument("--questions", type=int, default=20)
+    ap.add_argument("--questions", type=int, default=None,
+                    help="cap the run to the first N questions; default runs the "
+                         "WHOLE plan for the chosen --schema (demo=20, i90=25)")
     ap.add_argument("--trigger", type=int, default=12_000,
                     help="sliding-window trigger_tokens; size it ABOVE the "
                          "unevictable SI+tools base (~8.2k on the full-form "
