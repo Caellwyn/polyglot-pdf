@@ -123,6 +123,7 @@ export interface FieldHelp {
   inline?: string; // Inline hint text like "(if any)"
   tooltip?: string; // Hover tooltip
   instructions?: string; // Longer instructions below field
+  format_hint?: string; // Short input-format hint, e.g. "7-9 digits" / "YYYY-MM-DD" (rendered into the SI; bd polyglot-pdf-jnjj.23)
   warning?: string; // Legal warning or important note
   example?: string; // Example value
   legal_reference?: string; // Legal reference (e.g., "INA 241(b)(3)")

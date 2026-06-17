@@ -232,6 +232,7 @@ class FieldHelp(BaseModel):
     inline: Optional[str] = Field(None, description='Inline hint text like "(if any)"')
     tooltip: Optional[str] = Field(None, description="Hover tooltip")
     instructions: Optional[str] = Field(None, description="Longer instructions below field")
+    format_hint: Optional[str] = Field(None, description='Short input-format hint, e.g. "7-9 digits" or "YYYY-MM-DD" (rendered into the SI; bd polyglot-pdf-jnjj.23)')
     warning: Optional[str] = Field(None, description="Legal warning or important note")
     example: Optional[str] = Field(None, description="Example value")
     legal_reference: Optional[str] = Field(None, description='Legal reference (e.g., "INA 241(b)(3)", "18 USC 1546(a)")')
