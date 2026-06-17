@@ -354,14 +354,25 @@ def build_form_context(
             )
             unfilled_count = total_fields - filled_count
 
-        # Field 1's full guidance. The client sends the first UNFILLED field's FULL
-        # schema as schema["fields"][0] (frontend getJITHandshakePayload), which
-        # carries the nested help block -- so get_field_guidance reads real
-        # instructions/format_hint. Fields 2..N arrive via the confirm_field
-        # response (callback_handler), rendered by the SAME render_field_guidance.
+        # The CURRENT field's full guidance. On the JIT-shaped handshake the client
+        # already sends only the first UNFILLED field as schema["fields"][0]
+        # (getJITHandshakePayload selects it). But DTI can also receive a FULL
+        # handshake (all section fields, possibly with prefilled/reconnect values),
+        # where fields[0] may already be filled while {next_field_hint} points at a
+        # later field. Pick the first UNFILLED field so CURRENT FIELD and the hint
+        # agree -- otherwise the model is told to ask field X but described field 0,
+        # and (since DTI drops the full field list) it has no schema for field X
+        # and can update the wrong field (Codex PR #229). Fall back to fields[0].
         fields_list = schema.get("fields") or []
-        first_field = fields_list[0] if fields_list else None
-        current_field_guidance = render_field_guidance(first_field)
+        current_field = None
+        for f in fields_list:
+            fid = f.get("id")
+            if fid and not current_values.get(fid):
+                current_field = f
+                break
+        if current_field is None and fields_list:
+            current_field = fields_list[0]
+        current_field_guidance = render_field_guidance(current_field)
 
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION.format(
             form_title=form_title,
@@ -377,8 +388,14 @@ def build_form_context(
             current_field_guidance=current_field_guidance,
             confirmation_policy=confirmation_policy,
         )
-    # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled
-    elif settings.USE_JIT_SCHEMA:
+    # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled.
+    # Also fire on a JIT-SHAPED schema (schema["jit_mode"], set by websocket_routes
+    # when a handshake_jit arrives) even if USE_JIT_SCHEMA is off: such a schema has
+    # only first_field_schema in ["fields"] + a manifest, so the legacy full-dump
+    # branch would describe one field and LOSE the section. This makes rollback safe
+    # -- a client that persisted jit_mode and sends one more handshake_jit after both
+    # flags are turned off still renders the whole section (Codex PR #229).
+    elif settings.USE_JIT_SCHEMA or schema.get("jit_mode"):
         # Consume the section manifest the CLIENT sent on the handshake
         # (schema["manifest"]), NOT a manifest regenerated from schema["fields"]
         # -- in JIT mode schema["fields"] is only the synthesized first-field
