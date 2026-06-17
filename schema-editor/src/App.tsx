@@ -16,8 +16,16 @@ import {
   type FsFileHandle,
 } from './utils/fileSystemAccess';
 import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
+import { getCompletionStats } from './utils/validation';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
-import type { FormField, FormConfig } from './types/schema';
+import type { FormField, FormConfig, FormSchema } from './types/schema';
+
+// Live review stats for the open kit's catalogue bar (percent + the matching
+// complete/total counts, so the bar AND its hover detail both track edits).
+function liveStats(schema: FormSchema): { percent: number; complete: number; total: number } {
+  const s = getCompletionStats(schema);
+  return { percent: s.percentage, complete: s.complete, total: s.total };
+}
 
 export const App: React.FC = () => {
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
@@ -41,6 +49,10 @@ export const App: React.FC = () => {
   // catalogue) and a blob URL for its PDF (revoked when switching forms).
   const [selectedKitId, setSelectedKitId] = React.useState<string | null>(null);
   const pdfBlobUrlRef = React.useRef<string | null>(null);
+  // True while the active save target is the OPEN kit's own schema file. A
+  // "Save As..." to an arbitrary file flips this false, so the catalogue won't
+  // cache progress that was never written back to the kit (Codex PR #224 r6).
+  const [savingToKit, setSavingToKit] = React.useState(false);
 
   // Load schema when form is selected
   const handleSelectForm = React.useCallback(async (form: FormConfig) => {
@@ -115,6 +127,8 @@ export const App: React.FC = () => {
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
+      setSavingToKit(true); // save target is the kit's own schema until a Save As
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open form');
       console.error('Failed to open kit:', err);
@@ -122,6 +136,37 @@ export const App: React.FC = () => {
       setLoading(false);
     }
   }, [hasUnsavedChanges, loadSchemaState]);
+
+  // Guard a folder switch: returns false to ABORT when the user declines to
+  // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
+  // silently drop dirty work -- Codex P0). Pure check: it must NOT mutate state,
+  // because the picker may still be cancelled after this returns true (Codex
+  // round 4 -- clearing here would discard the kit for nothing).
+  const confirmFolderChange = React.useCallback((): boolean => {
+    if (hasUnsavedChanges) {
+      return window.confirm(
+        'You have unsaved changes. Are you sure you want to switch folders?'
+      );
+    }
+    return true;
+  }, [hasUnsavedChanges]);
+
+  // Drop the open-kit state AFTER a new folder is actually chosen, so a same-named
+  // kit in the new folder can't inherit the old form's live progress (Codex PR
+  // #224). Clears savedFileName too, else the header keeps showing "Saved to <old
+  // schema>" with no schema open (Codex round 4).
+  const clearOpenKit = React.useCallback((): void => {
+    setSelectedKitId(null);
+    setSelectedForm(null);
+    setSavedFileName(null);
+    setSavingToKit(false);
+    clearSchema();
+    fileHandleRef.current = null;
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
+    }
+  }, [clearSchema]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -221,6 +266,9 @@ export const App: React.FC = () => {
       if (!handle || forcePicker) {
         handle = await pickSchemaFile(suggestedFileName());
         fileHandleRef.current = handle;
+        // A picked destination (Save As) is no longer the kit's own schema, so
+        // its progress must not be cached against the kit id (Codex PR #224 r6).
+        setSavingToKit(false);
       }
       await writeSchemaToHandle(handle, schema);
       setSavedFileName(handle.name);
@@ -386,7 +434,23 @@ export const App: React.FC = () => {
         {/* The catalogue (directory-based) is the front door (bd b0pe); the
             hardcoded FormSelector remains as a fallback for browsers without the
             directory API (where the catalogue shows its unsupported message). */}
-        <FormCatalogue onOpenKit={handleOpenKit} selectedKitId={selectedKitId} />
+        <FormCatalogue
+          onOpenKit={handleOpenKit}
+          confirmFolderChange={confirmFolderChange}
+          clearOpenKit={clearOpenKit}
+          selectedKitId={selectedKitId}
+          liveProgress={
+            // Keep the open kit's catalogue bar in sync with in-editor edits:
+            // the disk-scanned % is stale after an edit/save, so feed the live
+            // in-memory stats (same getCompletionStats the ValidationPanel uses).
+            // `saved` lets the catalogue cache only persisted values: an UNSAVED
+            // edit still shows live on the open card, but is not remembered after
+            // the kit closes (else a discarded edit would leave phantom progress).
+            selectedKitId && schema
+              ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
+              : null
+          }
+        />
         {!dirAccess && (
           <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
         )}

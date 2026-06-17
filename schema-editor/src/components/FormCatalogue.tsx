@@ -3,13 +3,34 @@ import {
   isDirectoryAccessSupported, pickDirectory, isUserAbort,
   type FsDirectoryHandle,
 } from '../utils/fileSystemAccess';
-import { listKits, onboardPdf, type CatalogueEntry } from '../utils/formKitDirectory';
+import {
+  listKits, onboardPdf, readKitProgress, summarizeCatalogue,
+  type CatalogueEntry, type KitProgress,
+} from '../utils/formKitDirectory';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
   onOpenKit: (entry: CatalogueEntry) => void;
+  /**
+   * Guard run BEFORE opening the folder picker: returns false to ABORT the switch
+   * (e.g. the user declined to discard unsaved edits), in which case the picker is
+   * not opened. Must NOT mutate state -- it may be called and then the picker
+   * cancelled, leaving the open kit intact.
+   */
+  confirmFolderChange?: () => boolean;
+  /**
+   * Run AFTER the picker returns a new directory: drops the open-kit state so a
+   * same-named kit in the new folder can't inherit the prior form's live progress.
+   */
+  clearOpenKit?: () => void;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
+  /**
+   * Live in-editor review stats for the open kit, so its catalogue bar AND hover
+   * detail track unsaved edits instead of the stale disk-scan value. Null when no
+   * kit is open.
+   */
+  liveProgress?: { kitId: string; saved: boolean; percent: number; complete: number; total: number } | null;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -25,39 +46,98 @@ const STATUS_STYLE: Record<string, string> = {
  * the browser lacks the File System Access directory API.
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
-  onOpenKit, selectedKitId,
+  onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
+  // Per-kit review progress, keyed by kit id (filled in after the list renders).
+  const [progress, setProgress] = React.useState<Record<string, KitProgress>>({});
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  // Monotonic token: each refresh bumps it so a slow progress load from a prior
+  // folder cannot overwrite the current folder's progress (stale-folder race).
+  const refreshSeq = React.useRef(0);
 
-  const refresh = React.useCallback(async (dir: FsDirectoryHandle) => {
+  // `deliberate` = a user-initiated Refresh (disk truth supersedes remembered
+  // saved edits). Automatic scans (folder open, post-onboard) must NOT clear the
+  // cache: a stale initial scan completing after a save would otherwise wipe a
+  // just-saved value and reintroduce the post-save revert (Codex PR #224 r7).
+  const refresh = React.useCallback(async (dir: FsDirectoryHandle, deliberate = false) => {
+    const seq = ++refreshSeq.current;
     setBusy(true);
     setError(null);
     try {
-      setKits(await listKits(dir));
+      const entries = await listKits(dir);
+      if (seq !== refreshSeq.current) return; // superseded by a newer refresh
+      setKits(entries);
+      setProgress({}); // clear prior folder's bars while this folder's compute
+      // Compute review progress per kit (loads each schema). Done after the list
+      // is set so the catalogue renders immediately and the bars fill in; a kit
+      // whose schema fails to load just shows no bar.
+      const computed = await Promise.all(entries.map(readKitProgress));
+      if (seq !== refreshSeq.current) return; // a newer refresh won; drop these
+      const byId: Record<string, KitProgress> = {};
+      for (const p of computed) byId[p.entry.id] = p;
+      setProgress(byId);
+      // Only a DELIBERATE Refresh treats the scan as superseding remembered saved
+      // values (so an external/on-disk change can update a cached kit's bar --
+      // Codex r6). An automatic scan must not clear the cache (Codex r7). The OPEN
+      // kit keeps its live override (liveProgress), which is separate.
+      if (deliberate) setEditedProgress({});
     } catch (err) {
+      if (seq !== refreshSeq.current) return;
       setError(err instanceof Error ? err.message : 'Failed to read folder');
     } finally {
-      setBusy(false);
+      if (seq === refreshSeq.current) setBusy(false);
     }
   }, []);
 
+  const summary = React.useMemo(() => summarizeCatalogue(kits), [kits]);
+
+  // Last live in-editor value seen per kit, kept SEPARATELY from the disk-scan
+  // `progress` map so it survives after that kit stops being the live one AND is
+  // immune to a folder-scan completing later and clobbering it (Codex PR #224).
+  // The render overlays this on top of the scan. Editing kit A then opening B
+  // would otherwise revert A's card to its stale scan % until a manual Refresh;
+  // because liveProgress reflects in-memory edits, this also covers post-save.
+  const [editedProgress, setEditedProgress] =
+    React.useState<Record<string, { percent: number; complete: number; total: number }>>({});
+  React.useEffect(() => {
+    if (!liveProgress) return;
+    const { kitId, saved, percent, complete, total } = liveProgress;
+    // Only remember SAVED values. An unsaved edit still shows live on the open
+    // card (the `live` override below), but caching it would leave phantom
+    // progress after the user discards the edit and switches kits (Codex PR #224).
+    if (!saved) return;
+    setEditedProgress(prev => {
+      const e = prev[kitId];
+      if (e && e.percent === percent && e.complete === complete && e.total === total) return prev;
+      return { ...prev, [kitId]: { percent, complete, total } };
+    });
+  }, [liveProgress]);
+
   const handlePickFolder = React.useCallback(async () => {
+    // Guard unsaved edits BEFORE opening the picker (returns false to abort), but
+    // do NOT mutate state yet: if the user then cancels the native picker, the
+    // open kit must survive intact (Codex PR #224). Only after the picker returns
+    // a directory do we clear the open-kit state -- which also prevents a
+    // same-named kit in the new folder from inheriting the prior form's progress.
+    if (confirmFolderChange && confirmFolderChange() === false) return;
     setNotice(null); // a prior "Added X" notice is stale once the folder changes
     try {
       const dir = await pickDirectory();
+      clearOpenKit?.();
+      setEditedProgress({}); // remembered edits belong to the old folder
       setRoot(dir);
       await refresh(dir);
     } catch (err) {
-      if (isUserAbort(err)) return;
+      if (isUserAbort(err)) return; // picker cancelled -> open kit left intact
       setError(err instanceof Error ? err.message : 'Failed to open folder');
     }
-  }, [refresh]);
+  }, [refresh, confirmFolderChange, clearOpenKit]);
 
   const handleDrop = React.useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -111,7 +191,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           {root ? 'Change folder' : 'Open form-kits folder'}
         </button>
         {root && (
-          <button className="btn btn-secondary" onClick={() => void refresh(root)} disabled={busy}>
+          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy}>
             Refresh
           </button>
         )}
@@ -125,9 +205,40 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
       {notice && <div className="mt-2 text-sm text-green-700">{notice}</div>}
 
+      {/* Aggregate dashboard overview (bd vl3o, D3): complete vs in-progress at a glance. */}
+      {root && kits.length > 0 && (
+        <div
+          data-testid="catalogue-summary"
+          className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+        >
+          <span className="font-medium text-gray-700">{summary.total} forms</span>
+          <span className="text-green-700">{summary.complete} complete</span>
+          <span className="text-yellow-700">{summary.inProgress} in progress</span>
+          {summary.noSchema > 0 && (
+            <span className="text-gray-500">{summary.noSchema} awaiting extraction</span>
+          )}
+        </div>
+      )}
+
       {root && kits.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {kits.map((kit) => (
+          {kits.map((kit) => {
+            const prog = progress[kit.id];
+            // Precedence: the OPEN kit's live stats (tracks unsaved edits) > the
+            // last remembered edited value for this kit > the disk-scan value.
+            // Percent AND the complete/total hover counts come from one source so
+            // they never disagree.
+            const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
+            const edited = editedProgress[kit.id] ?? null;
+            const source = live ?? edited;
+            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
+            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
+            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
+            // Present-but-unreadable schema: show a notice instead of nothing, so
+            // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
+            // override always has measurable stats, so suppress it then.
+            const showSchemaError = !source && prog?.schemaError && pct === null;
+            return (
             <li key={kit.id}>
               <button
                 className={`w-full text-left p-3 rounded border ${
@@ -151,9 +262,33 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   {kit.id} -- {kit.hasSchema ? 'schema' : 'no schema yet'}
                   {kit.hasPdf ? ', pdf' : ', no pdf'}
                 </div>
+
+                {/* Per-form review progress (% of fields complete). */}
+                {pct !== null && (
+                  <div className="mt-2" title={`${completeFields} of ${totalFields} fields complete`}>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>Review</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="mt-0.5 h-1.5 bg-gray-200 rounded overflow-hidden">
+                      <div
+                        className={`h-full ${pct === 100 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Present-but-unreadable schema (distinct from no schema). */}
+                {showSchemaError && (
+                  <div className="mt-2 text-xs text-red-600">
+                    Schema present but unreadable -- can't measure review progress.
+                  </div>
+                )}
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

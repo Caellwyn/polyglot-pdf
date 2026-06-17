@@ -13,6 +13,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
+import { getCompletionStats } from './validation';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
 
@@ -127,6 +128,109 @@ export async function loadKitSchema(
   const handle = await tryGetFile(entry.dirHandle, entry.schemaFile);
   if (!handle) return null;
   return readJsonFile<FormSchema>(handle);
+}
+
+// --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
+//
+// "Review progress" for a form is the SAME field-completion signal the editor
+// already shows per field and the ValidationPanel already aggregates: a field is
+// `complete` when checkFieldComplete() passes (has id/type/pdf_field_name, a
+// spoken_name, and non-placeholder help). Per-form progress is the percentage of
+// fields that are complete -- i.e. getCompletionStats(schema).percentage. We reuse
+// that single definition rather than inventing a second one so the catalogue %
+// and the in-editor % can never disagree.
+
+/** A catalogue entry plus its computed review progress (null if no schema). */
+export interface KitProgress {
+  entry: CatalogueEntry;
+  /** % of fields complete (0-100), or null when there is no measurable schema. */
+  reviewPercent: number | null;
+  completeFields: number;
+  totalFields: number;
+  /**
+   * True when the kit HAS a schema file but it could not be read/measured
+   * (unparseable JSON or structurally malformed). Distinguishes "present but
+   * broken" (show an error) from "no schema yet" (show nothing) -- both have
+   * reviewPercent null.
+   */
+  schemaError: boolean;
+}
+
+/**
+ * Compute one kit's review progress by loading its schema and reusing
+ * getCompletionStats. A kit with no schema (PDF-only, pre-extraction) or an
+ * unparseable schema yields reviewPercent=null so the UI can show "no schema".
+ */
+export async function readKitProgress(
+  entry: CatalogueEntry,
+): Promise<KitProgress> {
+  if (!entry.hasSchema) {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: false };
+  }
+  const schema = await loadKitSchema(entry);
+  if (!schema) {
+    // Has a schema file but it is absent/unparseable -> a present-but-broken
+    // schema, not a pre-extraction kit.
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+  }
+  // Validate the shape BEFORE measuring: a schema can parse as JSON yet be
+  // structurally wrong in ways that don't throw -- e.g. `fields: "abc"` is
+  // iterable, and `fields: ["abc"]` is an array whose entries getCompletionStats
+  // reads properties off without throwing -- either would silently report a bogus
+  // % with schemaError=false. Require an actual array of objects (an empty [] is a
+  // valid 0% schema). Anything else is a broken extraction, surfaced as schemaError.
+  const fieldsOk =
+    Array.isArray(schema.fields) &&
+    schema.fields.every(f => f !== null && typeof f === 'object' && !Array.isArray(f));
+  if (!fieldsOk) {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+  }
+  try {
+    // Belt-and-suspenders: any remaining failure inside getCompletionStats is a
+    // measurable-progress failure (schemaError), never an unhandled rejection
+    // that would reject the catalogue-wide Promise.all and wipe every bar.
+    const stats = getCompletionStats(schema);
+    return {
+      entry,
+      reviewPercent: stats.percentage,
+      completeFields: stats.complete,
+      totalFields: stats.total,
+      schemaError: false,
+    };
+  } catch {
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+  }
+}
+
+/** An at-a-glance overview an aggregate dashboard header shows. */
+export interface CatalogueSummary {
+  total: number;          // every kit in the folder
+  complete: number;       // has a schema AND metadata status === 'complete'
+  inProgress: number;     // has a schema but not marked complete (drafts/unknown)
+  noSchema: number;       // no schema -- awaiting extraction (deploy would skip it)
+}
+
+/**
+ * Aggregate counts across the catalogue. A schema-less kit is "awaiting
+ * extraction" (the deploy skips it before the complete check, so it can't be
+ * complete); a schema-bearing kit is "complete" iff its metadata status is
+ * complete, else "in progress".
+ */
+export function summarizeCatalogue(entries: CatalogueEntry[]): CatalogueSummary {
+  let complete = 0;
+  let inProgress = 0;
+  let noSchema = 0;
+  for (const e of entries) {
+    // hasSchema is checked FIRST: deploy-all.sh skips a kit with no resolved
+    // schema file BEFORE it evaluates kit_is_complete, so a complete-marked kit
+    // without a schema is NOT actually deployable -- counting it as complete
+    // would overstate deployable forms and hide the missing extraction. Such a
+    // kit belongs in "awaiting extraction".
+    if (!e.hasSchema) noSchema++;
+    else if (e.status === 'complete') complete++;
+    else inProgress++;
+  }
+  return { total: entries.length, complete, inProgress, noSchema };
 }
 
 async function writeFile(
