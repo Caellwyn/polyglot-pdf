@@ -171,6 +171,13 @@ class FormFillingService:
         if schema:
             self._loaded_field_ids = set(schema.get("loaded_field_ids", []))
 
+        # Reset the DTI validation extras on every (re)start, INCLUDING a section
+        # switch (which calls start_session with the new section's schema). Otherwise
+        # client-supplied field schemas from a PREVIOUS section would linger and let
+        # the validator wrongly accept a stale cross-section field id (fresh-eyes
+        # substitute review, Codex PR #229). Parallels the _loaded_field_ids reseed.
+        self._dti_extra_fields = {}
+
         if accept_connection:
             await self._websocket.accept()
         

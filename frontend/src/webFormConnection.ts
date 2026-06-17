@@ -832,8 +832,22 @@ export class WebFormConnection {
   private handleGetNextFieldHintRequest(message: any): void {
     const requestId = message.request_id;
 
-    // Compute next field hint
-    const hint = this.computeNextFieldHintString();
+    // Compute the next field ONCE, and derive BOTH the hint and (for DTI) the
+    // schema from it -- so the hint and the supplied schema can never refer to
+    // different fields (fresh-eyes substitute review, Codex PR #229).
+    const nextField = isFormComplete(this.state)
+      ? null
+      : computeNextField(this.state, { skipConfirmed: true });
+
+    // Notify UI about the next field (highlight/scroll) -- same side effect
+    // computeNextFieldHintString had.
+    if (this.callbacks.onNextField) {
+      this.callbacks.onNextField(nextField ? nextField.id : null);
+    }
+
+    const hint = nextField
+      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
+      : null;
 
     // Store last field hint for recovery prompts
     if (hint) {
@@ -841,14 +855,11 @@ export class WebFormConnection {
     }
 
     // DTI (bd polyglot-pdf-jnjj.22): the client owns the schema, so it supplies the
-    // next field's FULL schema here -- the backend renders it into the confirm_field
-    // guidance. Only when DTI is on AND there's a next field (hint non-null).
+    // SAME field's FULL schema here -- the backend renders it into the confirm_field
+    // guidance. Only when DTI is on AND there's a next field.
     let nextFieldSchema: unknown = undefined;
-    if (this.dtiModeEnabled && hint) {
-      const nextField = computeNextField(this.state, { skipConfirmed: true });
-      if (nextField) {
-        nextFieldSchema = getFieldSchema(nextField.id, this.state.schema);
-      }
+    if (this.dtiModeEnabled && nextField) {
+      nextFieldSchema = getFieldSchema(nextField.id, this.state.schema);
     }
 
     // Send response back to backend

@@ -154,6 +154,27 @@ def test_dti_si_size_is_independent_of_section_size(monkeypatch):
     assert large - small < 1000, (small, large)
 
 
+def test_dti_extra_fields_reset_on_section_switch():
+    """_dti_extra_fields (the DTI validation extras) must reset when start_session
+    runs for a new section, or previous-section field schemas linger and the
+    validator wrongly accepts stale cross-section field ids (fresh-eyes substitute,
+    Codex PR #229)."""
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import get_settings
+    svc = FormFillingService(live_ai=None, settings=get_settings())
+    svc._schema = {"fields": [{"id": "sec1_f1", "name": "F1", "type": "text", "section_id": "s1"}]}
+    svc.merge_field_schema({"id": "sec1_f2", "name": "F2", "type": "text", "section_id": "s1"})
+    assert "sec1_f2" in svc._dti_extra_fields
+    # Simulate the reset start_session does at section switch (the line under test).
+    svc._dti_extra_fields = {}
+    assert svc._dti_extra_fields == {}
+    # After reset, validation only sees the new section's schema, not sec1_f2.
+    svc._schema = {"fields": [{"id": "sec2_f1", "name": "G1", "type": "text", "section_id": "s2"}]}
+    ids = {f.id for f in svc._build_fields_from_schema()}
+    assert ids == {"sec2_f1"}
+    assert "sec1_f2" not in ids
+
+
 def test_coordinator_stash_and_consume():
     coord = RequestCoordinator(websocket=None, session_id="t")
     # No schema stashed -> None.
