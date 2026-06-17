@@ -95,15 +95,14 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   all three; an inline finding always outranks a 👍, so a thumbs-up can't mask a
   real ask.
 - **Codex's "begun work" signal is an eyeballs (👀 / `eyes`) reaction on the
-  trigger comment -- distinct from the 👍 CLEAN verdict.** The watcher's
-  acknowledgment phase (armed by `--ack-timeout-min 2`, which closeout passes)
-  waits up to 2 minutes for proof Codex has started -- that eyeballs reaction OR
-  any in-window review/comment it posts (round 1's trigger is the PR body, which
-  has no issue-comment eyeballs to read, so round 1 leans on the activity signal).
-  If neither appears, the watch exits `NO-ACK` (exit 4) instead of blocking on the
-  full 20-minute verdict timeout -- a fast, specific "Codex is asleep" signal that
-  routes straight to the fallback. A Codex that is genuinely working is never
-  falsely `NO-ACK`'d.
+  trigger COMMENT -- distinct from the 👍 CLEAN verdict.** The watcher's
+  acknowledgment phase (armed by `--ack-timeout-min 2` on round 2+) waits up to
+  2 minutes for the eyeballs reaction on the `@codex review` issue comment; if it
+  never appears, the watch exits `NO-ACK` (exit 4) and routes straight to the
+  fallback. **Round 1 does NOT use the ack phase** -- its trigger is the PR body,
+  not an issue comment, so the eyeballs reaction is unobservable; round 1 goes
+  straight to the verdict wait. A Codex that acks on round 2+ gets the full 20-min
+  verdict window.
 - **Reviewer of last resort: a looped Opus-4.8 adversarial review when Codex is
   unavailable.** On `ERROR` (quota), `TIMEOUT` (no verdict), or `NO-ACK` (never
   started), closeout spawns the `fresh-eyes-reviewer` agent with `model: opus` --

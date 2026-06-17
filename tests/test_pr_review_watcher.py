@@ -1479,6 +1479,8 @@ def test_ack_present_proceeds_to_verdict_clean(capsys, monkeypatch):
     # The trigger comment has the eyes reaction (acked), AND Codex's verdict comment
     # carries a thumbs-up. The ack phase must pass through and the verdict wait must
     # then classify CLEAN -- i.e. an acked bot is NOT pre-empted by NO-ACK.
+    # since is set (round 2+) -- required for the ack phase to activate.
+    _since = datetime.datetime(2026, 6, 16, 9, 59, 0, tzinfo=UTC)
     issue = [
         {  # the gh-user trigger comment, now acked with eyeballs
             "user": {"login": "some-human"},
@@ -1494,7 +1496,7 @@ def test_ack_present_proceeds_to_verdict_clean(capsys, monkeypatch):
         },
     ]
     _patch_api(monkeypatch, issue=issue)
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=_since, profile=CODEX,
                   ack_timeout_min=2)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out
@@ -1503,6 +1505,8 @@ def test_ack_present_proceeds_to_verdict_clean(capsys, monkeypatch):
 def test_no_ack_within_window_is_no_ack(capsys, monkeypatch):
     # The trigger comment exists but has NO eyes reaction, and the ack deadline
     # passes -> NO-ACK (exit 4). Force the deadline past by advancing monotonic.
+    # since is set (round 2+) -- required for the ack phase to activate.
+    _since = datetime.datetime(2026, 6, 16, 9, 59, 0, tzinfo=UTC)
     issue = [{
         "user": {"login": "some-human"},
         "created_at": "2026-06-16T10:00:00Z",
@@ -1515,7 +1519,7 @@ def test_no_ack_within_window_is_no_ack(capsys, monkeypatch):
     # style without relying on wall-clock).
     ticks = iter([0.0, 0.0, 999.0, 999.0, 999.0])
     monkeypatch.setattr(cw.time, "monotonic", lambda: next(ticks))
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=_since, profile=CODEX,
                   ack_timeout_min=2)
     out = capsys.readouterr().out
     assert rc == 4, "no eyes reaction in the ack window must exit 4 (NO-ACK)"
@@ -1525,6 +1529,8 @@ def test_no_ack_within_window_is_no_ack(capsys, monkeypatch):
 def test_quota_during_ack_phase_is_error_not_no_ack(capsys, monkeypatch):
     # Codex posts the quota notice instead of reacting. The ack phase must classify
     # ERROR (the bot responded but refused), NOT NO-ACK (never responded).
+    # since is set (round 2+) -- required for the ack phase to activate.
+    _since = datetime.datetime(2026, 6, 16, 9, 59, 0, tzinfo=UTC)
     issue = [
         {  # the trigger comment, unacked
             "user": {"login": "some-human"},
@@ -1538,7 +1544,7 @@ def test_quota_during_ack_phase_is_error_not_no_ack(capsys, monkeypatch):
         },
     ]
     _patch_api(monkeypatch, issue=issue)
-    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=_since, profile=CODEX,
                   ack_timeout_min=2)
     out = capsys.readouterr().out
     assert rc == 1, "quota during ack phase must exit 1 (ERROR), not 4 (NO-ACK)"
@@ -1565,7 +1571,7 @@ def test_ack_phase_disabled_by_default(capsys, monkeypatch):
 def test_no_ack_does_not_close_beads(monkeypatch):
     # --close-on-clean must NOT fire on NO-ACK (only CLEAN/MERGED close). Drive a
     # NO-ACK through main() with --close-on-clean and assert the close shell-out
-    # never runs.
+    # never runs. --since is required for the ack phase to activate (round 2+).
     issue = [{
         "user": {"login": "some-human"},
         "created_at": "2026-06-16T10:00:00Z",
@@ -1584,7 +1590,28 @@ def test_no_ack_does_not_close_beads(monkeypatch):
 
     rc = cw.main([
         "1", "--reviewer", "codex", "--ack-timeout-min", "2",
-        "--poll-sec", "0", "--close-on-clean", "polyglot-pdf-x",
+        "--poll-sec", "0", "--since", "2026-06-16T09:59:00Z",
+        "--close-on-clean", "polyglot-pdf-x",
     ])
     assert rc == 4, "NO-ACK exits 4 even with --close-on-clean"
     assert closed["called"] is False, "NO-ACK must never close beads"
+
+
+def test_round1_skips_ack_phase(capsys, monkeypatch):
+    # Round 1 has no --since (trigger is PR body, not an issue comment). The ack
+    # phase must be skipped entirely even when --ack-timeout-min is set, so a slow
+    # Codex that posts its review after 2+ minutes is NOT falsely NO-ACK'd.
+    issue = [{
+        "user": {"login": _CODEX_LOGIN},
+        "created_at": "2026-06-16T10:05:00Z",  # 5 min after PR open, no eyeballs
+        "body": "Codex Review: Didn't find any major issues.",
+        "reactions": {"+1": 1},
+    }]
+    _patch_api(monkeypatch, issue=issue)
+    # Ack phase skipped -> goes straight to verdict wait -> CLEAN
+    rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
+                  ack_timeout_min=2)
+    out = capsys.readouterr().out
+    assert rc == 0 and "RESULT: CLEAN" in out, (
+        "round-1 (since=None) must skip ack phase and reach CLEAN verdict"
+    )

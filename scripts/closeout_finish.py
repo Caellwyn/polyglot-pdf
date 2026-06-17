@@ -293,8 +293,10 @@ class Closeout:
         ts = self.out["TS"]
         # PRINT the watch command; the orchestrator launches it run_in_background.
         watcher = self.WT / "scripts" / "pr_review_watcher.py"
-        self.out["WATCH_CMD"] = '"{}" "{}" {} --reviewer codex --since "{}"'.format(
-            self.PY, watcher, pr, ts
+        self.out["WATCH_CMD"] = (
+            '"{}" "{}" {} --reviewer codex --since "{}" --ack-timeout-min 2'.format(
+                self.PY, watcher, pr, ts
+            )
         )
 
     def telemetry(self) -> None:

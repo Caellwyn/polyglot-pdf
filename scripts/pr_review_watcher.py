@@ -1378,7 +1378,11 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
     verdict wait below with the full timeout_min. The phase is skipped entirely
     when ack_timeout_min is 0 (the default), so every existing caller is unchanged.
     """
-    if ack_timeout_min > 0 and profile.ack_reaction:
+    # The ack phase polls the TRIGGER COMMENT for the bot's eyes reaction. Round 1
+    # has no trigger comment (the trigger is the PR body, not an issue comment), so
+    # the eyes reaction is unobservable and the phase would falsely NO-ACK a Codex
+    # that is already working. Only run the ack phase for round 2+ (since is set).
+    if ack_timeout_min > 0 and profile.ack_reaction and since is not None:
         ack_rc = _ack_phase(repo, pr, ack_timeout_min, poll_sec, since, profile)
         if ack_rc is not None:
             return ack_rc
