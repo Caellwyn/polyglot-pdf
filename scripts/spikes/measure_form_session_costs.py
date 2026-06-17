@@ -545,7 +545,12 @@ async def run(args) -> int:
         print("GEMINI_API_KEY not set; cannot run.")
         return 1
     schema = load_schema(args.schema)
-    plan = SCHEMAS[args.schema]["questions"][: args.questions]
+    # Default (args.questions is None) runs the WHOLE plan for the chosen schema, so
+    # a default --schema i90 run exercises all 3 sections completely (a fixed default
+    # of 20 silently truncated the 25-question I-90 plan mid-section-3; fresh-eyes
+    # bd jnjj.24). An explicit --questions N still caps the run.
+    _all_questions = SCHEMAS[args.schema]["questions"]
+    plan = _all_questions if args.questions is None else _all_questions[: args.questions]
     secs = sections_in_plan(schema, plan)
 
     # Pre-synth all audio (cache-aware).
@@ -592,7 +597,8 @@ async def run(args) -> int:
     try:
         adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
         adapter.set_session_context(
-            form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}", form_id="INTAKE-DEMO")
+            form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
+            form_id=f"INTAKE-{args.schema.upper()}")
         adapter._log = _LogTap(adapter._log, log_sink)
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
@@ -801,7 +807,9 @@ def main() -> int:
                     choices=["unbounded", "section-reset", "section-reset-jit", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
-    ap.add_argument("--questions", type=int, default=20)
+    ap.add_argument("--questions", type=int, default=None,
+                    help="cap the run to the first N questions; default runs the "
+                         "WHOLE plan for the chosen --schema (demo=20, i90=25)")
     ap.add_argument("--trigger", type=int, default=12_000,
                     help="sliding-window trigger_tokens; size it ABOVE the "
                          "unevictable SI+tools base (~8.2k on the full-form "
