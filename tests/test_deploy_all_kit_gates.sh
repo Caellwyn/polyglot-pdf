@@ -97,6 +97,62 @@ mkdir -p "$TMP/paddedschema"
 printf '{ "schema" : " padded.json " }' > "$TMP/paddedschema/metadata.json"
 assert_schema "whitespace-padded value trimmed" "$TMP/paddedschema" "padded.json"
 
+# --- no-bypass: every deploy path routes form-kits through the gate (bd nr8u) ---
+# deploy-demo.sh and deploy-production.sh do NOT upload form-kits themselves --
+# they set env/bucket then invoke deploy-all.sh, whose kit_is_complete loop is the
+# single gate. Assert neither wrapper has its OWN form-kit upload (a gcloud/gsutil
+# copy targeting the form-kits bucket/dir) that would bypass the gate. This is the
+# static guarantee behind D2 exit criterion 2 across all three paths; it fails if a
+# future edit adds a bypassing upload to a wrapper.
+# A "bypass" is ANY storage write of form-kits (cp OR rsync, gcloud OR gsutil)
+# in a wrapper that is supposed to delegate. The regex covers cp and rsync so a
+# future `gsutil rsync form-kits ...` can't slip past (fresh-eyes finding).
+assert_no_bypass() {
+    local label="$1" file="$2"
+    if [ ! -f "$file" ]; then
+        echo "FAIL  no-bypass: $label (missing $file)"
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    if grep -Eq '(gcloud storage|gsutil)([[:space:]]+-[^[:space:]]+)*[[:space:]]+(cp|rsync).*form.?kits' "$file"; then
+        echo "FAIL  no-bypass: $label has its own form-kit upload (bypasses the gate)"
+        FAIL=$((FAIL + 1))
+    else
+        echo "PASS  no-bypass: $label routes form-kits through deploy-all.sh"
+        PASS=$((PASS + 1))
+    fi
+}
+
+# A "gated" deploy path is one that DOES upload form-kits itself but guards each
+# upload with `kit_is_complete`. Assert the actual GUARD CALL is present (the
+# `kit_is_complete <dir>` usage as a condition), not merely the function name --
+# matching only the name would still PASS if the upload-loop guard were deleted
+# while the definition stayed (fresh-eyes finding).
+assert_gated() {
+    local label="$1" file="$2"
+    if [ ! -f "$file" ]; then
+        echo "FAIL  gate-present: $label (missing $file)"
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    # The guard is invoked as a condition: `if ! kit_is_complete "..."`.
+    if grep -Eq 'if[[:space:]]+!?[[:space:]]*kit_is_complete[[:space:]]' "$file"; then
+        echo "PASS  gate-present: $label guards uploads with kit_is_complete"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  gate-present: $label no longer guards uploads with kit_is_complete"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+# Wrappers that delegate to deploy-all.sh must NOT upload form-kits themselves.
+assert_no_bypass "deploy-demo.sh" "$SCRIPT_DIR/../deploy-demo.sh"
+assert_no_bypass "deploy-production.sh" "$SCRIPT_DIR/../deploy-production.sh"
+
+# Paths that DO upload form-kits directly must guard every upload with the gate.
+assert_gated "deploy-all.sh" "$SCRIPT_DIR/../deploy-all.sh"
+assert_gated "scripts/deploy-form-kit.sh" "$SCRIPT_DIR/../scripts/deploy-form-kit.sh"
+
 echo ""
 echo "----------------------------------------"
 echo "kit-gate tests: $PASS passed, $FAIL failed"

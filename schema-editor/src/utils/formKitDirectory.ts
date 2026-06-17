@@ -130,6 +130,25 @@ export async function loadKitSchema(
   return readJsonFile<FormSchema>(handle);
 }
 
+/**
+ * Set a kit's metadata.json `status` (draft|complete), preserving every other
+ * metadata field (label, schema, pdf, ...). This is the editor-side promote/
+ * demote the deploy gate keys on: only status:complete kits reach GCS / the voice
+ * app (deploy-all.sh kit_is_complete). Returns the kit's refreshed CatalogueEntry.
+ * bd polyglot-pdf-nr8u (D2).
+ */
+export async function setKitStatus(
+  entry: CatalogueEntry, status: KitStatus,
+): Promise<CatalogueEntry> {
+  const dir = entry.dirHandle;
+  // Read-merge-write so we never clobber label/schema/pdf or unknown fields.
+  const metaHandle = await tryGetFile(dir, METADATA_FILE);
+  const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
+  const next: KitMetadata = { ...(existing || {}), status };
+  await writeFile(dir, METADATA_FILE, JSON.stringify(next, null, 2) + '\n');
+  return readKitEntry(entry.id, dir);
+}
+
 // --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
 //
 // "Review progress" for a form is the SAME field-completion signal the editor
