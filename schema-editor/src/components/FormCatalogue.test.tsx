@@ -365,6 +365,42 @@ describe('FormCatalogue', () => {
     expect(screen.queryByText('0%')).toBeNull();
   });
 
+  it('promotes a draft kit to complete via the status toggle (bd nr8u)', async () => {
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('I-90');
+    expect(screen.getByText('draft')).toBeTruthy();
+
+    // Click "Mark complete" -> writes status:complete, re-scans, badge updates.
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() => expect(screen.getByText('complete')).toBeTruthy());
+    // The toggle now offers the reverse action.
+    expect(screen.getByText('Revert to draft')).toBeTruthy();
+
+    // The metadata.json on disk now carries status:complete (preserved label).
+    const metaText = await (await root.children.get('i-90')!.children.get('metadata.json')!.getFile()).text();
+    const meta = JSON.parse(metaText);
+    expect(meta.status).toBe('complete');
+    expect(meta.label).toBe('I-90');
+  });
+
+  it('does not show a status toggle for a kit with no schema', async () => {
+    const root = mockRoot([
+      mockKit('raw', { 'metadata.json': JSON.stringify({ label: 'Raw', status: 'draft' }) }), // no schema
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('Raw');
+    expect(screen.queryByText('Mark complete')).toBeNull(); // schema-less -> no toggle
+  });
+
   it('shows an unreadable-schema notice (distinct from no schema)', async () => {
     const root = mockRoot([
       mockKit('broken', { 'schema.json': 'not json{', 'metadata.json': JSON.stringify({ label: 'Broken', status: 'draft' }) }),

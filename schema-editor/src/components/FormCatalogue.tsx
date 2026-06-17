@@ -4,8 +4,8 @@ import {
   type FsDirectoryHandle,
 } from '../utils/fileSystemAccess';
 import {
-  listKits, onboardPdf, readKitProgress, summarizeCatalogue,
-  type CatalogueEntry, type KitProgress,
+  listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitStatus,
+  type CatalogueEntry, type KitProgress, type KitStatus,
 } from '../utils/formKitDirectory';
 
 interface FormCatalogueProps {
@@ -169,6 +169,23 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     }
   }, [root, refresh]);
 
+  // Promote/demote a kit's metadata.json status (bd nr8u, D2). Only complete kits
+  // reach GCS via the deploy gate, so this is the human's publish/unpublish toggle.
+  const handleSetStatus = React.useCallback(async (kit: CatalogueEntry, status: KitStatus) => {
+    if (!root) return;
+    setNotice(null);
+    setBusy(true);
+    setError(null);
+    try {
+      await setKitStatus(kit, status);
+      await refresh(root);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update status');
+    } finally {
+      setBusy(false);
+    }
+  }, [root, refresh]);
+
   if (!supported) {
     return (
       <div className="p-4 bg-white border-b border-gray-200 text-sm text-red-600">
@@ -286,6 +303,34 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   </div>
                 )}
               </button>
+
+              {/* Status toggle (bd nr8u, D2): promote a reviewed draft to
+                  complete (so it deploys) or revert a complete kit to draft.
+                  Only for kits that have a schema -- a PDF-only kit can't be
+                  complete (the deploy gate skips schema-less kits anyway). */}
+              {kit.hasSchema && (
+                <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                  {kit.status === 'complete' ? (
+                    <button
+                      className="btn-sm btn-secondary text-xs"
+                      onClick={() => void handleSetStatus(kit, 'draft')}
+                      disabled={busy}
+                      title="Revert to draft (removes it from deploys)"
+                    >
+                      Revert to draft
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-sm btn-primary text-xs"
+                      onClick={() => void handleSetStatus(kit, 'complete')}
+                      disabled={busy}
+                      title="Mark complete (makes it eligible to deploy)"
+                    >
+                      Mark complete
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
             );
           })}
