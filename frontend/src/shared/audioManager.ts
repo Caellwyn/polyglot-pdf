@@ -62,11 +62,15 @@ interface AudioNodes {
  * unit-testable (bd polyglot-pdf -- PTT-as-a-gate over native VAD).
  *
  * The three modes:
- * - NATIVE VAD on: Gemini's own VAD drives turns, so we stream continuously
- *   (incl. silence). PTT is layered ON TOP as a client-side gate: when PTT is
- *   ON, only send while the button is held (inputMuted=false) -- noisy-room
- *   support; when PTT is OFF, stream everything. (Manual activity_start/end are
- *   suppressed elsewhere in native mode -- PTT here only decides which bytes go.)
+ * - NATIVE VAD on: Gemini's own VAD drives turns, so SOMETHING is always sent to
+ *   keep the stream continuous (Gemini needs trailing audio to close a turn).
+ *   This gate therefore returns true for native VAD regardless of PTT/mute --
+ *   when PTT is muted the CALLER substitutes a silence frame (so the mic is not
+ *   leaked) rather than dropping the chunk. Stopping the stream on PTT mute would
+ *   strand native VAD and Gemini "stops responding" after release (bd
+ *   polyglot-pdf-zivv). Native VAD and the manual turn signals (activity_start,
+ *   activity_end, audio_stream_end) are mutually exclusive, so under native VAD
+ *   PTT is ONLY an audio gate.
  * - NATIVE VAD off, PTT on: send only while the button is held.
  * - NATIVE VAD off, PTT off (client Silero VAD): send only when NOT muted AND the
  *   VAD has detected speech (vadActive).
@@ -79,8 +83,8 @@ export function shouldSendAudioChunk(flags: {
 }): boolean {
 	const { nativeVadEnabled, pttModeEnabled, inputMuted, vadActive } = flags
 	if (nativeVadEnabled) {
-		// PTT (when on) gates the client bytes even under native VAD.
-		if (pttModeEnabled && inputMuted) return false
+		// Always send under native VAD -- the stream must stay continuous. PTT-mute
+		// is handled by the caller substituting silence, NOT by withholding here.
 		return true
 	}
 	if (pttModeEnabled) {
@@ -250,20 +254,31 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 					}
 				}
 
-			// Mode-level routing gate (native VAD / PTT / client VAD). PTT is layered
-			// as a client-side gate that works even under native VAD (noisy rooms);
-			// see shouldSendAudioChunk for the full three-way logic.
-			if (!shouldSendAudioChunk({ nativeVadEnabled, pttModeEnabled, inputMuted, vadActive })) {
-				emitEnergy(false)
+			// NATIVE-VAD mode: Gemini's own VAD owns turn detection and needs a
+			// CONTINUOUS stream to find boundaries. PTT here is ONLY a client-side
+			// audio gate (noisy-room support) -- it must NEVER stop the stream or send
+			// a manual turn signal (activity_*/audio_stream_end are suppressed in the
+			// overlay; the two systems are mutually exclusive -- bd polyglot-pdf-zivv).
+			// So when PTT is muted we send SILENCE (a zeroed frame), not nothing:
+			// stopping the stream would leave native VAD with no trailing audio and
+			// the turn would never close (Gemini "stops responding" after PTT release).
+			if (nativeVadEnabled) {
+				if (pttModeEnabled && inputMuted) {
+					// Muted under PTT: keep the stream alive with silence so native VAD
+					// keeps detecting boundaries, but do not leak the muted mic.
+					const silence = new ArrayBuffer((pcmData as ArrayBuffer).byteLength)
+					emitEnergy(false)
+					onAudioDataCallback(silence)
+				} else {
+					emitEnergy(true)
+					onAudioDataCallback(pcmData)
+				}
 				return
 			}
 
-			// In NATIVE-VAD mode Gemini needs a CONTINUOUS stream (incl. silence) to
-			// detect turn boundaries, so we skip the pre-buffer + all-zero silence
-			// skip below and send the chunk straight through.
-			if (nativeVadEnabled) {
-				emitEnergy(true)
-				onAudioDataCallback(pcmData)
+			// Manual-VAD / client-VAD routing gate (PTT held, or Silero speech).
+			if (!shouldSendAudioChunk({ nativeVadEnabled, pttModeEnabled, inputMuted, vadActive })) {
+				emitEnergy(false)
 				return
 			}
 

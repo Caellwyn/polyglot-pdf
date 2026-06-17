@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-15. bd s3zv: a mic-energy meter in both demo overlays subscribes to audioManager.setEnergyCallback (the worklet's existing RMS, tagged with whether the frame passed the send gate). Diagnostic only -- no change to VAD/PTT gating or turn-taking; it reads the gate, it does not alter it. bd uj57: emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no VAD change). bd 0tgc: onStopCapture wired in createConnectionManager (calls audioManager.stopRecording before section switch -- VAD/capture behavior unchanged). bd b6k4: createMicDropWarn extracted from connection.ts closure. No VAD or turn-taking policy change. Prior: 2026-06-12 (handleDisclaimerAgree reconnect fall-through guard added to both overlays, bd ppf1; tool-call-compliance note for both models reliable, bd wpw.4). See [journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md](../journal/entries/2026-06-12-bd-wpw.4-model-rationale-correction.md) for the tool-call-compliance note, [journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md](../journal/entries/2026-06-11-bd-wpw.4-untyped-tool-param.md) for the underlying untyped-param fix, [journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md](../journal/entries/2026-06-10-bd-xroy-voice-surface-investigation-and-hardening.md) for the mic send-gate hardening, [journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md](../journal/entries/2026-06-08-bd-6vo-ptt-gate-over-native-vad.md) for PTT-as-a-client-gate over always-on native VAD, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the native-VAD smoke test.*
+*Last updated: 2026-06-17. bd zivv: native VAD and the manual turn signals (activity_start/activity_end/audio_stream_end) are MUTUALLY EXCLUSIVE -- under native VAD the client sends NO manual signal (connection.ts sendActivityStart AND sendActivityEnd both `if (nativeVad) return`), and PTT-mute streams SILENCE (not nothing) so native VAD finds the turn boundary; this fixed "Gemini stops responding after PTT press" and supersedes the bd-6vo audio_stream_end-on-release approach. See the SPEC section below and [journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md](../journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md). The mic-energy meter (bd s3zv) reads the send gate, it does not alter it.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -82,16 +82,21 @@ The return value is placed at
 The frontend VAD (`useDemoVAD.ts`) detects speech boundaries and fires
 `connection.ts` `onVADSpeechStart` / `onVADSpeechEnd`, which relay
 `vad_activity_start` / `vad_activity_end` over the WebSocket; the backend in turn
-calls `LiveAIGemini.send_activity_start()` / `send_activity_end()`. The signal
-`send_activity_end()` emits is **mode-dependent**: in **native** mode (the default,
-`DISABLE_GEMINI_VAD=False`) it sends `session.send_realtime_input(audio_stream_end=True)`
-— the realtime signal compatible with automatic VAD; sending a raw `ActivityEnd()`
-there conflicts with Gemini's own VAD and can leave the turn open (bd
-`polyglot-pdf-6vo`). Only in **manual** mode does it send
-`activity_end=types.ActivityEnd()`. `send_activity_start()` sends
-`activity_start=types.ActivityStart()` in manual mode and is a no-op in native
-mode. **Ordering matters (manual mode):** `activity_start` is sent *before* the
-audio chunks for that utterance; the end signal flushes Gemini's buffer after.
+calls `LiveAIGemini.send_activity_start()` / `send_activity_end()`. **In native VAD
+mode the frontend sends NEITHER signal** -- the `connection.ts` `sendActivityStart`
+and `sendActivityEnd` wrappers both `if (nativeVad) return` (bd
+`polyglot-pdf-zivv`); see the mutual-exclusion spec below. Only in **manual** mode
+do they flow: `send_activity_start()` sends `activity_start=types.ActivityStart()`
+and `send_activity_end()` sends `activity_end=types.ActivityEnd()`. **Ordering
+matters (manual mode):** `activity_start` is sent *before* the audio chunks for
+that utterance; the end signal flushes Gemini's buffer after.
+
+> **Note on the backend `send_activity_end` native branch.** The backend adapter
+> still contains a native-mode branch that would emit `audio_stream_end=True` (bd
+> `polyglot-pdf-6vo`). That path is now effectively dead for the PTT flow because
+> the frontend suppresses the signal before it reaches the backend (above). It is
+> retained as a server-side guard but is **not** the turn-close mechanism under
+> native VAD -- the trailing **silence stream** is (see the spec below).
 
 > The Gemini-side VAD sensitivity knobs (`VAD_START_SENSITIVITY`,
 > `VAD_END_SENSITIVITY`, `VAD_PREFIX_PADDING_MS`, `VAD_SILENCE_DURATION_MS` in
@@ -102,6 +107,43 @@ audio chunks for that utterance; the end signal flushes Gemini's buffer after.
 > omits these fields entirely. This is mandatory: the Live API rejects (1007) a
 > config that sets `disabled = True` *and* any sensitivity/padding field together.
 
+## SPEC: native VAD and manual turn signals are MUTUALLY EXCLUSIVE (bd polyglot-pdf-zivv)
+
+**This is a hard invariant. Read it before touching any PTT or VAD signal path.**
+
+Gemini's automatic (native) VAD and the manual turn signals
+(`activity_start` / `activity_end` / `audio_stream_end`) are **two separate,
+incompatible turn-taking systems**. You pick ONE per session:
+
+- **Manual VAD** (`DISABLE_GEMINI_VAD=true`): the client runs Silero VAD and sends
+  `activity_start` / `activity_end` to mark turn boundaries. Audio flows only
+  during a detected turn.
+- **Native VAD** (`DISABLE_GEMINI_VAD=false`, the demo default): Gemini's own VAD
+  finds turn boundaries from a **continuous audio stream**. The client sends
+  **NO manual turn signals at all** -- not `activity_start`, not `activity_end`,
+  not `audio_stream_end`. Injecting any of them into the continuous stream
+  interrupts/closes Gemini's in-flight turn mid-response. The live symptom was
+  "**Gemini stops responding after I press PTT**": each PTT release was emitting a
+  turn-end signal that killed the response.
+
+**PTT under native VAD is ONLY a client-side audio gate -- never a turn signal.**
+When the user holds PTT, the real mic audio flows; when released, PTT must:
+
+1. **NOT send any activity/stream-end signal** (`connection.ts` `sendActivityStart`
+   and `sendActivityEnd` both `if (nativeVad) return`).
+2. **Keep the stream CONTINUOUS by sending SILENCE** while muted -- NOT stop
+   sending. Native VAD needs trailing audio to detect the boundary; a dead stream
+   leaves the turn open forever (the same silence-stall the test harness works
+   around). `audioManager` substitutes a zeroed frame for the muted mic in native
+   mode (`shouldSendAudioChunk` returns `true` for native VAD regardless of mute;
+   the send path zeroes the chunk when `pttModeEnabled && inputMuted`).
+
+So under native VAD the turn closes from the **trailing silence**, not from a
+manual end signal. Under manual VAD, the signals are required and flow normally.
+This supersedes the earlier bd-6vo/PR#119 approach (which forwarded
+`audio_stream_end` on PTT release); that predated the silence-stream gate and was
+the direct cause of the conflict.
+
 ## Native VAD mode (default, bd polyglot-pdf-333)
 
 When `DISABLE_GEMINI_VAD = False`, Gemini's own VAD drives **turn-taking**, so the
@@ -110,25 +152,28 @@ audio gate** layered on top (bd polyglot-pdf-6vo), so the two concerns are
 separated: Gemini owns *when a turn starts/ends*; PTT owns *which client bytes are
 sent at all* (noisy-room support).
 
-- **No manual activity signals (unchanged).** The backend advertises
+- **No manual activity signals.** The backend advertises
   `native_vad: true` in the `session_ready` handshake.
   `WebFormConnection.handleSessionReady` relays it to
   `ConnectionCallbacks.onNativeVadMode`, which sets a `nativeVad` flag in the
-  `connection.ts` closure. That flag short-circuits all five activity-signal sites
-  (the `sendActivityStart/End` wrappers and `onVADSpeechStart/End` used by Silero),
-  and `shouldRunVAD` keeps client Silero VAD off in native mode. Belt-and-suspenders:
-  the adapter's `send_activity_start/end` also no-op server-side when native VAD is
-  on. **PTT does not change this** -- a PTT press still calls `sendActivityStart`,
-  which is a no-op in native mode; PTT only gates the audio bytes.
-- **Continuous stream by default, PTT-gatable.** Gemini's VAD needs the full stream
-  -- including silence -- to find turn boundaries. The audio routing decision lives
-  in the pure `shouldSendAudioChunk()` (`audioManager.ts`): in native mode it streams
-  continuously **unless PTT is on**, in which case it sends only while the button is
-  held (`inputMuted=false`). `setNativeVad(true)` still puts the **worklet RMS noise
-  gate** into bypass, and `setPTTMode` keeps that bypass active under native VAD
-  regardless of PTT (`enabled || nativeVadEnabled`) -- so toggling PTT off does not
-  re-arm the RMS gate and starve the stream. The bypass is re-applied whenever the
-  worklet node is (re)created.
+  `connection.ts` closure. That flag short-circuits ALL activity-signal sites: the
+  `sendActivityStart` AND `sendActivityEnd` wrappers (both `if (nativeVad) return`
+  -- bd zivv) and the `onVADSpeechStart/End` Silero callbacks. `shouldRunVAD` keeps
+  client Silero VAD off in native mode. Belt-and-suspenders: the adapter's
+  `send_activity_start/end` also no-op / are dead-pathed server-side. **PTT does
+  not change this** -- PTT only gates the audio bytes; it emits no turn signal.
+- **Continuous stream ALWAYS -- silence when PTT-muted.** Gemini's VAD needs the
+  full stream -- including silence -- to find turn boundaries. The audio routing
+  decision lives in the pure `shouldSendAudioChunk()` (`audioManager.ts`): in
+  native mode it returns `true` **always** (the stream never stops). When PTT is on
+  and the button is released (`inputMuted=true`), the send path substitutes a
+  **zeroed (silence) frame** for the real mic so the stream stays continuous
+  without leaking the muted mic (bd zivv -- stopping the stream here is what made
+  Gemini go silent after release). `setNativeVad(true)` still puts the **worklet
+  RMS noise gate** into bypass, and `setPTTMode` keeps that bypass active under
+  native VAD regardless of PTT (`enabled || nativeVadEnabled`) -- so toggling PTT
+  off does not re-arm the RMS gate and starve the stream. The bypass is re-applied
+  whenever the worklet node is (re)created.
 - **PTT is a live, always-available gate.** In native mode the Input-Mode toggle is
   **enabled** and the Hold-to-Talk button **renders** (the old `!nativeVad` /
   `isNativeVad()` early-returns were removed). Toggling drives `muteInput`/

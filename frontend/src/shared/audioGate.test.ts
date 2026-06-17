@@ -1,32 +1,34 @@
 /**
  * Tests for shouldSendAudioChunk -- the mode-level audio routing gate.
  *
- * The key new behavior (PTT-as-a-gate over native VAD): native Gemini VAD always
- * runs on the backend, but Push-To-Talk can still gate which CLIENT audio bytes
- * reach Gemini (noisy-room support). So under native VAD, PTT-on + muted must
- * WITHHOLD audio -- the bug this fix addresses was that native mode streamed all
- * audio unconditionally, defeating PTT gating.
+ * Native Gemini VAD needs a CONTINUOUS stream to detect turn boundaries, so under
+ * native VAD this gate ALWAYS returns true -- something must always be sent.
+ * Push-To-Talk under native VAD is purely an audio gate: when PTT is muted the
+ * CALLER substitutes a silence frame (so the mic is not leaked) rather than
+ * dropping the chunk. Withholding audio on PTT-mute would strand native VAD and
+ * Gemini "stops responding" after release (bd polyglot-pdf-zivv). Native VAD and
+ * the manual turn signals (activity_start, activity_end, audio_stream_end) are
+ * mutually exclusive.
  */
 
 import { describe, it, expect } from 'vitest'
 import { shouldSendAudioChunk } from './audioManager'
 
 describe('shouldSendAudioChunk (audio routing gate)', () => {
-  describe('native VAD on', () => {
+  describe('native VAD on -- always streams (silence substituted by caller when PTT-muted)', () => {
     it('PTT off: streams continuously regardless of mute/vad', () => {
-      // Continuous native stream -- Gemini needs silence too.
       expect(shouldSendAudioChunk({ nativeVadEnabled: true, pttModeEnabled: false, inputMuted: true, vadActive: false })).toBe(true)
       expect(shouldSendAudioChunk({ nativeVadEnabled: true, pttModeEnabled: false, inputMuted: false, vadActive: false })).toBe(true)
     })
 
-    it('PTT on + button held (not muted): SENDS audio', () => {
+    it('PTT on + button held (not muted): SENDS real audio', () => {
       expect(shouldSendAudioChunk({ nativeVadEnabled: true, pttModeEnabled: true, inputMuted: false, vadActive: false })).toBe(true)
     })
 
-    it('PTT on + button released (muted): WITHHOLDS audio (the noisy-room gate)', () => {
-      // This is the core fix: native mode no longer streams unconditionally when
-      // PTT is gating.
-      expect(shouldSendAudioChunk({ nativeVadEnabled: true, pttModeEnabled: true, inputMuted: true, vadActive: false })).toBe(false)
+    it('PTT on + button released (muted): STILL sends (caller substitutes silence -- stream must stay continuous)', () => {
+      // The fix for bd polyglot-pdf-zivv: native VAD must NOT lose the stream on
+      // PTT mute, or the turn never closes. The gate sends; the caller zeroes it.
+      expect(shouldSendAudioChunk({ nativeVadEnabled: true, pttModeEnabled: true, inputMuted: true, vadActive: false })).toBe(true)
     })
   })
 

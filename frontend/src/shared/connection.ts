@@ -661,13 +661,19 @@ export function createConnectionManager(
 		},
 
 		async sendActivityEnd() {
-			// PTT-release turn boundary under native VAD (bd polyglot-pdf-6vo, Codex
-			// review PR #119): this wrapper is the PTT path (Silero uses onVADSpeechEnd
-			// directly, still suppressed below). In native mode we DO forward the end
-			// signal -- the backend converts it to audio_stream_end (NOT the conflicting
-			// activity_end) so Gemini's VAD can close the turn after the PTT gate shuts;
-			// without it the session goes silent after release. (sendActivityStart stays
-			// suppressed: Gemini's VAD opens the turn; we only need to close it.)
+			// bd polyglot-pdf-zivv: in native-VAD mode, suppress the manual end signal
+			// entirely (mirrors sendActivityStart above). Native automatic VAD and the
+			// manual turn signals are MUTUALLY EXCLUSIVE -- forwarding activity_end (the
+			// backend maps it to audio_stream_end under native VAD) into the continuous
+			// stream interrupts/closes Gemini's turn mid-response ("Gemini stops
+			// responding after I press PTT"). Under native VAD, PTT is ONLY an audio
+			// gate: audioManager keeps the stream continuous with SILENCE while the
+			// button is released, so native VAD detects the turn boundary from that
+			// trailing silence -- no manual end signal is needed. This supersedes the
+			// earlier bd-6vo/PR#119 audio_stream_end approach, which predated the
+			// silence-stream gate and is what caused the conflict. Manual (Silero) VAD
+			// mode still sends the real activity_end below.
+			if (nativeVad) return
 			if (connection) {
 				await connection.sendActivityEnd()
 			}

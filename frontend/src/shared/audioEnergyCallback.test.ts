@@ -130,6 +130,48 @@ describe('audioManager energy callback (bd polyglot-pdf-s3zv)', () => {
     expect(onEnergy).toHaveBeenCalledWith(8, true)
   })
 
+  it('native VAD + PTT muted: substitutes SILENCE (sending=false, zeroed buffer same length) -- bd zivv', async () => {
+    // The core of the zivv fix: under native VAD, a PTT-muted frame must NOT stop
+    // the stream (that stalls Gemini's VAD) -- it sends a zeroed frame instead, so
+    // the stream stays continuous without leaking the muted mic. Energy is tagged
+    // sending=false (the user's mic is not contributing), and the forwarded buffer
+    // is all-zero PCM of the SAME length as the captured frame.
+    const sent: ArrayBuffer[] = []
+    const mgr = createAudioManager({ id: 'fake' } as unknown as MediaStream)
+    await mgr.startRecording((data: ArrayBuffer) => { sent.push(data) })
+    const onEnergy = vi.fn()
+    mgr.setEnergyCallback(onEnergy)
+    mgr.setNativeVad(true)
+    mgr.setPTTMode(true)
+    mgr.muteInput() // button released
+
+    fireFrame(7, SIGNAL) // real mic has signal, but PTT is muted -> must be zeroed
+
+    expect(onEnergy).toHaveBeenCalledWith(7, false)
+    expect(sent).toHaveLength(1)
+    const forwarded = new Int16Array(sent[0])
+    expect(forwarded.length).toBe(SIGNAL.length)
+    expect(forwarded.every((s) => s === 0)).toBe(true) // silence, not the real mic
+  })
+
+  it('native VAD + PTT held (not muted): sends the REAL frame through -- bd zivv', async () => {
+    const sent: ArrayBuffer[] = []
+    const mgr = createAudioManager({ id: 'fake' } as unknown as MediaStream)
+    await mgr.startRecording((data: ArrayBuffer) => { sent.push(data) })
+    const onEnergy = vi.fn()
+    mgr.setEnergyCallback(onEnergy)
+    mgr.setNativeVad(true)
+    mgr.setPTTMode(true)
+    mgr.unmuteInput() // button held
+
+    fireFrame(9, SIGNAL)
+
+    expect(onEnergy).toHaveBeenCalledWith(9, true)
+    expect(sent).toHaveLength(1)
+    const forwarded = new Int16Array(sent[0])
+    expect(Array.from(forwarded)).toEqual(Array.from(SIGNAL)) // real mic, unchanged
+  })
+
   it('does not throw when energy is missing/non-numeric, and skips the callback', async () => {
     const mgr = await startedManager()
     const onEnergy = vi.fn()
