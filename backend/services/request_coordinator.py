@@ -547,8 +547,6 @@ class RequestCoordinator:
                 confirm handler to render into next_field_guidance. None for
                 legacy/non-DTI clients.
         """
-        if next_field_schema and request_id:
-            self._next_field_schemas[request_id] = next_field_schema
         # Strip the technical "(field_id: ...)" parenthetical here, at the single
         # point where the frontend's spoken hint enters the backend, so EVERY
         # consumer that forwards it to Gemini (the confirm_field tool response,
@@ -561,8 +559,14 @@ class RequestCoordinator:
         # matching pending request -- a stale/malformed response (unknown id, or a
         # non-string hint) must not reach strip_field_id_from_hint and risk raising
         # on the WS path (Codex PR #136).
-        self._resolve(request_id, "next_field", hint,
-                      transform=strip_field_id_from_hint)
+        resolved = self._resolve(request_id, "next_field", hint,
+                                 transform=strip_field_id_from_hint)
+        # Stash the DTI schema ONLY when _resolve matched a still-pending request.
+        # A LATE response (its hint request already timed out -> future popped) must
+        # NOT leave a stale schema in the stash, or the NEXT confirm's consume would
+        # serve the wrong field's guidance (bd polyglot-pdf-jnjj.22 fresh-eyes).
+        if resolved and next_field_schema and request_id:
+            self._next_field_schemas[request_id] = next_field_schema
 
     def handle_confirm_field_response(
         self, request_id: str, recorded: bool, reason: Optional[str] = None,

@@ -158,8 +158,10 @@ def test_coordinator_stash_and_consume():
     coord = RequestCoordinator(websocket=None, session_id="t")
     # No schema stashed -> None.
     assert coord.consume_pending_next_field_schema() is None
-    # Stash via the hint-response handler, then consume.
-    coord.handle_next_field_hint_response("req1", "some hint", NESTED_FIELD)
+    # Register a pending next_field request (as request_next_field_hint does), so
+    # the response _resolves a real future and the schema is stashed.
+    request_id, _future = coord._register("next_field")
+    coord.handle_next_field_hint_response(request_id, "some hint", NESTED_FIELD)
     got = coord.consume_pending_next_field_schema()
     assert got == NESTED_FIELD
     # Consumed -> cleared.
@@ -170,4 +172,14 @@ def test_coordinator_no_schema_when_legacy_client():
     """A legacy/non-DTI client sends no next_field_schema -> nothing stashed."""
     coord = RequestCoordinator(websocket=None, session_id="t")
     coord.handle_next_field_hint_response("req1", "some hint", None)
+    assert coord.consume_pending_next_field_schema() is None
+
+
+def test_coordinator_late_response_does_not_stash_stale_schema():
+    """A LATE hint response (no matching pending request -> _resolve returns False)
+    must NOT stash its schema, or it would leak into the next confirm's consume
+    (bd jnjj.22 fresh-eyes race). No request was registered, so request_id is
+    unknown -> nothing stashed."""
+    coord = RequestCoordinator(websocket=None, session_id="t")
+    coord.handle_next_field_hint_response("stale_unknown_id", "hint", NESTED_FIELD)
     assert coord.consume_pending_next_field_schema() is None
