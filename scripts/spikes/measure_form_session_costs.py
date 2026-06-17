@@ -151,13 +151,21 @@ DEMO_QUESTIONS = [
      "wrong": "The first household member is David Vasquez."},
 ]
 
-# The REAL I-90 20-question plan (bd polyglot-pdf-jnjj.24): the first 3 sections of
+# The REAL I-90 question plan (bd polyglot-pdf-jnjj.24): the first 3 sections of
 # form-kits/i-90/schema.json -- Part 1 "Information About You" (sec 1), the mailing
 # address (sec 2), and the physical address (sec 3). FICTIONAL answers (no real PII).
-# Only UNCONDITIONALLY-VISIBLE fields are scripted: the name-change radio is answered
-# "no" so the show_if previous-name fields stay hidden, and the conditional
-# apt/suite fields are skipped -- otherwise the plan would stall asking for a field
-# the client never shows. spoken_name is the natural phrasing the model asks by.
+# spoken_name is the natural phrasing the model asks by. Conditional fields are
+# handled COHERENTLY so the SI's visible-field set and the next-field hint never
+# contradict (Codex/fresh-eyes PR for this bead):
+#   - the name-change radio (p1_checkbox4) is answered "no", so the show_if
+#     previous-name fields (p1_line5a/b/c) stay hidden and are NOT scripted;
+#   - each unit-type radio (p1_unit_type6c/7b) IS answered, which makes its
+#     show_if apt-number field (p1_line6c/7b_aptsteflrnumber) visible -- so that
+#     apt-number field is ALSO scripted (a real apartment filer fills it). Scripting
+#     the radio but skipping its now-visible apt field would leave the section-reset
+#     SI listing a field the plan never answers -> the model could ask for it and
+#     stall. Fields are in SCHEMA ORDER within each section so the hint and the SI
+#     field list agree.
 I90_QUESTIONS = [
     # --- Section 1: Part 1 - Information About You ---
     {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is A12345678.",
@@ -179,6 +187,9 @@ I90_QUESTIONS = [
      "wrong": "Fifty six seventy eight Oak Street."},
     {"field_id": "p1_unit_type6c_unit", "say": "Apartment.",
      "wrong": "Suite."},
+    # apt-number is show_if (unit_type is_not_empty) -- now visible, so scripted.
+    {"field_id": "p1_line6c_aptsteflrnumber", "say": "Apartment number twelve B.",
+     "wrong": "Apartment number fourteen C."},
     {"field_id": "p1_line6d_cityortown", "say": "My mailing city is Austin.",
      "wrong": "My mailing city is Houston."},
     {"field_id": "p1_line6e_state", "say": "Texas.",
@@ -187,21 +198,23 @@ I90_QUESTIONS = [
      "wrong": "My mailing zip code is seven seven zero zero one."},
     {"field_id": "p1_line6i_country", "say": "United States.",
      "wrong": "Canada."},
-    # --- Section 3: physical address ---
+    # --- Section 3: physical address (schema order: ...zipcode, province, postalcode, country) ---
     {"field_id": "p1_line7a_streetnumbername", "say": "Twelve thirty four Maple Street.",
      "wrong": "Ninety nine Pine Avenue."},
     {"field_id": "p1_unit_type7b_unit", "say": "Apartment.",
      "wrong": "Floor."},
+    {"field_id": "p1_line7b_aptsteflrnumber", "say": "Apartment number twelve B.",
+     "wrong": "Apartment number fifteen D."},
     {"field_id": "p1_line7c_cityortown", "say": "My physical city is Austin.",
      "wrong": "My physical city is Dallas."},
     {"field_id": "p1_line7d_state", "say": "Texas.",
      "wrong": "Arizona."},
     {"field_id": "p1_line7e_zipcode", "say": "My physical zip code is seven three seven zero one.",
      "wrong": "My physical zip code is eight five zero zero one."},
-    {"field_id": "p1_line7h_country", "say": "United States.",
-     "wrong": "Mexico."},
     {"field_id": "p1_line7g_postalcode", "say": "I do not have a postal code, I am in the United States.",
      "wrong": "My postal code is K1A 0B1."},
+    {"field_id": "p1_line7h_country", "say": "United States.",
+     "wrong": "Mexico."},
 ]
 
 # --schema registry: source path + matching question plan. Default is "demo" for
@@ -260,15 +273,24 @@ def load_schema(schema_key: str = "demo") -> dict:
 
 
 def sections_in_plan(schema: dict, plan: list[dict]) -> list[dict]:
-    """Ordered distinct sections covered by the plan, with labels from the schema."""
+    """Ordered distinct sections covered by the plan, with labels from the schema.
+
+    Label resolution prefers, in order: a field's own `section_label` (the demo
+    schema shape), then the schema-root `sections[]` entry's `label` (the I-90 shape
+    -- its fields carry no section_label, so without this the SI would announce the
+    raw snake_case section_id like "part_1_2_addresses" instead of the production
+    "Part 1.2 Mailing Address"; bd polyglot-pdf-jnjj.24 fresh-eyes), then the id.
+    """
     by_id = {f["id"]: f for f in schema["fields"]}
+    section_labels = {s.get("id"): s.get("label")
+                      for s in schema.get("sections", []) if s.get("id")}
     seen: list[dict] = []
     for q in plan:
         f = by_id[q["field_id"]]
         sid = f.get("section_id") or "section-1"
         if not any(s["id"] == sid for s in seen):
-            seen.append({"id": sid, "label": f.get("section_label") or sid,
-                         "number": len(seen) + 1})
+            label = f.get("section_label") or section_labels.get(sid) or sid
+            seen.append({"id": sid, "label": label, "number": len(seen) + 1})
     return seen
 
 
