@@ -85,7 +85,7 @@ class TextAIGemini(ITextAI):
           stable_prefix: list of str/Part -- secretary SI + field catalog
           fresh_tail:    list of str/Part -- current values + query text
 
-        Returns contract-1 verdict {"conflicts": [...]} or fail-open {}.
+        Returns contract-1 verdict {"conflicts": [...]} or fail-open {"conflicts": []}.
         PII rule: never log payload content, field values, or reason text.
         """
         if self._client is None:
