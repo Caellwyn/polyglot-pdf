@@ -6,6 +6,9 @@ Uses a stubbed genai.Client so no real API calls are made. Tests cover:
 - fail-open on API exception
 - fail-open on unparseable JSON
 - fail-open when no client is configured
+- fail-open on non-dict payload
+- fail-open when conflicts is not a list
+- field_count coerced to int before logging
 """
 import json
 from types import SimpleNamespace
@@ -139,6 +142,42 @@ async def test_ask_raises_not_implemented():
 
     with pytest.raises(NotImplementedError):
         await adapter.ask("what is the zip code?", {})
+
+
+@pytest.mark.asyncio
+async def test_validate_fail_open_on_non_dict_payload(adapter_with_client):
+    """Non-dict payload (None, string, etc.) returns fail-open {"conflicts": []}."""
+    response = _make_response(text='{"conflicts":[]}', cached_tokens=0)
+    adapter = adapter_with_client(response)
+    result = await adapter.validate(None)
+    assert result == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_validate_fail_open_on_non_list_conflicts(adapter_with_client):
+    """Conflicts field that is not a list returns fail-open {"conflicts": []}."""
+    response = _make_response(text='{"conflicts": "oops"}', cached_tokens=0)
+    adapter = adapter_with_client(response)
+    result = await adapter.validate({"stable_prefix": [], "fresh_tail": []})
+    assert result == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_validate_field_count_coerced_to_int(adapter_with_client):
+    """field_count from payload is coerced to int before logging."""
+    import structlog.testing
+
+    response = _make_response(text='{"conflicts":[]}', cached_tokens=0)
+    adapter = adapter_with_client(response)
+    with structlog.testing.capture_logs() as logs:
+        await adapter.validate({
+            "stable_prefix": [],
+            "fresh_tail": [],
+            "field_count": "5",
+        })
+    complete_events = [e for e in logs if e.get("event") == "text_ai_validate_complete"]
+    assert complete_events, f"Expected text_ai_validate_complete log; got: {logs}"
+    assert complete_events[0].get("field_count") == 5
 
 
 def test_get_text_ai_wiring():

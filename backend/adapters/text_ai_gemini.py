@@ -92,10 +92,17 @@ class TextAIGemini(ITextAI):
             self._log.warning("text_ai_no_client_validate_fail_open")
             return {"conflicts": []}
 
+        if not isinstance(payload, dict):
+            self._log.warning("text_ai_validate_bad_payload_fail_open")
+            return {"conflicts": []}
+
         stable_prefix = payload.get("stable_prefix", [])
         fresh_tail = payload.get("fresh_tail", [])
-        field_count = payload.get("field_count", None)
+        # Coerce to int so arbitrary caller values never reach the log.
+        raw_field_count = payload.get("field_count", None)
+        field_count = int(raw_field_count) if raw_field_count is not None else None
 
+        raw = ""
         try:
             raw = await self._generate(
                 stable_prefix=stable_prefix,
@@ -104,6 +111,12 @@ class TextAIGemini(ITextAI):
             )
             verdict = json.loads(raw)
             conflicts = verdict.get("conflicts", [])
+            if not isinstance(conflicts, list):
+                self._log.warning(
+                    "text_ai_validate_bad_conflicts_type_fail_open",
+                    conflicts_type=type(conflicts).__name__,
+                )
+                return {"conflicts": []}
             self._log.info(
                 "text_ai_validate_complete",
                 conflict_count=len(conflicts),
