@@ -101,6 +101,13 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
   TIMEOUT  -- no completed review appeared within --timeout-min. Distinct
               from ERROR (exit code 2 vs 1) so a caller can retry-later on a
               timeout but investigate on a genuine failure.
+  NO-ACK   -- the reviewer's acknowledgment reaction did not appear within
+              --ack-timeout-min (opt-in, default 0=disabled). Only emitted when
+              --ack-timeout-min > 0 AND the reviewer profile has an ack_reaction
+              configured (Codex: "eyes"). Distinct from TIMEOUT (which means the
+              reviewer acknowledged but never delivered a verdict); here the
+              reviewer never picked up the work at all. Route to the reviewer of
+              last resort rather than waiting for the full verdict window.
 
 Any unexpected crash is caught and reported as RESULT: ERROR with the
 exception text, so the agent is woken with a real signal rather than the
@@ -110,6 +117,7 @@ Usage
 -----
     python scripts/pr_review_watcher.py <pr-number> [--reviewer copilot|codex]
         [--repo OWNER/REPO] [--timeout-min N] [--poll-sec N] [--since ISO8601]
+        [--ack-timeout-min N]
 
 `--since` lets the caller scope detection to reviews/comments created after
 a known timestamp, so a re-review loop does not re-detect the previous round's
@@ -117,10 +125,11 @@ verdict. For Copilot (requested via the reviewer API) the floor is a UTC
 timestamp captured just BEFORE the reviewer request (there is no comment
 created_at); for Codex it is the "@codex review" comment's created_at.
 
-Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT. TIMEOUT and
-ERROR are distinct so a shell caller can retry-later on a timeout but
-investigate on a genuine error. The RESULT line is the contract; the exit
-code mirrors it for shell callers.
+Exit codes: 0 for COMMENTS/CLEAN/MERGED, 1 for ERROR, 2 for TIMEOUT, 4 for
+NO-ACK. TIMEOUT and ERROR are distinct so a shell caller can retry-later on a
+timeout but investigate on a genuine error. NO-ACK (exit 4) means the reviewer
+never acknowledged the work within --ack-timeout-min. The RESULT line is the
+contract; the exit code mirrors it for shell callers.
 """
 
 from __future__ import annotations
@@ -233,6 +242,20 @@ class ReviewerProfile:
                                 (Copilot). The rollup ships inline on the comment
                                 payload (comment["reactions"]["+1"]), so this costs
                                 no extra API call.
+      ack_reaction           -- a GitHub reaction (rollup key, e.g. "eyes" for the
+                                eyeballs emoji) the bot adds to the TRIGGER comment to
+                                signal "I have begun work" (distinct from clean_reaction,
+                                which is the verdict). When set AND the watcher is given a
+                                positive --ack-timeout-min, an acknowledgment phase runs
+                                BEFORE the verdict wait: if the trigger comment gains this
+                                reaction in time the review is provably in flight (proceed
+                                to the verdict wait); if it does not, the watcher returns
+                                NO-ACK so the caller can route to a fallback reviewer
+                                rather than block on the full verdict timeout (bd
+                                polyglot-pdf-n6ks). Codex adds "eyes" to the
+                                triggering comment when it picks up the review; Copilot
+                                has no such signal (None). The rollup ships inline on the
+                                comment payload, so polling it costs no extra API call.
     """
 
     key: str
@@ -243,6 +266,7 @@ class ReviewerProfile:
     error_body_substrings: tuple[str, ...] = ()
     clean_sentinels: tuple[str, ...] = ()
     clean_reaction: str | None = None
+    ack_reaction: str | None = None
 
 
 # Copilot: review actor login carries "copilot" (e.g.
@@ -281,6 +305,10 @@ CODEX_PROFILE = ReviewerProfile(
     ),
     uses_timeline=False,
     clean_reaction="+1",  # thumbs-up -- the documented canonical approval signal
+    # eyeballs -- Codex adds this to the TRIGGER comment when it picks up the
+    # review ("begun work"). Drives the optional acknowledgment phase: no "eyes"
+    # within --ack-timeout-min => NO-ACK => caller falls back (bd polyglot-pdf-n6ks).
+    ack_reaction="eyes",
     clean_sentinels=(
         "didn't find any major issues",   # straight apostrophe U+0027
         "didn\u2019t find any major issues",   # NOT a duplicate -- curly apostrophe (U+2019)
@@ -566,7 +594,14 @@ def _collect_findings(repo: str, pr: int, floor: datetime | None, review: dict, 
 # Exit codes by terminal state. COMMENTS/CLEAN are "the review happened"
 # (success); TIMEOUT and ERROR are distinct so a shell caller can branch
 # (retry-later on TIMEOUT vs investigate on ERROR) without parsing text.
-_EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "MERGED": 0, "TIMEOUT": 2, "ERROR": 1}
+# NO-ACK (4) is the acknowledgment-phase timeout: the bot never reacted to the
+# trigger comment within --ack-timeout-min, so the review never started -- the
+# caller routes to a fallback reviewer (closeout Step 7.5) rather than blocking
+# on the full verdict timeout. Distinct from TIMEOUT (review expected but produced
+# no verdict in the window). Exit 3 is reserved for CLOSE-FAILED (EXIT_CLOSE_FAILED,
+# defined below), so NO-ACK takes 4.
+_EXIT_CODES = {"COMMENTS": 0, "CLEAN": 0, "MERGED": 0, "TIMEOUT": 2, "ERROR": 1,
+               "NO-ACK": 4}
 
 # Consecutive transient-error tolerance before giving up. A 1-second network
 # blip or token refresh should not be terminal; a real quota exhaustion will
@@ -811,6 +846,110 @@ def _has_clean_reaction(comment: dict, profile: ReviewerProfile) -> bool:
         return int(rollup.get(profile.clean_reaction, 0)) > 0
     except (TypeError, ValueError):
         return False
+
+
+def _has_ack_reaction(comment: dict, profile: ReviewerProfile) -> bool:
+    """True if `comment` carries the profile's "begun work" reaction (eyeballs).
+
+    Mirrors `_has_clean_reaction` but reads `profile.ack_reaction` (e.g. "eyes")
+    off the same inline `reactions` rollup -- no extra API call. Returns False
+    when the profile defines no ack_reaction, when the rollup is absent, or when
+    the count is zero. Used only by the acknowledgment phase to detect that the
+    bot picked up the review (vs. never starting -> NO-ACK).
+
+    As with _has_clean_reaction, the rollup is a count not an actor list, so this
+    does not prove the BOT (vs a human) added the eyeballs. In practice only Codex
+    reacts "eyes" to a `@codex review` trigger comment, and a human eyeballs on it
+    would still mean "someone is looking," so the count is sufficient.
+    """
+    if not profile.ack_reaction:
+        return False
+    rollup = comment.get("reactions")
+    if not isinstance(rollup, dict):
+        return False
+    try:
+        return int(rollup.get(profile.ack_reaction, 0)) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+# The exact trigger string posted to request a (re-)review. The acknowledgment
+# phase looks for the bot's "eyes" reaction on THIS comment. Kept as a constant so
+# it stays in lockstep with the closeout skill's trigger (EXACTLY "@codex review").
+_REVIEW_TRIGGER_BODY = "@codex review"
+
+
+def _trigger_comment_acked(repo: str, pr: int, since: datetime | None,
+                           profile: ReviewerProfile) -> bool:
+    """True if the review trigger comment has the bot's ack reaction (eyeballs).
+
+    The trigger is the `@codex review` issue comment posted at/after `since` (its
+    created_at is the round floor the caller passes as --since). We scan the issue
+    comments for one whose body contains the trigger string and is at/after
+    `since`, then check it for `profile.ack_reaction`. If several match (rare), ANY
+    acked one counts. Returns False when no trigger comment is found yet or none
+    carries the reaction -- the caller keeps polling until the ack timeout.
+
+    A round-1 auto-review has no explicit `@codex review` ISSUE comment (the
+    trigger is the PR body), so this body-match finds nothing on round 1 -- the
+    ack phase covers that case via `_reviewer_has_activity` instead (any in-window
+    Codex review/comment proves it is working). Round 2+ DO post an explicit
+    `@codex review` comment, whose eyeballs this reads directly.
+    """
+    if not profile.ack_reaction:
+        return False
+    for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
+        body = (c.get("body") or "")
+        if _REVIEW_TRIGGER_BODY not in body.lower():
+            continue
+        if not _after(c.get("created_at", ""), since):
+            continue
+        if _has_ack_reaction(c, profile):
+            return True
+    return False
+
+
+def _bot_posted_error_body(repo: str, pr: int, since: datetime | None,
+                           profile: ReviewerProfile) -> bool:
+    """True if the bot posted an error/quota issue comment at/after `since`.
+
+    Used by the acknowledgment phase: a quota notice ("You have reached your Codex
+    usage limits for code reviews") must classify ERROR, not NO-ACK -- the bot DID
+    respond, it just refused the work. Reuses `_is_error_body` (the same sentinel
+    set the verdict classifier uses), so the two paths can't drift.
+    """
+    for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
+        if not _is_reviewer((c.get("user") or {}).get("login", ""), profile):
+            continue
+        if not _after(c.get("created_at", ""), since):
+            continue
+        if _is_error_body((c.get("body") or ""), profile):
+            return True
+    return False
+
+
+def _reviewer_has_activity(repo: str, pr: int, since: datetime | None,
+                           profile: ReviewerProfile) -> bool:
+    """True if the bot has posted ANY in-window review or comment (it is working).
+
+    A second "begun work" signal beyond the trigger-comment eyeballs reaction:
+    if the bot has already left a formal review OR an issue comment at/after
+    `since`, it is provably not asleep -- so the ack phase must NOT emit NO-ACK
+    (the verdict wait will classify whatever it produced). This matters most on
+    ROUND 1, where the auto-review has no `@codex review` ISSUE comment to react
+    to (the trigger is the PR body), so the eyeballs check alone would falsely
+    NO-ACK a slow-but-working Codex. Any review/comment from the bot proves
+    activity regardless of the trigger surface.
+    """
+    for r in _run_gh_api("repos/{}/pulls/{}/reviews".format(repo, pr)) or []:
+        if _is_reviewer((r.get("user") or {}).get("login", ""), profile) and \
+                _after(r.get("submitted_at", ""), since):
+            return True
+    for c in _run_gh_api("repos/{}/issues/{}/comments".format(repo, pr)) or []:
+        if _is_reviewer((c.get("user") or {}).get("login", ""), profile) and \
+                _after(c.get("created_at", ""), since):
+            return True
+    return False
 
 
 def _latest_by_created(comments: list) -> dict | None:
@@ -1150,8 +1289,74 @@ def _classify_reviewed(repo: str, pr: int, since: datetime | None, profile: Revi
                  review_verdict=True)
 
 
+def _ack_phase(repo: str, pr: int, ack_timeout_min: int, poll_sec: int,
+               since: datetime | None, profile: ReviewerProfile) -> int | None:
+    """Wait for the bot to acknowledge the trigger comment, or return NO-ACK.
+
+    Runs ONLY when the caller passes a positive ack_timeout_min AND the profile
+    defines an ack_reaction (Codex). The contract:
+
+      - the bot reacts to the trigger comment (eyeballs) -> return None ("acked";
+        the caller proceeds to the verdict wait, which gets the full --timeout-min).
+      - the bot posts an error/quota notice instead -> return ERROR. It responded
+        but refused the work, which is a distinct fact from "never reacted," so it
+        keeps the ERROR state + exit code (the closeout skill routes BOTH ERROR and
+        NO-ACK to the fallback reviewer; the distinction is for the human-readable
+        RESULT line, not the routing).
+      - neither happens within ack_timeout_min -> return NO-ACK (exit 4); the bot
+        is "taking a lunch break" and the caller routes to the fallback reviewer.
+
+    A merge or close during the ack window is honored (the same decisive terminal
+    states the verdict loop checks first). Transient API errors are retried with
+    the same consecutive-error tolerance as the verdict loop.
+    """
+    ack_deadline = time.monotonic() + ack_timeout_min * 60
+    consecutive_errors = 0
+    while True:
+        try:
+            closed_state = _pr_closed_state(repo, pr)
+            if closed_state == "merged":
+                return _emit("MERGED", "PR was merged; no review pending.")
+            if closed_state == "closed":
+                return _emit("CLEAN", "PR is closed (not merged); no review pending.")
+            if _bot_posted_error_body(repo, pr, since, profile):
+                return _emit(
+                    "ERROR",
+                    "{} posted an error/quota notice instead of starting the "
+                    "review (route to the fallback reviewer).".format(profile.label),
+                )
+            # "Begun work" = the eyeballs reaction on the trigger comment (the
+            # canonical signal, present round 2+) OR any in-window review/comment
+            # from the bot (covers round 1, whose trigger is the PR body, not an
+            # issue comment to react to). Either proves it is not asleep.
+            if _trigger_comment_acked(repo, pr, since, profile) or \
+                    _reviewer_has_activity(repo, pr, since, profile):
+                return None  # acked -- proceed to the verdict wait
+        except RuntimeError as exc:
+            consecutive_errors += 1
+            if consecutive_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                return _emit(
+                    "ERROR",
+                    "{} ack-phase poll failed {} times in a row; giving up. "
+                    "Last error: {}".format(profile.label, consecutive_errors, exc),
+                )
+            time.sleep(poll_sec)
+            continue
+        consecutive_errors = 0
+
+        if time.monotonic() >= ack_deadline:
+            return _emit(
+                "NO-ACK",
+                "{} did not react to the review trigger within {} min "
+                "(no '{}' reaction); routing to the fallback reviewer.".format(
+                    profile.label, ack_timeout_min, profile.ack_reaction
+                ),
+            )
+        time.sleep(poll_sec)
+
+
 def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime | None,
-          profile: ReviewerProfile) -> int:
+          profile: ReviewerProfile, ack_timeout_min: int = 0) -> int:
     """Poll until the reviewer reaches a terminal state, then classify.
 
     For a TIMELINE reviewer (Copilot): `copilot_work_started` means "keep
@@ -1164,7 +1369,20 @@ def watch(repo: str, pr: int, timeout_min: int, poll_sec: int, since: datetime |
     `_classify_reviewed` returns None until a verdict (review, or issue comment
     + clean sentinel) lands, which falls through to the wait below. There is no
     "working" signal, so the deadline alone bounds the wait.
+
+    Acknowledgment phase (opt-in): when ack_timeout_min > 0 AND the profile has an
+    ack_reaction, an `_ack_phase` runs FIRST. If the bot does not react to the
+    trigger comment in that window the watcher returns NO-ACK (exit 4) so the
+    caller can route to a fallback reviewer instead of blocking on the full
+    verdict timeout (bd polyglot-pdf-n6ks). An acked bot proceeds to the
+    verdict wait below with the full timeout_min. The phase is skipped entirely
+    when ack_timeout_min is 0 (the default), so every existing caller is unchanged.
     """
+    if ack_timeout_min > 0 and profile.ack_reaction:
+        ack_rc = _ack_phase(repo, pr, ack_timeout_min, poll_sec, since, profile)
+        if ack_rc is not None:
+            return ack_rc
+
     deadline = time.monotonic() + timeout_min * 60
     consecutive_errors = 0
     while True:
@@ -1312,6 +1530,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout-min", type=int, default=20)
     parser.add_argument("--poll-sec", type=int, default=20)
     parser.add_argument(
+        "--ack-timeout-min",
+        type=int,
+        default=0,
+        help="If > 0 (and the reviewer defines an ack reaction, i.e. Codex), run "
+        "an acknowledgment phase BEFORE the verdict wait: poll the trigger comment "
+        "for the bot's '{}' reaction (Codex's 'begun work' signal). If it does not "
+        "appear within this many minutes, exit NO-ACK ({}) so the caller can route "
+        "to a fallback reviewer rather than block on the full --timeout-min. An "
+        "acked bot proceeds to the verdict wait with the full --timeout-min. "
+        "Default 0 = phase disabled (every existing caller unchanged). Closeout "
+        "passes 2 (bd polyglot-pdf-n6ks).".format(
+            CODEX_PROFILE.ack_reaction, _EXIT_CODES["NO-ACK"]
+        ),
+    )
+    parser.add_argument(
         "--since",
         default=None,
         help="ISO8601; only count reviews/comments at or after this time, to "
@@ -1328,7 +1561,7 @@ def main(argv: list[str] | None = None) -> int:
         "(genuine passed-review verdict) OR MERGED (maintainer merged the PR). "
         "The deterministic, zero-model-token bead-close (bd hrn.14). "
         "Repeat for a bundled PR. Runs closeout_finish.py --close-only (bd_safe "
-        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT. "
+        "close -> bd dolt push); does NOT fire on COMMENTS/ERROR/TIMEOUT/NO-ACK. "
         "FRESH-EYES RACE: do NOT pass this on the ROUND-1 watch while fresh-eyes "
         "is still running -- a fast clean Codex verdict would close the bead before "
         "fresh-eyes fixes are triaged. Pass it on the RE-WATCH instead (after all "
@@ -1352,7 +1585,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         code = watch(args.repo, args.pr, args.timeout_min, args.poll_sec,
-                     since, profile)
+                     since, profile, args.ack_timeout_min)
     except KeyboardInterrupt:
         return _emit("ERROR", "Interrupted.")
     except Exception as exc:  # noqa: BLE001 -- last-resort: never die silently

@@ -1,6 +1,6 @@
 # Review-flow doctrine: pre-PR adversarial assess + Codex outer review, looped to clean
 
-*Last updated: 2026-06-11. See [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`).*
+*Last updated: 2026-06-16. See [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus-4.8 reviewer-of-last-resort + the watcher's acknowledgment phase / `NO-ACK` state were added under bd `polyglot-pdf-n6ks`.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
@@ -23,8 +23,13 @@ clean tree
   -> judge review-worthiness              [orchestrator: does this diff warrant Codex?]
   -> open a NORMAL (non-draft) PR         [scorecard in the PR BODY; if review-worthy: `@codex review` line; Codex auto-reviews on open]
   -> OUTER LOOP (post-PR Codex review):    [review-worthy PRs only]
-       watch Codex -> fix -> push -> re-comment `@codex review`
+       watch Codex (ack window 2 min) -> fix -> push -> re-comment `@codex review`
        ... until Codex reports CLEAN (ceiling MAX_REVIEW_ROUNDS = 2)
+       |
+       +-- Codex UNAVAILABLE (ERROR quota / TIMEOUT / NO-ACK)
+           -> FALLBACK: Opus-4.8 adversarial review (reviewer of last resort)
+              spawn fresh-eyes-reviewer @ model:opus -> fix -> re-spawn
+              ... until NO-GAPS (ceiling MAX_FALLBACK_ROUNDS = 2); same authority as Codex
   -> close bead + ping the maintainer to merge
 ```
 
@@ -55,10 +60,16 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   outside the current bead's criteria as a NEW bead itself (it has `Bash`; the bead
   body carries >= 1 exit criterion + `surfaces` metadata) and lists the filed IDs
   in its output. The executor is not interrupted for out-of-scope finds.
-- **The no-Codex fallback.** Codex, when credits are available, is the outer
-  review. While Codex credits are exhausted (until ~2026-06-15) -- or for any
-  review-skipped PR -- there is no outer loop, and **the last fresh-eyes `NO-GAPS`
-  verdict is the review record**, noted in the PR body.
+- **The reviewer of last resort: an Opus-4.8 adversarial review when Codex is
+  unavailable.** Codex can be down three ways -- it posts a quota notice (`ERROR`),
+  it produces no verdict in the window (`TIMEOUT`), or it never reacts to the
+  trigger comment within the 2-minute acknowledgment window (`NO-ACK`). In ALL
+  three the PR must NOT stall, so closeout routes to ONE looped Opus-4.8
+  adversarial review (the same `fresh-eyes-reviewer` agent, spawned with
+  `model: opus`) with the **same authority as a clean Codex review** -- a
+  `NO-GAPS` closes the bead and pings the maintainer to merge. See the "fallback
+  reviewer" subsection below. A review-skipped PR (docs/beads/journal-only) still
+  has no outer loop at all -- there the last fresh-eyes `NO-GAPS` is the record.
 
 ## Why each choice
 
@@ -83,6 +94,35 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   (`scripts/pr_review_watcher.py --reviewer codex`, now the default) classifies
   all three; an inline finding always outranks a 👍, so a thumbs-up can't mask a
   real ask.
+- **Codex's "begun work" signal is an eyeballs (👀 / `eyes`) reaction on the
+  trigger COMMENT -- distinct from the 👍 CLEAN verdict.** The watcher's
+  acknowledgment phase (armed by `--ack-timeout-min 2` on round 2+) waits up to
+  2 minutes for the eyeballs reaction on the `@codex review` issue comment; if it
+  never appears, the watch exits `NO-ACK` (exit 4) and routes straight to the
+  fallback. **Round 1 does NOT use the ack phase** -- its trigger is the PR body,
+  not an issue comment, so the eyeballs reaction is unobservable; round 1 goes
+  straight to the verdict wait. A Codex that acks on round 2+ gets the full 20-min
+  verdict window.
+- **Reviewer of last resort: a looped Opus-4.8 adversarial review when Codex is
+  unavailable.** On `ERROR` (quota), `TIMEOUT` (no verdict), or `NO-ACK` (never
+  started), closeout spawns the `fresh-eyes-reviewer` agent with `model: opus` --
+  passed the bead's exit criteria and pointed at the real post-PR diff -- and loops
+  it (fix gaps -> re-spawn) to `NO-GAPS`, ceiling `MAX_FALLBACK_ROUNDS = 2`. A
+  clean fallback has the **same authority as a clean Codex review**: it closes the
+  bead and pings the maintainer to merge (the merge ping notes the fallback path
+  and which trigger fired). **Why Opus-4.8:** it is the most capable affordable
+  reviewer once Codex credits are spent -- same model family as the Sonnet
+  fresh-eyes that ALREADY cleared the rubric pre-PR and as the author, but a
+  stronger tier, so this is a genuine fresh adversarial look rather than re-running
+  an already-clean process. A different vendor would cost more for no clear gain.
+  **Why not just trust the pre-PR fresh-eyes `NO-GAPS`** (the old behavior while
+  credits were exhausted)**:** that pass and the author share a model family and
+  ran on the SAME diff with the author's framing fresh in context; the outer review
+  exists precisely to add an independent look, and the Opus fallback preserves that
+  independence (stronger tier, post-PR, adversarial) when Codex can't provide it.
+  The fallback subagent is read directly (its `NO-GAPS` / `GAPS-FOUND` STATUS
+  line), NOT watched by `pr_review_watcher.py` -- that watcher is the GitHub-bot
+  (Codex) path only, same as the Step 5.5 fresh-eyes loop.
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs get NO trigger and skip the watch loop entirely -- reviewing them
@@ -113,10 +153,12 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   a fresh `@codex review` comment (capturing its `created_at` as the next round's
   `--since` floor) to request each re-review. The fresh-eyes inner loop is already
   done (pre-PR); the outer loop is Codex only.
-- **Handle all four pr_review_watcher.py states.** CLEAN/COMMENTS (exit 0), ERROR
-  (exit 1, surface to maintainer, no auto-retry -- a quota error will not clear
-  for hours), TIMEOUT (exit 2, treat like ERROR -- NEVER interpret silence as
-  CLEAN). An unhandled state must never fall through to "done."
+- **Handle all five pr_review_watcher.py states.** CLEAN/COMMENTS (exit 0) proceed
+  normally. ERROR (exit 1), TIMEOUT (exit 2), and NO-ACK (exit 4) all route to the
+  Opus-4.8 fallback reviewer (Step 7.5) -- NEVER treat them as clean and NEVER
+  dead-end at the maintainer. CLOSE-FAILED (exit 3) surfaces to the maintainer (a
+  bead-close failure is a genuine stop). An unhandled state must never fall through
+  to "done."
 - **Resolve mechanical merge conflicts inline; escalate only structural ones.**
   When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
   an automatic escalation. **Mechanical / ordering** conflicts (append-only journal

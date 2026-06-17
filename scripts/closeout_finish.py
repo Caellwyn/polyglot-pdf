@@ -293,8 +293,15 @@ class Closeout:
         ts = self.out["TS"]
         # PRINT the watch command; the orchestrator launches it run_in_background.
         watcher = self.WT / "scripts" / "pr_review_watcher.py"
-        self.out["WATCH_CMD"] = '"{}" "{}" {} --reviewer codex --since "{}"'.format(
-            self.PY, watcher, pr, ts
+        # Round 1: --since is the PR-open time, NOT a trigger comment timestamp.
+        # The ack phase (--ack-timeout-min) only makes sense for round 2+ where
+        # --since is the @codex review comment's created_at that Codex reacts to
+        # with the eyes reaction. Round 1 omits --ack-timeout-min so a slow
+        # auto-review is never falsely NO-ACK'd.
+        self.out["WATCH_CMD"] = (
+            '"{}" "{}" {} --reviewer codex --since "{}"'.format(
+                self.PY, watcher, pr, ts
+            )
         )
 
     def telemetry(self) -> None:
