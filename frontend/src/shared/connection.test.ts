@@ -229,12 +229,17 @@ describe('Connection Manager (connection.ts)', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // (b) Activity-signal suppression in native-VAD mode (bd polyglot-pdf-333/6vo)
+  // (b) Activity-signal suppression in native-VAD mode (bd polyglot-pdf-333/zivv)
   //
   // When the backend reports native VAD, Gemini owns turn detection: the client
-  // must suppress activity_start (and the Silero barge-in callbacks) but STILL
-  // forward activity_end (the backend converts it to audio_stream_end so the
-  // turn can close after a PTT release).
+  // must suppress ALL manual turn signals -- activity_start AND activity_end (and
+  // the Silero barge-in callbacks). Native automatic VAD and the manual signals
+  // are mutually exclusive; forwarding activity_end (mapped to audio_stream_end on
+  // the backend) into the continuous native stream interrupts Gemini's response
+  // ("Gemini stops responding after PTT press" -- bd zivv). PTT under native VAD
+  // is ONLY an audio gate: audioManager streams SILENCE while the button is
+  // released so native VAD finds the boundary itself -- no manual end needed. This
+  // supersedes the earlier bd-6vo audio_stream_end behavior.
   // ---------------------------------------------------------------------------
   describe('native-VAD activity-signal suppression', () => {
     async function connected() {
@@ -261,13 +266,22 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.setNativeVad).toHaveBeenCalledWith(true)
     })
 
-    it('still forwards activity_end in native-VAD mode (becomes audio_stream_end)', async () => {
+    it('suppresses activity_end in native-VAD mode (bd zivv -- no manual turn signal)', async () => {
       const manager = await connected()
       capturedCallbacks.onNativeVadMode(true)
 
       await manager.sendActivityEnd()
-      // activity_end is NOT suppressed -- the backend turns it into
-      // audio_stream_end so the turn closes after PTT release.
+      // activity_end IS suppressed under native VAD: forwarding it (backend maps to
+      // audio_stream_end) into the continuous stream interrupts Gemini's response.
+      // The turn closes from the trailing SILENCE the audio layer streams while PTT
+      // is released, not from a manual end signal.
+      expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
+    })
+
+    it('still forwards activity_end in MANUAL-VAD mode (real activity_end)', async () => {
+      const manager = await connected()
+      // No native-VAD report -> manual mode; activity_end must still flow.
+      await manager.sendActivityEnd()
       expect(webFormConnectionMock.sendActivityEnd).toHaveBeenCalledTimes(1)
     })
 
