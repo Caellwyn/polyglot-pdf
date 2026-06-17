@@ -40,11 +40,14 @@ enumerates NO-ACK as a non-firing state (same gap).
 
 - Hard-rules block updated: "handle all five states; ERROR/TIMEOUT/NO-ACK route to
   Step 7.5 fallback instead of dead-ending at the maintainer."
-- Step 6.2 round-1 watch command now carries `--ack-timeout-min 2` (2-minute ack
-  window for Codex).
-- Step 7 re-watch command now also explicitly carries `--ack-timeout-min 2` (gap
-  found by fresh-eyes round 1 -- `[...]` shorthand was ambiguous for an
-  operationally critical flag).
+- Step 6.2 round-1 watch command does NOT carry `--ack-timeout-min` -- round 1's
+  trigger is the PR body, not an issue comment, so the eyes reaction is
+  unobservable and the ack phase is disabled for round 1. NO-ACK (exit 4) cannot
+  occur on round 1.
+- Step 7 re-watch command (round 2+) carries `--ack-timeout-min 2`: the trigger is
+  an explicit `@codex review` issue comment, so Codex can react to it with eyeballs
+  and the ack phase is meaningful. (Originally the re-watch used ambiguous `[...]`
+  shorthand -- made explicit by fresh-eyes round 1.)
 - New Step 7.5 -- Opus-4.8 fallback reviewer: spawn `fresh-eyes-reviewer` agent
   with `model: opus`, pass bead exit criteria + post-PR diff; loop to NO-GAPS
   (ceiling MAX_FALLBACK_ROUNDS=2); NO-GAPS -> close bead by hand (`bd_safe.py
@@ -70,7 +73,8 @@ enumerates NO-ACK as a non-firing state (same gap).
    ack; routes quota body to ERROR; `--ack-timeout-min 0` is a strict no-op.
    All four branches covered by named tests (134 passing, 0 failures).
 2. PASS -- SKILL.md Step 7.5 with MAX_FALLBACK_ROUNDS=2, manual close on NO-GAPS,
-   and fallback-noted merge ping; Step 6.2 and Step 7 both carry `--ack-timeout-min 2`.
+   and fallback-noted merge ping; Step 7 re-watch carries `--ack-timeout-min 2`
+   (round 2+); Step 6.2 round-1 watch omits it (PR-body trigger, no ack phase).
 3. PASS -- `should_close` gates on CLEAN (with `_LAST_CLEAN_WAS_REVIEW`) or MERGED
    only; NO-ACK satisfies neither; `test_no_ack_does_not_close_beads` verifies
    end-to-end through `main()`.
