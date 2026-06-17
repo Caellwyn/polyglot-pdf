@@ -197,7 +197,8 @@ def build_form_context(
         # voice model got NONE of that authored guidance on real forms. Read the
         # nested block here: help.instructions feeds the "Note:" line (preferred over
         # a flat description), help.format_hint feeds "Format:" when no flat format.
-        help_block = field.get("help") if isinstance(field.get("help"), dict) else None
+        _help = field.get("help")
+        help_block = _help if isinstance(_help, dict) else None
         if help_block:
             if help_block.get("instructions"):
                 field_info["description"] = help_block["instructions"]
