@@ -2,7 +2,7 @@
 
 **Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-15. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). A2 fixed the SI-BUILD path only; the G2 cost spike (bd polyglot-pdf-jnjj.6) then found gap P -- the separate RUNTIME next-field drip is still broken (returns None past field 1), tracked as bug polyglot-pdf-jnjj.22 and blocking A5. See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the A2 repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
+*Last updated: 2026-06-16. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). A2 fixed the SI-BUILD path only; the G2 cost spike (bd polyglot-pdf-jnjj.6) then found gap P -- the RUNTIME next-field drip returns None past field 1. Gap P is now SUPERSEDED: bd polyglot-pdf-jnjj.22 REPLACES the JIT schema-drip with Dynamic Turn Injection (DTI, USE_DTI flag) rather than fixing it -- DTI rides the next field's CLIENT-SUPPLIED guidance in the confirm_field response and keeps the principal SI tiny (see [../research/secretary-agent-research-plan.md](../research/secretary-agent-research-plan.md) and the DTI branch in ai_context.build_form_context / manifest_service.get_field_guidance / callback_handler). JIT (USE_JIT_SCHEMA) remains a separate, independent A/B arm. See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the A2 repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
 
 The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models, audited
 under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** gaps
@@ -134,10 +134,16 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
 
 ### Discovered post-A2 (NOT repaired by jnjj.9)
 
-- **P -- [BREAKS] The runtime next-field drip returns None for every field past
-  the first, so the model never receives schemas for fields 2..N.** A2 fixed the
-  SI-BUILD path (gaps A/B/C/...) to consume the handshake manifest, but the
-  separate RUNTIME drip was not touched. On each successful update/confirm,
+- **P -- [SUPERSEDED by DTI / bd jnjj.22] The runtime next-field drip returns None
+  for every field past the first, so the model never receives schemas for fields
+  2..N.** RESOLUTION: not fixed in place -- REPLACED. Dynamic Turn Injection
+  (USE_DTI) drops the drip entirely; the next field's guidance is CLIENT-SUPPLIED
+  on next_field_hint_response and rendered into the confirm_field response
+  (response["next_field_guidance"]) by callback_handler, honoring the
+  stateless/client-owns-state invariant the drip violated. get_next_field_schema_for_jit
+  remains only for the legacy JIT (USE_JIT_SCHEMA) arm. Original diagnosis below.
+  A2 fixed the SI-BUILD path (gaps A/B/C/...) to consume the handshake manifest,
+  but the separate RUNTIME drip was not touched. On each successful update/confirm,
   `callback_handler` calls `form_filling_service.get_next_field_schema_for_jit(field_id)`
   (single call site, `callback_handler.py:556-557`; the result is inserted into
   the tool response at `:776-777`) to compute the next field's full schema. That
