@@ -57,9 +57,18 @@ NO-GO.** Precision is not the problem (flash_lite is perfect on the clean set);
 recall is. The incumbent in-SI check, run at the same boundary over the same full
 state, caught every contradiction; the cheap validator missed 5 of 34 (~15%).
 (Both arms received the same explicit date-sanity instruction; the in-SI arm's
-prose is the verbatim ADDRESS CONSISTENCY block from config.py, with that
+prose is the verbatim ADDRESS CONSISTENCY block from config.py:379-385, with that
 date-sanity line and a JSON-output line added identically to BOTH arms so the
 comparison stays symmetric -- see the probe's IN_SI_PROMPT comment.)
+
+**Miss honesty:** all 5 flash_lite misses had `n_flagged=0` (an empty verdict),
+not a mislabeled flag. The probe's fail-open path returns an empty `conflicts`
+list on a JSON-parse error or API exception too, and it does not persist a
+parse/error marker to the CSV -- so the artifact alone cannot prove an empty
+verdict was a genuine "no contradiction found" rather than a swallowed error.
+This does not threaten the NO-GO: a swallowed error would only DEFLATE flash_lite
+recall, making the (already-failing) gate more conservative, never produce a
+wrongful GO. The live run showed no parse/error log warnings during the misses.
 
 Removing the in-SI prose and delegating ENTIRELY to flash-lite would let ~15% of
 the contradiction classes this corpus covers pass unchecked -- a real correctness
