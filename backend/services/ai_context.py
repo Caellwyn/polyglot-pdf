@@ -188,7 +188,22 @@ def build_form_context(
             field_info["placeholder"] = field.get("placeholder")
         if "description" in field:
             field_info["description"] = field.get("description")
-        
+
+        # Nested canonical help block (bd polyglot-pdf-jnjj.23). The FormField model
+        # carries field-level guidance under field["help"] (FieldHelp:
+        # instructions/format_hint/...), and real form-kit schemas (e.g.
+        # form-kits/i-90/schema.json) populate help.instructions on every field --
+        # but this builder previously read only the FLAT "description" key, so the
+        # voice model got NONE of that authored guidance on real forms. Read the
+        # nested block here: help.instructions feeds the "Note:" line (preferred over
+        # a flat description), help.format_hint feeds "Format:" when no flat format.
+        help_block = field.get("help") if isinstance(field.get("help"), dict) else None
+        if help_block:
+            if help_block.get("instructions"):
+                field_info["description"] = help_block["instructions"]
+            if help_block.get("format_hint") and "format" not in field_info:
+                field_info["format"] = help_block["format_hint"]
+
         fields_info.append(field_info)
     
     form_title = schema.get("form_metadata", {}).get("title", "Form")

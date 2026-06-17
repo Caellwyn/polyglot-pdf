@@ -3,6 +3,51 @@ import json
 from backend.services.ai_context import build_form_context
 
 
+def test_nested_help_block_rendered_in_si():
+    """The legacy/full SI must render the canonical NESTED help block
+    (help.instructions -> Note:, help.format_hint -> Format:), which real form-kit
+    schemas use -- previously only the flat 'description' key was read, so the voice
+    model got NO authored guidance on real forms (bd polyglot-pdf-jnjj.23)."""
+    schema = {
+        "form_metadata": {"title": "I-90"},
+        "fields": [{
+            "id": "p1_line1_aliennumber", "name": "A-Number", "type": "text",
+            "help": {"instructions": "Your A-Number is a 7-9 digit number on your green card.",
+                     "format_hint": "7-9 digits"},
+        }],
+    }
+    si = build_form_context(schema, {}, "English")
+    assert "Note: Your A-Number is a 7-9 digit number" in si
+    assert "Format: 7-9 digits" in si
+
+
+def test_flat_description_still_rendered_backward_compat():
+    """A form using the FLAT 'description' key (demo-schema shape) still renders the
+    Note: line -- the nested-help change must not regress it (jnjj.23 exit 3)."""
+    schema = {
+        "form_metadata": {"title": "Demo"},
+        "fields": [{"id": "dob", "name": "DOB", "type": "date",
+                    "format": "YYYY-MM-DD", "description": "Convert spoken dates."}],
+    }
+    si = build_form_context(schema, {}, "English")
+    assert "Note: Convert spoken dates." in si
+    assert "Format: YYYY-MM-DD" in si
+
+
+def test_nested_help_instructions_preferred_over_flat_description():
+    """When both nested help.instructions and a flat description exist, the nested
+    (canonical) instructions win for the Note: line."""
+    schema = {
+        "form_metadata": {"title": "X"},
+        "fields": [{"id": "f", "name": "F", "type": "text",
+                    "description": "flat desc",
+                    "help": {"instructions": "nested instructions"}}],
+    }
+    si = build_form_context(schema, {}, "English")
+    assert "Note: nested instructions" in si
+    assert "flat desc" not in si
+
+
 def test_build_form_context_basic():
     """Test that build_form_context generates system instruction without JSON quote issues."""
     schema = {
