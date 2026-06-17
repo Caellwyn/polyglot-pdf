@@ -188,24 +188,28 @@ def test_dti_current_field_is_client_selected_field_zero(monkeypatch):
     assert "ID: p1_line1_aliennumber" in si
 
 
-def test_merge_field_schema_extends_validation_set():
-    """The client-supplied next-field schema is merged into _schema['fields'] so
-    update_form_fields validation recognizes fields 2..N (Codex PR #229).
-    Idempotent; schema only."""
+def test_merge_field_schema_extends_validation_set_without_mutating_schema():
+    """Client-supplied next-field schemas are recorded for validation (so fields
+    2..N are not 'unknown'), but kept SEPARATE from _schema['fields'] -- the DTI SI
+    branch renders _schema['fields'][0] as the CURRENT field, so growing that list
+    would make an SI rebuild describe a stale field (Codex PR #229). Validation set
+    = _schema fields + recorded extras."""
     from backend.services.form_filling_service import FormFillingService
     from backend.config import get_settings
     svc = FormFillingService(live_ai=None, settings=get_settings())
-    svc._schema = {"fields": [{"id": "f1"}]}  # JIT/DTI shape: only field 1
-    svc.merge_field_schema({"id": "f2", "spoken_name": "field two", "type": "text"})
-    ids = [f["id"] for f in svc._schema["fields"]]
-    assert ids == ["f1", "f2"]
-    # Idempotent: merging f2 again does not duplicate.
-    svc.merge_field_schema({"id": "f2", "spoken_name": "field two", "type": "text"})
-    assert [f["id"] for f in svc._schema["fields"]] == ["f1", "f2"]
-    # No-op on empty / id-less.
+    svc._schema = {"fields": [{"id": "f1", "name": "F1", "type": "text", "section_id": "s"}]}
+    svc.merge_field_schema({"id": "f2", "name": "F2", "spoken_name": "field two",
+                            "type": "text", "section_id": "s"})
+    # _schema['fields'] is UNCHANGED (still just field 1 -- the SI's current field).
+    assert [f["id"] for f in svc._schema["fields"]] == ["f1"]
+    # But validation sees BOTH.
+    validation_ids = {f.id for f in svc._build_fields_from_schema()}
+    assert validation_ids == {"f1", "f2"}
+    # Idempotent; no-op on empty/id-less.
+    svc.merge_field_schema({"id": "f2", "name": "F2", "type": "text", "section_id": "s"})
     svc.merge_field_schema({})
     svc.merge_field_schema(None)
-    assert [f["id"] for f in svc._schema["fields"]] == ["f1", "f2"]
+    assert {f.id for f in svc._build_fields_from_schema()} == {"f1", "f2"}
 
 
 def test_jit_shaped_schema_renders_manifest_branch_when_flags_off(monkeypatch):

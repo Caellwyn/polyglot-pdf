@@ -53,6 +53,11 @@ class FormFillingService:
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
         # JIT schema loading: Track which field schemas have been sent to Gemini
         self._loaded_field_ids: set = set()  # Prevents duplicate schemas in context
+        # DTI (bd polyglot-pdf-jnjj.22): client-supplied field schemas merged for
+        # VALIDATION only -- kept SEPARATE from self._schema['fields'] so the DTI SI
+        # branch's "fields[0] is the current field" assumption is never disturbed by
+        # accumulated fields (Codex PR #229). Schema only, no values.
+        self._dti_extra_fields: Dict[str, Dict[str, Any]] = {}
         # Store callbacks for reuse during section switching
         self._on_form_update = None
         self._on_transcript = None
@@ -91,13 +96,28 @@ class FormFillingService:
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
-        
+
         Used by web sessions to construct field objects for tool responses.
         Backend doesn't persist these - they're rebuilt each time.
-        
+
         Delegates to field_utils.build_fields_from_schema for the actual logic.
+
+        In DTI/JIT mode self._schema['fields'] holds only the first field, so the
+        client-supplied fields recorded via merge_field_schema (DTI, bd
+        polyglot-pdf-jnjj.22) are folded in here for validation -- WITHOUT mutating
+        self._schema (which the SI builder reads for the current field).
         """
-        return build_fields_from_schema(self._schema or {})
+        schema = self._schema or {}
+        if not self._dti_extra_fields:
+            return build_fields_from_schema(schema)
+        present = {f.get("id") for f in schema.get("fields", [])}
+        merged = {
+            **schema,
+            "fields": list(schema.get("fields", [])) + [
+                f for fid, f in self._dti_extra_fields.items() if fid not in present
+            ],
+        }
+        return build_fields_from_schema(merged)
 
     async def start_session(
         self,
@@ -926,28 +946,27 @@ class FormFillingService:
             request_id, recorded, reason, section_complete)
 
     def merge_field_schema(self, field_schema: Dict[str, Any]) -> None:
-        """Merge a CLIENT-SUPPLIED field schema into self._schema['fields'] for
-        VALIDATION (DTI, bd polyglot-pdf-jnjj.22; Codex PR #229).
+        """Record a CLIENT-SUPPLIED field schema for VALIDATION (DTI, bd
+        polyglot-pdf-jnjj.22; Codex PR #229).
 
         In JIT/DTI mode self._schema['fields'] holds only the first field, so
-        update_form_fields validation (build_fields_from_schema -> _schema['fields'])
-        would reject every later field as 'unknown'. The client delivers each next
-        field's full schema on next_field_hint_response; merging it here (SCHEMA
-        ONLY -- no user values; the backend stays stateless re values) lets the
-        validator recognize the field Gemini was just told to fill. Idempotent:
-        skips a field id already present.
+        update_form_fields validation (build_fields_from_schema) would reject every
+        later field as 'unknown'. The client delivers each next field's full schema
+        on next_field_hint_response; we record it here (SCHEMA ONLY -- no user
+        values) so _build_fields_from_schema can validate it.
+
+        Stored in a SEPARATE dict, NOT appended to self._schema['fields'] -- the DTI
+        SI branch renders schema['fields'][0] as the CURRENT field, so growing that
+        list would make an SI rebuild (recovery restart) describe a stale early
+        field (Codex PR #229 round-2 follow-up). Idempotent by field id.
         """
         if not field_schema or not field_schema.get("id"):
             return
-        if self._schema is None:
-            return
-        fields = self._schema.setdefault("fields", [])
-        fid = field_schema.get("id")
-        if any(f.get("id") == fid for f in fields):
-            return
-        fields.append(field_schema)
-        _log.debug("dti_merged_field_for_validation", field_id=fid,
-                   total_fields=len(fields))
+        fid = field_schema["id"]
+        if fid not in self._dti_extra_fields:
+            self._dti_extra_fields[fid] = field_schema
+            _log.debug("dti_recorded_field_for_validation", field_id=fid,
+                       total_extra=len(self._dti_extra_fields))
 
     def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
         """
