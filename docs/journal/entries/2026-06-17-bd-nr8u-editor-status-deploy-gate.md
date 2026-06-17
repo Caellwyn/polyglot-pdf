@@ -46,11 +46,24 @@ catch rsync, and verified the gate-present check is non-vacuous (removing the gu
 makes it FAIL). (Note: there is no ACTIVE prod -- CLAUDE.md -- but
 `deploy-production.sh` exists and delegates correctly, so it's verified regardless.)
 
-**Fresh-eyes assess (Sonnet, arm B picker):** round 1 scored criterion 1 PASS,
-criterion 2 FAIL -- the missed `scripts/deploy-form-kit.sh` path (high-confidence,
-in-scope) plus two test-robustness gaps (vacuous gate-present grep; rsync blind
-spot). All three adopted and fixed as above; re-spawned to confirm NO-GAPS (see
-merge ping for the final round count).
+**Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** round 1 scored
+criterion 1 PASS, criterion 2 FAIL -- the missed `scripts/deploy-form-kit.sh` path
+(high-confidence, in-scope) plus two test-robustness gaps (vacuous gate-present
+grep; rsync blind spot). All three adopted and fixed; round 2 returned NO-GAPS.
+
+**Outer review went via the Opus-4.8 FALLBACK, not Codex:** Codex's usage limit
+was exhausted (watch returned ERROR), so per the closeout skill (Step 7.5) the
+reviewer-of-last-resort -- the fresh-eyes agent at `model: opus` -- did the outer
+review. It returned NO-GAPS (both criteria PASS; it ran the bash gate harness
+14/14 with mutation checks proving non-vacuity, and the vitest suites), which
+carries the same authority as a clean Codex review. The bead was closed by hand
+(the watcher's Codex-only `--close-on-clean` did not fire).
+
+**Telemetry gap:** the harness_ledger row for this PR (arm BC) incremented the
+experiment counter but its JSON file did not persist to disk (cause unclear; the
+file the script reported writing was absent on a follow-up `git add`). Not
+regenerated, to avoid double-counting the arm in the cache. Warn-only; does not
+block the merge.
 
 **Exit-criteria scorecard** (both PASS):
 
