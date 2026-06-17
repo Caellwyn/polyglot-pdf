@@ -29,17 +29,28 @@ a PDF-only kit can't meaningfully be complete (the deploy gate skips schema-less
 kits regardless). The toggle sits outside the card's open-button (valid HTML; the
 open-button opens the kit, the toggle publishes/unpublishes it).
 
-**Part 2 -- confirm/harden the deploy gate across all paths.** Investigation
-showed `deploy-demo.sh` and `deploy-production.sh` do NOT upload form-kits
-themselves -- each sets the bucket/env then invokes `./deploy-all.sh`, whose
-`kit_is_complete` loop is the single gate. So criterion 2 was structurally already
-true; the work was to CONFIRM it and lock it against regression. Extended the
-existing deploy-gate harness (`tests/test_deploy_all_kit_gates.sh`, bd 45x5) with
-a no-bypass check: assert neither wrapper has its own `gcloud/gsutil` form-kit
-copy, and that `deploy-all.sh` still references `kit_is_complete`. (Note: there is
-no ACTIVE prod for this project -- CLAUDE.md / the architecture decision -- but
-`deploy-production.sh` exists and delegates correctly, so the gate is verified on
-it as a script regardless.)
+**Part 2 -- confirm/harden the deploy gate across all paths.** `deploy-demo.sh`
+and `deploy-production.sh` do NOT upload form-kits themselves -- each sets the
+bucket/env then invokes `./deploy-all.sh`, whose `kit_is_complete` loop gates the
+upload. BUT fresh-eyes caught a FOURTH path I'd missed: `scripts/deploy-form-kit.sh`
+is an independent form-kit deploy script (`--all` loops every kit) that uploaded
+AND manifested kits with NO status gate -- a real draft-leak that falsified
+criterion 2's "no path uploads a draft." Fixed: added a `kit_is_complete` gate
+(matching deploy-all.sh's exact grep) to both its `upload_kit` and its manifest
+loop. Then extended the deploy-gate harness (`tests/test_deploy_all_kit_gates.sh`,
+bd 45x5) with two assertion kinds: `no-bypass` (delegating wrappers have no own
+form-kit cp/rsync) for demo/prod, and `gate-present` (the actual `if !
+kit_is_complete` GUARD CALL, not just the function name) for the two direct-upload
+paths deploy-all.sh + deploy-form-kit.sh. Also broadened the no-bypass regex to
+catch rsync, and verified the gate-present check is non-vacuous (removing the guard
+makes it FAIL). (Note: there is no ACTIVE prod -- CLAUDE.md -- but
+`deploy-production.sh` exists and delegates correctly, so it's verified regardless.)
+
+**Fresh-eyes assess (Sonnet, arm B picker):** round 1 scored criterion 1 PASS,
+criterion 2 FAIL -- the missed `scripts/deploy-form-kit.sh` path (high-confidence,
+in-scope) plus two test-robustness gaps (vacuous gate-present grep; rsync blind
+spot). All three adopted and fixed as above; re-spawned to confirm NO-GAPS (see
+merge ping for the final round count).
 
 **Exit-criteria scorecard** (both PASS):
 
@@ -48,9 +59,11 @@ it as a script regardless.)
    (`formKitDirectory.status.test.ts`) + 2 component tests assert the write and
    the badge/label flip.
 2. Deploy filter holds across deploy-demo.sh, deploy-production.sh, AND a direct
-   deploy-all.sh --form-kits -- no path uploads a draft. PASS -- demo/prod both
-   delegate to deploy-all.sh's gate (no independent upload); the no-bypass
-   regression check in the gate harness locks it (13/13 assertions pass).
+   deploy-all.sh --form-kits -- no path uploads a draft. PASS -- demo/prod
+   delegate to deploy-all.sh's gate (no independent upload); deploy-all.sh and the
+   independent scripts/deploy-form-kit.sh both guard uploads with kit_is_complete;
+   the no-bypass + gate-present regression checks lock all four paths (14/14
+   assertions pass).
 
 **Verification:** 6 new FE tests (4 setKitStatus units + 2 catalogue toggle
 component) + 3 new deploy-gate assertions; FE suite green (the forks-runner pool
@@ -87,6 +100,9 @@ files is clean); `tsc --noEmit` clean. Backend suite green from prep.
   (promote, revert, preserve-unknown-keys, write-when-no-metadata).
 - `schema-editor/src/components/FormCatalogue.test.tsx` -- 2 new tests (promote a
   draft via the toggle + persisted to disk; no toggle for a schema-less kit).
-- `tests/test_deploy_all_kit_gates.sh` -- no-bypass assertions (demo/prod route
-  through deploy-all.sh; deploy-all.sh still calls kit_is_complete).
+- `scripts/deploy-form-kit.sh` -- NEW `kit_is_complete` gate on both `upload_kit`
+  and the manifest loop (was an ungated 4th deploy path; fresh-eyes finding).
+- `tests/test_deploy_all_kit_gates.sh` -- `no-bypass` (demo/prod, cp+rsync) +
+  `gate-present` (the actual `if ! kit_is_complete` guard call) for deploy-all.sh
+  and scripts/deploy-form-kit.sh.
 - `docs/journal/entries/2026-06-17-bd-nr8u-editor-status-deploy-gate.md` -- THIS entry.

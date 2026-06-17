@@ -34,6 +34,17 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Draft-leak gate: only a kit whose metadata.json is status:complete may reach
+# GCS / the voice-app manifest (bd b0pe / nr8u). MUST match deploy-all.sh's
+# kit_is_complete exactly (same tolerant grep, no jq) -- this script is the
+# fourth deploy path and was previously ungated, so a --all run could leak every
+# draft (Codex/fresh-eyes finding, bd nr8u). Returns 0 (complete) / non-0 (skip).
+kit_is_complete() {
+    local meta="$1/metadata.json"
+    [ -f "$meta" ] || return 1
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"complete"' "$meta"
+}
+
 # Check prerequisites
 check_prereqs() {
     if ! command -v gcloud &> /dev/null; then
@@ -86,6 +97,12 @@ upload_kit() {
         return 1
     fi
 
+    # Draft-leak gate: never upload a kit that isn't status:complete.
+    if ! kit_is_complete "$kit_dir"; then
+        log_warn "Skipping $kit_id - not status:complete (draft kept local; bd b0pe/nr8u gate)"
+        return 0
+    fi
+
     log_info "Uploading form kit: $kit_id"
 
     # Upload all files in the kit directory
@@ -109,6 +126,13 @@ generate_manifest() {
         # Skip if no schema.json
         if [ ! -f "$kit_dir/schema.json" ]; then
             log_warn "Skipping $kit_id - no schema.json found"
+            continue
+        fi
+
+        # Draft-leak gate: a draft kit must not appear in the deployed manifest
+        # either (the upload is gated above; keep the manifest consistent).
+        if ! kit_is_complete "$kit_dir"; then
+            log_warn "Skipping $kit_id from manifest - not status:complete"
             continue
         fi
 
