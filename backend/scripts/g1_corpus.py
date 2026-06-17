@@ -158,21 +158,25 @@ def build_corpus() -> list:
             expected_conflicts=[{M_STATE[0], M_PROV[0]}],
         ))
 
-    # --- city_state: US city not in the stated state (weaker world knowledge) ---
+    # --- city_state: US city not in the stated state (weaker world knowledge).
+    #     The ZIP here MATCHES the stated state, so the ONLY contradiction is
+    #     city-vs-state -- a checker cannot "detect" via a ZIP-vs-state path and
+    #     get credit for the wrong capability (fresh-eyes finding 1, PR re-run).
     city_state_data = [
-        ("Chicago", "Texas", "Illinois"),
-        ("Miami", "California", "Florida"),
-        ("Seattle", "Nevada", "Washington"),
-        ("Boston", "Ohio", "Massachusetts"),
+        # (city, state, state-matching ZIP)  -- city is NOT in that state.
+        ("Chicago", "Texas", "75001"),         # TX zip, but Chicago is in IL
+        ("Miami", "California", "90001"),       # CA zip, but Miami is in FL
+        ("Seattle", "Nevada", "89101"),         # NV zip, but Seattle is in WA
+        ("Boston", "Ohio", "43201"),            # OH zip, but Boston is in MA
     ]
-    for i, (city, state, _real) in enumerate(city_state_data):
+    for i, (city, state, zipc) in enumerate(city_state_data):
         cases.append(Case(
             case_id=f"city_state_{i}",
             cls="city_state",
             fields=[
                 _f(*M_CITY, city),
                 _f(*M_STATE, state),
-                _f(*M_ZIP, "00000"),
+                _f(*M_ZIP, zipc),
                 _f(*M_COUNTRY, "United States"),
             ],
             expected_conflicts=[{M_CITY[0], M_STATE[0]}],

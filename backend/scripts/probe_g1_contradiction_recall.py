@@ -66,11 +66,19 @@ OUT_DIR = os.path.join(
 TODAY = "2026-06-17"
 
 
-# The VERBATIM in-SI ADDRESS CONSISTENCY prose (backend/config.py:379-385), the
-# incumbent arm (i) is being scored against. Copied verbatim so arm (i) tests the
-# REAL incumbent rule, not a paraphrase. Plus a JSON-output instruction so the
-# probe can parse it into the contract-1 verdict shape (the live model voices the
-# steer; here we score the detection decision the prose drives).
+# The in-SI ADDRESS CONSISTENCY prose, VERBATIM from backend/config.py:380-385,
+# is what incumbent arm (i) is scored against (so arm (i) tests the REAL incumbent
+# address rule, not a paraphrase). Two faithful additions, both also given to arm
+# (ii) so the comparison stays symmetric and fair:
+#   - an EXPLICIT date-sanity instruction (DOB-not-future, admission-not-before-DOB).
+#     config.py carries date checking only as the vague CONSTRAINTS line "Sanity
+#     check dates/phones/ZIP codes" (config.py:375), NOT in the ADDRESS CONSISTENCY
+#     block; this probe spells it out so the 6 date-class cases are actually
+#     exercised. Both arms get the identical instruction, so it cannot bias the
+#     in_si-vs-flash_lite comparison.
+#   - a JSON-output instruction so the probe can parse the decision into the
+#     contract-1 verdict shape (in production the live model VOICES the steer;
+#     here we score the detection decision the prose drives).
 IN_SI_PROMPT = (
     "You are a form-filling assistant filling a USCIS I-90 immigration form by "
     "voice. After filling any address-cluster field (state, zip, province, "
@@ -298,8 +306,23 @@ async def main() -> None:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()
         w.writerows(rows)
+    # NaN is not valid JSON (RFC 8259) -- json.dump writes the bare token `NaN`,
+    # which strict parsers (JS JSON.parse) reject. Undefined precision/recall
+    # (e.g. no_check precision, 0/0) is recorded as null, not NaN (fresh-eyes
+    # finding 3). math.isnan guards only floats; ints/strs pass through.
+    import math
+
+    def _nan_to_none(obj):
+        if isinstance(obj, float) and math.isnan(obj):
+            return None
+        if isinstance(obj, dict):
+            return {k: _nan_to_none(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_nan_to_none(v) for v in obj]
+        return obj
+
     with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump({
+        json.dump(_nan_to_none({
             "bead": "polyglot-pdf-jnjj.5",
             "stamp": stamp,
             "today_for_date_checks": TODAY,
@@ -307,7 +330,7 @@ async def main() -> None:
             "corpus": {"total": len(corpus), "contradiction": n_contra, "clean": n_clean,
                        "provenance": "SYNTHETIC injection over real I-90 field structure"},
             "summary": summary,
-        }, f, indent=2)
+        }), f, indent=2)
     print(f"\nwrote {csv_path}\nwrote {meta_path}", flush=True)
 
 
