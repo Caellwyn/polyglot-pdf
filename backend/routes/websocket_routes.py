@@ -367,10 +367,14 @@ async def _handle_fill_session(
 					# Frontend responds to get_next_field_hint request from backend
 					request_id = obj.get("request_id")
 					hint = obj.get("hint")  # Can be None if form is complete
+					# DTI (bd polyglot-pdf-jnjj.22): the client may also send the next
+					# field's FULL schema (it owns the schema; the backend does not).
+					# Absent for legacy/non-DTI clients -> None, no behavior change.
+					next_field_schema = obj.get("next_field_schema")
 					if not request_id:
 						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
 					else:
-						service.handle_next_field_hint_response(request_id, hint)
+						service.handle_next_field_hint_response(request_id, hint, next_field_schema)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
 				elif mtype == "confirm_field_response":
@@ -789,7 +793,12 @@ async def fill_form_from_schema(
 		"type": "session_ready",
 		"session_id": ephemeral_id,
 		"ephemeral": True,  # Signal to client this is stateless
-		"jit_mode_enabled": settings.USE_JIT_SCHEMA,  # Signal if JIT schema loading is active
+		# JIT and DTI both use the manifest-first handshake shape (manifest +
+		# first_field_schema), so signal jit_mode for EITHER so the frontend builds
+		# that handshake. dti_mode_enabled additionally tells the client to send each
+		# next field's full schema on next_field_hint_response (bd polyglot-pdf-jnjj.22).
+		"jit_mode_enabled": settings.USE_JIT_SCHEMA or settings.USE_DTI,  # Signal manifest-first handshake
+		"dti_mode_enabled": settings.USE_DTI,  # Signal Dynamic Turn Injection (client supplies next-field schema)
 		# Native-VAD mode toggle (bd polyglot-pdf-333): when True, Gemini's own VAD
 		# drives turns -- the frontend must stop sending manual activity signals and
 		# stream continuous audio. Mirror of the backend DISABLE_GEMINI_VAD flag.

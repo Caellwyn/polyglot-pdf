@@ -14,6 +14,8 @@ from .request_coordinator import (
     HINT_REQUEST_TIMEOUT,
     RequestCoordinator,
 )
+from backend.config import get_settings
+from backend.services.ai_context import render_field_guidance
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
 
@@ -58,6 +60,7 @@ class CallbackHandler:
         self._handle_get_field_value = None
         self._request_form_state_from_client = None
         self._get_next_field_schema_for_jit = None
+        self._merge_field_schema = None
 
     def set_tool_handlers(
         self,
@@ -66,6 +69,7 @@ class CallbackHandler:
         handle_get_field_value,
         request_form_state_from_client,
         get_next_field_schema_for_jit,
+        merge_field_schema=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -73,6 +77,7 @@ class CallbackHandler:
         self._handle_get_field_value = handle_get_field_value
         self._request_form_state_from_client = request_form_state_from_client
         self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
+        self._merge_field_schema = merge_field_schema
     
     async def send_form_update(
         self,
@@ -519,6 +524,7 @@ class CallbackHandler:
             )
             next_hint = None
             next_field_schema = None
+            next_field_guidance = None
             message = (
                 f"Field '{field_id}' confirmed -- that completes this section. The "
                 f"form is advancing to the next section; wait for the next field."
@@ -556,6 +562,23 @@ class CallbackHandler:
             if self._get_next_field_schema_for_jit and next_hint:
                 next_field_schema = self._get_next_field_schema_for_jit(field_id)
 
+            # DTI (bd polyglot-pdf-jnjj.22): the next field's full guidance is
+            # CLIENT-SUPPLIED -- the client owns the schema, so it rides the
+            # next_field_hint_response and is stashed on the coordinator. Render it
+            # (same render_field_guidance the DTI system instruction uses for field
+            # 1) into next_field_guidance. Skip on timeout / no hint.
+            next_field_guidance = None
+            if get_settings().USE_DTI and next_hint and self._request_coordinator:
+                client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
+                if client_next_schema:
+                    next_field_guidance = render_field_guidance(client_next_schema)
+                    # Merge the field into the backend's validation schema so the
+                    # SUBSEQUENT update_form_fields for this field is not rejected as
+                    # 'unknown' (in DTI/JIT mode _schema['fields'] holds only field 1;
+                    # Codex PR #229). Schema only -- no user values.
+                    if self._merge_field_schema:
+                        self._merge_field_schema(client_next_schema)
+
             if hint_timed_out:
                 message = (
                     f"Field '{field_id}' confirmed. (Could not determine the next field "
@@ -578,6 +601,12 @@ class CallbackHandler:
         # Add next field schema if available (JIT mode)
         if next_field_schema:
             response["next_field_schema"] = next_field_schema
+
+        # Add the rendered next-field guidance (DTI mode). This is the per-field
+        # guidance the thin-principal SI points at ("use the LATEST confirm_field
+        # response's next_field_guidance"); bd polyglot-pdf-jnjj.22.
+        if next_field_guidance:
+            response["next_field_guidance"] = next_field_guidance
 
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmation_method=confirmation_method)

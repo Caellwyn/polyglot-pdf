@@ -67,6 +67,14 @@ class RequestCoordinator:
         # entry; the matching handler (or a timeout) pops it.
         self._pending: Dict[str, Dict[str, Any]] = {}
 
+        # DTI (bd polyglot-pdf-jnjj.22): the next_field_hint_response may carry the
+        # next field's FULL schema (the client owns it; the backend does not). The
+        # hint future resolves to the hint string only, so the accompanying schema
+        # is stashed here keyed by request_id and read out by request_next_field_hint
+        # right after the future resolves. Keyed (not a single slot) so overlapping
+        # hint requests never cross-deliver a schema.
+        self._next_field_schemas: Dict[str, Any] = {}
+
     def set_websocket(self, websocket: WebSocket) -> None:
         """Update WebSocket connection."""
         self._websocket = websocket
@@ -250,6 +258,7 @@ class RequestCoordinator:
             )
             return result
         except asyncio.TimeoutError:
+            self._next_field_schemas.pop(request_id, None)
             _coord_nf_ms = round((time.monotonic() - _t_coord_nf) * 1000)
             _log.error("next_field_request_timeout", session_id=self._session_id, request_id=request_id)
             _log.info(
@@ -507,7 +516,24 @@ class RequestCoordinator:
         """
         self._resolve(request_id, "form_state", field_values)
 
-    def handle_next_field_hint_response(self, request_id: str, hint: Optional[str]) -> None:
+    def consume_pending_next_field_schema(self) -> Optional[Dict[str, Any]]:
+        """Return and clear the most-recently delivered next-field schema (DTI,
+        bd polyglot-pdf-jnjj.22). Called by the confirm_field handler immediately
+        after request_next_field_hint() resolves -- the confirm flow is sequential
+        per session, so 'most recent' is unambiguous. Returns None if the client
+        sent no schema (e.g. legacy/non-DTI client, or form complete)."""
+        if not self._next_field_schemas:
+            return None
+        # Drain to the single most-recent entry; clear the rest defensively so a
+        # stale schema from an abandoned request can never be served later.
+        _, schema = self._next_field_schemas.popitem()
+        self._next_field_schemas.clear()
+        return schema
+
+    def handle_next_field_hint_response(
+        self, request_id: str, hint: Optional[str],
+        next_field_schema: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Handle next_field_hint_response message from frontend.
 
@@ -516,6 +542,10 @@ class RequestCoordinator:
         Args:
             request_id: ID matching the original request
             hint: Formatted hint string or None if form is complete
+            next_field_schema: (DTI, bd polyglot-pdf-jnjj.22) the next field's FULL
+                schema, supplied by the client (which owns it). Stashed for the
+                confirm handler to render into next_field_guidance. None for
+                legacy/non-DTI clients.
         """
         # Strip the technical "(field_id: ...)" parenthetical here, at the single
         # point where the frontend's spoken hint enters the backend, so EVERY
@@ -529,8 +559,14 @@ class RequestCoordinator:
         # matching pending request -- a stale/malformed response (unknown id, or a
         # non-string hint) must not reach strip_field_id_from_hint and risk raising
         # on the WS path (Codex PR #136).
-        self._resolve(request_id, "next_field", hint,
-                      transform=strip_field_id_from_hint)
+        resolved = self._resolve(request_id, "next_field", hint,
+                                 transform=strip_field_id_from_hint)
+        # Stash the DTI schema ONLY when _resolve matched a still-pending request.
+        # A LATE response (its hint request already timed out -> future popped) must
+        # NOT leave a stale schema in the stash, or the NEXT confirm's consume would
+        # serve the wrong field's guidance (bd polyglot-pdf-jnjj.22 fresh-eyes).
+        if resolved and next_field_schema and request_id:
+            self._next_field_schemas[request_id] = next_field_schema
 
     def handle_confirm_field_response(
         self, request_id: str, recorded: bool, reason: Optional[str] = None,

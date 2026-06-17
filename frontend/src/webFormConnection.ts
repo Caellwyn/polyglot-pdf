@@ -16,6 +16,7 @@ import {
   getFieldOrder,
   isFormComplete
 } from "./navigation";
+import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
@@ -94,6 +95,7 @@ export class WebFormConnection {
   private audioChunkCount = 0; // Track audio chunks for logging
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
+  private dtiModeEnabled = false; // DTI: send next field's full schema on hint response (bd polyglot-pdf-jnjj.22)
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
   // (bd polyglot-pdf-aun / WS-D). isSectionSwitching is the auto-reconnect
@@ -499,7 +501,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled, native_vad } = message;
+    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad } = message;
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -510,6 +512,14 @@ export class WebFormConnection {
       if (jit_mode_enabled) {
         console.log('[WebFormConnection] [OK] JIT mode enabled by backend');
       }
+    }
+
+    // DTI mode (bd polyglot-pdf-jnjj.22): when on, the client supplies each next
+    // field's full schema on next_field_hint_response (the backend renders it into
+    // the confirm_field guidance, since the client owns the schema).
+    this.dtiModeEnabled = dti_mode_enabled === true;
+    if (this.dtiModeEnabled) {
+      console.log('[WebFormConnection] [OK] DTI mode enabled by backend');
     }
 
     // Native-VAD mode (bd polyglot-pdf-333): tell the connection/audio layer
@@ -822,12 +832,34 @@ export class WebFormConnection {
   private handleGetNextFieldHintRequest(message: any): void {
     const requestId = message.request_id;
 
-    // Compute next field hint
-    const hint = this.computeNextFieldHintString();
+    // Compute the next field ONCE, and derive BOTH the hint and (for DTI) the
+    // schema from it -- so the hint and the supplied schema can never refer to
+    // different fields (fresh-eyes substitute review, Codex PR #229).
+    const nextField = isFormComplete(this.state)
+      ? null
+      : computeNextField(this.state, { skipConfirmed: true });
+
+    // Notify UI about the next field (highlight/scroll) -- same side effect
+    // computeNextFieldHintString had.
+    if (this.callbacks.onNextField) {
+      this.callbacks.onNextField(nextField ? nextField.id : null);
+    }
+
+    const hint = nextField
+      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
+      : null;
 
     // Store last field hint for recovery prompts
     if (hint) {
       sessionStorage.setItem('vff_last_field_hint', hint);
+    }
+
+    // DTI (bd polyglot-pdf-jnjj.22): the client owns the schema, so it supplies the
+    // SAME field's FULL schema here -- the backend renders it into the confirm_field
+    // guidance. Only when DTI is on AND there's a next field.
+    let nextFieldSchema: unknown = undefined;
+    if (this.dtiModeEnabled && nextField) {
+      nextFieldSchema = getFieldSchema(nextField.id, this.state.schema);
     }
 
     // Send response back to backend
@@ -835,6 +867,7 @@ export class WebFormConnection {
       type: "next_field_hint_response",
       request_id: requestId,
       hint: hint,  // Can be null if form is complete
+      ...(nextFieldSchema ? { next_field_schema: nextFieldSchema } : {}),
     });
   }
 

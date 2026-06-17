@@ -53,6 +53,11 @@ class FormFillingService:
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
         # JIT schema loading: Track which field schemas have been sent to Gemini
         self._loaded_field_ids: set = set()  # Prevents duplicate schemas in context
+        # DTI (bd polyglot-pdf-jnjj.22): client-supplied field schemas merged for
+        # VALIDATION only -- kept SEPARATE from self._schema['fields'] so the DTI SI
+        # branch's "fields[0] is the current field" assumption is never disturbed by
+        # accumulated fields (Codex PR #229). Schema only, no values.
+        self._dti_extra_fields: Dict[str, Dict[str, Any]] = {}
         # Store callbacks for reuse during section switching
         self._on_form_update = None
         self._on_transcript = None
@@ -91,13 +96,28 @@ class FormFillingService:
 
     def _build_fields_from_schema(self) -> list:
         """Build field list from schema on-demand (no caching).
-        
+
         Used by web sessions to construct field objects for tool responses.
         Backend doesn't persist these - they're rebuilt each time.
-        
+
         Delegates to field_utils.build_fields_from_schema for the actual logic.
+
+        In DTI/JIT mode self._schema['fields'] holds only the first field, so the
+        client-supplied fields recorded via merge_field_schema (DTI, bd
+        polyglot-pdf-jnjj.22) are folded in here for validation -- WITHOUT mutating
+        self._schema (which the SI builder reads for the current field).
         """
-        return build_fields_from_schema(self._schema or {})
+        schema = self._schema or {}
+        if not self._dti_extra_fields:
+            return build_fields_from_schema(schema)
+        present = {f.get("id") for f in schema.get("fields", [])}
+        merged = {
+            **schema,
+            "fields": list(schema.get("fields", [])) + [
+                f for fid, f in self._dti_extra_fields.items() if fid not in present
+            ],
+        }
+        return build_fields_from_schema(merged)
 
     async def start_session(
         self,
@@ -151,6 +171,13 @@ class FormFillingService:
         if schema:
             self._loaded_field_ids = set(schema.get("loaded_field_ids", []))
 
+        # Reset the DTI validation extras on every (re)start, INCLUDING a section
+        # switch (which calls start_session with the new section's schema). Otherwise
+        # client-supplied field schemas from a PREVIOUS section would linger and let
+        # the validator wrongly accept a stale cross-section field id (fresh-eyes
+        # substitute review, Codex PR #229). Parallels the _loaded_field_ids reseed.
+        self._dti_extra_fields = {}
+
         if accept_connection:
             await self._websocket.accept()
         
@@ -178,6 +205,7 @@ class FormFillingService:
             handle_get_field_value=self.handle_get_field_value,
             request_form_state_from_client=self.request_form_state_from_client,
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
+            merge_field_schema=self.merge_field_schema,
         )
 
         # Use web form tool declarations (stateless)
@@ -877,21 +905,27 @@ class FormFillingService:
         
         return await self._request_coordinator.request_next_field_hint()
 
-    def handle_next_field_hint_response(self, request_id: str, hint: Optional[str]) -> None:
+    def handle_next_field_hint_response(
+        self, request_id: str, hint: Optional[str],
+        next_field_schema: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Handle next_field_hint_response message from frontend.
-        
+
         Delegates to RequestCoordinator.
-        
+
         Args:
             request_id: ID matching the original request
             hint: Formatted hint string or None if form is complete
+            next_field_schema: (DTI, bd polyglot-pdf-jnjj.22) the next field's full
+                schema supplied by the client; None for legacy/non-DTI clients.
         """
         if not self._request_coordinator:
             _log.warning("handle_next_field_hint_response_no_coordinator", session_id=self._session_id)
             return
 
-        self._request_coordinator.handle_next_field_hint_response(request_id, hint)
+        self._request_coordinator.handle_next_field_hint_response(
+            request_id, hint, next_field_schema)
 
     def handle_confirm_field_response(
         self, request_id: str, recorded: bool, reason: Optional[str] = None,
@@ -917,6 +951,29 @@ class FormFillingService:
 
         self._request_coordinator.handle_confirm_field_response(
             request_id, recorded, reason, section_complete)
+
+    def merge_field_schema(self, field_schema: Dict[str, Any]) -> None:
+        """Record a CLIENT-SUPPLIED field schema for VALIDATION (DTI, bd
+        polyglot-pdf-jnjj.22; Codex PR #229).
+
+        In JIT/DTI mode self._schema['fields'] holds only the first field, so
+        update_form_fields validation (build_fields_from_schema) would reject every
+        later field as 'unknown'. The client delivers each next field's full schema
+        on next_field_hint_response; we record it here (SCHEMA ONLY -- no user
+        values) so _build_fields_from_schema can validate it.
+
+        Stored in a SEPARATE dict, NOT appended to self._schema['fields'] -- the DTI
+        SI branch renders schema['fields'][0] as the CURRENT field, so growing that
+        list would make an SI rebuild (recovery restart) describe a stale early
+        field (Codex PR #229 round-2 follow-up). Idempotent by field id.
+        """
+        if not field_schema or not field_schema.get("id"):
+            return
+        fid = field_schema["id"]
+        if fid not in self._dti_extra_fields:
+            self._dti_extra_fields[fid] = field_schema
+            _log.debug("dti_recorded_field_for_validation", field_id=fid,
+                       total_extra=len(self._dti_extra_fields))
 
     def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
         """
