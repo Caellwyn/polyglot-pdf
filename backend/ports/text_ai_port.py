@@ -12,10 +12,13 @@ class ITextAI(ABC):
         {"conflicts": []} so the caller advances unchecked."""
         ...
 
-    @abstractmethod
     async def ask(self, query: str, context: dict) -> str:
         """Send a prose query + current-values context to the secretary agent.
         Returns the secretary's answer as a plain string. Fail-open: on error
         returns "" so the Live model can ask the user directly.
+        Non-abstract default raises NotImplementedError so implementations that
+        have not yet built the secretary bead fail loudly rather than silently.
         Implementation added in the A-pillar secretary bead (polyglot-pdf-jnjj.*)."""
-        ...
+        raise NotImplementedError(
+            "ask() is not implemented until the A-pillar secretary bead lands."
+        )

@@ -180,6 +180,28 @@ async def test_validate_field_count_coerced_to_int(adapter_with_client):
     assert complete_events[0].get("field_count") == 5
 
 
+@pytest.mark.asyncio
+async def test_validate_fail_open_on_bad_field_count(adapter_with_client):
+    """Non-numeric field_count (e.g. empty string) does not raise; validate returns normally."""
+    response = _make_response(text='{"conflicts":[]}', cached_tokens=0)
+    adapter = adapter_with_client(response)
+    result = await adapter.validate({
+        "stable_prefix": [],
+        "fresh_tail": [],
+        "field_count": "",
+    })
+    assert result == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_validate_fail_open_on_non_dict_conflict_items(adapter_with_client):
+    """Conflicts list with non-dict items returns fail-open {"conflicts": []}."""
+    response = _make_response(text='{"conflicts": ["not a dict"]}', cached_tokens=0)
+    adapter = adapter_with_client(response)
+    result = await adapter.validate({"stable_prefix": [], "fresh_tail": []})
+    assert result == {"conflicts": []}
+
+
 def test_get_text_ai_wiring():
     """get_text_ai() resolves to a TextAIGemini without import error."""
     from backend.dependencies import get_text_ai

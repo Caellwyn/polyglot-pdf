@@ -98,12 +98,17 @@ class TextAIGemini(ITextAI):
 
         stable_prefix = payload.get("stable_prefix", [])
         fresh_tail = payload.get("fresh_tail", [])
-        # Coerce to int so arbitrary caller values never reach the log.
-        raw_field_count = payload.get("field_count", None)
-        field_count = int(raw_field_count) if raw_field_count is not None else None
 
         raw = ""
         try:
+            # Coerce field_count to int inside the guarded block; skip if invalid
+            # so a bad optional telemetry value never propagates as an exception.
+            raw_field_count = payload.get("field_count", None)
+            try:
+                field_count = int(raw_field_count) if raw_field_count is not None else None
+            except (ValueError, TypeError):
+                field_count = None
+
             raw = await self._generate(
                 stable_prefix=stable_prefix,
                 fresh_tail=fresh_tail,
@@ -116,6 +121,11 @@ class TextAIGemini(ITextAI):
                     "text_ai_validate_bad_conflicts_type_fail_open",
                     conflicts_type=type(conflicts).__name__,
                 )
+                return {"conflicts": []}
+            # Shallow per-item check: each conflict must be a dict (B3 enforces
+            # the full field_ids/reason shape when consuming the verdict).
+            if not all(isinstance(c, dict) for c in conflicts):
+                self._log.warning("text_ai_validate_bad_conflict_items_fail_open")
                 return {"conflicts": []}
             self._log.info(
                 "text_ai_validate_complete",
