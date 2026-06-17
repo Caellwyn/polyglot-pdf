@@ -138,6 +138,80 @@ def get_next_field_schema(part_data: dict, current_field_id: str | None = None) 
     return minimal_schema
 
 
+def get_field_guidance(field: dict) -> dict | None:
+    """Build the per-field guidance block for Dynamic Turn Injection (bd
+    polyglot-pdf-jnjj.22).
+
+    Unlike get_next_field_schema (which reads FLAT keys -- placeholder, help_text,
+    description -- the demo schema's shape), this reads the canonical NESTED `help`
+    block (`help.instructions`, `help.format_hint`) that real form-kit schemas use
+    (e.g. form-kits/i-90/schema.json: help.instructions on every field), with the
+    flat keys as a fallback so the demo schema still renders. This is the single
+    source of truth for a field's guidance: it feeds both the DTI system
+    instruction (field 1) and the confirm_field tool response (fields 2..N), so the
+    model sees identical guidance whichever path delivers it.
+
+    PII-free schema only -- never user values.
+
+    Args:
+        field: A full field dict from the schema.
+
+    Returns:
+        A guidance dict, or None if no field. Keys: field_id, spoken_name, name,
+        type, required, instructions, format_hint, options, validation. Absent keys
+        are omitted (not null) to keep the rendered block lean.
+    """
+    if not field or not field.get("id"):
+        return None
+
+    help_block = field.get("help") if isinstance(field.get("help"), dict) else {}
+
+    # instructions: nested help.instructions (canonical) -> flat help_text/description.
+    instructions = (
+        help_block.get("instructions")
+        or field.get("help_text")
+        or field.get("description")
+    )
+    # format_hint: nested help.format_hint (canonical) -> flat format.
+    format_hint = help_block.get("format_hint") or field.get("format")
+
+    guidance: dict = {
+        "field_id": field.get("id"),
+        "spoken_name": field.get("spoken_name") or field.get("name") or field.get("id"),
+        "type": field.get("type", "text"),
+    }
+    if field.get("name"):
+        guidance["name"] = field["name"]
+    if field.get("required"):
+        guidance["required"] = field["required"]
+    if instructions:
+        guidance["instructions"] = instructions
+    if format_hint:
+        guidance["format_hint"] = format_hint
+
+    # Options for select/radio/checkbox (label/value pairs or bare values).
+    options = field.get("options") or field.get("allowed_values")
+    if options:
+        guidance["options"] = options
+
+    # Validation hints that help the model guide the user (no internal-only keys).
+    validation = field.get("validation")
+    if isinstance(validation, dict):
+        minimal_validation = {
+            k: validation[k]
+            for k in ("format", "format_preset", "pattern", "min", "max",
+                      "min_length", "max_length", "minLength", "maxLength")
+            if k in validation
+        }
+        if minimal_validation:
+            guidance["validation"] = minimal_validation
+    # Flat placeholder as a last-resort example.
+    if field.get("placeholder"):
+        guidance.setdefault("example", field["placeholder"])
+
+    return guidance
+
+
 def should_include_schema_in_response(field_id: str, loaded_field_ids: set) -> bool:
     """
     Determine if a field's schema should be included in a tool response.

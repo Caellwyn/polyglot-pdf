@@ -877,21 +877,27 @@ class FormFillingService:
         
         return await self._request_coordinator.request_next_field_hint()
 
-    def handle_next_field_hint_response(self, request_id: str, hint: Optional[str]) -> None:
+    def handle_next_field_hint_response(
+        self, request_id: str, hint: Optional[str],
+        next_field_schema: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Handle next_field_hint_response message from frontend.
-        
+
         Delegates to RequestCoordinator.
-        
+
         Args:
             request_id: ID matching the original request
             hint: Formatted hint string or None if form is complete
+            next_field_schema: (DTI, bd polyglot-pdf-jnjj.22) the next field's full
+                schema supplied by the client; None for legacy/non-DTI clients.
         """
         if not self._request_coordinator:
             _log.warning("handle_next_field_hint_response_no_coordinator", session_id=self._session_id)
             return
 
-        self._request_coordinator.handle_next_field_hint_response(request_id, hint)
+        self._request_coordinator.handle_next_field_hint_response(
+            request_id, hint, next_field_schema)
 
     def handle_confirm_field_response(
         self, request_id: str, recorded: bool, reason: Optional[str] = None,

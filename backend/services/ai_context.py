@@ -5,8 +5,64 @@ import json
 from backend.config import get_settings
 from backend.services.manifest_service import (
     format_manifest_for_context,
+    get_field_guidance,
     get_next_field_schema
 )
+
+
+def render_field_guidance(field: Optional[Dict[str, Any]]) -> str:
+    """Render a single field's guidance as the readable text block the model reads
+    (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
+
+    Single source of truth: this same text feeds the DTI system instruction
+    (field 1, via {current_field_guidance}) and the confirm_field tool response
+    (fields 2..N), so the model sees identical guidance whichever path delivers it.
+    Accepts a raw field dict (full schema) and reduces it via
+    manifest_service.get_field_guidance.
+    """
+    guidance = get_field_guidance(field) if field else None
+    if not guidance:
+        return "No fields available"
+
+    parts = [
+        f"ID: {guidance['field_id']}",
+        f"Spoken: {guidance['spoken_name']}",
+        f"Type: {guidance.get('type', 'text')}",
+    ]
+    if guidance.get("required"):
+        parts.append("Required: true")
+    if guidance.get("instructions"):
+        parts.append(f"Instructions: {guidance['instructions']}")
+    if guidance.get("format_hint"):
+        parts.append(f"Format: {guidance['format_hint']}")
+
+    options = guidance.get("options")
+    if options:
+        opt_strs = []
+        for opt in options:
+            if isinstance(opt, dict):
+                opt_value = opt.get("value", "")
+                opt_label = opt.get("label", "")
+                if opt_label and opt_value and opt_label != opt_value:
+                    opt_strs.append(f'"{opt_label}" (use value: {opt_value})')
+                elif opt_label:
+                    opt_strs.append(opt_label)
+                else:
+                    opt_strs.append(opt_value)
+            else:
+                opt_strs.append(str(opt))
+        parts.append(f"Options: [{', '.join(opt_strs)}]")
+
+    validation = guidance.get("validation")
+    if isinstance(validation, dict):
+        for key in ("format", "format_preset", "pattern", "min", "max",
+                    "min_length", "max_length", "minLength", "maxLength"):
+            if key in validation:
+                parts.append(f"{key}: {validation[key]}")
+    if guidance.get("example"):
+        parts.append(f"Example: {guidance['example']}")
+
+    return " | ".join(parts)
 
 
 def get_confirmation_policy(section_number: int, total_sections: int) -> str:
@@ -276,8 +332,53 @@ def build_form_context(
             "Then ask 'Is everything correct?'"
         )
 
+    # DTI (Dynamic Turn Injection, bd polyglot-pdf-jnjj.22): thin-principal SI.
+    # Static backbone + ONLY the current field's guidance. No {fields_json} dump and
+    # no {manifest_text}: each NEXT field's guidance rides the confirm_field tool
+    # response. Reuses the JIT handshake shape (client sends the first field's full
+    # schema as schema["fields"][0] + a section manifest for progress counts), so
+    # progress is computed from the real section, not the one-field schema["fields"].
+    # Precedence: DTI takes priority over JIT (mutually exclusive at the SI level).
+    # getattr-guard so a minimal settings stub (some unit tests) without USE_DTI
+    # falls through to the JIT/legacy branches rather than AttributeError-ing.
+    if getattr(settings, "USE_DTI", False):
+        client_manifest = schema.get("manifest") or {}
+        current_section = client_manifest.get("current_section") or {}
+        section_fields = current_section.get("fields", [])
+        # Recompute progress from the real section field set (same fix as the JIT
+        # branch -- avoid "x/1" when schema["fields"] holds only the first field).
+        if current_section:
+            total_fields = len(section_fields)
+            filled_count = sum(
+                1 for f in section_fields if current_values.get(f.get("field_id"))
+            )
+            unfilled_count = total_fields - filled_count
+
+        # Field 1's full guidance. The client sends the first UNFILLED field's FULL
+        # schema as schema["fields"][0] (frontend getJITHandshakePayload), which
+        # carries the nested help block -- so get_field_guidance reads real
+        # instructions/format_hint. Fields 2..N arrive via the confirm_field
+        # response (callback_handler), rendered by the SAME render_field_guidance.
+        fields_list = schema.get("fields") or []
+        first_field = fields_list[0] if fields_list else None
+        current_field_guidance = render_field_guidance(first_field)
+
+        system_instruction = settings.DTI_SYSTEM_INSTRUCTION.format(
+            form_title=form_title,
+            section_number=section_num_text,
+            total_sections=total_sections_text,
+            section_label=section_label_text,
+            section_list=section_list_text,
+            filled_count=filled_count,
+            total_fields=total_fields,
+            fill_language=fill_language,
+            previous_spoken_names=previous_names_text,
+            next_field_hint=next_field_hint or "the first unfilled field",
+            current_field_guidance=current_field_guidance,
+            confirmation_policy=confirmation_policy,
+        )
     # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled
-    if settings.USE_JIT_SCHEMA:
+    elif settings.USE_JIT_SCHEMA:
         # Consume the section manifest the CLIENT sent on the handshake
         # (schema["manifest"]), NOT a manifest regenerated from schema["fields"]
         # -- in JIT mode schema["fields"] is only the synthesized first-field
