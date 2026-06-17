@@ -61,7 +61,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // folder cannot overwrite the current folder's progress (stale-folder race).
   const refreshSeq = React.useRef(0);
 
-  const refresh = React.useCallback(async (dir: FsDirectoryHandle) => {
+  // `deliberate` = a user-initiated Refresh (disk truth supersedes remembered
+  // saved edits). Automatic scans (folder open, post-onboard) must NOT clear the
+  // cache: a stale initial scan completing after a save would otherwise wipe a
+  // just-saved value and reintroduce the post-save revert (Codex PR #224 r7).
+  const refresh = React.useCallback(async (dir: FsDirectoryHandle, deliberate = false) => {
     const seq = ++refreshSeq.current;
     setBusy(true);
     setError(null);
@@ -78,11 +82,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       const byId: Record<string, KitProgress> = {};
       for (const p of computed) byId[p.entry.id] = p;
       setProgress(byId);
-      // A completed scan is authoritative disk truth, so drop remembered edited
-      // values -- otherwise a Refresh (after extraction reruns or a manual JSON
-      // edit) could not update a previously-cached kit's bar (Codex PR #224 r6).
-      // The OPEN kit keeps its live override (liveProgress), which is separate.
-      setEditedProgress({});
+      // Only a DELIBERATE Refresh treats the scan as superseding remembered saved
+      // values (so an external/on-disk change can update a cached kit's bar --
+      // Codex r6). An automatic scan must not clear the cache (Codex r7). The OPEN
+      // kit keeps its live override (liveProgress), which is separate.
+      if (deliberate) setEditedProgress({});
     } catch (err) {
       if (seq !== refreshSeq.current) return;
       setError(err instanceof Error ? err.message : 'Failed to read folder');
@@ -187,7 +191,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
           {root ? 'Change folder' : 'Open form-kits folder'}
         </button>
         {root && (
-          <button className="btn btn-secondary" onClick={() => void refresh(root)} disabled={busy}>
+          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy}>
             Refresh
           </button>
         )}

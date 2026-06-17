@@ -276,6 +276,40 @@ describe('FormCatalogue', () => {
     expect(screen.queryByText('60%')).toBeNull();
   });
 
+  it('keeps a cached saved percentage across a non-deliberate (post-onboard) scan', async () => {
+    // Codex round 7: only a deliberate Refresh clears the cache; an automatic scan
+    // (e.g. the re-scan after onboarding a dropped PDF) must NOT wipe a just-saved
+    // cached value, else the post-save revert returns.
+    const root = mockRoot([
+      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    const { rerender } = render(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('Kit A');
+
+    // Save an edit -> 60% cached for A, then deselect.
+    rerender(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        selectedKitId="a"
+        liveProgress={{ kitId: 'a', saved: true, percent: 60, complete: 3, total: 5 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
+    rerender(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />);
+
+    // A non-deliberate scan (drop a PDF -> post-onboard refresh) must keep 60%.
+    const pdf = { name: 'b.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
+    fireEvent.drop(screen.getByTestId('form-catalogue'), { dataTransfer: { files: [pdf] } });
+    await waitFor(() => expect(screen.getByText(/Added "b"/)).toBeTruthy());
+    expect(screen.getByText('60%')).toBeTruthy(); // cache survived the auto-scan
+  });
+
   it('does NOT persist an UNSAVED edit after the kit is deselected (discard flow)', async () => {
     // Codex round 5: an unsaved edit shows live on the open card, but if the user
     // discards it (switches kits without saving), the card must revert to the

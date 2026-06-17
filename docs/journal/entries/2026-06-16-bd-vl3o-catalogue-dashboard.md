@@ -50,9 +50,11 @@ catalogue appears immediately and the bars fill in.
    vs in-progress counts. PASS -- `summarizeCatalogue` header + per-card status
    badge and %; component-tested (`FormCatalogue.test.tsx`).
 
-**Verification:** 11 new tests (8 metric/aggregate units, 3 dashboard component);
-full schema-editor suite 198/198; `tsc --noEmit` clean. Backend suite untouched
-(FE-only) and green from prep.
+**Verification:** 23 new tests (11 metric/aggregate units in
+`formKitDirectory.progress.test.ts` + 12 dashboard component tests in
+`FormCatalogue.test.tsx`); full schema-editor suite green; `tsc --noEmit` clean.
+Backend suite untouched (FE-only) and green from prep. (The Codex review loop --
+7 rounds, below -- grew the test count well past the initial pass.)
 
 **Fresh-eyes assess (Sonnet, arm B picker, 2 rounds to NO-GAPS):** both rubric
 criteria PASS; round 1 found four in-scope robustness gaps, all adopted:
@@ -124,6 +126,14 @@ Refresh after an external/on-disk schema change couldn't update a cached kit's b
 -- a completed scan now clears the cache (disk truth wins), while the OPEN kit
 keeps its separate live override.
 
+Round 7 -- one code finding (+ two journal-accuracy nits, fixed): (q, P1) the r6
+"clear cache on scan completion" was too broad -- a STALE initial scan completing
+after a save would wipe the just-saved cache, reintroducing the post-save revert.
+Narrowed: only a DELIBERATE Refresh (the button passes `deliberate=true`) clears
+the cache; automatic scans (folder-open, post-onboard) never do. The two nits were
+this entry's own stale `handleFolderChange` name (now `confirmFolderChange` +
+`clearOpenKit`) and an undercounted test inventory -- both corrected above.
+
 ## Lessons
 
 - **Reuse the one metric, don't mint a parallel one.** "Review progress" could
@@ -151,19 +161,26 @@ keeps its separate live override.
   `getCompletionStats`.
 - `schema-editor/src/components/FormCatalogue.tsx` -- per-kit progress state +
   computation after list (monotonic refresh-token guard vs the stale-folder
-  race); aggregate overview header; per-card review bar + %; `liveProgress` prop
-  override for the open kit; "schema present but unreadable" notice.
+  race); aggregate overview header; per-card review bar + %; `liveProgress`
+  override for the open kit + an `editedProgress` cache for last-saved values
+  (cleared only by a deliberate Refresh); `confirmFolderChange`/`clearOpenKit`
+  callbacks; "schema present but unreadable" notice.
 - `schema-editor/src/App.tsx` -- passes `liveProgress` (the open kit's live
-  in-memory review %/counts) to FormCatalogue so the bar tracks unsaved edits;
-  `handleFolderChange` (confirms unsaved edits, clears open-kit state, returns
-  false to abort).
+  in-memory review %/counts + a `saved` flag = clean AND saving to the kit's own
+  schema) to FormCatalogue; `confirmFolderChange` (pure pre-picker unsaved-edits
+  guard, returns false to abort) + `clearOpenKit` (runs after the picker returns);
+  `savingToKit` flag (false after a Save As).
 - `schema-editor/src/utils/formKitDirectory.ts` adds a `schemaError` flag to
-  KitProgress (present-but-broken vs no-schema).
-- `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 8 unit
+  KitProgress (present-but-broken vs no-schema) and validates `fields` is an array
+  of objects.
+- `schema-editor/src/utils/formKitDirectory.progress.test.ts` -- NEW. 11 unit
   tests (aggregate counts incl. complete-without-schema, percent from completion,
-  null for no/unparseable/malformed schema, 0% for empty schema).
-- `schema-editor/src/components/FormCatalogue.test.tsx` -- 3 new dashboard tests
-  (aggregate overview, per-form %, 0%-bar-vs-no-bar distinction).
+  null for no/unparseable/malformed schema, non-array + non-object/array field
+  entries, 0% for empty schema).
+- `schema-editor/src/components/FormCatalogue.test.tsx` -- 12 new dashboard tests
+  (aggregate overview, per-form %, 0%-bar-vs-no-bar, unreadable-schema notice,
+  folder-switch abort/clear-timing, live override, saved-progress persistence,
+  discard-flow revert, Refresh-replaces-cache, cache-survives-auto-scan).
 - `docs/journal/telemetry/2026-06-16T05-11-51Z-1639d1bb.json` -- carried-forward
   telemetry row for PR #216 (bd bjwy), recorded after that PR had merged; rides
   this PR for completeness.
