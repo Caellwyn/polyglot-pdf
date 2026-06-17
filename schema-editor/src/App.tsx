@@ -131,29 +131,35 @@ export const App: React.FC = () => {
     }
   }, [hasUnsavedChanges, loadSchemaState]);
 
-  // When the catalogue switches to a different folder, drop the open-kit state so
-  // a same-named kit in the new folder can't inherit the old form's live progress
-  // (Codex PR #224). Returns false to ABORT the switch when the user declines to
+  // Guard a folder switch: returns false to ABORT when the user declines to
   // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
-  // silently drop dirty work -- Codex P0). The user re-opens a kit from the new
-  // folder explicitly.
-  const handleFolderChange = React.useCallback((): boolean => {
+  // silently drop dirty work -- Codex P0). Pure check: it must NOT mutate state,
+  // because the picker may still be cancelled after this returns true (Codex
+  // round 4 -- clearing here would discard the kit for nothing).
+  const confirmFolderChange = React.useCallback((): boolean => {
     if (hasUnsavedChanges) {
-      const confirmed = window.confirm(
+      return window.confirm(
         'You have unsaved changes. Are you sure you want to switch folders?'
       );
-      if (!confirmed) return false;
     }
+    return true;
+  }, [hasUnsavedChanges]);
+
+  // Drop the open-kit state AFTER a new folder is actually chosen, so a same-named
+  // kit in the new folder can't inherit the old form's live progress (Codex PR
+  // #224). Clears savedFileName too, else the header keeps showing "Saved to <old
+  // schema>" with no schema open (Codex round 4).
+  const clearOpenKit = React.useCallback((): void => {
     setSelectedKitId(null);
     setSelectedForm(null);
+    setSavedFileName(null);
     clearSchema();
     fileHandleRef.current = null;
     if (pdfBlobUrlRef.current) {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-    return true;
-  }, [hasUnsavedChanges, clearSchema]);
+  }, [clearSchema]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {
@@ -420,7 +426,8 @@ export const App: React.FC = () => {
             directory API (where the catalogue shows its unsupported message). */}
         <FormCatalogue
           onOpenKit={handleOpenKit}
-          onFolderChange={handleFolderChange}
+          confirmFolderChange={confirmFolderChange}
+          clearOpenKit={clearOpenKit}
           selectedKitId={selectedKitId}
           liveProgress={
             // Keep the open kit's catalogue bar in sync with in-editor edits:

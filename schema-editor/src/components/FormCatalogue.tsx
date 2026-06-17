@@ -12,11 +12,17 @@ interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
   onOpenKit: (entry: CatalogueEntry) => void;
   /**
-   * Called when the user is about to switch to a different form-kits folder.
-   * Returns false to ABORT the switch (e.g. the user declined to discard unsaved
-   * edits), in which case the folder picker is not opened.
+   * Guard run BEFORE opening the folder picker: returns false to ABORT the switch
+   * (e.g. the user declined to discard unsaved edits), in which case the picker is
+   * not opened. Must NOT mutate state -- it may be called and then the picker
+   * cancelled, leaving the open kit intact.
    */
-  onFolderChange?: () => boolean;
+  confirmFolderChange?: () => boolean;
+  /**
+   * Run AFTER the picker returns a new directory: drops the open-kit state so a
+   * same-named kit in the new folder can't inherit the prior form's live progress.
+   */
+  clearOpenKit?: () => void;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
   /**
@@ -40,7 +46,7 @@ const STATUS_STYLE: Record<string, string> = {
  * the browser lacks the File System Access directory API.
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
-  onOpenKit, onFolderChange, selectedKitId, liveProgress,
+  onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
@@ -82,22 +88,43 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
 
   const summary = React.useMemo(() => summarizeCatalogue(kits), [kits]);
 
+  // Last live in-editor value seen per kit, kept SEPARATELY from the disk-scan
+  // `progress` map so it survives after that kit stops being the live one AND is
+  // immune to a folder-scan completing later and clobbering it (Codex PR #224).
+  // The render overlays this on top of the scan. Editing kit A then opening B
+  // would otherwise revert A's card to its stale scan % until a manual Refresh;
+  // because liveProgress reflects in-memory edits, this also covers post-save.
+  const [editedProgress, setEditedProgress] =
+    React.useState<Record<string, { percent: number; complete: number; total: number }>>({});
+  React.useEffect(() => {
+    if (!liveProgress) return;
+    const { kitId, percent, complete, total } = liveProgress;
+    setEditedProgress(prev => {
+      const e = prev[kitId];
+      if (e && e.percent === percent && e.complete === complete && e.total === total) return prev;
+      return { ...prev, [kitId]: { percent, complete, total } };
+    });
+  }, [liveProgress]);
+
   const handlePickFolder = React.useCallback(async () => {
-    // Confirm/clear the open-kit state BEFORE opening the picker: this both
-    // guards unsaved edits (returns false to abort) and prevents a same-named kit
-    // in the new folder from inheriting the previous form's live progress
-    // (Codex PR #224). Only the first folder-open (no prior state) skips it.
-    if (onFolderChange && onFolderChange() === false) return;
+    // Guard unsaved edits BEFORE opening the picker (returns false to abort), but
+    // do NOT mutate state yet: if the user then cancels the native picker, the
+    // open kit must survive intact (Codex PR #224). Only after the picker returns
+    // a directory do we clear the open-kit state -- which also prevents a
+    // same-named kit in the new folder from inheriting the prior form's progress.
+    if (confirmFolderChange && confirmFolderChange() === false) return;
     setNotice(null); // a prior "Added X" notice is stale once the folder changes
     try {
       const dir = await pickDirectory();
+      clearOpenKit?.();
+      setEditedProgress({}); // remembered edits belong to the old folder
       setRoot(dir);
       await refresh(dir);
     } catch (err) {
-      if (isUserAbort(err)) return;
+      if (isUserAbort(err)) return; // picker cancelled -> open kit left intact
       setError(err instanceof Error ? err.message : 'Failed to open folder');
     }
-  }, [refresh, onFolderChange]);
+  }, [refresh, confirmFolderChange, clearOpenKit]);
 
   const handleDrop = React.useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -184,17 +211,20 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {kits.map((kit) => {
             const prog = progress[kit.id];
-            // The open kit shows its LIVE in-editor stats (tracks unsaved edits);
-            // others show the disk-scanned value. Percent AND the complete/total
-            // hover counts come from the same source so they never disagree.
+            // Precedence: the OPEN kit's live stats (tracks unsaved edits) > the
+            // last remembered edited value for this kit > the disk-scan value.
+            // Percent AND the complete/total hover counts come from one source so
+            // they never disagree.
             const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
-            const pct = live ? live.percent : (prog?.reviewPercent ?? null);
-            const completeFields = live ? live.complete : (prog?.completeFields ?? 0);
-            const totalFields = live ? live.total : (prog?.totalFields ?? 0);
+            const edited = editedProgress[kit.id] ?? null;
+            const source = live ?? edited;
+            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
+            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
+            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
             // Present-but-unreadable schema: show a notice instead of nothing, so
-            // a broken schema isn't mistaken for a pre-extraction kit. A live
-            // override (open kit) always has measurable stats, so suppress it then.
-            const showSchemaError = !live && prog?.schemaError && pct === null;
+            // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
+            // override always has measurable stats, so suppress it then.
+            const showSchemaError = !source && prog?.schemaError && pct === null;
             return (
             <li key={kit.id}>
               <button

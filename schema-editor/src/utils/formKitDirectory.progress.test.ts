@@ -148,6 +148,17 @@ describe('readKitProgress', () => {
     expect(prog.schemaError).toBe(true);
   });
 
+  it('flags schemaError for array-valued field entries (typeof [] === object)', async () => {
+    // Codex round 4: `fields: [[]]` -- entries are arrays, which pass a bare
+    // typeof==='object' check. getCompletionStats reads props off them without
+    // throwing -> bogus 0%. The guard must also reject arrays.
+    const prog = await readKitProgress(
+      entryServingSchema('k', { form_metadata: { form_number: 'T' }, fields: [[]] }),
+    );
+    expect(prog.reviewPercent).toBeNull();
+    expect(prog.schemaError).toBe(true);
+  });
+
   it('reports 0% (not null) for a valid schema with zero fields', async () => {
     // An extracted-but-empty schema is distinct from a pre-extraction kit: it has
     // a measurable (0%) progress, so the bar renders rather than being hidden.

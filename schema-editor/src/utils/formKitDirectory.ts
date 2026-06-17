@@ -181,7 +181,7 @@ export async function readKitProgress(
   // valid 0% schema). Anything else is a broken extraction, surfaced as schemaError.
   const fieldsOk =
     Array.isArray(schema.fields) &&
-    schema.fields.every(f => f !== null && typeof f === 'object');
+    schema.fields.every(f => f !== null && typeof f === 'object' && !Array.isArray(f));
   if (!fieldsOk) {
     return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
   }

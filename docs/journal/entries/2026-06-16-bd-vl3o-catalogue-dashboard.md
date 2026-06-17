@@ -88,18 +88,25 @@ its detail share one source; (f) the malformed-schema guard relied on
 `getCompletionStats` throwing, but an iterable-but-invalid `fields` (e.g.
 `"abc"`) would not throw and reported a bogus % -- added an explicit
 `Array.isArray(schema.fields)` check that surfaces `schemaError` instead.
-Round 3 caught two more (and one deferred): (g, P0) `onFolderChange` cleared the
-schema without the unsaved-edits confirmation `handleOpenKit` has, so switching
-folders could silently drop dirty work -- `handleFolderChange` now runs the same
-confirm and returns false to ABORT the switch (the picker isn't even opened);
-(h, P1) the `fields` guard accepted an array of non-objects (`["abc"]`), which
-`getCompletionStats` reads props off without throwing -- tightened to require
-every entry be an object. (i, P1 DEFERRED to `polyglot-pdf-8srh`) after editing
-kit A, saving, and opening kit B, A's card falls back to its stale folder-scan %
-because `handleSave` never updates the catalogue progress map -- a real live-sync
-gap, but the third consecutive sibling of the same refinement, so deferred rather
-than looped on; the core dashboard (metric, per-form %, aggregate counts) is
-complete and correct.
+Round 3 caught two more (and one initially deferred): (g, P0) `onFolderChange`
+cleared the schema without the unsaved-edits confirmation `handleOpenKit` has, so
+switching folders could silently drop dirty work -- added the same confirm with an
+abort path; (h, P1) the `fields` guard accepted an array of non-objects
+(`["abc"]`), which `getCompletionStats` reads props off without throwing --
+tightened to require every entry be an object.
+
+Round 4 (maintainer chose to keep iterating) -- four findings, all fixed: (j, P1)
+the round-3 P0 fix cleared the open-kit state BEFORE the picker, so confirming then
+cancelling the native picker discarded the kit for nothing -- split into
+`confirmFolderChange` (pure guard, pre-picker) + `clearOpenKit` (runs only AFTER
+the picker returns a dir); (k, P1) the field-entry guard still accepted arrays
+(`typeof [] === 'object'`) -- excluded arrays so `fields: [[]]` surfaces
+schemaError; (l, P1) `clearOpenKit` left `savedFileName` set, so the header showed
+"Saved to <old schema>" with no schema open -- cleared it too; (m, P1, the
+round-3 deferral) the saved-kit % went stale after opening another kit -- FIXED
+here (not deferred after all): a separate `editedProgress` map caches the open
+kit's live value and overlays the disk scan, surviving deselection and immune to a
+late folder-scan clobbering it; `polyglot-pdf-8srh` (the deferral bead) is CLOSED.
 
 ## Lessons
 

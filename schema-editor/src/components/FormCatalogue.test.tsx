@@ -209,6 +209,41 @@ describe('FormCatalogue', () => {
     expect(screen.getAllByText('Review')).toHaveLength(1);
   });
 
+  it('persists the live percentage after the kit stops being live (no revert to stale scan)', async () => {
+    // Codex round 4 / bd 8srh: after editing+saving kit A then opening B, A's card
+    // must keep the edited % instead of reverting to the disk-scan value. The
+    // catalogue caches the last live value into its progress map.
+    const root = mockRoot([
+      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    // Real sequence: open the folder first (no kit open yet)...
+    const { rerender } = render(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('Kit A');
+
+    // ...then the user opens Kit A and edits it (liveProgress appears at 60%)...
+    rerender(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        selectedKitId="a"
+        liveProgress={{ kitId: 'a', percent: 60, complete: 3, total: 5 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
+
+    // ...then Kit A is deselected (user opened a different kit) -> liveProgress gone.
+    rerender(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    // A's card still shows the persisted 60%, not the disk scan's 0%.
+    expect(screen.getByText('60%')).toBeTruthy();
+    expect(screen.queryByText('0%')).toBeNull();
+  });
+
   it('overrides the open kit bar with the live in-editor percentage', async () => {
     // The disk schema is empty (0%); liveProgress reports 75% for the open kit, so
     // the card must show 75% (tracks unsaved edits), not the stale 0% (Codex finding).
@@ -244,20 +279,67 @@ describe('FormCatalogue', () => {
     await waitFor(() => expect(screen.getByText(/Schema present but unreadable/i)).toBeTruthy());
   });
 
-  it('aborts the folder switch (does not open the picker) when onFolderChange returns false', async () => {
-    // Codex P0: switching folders with unsaved edits must be confirmable; a
-    // false return (user declined) means the picker is never opened.
+  it('aborts the folder switch (no picker, no clear) when confirmFolderChange returns false', async () => {
+    // Codex P0: switching folders with unsaved edits must be confirmable; a false
+    // return (user declined) means the picker is never opened and the open kit is
+    // never cleared.
     const root = mockRoot([mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90' }) })]);
     const picker = vi.fn(async () => root);
     (window as unknown as Record<string, unknown>).showDirectoryPicker = picker;
-    const onFolderChange = vi.fn(() => false); // user declined to discard edits
+    const confirmFolderChange = vi.fn(() => false); // user declined to discard edits
+    const clearOpenKit = vi.fn();
 
     render(
-      <FormCatalogue onOpenKit={vi.fn()} onFolderChange={onFolderChange} selectedKitId="i-90" />,
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        confirmFolderChange={confirmFolderChange}
+        clearOpenKit={clearOpenKit}
+        selectedKitId="i-90"
+      />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
 
-    expect(onFolderChange).toHaveBeenCalled();
+    expect(confirmFolderChange).toHaveBeenCalled();
     expect(picker).not.toHaveBeenCalled(); // aborted before opening the picker
+    expect(clearOpenKit).not.toHaveBeenCalled(); // open kit left intact
+  });
+
+  it('does NOT clear the open kit when the picker is cancelled', async () => {
+    // Codex round 4: clearing before the picker would discard the open kit even if
+    // the user then cancels the native picker. clearOpenKit runs only on success.
+    const confirmFolderChange = vi.fn(() => true);
+    const clearOpenKit = vi.fn();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => {
+      throw new DOMException('cancelled', 'AbortError');
+    });
+
+    render(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        confirmFolderChange={confirmFolderChange}
+        clearOpenKit={clearOpenKit}
+        selectedKitId="i-90"
+      />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(confirmFolderChange).toHaveBeenCalled());
+    expect(clearOpenKit).not.toHaveBeenCalled(); // cancelled -> kit intact
+  });
+
+  it('clears the open kit after the picker successfully returns a folder', async () => {
+    const root = mockRoot([mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90' }) })]);
+    const clearOpenKit = vi.fn();
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        confirmFolderChange={vi.fn(() => true)}
+        clearOpenKit={clearOpenKit}
+        selectedKitId="i-90"
+      />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
   });
 });
