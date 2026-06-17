@@ -76,14 +76,17 @@ async def test_validate_happy_path_with_conflicts(adapter_with_client):
 
 
 @pytest.mark.asyncio
-async def test_validate_cache_hit_logged(adapter_with_client, capfd):
-    """cache_hit=True appears in stdout log output when cached_tokens > 0."""
+async def test_validate_cache_hit_logged(adapter_with_client):
+    """cache_hit=True is emitted in structured logs when cached_tokens > 0."""
+    import structlog.testing
+
     response = _make_response(text='{"conflicts":[]}', cached_tokens=512)
     adapter = adapter_with_client(response)
-    await adapter.validate({"stable_prefix": ["catalog"], "fresh_tail": ["q"]})
-    out = capfd.readouterr().out
-    assert "cache_hit=True" in out, (
-        f"Expected 'cache_hit=True' in log output; got:\n{out}"
+    with structlog.testing.capture_logs() as logs:
+        await adapter.validate({"stable_prefix": ["catalog"], "fresh_tail": ["q"]})
+    usage_events = [e for e in logs if e.get("event") == "text_ai_usage"]
+    assert any(e.get("cache_hit") is True for e in usage_events), (
+        f"Expected cache_hit=True in text_ai_usage log; got: {logs}"
     )
 
 

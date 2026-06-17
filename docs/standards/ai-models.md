@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware, so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) with no `MODEL_NATIVE` pin -- the AI Studio id 1008s on Vertex (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). The `MODEL_LABELING` knob documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md).*
+*Last updated: 2026-06-17. Added `get_text_ai()` to `backend/dependencies.py` (bd polyglot-pdf-jnjj.14): `MODEL_LABELING` is now the live cheap-model adapter knob, no longer orphaned. See [journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -65,13 +65,12 @@ of 2026-06.
   Both are 2.5-family, so `model_family()` bills them identically. The premium
   (3.1) tier has no Vertex id (AI-Studio-only as of 2026-06), so it is unaffected.
 - `MODEL_LABELING` (default `gemini-2.5-flash`) is a separate knob for the cheap,
-  non-Live TEXT model. The original field-labeling/normalizer path it was named for
-  is deprecated; today the knob is read only by `/health` (orphaned). The
-  SI-reduction epic's **cheap-model validator** (`bd polyglot-pdf-jnjj`, pillar B)
-  REUSES this knob for the validator model rather than adding a new one -- so when B
-  lands, set `MODEL_LABELING=gemini-2.5-flash-lite` to run the validator on the lite
-  tier (the default stays `gemini-2.5-flash`). The reuse decision + the "why
-  flash-lite" rationale are owned by
+  non-Live TEXT model. The SI-reduction epic's **cheap-model validator / secretary**
+  (`bd polyglot-pdf-jnjj`, pillar B) reuses this knob via `get_text_ai()` in
+  `backend/dependencies.py` (wired in jnjj.14). Set `MODEL_LABELING=gemini-2.5-flash-lite`
+  in the deploy env to run the validator/secretary on the lite tier (the default
+  stays `gemini-2.5-flash` so existing deploys without the env var don't change).
+  The reuse decision + the "why flash-lite" rationale are owned by
   [validation-delegation.md](validation-delegation.md) (F3); this doc just records
   that the validator's model id rides on `MODEL_LABELING`, not a new env var.
 - `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
@@ -99,12 +98,14 @@ of 2026-06.
   `USE_PREMIUM_MODEL=true`) -- a Vertex round-trip can't reach 3.1, and with no pin
   to clear the flip is clean. Surfaced on `/health` as `vertexai`.
 
-`backend/dependencies.py` is the **one** place the model reaches the adapter:
+`backend/dependencies.py` is the **one** place models reach adapters:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
 model=settings.MODEL_NATIVE, vertexai=settings.VERTEXAI)` (a fresh instance per
-connection — a CRITICAL bug-fix comment there), and `get_form_filling_service()`
-depends on that provider. Routes depend on the service factory, so nothing else
-picks a model.
+connection -- a CRITICAL bug-fix comment there). `get_text_ai()` (added jnjj.14)
+constructs `TextAIGemini(api_key=settings.GEMINI_API_KEY,
+model=settings.MODEL_LABELING, vertexai=settings.VERTEXAI)` for the cheap
+text-gen validator/secretary path. Routes depend on the service factory, so
+nothing else picks a model.
 
 ## A/B-ing 2.5 vs 3.1
 
@@ -127,4 +128,4 @@ picks a model.
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
 
-*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware, so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) with no `MODEL_NATIVE` pin -- the AI Studio id 1008s on Vertex (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). The `MODEL_LABELING` knob documents its reuse as the SI-reduction epic's cheap-model validator id (bd polyglot-pdf-jnjj, pillar B); rationale owned by [validation-delegation.md](validation-delegation.md).*
+*Last updated: 2026-06-17. Added `get_text_ai()` to `backend/dependencies.py` (bd polyglot-pdf-jnjj.14): `MODEL_LABELING` is now the live cheap-model adapter knob, no longer orphaned. See [journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*

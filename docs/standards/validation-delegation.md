@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
 
-*Last updated: 2026-06-14. Created as the F3 foundation contract for the SI-reduction epic (bd polyglot-pdf-jnjj.4). See [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry) for closeout details.*
+*Last updated: 2026-06-17. Current-state section updated to reflect jnjj.14 landing (ITextAI port + TextAIGemini adapter wired). See [../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -34,40 +34,38 @@ Sibling contracts:
 
 ---
 
-## Current state: no text-model path exists
+## Current state: text-model path wired (jnjj.14)
 
-Every Gemini call today is the **Live API** (audio + tool-calling), routed
-through one port and one adapter:
+The Live API path (audio + tool-calling) is unchanged:
 
-- Port: `backend/ports/live_ai_port.py::ILiveAI` (with the `LiveAISession`
-  Protocol).
-- Adapter: `backend/adapters/live_ai_gemini.py::LiveAIGemini` (the only adapter
-  in `backend/adapters/`).
-- Wiring: `backend/dependencies.py::get_live_ai()` constructs a fresh
-  `LiveAIGemini(api_key=settings.GEMINI_API_KEY, model=settings.MODEL_NATIVE,
-  vertexai=settings.VERTEXAI)` per WebSocket connection.
+- Port: `backend/ports/live_ai_port.py::ILiveAI` (with the `LiveAISession` Protocol).
+- Adapter: `backend/adapters/live_ai_gemini.py::LiveAIGemini`.
+- Wiring: `backend/dependencies.py::get_live_ai()` constructs a fresh `LiveAIGemini`
+  per WebSocket connection.
 
-There is **no request/response text-generation path** anywhere -- nothing calls
-`generate_content` / a non-Live model. `MODEL_LABELING` (`backend/config.py:70`,
-default `gemini-2.5-flash`) is an **orphaned env knob**: its ONLY reader is
-`backend/main.py:62`, which surfaces it on the `/health` response for display; no
-handler, service, or adapter consumes it (the field-labeling normalizer it was
-named for is deprecated -- see the `config.py:55` comment). The
-`dependencies.py:21` comment's reference to a "LabelingAIGemini" constructor
-convention is stale prose; no such adapter exists in the tree.
+The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
+
+- Port: `backend/ports/text_ai_port.py::ITextAI` -- two abstract methods:
+  `validate(payload) -> verdict` (B-pillar validator) and `ask(query, context) -> str`
+  (A-pillar secretary stub, raises `NotImplementedError` until the secretary bead).
+- Adapter: `backend/adapters/text_ai_gemini.py::TextAIGemini` -- mirrors
+  `LiveAIGemini`'s three-way client construction (Vertex/AI-Studio/bare). Calls
+  `client.aio.models.generate_content`, NOT the Live bidi path. Accepts
+  `stable_prefix` + `fresh_tail` separately so the leading token sequence is stable
+  for implicit caching; logs `cached_content_token_count` on every call (`cache_hit`
+  bool) for observability.
+- Wiring: `backend/dependencies.py::get_text_ai()` constructs a fresh `TextAIGemini`
+  reading `settings.MODEL_LABELING` (default `gemini-2.5-flash`; set
+  `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).
+
+`MODEL_LABELING` is no longer orphaned -- `get_text_ai()` is its live consumer. The
+original field-labeling normalizer it was named for is still deprecated (`config.py:55`).
 
 Existing validation is **field-level only**: `backend/utils/field_validator.py`
-(`validate_updates` -> `validate_field_value`) checks one value against its own
-schema constraints (min/max, pattern, date_constraint, options); the frontend
-mirror is `frontend/src/schema-forms/utils/validation.ts`. **Neither does any
-cross-field or contradiction detection** -- a zip that disagrees with a state
-passes both, because each field is valid in isolation. That gap is exactly what
-the validator fills.
-
-The validator (`ITextAI` / `TextAIGemini`) is **net-new** and MIRRORS the
-`ILiveAI` / `LiveAIGemini` structure: a port in `backend/ports/`, an adapter in
-`backend/adapters/`, and a `get_text_ai()` provider slotted into
-`backend/dependencies.py` alongside `get_live_ai()`.
+checks one value against its own schema constraints; the frontend mirror is
+`frontend/src/schema-forms/utils/validation.ts`. **Neither does cross-field
+contradiction detection** -- that gap is what the B-pillar validator will fill once
+B3 (validator service) is built on top of this adapter.
 
 ---
 
