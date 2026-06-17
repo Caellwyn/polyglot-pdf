@@ -230,7 +230,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue
         onOpenKit={vi.fn()}
         selectedKitId="a"
-        liveProgress={{ kitId: 'a', percent: 60, complete: 3, total: 5 }}
+        liveProgress={{ kitId: 'a', saved: true, percent: 60, complete: 3, total: 5 }}
       />,
     );
     await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
@@ -242,6 +242,39 @@ describe('FormCatalogue', () => {
     // A's card still shows the persisted 60%, not the disk scan's 0%.
     expect(screen.getByText('60%')).toBeTruthy();
     expect(screen.queryByText('0%')).toBeNull();
+  });
+
+  it('does NOT persist an UNSAVED edit after the kit is deselected (discard flow)', async () => {
+    // Codex round 5: an unsaved edit shows live on the open card, but if the user
+    // discards it (switches kits without saving), the card must revert to the
+    // disk-scan value, not keep phantom progress.
+    const root = mockRoot([
+      mockKit('a', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'Kit A', status: 'draft' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    const { rerender } = render(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await screen.findByText('Kit A');
+
+    // User opens A and edits it WITHOUT saving (saved:false) -> 60% shows live.
+    rerender(
+      <FormCatalogue
+        onOpenKit={vi.fn()}
+        selectedKitId="a"
+        liveProgress={{ kitId: 'a', saved: false, percent: 60, complete: 3, total: 5 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('60%')).toBeTruthy());
+
+    // Edit discarded, kit deselected -> revert to disk scan (0%), NOT 60%.
+    rerender(
+      <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
+    );
+    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.queryByText('60%')).toBeNull();
   });
 
   it('overrides the open kit bar with the live in-editor percentage', async () => {
@@ -256,7 +289,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue
         onOpenKit={vi.fn()}
         selectedKitId="i-90"
-        liveProgress={{ kitId: 'i-90', percent: 75, complete: 3, total: 4 }}
+        liveProgress={{ kitId: 'i-90', saved: false, percent: 75, complete: 3, total: 4 }}
       />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));

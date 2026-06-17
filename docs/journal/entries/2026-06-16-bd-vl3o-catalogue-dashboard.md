@@ -108,6 +108,13 @@ here (not deferred after all): a separate `editedProgress` map caches the open
 kit's live value and overlays the disk scan, surviving deselection and immune to a
 late folder-scan clobbering it; `polyglot-pdf-8srh` (the deferral bead) is CLOSED.
 
+Round 5 -- one finding, fixed: (n, P1) the `editedProgress` cache from round 4
+captured the live % even for UNSAVED edits, so discarding an edit and switching
+kits left phantom progress on the card. `liveProgress` now carries a `saved` flag
+(`!hasUnsavedChanges`); the cache only remembers SAVED values, while the open
+card still shows unsaved edits live via the override. A discarded edit reverts to
+the disk scan once the kit closes.
+
 ## Lessons
 
 - **Reuse the one metric, don't mint a parallel one.** "Review progress" could

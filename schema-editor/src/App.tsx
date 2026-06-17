@@ -433,8 +433,11 @@ export const App: React.FC = () => {
             // Keep the open kit's catalogue bar in sync with in-editor edits:
             // the disk-scanned % is stale after an edit/save, so feed the live
             // in-memory stats (same getCompletionStats the ValidationPanel uses).
+            // `saved` lets the catalogue cache only persisted values: an UNSAVED
+            // edit still shows live on the open card, but is not remembered after
+            // the kit closes (else a discarded edit would leave phantom progress).
             selectedKitId && schema
-              ? { kitId: selectedKitId, ...liveStats(schema) }
+              ? { kitId: selectedKitId, saved: !hasUnsavedChanges, ...liveStats(schema) }
               : null
           }
         />

@@ -30,7 +30,7 @@ interface FormCatalogueProps {
    * detail track unsaved edits instead of the stale disk-scan value. Null when no
    * kit is open.
    */
-  liveProgress?: { kitId: string; percent: number; complete: number; total: number } | null;
+  liveProgress?: { kitId: string; saved: boolean; percent: number; complete: number; total: number } | null;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -98,7 +98,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     React.useState<Record<string, { percent: number; complete: number; total: number }>>({});
   React.useEffect(() => {
     if (!liveProgress) return;
-    const { kitId, percent, complete, total } = liveProgress;
+    const { kitId, saved, percent, complete, total } = liveProgress;
+    // Only remember SAVED values. An unsaved edit still shows live on the open
+    // card (the `live` override below), but caching it would leave phantom
+    // progress after the user discards the edit and switches kits (Codex PR #224).
+    if (!saved) return;
     setEditedProgress(prev => {
       const e = prev[kitId];
       if (e && e.percent === percent && e.complete === complete && e.total === total) return prev;
