@@ -178,6 +178,7 @@ class FormFillingService:
             handle_get_field_value=self.handle_get_field_value,
             request_form_state_from_client=self.request_form_state_from_client,
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
+            merge_field_schema=self.merge_field_schema,
         )
 
         # Use web form tool declarations (stateless)
@@ -923,6 +924,30 @@ class FormFillingService:
 
         self._request_coordinator.handle_confirm_field_response(
             request_id, recorded, reason, section_complete)
+
+    def merge_field_schema(self, field_schema: Dict[str, Any]) -> None:
+        """Merge a CLIENT-SUPPLIED field schema into self._schema['fields'] for
+        VALIDATION (DTI, bd polyglot-pdf-jnjj.22; Codex PR #229).
+
+        In JIT/DTI mode self._schema['fields'] holds only the first field, so
+        update_form_fields validation (build_fields_from_schema -> _schema['fields'])
+        would reject every later field as 'unknown'. The client delivers each next
+        field's full schema on next_field_hint_response; merging it here (SCHEMA
+        ONLY -- no user values; the backend stays stateless re values) lets the
+        validator recognize the field Gemini was just told to fill. Idempotent:
+        skips a field id already present.
+        """
+        if not field_schema or not field_schema.get("id"):
+            return
+        if self._schema is None:
+            return
+        fields = self._schema.setdefault("fields", [])
+        fid = field_schema.get("id")
+        if any(f.get("id") == fid for f in fields):
+            return
+        fields.append(field_schema)
+        _log.debug("dti_merged_field_for_validation", field_id=fid,
+                   total_fields=len(fields))
 
     def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
         """

@@ -354,24 +354,18 @@ def build_form_context(
             )
             unfilled_count = total_fields - filled_count
 
-        # The CURRENT field's full guidance. On the JIT-shaped handshake the client
-        # already sends only the first UNFILLED field as schema["fields"][0]
-        # (getJITHandshakePayload selects it). But DTI can also receive a FULL
-        # handshake (all section fields, possibly with prefilled/reconnect values),
-        # where fields[0] may already be filled while {next_field_hint} points at a
-        # later field. Pick the first UNFILLED field so CURRENT FIELD and the hint
-        # agree -- otherwise the model is told to ask field X but described field 0,
-        # and (since DTI drops the full field list) it has no schema for field X
-        # and can update the wrong field (Codex PR #229). Fall back to fields[0].
+        # The CURRENT field's full guidance = schema["fields"][0]. On the JIT/DTI
+        # handshake the CLIENT already selects the first unfilled+VISIBLE field as
+        # fields[0] via computeNextField(skipConfirmed:true) -- which applies the
+        # confirmed-state, hidden, and show_if filtering that backend code must NOT
+        # re-derive (an incomplete backend re-selection mis-picks confirmed/hidden
+        # fields; Codex PR #229 round 2). So trust the client's selection: fields[0]
+        # is the field {next_field_hint} also points at, by construction. (A first
+        # connect that hasn't learned jit_mode yet sends a full handshake where
+        # fields[0] is positional; that self-corrects on the next turn once the
+        # client persists jit_mode and the manifest-shaped handshake takes over.)
         fields_list = schema.get("fields") or []
-        current_field = None
-        for f in fields_list:
-            fid = f.get("id")
-            if fid and not current_values.get(fid):
-                current_field = f
-                break
-        if current_field is None and fields_list:
-            current_field = fields_list[0]
+        current_field = fields_list[0] if fields_list else None
         current_field_guidance = render_field_guidance(current_field)
 
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION.format(

@@ -175,26 +175,37 @@ def test_coordinator_no_schema_when_legacy_client():
     assert coord.consume_pending_next_field_schema() is None
 
 
-def test_dti_picks_first_unfilled_field_not_field_zero(monkeypatch):
-    """DTI's CURRENT FIELD must be the first UNFILLED field, not fields[0] -- on a
-    full handshake / prefill, fields[0] may already be filled while the hint points
-    elsewhere (Codex PR #229)."""
+def test_dti_current_field_is_client_selected_field_zero(monkeypatch):
+    """DTI's CURRENT FIELD = schema['fields'][0], which the CLIENT pre-selects as the
+    first unfilled+visible field (computeNextField). The backend must NOT re-derive
+    selection -- an incomplete re-selection mis-picks confirmed/hidden/show_if fields
+    (Codex PR #229 round 2). So fields[0] is authoritative, hint agrees by
+    construction."""
     monkeypatch.setattr(ai_context_mod, "get_settings", _dti_settings)
-    f0 = {"id": "already_filled", "spoken_name": "filled one", "type": "text"}
-    f1 = dict(NESTED_FIELD)  # unfilled, has instructions
-    schema = {
-        "form_metadata": {"title": "I-90"},
-        "fields": [f0, f1],  # full-shape: fields[0] is filled
-        "manifest": {"current_section": {"section_id": "s", "section_label": "P1",
-                     "fields": [{"field_id": f0["id"], "spoken_name": "filled one"},
-                                {"field_id": f1["id"], "spoken_name": f1["spoken_name"]}]},
-                     "previous_sections": []},
-    }
-    si = build_form_context(schema, {"already_filled": "x"}, "English",
+    si = build_form_context(_dti_schema(), {}, "English",
                             section_number=1, total_sections=8, section_label="P1")
-    # CURRENT FIELD describes the UNFILLED field, not the filled fields[0].
+    # fields[0] (the client's selection) is rendered as CURRENT FIELD.
     assert "ID: p1_line1_aliennumber" in si
-    assert "ID: already_filled" not in si
+
+
+def test_merge_field_schema_extends_validation_set():
+    """The client-supplied next-field schema is merged into _schema['fields'] so
+    update_form_fields validation recognizes fields 2..N (Codex PR #229).
+    Idempotent; schema only."""
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import get_settings
+    svc = FormFillingService(live_ai=None, settings=get_settings())
+    svc._schema = {"fields": [{"id": "f1"}]}  # JIT/DTI shape: only field 1
+    svc.merge_field_schema({"id": "f2", "spoken_name": "field two", "type": "text"})
+    ids = [f["id"] for f in svc._schema["fields"]]
+    assert ids == ["f1", "f2"]
+    # Idempotent: merging f2 again does not duplicate.
+    svc.merge_field_schema({"id": "f2", "spoken_name": "field two", "type": "text"})
+    assert [f["id"] for f in svc._schema["fields"]] == ["f1", "f2"]
+    # No-op on empty / id-less.
+    svc.merge_field_schema({})
+    svc.merge_field_schema(None)
+    assert [f["id"] for f in svc._schema["fields"]] == ["f1", "f2"]
 
 
 def test_jit_shaped_schema_renders_manifest_branch_when_flags_off(monkeypatch):

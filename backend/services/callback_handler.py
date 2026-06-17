@@ -60,6 +60,7 @@ class CallbackHandler:
         self._handle_get_field_value = None
         self._request_form_state_from_client = None
         self._get_next_field_schema_for_jit = None
+        self._merge_field_schema = None
 
     def set_tool_handlers(
         self,
@@ -68,6 +69,7 @@ class CallbackHandler:
         handle_get_field_value,
         request_form_state_from_client,
         get_next_field_schema_for_jit,
+        merge_field_schema=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -75,6 +77,7 @@ class CallbackHandler:
         self._handle_get_field_value = handle_get_field_value
         self._request_form_state_from_client = request_form_state_from_client
         self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
+        self._merge_field_schema = merge_field_schema
     
     async def send_form_update(
         self,
@@ -569,6 +572,12 @@ class CallbackHandler:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
                 if client_next_schema:
                     next_field_guidance = render_field_guidance(client_next_schema)
+                    # Merge the field into the backend's validation schema so the
+                    # SUBSEQUENT update_form_fields for this field is not rejected as
+                    # 'unknown' (in DTI/JIT mode _schema['fields'] holds only field 1;
+                    # Codex PR #229). Schema only -- no user values.
+                    if self._merge_field_schema:
+                        self._merge_field_schema(client_next_schema)
 
             if hint_timed_out:
                 message = (
