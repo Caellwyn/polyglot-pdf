@@ -1597,10 +1597,10 @@ def test_no_ack_does_not_close_beads(monkeypatch):
     assert closed["called"] is False, "NO-ACK must never close beads"
 
 
-def test_round1_skips_ack_phase(capsys, monkeypatch):
-    # Round 1 has no --since (trigger is PR body, not an issue comment). The ack
-    # phase must be skipped entirely even when --ack-timeout-min is set, so a slow
-    # Codex that posts its review after 2+ minutes is NOT falsely NO-ACK'd.
+def test_round1_no_ack_timeout_reaches_clean(capsys, monkeypatch):
+    # Round 1 does not carry --ack-timeout-min (enforced at the call site, not in
+    # watch()). Verify that a slow Codex verdict with no eyeballs still classifies
+    # CLEAN when ack_timeout_min is 0 (the default, same as round 1's actual usage).
     issue = [{
         "user": {"login": _CODEX_LOGIN},
         "created_at": "2026-06-16T10:05:00Z",  # 5 min after PR open, no eyeballs
@@ -1608,10 +1608,10 @@ def test_round1_skips_ack_phase(capsys, monkeypatch):
         "reactions": {"+1": 1},
     }]
     _patch_api(monkeypatch, issue=issue)
-    # Ack phase skipped -> goes straight to verdict wait -> CLEAN
+    # ack_timeout_min=0 (default, as round 1 passes it) -> ack phase skipped -> CLEAN
     rc = cw.watch("o/r", 1, timeout_min=1, poll_sec=0, since=None, profile=CODEX,
-                  ack_timeout_min=2)
+                  ack_timeout_min=0)
     out = capsys.readouterr().out
     assert rc == 0 and "RESULT: CLEAN" in out, (
-        "round-1 (since=None) must skip ack phase and reach CLEAN verdict"
+        "round-1 omits --ack-timeout-min; slow Codex must still reach CLEAN"
     )

@@ -153,10 +153,12 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   a fresh `@codex review` comment (capturing its `created_at` as the next round's
   `--since` floor) to request each re-review. The fresh-eyes inner loop is already
   done (pre-PR); the outer loop is Codex only.
-- **Handle all four pr_review_watcher.py states.** CLEAN/COMMENTS (exit 0), ERROR
-  (exit 1, surface to maintainer, no auto-retry -- a quota error will not clear
-  for hours), TIMEOUT (exit 2, treat like ERROR -- NEVER interpret silence as
-  CLEAN). An unhandled state must never fall through to "done."
+- **Handle all five pr_review_watcher.py states.** CLEAN/COMMENTS (exit 0) proceed
+  normally. ERROR (exit 1), TIMEOUT (exit 2), and NO-ACK (exit 4) all route to the
+  Opus-4.8 fallback reviewer (Step 7.5) -- NEVER treat them as clean and NEVER
+  dead-end at the maintainer. CLOSE-FAILED (exit 3) surfaces to the maintainer (a
+  bead-close failure is a genuine stop). An unhandled state must never fall through
+  to "done."
 - **Resolve mechanical merge conflicts inline; escalate only structural ones.**
   When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
   an automatic escalation. **Mechanical / ordering** conflicts (append-only journal
