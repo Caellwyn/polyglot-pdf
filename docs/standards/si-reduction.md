@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-06-15. A2 (bd polyglot-pdf-jnjj.9) repaired the JIT path the "JIT-path correctness" note below describes; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
+*Last updated: 2026-06-17. The legacy SI now renders the canonical nested `help` block (`help.instructions`/`help.format_hint`), which it previously dropped on real forms (bd polyglot-pdf-jnjj.23); see [../journal/entries/2026-06-17-bd-jnjj.23-render-nested-help-block.md](../journal/entries/2026-06-17-bd-jnjj.23-render-nested-help-block.md). Earlier: A2 (bd polyglot-pdf-jnjj.9) repaired the JIT path the "JIT-path correctness" note below describes. Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
 
 This is the FROZEN interface that the SI-reduction pillar (A) and the
 cheap-model-validator pillar (B) build against, so multiple agents can work in
@@ -24,7 +24,7 @@ time) and branches on the `USE_JIT_SCHEMA` flag (`backend/config.py`, default
 
 | Mode | Template (`config.py`) | The cost driver |
 |------|------------------------|-----------------|
-| **Legacy** (`USE_JIT_SCHEMA=false`, default today) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the CURRENT SECTION's fields dumped as text. The legacy handshake builder sends `extractSectionFields(currentSectionId)` as `schema` (`schemaFormState.ts:594-607`), so the dump is the active section, NOT the whole form. The ~8,200-token floor is the LARGEST section; smaller sections dump less. This per-section dump is what the epic shrinks. |
+| **Legacy** (`USE_JIT_SCHEMA=false`, default today) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the CURRENT SECTION's fields dumped as text. The legacy handshake builder sends `extractSectionFields(currentSectionId)` as `schema` (`schemaFormState.ts:594-607`), so the dump is the active section, NOT the whole form. Each field's line carries its authored guidance: the canonical nested `help.instructions` -> `Note:` and `help.format_hint` -> `Format:` (flat `description`/`format` as fallback; bd polyglot-pdf-jnjj.23). The ~8,200-token floor is the LARGEST section; smaller sections dump less. This per-section dump is what the epic shrinks. |
 | **JIT** (`USE_JIT_SCHEMA=true`) | `JIT_SYSTEM_INSTRUCTION` | `{manifest_text}` (field_id\|spoken_name pairs) + `{next_field_schema}` (one field only). ~2k today; the reduction target is lower. |
 
 > **The SI is already per-section, not whole-form.** The live model only ever sees
