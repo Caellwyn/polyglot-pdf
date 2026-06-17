@@ -154,18 +154,18 @@ DEMO_QUESTIONS = [
 # The REAL I-90 question plan (bd polyglot-pdf-jnjj.24): the first 3 sections of
 # form-kits/i-90/schema.json -- Part 1 "Information About You" (sec 1), the mailing
 # address (sec 2), and the physical address (sec 3). FICTIONAL answers (no real PII).
-# spoken_name is the natural phrasing the model asks by. Conditional fields are
-# handled COHERENTLY so the SI's visible-field set and the next-field hint never
-# contradict (Codex/fresh-eyes PR for this bead):
+# spoken_name is the natural phrasing the model asks by. The plan scripts EVERY
+# field that is visible in a section given the scripted conditional answers, in
+# SCHEMA ORDER, so the section-reset SI's field list and the next-field hint never
+# contradict -- otherwise the model could ask for an SI-listed field the plan never
+# answers and stall the run (fresh-eyes for this bead):
 #   - the name-change radio (p1_checkbox4) is answered "no", so the show_if
-#     previous-name fields (p1_line5a/b/c) stay hidden and are NOT scripted;
-#   - each unit-type radio (p1_unit_type6c/7b) IS answered, which makes its
-#     show_if apt-number field (p1_line6c/7b_aptsteflrnumber) visible -- so that
-#     apt-number field is ALSO scripted (a real apartment filer fills it). Scripting
-#     the radio but skipping its now-visible apt field would leave the section-reset
-#     SI listing a field the plan never answers -> the model could ask for it and
-#     stall. Fields are in SCHEMA ORDER within each section so the hint and the SI
-#     field list agree.
+#     previous-name fields (p1_line5a/b/c) stay HIDDEN and are correctly NOT scripted;
+#   - each unit-type radio (p1_unit_type6c/7b) IS answered, which makes its show_if
+#     apt-number field (p1_line6c/7b_aptsteflrnumber) VISIBLE -- so that apt-number
+#     field IS scripted (a real apartment filer fills it);
+#   - the always-visible optional province/postalcode fields are scripted too, with
+#     a US-filer "not applicable" answer, so no visible field is left unanswered.
 I90_QUESTIONS = [
     # --- Section 1: Part 1 - Information About You ---
     {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is A12345678.",
@@ -196,6 +196,10 @@ I90_QUESTIONS = [
      "wrong": "Florida."},
     {"field_id": "p1_line6f_zipcode", "say": "My mailing zip code is seven three seven zero one.",
      "wrong": "My mailing zip code is seven seven zero zero one."},
+    {"field_id": "p1_line6g_province", "say": "I do not have a province, I am in the United States.",
+     "wrong": "My province is Ontario."},
+    {"field_id": "p1_line6h_postalcode", "say": "I do not have a postal code, I am in the United States.",
+     "wrong": "My postal code is K1A 0B1."},
     {"field_id": "p1_line6i_country", "say": "United States.",
      "wrong": "Canada."},
     # --- Section 3: physical address (schema order: ...zipcode, province, postalcode, country) ---
@@ -211,6 +215,8 @@ I90_QUESTIONS = [
      "wrong": "Arizona."},
     {"field_id": "p1_line7e_zipcode", "say": "My physical zip code is seven three seven zero one.",
      "wrong": "My physical zip code is eight five zero zero one."},
+    {"field_id": "p1_line7f_province", "say": "I do not have a province, I am in the United States.",
+     "wrong": "My province is Quebec."},
     {"field_id": "p1_line7g_postalcode", "say": "I do not have a postal code, I am in the United States.",
      "wrong": "My postal code is K1A 0B1."},
     {"field_id": "p1_line7h_country", "say": "United States.",
