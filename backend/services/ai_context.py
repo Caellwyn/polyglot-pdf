@@ -202,7 +202,13 @@ def build_form_context(
         if help_block:
             if help_block.get("instructions"):
                 field_info["description"] = help_block["instructions"]
-            if help_block.get("format_hint") and "format" not in field_info:
+            # Use `not field_info.get("format")`, NOT `"format" not in field_info`:
+            # a field can carry a flat "format": null (present-but-null, e.g. after a
+            # round-trip through the optional ValidationRules) -- the "in" guard would
+            # see the key, suppress the nested hint, and the renderer would then skip
+            # the null and emit NO Format: line, dropping the guidance on exactly the
+            # nested-help schemas this fix targets (Codex PR #230 round 2).
+            if help_block.get("format_hint") and not field_info.get("format"):
                 field_info["format"] = help_block["format_hint"]
 
         fields_info.append(field_info)

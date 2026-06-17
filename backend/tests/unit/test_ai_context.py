@@ -34,6 +34,21 @@ def test_flat_description_still_rendered_backward_compat():
     assert "Format: YYYY-MM-DD" in si
 
 
+def test_help_format_hint_used_when_flat_format_is_null():
+    """A field can carry a present-but-null flat 'format' (e.g. after a round-trip
+    through the optional ValidationRules) alongside help.format_hint. The nested
+    hint must still render -- a `"format" in field` guard would suppress it and the
+    renderer would drop the null, leaving NO Format: line (Codex PR #230 round 2)."""
+    schema = {
+        "form_metadata": {"title": "X"},
+        "fields": [{"id": "f", "name": "F", "type": "text",
+                    "format": None,  # present but null
+                    "help": {"format_hint": "7-9 digits"}}],
+    }
+    si = build_form_context(schema, {}, "English")
+    assert "Format: 7-9 digits" in si
+
+
 def test_real_i90_section_si_carries_help_instructions():
     """Regression on the ACTUAL form-kits/i-90/schema.json (not a hand-rolled
     fixture): a built SI for a real I-90 section must contain its fields'
