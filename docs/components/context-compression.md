@@ -168,7 +168,13 @@ window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS
 trigger = window + CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS
 ```
 
-(`estimate_si_floor_tokens` / `derive_compression_window` in
+The floor is the **rendered (filled) SI plus the tool declarations** -- both
+unevictable, both re-billed every turn -- NOT the SI template alone. On the I-90
+the unfilled DTI template is ~826 tok and the tool declarations ~655 tok; once the
+SI is rendered with the form title, section list, current-field guidance, and
+carried `previous_spoken_names`, the measured live floor is ~1978 tok (the
+`jnjj.25` figure), which the headroom default (222) lifts to the validated ~2200
+window. (`estimate_si_floor_tokens` / `derive_compression_window` in
 `backend/adapters/live_ai_gemini.py`; `~4 chars/token` is the file's coarse
 estimate, and the headroom/margin bands absorb its slop -- the window only has to
 land just above the floor.) The static `TRIGGER`/`WINDOW` constants are the
