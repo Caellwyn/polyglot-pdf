@@ -164,6 +164,45 @@ class Settings(BaseModel):
 	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS") or "5000")
 	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS") or "3000")
 
+	# --- Per-form window derivation (bd polyglot-pdf-jnjj.35 / A6) ---
+	# The jnjj.25 cost measurement proved DTI + CALIBRATED eviction is the win
+	# (-21% on the unhappy path), and the calibration is LOAD-BEARING and
+	# FORM-SPECIFIC: the sliding window must sit JUST ABOVE the unevictable SI+tools
+	# floor. Too loose -> Gemini barely evicts (l3a) -> no win; too tight (<= floor)
+	# -> compression fires turn 1 and evicts ALL conversation. A FIXED constant (the
+	# TRIGGER/WINDOW above) is therefore wrong for any form whose floor differs from
+	# the one it was tuned for. When this flag is on (the default), the adapter
+	# DERIVES the window/trigger per-form from the rendered DTI SI floor:
+	#   window  = floor_tokens + WINDOW_HEADROOM_TOKENS   (room for a couple fields'
+	#                                                       guidance to accumulate)
+	#   trigger = window       + TRIGGER_MARGIN_TOKENS    (pile-up before eviction)
+	# The static TRIGGER/WINDOW above stay as the explicit OVERRIDE used when this is
+	# off (or when the floor is unknown -- e.g. a non-DTI SI). Findings:
+	# scripts/spikes/jnjj_25_dti_cost_findings.md (the production-wiring note).
+	#
+	# CALIBRATING THE HEADROOM (the load-bearing number). The floor estimator is a
+	# coarse chars/4 of the SI+tools TEXT, which UNDERSHOOTS the floor Gemini
+	# actually bills: on the measured I-90 DTI run the rendered SI is 3786 chars
+	# (-> ~946 est. tok) + ~655 tok tools = ~1601 ESTIMATED floor, but the live
+	# eviction landing zone was ~1978-2034 tokens (the meta.json eviction_drops) --
+	# a ~377-tok undershoot, because Gemini's tokenizer + conversation framing bill
+	# more than chars/4 of the raw text. So the headroom must clear the REAL billed
+	# floor, not the estimate: 599 lifts the ~1601 estimate to the validated ~2200
+	# window (which sits just above the ~1978 real floor). Margin 600 -> ~2800
+	# trigger. (Anchored to the one form with measured eviction data; the estimator's
+	# undershoot scales loosely with content, so re-measure the headroom when a
+	# second form's eviction floor is known. Strictly safer than the old 222, which
+	# derived a 1823 window -- BELOW the 1978 real floor -> turn-1 eviction.)
+	CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR: bool = (
+		os.getenv("CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR", "true").lower() == "true"
+	)
+	CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS: int = int(
+		os.getenv("CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS") or "599"
+	)
+	CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS: int = int(
+		os.getenv("CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS") or "600"
+	)
+
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an

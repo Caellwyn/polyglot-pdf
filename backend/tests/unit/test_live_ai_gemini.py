@@ -1345,3 +1345,265 @@ def test_build_live_config_input_transcription_for_liveness(mock_google_ai_clien
     assert "output_audio_transcription" in cfg
 
 
+# ---------------------------------------------------------------------------
+# Per-form compression-window derivation (bd polyglot-pdf-jnjj.35 / A6)
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_si_floor_tokens_counts_si_plus_tools():
+    """The unevictable floor = (SI text + serialized tool declarations) / 4 chars.
+
+    Pin the estimator against a KNOWN fixture so the derivation below is anchored
+    to a stable floor, not whatever the production SI happens to render to.
+    """
+    from backend.adapters.live_ai_gemini import (
+        estimate_si_floor_tokens,
+        _FLOOR_CHARS_PER_TOKEN,
+    )
+
+    si = "x" * 4000  # 4000 chars
+    tools = [{"function_declarations": [{"name": "confirm_field"}]}]
+    import json as _json
+
+    expected = (len(si) + len(_json.dumps(tools, ensure_ascii=False))) // _FLOOR_CHARS_PER_TOKEN
+    assert estimate_si_floor_tokens(si, tools) == expected
+    # No SI and no tools -> floor of 0 (the override path then takes over).
+    assert estimate_si_floor_tokens(None, None) == 0
+    assert estimate_si_floor_tokens("", []) == 0
+
+
+def test_estimate_si_floor_tokens_includes_real_tool_declarations():
+    """The floor must count the REAL tool declarations, not just the SI -- in
+    production tools are ALWAYS present (settings.TOOL_DECLARATIONS) and add a
+    non-trivial, unevictable block (~655 tok). A floor that ignored tools would
+    underestimate and let the window land too close to the true floor."""
+    from backend.adapters.live_ai_gemini import estimate_si_floor_tokens
+    from backend.config import get_settings
+
+    tools = get_settings().TOOL_DECLARATIONS
+    si = "q" * 4000  # 1000 SI tokens
+    si_only = estimate_si_floor_tokens(si, None)
+    with_tools = estimate_si_floor_tokens(si, tools)
+    # Tools materially raise the floor -- production always pays this.
+    assert with_tools > si_only
+    assert with_tools - si_only > 100  # the real declarations are hundreds of tokens
+
+
+def test_derive_compression_window_sits_just_above_floor():
+    """Pure arithmetic of the derivation: window = floor + headroom;
+    trigger = window + margin; window < trigger always; window > floor always.
+
+    Uses explicit headroom/margin (NOT the production defaults -- those are guarded
+    against the MEASURED I-90 floor in
+    test_production_default_headroom_clears_measured_i90_floor). This pins only the
+    formula: a 1978 estimated floor + 222 headroom = 2200 window, + 600 = 2800.
+    """
+    from backend.adapters.live_ai_gemini import (
+        derive_compression_window,
+        estimate_si_floor_tokens,
+    )
+
+    # Build an SI whose floor estimates to ~1978 tokens: 1978 tokens * 4 chars.
+    si = "y" * (1978 * 4)
+    floor = estimate_si_floor_tokens(si, None)
+    assert floor == 1978
+
+    derived = derive_compression_window(
+        si, None, window_headroom_tokens=222, trigger_margin_tokens=600
+    )
+    assert derived["floor"] == 1978
+    assert derived["window"] == 1978 + 222 == 2200
+    assert derived["trigger"] == 2200 + 600 == 2800
+    # The API invariant the Live config requires: target_tokens < trigger_tokens.
+    assert derived["window"] < derived["trigger"]
+    assert derived["window"] > derived["floor"]  # window must clear the floor
+
+
+def _compression_settings(**overrides):
+    """Real Settings with compression ENABLED and a known derivation calibration.
+
+    Headroom/margin here are FIXTURE values (the wiring assertions read them back
+    as floor+222 etc.), independent of the production defaults. The production-
+    default calibration is guarded separately by
+    test_production_default_headroom_clears_measured_i90_floor below."""
+    from backend.config import Settings
+
+    base = dict(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR=True,
+        CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS=222,
+        CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS=600,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=5000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=3000,
+        USE_DTI=True,
+    )
+    base.update(overrides)
+    return Settings(**base)
+
+
+# The MEASURED I-90 DTI calibration anchors (from the jnjj.25 cost run meta.json
+# scripts/spikes/data/costs_i90_2.5_dti_comp_happy_20260618T040035Z.meta.json):
+#   - rendered DTI SI = 3786 chars (system_instruction_chars)
+#   - live eviction landing zone (the unevictable billed floor) = ~1978-2034 tok
+# The estimator (chars/4 of SI+tools) UNDERSHOOTS that billed floor, so the
+# production headroom must be large enough that the derived window still clears
+# ~1978. This was the Codex P1 (a 222 headroom derived a 1823 window, BELOW the
+# real floor -> turn-1 eviction).
+_I90_DTI_SI_CHARS = 3786
+_I90_MEASURED_FLOOR_TOKENS = 1978
+
+
+def test_production_default_headroom_clears_measured_i90_floor():
+    """Regression guard for the Codex P1: the PRODUCTION-DEFAULT headroom must
+    derive a window that sits ABOVE the MEASURED I-90 eviction floor (~1978 tok),
+    not above the estimator's undershoot. A window below the real floor makes
+    compression fire on turn 1 and evict all conversation context.
+
+    Uses Settings() defaults (no headroom override) + the measured SI char count +
+    the real tool declarations -- i.e. the exact production configuration."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, estimate_si_floor_tokens
+    from backend.config import Settings
+
+    settings = Settings(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        USE_DTI=True,
+        # NO headroom/margin override -> exercise the shipped defaults.
+    )
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "x" * _I90_DTI_SI_CHARS
+    adapter._function_declarations = settings.TOOL_DECLARATIONS
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    window = comp["sliding_window"]["target_tokens"]
+    trigger = comp["trigger_tokens"]
+    est_floor = estimate_si_floor_tokens(
+        adapter._system_instruction, settings.TOOL_DECLARATIONS
+    )
+
+    # The estimator undershoots the billed floor -- document that it does.
+    assert est_floor < _I90_MEASURED_FLOOR_TOKENS, (
+        "if the estimator no longer undershoots, the headroom can shrink -- recheck"
+    )
+    # THE GUARD: the derived window must clear the REAL measured floor, with a
+    # little room to spare (it should land near the validated ~2200, not at 1978).
+    assert window > _I90_MEASURED_FLOOR_TOKENS, (
+        f"derived window {window} is at/below the measured ~{_I90_MEASURED_FLOOR_TOKENS}"
+        " floor -> compression fires turn 1 and evicts everything (Codex P1)"
+    )
+    assert window <= 2400, "window drifted well above the validated ~2200 calibration"
+    assert trigger > window  # API invariant
+
+
+def test_build_live_config_derives_window_under_dti():
+    """With USE_DTI + derive flag on, the compression config is sized per-form
+    from the rendered SI floor -- NOT the static env constants (bd jnjj.35)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, estimate_si_floor_tokens
+
+    settings = _compression_settings()
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)  # floor -> 1978 tokens
+    adapter._function_declarations = None
+
+    cfg = adapter._build_live_config(settings)
+    comp = cfg["context_window_compression"]
+    floor = estimate_si_floor_tokens(adapter._system_instruction, None)
+    assert comp["trigger_tokens"] == floor + 222 + 600
+    assert comp["sliding_window"]["target_tokens"] == floor + 222
+    # Sanity: the derived values are NOT the static env constants.
+    assert comp["trigger_tokens"] != settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] != settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_a_different_floor_yields_a_different_window():
+    """Exit criterion 1: a form with a different SI floor gets a correspondingly
+    different window (the whole point of per-form derivation)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings()
+
+    small = LiveAIGemini(api_key="test_key")
+    small._system_instruction = "a" * (1000 * 4)  # floor -> 1000
+    small._function_declarations = None
+    small_window = small._build_live_config(settings)["context_window_compression"][
+        "sliding_window"
+    ]["target_tokens"]
+
+    large = LiveAIGemini(api_key="test_key")
+    large._system_instruction = "b" * (3000 * 4)  # floor -> 3000
+    large._function_declarations = None
+    large_window = large._build_live_config(settings)["context_window_compression"][
+        "sliding_window"
+    ]["target_tokens"]
+
+    assert small_window == 1000 + 222
+    assert large_window == 3000 + 222
+    assert large_window > small_window  # bigger floor -> bigger window
+
+
+def test_build_live_config_static_override_when_derive_off():
+    """Derivation OFF -> fall back to the static env constants (the override)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings(CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR=False)
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)
+    adapter._function_declarations = None
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] == settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_static_override_when_not_dti():
+    """No DTI SI -> no calibrated floor -> use the static override, not a guess."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings(USE_DTI=False)
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)
+    adapter._function_declarations = None
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] == settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_static_override_when_dti_but_no_si():
+    """DTI + derive on but NO system instruction yet (e.g. a section switch before
+    the SI is rendered) -> there is no floor to measure, so fall back to the static
+    override rather than deriving from a zero floor. Guards the third leg of the
+    derive AND-condition (bool(self._system_instruction))."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings()  # USE_DTI=True, derive on
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = None  # not rendered yet
+    adapter._function_declarations = None
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] == settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_derived_floor_includes_real_tools():
+    """Production-accurate: with the REAL tool declarations present (as production
+    always has), the derived window reflects the SI+TOOLS floor, not SI alone.
+    The window must still clear that larger floor (window > floor, trigger > window)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, estimate_si_floor_tokens
+    from backend.config import get_settings
+
+    tools = get_settings().TOOL_DECLARATIONS
+    settings = _compression_settings()
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1500 * 4)  # 1500 SI tokens
+    adapter._function_declarations = tools
+
+    floor = estimate_si_floor_tokens(adapter._system_instruction, tools)
+    assert floor > 1500  # tools pushed the floor above the SI-only count
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["sliding_window"]["target_tokens"] == floor + 222
+    assert comp["trigger_tokens"] == floor + 222 + 600
+    assert comp["sliding_window"]["target_tokens"] > floor
+    assert comp["trigger_tokens"] > comp["sliding_window"]["target_tokens"]
+
+
