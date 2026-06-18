@@ -40,93 +40,103 @@ def _pairs(*specs):
     return pairs
 
 
-def test_perfect_grouping_scores_100():
+import math
+
+
+def test_perfect_grouping_scores_f1_100():
     # Two sections, two fields each; draft mirrors the gold partition exactly.
-    pairs = _pairs(("A", "X"), ("A", "X"), ("B", "Y"), ("B", "Y"))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 6  # C(4,2)
-    assert agree == 6
-    assert schema_score._pct(agree, comparable) == 100.0
+    # true pairs (gold-same): (f0,f1),(f2,f3) = 2; predicted-same: same 2; all hit.
+    r = _grouping(_pairs(("A", "X"), ("A", "X"), ("B", "Y"), ("B", "Y")))
+    assert r["true_pairs"] == 2
+    assert r["predicted_pairs"] == 2
+    assert r["agree_pairs"] == 2
+    assert r["precision"] == 1.0 and r["recall"] == 1.0 and r["f1"] == 1.0
 
 
 def test_naming_is_irrelevant_only_grouping_matters():
-    # Draft uses COMPLETELY different section names but the SAME partition ->
-    # still a perfect score. This is the core reason for the metric change.
-    gold_names = _pairs(("Part 1 - Information About You", "part_1_info"),
-                        ("Part 1 - Information About You", "part_1_info"),
-                        ("part_6_interpreter", "Part 6 - Interpreter"),
-                        ("part_6_interpreter", "Part 6 - Interpreter"))
-    agree, comparable = _grouping(gold_names)
-    assert agree == comparable == 6
-    assert schema_score._pct(agree, comparable) == 100.0
+    # Draft uses COMPLETELY different section names but the SAME partition -> F1 1.
+    r = _grouping(_pairs(("Part 1 - Information About You", "part_1_info"),
+                         ("Part 1 - Information About You", "part_1_info"),
+                         ("part_6_interpreter", "Part 6 - Interpreter"),
+                         ("part_6_interpreter", "Part 6 - Interpreter")))
+    assert r["f1"] == 1.0
 
 
 def test_wrong_grouping_is_penalized():
-    # Gold puts f0,f1 together and f2,f3 together. Draft splits f0 from f1 and
-    # lumps f1 with f2 -> several pairwise disagreements.
-    pairs = _pairs(("A", "X"), ("A", "Y"), ("B", "Y"), ("B", "Z"))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 6
-    # Pairs: (f0,f1) gold-same/draft-diff DISAGREE; (f0,f2) diff/diff agree;
-    # (f0,f3) diff/diff agree; (f1,f2) gold-diff/draft-same DISAGREE;
-    # (f1,f3) diff/diff agree; (f2,f3) gold-same/draft-diff DISAGREE.
-    assert agree == 3
-    assert schema_score._pct(agree, comparable) == 50.0
+    # Gold: {f0,f1},{f2,f3}. Draft sections: f0=X f1=Y f2=Y f3=Z.
+    # true pairs (gold-same): (f0,f1),(f2,f3) = 2. predicted (draft-same): (f1,f2) = 1.
+    # overlap (gold-same AND draft-same): none -> agree 0 -> recall 0, prec 0, F1 0.
+    r = _grouping(_pairs(("A", "X"), ("A", "Y"), ("B", "Y"), ("B", "Z")))
+    assert r["true_pairs"] == 2
+    assert r["predicted_pairs"] == 1
+    assert r["agree_pairs"] == 0
+    assert r["f1"] == 0.0
 
 
-def test_all_one_section_vs_all_separate_is_total_disagreement():
-    # Gold: everything in one section. Draft: every field its own section.
-    pairs = _pairs(("A", "1"), ("A", "2"), ("A", "3"))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 3  # C(3,2)
-    assert agree == 0       # every pair: gold-same vs draft-diff
+def test_partial_grouping_scores_between():
+    # Gold: {f0,f1,f2} all together (3 true pairs). Draft groups f0,f1 only (X)
+    # and f2 alone (Y): predicted-same = (f0,f1) = 1; overlap = 1.
+    # recall = 1/3, precision = 1/1 -> F1 = 2*(1*1/3)/(1+1/3) = 0.5.
+    r = _grouping(_pairs(("A", "X"), ("A", "X"), ("A", "Y")))
+    assert r["true_pairs"] == 3
+    assert r["predicted_pairs"] == 1
+    assert r["agree_pairs"] == 1
+    assert r["recall"] == 1 / 3
+    assert r["precision"] == 1.0
+    assert math.isclose(r["f1"], 0.5)
+
+
+def test_over_grouping_hurts_precision():
+    # Gold separates everything (0 true pairs); draft lumps all 3 into one section.
+    # predicted-same = 3, overlap = 0 -> precision 0, recall n/a (no true pairs)
+    # -> F1 0 (a draft that invents groupings the gold doesn't have is wrong).
+    r = _grouping(_pairs(("A", "X"), ("B", "X"), ("C", "X")))
+    assert r["true_pairs"] == 0
+    assert r["predicted_pairs"] == 3
+    assert r["f1"] == 0.0
 
 
 def test_fields_without_a_gold_section_are_ignored():
-    # Only f0,f1 carry a gold section; f2 has None -> excluded entirely, so the
-    # single comparable pair is (f0,f1).
-    pairs = _pairs(("A", "X"), ("A", "X"), (None, "Y"))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 1
-    assert agree == 1
+    # Only f0,f1 carry a gold section; f2 has None -> excluded entirely.
+    r = _grouping(_pairs(("A", "X"), ("A", "X"), (None, "Y")))
+    assert r["true_pairs"] == 1
+    assert r["agree_pairs"] == 1
+    assert r["f1"] == 1.0
 
 
-def test_unsectioned_draft_does_not_score_100_on_single_section_gold():
-    # Regression (fresh-eyes): a draft that emits NO sections must NOT score 100%
-    # against a one-section gold via ""=="" conflation -- an unsectioned field is a
-    # singleton, never "same" as another. Gold lumps all 3 together; draft groups
-    # none -> every same-section gold pair disagrees -> 0%.
-    pairs = _pairs(("A", None), ("A", None), ("A", None))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 3      # C(3,2)
-    assert agree == 0           # NOT 3; the null-draft singletons reproduce nothing
-    assert schema_score._pct(agree, comparable) == 0.0
+def test_unsectioned_draft_scores_f1_zero_not_inflated():
+    # Codex PR #235: a draft that emits NO sections must score F1 0, NOT be
+    # inflated by cross-section true-negative pairs (the Rand-index flaw). Gold has
+    # MANY sections; draft none -> 0 predicted pairs -> recall 0 -> F1 0.
+    r = _grouping(_pairs(("A", None), ("A", None), ("B", None), ("B", None),
+                         ("C", None), ("C", None)))
+    assert r["true_pairs"] == 3       # one per 2-field section
+    assert r["predicted_pairs"] == 0  # singletons -> no co-membership predicted
+    assert r["f1"] == 0.0
 
 
-def test_unsectioned_draft_agrees_only_where_gold_also_separates():
-    # Mixed gold: f0,f1 share a section, f2 is separate; draft has no sections.
-    # Draft singletons: (f0,f1) gold-same/draft-diff DISAGREE; (f0,f2) and (f1,f2)
-    # gold-diff/draft-diff AGREE. -> 2/3.
-    pairs = _pairs(("A", None), ("A", None), ("B", None))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 3
-    assert agree == 2
+def test_unsectioned_draft_single_section_gold_is_f1_zero():
+    # Gold lumps all 3 together; draft groups none -> recall 0 -> F1 0.
+    r = _grouping(_pairs(("A", None), ("A", None), ("A", None)))
+    assert r["true_pairs"] == 3
+    assert r["predicted_pairs"] == 0
+    assert r["f1"] == 0.0
 
 
 def test_two_unsectioned_draft_fields_are_distinct_not_grouped():
-    # Even two empty-string draft sections are NOT the same section as each other.
-    pairs = _pairs(("A", ""), ("A", ""))
-    agree, comparable = _grouping(pairs)
-    assert comparable == 1
-    assert agree == 0  # gold-same but draft singletons -> disagree
+    # Even two empty-string draft sections are NOT co-membered -> 0 predicted.
+    r = _grouping(_pairs(("A", ""), ("A", "")))
+    assert r["true_pairs"] == 1
+    assert r["predicted_pairs"] == 0
+    assert r["f1"] == 0.0
 
 
-def test_fewer_than_two_sectioned_fields_is_not_applicable():
-    # No pair to compare -> comparable 0 -> _pct yields the n/a sentinel (nan).
-    import math
-    agree, comparable = _grouping(_pairs(("A", "X")))
-    assert (agree, comparable) == (0, 0)
-    assert math.isnan(schema_score._pct(agree, comparable))
+def test_no_true_and_no_predicted_pairs_is_not_applicable():
+    # A single gold-sectioned field: no pairs at all on either side -> n/a (nan).
+    r = _grouping(_pairs(("A", "X")))
+    assert r["true_pairs"] == 0
+    assert r["predicted_pairs"] == 0
+    assert math.isnan(r["f1"])
 
 
 def test_score_fields_exposes_section_grouping_not_section_id():
@@ -145,5 +155,6 @@ def test_score_fields_exposes_section_grouping_not_section_id():
     attrs = result["attributes"]
     assert "section_grouping" in attrs
     assert "section_id" not in attrs
-    # Both fields share a section in gold AND in draft -> the one pair agrees.
+    # Both fields share a section in gold AND in draft -> F1 100%.
     assert attrs["section_grouping"]["pct"] == 100.0
+    assert attrs["section_grouping"]["f1"] == 1.0

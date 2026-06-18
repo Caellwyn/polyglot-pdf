@@ -233,7 +233,7 @@ def _pos_match(t: dict, d: dict, tol: float = 5.0) -> Optional[bool]:
             and abs((tp.get("y") or 0) - (dp.get("y") or 0)) <= tol)
 
 
-def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, int]:
+def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> dict[str, Any]:
     """Score section GROUPING, not the section_id STRING (bd polyglot-pdf-7a9.13).
 
     Exact section_id matching was a broken metric: the I-90 gold section_ids are
@@ -243,24 +243,30 @@ def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, in
     GROUPS the same fields together -- the partition -- regardless of what the
     section is named.
 
-    This is the Rand index of the two partitions over matched fields: for every
-    unordered pair of matched fields, draft and gold AGREE if they either both put
-    the two fields in the same section or both put them in different sections.
-    Naming-symmetric (invariant to relabeling sections), robust to any future id
-    convention.
+    Metric: PAIRWISE co-membership F1 over matched fields, scored ONLY on
+    same-section pairs (not the Rand index). For every unordered pair of matched
+    truth-sectioned fields:
+      - a TRUE pair = gold puts the two fields in the same section;
+      - a PREDICTED pair = the draft puts them in the same section.
+      recall    = (true & predicted) / true       (gold groupings the draft kept)
+      precision = (true & predicted) / predicted   (draft groupings that are real)
+      f1        = harmonic mean; this is the reported pct.
 
-    Only fields whose TRUTH side carries a section participate (a field the gold
-    never sectioned can't inform a grouping judgment).
+    Why NOT the Rand index (Codex review, PR #235): Rand also credits
+    DIFFERENT-section agreements, so a draft that emits NO sections (everything a
+    singleton) scores ~90% on a many-section gold purely from cross-section pairs
+    it got "right" by grouping nothing -- inflating the signal and able to reverse
+    bake-off conclusions. Co-membership F1 ignores the true-negative cross-section
+    pairs: an extractor that reproduces no grouping has recall 0 -> F1 0.
 
-    A draft field with NO section_id is treated as its own SINGLETON -- it is never
-    "in the same section" as any other field, including other unsectioned draft
-    fields. This is deliberate: an extractor that emits NO sections has not
-    reproduced any grouping, so on a single-section gold it must score ~0%, not
-    100% (which a naive ""=="" equality would wrongly give -- the whole point of
-    the metric is to discriminate, so null-conflation would defeat it).
+    Naming-agnostic (invariant to relabeling sections). Only fields whose TRUTH
+    side carries a section participate (a field the gold never sectioned can't
+    inform a grouping judgment). A draft field with NO section_id is a SINGLETON
+    (never co-membered with anything), so it can never be a predicted pair.
 
-    Returns (agreeing_pairs, comparable_pairs); comparable_pairs is 0 (-> n/a) when
-    fewer than two truth-sectioned fields matched.
+    Returns {"precision","recall","f1","true_pairs","predicted_pairs",
+    "agree_pairs"} (agree_pairs = true & predicted). f1 is NaN (-> n/a) when there
+    are no true pairs AND no predicted pairs (nothing to grade).
     """
     # (truth_section, draft_section) for each matched field the gold sectioned.
     sectioned = [
@@ -269,21 +275,37 @@ def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> tuple[int, in
         if _norm_text(t.get("section_id"))
     ]
 
-    def _same_section(a: str, b: str) -> bool:
+    def _draft_same(a: str, b: str) -> bool:
         # Empty draft section = a singleton: never "same" as anything (incl. "").
         return a != "" and a == b
 
-    agree = comparable = 0
+    true_pairs = predicted_pairs = agree_pairs = 0
     for i in range(len(sectioned)):
         t_i, d_i = sectioned[i]
         for j in range(i + 1, len(sectioned)):
             t_j, d_j = sectioned[j]
-            comparable += 1
-            # truth ids always exist here (filtered above), so t-side uses plain
-            # equality; the d-side uses the singleton rule for empty drafts.
-            if (t_i == t_j) == _same_section(d_i, d_j):
-                agree += 1
-    return agree, comparable
+            gold_same = t_i == t_j  # truth ids always non-empty (filtered above)
+            draft_same = _draft_same(d_i, d_j)
+            if gold_same:
+                true_pairs += 1
+            if draft_same:
+                predicted_pairs += 1
+            if gold_same and draft_same:
+                agree_pairs += 1
+
+    precision = (agree_pairs / predicted_pairs) if predicted_pairs else float("nan")
+    recall = (agree_pairs / true_pairs) if true_pairs else float("nan")
+    if true_pairs == 0 and predicted_pairs == 0:
+        f1 = float("nan")  # nothing to grade -> n/a
+    elif true_pairs == 0 or predicted_pairs == 0 or agree_pairs == 0:
+        f1 = 0.0           # one side empty (or zero overlap) -> no co-membership credit
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
+    return {
+        "precision": precision, "recall": recall, "f1": f1,
+        "true_pairs": true_pairs, "predicted_pairs": predicted_pairs,
+        "agree_pairs": agree_pairs,
+    }
 
 
 def score_fields(match: MatchResult) -> dict[str, Any]:
@@ -342,11 +364,19 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
                    for k, (c, n) in attrs.items()}
     attr_scores["pdf_position"] = {"correct": pos[0], "applicable": pos[1],
                                    "pct": _pct(pos[0], pos[1])}
-    # section GROUPING (partition agreement), replacing exact section_id matching.
-    sg_correct, sg_applicable = _section_grouping_agreement(match.pairs)
-    attr_scores["section_grouping"] = {"correct": sg_correct,
-                                       "applicable": sg_applicable,
-                                       "pct": _pct(sg_correct, sg_applicable)}
+    # section GROUPING: pairwise co-membership F1 (NOT exact section_id, NOT the
+    # Rand index -- see _section_grouping_agreement). pct is the F1; the displayed
+    # (correct/applicable) shows the recall fraction (gold-together pairs kept).
+    sg = _section_grouping_agreement(match.pairs)
+    attr_scores["section_grouping"] = {
+        "correct": sg["agree_pairs"],
+        "applicable": sg["true_pairs"],
+        "pct": (sg["f1"] * 100.0 if sg["f1"] == sg["f1"] else float("nan")),
+        "precision": sg["precision"],
+        "recall": sg["recall"],
+        "f1": sg["f1"],
+        "predicted_pairs": sg["predicted_pairs"],
+    }
 
     return {
         "detection": {"true_positive": tp, "false_negative": fn,
