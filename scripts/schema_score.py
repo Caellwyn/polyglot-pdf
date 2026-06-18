@@ -479,8 +479,18 @@ def render_report(name: str, a: dict, b: dict) -> str:
              f"FP(spurious)={det['false_positive']}")
     L.append("  per-attribute accuracy (over matched fields):")
     for k, v in a["attributes"].items():
-        L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
-                 f"({v['correct']}/{v['applicable']})")
+        # section_grouping's pct is an F1 (pairwise co-membership), so the generic
+        # "(correct/applicable)" is NOT pct's fraction -- render it as F1 with its
+        # own precision/recall instead of a misleading raw count (Codex PR #235 r3).
+        if k == "section_grouping":
+            _p = v["precision"] * 100 if v["precision"] == v["precision"] else float("nan")
+            _r = v["recall"] * 100 if v["recall"] == v["recall"] else float("nan")
+            L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
+                     f"(F1; P {_fmt_pct(_p)} R {_fmt_pct(_r)}; "
+                     f"{v['correct']}/{v['true_pairs']} gold pairs kept)")
+        else:
+            L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
+                     f"({v['correct']}/{v['applicable']})")
     L.append("")
     L.append("(b) RELATIONSHIP / LOGIC")
     L.append("  conditional recall (recovered / total in ground truth):")
