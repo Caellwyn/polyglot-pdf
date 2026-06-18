@@ -51,6 +51,12 @@ the full I-90.** So:
 | **dti + calibrated eviction** | happy | 3786 | **$0.2247** | **+1.3%** | 260,303 | 14/25 | 6 |
 | **dti + calibrated eviction** | unhappy | 3786 | **$0.4407** | **-21.2%** | 559,290 | 20/25 | 15 |
 
+(The "evictions" column counts ALL prompt-token drops detected, which conflates
+two event types: section-boundary session RESETS -- present in every arm, ~2-3 per
+run -- and context-window COMPRESSION events. So the baseline's "2" and DTI-alone's
+"3-4" are mostly/entirely section resets, NOT compression; only the dti+comp rows'
+elevated counts -- and especially the unhappy "15" -- are real compression events.)
+
 Eviction calibration: `CONTEXT_COMPRESSION_ENABLED`, trigger 2800 / window 2200
 (window just above the ~1978-token unevictable SI+tools floor; `--compression
 --trigger 2800 --window 2200`). A looser window (2500/3500) barely evicted (drops

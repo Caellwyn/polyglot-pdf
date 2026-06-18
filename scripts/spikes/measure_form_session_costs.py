@@ -897,10 +897,12 @@ def main() -> int:
     ap.add_argument("--compression", action="store_true",
                     help="layer calibrated context-window eviction onto a non-"
                          "sliding-window arm (the jnjj.25-folded eviction test): "
-                         "set --trigger/--window to the arm's SI floor (for the DTI "
-                         "SI on i90, ~window 2500 / trigger 3500 -- above the ~1978 "
-                         "unevictable SI+tools floor). Lets the accumulated per-field "
-                         "guidance be evicted turn-over-turn instead of replayed.")
+                         "set --trigger/--window just above the arm's unevictable "
+                         "SI+tools floor. The WINNING DTI-on-i90 calibration was "
+                         "--trigger 2800 --window 2200 (-21% unhappy); a LOOSER "
+                         "window (2500/3500) barely evicted and did NOT help -- use "
+                         "the tight values. Lets the accumulated per-field guidance "
+                         "be evicted turn-over-turn instead of replayed.")
     ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "data"))
     ap.add_argument("--synth-only", action="store_true",
                     help="build the audio cache and exit (no live calls)")
