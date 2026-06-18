@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-13. bd vfb2: send_form_update no longer unconditionally awaits request_next_field_hint (no compression behavior change). Prior: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
+*Last updated: 2026-06-18. bd jnjj.35 (A6): the DTI compression window/trigger are now DERIVED per-form from the rendered SI+tools floor (new CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR / *_HEADROOM_TOKENS / *_MARGIN_TOKENS knobs); the static TRIGGER/WINDOW are the override. Prior: 2026-06-13. bd vfb2: send_form_update no longer unconditionally awaits request_next_field_hint (no compression behavior change). Prior: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
 cost-motivation of section resets corrected per maintainer; epic `polyglot-pdf-hcsl`,
 bead `polyglot-pdf-h04c`). Session-resumption/GoAway decisions: see
 [../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md)
@@ -140,14 +140,42 @@ config["context_window_compression"] = {
 
 ## Parameters
 
-All three are env-swappable in `backend/config.py` -- tuning knobs, not load-bearing
-constants:
+Env-swappable in `backend/config.py`. Under DTI the window/trigger are **derived
+per-form** (below); the static token values are the override:
 
 | Setting | Purpose | Current state |
 |---|---|---|
-| `CONTEXT_COMPRESSION_ENABLED` | Master flag | `False` until epic `hcsl` completes parameter selection + coherence regression tests |
-| `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Tokens that trigger compression | Production value TBD by the epic's elbow analysis (bead `6x1y`); 1500 is the PROBE value, chosen only to make eviction observable in short runs |
-| `CONTEXT_COMPRESSION_WINDOW_TOKENS` | `target_tokens` to retain (must be `< trigger`) | Production value TBD by the same analysis; 800 is the probe value |
+| `CONTEXT_COMPRESSION_ENABLED` | Master flag | `False` until epic `hcsl`/`jnjj` completes parameter selection + coherence regression tests |
+| `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
+| `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the floor for the derived window | `222` (floor `~1978` -> window `~2200`, the validated I-90 calibration) |
+| `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `600` (window `~2200` -> trigger `~2800`) |
+| `CONTEXT_COMPRESSION_TRIGGER_TOKENS` | Static `trigger_tokens` (the OVERRIDE: used when derivation is off, or no DTI SI to measure) | `5000` |
+| `CONTEXT_COMPRESSION_WINDOW_TOKENS` | Static `target_tokens` to retain, `< trigger` (the OVERRIDE) | `3000` |
+
+### Per-form window derivation (bd `jnjj.35` / A6)
+
+`jnjj.25` proved DTI + eviction is the cost win (`-21%` on the unhappy path) and
+that the calibration is **load-bearing and form-specific**: the sliding window must
+sit JUST ABOVE the unevictable SI+tools floor. Too loose -> Gemini barely evicts
+(`l3a`) -> no win; `<=` the floor -> compression fires turn 1. A fixed constant is
+therefore wrong for any form whose floor differs. So when `USE_DTI` and
+`CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` are both on and a DTI SI is present,
+`_build_live_config` derives:
+
+```
+floor   = (len(rendered SI) + len(serialized tool declarations)) / 4   # ~ tokens
+window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS
+trigger = window + CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS
+```
+
+(`estimate_si_floor_tokens` / `derive_compression_window` in
+`backend/adapters/live_ai_gemini.py`; `~4 chars/token` is the file's coarse
+estimate, and the headroom/margin bands absorb its slop -- the window only has to
+land just above the floor.) The static `TRIGGER`/`WINDOW` constants are the
+explicit override for the non-DTI path (a non-DTI SI has no calibrated floor, so
+deriving would be guesswork). `CONTEXT_COMPRESSION_ENABLED` stays default-off; this
+only makes the window CORRECT once enabled (the default-flip is `jnjj.12`/A5, gated
+on G2+G3).
 
 Two anchors for the eventual choice: the trigger must leave the async eviction
 enough runway below any hard limit it is protecting (it fires 1-3 turns late), and

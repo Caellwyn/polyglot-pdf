@@ -1345,3 +1345,149 @@ def test_build_live_config_input_transcription_for_liveness(mock_google_ai_clien
     assert "output_audio_transcription" in cfg
 
 
+# ---------------------------------------------------------------------------
+# Per-form compression-window derivation (bd polyglot-pdf-jnjj.35 / A6)
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_si_floor_tokens_counts_si_plus_tools():
+    """The unevictable floor = (SI text + serialized tool declarations) / 4 chars.
+
+    Pin the estimator against a KNOWN fixture so the derivation below is anchored
+    to a stable floor, not whatever the production SI happens to render to.
+    """
+    from backend.adapters.live_ai_gemini import (
+        estimate_si_floor_tokens,
+        _FLOOR_CHARS_PER_TOKEN,
+    )
+
+    si = "x" * 4000  # 4000 chars
+    tools = [{"function_declarations": [{"name": "confirm_field"}]}]
+    import json as _json
+
+    expected = (len(si) + len(_json.dumps(tools, ensure_ascii=False))) // _FLOOR_CHARS_PER_TOKEN
+    assert estimate_si_floor_tokens(si, tools) == expected
+    # No SI and no tools -> floor of 0 (the override path then takes over).
+    assert estimate_si_floor_tokens(None, None) == 0
+    assert estimate_si_floor_tokens("", []) == 0
+
+
+def test_derive_compression_window_sits_just_above_floor():
+    """window = floor + headroom; trigger = window + margin; window < trigger always.
+
+    The jnjj.25 calibration is load-bearing: the window must land JUST ABOVE the
+    floor. With the validated I-90-shaped defaults (headroom 222, margin 600) a
+    ~1978-token floor must derive to ~2200 window / ~2800 trigger.
+    """
+    from backend.adapters.live_ai_gemini import (
+        derive_compression_window,
+        estimate_si_floor_tokens,
+    )
+
+    # Build an SI whose floor estimates to ~1978 tokens: 1978 tokens * 4 chars.
+    si = "y" * (1978 * 4)
+    floor = estimate_si_floor_tokens(si, None)
+    assert floor == 1978
+
+    derived = derive_compression_window(
+        si, None, window_headroom_tokens=222, trigger_margin_tokens=600
+    )
+    assert derived["floor"] == 1978
+    assert derived["window"] == 1978 + 222 == 2200
+    assert derived["trigger"] == 2200 + 600 == 2800
+    # The API invariant the Live config requires: target_tokens < trigger_tokens.
+    assert derived["window"] < derived["trigger"]
+    assert derived["window"] > derived["floor"]  # window must clear the floor
+
+
+def _compression_settings(**overrides):
+    """Real Settings with compression ENABLED and a known derivation calibration."""
+    from backend.config import Settings
+
+    base = dict(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR=True,
+        CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS=222,
+        CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS=600,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=5000,
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=3000,
+        USE_DTI=True,
+    )
+    base.update(overrides)
+    return Settings(**base)
+
+
+def test_build_live_config_derives_window_under_dti():
+    """With USE_DTI + derive flag on, the compression config is sized per-form
+    from the rendered SI floor -- NOT the static env constants (bd jnjj.35)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, estimate_si_floor_tokens
+
+    settings = _compression_settings()
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)  # floor -> 1978 tokens
+    adapter._function_declarations = None
+
+    cfg = adapter._build_live_config(settings)
+    comp = cfg["context_window_compression"]
+    floor = estimate_si_floor_tokens(adapter._system_instruction, None)
+    assert comp["trigger_tokens"] == floor + 222 + 600
+    assert comp["sliding_window"]["target_tokens"] == floor + 222
+    # Sanity: the derived values are NOT the static env constants.
+    assert comp["trigger_tokens"] != settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] != settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_a_different_floor_yields_a_different_window():
+    """Exit criterion 1: a form with a different SI floor gets a correspondingly
+    different window (the whole point of per-form derivation)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings()
+
+    small = LiveAIGemini(api_key="test_key")
+    small._system_instruction = "a" * (1000 * 4)  # floor -> 1000
+    small._function_declarations = None
+    small_window = small._build_live_config(settings)["context_window_compression"][
+        "sliding_window"
+    ]["target_tokens"]
+
+    large = LiveAIGemini(api_key="test_key")
+    large._system_instruction = "b" * (3000 * 4)  # floor -> 3000
+    large._function_declarations = None
+    large_window = large._build_live_config(settings)["context_window_compression"][
+        "sliding_window"
+    ]["target_tokens"]
+
+    assert small_window == 1000 + 222
+    assert large_window == 3000 + 222
+    assert large_window > small_window  # bigger floor -> bigger window
+
+
+def test_build_live_config_static_override_when_derive_off():
+    """Derivation OFF -> fall back to the static env constants (the override)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings(CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR=False)
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)
+    adapter._function_declarations = None
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] == settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+
+def test_build_live_config_static_override_when_not_dti():
+    """No DTI SI -> no calibrated floor -> use the static override, not a guess."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+
+    settings = _compression_settings(USE_DTI=False)
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "z" * (1978 * 4)
+    adapter._function_declarations = None
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+    assert comp["sliding_window"]["target_tokens"] == settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+
+

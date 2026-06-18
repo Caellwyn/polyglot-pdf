@@ -164,6 +164,33 @@ class Settings(BaseModel):
 	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS") or "5000")
 	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS") or "3000")
 
+	# --- Per-form window derivation (bd polyglot-pdf-jnjj.35 / A6) ---
+	# The jnjj.25 cost measurement proved DTI + CALIBRATED eviction is the win
+	# (-21% on the unhappy path), and the calibration is LOAD-BEARING and
+	# FORM-SPECIFIC: the sliding window must sit JUST ABOVE the unevictable SI+tools
+	# floor (~1978 tok for the I-90 DTI SI). Too loose -> Gemini barely evicts (l3a)
+	# -> no win; too tight (<= floor) -> compression fires turn 1. A FIXED constant
+	# (the TRIGGER/WINDOW above) is therefore wrong for any form whose SI floor
+	# differs from the one it was tuned for. When this flag is on (the default), the
+	# adapter DERIVES the window/trigger per-form from the rendered DTI SI floor:
+	#   window  = floor_tokens + WINDOW_HEADROOM_TOKENS   (room for a couple fields'
+	#                                                       guidance to accumulate)
+	#   trigger = window       + TRIGGER_MARGIN_TOKENS    (pile-up before eviction)
+	# The static TRIGGER/WINDOW above stay as the explicit OVERRIDE used when this is
+	# off (or when the floor is unknown -- e.g. a non-DTI SI). Findings:
+	# scripts/spikes/jnjj_25_dti_cost_findings.md (the production-wiring note at the
+	# end). Defaults reproduce the validated I-90 calibration (~1978 floor ->
+	# ~2200 window -> ~2800 trigger).
+	CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR: bool = (
+		os.getenv("CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR", "true").lower() == "true"
+	)
+	CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS: int = int(
+		os.getenv("CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS") or "222"
+	)
+	CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS: int = int(
+		os.getenv("CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS") or "600"
+	)
+
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an

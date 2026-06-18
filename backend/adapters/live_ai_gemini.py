@@ -134,6 +134,67 @@ def _tool_error_envelope(message: str = "The tool call failed; ask the user to r
     return {"status": "error", "retryable": True, "error": message, "message": message}
 
 
+# Rough chars-per-token used to estimate the unevictable SI+tools floor. The Live
+# API re-bills the whole context every turn; the system instruction + tool
+# declarations are NEVER evicted, so they set a hard floor under any sliding
+# window. ~4 chars/token is the same coarse estimate this file already uses for
+# token accounting (the debug SI write + the per-turn response estimate); it does
+# NOT need to be exact -- the derived window only needs to land JUST ABOVE the
+# floor, and the headroom/margin knobs absorb the estimator's slop. bd jnjj.35.
+_FLOOR_CHARS_PER_TOKEN = 4
+
+
+def estimate_si_floor_tokens(
+    system_instruction: Optional[str],
+    function_declarations: Optional[List[Dict[str, Any]]],
+) -> int:
+    """Estimate the unevictable SI+tools floor (in tokens) for a Live session.
+
+    The floor = the system-instruction text plus the serialized tool declarations,
+    both of which the Live API keeps in context for the whole session and re-bills
+    every turn. A sliding window can only evict CONVERSATION turns, never this
+    base, so the window's target_tokens must sit ABOVE it (bd jnjj.35 / A6).
+
+    Coarse on purpose (see _FLOOR_CHARS_PER_TOKEN): the caller adds a headroom
+    band on top, so an exact tokenizer is not warranted here.
+    """
+    si_chars = len(system_instruction) if system_instruction else 0
+    tools_chars = (
+        len(json.dumps(function_declarations, ensure_ascii=False))
+        if function_declarations
+        else 0
+    )
+    return (si_chars + tools_chars) // _FLOOR_CHARS_PER_TOKEN
+
+
+def derive_compression_window(
+    system_instruction: Optional[str],
+    function_declarations: Optional[List[Dict[str, Any]]],
+    *,
+    window_headroom_tokens: int,
+    trigger_margin_tokens: int,
+) -> Dict[str, int]:
+    """Derive a per-form (trigger_tokens, target_tokens) from the SI+tools floor.
+
+    jnjj.25 proved the eviction calibration is load-bearing AND form-specific: the
+    window must sit JUST ABOVE the unevictable floor (too loose -> Gemini barely
+    evicts; too tight -> compression fires turn 1). So instead of a fixed constant
+    tuned for one form, derive both per-form:
+
+        floor   = estimate_si_floor_tokens(SI, tools)
+        window  = floor  + window_headroom_tokens   (room for a couple fields)
+        trigger = window + trigger_margin_tokens    (pile-up before eviction)
+
+    Returns a dict ready to drop into the adapter's compression config. The
+    headroom/margin defaults (config.py) reproduce the validated I-90 calibration
+    (~1978 floor -> ~2200 window -> ~2800 trigger). bd jnjj.35 / A6.
+    """
+    floor = estimate_si_floor_tokens(system_instruction, function_declarations)
+    window = floor + max(1, window_headroom_tokens)
+    trigger = window + max(1, trigger_margin_tokens)
+    return {"floor": floor, "window": window, "trigger": trigger}
+
+
 class LiveAIGeminiSession(LiveAISession):
     """Adapter for the Gemini Live AI session."""
 
@@ -1133,16 +1194,46 @@ class LiveAIGemini(ILiveAI):
         # accepts these snake_case keys and aliases them to triggerTokens / slidingWindow /
         # targetTokens. See docs/components/context-compression.md.
         if settings.CONTEXT_COMPRESSION_ENABLED:
+            # Per-form derivation (bd jnjj.35 / A6): when DTI is the SI shape and the
+            # derive flag is on, size the window from THIS form's rendered SI+tools
+            # floor rather than the static env constants (which are tuned for nothing
+            # in particular and are wrong for any form whose floor differs). The
+            # static TRIGGER/WINDOW remain the explicit override -- used when
+            # derivation is off, or when there is no DTI SI to measure a floor from
+            # (a non-DTI SI has no calibrated floor, so deriving would be guesswork).
+            # jnjj.25 proved the calibration is load-bearing; see
+            # scripts/spikes/jnjj_25_dti_cost_findings.md.
+            derive = (
+                getattr(settings, "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR", False)
+                and getattr(settings, "USE_DTI", False)
+                and bool(self._system_instruction)
+            )
+            if derive:
+                derived = derive_compression_window(
+                    self._system_instruction,
+                    self._function_declarations,
+                    window_headroom_tokens=settings.CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS,
+                    trigger_margin_tokens=settings.CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS,
+                )
+                trigger_tokens = derived["trigger"]
+                window_tokens = derived["window"]
+            else:
+                trigger_tokens = settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
+                window_tokens = settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
             config["context_window_compression"] = {
-                "trigger_tokens": settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS,
+                "trigger_tokens": trigger_tokens,
                 "sliding_window": {
-                    "target_tokens": settings.CONTEXT_COMPRESSION_WINDOW_TOKENS,
+                    "target_tokens": window_tokens,
                 },
             }
             self._log.info(
                 "context_window_compression_enabled",
-                trigger_tokens=settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS,
-                window_tokens=settings.CONTEXT_COMPRESSION_WINDOW_TOKENS,
+                trigger_tokens=trigger_tokens,
+                window_tokens=window_tokens,
+                derived_from_si_floor=derive,
+                si_floor_tokens=(
+                    derived["floor"] if derive else None
+                ),
             )
 
         if self._system_instruction:
