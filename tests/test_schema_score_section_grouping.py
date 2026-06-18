@@ -3,10 +3,12 @@
 
 Exact section_id string matching was a broken quality signal (the I-90 gold ids
 are inconsistent hand-authored noise, so every extractor scored 0%). The decision
-(option b) replaced it with a partition-agreement (Rand-index) score over matched
-fields: do draft and gold agree on which fields share a section, regardless of the
-section NAME? These tests pin that behavior -- especially naming-independence,
-which is the whole point.
+(option b) replaced it with PAIRWISE CO-MEMBERSHIP F1 over matched fields: of the
+field-pairs the gold groups into the same section, how many does the draft also
+group (recall), and of the pairs the draft groups, how many are real (precision)?
+Naming-independent. NOT the Rand index -- that was rejected because it credits
+cross-section true negatives, inflating a no-section draft (Codex PR #235). These
+tests pin that behavior -- naming-independence AND the no-inflation property.
 
 Load pattern mirrors tests/test_harness_ledger.py (load the script as a module
 without running its CLI main()).
@@ -158,3 +160,24 @@ def test_score_fields_exposes_section_grouping_not_section_id():
     # Both fields share a section in gold AND in draft -> F1 100%.
     assert attrs["section_grouping"]["pct"] == 100.0
     assert attrs["section_grouping"]["f1"] == 1.0
+
+
+def test_over_grouping_penalty_is_applicable_to_the_headline():
+    # Codex PR #235 r2: when the gold separates fields (no true pairs) but the
+    # draft lumps them together, F1 is 0 -- and `applicable` MUST be > 0 so the
+    # bake-off headline (_attr_avg drops falsy-applicable attrs) actually counts
+    # the penalty instead of silently ignoring a wholly-wrong grouping.
+    truth = [
+        {"id": "a", "name": "A", "type": "text", "pdf_field_name": "p.a", "section_id": "S1"},
+        {"id": "b", "name": "B", "type": "text", "pdf_field_name": "p.b", "section_id": "S2"},
+    ]
+    draft = [  # draft wrongly lumps both into one section
+        {"id": "a2", "name": "A", "type": "text", "pdf_field_name": "p.a", "section_id": "X"},
+        {"id": "b2", "name": "B", "type": "text", "pdf_field_name": "p.b", "section_id": "X"},
+    ]
+    match = schema_score.match_fields(truth, draft)
+    sg = schema_score.score_fields(match)["attributes"]["section_grouping"]
+    assert sg["pct"] == 0.0          # wholly wrong grouping
+    assert sg["applicable"] > 0       # ...and it COUNTS toward the headline
+    # _attr_avg's own filter would now include it (truthy applicable + non-nan pct).
+    assert sg["applicable"] and sg["pct"] == sg["pct"]

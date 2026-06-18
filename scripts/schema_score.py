@@ -366,15 +366,21 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
                                    "pct": _pct(pos[0], pos[1])}
     # section GROUPING: pairwise co-membership F1 (NOT exact section_id, NOT the
     # Rand index -- see _section_grouping_agreement). pct is the F1; the displayed
-    # (correct/applicable) shows the recall fraction (gold-together pairs kept).
+    # (correct/applicable) is agree_pairs over the UNION of gold-same and
+    # draft-same pairs. `applicable` MUST be truthy whenever the metric is gradable
+    # (true OR predicted pairs exist) -- the bake-off summary (_attr_avg) drops any
+    # attr with falsy applicable, so keying it on true_pairs alone would silently
+    # hide an over-grouping 0% from the headline (Codex PR #235 r2).
     sg = _section_grouping_agreement(match.pairs)
+    sg_gradable = sg["true_pairs"] + sg["predicted_pairs"] - sg["agree_pairs"]
     attr_scores["section_grouping"] = {
         "correct": sg["agree_pairs"],
-        "applicable": sg["true_pairs"],
+        "applicable": sg_gradable,
         "pct": (sg["f1"] * 100.0 if sg["f1"] == sg["f1"] else float("nan")),
         "precision": sg["precision"],
         "recall": sg["recall"],
         "f1": sg["f1"],
+        "true_pairs": sg["true_pairs"],
         "predicted_pairs": sg["predicted_pairs"],
     }
 
