@@ -81,11 +81,22 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
 
 Opens at http://localhost:3001
 
-### Select a Form
+### Open a Form (the catalogue)
 
-1. Choose from dropdown (I-90, I-589, etc.)
-2. PDF loads on left, fields in center, properties on right
-3. Validation panel at bottom shows progress
+The front door is the **form catalogue** -- it reads your local `form-kits/`
+directory directly (File System Access API; Chrome/Edge):
+
+1. Click **Open form-kits folder** and pick your `form-kits/` directory.
+2. The catalogue lists every kit as a card, showing its status badge
+   (draft / complete), a **review-progress %** bar (how much of the human review
+   is done), and an aggregate overview ("N forms - X complete - Y in progress").
+3. Click a card to open that kit -- PDF on the left, fields in the center,
+   properties on the right, validation panel at the bottom.
+4. To onboard a NEW form, **drag-drop an AcroForm PDF** onto the catalogue; it
+   creates a `form-kits/<id>/` (status:draft) ready for extraction.
+
+(If the browser lacks the directory API, a legacy hardcoded form dropdown shows
+as a fallback.)
 
 ### Edit Fields
 
@@ -95,13 +106,15 @@ Opens at http://localhost:3001
 - **Spoken Name** - User-friendly name for voice AI
 - **Help Text** - Instructions for users
 - **Validation** - Patterns, formats, constraints
-- **Conditional Logic** - show_if rules
+- **Conditional Logic** - `show_if` (reactive) and `controls_fields` (trigger-side)
 
 ### Save Your Work
 
 - **Cmd+S** (Mac) or **Ctrl+S** (Windows/Linux)
-- Downloads as `{form}_edited.json`
-- Copy to appropriate location
+- Saves **in place** to the open kit's own `schema.json` (File System Access; no
+  re-prompt after the first grant). **Save As...** writes to a picked file instead.
+- A kit opened via the legacy fallback (no directory API) downloads
+  `{form}_edited.json` to copy into place manually.
 
 ## Interface Overview
 
@@ -161,10 +174,18 @@ Opens at http://localhost:3001
 
 ### Field List
 
+**Search / filter** (top of the list):
+- Type any part of a field's **id**, **spoken name**, or **PDF field name** to
+  filter the tree to matches (case-insensitive substring).
+- Section grouping is preserved while filtering; sections with no match are hidden
+  and matching sections auto-expand. The "x" (or clearing the box) restores the
+  full list.
+
 **Section grouping**:
 - Click section header to expand/collapse
 - Fields grouped by form sections
 - Icons show field status (🟢🟡🔴)
+- The count badge shows `matches/total` while filtering, `total` otherwise
 
 **Field selection**:
 - Click field to select
@@ -249,6 +270,24 @@ For fields that only show based on another field:
 
 **Example:** "Family name on card" only shows if "Name changed" = Yes
 
+### Find a Field
+
+On a large form, use the **search box** at the top of the field list rather than
+scrolling: type part of the field's id, spoken name, or PDF field name. The list
+filters to matches (grouping preserved); selecting a result selects that field
+across the PDF, list, and editor. Clear the box to restore the full list.
+
+### Mark a Form Complete (deploy gating)
+
+A kit is **draft** until you promote it. On each catalogue card:
+- **Mark complete** -- sets `metadata.json` status to `complete`. Only complete
+  kits are uploaded by the deploy scripts (the draft-leak gate); a draft stays
+  local and git-backed.
+- **Revert to draft** -- the inverse, on a complete kit.
+
+Promote a form only after its review % is where you want it -- once complete, the
+next deploy ships it to the voice app.
+
 ### Navigate Large Forms
 
 **Using PDF Viewer**:
@@ -259,6 +298,7 @@ For fields that only show based on another field:
 - Click "Fit Page" to see entire page at once
 
 **Using Field List**:
+- **Search** to jump straight to a field by name (see "Find a Field" above)
 - Click any field → PDF auto-scrolls to that page
 - Collapse sections to reduce clutter
 - Status icons show completion at a glance
