@@ -7,7 +7,9 @@ SEPARATELY:
 
   (a) FIELD extraction -- did the extractor find the right fields, with the right
       per-field attributes (type, pdf_field_name, pdf_position, options,
-      validation, section_id)?
+      validation) and section GROUPING (which fields share a section -- a
+      partition-agreement metric, NOT exact section_id string match; bd
+      polyglot-pdf-7a9.13)?
   (b) RELATIONSHIP/logic -- did it recover the parts/sections structure and the
       conditional dependencies (show_if, controls_fields, conditional_fields,
       copy_to, supplements + overflow_to_supplement, tables/multi_entry)?
@@ -231,6 +233,81 @@ def _pos_match(t: dict, d: dict, tol: float = 5.0) -> Optional[bool]:
             and abs((tp.get("y") or 0) - (dp.get("y") or 0)) <= tol)
 
 
+def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> dict[str, Any]:
+    """Score section GROUPING, not the section_id STRING (bd polyglot-pdf-7a9.13).
+
+    Exact section_id matching was a broken metric: the I-90 gold section_ids are
+    inconsistent hand-authored noise (prose mixed with slugs), so every extractor
+    scored 0%, while the LLM's clean-but-different ids were punished for not
+    reproducing that noise. What actually matters for the UX is whether the draft
+    GROUPS the same fields together -- the partition -- regardless of what the
+    section is named.
+
+    Metric: PAIRWISE co-membership F1 over matched fields, scored ONLY on
+    same-section pairs (not the Rand index). For every unordered pair of matched
+    truth-sectioned fields:
+      - a TRUE pair = gold puts the two fields in the same section;
+      - a PREDICTED pair = the draft puts them in the same section.
+      recall    = (true & predicted) / true       (gold groupings the draft kept)
+      precision = (true & predicted) / predicted   (draft groupings that are real)
+      f1        = harmonic mean; this is the reported pct.
+
+    Why NOT the Rand index (Codex review, PR #235): Rand also credits
+    DIFFERENT-section agreements, so a draft that emits NO sections (everything a
+    singleton) scores ~90% on a many-section gold purely from cross-section pairs
+    it got "right" by grouping nothing -- inflating the signal and able to reverse
+    bake-off conclusions. Co-membership F1 ignores the true-negative cross-section
+    pairs: an extractor that reproduces no grouping has recall 0 -> F1 0.
+
+    Naming-agnostic (invariant to relabeling sections). Only fields whose TRUTH
+    side carries a section participate (a field the gold never sectioned can't
+    inform a grouping judgment). A draft field with NO section_id is a SINGLETON
+    (never co-membered with anything), so it can never be a predicted pair.
+
+    Returns {"precision","recall","f1","true_pairs","predicted_pairs",
+    "agree_pairs"} (agree_pairs = true & predicted). f1 is NaN (-> n/a) when there
+    are no true pairs AND no predicted pairs (nothing to grade).
+    """
+    # (truth_section, draft_section) for each matched field the gold sectioned.
+    sectioned = [
+        (_norm_text(t.get("section_id")), _norm_text(d.get("section_id")))
+        for t, d in pairs
+        if _norm_text(t.get("section_id"))
+    ]
+
+    def _draft_same(a: str, b: str) -> bool:
+        # Empty draft section = a singleton: never "same" as anything (incl. "").
+        return a != "" and a == b
+
+    true_pairs = predicted_pairs = agree_pairs = 0
+    for i in range(len(sectioned)):
+        t_i, d_i = sectioned[i]
+        for j in range(i + 1, len(sectioned)):
+            t_j, d_j = sectioned[j]
+            gold_same = t_i == t_j  # truth ids always non-empty (filtered above)
+            draft_same = _draft_same(d_i, d_j)
+            if gold_same:
+                true_pairs += 1
+            if draft_same:
+                predicted_pairs += 1
+            if gold_same and draft_same:
+                agree_pairs += 1
+
+    precision = (agree_pairs / predicted_pairs) if predicted_pairs else float("nan")
+    recall = (agree_pairs / true_pairs) if true_pairs else float("nan")
+    if true_pairs == 0 and predicted_pairs == 0:
+        f1 = float("nan")  # nothing to grade -> n/a
+    elif true_pairs == 0 or predicted_pairs == 0 or agree_pairs == 0:
+        f1 = 0.0           # one side empty (or zero overlap) -> no co-membership credit
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
+    return {
+        "precision": precision, "recall": recall, "f1": f1,
+        "true_pairs": true_pairs, "predicted_pairs": predicted_pairs,
+        "agree_pairs": agree_pairs,
+    }
+
+
 def score_fields(match: MatchResult) -> dict[str, Any]:
     """(a) half: detection P/R/F1 + per-attribute accuracy over matched pairs."""
     tp = len(match.pairs)
@@ -244,7 +321,7 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
     # Per-attribute accuracy across matched pairs only (you can't grade an
     # attribute of a field that wasn't detected).
     attrs = {k: [0, 0] for k in
-             ("type", "pdf_field_name", "options", "validation", "section_id")}
+             ("type", "pdf_field_name", "options", "validation")}
     pos = [0, 0]  # [correct, applicable]
 
     for t, d in match.pairs:
@@ -273,12 +350,9 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
             pat_ok = _norm_text(tv.get("pattern")) == _norm_text(dv.get("pattern"))
             if dv and req_ok and pat_ok:
                 attrs["validation"][0] += 1
-        # section_id: only applicable when the truth field HAS a section (else a
-        # both-None pair would count as a correct hit and pad the metric).
-        if _norm_text(t.get("section_id")):
-            attrs["section_id"][1] += 1
-            if _norm_text(t.get("section_id")) == _norm_text(d.get("section_id")):
-                attrs["section_id"][0] += 1
+        # section grouping is scored AFTER the loop (it is a pairwise partition
+        # metric over all matched fields, not a per-field attribute) -- see
+        # _section_grouping_agreement and bd polyglot-pdf-7a9.13.
         # pdf_position
         pm = _pos_match(t, d)
         if pm is not None:
@@ -290,6 +364,25 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
                    for k, (c, n) in attrs.items()}
     attr_scores["pdf_position"] = {"correct": pos[0], "applicable": pos[1],
                                    "pct": _pct(pos[0], pos[1])}
+    # section GROUPING: pairwise co-membership F1 (NOT exact section_id, NOT the
+    # Rand index -- see _section_grouping_agreement). pct is the F1; the displayed
+    # (correct/applicable) is agree_pairs over the UNION of gold-same and
+    # draft-same pairs. `applicable` MUST be truthy whenever the metric is gradable
+    # (true OR predicted pairs exist) -- the bake-off summary (_attr_avg) drops any
+    # attr with falsy applicable, so keying it on true_pairs alone would silently
+    # hide an over-grouping 0% from the headline (Codex PR #235 r2).
+    sg = _section_grouping_agreement(match.pairs)
+    sg_gradable = sg["true_pairs"] + sg["predicted_pairs"] - sg["agree_pairs"]
+    attr_scores["section_grouping"] = {
+        "correct": sg["agree_pairs"],
+        "applicable": sg_gradable,
+        "pct": (sg["f1"] * 100.0 if sg["f1"] == sg["f1"] else float("nan")),
+        "precision": sg["precision"],
+        "recall": sg["recall"],
+        "f1": sg["f1"],
+        "true_pairs": sg["true_pairs"],
+        "predicted_pairs": sg["predicted_pairs"],
+    }
 
     return {
         "detection": {"true_positive": tp, "false_negative": fn,
@@ -386,8 +479,18 @@ def render_report(name: str, a: dict, b: dict) -> str:
              f"FP(spurious)={det['false_positive']}")
     L.append("  per-attribute accuracy (over matched fields):")
     for k, v in a["attributes"].items():
-        L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
-                 f"({v['correct']}/{v['applicable']})")
+        # section_grouping's pct is an F1 (pairwise co-membership), so the generic
+        # "(correct/applicable)" is NOT pct's fraction -- render it as F1 with its
+        # own precision/recall instead of a misleading raw count (Codex PR #235 r3).
+        if k == "section_grouping":
+            _p = v["precision"] * 100 if v["precision"] == v["precision"] else float("nan")
+            _r = v["recall"] * 100 if v["recall"] == v["recall"] else float("nan")
+            L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
+                     f"(F1; P {_fmt_pct(_p)} R {_fmt_pct(_r)}; "
+                     f"{v['correct']}/{v['true_pairs']} gold pairs kept)")
+        else:
+            L.append(f"    {k:18s} {_fmt_pct(v['pct'])}  "
+                     f"({v['correct']}/{v['applicable']})")
     L.append("")
     L.append("(b) RELATIONSHIP / LOGIC")
     L.append("  conditional recall (recovered / total in ground truth):")
