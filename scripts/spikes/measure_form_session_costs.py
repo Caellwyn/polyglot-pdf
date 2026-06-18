@@ -504,7 +504,7 @@ class _LogTap:
 
 # ------------------------------------------------------------------- driver
 
-def _make_settings(arm: str, trigger: int, window: int):
+def _make_settings(arm: str, trigger: int, window: int, compression: bool = False):
     overrides = {}
     if arm == "sliding-window":
         overrides = {
@@ -526,6 +526,21 @@ def _make_settings(arm: str, trigger: int, window: int):
         # next field's schema on next_field_hint_response). This is the production
         # DTI principal path -- jnjj.22.
         overrides = {"USE_DTI": True}
+
+    # --compression layers calibrated context-window eviction onto the arm (the
+    # jnjj.25-folded eviction experiment, formerly jnjj.34). jnjj.25 found DTI's
+    # per-field guidance ACCUMULATES within a section, cancelling the SI saving;
+    # eviction should purge that stale guidance turn-over-turn. Calibration: the
+    # window must EXCEED the unevictable SI+tools floor (~1978 tok for the DTI SI on
+    # the I-90) -- else compression fires on turn 1 and the data is incomparable --
+    # but be tight enough to evict accumulated guidance; the trigger sits above the
+    # window so a couple of fields' guidance must pile up before eviction. Defaults:
+    # window 2500 (floor + the current field's guidance headroom), trigger 3500.
+    if compression and arm != "sliding-window":
+        overrides["CONTEXT_COMPRESSION_ENABLED"] = True
+        overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
+        overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
+
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: neutralize server VAD so explicit
     # activity brackets give deterministic synthetic-turn boundaries (bd p1t /
@@ -604,7 +619,7 @@ async def run(args) -> int:
 
     model_name = MODELS[args.model]
     rates = get_pricing_for_model(model_name)
-    settings = _make_settings(args.arm, args.trigger, args.window)
+    settings = _make_settings(args.arm, args.trigger, args.window, args.compression)
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
     # `_config.get_settings = ...` is NOT enough: modules that did
     # `from backend.config import get_settings` at import time (ai_context,
@@ -626,13 +641,15 @@ async def run(args) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    base_name = f"costs_{args.schema}_{args.model}_{args.arm}_{args.path}_{stamp}"
+    _comp_tag = "_comp" if args.compression and args.arm != "sliding-window" else ""
+    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
         "bead": "polyglot-pdf-4loz", "model": model_name, "tier": args.model,
         "schema": args.schema,
         "arm": args.arm, "path": args.path, "questions": len(plan),
-        "trigger": args.trigger if args.arm == "sliding-window" else None,
-        "window": args.window if args.arm == "sliding-window" else None,
+        "compression": bool(args.compression),
+        "trigger": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
+        "window": args.window if (args.arm == "sliding-window" or args.compression) else None,
         "schema_scope": ("per-section" if args.arm in ("section-reset", "section-reset-jit", "dti") else "full-form"),
         "started": stamp, "turns": [], "per_question_tools": {},
         "prompt_curve": [], "errors": [], "rates_per_token": rates,
@@ -877,6 +894,13 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=9_000,
                     help="sliding-window target_tokens; must exceed the SI "
                          "base for any evictable mass to exist")
+    ap.add_argument("--compression", action="store_true",
+                    help="layer calibrated context-window eviction onto a non-"
+                         "sliding-window arm (the jnjj.25-folded eviction test): "
+                         "set --trigger/--window to the arm's SI floor (for the DTI "
+                         "SI on i90, ~window 2500 / trigger 3500 -- above the ~1978 "
+                         "unevictable SI+tools floor). Lets the accumulated per-field "
+                         "guidance be evicted turn-over-turn instead of replayed.")
     ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "data"))
     ap.add_argument("--synth-only", action="store_true",
                     help="build the audio cache and exit (no live calls)")
