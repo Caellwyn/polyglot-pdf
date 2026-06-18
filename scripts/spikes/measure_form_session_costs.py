@@ -511,6 +511,11 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             "CONTEXT_COMPRESSION_ENABLED": True,
             "CONTEXT_COMPRESSION_TRIGGER_TOKENS": trigger,
             "CONTEXT_COMPRESSION_WINDOW_TOKENS": window,
+            # This arm applies the EXACT --trigger/--window the operator asked for;
+            # disable per-form derivation (default-on under DTI, bd jnjj.35) so the
+            # adapter honors the fixed values instead of silently auto-sizing while
+            # the run metadata still records the requested fixed numbers.
+            "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
         }
     elif arm == "section-reset-jit":
         # The JIT cost arm (bd polyglot-pdf-jnjj.6 / G2): same per-section-reset
@@ -540,6 +545,11 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
         overrides["CONTEXT_COMPRESSION_ENABLED"] = True
         overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
         overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
+        # Honor the EXACT --trigger/--window for this calibration sweep: turn OFF
+        # the production per-form derivation (default-on under DTI, bd jnjj.35),
+        # which would otherwise auto-size the window and ignore the CLI values --
+        # silently, while the run metadata still records the requested fixed pair.
+        overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
 
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: neutralize server VAD so explicit

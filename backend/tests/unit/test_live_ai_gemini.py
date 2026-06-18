@@ -1390,11 +1390,13 @@ def test_estimate_si_floor_tokens_includes_real_tool_declarations():
 
 
 def test_derive_compression_window_sits_just_above_floor():
-    """window = floor + headroom; trigger = window + margin; window < trigger always.
+    """Pure arithmetic of the derivation: window = floor + headroom;
+    trigger = window + margin; window < trigger always; window > floor always.
 
-    The jnjj.25 calibration is load-bearing: the window must land JUST ABOVE the
-    floor. With the validated I-90-shaped defaults (headroom 222, margin 600) a
-    ~1978-token floor must derive to ~2200 window / ~2800 trigger.
+    Uses explicit headroom/margin (NOT the production defaults -- those are guarded
+    against the MEASURED I-90 floor in
+    test_production_default_headroom_clears_measured_i90_floor). This pins only the
+    formula: a 1978 estimated floor + 222 headroom = 2200 window, + 600 = 2800.
     """
     from backend.adapters.live_ai_gemini import (
         derive_compression_window,
@@ -1418,7 +1420,12 @@ def test_derive_compression_window_sits_just_above_floor():
 
 
 def _compression_settings(**overrides):
-    """Real Settings with compression ENABLED and a known derivation calibration."""
+    """Real Settings with compression ENABLED and a known derivation calibration.
+
+    Headroom/margin here are FIXTURE values (the wiring assertions read them back
+    as floor+222 etc.), independent of the production defaults. The production-
+    default calibration is guarded separately by
+    test_production_default_headroom_clears_measured_i90_floor below."""
     from backend.config import Settings
 
     base = dict(
@@ -1432,6 +1439,59 @@ def _compression_settings(**overrides):
     )
     base.update(overrides)
     return Settings(**base)
+
+
+# The MEASURED I-90 DTI calibration anchors (from the jnjj.25 cost run meta.json
+# scripts/spikes/data/costs_i90_2.5_dti_comp_happy_20260618T040035Z.meta.json):
+#   - rendered DTI SI = 3786 chars (system_instruction_chars)
+#   - live eviction landing zone (the unevictable billed floor) = ~1978-2034 tok
+# The estimator (chars/4 of SI+tools) UNDERSHOOTS that billed floor, so the
+# production headroom must be large enough that the derived window still clears
+# ~1978. This was the Codex P1 (a 222 headroom derived a 1823 window, BELOW the
+# real floor -> turn-1 eviction).
+_I90_DTI_SI_CHARS = 3786
+_I90_MEASURED_FLOOR_TOKENS = 1978
+
+
+def test_production_default_headroom_clears_measured_i90_floor():
+    """Regression guard for the Codex P1: the PRODUCTION-DEFAULT headroom must
+    derive a window that sits ABOVE the MEASURED I-90 eviction floor (~1978 tok),
+    not above the estimator's undershoot. A window below the real floor makes
+    compression fire on turn 1 and evict all conversation context.
+
+    Uses Settings() defaults (no headroom override) + the measured SI char count +
+    the real tool declarations -- i.e. the exact production configuration."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini, estimate_si_floor_tokens
+    from backend.config import Settings
+
+    settings = Settings(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        USE_DTI=True,
+        # NO headroom/margin override -> exercise the shipped defaults.
+    )
+    adapter = LiveAIGemini(api_key="test_key")
+    adapter._system_instruction = "x" * _I90_DTI_SI_CHARS
+    adapter._function_declarations = settings.TOOL_DECLARATIONS
+
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    window = comp["sliding_window"]["target_tokens"]
+    trigger = comp["trigger_tokens"]
+    est_floor = estimate_si_floor_tokens(
+        adapter._system_instruction, settings.TOOL_DECLARATIONS
+    )
+
+    # The estimator undershoots the billed floor -- document that it does.
+    assert est_floor < _I90_MEASURED_FLOOR_TOKENS, (
+        "if the estimator no longer undershoots, the headroom can shrink -- recheck"
+    )
+    # THE GUARD: the derived window must clear the REAL measured floor, with a
+    # little room to spare (it should land near the validated ~2200, not at 1978).
+    assert window > _I90_MEASURED_FLOOR_TOKENS, (
+        f"derived window {window} is at/below the measured ~{_I90_MEASURED_FLOOR_TOKENS}"
+        " floor -> compression fires turn 1 and evicts everything (Codex P1)"
+    )
+    assert window <= 2400, "window drifted well above the validated ~2200 calibration"
+    assert trigger > window  # API invariant
 
 
 def test_build_live_config_derives_window_under_dti():
