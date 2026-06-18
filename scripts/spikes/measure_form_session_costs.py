@@ -168,8 +168,14 @@ DEMO_QUESTIONS = [
 #     a US-filer "not applicable" answer, so no visible field is left unanswered.
 I90_QUESTIONS = [
     # --- Section 1: Part 1 - Information About You ---
-    {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is A12345678.",
-     "wrong": "My alien registration number is A87654321."},
+    # Answer the A-Number as BARE DIGITS (no "A" prefix): the a_number A-strip
+    # normalizer is currently broken (bd polyglot-pdf-cn0e -- it reads top-level
+    # format_preset but the schema nests it under validation.format_preset), so an
+    # "A..."-prefixed answer fails the ^\d{7,9}$ pattern and adds validation noise to
+    # the cost measurement. Bare digits validate cleanly today; revert to a natural
+    # "A12345678" phrasing once cn0e lands.
+    {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is one two three four five six seven eight.",
+     "wrong": "My alien registration number is eight seven six five four three two one."},
     {"field_id": "p1_line2_acctidentifier", "say": "My USCIS online account number is 1234567890.",
      "wrong": "My USCIS online account number is 9876543210."},
     {"field_id": "p1_line3a_familyname", "say": "My current family name is Vasquez.",
@@ -363,7 +369,7 @@ class FakeClientWebSocket:
     synchronous round-trips (get_form_state / get_next_field_hint /
     confirm_field) the way webFormConnection does."""
 
-    def __init__(self, schema: dict, plan: list[dict]):
+    def __init__(self, schema: dict, plan: list[dict], dti_mode: bool = False):
         self.schema_fields = {f["id"]: f for f in schema["fields"]}
         self.plan = plan
         self.active_field_ids: list[str] = [q["field_id"] for q in plan]
@@ -371,6 +377,12 @@ class FakeClientWebSocket:
         self.service: FormFillingService | None = None
         self.first_audio_at: float | None = None
         self.sent_messages: list[str] = []
+        # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
+        # supplies the next field's FULL schema on next_field_hint_response, which
+        # the backend renders into the confirm_field next_field_guidance. Mirrors the
+        # production frontend (webFormConnection.handleGetNextFieldHintRequest +
+        # getFieldSchema). Off for the section-reset/JIT arms.
+        self.dti_mode = dti_mode
 
     # -- WebSocket surface the backend touches
     async def accept(self):
@@ -407,7 +419,11 @@ class FakeClientWebSocket:
         elif mtype == "get_next_field_hint":
             rid = msg.get("request_id")
             hint = self.next_hint()
-            self._reply(lambda: self.service.handle_next_field_hint_response(rid, hint))
+            # DTI: also hand the backend the next field's FULL schema (the client
+            # owns it) so it renders into next_field_guidance -- otherwise the DTI
+            # model gets no per-field guidance past field 1 and stalls.
+            nfs = self.next_field_schema() if self.dti_mode else None
+            self._reply(lambda: self.service.handle_next_field_hint_response(rid, hint, nfs))
         elif mtype == "confirm_field":
             rid = msg.get("request_id")
             fid = msg.get("field_id")
@@ -433,6 +449,17 @@ class FakeClientWebSocket:
             entry = self.state.get(fid)
             if not entry or not entry.get("confirmed"):
                 return _hint_for(self.schema_fields[fid], order)
+        return None
+
+    def next_field_schema(self) -> dict | None:
+        """The FULL schema dict of the next unconfirmed field (DTI mode). The client
+        owns the full schema, so this is the harness analogue of the frontend's
+        getFieldSchema(nextField.id) -- the backend renders it into the confirm_field
+        next_field_guidance."""
+        for fid in self.active_field_ids:
+            entry = self.state.get(fid)
+            if not entry or not entry.get("confirmed"):
+                return self.schema_fields.get(fid)
         return None
 
 
@@ -477,7 +504,7 @@ class _LogTap:
 
 # ------------------------------------------------------------------- driver
 
-def _make_settings(arm: str, trigger: int, window: int):
+def _make_settings(arm: str, trigger: int, window: int, compression: bool = False):
     overrides = {}
     if arm == "sliding-window":
         overrides = {
@@ -490,6 +517,30 @@ def _make_settings(arm: str, trigger: int, window: int):
         # flow as "section-reset", but build_form_context renders the JIT manifest
         # SI instead of the full per-section field dump.
         overrides = {"USE_JIT_SCHEMA": True}
+    elif arm == "dti":
+        # The Dynamic Turn Injection cost arm (bd polyglot-pdf-jnjj.25): same
+        # per-section-reset flow + JIT-shaped handshake, but USE_DTI makes
+        # build_form_context render the TINY DTI SI (static backbone + only the
+        # current field's guidance) and each next field's guidance rides the
+        # confirm_field tool response (client-supplied; the FakeClient sends the
+        # next field's schema on next_field_hint_response). This is the production
+        # DTI principal path -- jnjj.22.
+        overrides = {"USE_DTI": True}
+
+    # --compression layers calibrated context-window eviction onto the arm (the
+    # jnjj.25-folded eviction experiment, formerly jnjj.34). jnjj.25 found DTI's
+    # per-field guidance ACCUMULATES within a section, cancelling the SI saving;
+    # eviction should purge that stale guidance turn-over-turn. Calibration: the
+    # window must EXCEED the unevictable SI+tools floor (~1978 tok for the DTI SI on
+    # the I-90) -- else compression fires on turn 1 and the data is incomparable --
+    # but be tight enough to evict accumulated guidance; the trigger sits above the
+    # window so a couple of fields' guidance must pile up before eviction. Defaults:
+    # window 2500 (floor + the current field's guidance headroom), trigger 3500.
+    if compression and arm != "sliding-window":
+        overrides["CONTEXT_COMPRESSION_ENABLED"] = True
+        overrides["CONTEXT_COMPRESSION_TRIGGER_TOKENS"] = trigger
+        overrides["CONTEXT_COMPRESSION_WINDOW_TOKENS"] = window
+
     s = _config.Settings(**overrides)
     # Labeled deviation from deploy config: neutralize server VAD so explicit
     # activity brackets give deterministic synthetic-turn boundaries (bd p1t /
@@ -568,21 +619,38 @@ async def run(args) -> int:
 
     model_name = MODELS[args.model]
     rates = get_pricing_for_model(model_name)
-    settings = _make_settings(args.arm, args.trigger, args.window)
-    orig_get_settings = _config.get_settings
-    _config.get_settings = lambda s=settings: s
+    settings = _make_settings(args.arm, args.trigger, args.window, args.compression)
+    # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
+    # `_config.get_settings = ...` is NOT enough: modules that did
+    # `from backend.config import get_settings` at import time (ai_context,
+    # callback_handler, form_filling_service) hold their OWN reference and would
+    # keep reading the default flags -- so a `dti`/`section-reset-jit` arm would
+    # silently render the wrong SI (bd jnjj.25: the DTI branch never fired under the
+    # old single-module swap). Patch the name on _config AND on each by-reference
+    # holder on the SI-build path; restore them all in the finally block. (Modules
+    # that import get_settings LOCALLY inside a function -- e.g. live_ai_gemini --
+    # re-read _config at call time, so the _config swap covers them.)
+    import backend.services.ai_context as _ai_context_mod
+    import backend.services.callback_handler as _callback_mod
+    import backend.services.form_filling_service as _ffs_mod
+    _patch_targets = [_config, _ai_context_mod, _callback_mod, _ffs_mod]
+    _orig_get_settings = [(m, m.get_settings) for m in _patch_targets if hasattr(m, "get_settings")]
+    for m, _ in _orig_get_settings:
+        m.get_settings = lambda s=settings: s
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    base_name = f"costs_{args.schema}_{args.model}_{args.arm}_{args.path}_{stamp}"
+    _comp_tag = "_comp" if args.compression and args.arm != "sliding-window" else ""
+    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
         "bead": "polyglot-pdf-4loz", "model": model_name, "tier": args.model,
         "schema": args.schema,
         "arm": args.arm, "path": args.path, "questions": len(plan),
-        "trigger": args.trigger if args.arm == "sliding-window" else None,
-        "window": args.window if args.arm == "sliding-window" else None,
-        "schema_scope": ("per-section" if args.arm in ("section-reset", "section-reset-jit") else "full-form"),
+        "compression": bool(args.compression),
+        "trigger": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
+        "window": args.window if (args.arm == "sliding-window" or args.compression) else None,
+        "schema_scope": ("per-section" if args.arm in ("section-reset", "section-reset-jit", "dti") else "full-form"),
         "started": stamp, "turns": [], "per_question_tools": {},
         "prompt_curve": [], "errors": [], "rates_per_token": rates,
         "vad": "neutralized (explicit activity brackets; labeled deviation)",
@@ -612,11 +680,17 @@ async def run(args) -> int:
         # schema (manifest + one-field `fields`) so build_form_context renders the
         # reduced JIT SI (bd polyglot-pdf-jnjj.6). The single-session arms get the
         # whole form (what "no sections" honestly costs with today's SI machinery).
-        is_section_reset = args.arm in ("section-reset", "section-reset-jit")
+        # section-reset (full-SI baseline), section-reset-jit (JIT manifest SI), and
+        # dti (Dynamic Turn Injection) ALL use the production per-section sub-schema
+        # flow. section-reset-jit and dti additionally synthesize the JIT-shaped
+        # handshake (manifest + one-field `fields`) -- build_form_context renders the
+        # JIT SI under USE_JIT_SCHEMA and the tiny DTI SI under USE_DTI (bd jnjj.6/.25).
+        is_section_reset = args.arm in ("section-reset", "section-reset-jit", "dti")
+        uses_jit_handshake = args.arm in ("section-reset-jit", "dti")
         if is_section_reset:
             sec = secs[0]
             sub = section_subschema(schema, sec["id"])
-            if args.arm == "section-reset-jit":
+            if uses_jit_handshake:
                 arm_schema = jit_handshake_schema(sub, sec["id"], sec["label"])
             else:
                 arm_schema = sub
@@ -630,7 +704,7 @@ async def run(args) -> int:
                              section_label="Full Form", previous_spoken_names=[])
             current_section_id = secs[0]["id"]
 
-        client = FakeClientWebSocket(schema, plan)
+        client = FakeClientWebSocket(schema, plan, dti_mode=(args.arm == "dti"))
         client.service = service
         if is_section_reset:
             client.set_active_section(
@@ -701,9 +775,10 @@ async def run(args) -> int:
             fid = q["field_id"]
             f_sec = (client.schema_fields[fid].get("section_id") or "section-1")
 
-            # Section boundary (section-reset + section-reset-jit arms): production
-            # restart. The JIT arm rebuilds the handshake_jit schema for the new
-            # section so the restarted SI is still the reduced JIT SI (jnjj.6).
+            # Section boundary (section-reset, section-reset-jit, dti arms):
+            # production restart. The JIT-handshake arms (section-reset-jit, dti)
+            # rebuild the handshake_jit schema for the new section so the restarted
+            # SI is still the reduced JIT SI / tiny DTI SI (jnjj.6 / jnjj.25).
             if is_section_reset and f_sec != secs[sec_idx]["id"]:
                 sec_idx += 1
                 sec = secs[sec_idx]
@@ -713,7 +788,7 @@ async def run(args) -> int:
                     [p for p in plan
                      if (client.schema_fields[p["field_id"]].get("section_id")
                          or "section-1") == sec["id"]])
-                if args.arm == "section-reset-jit":
+                if uses_jit_handshake:
                     switch_schema = jit_handshake_schema(
                         section_subschema(schema, sec["id"]), sec["id"], sec["label"])
                 else:
@@ -766,7 +841,8 @@ async def run(args) -> int:
         except Exception:
             pass
     finally:
-        _config.get_settings = orig_get_settings
+        for _m, _orig in _orig_get_settings:
+            _m.get_settings = _orig
 
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
@@ -804,7 +880,7 @@ def main() -> int:
                          "(the REAL form-kits/i-90 first 3 sections -- the "
                          "production-faithful set; bd polyglot-pdf-jnjj.24)")
     ap.add_argument("--arm",
-                    choices=["unbounded", "section-reset", "section-reset-jit", "sliding-window"],
+                    choices=["unbounded", "section-reset", "section-reset-jit", "dti", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=None,
@@ -818,6 +894,15 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=9_000,
                     help="sliding-window target_tokens; must exceed the SI "
                          "base for any evictable mass to exist")
+    ap.add_argument("--compression", action="store_true",
+                    help="layer calibrated context-window eviction onto a non-"
+                         "sliding-window arm (the jnjj.25-folded eviction test): "
+                         "set --trigger/--window just above the arm's unevictable "
+                         "SI+tools floor. The WINNING DTI-on-i90 calibration was "
+                         "--trigger 2800 --window 2200 (-21% unhappy); a LOOSER "
+                         "window (2500/3500) barely evicted and did NOT help -- use "
+                         "the tight values. Lets the accumulated per-field guidance "
+                         "be evicted turn-over-turn instead of replayed.")
     ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "data"))
     ap.add_argument("--synth-only", action="store_true",
                     help="build the audio cache and exit (no live calls)")
