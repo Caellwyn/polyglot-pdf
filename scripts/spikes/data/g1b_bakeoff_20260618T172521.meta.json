@@ -1,0 +1,86 @@
+{
+  "bead": "polyglot-pdf-0zp3",
+  "stamp": "20260618T172521",
+  "today_for_date_checks": "2026-06-17",
+  "sizes": [
+    132
+  ],
+  "models": {
+    "gemini-2.5-flash-lite": {
+      "in": 0.1,
+      "out": 0.4
+    },
+    "gemini-2.5-flash": {
+      "in": 0.3,
+      "out": 2.5
+    },
+    "gemini-3.1-flash-lite": {
+      "in": 0.25,
+      "out": 2.0
+    },
+    "gemini-3-flash-preview": {
+      "in": 0.5,
+      "out": 4.0
+    }
+  },
+  "provenance": "SYNTHETIC full-size form states over real I-90 fields",
+  "note_voice_model": "2.5-flash-live/native-audio is bidi-only; not run here as a text checker -- separate probe needed.",
+  "summary": {
+    "gemini-2.5-flash-lite@132": {
+      "recall": 0.96,
+      "precision": 0.6857142857142857,
+      "tp": 24,
+      "fn": 1,
+      "fp": 11,
+      "tn": 4,
+      "lat_p50": 1.0380948781967163,
+      "lat_p90": 1.4445059299468994,
+      "cost_mean": 0.000392665,
+      "in_med": 3283.0,
+      "out_med": 159.5,
+      "errors": 0
+    },
+    "gemini-2.5-flash@132": {
+      "recall": 1.0,
+      "precision": 0.8928571428571429,
+      "tp": 25,
+      "fn": 0,
+      "fp": 3,
+      "tn": 12,
+      "lat_p50": 18.237725615501404,
+      "lat_p90": 40.618980169296265,
+      "cost_mean": 0.0012517075,
+      "in_med": 3283.0,
+      "out_med": 89.5,
+      "errors": 0
+    },
+    "gemini-3.1-flash-lite@132": {
+      "recall": 0.96,
+      "precision": 0.6486486486486487,
+      "tp": 24,
+      "fn": 1,
+      "fp": 13,
+      "tn": 2,
+      "lat_p50": 0.8270690441131592,
+      "lat_p90": 1.1001574993133545,
+      "cost_mean": 0.0010304375,
+      "in_med": 3283.0,
+      "out_med": 91.5,
+      "errors": 0
+    },
+    "gemini-3-flash-preview@132": {
+      "recall": 1.0,
+      "precision": 0.8333333333333334,
+      "tp": 25,
+      "fn": 0,
+      "fp": 5,
+      "tn": 10,
+      "lat_p50": 37.561121225357056,
+      "lat_p90": 60.00833177566528,
+      "cost_mean": 0.0023628833333333332,
+      "in_med": 3283.0,
+      "out_med": 166.5,
+      "errors": 10
+    }
+  }
+}
