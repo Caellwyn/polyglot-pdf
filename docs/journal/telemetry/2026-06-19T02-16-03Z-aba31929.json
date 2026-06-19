@@ -1,0 +1,78 @@
+{
+  "recorded_at": "2026-06-19T02:16:03Z",
+  "session_id": "aba31929-9507-419b-8b94-a8b0aa95f3f3",
+  "beads": [
+    "polyglot-pdf-jnjj.26"
+  ],
+  "arm": "A",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-06-18T21:05:59.325Z",
+    "last_ts": "2026-06-19T02:15:53.268Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 49641,
+      "output_tokens": 287136,
+      "cache_read_input_tokens": 96902291,
+      "cache_creation_input_tokens": 1246425
+    },
+    "subagent": {
+      "input_tokens": 25160,
+      "output_tokens": 84176,
+      "cache_read_input_tokens": 19202273,
+      "cache_creation_input_tokens": 1272456
+    },
+    "total": {
+      "input_tokens": 74801,
+      "output_tokens": 371312,
+      "cache_read_input_tokens": 116104564,
+      "cache_creation_input_tokens": 2518881
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 49641,
+        "output_tokens": 287136,
+        "cache_read_input_tokens": 96902291,
+        "cache_creation_input_tokens": 1246425
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 24348,
+        "output_tokens": 19272,
+        "cache_read_input_tokens": 4754873,
+        "cache_creation_input_tokens": 290493
+      },
+      "claude-haiku-4-5-20251001": {
+        "input_tokens": 680,
+        "output_tokens": 22013,
+        "cache_read_input_tokens": 6671407,
+        "cache_creation_input_tokens": 637913
+      },
+      "claude-sonnet-4-6": {
+        "input_tokens": 132,
+        "output_tokens": 42891,
+        "cache_read_input_tokens": 7775993,
+        "cache_creation_input_tokens": 344050
+      }
+    }
+  },
+  "subagent_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-8",
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 385,
+    "subagent": 358
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 2,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
