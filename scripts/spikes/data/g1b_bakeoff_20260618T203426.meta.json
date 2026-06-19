@@ -15,7 +15,7 @@
     }
   },
   "provenance": "SYNTHETIC full-size form states over real I-90 fields",
-  "note_voice_model": "2.5-flash-live/native-audio is bidi-only; not run here as a text checker -- separate probe needed.",
+  "note_voice_model": "This run IS the voice model (2.5-flash-native-audio) via a Live session in tool-calling mode (_run_live); bidi-only, TEXT modality rejected, so not generate_content.",
   "summary": {
     "gemini-2.5-flash-native-audio-preview-12-2025@20": {
       "recall": 0.875,

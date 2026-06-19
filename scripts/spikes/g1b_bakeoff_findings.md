@@ -12,7 +12,7 @@ accuracy across 4 models x 3 form sizes.
 sub-second, cheap, near-perfect recall -- but they trade ~25-35% false-positive
 rate (precision ~0.65-0.73). The **bigger models buy precision, not recall**, at a
 10-25x latency penalty; `gemini-3-flash-preview` is additionally **unreliable
-under load** (10-34% of its calls timed out) and is not recommended. Since this is
+under load** (7-39% of its calls timed out) and is not recommended. Since this is
 ONE layer among many (read-back, verbal section verify, human translator review),
 recall is the metric that matters and all models have it; the false-positive cost
 is a UX-tuning problem, not a blocker.
@@ -44,7 +44,7 @@ precision = 1 - false-alarm rate; latency = per-call wall clock; cost =
 | model | size | recall | precision | lat p50 | lat p90 | cost/call | err rate |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | **2.5-flash-lite** | 20 | 1.000 | 0.727 | 0.72s | 0.85s | $0.00012 | 0 |
-| **2.5-flash-lite** | 40 | 1.000 | 0.697 | 0.82s | 1.21s | $0.00019 | 0 |
+| **2.5-flash-lite** | 40 | 0.957 | 0.688 | 0.82s | 1.21s | $0.00019 | ~3% |
 | **2.5-flash-lite** | 132 | 0.960 | 0.686 | 1.04s | 1.45s | $0.00039 | 0 |
 | **3.1-flash-lite** | 20 | 1.000 | 0.800 | 0.75s | 0.96s | $0.00039 | 0 |
 | **3.1-flash-lite** | 40 | 1.000 | 0.622 | 0.80s | 0.96s | $0.00052 | 0 |
@@ -52,8 +52,8 @@ precision = 1 - false-alarm rate; latency = per-call wall clock; cost =
 | 2.5-flash | 20 | 1.000 | 0.889 | 7.72s | 13.8s | $0.00049 | 0 |
 | 2.5-flash | 40 | 1.000 | 0.821 | 10.9s | 19.5s | $0.00064 | 0 |
 | **2.5-flash** | 132 | 1.000 | 0.893 | 18.2s | 40.6s | $0.00125 | 0 |
-| 3-flash-preview | 20 | 0.875 | 0.875 | 11.0s | 56.4s | $0.00084 | ~7% |
-| 3-flash-preview | 40 | 0.957 | 0.917 | 12.5s | 43.5s | $0.00125 | ~34% |
+| 3-flash-preview | 20 | 1.000 | 0.941 | 11.0s | 56.4s | $0.00084 | ~7% |
+| 3-flash-preview | 40 | 1.000 | 1.000 | 12.5s | 43.5s | $0.00125 | ~39% |
 | 3-flash-preview | 132 | 1.000 | 0.833 | 24.7s | 56.1s | $0.00236 | ~25% |
 | 3.5-flash | 132 | 1.000 | 0.862 | 11.1s | 39.7s | $0.00553 | 0 |
 | voice (2.5-flash-native-audio) | 20 | 1.000 | 0.800 | 6.0s | 8.4s | $0.00045* | 0 |
@@ -102,9 +102,12 @@ unmeasured -- true cost is HIGHER).)
    that is well under a cent of validator cost per form. Cost does NOT
    discriminate here -- speed and precision do.
 
-5. **`gemini-3-flash-preview` is out** on reliability alone: 34% of its size-40
-   calls timed out (>60s) even after 4 retries, vs 0% for the other three models.
-   The priciest, slowest candidate is also the flakiest. Not recommended.
+5. **`gemini-3-flash-preview` is out** on reliability alone: 39% of its size-40
+   calls timed out (>60s) even after 4 retries, vs ~0% for the other text models.
+   The priciest, slowest candidate is also the flakiest. Not recommended. (Its
+   accuracy cells -- e.g. precision 1.000 at 40 -- are computed from the FEW calls
+   that survived, so they are not reliable comparison numbers; the headline is the
+   error rate, not the precision.)
 
 ---
 
@@ -202,7 +205,7 @@ buckets (read off the model's own `reason` text on flagged clean cases):
    "United States" contains "state"); the model correctly flagged it as invalid
    for a Yes/No question. For 3.1-flash-lite at 132, 4 of its 13 FPs are
    SOLELY this artifact -- discounting them moves its precision 0.649 -> ~0.727,
-   a 12-point jump that actually FLIPS the lite ordering at 132 (artifact-corrected
+   a ~8-point jump that actually FLIPS the lite ordering at 132 (artifact-corrected
    3.1-flash-lite 0.727 edges past 2.5-flash-lite 0.686). The A/B "lead with
    2.5-flash-lite" call rests on cost (3-4x cheaper input) and small-size precision,
    NOT this 132 precision number -- but the artifact should be fixed in the corpus
@@ -230,7 +233,7 @@ lives in several run files merged by `g1b_merge.py`:
   completed cells. The final dataset is the per-size/per-model pieces merged,
   deduped preferring non-errored rows.
 - `3-flash-preview` stayed flaky even at low concurrency (its residual error rate
-  in the merged set: 13/38 @ size40, 10/40 @ size132) -- which is itself the
+  in the merged set: 15/38 @ size40, 10/40 @ size132) -- which is itself the
   recommendation against it.
 
 ---
@@ -286,7 +289,7 @@ with bulletproof state management. Forcing a stateful streaming pipeline to do
 discrete batch validation is the wrong tool. Not pursued further.
 
 **Not recommended:** `gemini-3-flash-preview` (slowest, priciest, AND unreliable
--- 10-34% of its calls timed out).
+-- 7-39% of its calls timed out).
 
 ### Follow-ups filed (not part of this bead)
 

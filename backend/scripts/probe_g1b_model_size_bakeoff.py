@@ -555,8 +555,9 @@ async def main() -> None:
             "sizes": sizes,
             "models": {m: MODELS[m] for m in models},
             "provenance": "SYNTHETIC full-size form states over real I-90 fields",
-            "note_voice_model": ("2.5-flash-live/native-audio is bidi-only; not run "
-                                 "here as a text checker -- separate probe needed."),
+            "note_voice_model": ("2.5-flash-native-audio is bidi-only (TEXT modality "
+                                 "rejected); when run, it goes via a Live session in "
+                                 "tool-calling mode (_run_live), not generate_content."),
             "summary": summary,
         }), f, indent=2)
     print(f"\nwrote {csv_path}\nwrote {meta_path}", flush=True)
