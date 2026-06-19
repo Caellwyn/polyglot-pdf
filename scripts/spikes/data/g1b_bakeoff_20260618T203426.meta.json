@@ -18,10 +18,10 @@
   "note_voice_model": "This run IS the voice model (2.5-flash-native-audio) via a Live session in tool-calling mode (_run_live); bidi-only, TEXT modality rejected, so not generate_content.",
   "summary": {
     "gemini-2.5-flash-native-audio-preview-12-2025@20": {
-      "recall": 0.875,
-      "precision": 0.7777777777777778,
-      "tp": 14,
-      "fn": 2,
+      "recall": 1.0,
+      "precision": 0.8,
+      "tp": 16,
+      "fn": 0,
       "fp": 4,
       "tn": 9,
       "lat_p50": 5.992187976837158,
@@ -32,10 +32,10 @@
       "errors": 0
     },
     "gemini-2.5-flash-native-audio-preview-12-2025@40": {
-      "recall": 0.9565217391304348,
-      "precision": 0.7857142857142857,
-      "tp": 22,
-      "fn": 1,
+      "recall": 1.0,
+      "precision": 0.7931,
+      "tp": 23,
+      "fn": 0,
       "fp": 6,
       "tn": 9,
       "lat_p50": 7.548967480659485,
@@ -47,7 +47,7 @@
     },
     "gemini-2.5-flash-native-audio-preview-12-2025@132": {
       "recall": 1.0,
-      "precision": 0.7575757575757576,
+      "precision": 0.7576,
       "tp": 25,
       "fn": 0,
       "fp": 8,
@@ -59,5 +59,6 @@
       "out_med": null,
       "errors": 0
     }
-  }
+  },
+  "_note_rescored": "recall/precision in this summary were re-derived from the re-scored MERGED dataset (prefix-tolerant field-id matching for the truncated native-audio tool ids); the original run used exact matching. See scripts/spikes/g1b_bakeoff_findings.md."
 }

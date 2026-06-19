@@ -43,22 +43,22 @@ precision = 1 - false-alarm rate; latency = per-call wall clock; cost =
 
 | model | size | recall | precision | lat p50 | lat p90 | cost/call | err rate |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **2.5-flash-lite** | 20 | 1.000 | 0.727 | 0.72s | 0.85s | $0.00012 | 0 |
-| **2.5-flash-lite** | 40 | 0.957 | 0.688 | 0.82s | 1.21s | $0.00019 | ~3% |
-| **2.5-flash-lite** | 132 | 0.960 | 0.686 | 1.04s | 1.45s | $0.00039 | 0 |
-| **3.1-flash-lite** | 20 | 1.000 | 0.800 | 0.75s | 0.96s | $0.00039 | 0 |
-| **3.1-flash-lite** | 40 | 1.000 | 0.622 | 0.80s | 0.96s | $0.00052 | 0 |
-| **3.1-flash-lite** | 132 | 0.960 | 0.649 | 0.83s | 1.10s | $0.00103 | 0 |
-| 2.5-flash | 20 | 1.000 | 0.889 | 7.72s | 13.8s | $0.00049 | 0 |
+| **2.5-flash-lite** | 20 | 1.000 | 0.727 | 0.7s | 0.8s | $0.00012 | 0 |
+| **2.5-flash-lite** | 40 | 1.000 | 0.688 | 0.8s | 1.1s | $0.00018 | ~3% |
+| **2.5-flash-lite** | 132 | 0.960 | 0.686 | 1.0s | 1.4s | $0.00039 | 0 |
+| **3.1-flash-lite** | 20 | 1.000 | 0.800 | 0.8s | 1.0s | $0.00039 | 0 |
+| **3.1-flash-lite** | 40 | 1.000 | 0.622 | 0.8s | 1.0s | $0.00052 | 0 |
+| **3.1-flash-lite** | 132 | 0.960 | 0.649 | 0.8s | 1.1s | $0.00103 | 0 |
+| 2.5-flash | 20 | 1.000 | 0.889 | 7.7s | 13.8s | $0.00049 | 0 |
 | 2.5-flash | 40 | 1.000 | 0.821 | 10.9s | 19.5s | $0.00064 | 0 |
 | **2.5-flash** | 132 | 1.000 | 0.893 | 18.2s | 40.6s | $0.00125 | 0 |
-| 3-flash-preview | 20 | 1.000 | 0.941 | 11.0s | 56.4s | $0.00084 | ~7% |
-| 3-flash-preview | 40 | 1.000 | 1.000 | 12.5s | 43.5s | $0.00125 | ~39% |
+| 3-flash-preview | 20 | 1.000 | 0.941 | 10.2s | 25.7s | $0.00088 | ~7% |
+| 3-flash-preview | 40 | 1.000 | 1.000 | 12.9s | 38.3s | $0.00126 | ~39% |
 | 3-flash-preview | 132 | 1.000 | 0.833 | 24.7s | 56.1s | $0.00236 | ~25% |
 | 3.5-flash | 132 | 1.000 | 0.862 | 11.1s | 39.7s | $0.00553 | 0 |
 | voice (2.5-flash-native-audio) | 20 | 1.000 | 0.800 | 6.0s | 8.4s | $0.00045* | 0 |
-| voice (2.5-flash-native-audio) | 40 | 1.000 | 0.793 | 7.55s | 9.6s | $0.00068* | 0 |
-| voice (2.5-flash-native-audio) | 132 | 1.000 | 0.758 | 9.33s | 15.1s | $0.00165* | 0 |
+| voice (2.5-flash-native-audio) | 40 | 1.000 | 0.793 | 7.5s | 9.6s | $0.00068* | 0 |
+| voice (2.5-flash-native-audio) | 132 | 1.000 | 0.758 | 9.3s | 15.1s | $0.00165* | 0 |
 
 (latency/cost from CLEAN calls only. PRECISION is CASE-LEVEL: a clean case counts
 as 1 false positive if it flags anything, and a contradiction case's EXTRA flagged
@@ -91,11 +91,11 @@ unmeasured -- true cost is HIGHER).)
    valid US city/state pair, "unsure, better flag it"). 2.5-flash is markedly
    cleaner (~0.82-0.89) but 10-22x slower.
 
-3. **The latency cliff is stark.** The flash-lite tiers answer in <1.1s at every
+3. **The latency cliff is stark.** The flash-lite tiers answer in <1.4s at every
    size; 2.5-flash takes 8-18s (p90 up to 40s at 132 fields); 3-flash-preview is
-   11-25s with a p90 near a minute. For an end-of-section checker that gates the
-   section auto-advance (per the validation-delegation contract), a sub-second
-   answer vs a 20-second one is the difference between invisible and a stall.
+   10-25s (p90 26-56s). For an end-of-section checker that gates the section
+   auto-advance (per the validation-delegation contract), a sub-second answer vs a
+   20-second one is the difference between invisible and a stall.
 
 4. **Cost is negligible for all of them at this call volume.** Even the priciest
    cell (3-flash-preview @ 132) is $0.0024/call; at 3-20 calls per WHOLE form
@@ -143,22 +143,21 @@ differently and is worth a future targeted corpus.)
 | model | zip_state | state_country | province_us | city_state | future_dob | admission_dob | cross_date |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 1.000 | 0.917 | 1.000 | 1.000 | 0.833 | 1.000 | 1.000 |
+| 2.5-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 0.833 | 1.000 | 1.000 |
 | voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3.1-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.750 | 1.000 |
 | 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3.5-flash (132 only) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 
-**The G1 state_country blind spot is essentially GONE.** In G1, 2.5-flash-lite
-missed 3 of 5 US-state-vs-foreign-country cases (its worst class). Embedded in a
-full-size form with a sharper prompt, recovery is near-total: every model is at
-1.000 on state_country EXCEPT 2.5-flash-lite at 0.917 (one slip in ~12 cases) --
-a dramatic improvement from G1's 0.40. The other sub-1.0 cells (2.5-flash-lite
-future_dob 0.833, 3.1-flash-lite admission_dob 0.750) are single-case slips in the
-small 3-case date classes, not reliable weaknesses. Net: no class is a systematic
-blind spot for the flash-lite tiers at form scale. (The voice model and 2.5-flash
-are clean across all classes; 3-flash-preview's earlier apparent city_state miss
-was an error-cell artifact, gone after the merge dedup preferred its clean run.)
+**The G1 state_country blind spot is GONE.** In G1, 2.5-flash-lite missed 3 of 5
+US-state-vs-foreign-country cases (its worst class). Embedded in a full-size form
+with a sharper prompt, EVERY model -- flash-lite included -- now catches
+state_country at 1.000 (vs G1's 0.40). The only sub-1.0 cells are single-case
+slips in the small 3-case date classes (2.5-flash-lite future_dob 0.833,
+3.1-flash-lite admission_dob 0.750), not reliable weaknesses. Net: no class is a
+systematic blind spot for the flash-lite tiers at form scale. (All recall numbers
+EXCLUDE errored calls -- an API timeout is "no measurement", not a miss; the
+voice model, 2.5-flash, and 3.5-flash are clean across all classes.)
 
 ---
 

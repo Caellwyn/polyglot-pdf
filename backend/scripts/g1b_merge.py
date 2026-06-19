@@ -80,8 +80,13 @@ def main() -> None:
         exp = expected_by_case.get(r["case_id"])
         if exp is None:
             continue
-        # flagged_ids is a flat ';'-joined union of all flagged fields -> one set;
+        # flagged_ids is a flat ';'-joined UNION of all flagged fields -> one set;
         # _detected's "any expected field matches any flagged field" works on it.
+        # CAVEAT: every current corpus case has exactly ONE expected conflict group,
+        # so the flatten is lossless here. If a future case expected TWO separate
+        # groups, this re-score could over-detect (it would mark the case detected
+        # if ANY group's field was flagged, even a different group's). Re-derive
+        # detected from the structured per-group flags if multi-group cases are added.
         flagged = [set(x for x in r["flagged_ids"].split(";") if x)] if r["flagged_ids"] else []
         new_det = int(bool(exp) and _detected(exp, flagged))
         if str(new_det) != r["detected"]:

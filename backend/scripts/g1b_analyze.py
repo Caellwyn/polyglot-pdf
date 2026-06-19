@@ -65,7 +65,11 @@ def main() -> None:
         det = defaultdict(int)
         tot = defaultdict(int)
         for r in rows:
-            if r["model"] == model and r["is_contradiction"] == "1":
+            # Exclude ERRORED calls -- an API timeout is "no measurement", not a
+            # miss; counting it as FN unfairly penalizes a model for infra
+            # flakiness (and disagrees with the probe's own matrix). Consistent
+            # with the recall/precision-by-size block below.
+            if r["model"] == model and r["is_contradiction"] == "1" and not r["error"]:
                 b = _distance_bucket(int(r["distance"]))
                 tot[b] += 1
                 det[b] += r["detected"] == "1"
@@ -83,7 +87,7 @@ def main() -> None:
         det = defaultdict(int)
         tot = defaultdict(int)
         for r in rows:
-            if r["model"] == model and r["is_contradiction"] == "1":
+            if r["model"] == model and r["is_contradiction"] == "1" and not r["error"]:
                 tot[r["cls"]] += 1
                 det[r["cls"]] += r["detected"] == "1"
         cells = " ".join(f"{_pct(det[c], tot[c]):>13}" for c in classes)
@@ -98,7 +102,7 @@ def main() -> None:
         for size in sizes:
             tp = fn = fp = 0
             for r in rows:
-                if r["model"] == model and int(r["size"]) == size:
+                if r["model"] == model and int(r["size"]) == size and not r["error"]:
                     if r["is_contradiction"] == "1":
                         tp += r["detected"] == "1"
                         fn += r["detected"] == "0"
