@@ -153,6 +153,16 @@ class GeminiProvider:
     name = "gemini"
 
     def run(self, prompt: str, model: str, pdf_path: Optional[str]) -> ProviderResult:
+        # Fail loud on a non-Gemini model name routed here (Codex r2) BEFORE any
+        # SDK import/network call: with EXTRACTOR_PROVIDER=gemini but no --model,
+        # the default "claude-opus-4-8" would otherwise be sent to google-genai,
+        # which rejects it with an opaque error. Tell the caller how to fix it.
+        if not model.lower().startswith("gemini"):
+            raise ValueError(
+                f"the gemini provider needs a gemini-* model, got {model!r}. "
+                "Set EXTRACTOR_MODEL (e.g. gemini-2.5-flash) alongside "
+                "EXTRACTOR_PROVIDER=gemini, or pass --model.")
+
         from google import genai  # lazy: only needed for the gemini path
         from google.genai import types
         extract_json, normalize_schema = _parse_helpers()

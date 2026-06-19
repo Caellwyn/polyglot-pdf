@@ -116,9 +116,18 @@ The PDF -> schema model call is selected behind a provider seam
 
 - **Default:** the local `claude` CLI (free in the maintainer's environment).
 - **`EXTRACTOR_PROVIDER=gemini`** routes to the paid google-genai SDK (needs
-  `GEMINI_API_KEY`).
+  `GEMINI_API_KEY`). **You MUST also set `EXTRACTOR_MODEL` to a `gemini-*` model**
+  (e.g. `EXTRACTOR_MODEL=gemini-2.5-flash`) -- otherwise the default
+  `claude-opus-4-8` would be sent to Gemini and rejected. The button forwards
+  `EXTRACTOR_MODEL` to the extractor's `--model`.
 - Otherwise the model name dispatches (`gemini*` -> Gemini; everything else ->
   the CLI).
+
+Other env knobs the button honors:
+- **`EXTRACTOR_MODEL`** -- forwarded to `extract_form.py --model` (provider swap).
+- **`EXTRACTOR_PYTHON`** -- explicit interpreter path (else the repo's
+  `backend/.venv` is auto-resolved, incl. from a git worktree via the main
+  checkout, since the venv lives only in the main repo).
 
 The seam is the swap point for a remote/hosted or better model later (register a
 provider, select it by env) -- no edit to `extract_form.py` or its callers. The

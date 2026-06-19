@@ -109,3 +109,17 @@ def test_builtin_registry_has_both_backends():
     assert set(lp._REGISTRY) >= {"claude-cli", "gemini"}
     assert lp._REGISTRY["claude-cli"].name == "claude-cli"
     assert lp._REGISTRY["gemini"].name == "gemini"
+
+
+# --- gemini provider rejects a non-gemini model name (Codex r2) -------------- #
+
+def test_gemini_provider_rejects_non_gemini_model():
+    """EXTRACTOR_PROVIDER=gemini with the default claude-* model must fail LOUD,
+    not silently send a Claude model name to google-genai (which rejects it with
+    an opaque error). The guard runs before any SDK import/network call."""
+    provider = lp._REGISTRY["gemini"]
+    with pytest.raises(ValueError) as exc:
+        provider.run("prompt", "claude-opus-4-8", None)
+    msg = str(exc.value)
+    assert "gemini" in msg.lower()
+    assert "EXTRACTOR_MODEL" in msg  # tells the caller how to fix it

@@ -24,7 +24,7 @@
  *
  * ASCII only, consistent with the repo's source-file convention.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ServerResponse } from 'node:http';
@@ -32,6 +32,27 @@ import type { Plugin, Connect } from 'vite';
 
 /** A kit id must be ONE safe path segment: no separators, no `..`, no leading dot. */
 const KIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+// Monotonic per-process counter so each extraction gets a UNIQUE temp filename
+// (process.pid is constant for the Vite server, so it alone cannot disambiguate
+// two concurrent requests for the same kit).
+let _requestCounter = 0;
+function nextRequestId(): number { return ++_requestCounter; }
+
+/**
+ * A safe metadata filename: any chars EXCEPT path separators, and not `.`/`..`.
+ * Looser than KIT_ID_RE on purpose -- metadata.json may legitimately point at a
+ * filename with spaces ("Form W-7.pdf"), which the browser catalogue accepts, so
+ * the endpoint must too (Codex r2). We constrain ONLY traversal: no `/` or `\`,
+ * and reject the `.`/`..` segments. Containment is still enforced downstream by
+ * resolving inside kitDir.
+ */
+function isSafeFilename(name: string): boolean {
+  if (name === '.' || name === '..') return false;
+  if (name.includes('/') || name.includes('\\')) return false;
+  if (name.includes('\0')) return false;
+  return name.length > 0;
+}
 
 export interface ExtractEndpointOptions {
   /**
@@ -62,17 +83,48 @@ interface ExtractResponse {
   exitCode?: number;
 }
 
-function resolvePythonExe(repoRoot: string): string {
-  // Prefer the repo venv (has PyMuPDF etc.); fall back to PATH python. On Windows
-  // the venv interpreter is under Scripts/, on POSIX under bin/.
-  const candidates = [
-    path.join(repoRoot, 'backend', '.venv', 'Scripts', 'python.exe'),
-    path.join(repoRoot, 'backend', '.venv', 'bin', 'python'),
+function venvCandidates(root: string): string[] {
+  // The venv interpreter is under Scripts/ on Windows, bin/ on POSIX.
+  return [
+    path.join(root, 'backend', '.venv', 'Scripts', 'python.exe'),
+    path.join(root, 'backend', '.venv', 'bin', 'python'),
   ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+}
+
+function resolvePythonExe(repoRoot: string): string {
+  // EXTRACTOR_PYTHON wins (explicit override / CI). Then the repo venv (has
+  // PyMuPDF etc.). CRUCIAL for worktrees: the backend/.venv lives ONLY in the
+  // MAIN checkout, never in a worktree, so when repoRoot is a worktree we also
+  // probe the main repo resolved via the git common dir -- otherwise the button
+  // falls back to a bare `python3` that lacks PyMuPDF/google-genai and fails in
+  // exactly the worktree setup this feature supports (Codex r2).
+  const explicit = process.env.EXTRACTOR_PYTHON;
+  if (explicit && fs.existsSync(explicit)) return explicit;
+
+  const roots = [repoRoot];
+  const mainRoot = resolveMainRepoRoot(repoRoot);
+  if (mainRoot && mainRoot !== repoRoot) roots.push(mainRoot);
+
+  for (const root of roots) {
+    for (const c of venvCandidates(root)) {
+      if (fs.existsSync(c)) return c;
+    }
   }
   return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+/** The main checkout's root, even when repoRoot is a git worktree: the parent
+ *  of `git rev-parse --git-common-dir` (which points at the main .git). Returns
+ *  null if git can't resolve it (not a repo / git absent). */
+function resolveMainRepoRoot(repoRoot: string): string | null {
+  try {
+    const out = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { encoding: 'utf8' });
+    if (out.status !== 0 || !out.stdout) return null;
+    return path.dirname(out.stdout.trim());
+  } catch {
+    return null;
+  }
 }
 
 function readJsonBody(req: Connect.IncomingMessage): Promise<ExtractRequest> {
@@ -117,7 +169,7 @@ function sendJson(res: ServerResponse, status: number, body: ExtractResponse): v
  * when Origin is absent (same-origin fetch / curl) OR its host matches the
  * request's Host header. This blocks a malicious page from driving the endpoint.
  */
-function isSameOrigin(req: Connect.IncomingMessage): boolean {
+export function isSameOrigin(req: Connect.IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // same-origin fetches may omit Origin; curl has none
   try {
@@ -185,7 +237,9 @@ export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
   };
 }
 
-async function handleExtract(
+// Exported for unit tests (the request-validation contracts -- same-origin,
+// traversal, type/filename checks, no-overwrite -- all return before spawn).
+export async function handleExtract(
   req: Connect.IncomingMessage,
   res: ServerResponse,
   ctx: { formKitsRoot: string; extractScript: string; repoRoot: string; model?: string },
@@ -211,14 +265,16 @@ async function handleExtract(
     sendJson(res, 400, { ok: false, detail: 'pdfFile/schemaFile must be strings' });
     return;
   }
-  // pdf/schema filenames are optional metadata overrides; constrain them to a
-  // bare filename WITH the expected extension so they cannot redirect the
-  // read/write outside the kit dir AND cannot point the extractor at a non-PDF /
-  // write a non-.json (the safe stem regex alone would accept "form.exe").
+  // pdf/schema filenames are optional metadata overrides; require the expected
+  // extension (so we never point the extractor at a non-PDF or write a non-.json)
+  // but allow any otherwise-safe filename incl. SPACES ("Form W-7.pdf") -- the
+  // browser catalogue accepts those, so the endpoint must too (Codex r2). Only
+  // path separators / `.`/`..` are rejected (isSafeFilename); containment is
+  // still enforced by resolving inside kitDir.
   const pdfFile = body.pdfFile ?? 'form.pdf';
   const schemaFile = body.schemaFile ?? 'schema.json';
   const validName = (name: string, ext: RegExp): boolean =>
-    ext.test(name) && KIT_ID_RE.test(name.replace(ext, ''));
+    ext.test(name) && isSafeFilename(name);
   if (!validName(pdfFile, /\.pdf$/i) || !validName(schemaFile, /\.json$/i)) {
     sendJson(res, 400, { ok: false, detail: 'invalid pdf/schema filename (need a safe *.pdf / *.json name)' });
     return;
@@ -245,15 +301,13 @@ async function handleExtract(
     sendJson(res, 404, { ok: false, detail: `no ${pdfFile} in kit "${id}"` });
     return;
   }
-  if (!fs.existsSync(ctx.extractScript)) {
-    sendJson(res, 500, { ok: false, detail: `extractor not found at ${ctx.extractScript}` });
-    return;
-  }
 
   const outPath = path.join(kitDir, schemaFile);
   // Refuse to clobber an EXISTING schema unless force=true (Codex): a stale
   // catalogue, a second tab, or a same-id kit in another root could otherwise
   // overwrite hand-reviewed work. `force` is the explicit re-extract opt-in.
+  // Checked BEFORE the extractScript-exists check so the request is fully
+  // validated (incl. the force gate) before we probe server tooling.
   if (fs.existsSync(outPath) && body.force !== true) {
     sendJson(res, 409, {
       ok: false,
@@ -264,12 +318,19 @@ async function handleExtract(
     return;
   }
 
+  if (!fs.existsSync(ctx.extractScript)) {
+    sendJson(res, 500, { ok: false, detail: `extractor not found at ${ctx.extractScript}` });
+    return;
+  }
+
   // Write to a TEMP file and promote only on a validated success (Codex): the
   // extractor writes outPath even when validation FAILS and exits non-zero, which
   // would leave a broken schema.json at the real path (hiding the Run button /
   // letting the user open a broken draft). Extracting to a temp + atomic rename
-  // means a failed run never lands at outPath.
-  const tmpOut = path.join(kitDir, `.extract_${process.pid}_${schemaFile}.tmp`);
+  // means a failed run never lands at outPath. The temp name is UNIQUE PER REQUEST
+  // (pid is fixed for the Vite server, so a per-process counter is what prevents
+  // two concurrent extractions of the same kit from racing on one temp -- Codex r2).
+  const tmpOut = path.join(kitDir, `.extract_${process.pid}_${nextRequestId()}_${schemaFile}.tmp`);
   const py = resolvePythonExe(ctx.repoRoot);
   const args = [ctx.extractScript, '--pdf', pdfPath, '--out', tmpOut];
   if (ctx.model) args.push('--model', ctx.model);
@@ -286,8 +347,11 @@ async function handleExtract(
   child.stderr.on('data', (d) => { stderr += d.toString(); });
 
   // Kill the (possibly minutes-long, possibly paid) extractor if the client
-  // disconnects -- tab closed/refreshed, request aborted (Codex). `responded`
-  // also suppresses the close handler's response in that case.
+  // disconnects -- tab closed/refreshed, request aborted (Codex). During the long
+  // run the abort surfaces on the RESPONSE (req was already consumed by
+  // readJsonBody and its 'close' has usually fired), so listen on `res` -- and on
+  // `req` too as a belt-and-suspenders (Codex r2: req.close alone misses the abort).
+  // `responded` also suppresses the close handler's response in that case.
   let responded = false;
   const onClientGone = () => {
     if (responded) return;
@@ -295,7 +359,12 @@ async function handleExtract(
     child.kill();
     cleanupTmp();
   };
-  req.on('close', onClientGone);
+  res.on('close', onClientGone);
+  req.on('aborted', onClientGone);
+  const detachClientGone = () => {
+    res.off('close', onClientGone);
+    req.off('aborted', onClientGone);
+  };
 
   // A failed spawn (e.g. no Python on PATH) fires BOTH 'error' and 'close', so
   // guard against a double response -- the second sendJson would throw
@@ -303,14 +372,14 @@ async function handleExtract(
   child.on('error', (err) => {
     if (responded) return;
     responded = true;
-    req.off('close', onClientGone);
+    detachClientGone();
     cleanupTmp();
     sendJson(res, 500, { ok: false, detail: `failed to launch extractor: ${err.message}` });
   });
   child.on('close', (code) => {
     if (responded) return;
     responded = true;
-    req.off('close', onClientGone);
+    detachClientGone();
     // extract_form.py prints a "[OK]/[INVALID] wrote ... ; <validation detail>"
     // line and exits 0 only when the draft validated. Surface its last line as
     // the human-readable detail.
