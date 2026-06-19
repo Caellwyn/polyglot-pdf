@@ -7,6 +7,7 @@ import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitStatus,
   type CatalogueEntry, type KitProgress, type KitStatus,
 } from '../utils/formKitDirectory';
+import { isExtractionAvailable, runExtraction } from '../utils/extractionClient';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -57,6 +58,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  // Whether the host-side extraction endpoint exists (only under `vite dev`).
+  // Probed once on mount; gates the "Run extraction" button so a static build
+  // (no endpoint) keeps the instructions-only flow with no broken button.
+  const [extractionAvailable, setExtractionAvailable] = React.useState(false);
+  // id of the kit currently extracting (one at a time), for the spinner/disable.
+  const [extractingId, setExtractingId] = React.useState<string | null>(null);
   // Monotonic token: each refresh bumps it so a slow progress load from a prior
   // folder cannot overwrite the current folder's progress (stale-folder race).
   const refreshSeq = React.useRef(0);
@@ -183,6 +190,38 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
       setBusy(false);
+    }
+  }, [root, refresh]);
+
+  // Probe the host extraction endpoint once on mount (dev-only; absent in a
+  // static build). Errors resolve false inside the client, so this never throws.
+  React.useEffect(() => {
+    let alive = true;
+    void isExtractionAvailable().then((ok) => { if (alive) setExtractionAvailable(ok); });
+    return () => { alive = false; };
+  }, []);
+
+  // Run the PDF->schema extractor for a schemaless kit (bd 7a9.17). On success
+  // the kit gains a schema.json on disk; refresh so its card lights up openable.
+  const handleRunExtraction = React.useCallback(async (kit: CatalogueEntry) => {
+    if (!root) return;
+    setNotice(null);
+    setError(null);
+    setExtractingId(kit.id);
+    try {
+      const result = await runExtraction(kit.id, {
+        pdfFile: kit.pdfFile, schemaFile: kit.schemaFile,
+      });
+      if (result.ok) {
+        await refresh(root);
+        setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+      } else {
+        setError(`Extraction failed for "${kit.id}": ${result.detail}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setExtractingId(null);
     }
   }, [root, refresh]);
 
@@ -330,6 +369,29 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     </button>
                   )}
                 </div>
+              )}
+
+              {/* Run-extraction (bd 7a9.17): a schemaless kit WITH a PDF can be
+                  extracted in place when the host endpoint is available (vite
+                  dev). Without the endpoint (static build), show the manual-step
+                  hint instead of a button that can't work. */}
+              {!kit.hasSchema && kit.hasPdf && (
+                extractionAvailable ? (
+                  <div className="mt-1 flex items-center justify-end px-1">
+                    <button
+                      className="btn-sm btn-primary text-xs"
+                      onClick={() => void handleRunExtraction(kit)}
+                      disabled={busy || extractingId !== null}
+                      title="Run the automated PDF -> schema extraction (uses a local model; can take a minute)"
+                    >
+                      {extractingId === kit.id ? 'Extracting...' : 'Run extraction'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-1 px-1 text-right text-xs text-gray-400">
+                    Run the extractor to produce its schema.
+                  </div>
+                )
               )}
             </li>
             );

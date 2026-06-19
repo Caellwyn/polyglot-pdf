@@ -51,23 +51,29 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
 │                    EXTRACTION PIPELINE                       │
 └─────────────────────────────────────────────────────────────┘
 
-1. EXTRACT (Automated - 75-80% complete)
-   ├─→ python automated_extractor.py form.pdf
-   └─→ Output: form_draft_schema.json
+1. ONBOARD + EXTRACT (in the editor, when run locally)
+   ├─→ drag-drop an AcroForm PDF onto the catalogue (creates form-kits/<id>/)
+   ├─→ click "Run extraction" on the new kit's card
+   └─→ Output: form-kits/<id>/schema.json (a validated draft)
+
+   The button POSTs to the dev server's /api/extract, which runs
+   scripts/authoring/extract_form.py on the host (the browser can't spawn the
+   model itself). The LLM out-call is behind a provider seam (default: the local
+   `claude` CLI, free in-env; swappable by env -- see "Extraction backends"
+   below). It is DEV/LOCAL only: a deployed static editor shows the manual step
+   instead. You can always run it from a terminal:
+   python scripts/authoring/extract_form.py --pdf form-kits/<id>/form.pdf \
+       --out form-kits/<id>/schema.json
 
 2. EDIT (Human Review - 20-30 min)
-   ├─→ ./scripts/run-schema-editor.sh
+   ├─→ click the now-openable kit card
    ├─→ Fix field types (radio/checkbox/text)
    ├─→ Add help text + validation
    ├─→ Define conditional logic
-   └─→ Save: form_final_schema.json
+   └─→ Save (Cmd/Ctrl+S)
 
-3. VALIDATE (Automated - < 1 min)
-   ├─→ python compare_schemas.py draft.json final.json
-   └─→ 100% validation pass rate required
-
-4. DEPLOY
-   └─→ Copy to backend/schemas/
+3. MARK COMPLETE
+   └─→ "Mark complete" on the card -> eligible for deploy (status gate)
 ```
 
 ## Quick Start
@@ -93,10 +99,31 @@ directory directly (File System Access API; Chrome/Edge):
 3. Click a card to open that kit -- PDF on the left, fields in the center,
    properties on the right, validation panel at the bottom.
 4. To onboard a NEW form, **drag-drop an AcroForm PDF** onto the catalogue; it
-   creates a `form-kits/<id>/` (status:draft) ready for extraction.
+   creates a `form-kits/<id>/` (status:draft) with no schema yet.
+5. On the new (schemaless) card, click **Run extraction** to produce its
+   `schema.json` in place, then open it to review. (The button appears only when
+   the editor is run locally via `npm run dev` / `run-schema-editor.sh`, which
+   provides the host-side extraction endpoint; a deployed static editor shows a
+   "run the extractor" hint instead -- run the terminal command above.)
 
 (If the browser lacks the directory API, a legacy hardcoded form dropdown shows
 as a fallback.)
+
+### Extraction backends (the provider seam)
+
+The PDF -> schema model call is selected behind a provider seam
+(`scripts/bakeoff/llm_providers.py`):
+
+- **Default:** the local `claude` CLI (free in the maintainer's environment).
+- **`EXTRACTOR_PROVIDER=gemini`** routes to the paid google-genai SDK (needs
+  `GEMINI_API_KEY`).
+- Otherwise the model name dispatches (`gemini*` -> Gemini; everything else ->
+  the CLI).
+
+The seam is the swap point for a remote/hosted or better model later (register a
+provider, select it by env) -- no edit to `extract_form.py` or its callers. The
+in-editor button stays dev/local regardless; a hosted extraction service is
+separate, future work.
 
 ### Edit Fields
 

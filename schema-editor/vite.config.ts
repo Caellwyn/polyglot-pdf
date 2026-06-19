@@ -1,12 +1,42 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
+import path from 'node:path'
+import { extractEndpoint } from './vite-plugins/extractEndpoint'
+
+// Vite's dev server only serves files under server.fs.allow (default: the project
+// root). When this editor is run from a GIT WORKTREE, node_modules is typically a
+// junction/symlink into the MAIN checkout's node_modules, so a module Vite serves
+// by real path (e.g. the pdfjs worker, loaded via new URL(..., import.meta.url))
+// resolves OUTSIDE the worktree root and is refused with "403 Restricted". We add
+// the REAL (link-resolved) node_modules path to the allowlist so that case works.
+// In a normal (non-worktree) checkout node_modules is real and already inside the
+// root, so realpath == the nested path and this is a harmless no-op.
+function fsAllowList(): string[] {
+  const root = __dirname
+  const allow = [root]
+  try {
+    const real = fs.realpathSync(path.join(root, 'node_modules'))
+    allow.push(real)
+  } catch {
+    // node_modules not present (fresh clone before install) -- nothing to add.
+  }
+  return allow
+}
 
 export default defineConfig({
-  plugins: [react()],
+  // extractEndpoint adds a dev-only POST /api/extract that runs the PDF->schema
+  // extractor on the host (bd 7a9.17). apply:'serve' keeps it out of prod builds.
+  plugins: [react(), extractEndpoint()],
   server: {
     port: 3001,
-    open: true
+    open: true,
+    fs: {
+      // Permit the link-resolved node_modules so a worktree's junctioned deps
+      // (esp. the pdfjs worker) are servable; see fsAllowList above.
+      allow: fsAllowList(),
+    },
   },
   resolve: {
     alias: {

@@ -58,15 +58,27 @@ npm run dev
 
 ## Adding New Forms
 
-Edit `src/utils/schemaLoader.ts` and add to `AVAILABLE_FORMS`:
+The editor is a stand-alone PDF -> schema tool when run locally:
 
-```typescript
-{
-  name: 'Your Form Name',
-  pdfPath: '../pdf_schema_extractor/test_schemas/test_pdfs/your-form/form.pdf',
-  schemaPath: '../pdf_schema_extractor/test_schemas/test_pdfs/your-form/schema.json',
-}
+1. Click **Open form-kits folder** and pick your `form-kits/` directory.
+2. **Drag-drop an AcroForm PDF** onto the catalogue -- it creates
+   `form-kits/<id>/` (status:draft, no schema yet).
+3. Click **Run extraction** on the new card. This POSTs to the dev server's
+   `/api/extract`, which runs `scripts/authoring/extract_form.py` on the host and
+   writes `form-kits/<id>/schema.json` (a validated draft). The kit then becomes
+   openable for review.
+
+The "Run extraction" button needs the host-side endpoint that only the dev
+server provides, so it appears under `npm run dev` / `run-schema-editor.sh`, not
+in a deployed static build. From a terminal, equivalently:
+
+```bash
+python scripts/authoring/extract_form.py \
+  --pdf form-kits/<id>/form.pdf --out form-kits/<id>/schema.json
 ```
+
+The model behind extraction is pluggable -- default is the local `claude` CLI;
+set `EXTRACTOR_PROVIDER` to swap it. See EDITOR_GUIDE.md ("Extraction backends").
 
 ## Tech Stack
 
