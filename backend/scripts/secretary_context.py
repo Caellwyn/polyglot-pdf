@@ -114,13 +114,40 @@ def _ordered_groups(schema: dict) -> list:
     return groups
 
 
-def _value_str(field_values: dict, fid: str) -> str:
+def _raw_value(field_values: dict, fid: str):
+    """Extract the raw value for a field, accepting BOTH the primitive shape
+    ({fid: "Smith"}) AND the real client wire shape ({fid: {"value": "Smith",
+    "confirmed": true}}) that webFormConnection.ts form_state_response sends. The
+    `confirmed` flag (and any other wrapper keys) are dropped -- the secretary reads
+    the value, not the confirm-state."""
     v = field_values.get(fid, None)
-    if v is None or v == "":
+    if isinstance(v, dict) and "value" in v:
+        return v.get("value")
+    return v
+
+
+def _option_label(field: dict, raw) -> str:
+    """For a radio/select field, map a stored option token to its human label.
+    The client stores the option `value` token (e.g. 'P1_checkbox4[0]'); rendering
+    only that token would force the model to guess option ordering. Resolve it to
+    the label ('Yes ...') so the secretary reads a meaningful value."""
+    opts = field.get("options") or []
+    for o in opts:
+        if isinstance(o, dict) and str(o.get("value")) == str(raw):
+            return str(o.get("spoken_label") or o.get("label") or raw)
+    return str(raw)
+
+
+def _value_str(field: dict, field_values: dict, fid: str) -> str:
+    raw = _raw_value(field_values, fid)
+    if raw is None or raw == "":
         return EMPTY
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    return str(v)
+    if isinstance(raw, bool):
+        return "true" if raw else "false"
+    # radio/select: render the option LABEL, not the opaque value token.
+    if field.get("type") in ("radio", "select", "checkbox") and field.get("options"):
+        return _option_label(field, raw)
+    return str(raw)
 
 
 def _options_str(field: dict) -> str:
@@ -143,7 +170,7 @@ def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict) ->
     help_obj = field.get("help") or {}
     instr = (help_obj.get("instructions") or "").strip()
     fmt_hint = (help_obj.get("format_hint") or "").strip()
-    value = _value_str(field_values, fid)
+    value = _value_str(field, field_values, fid)
     # shown: explicit map wins; default True (applicable) when unspecified.
     shown = shown_map.get(fid, True)
 

@@ -160,20 +160,59 @@ def _score_grounding(expected: list, sourced: list) -> dict:
     }
 
 
-def _asserts_value(answer: str) -> bool:
-    """Heuristic: does the prose ASSERT a value rather than hedge/ask? Used with
-    wrong_cite to flag confident-wrong. Conservative: treats a clarifying question
-    or an explicit not-applicable/not-answered as NOT a confident assertion."""
+# A clarifying question: the model is ASKING which field/value is meant, not
+# asserting anything. A genuinely-ambiguous query answered with one of these is a
+# SUCCESS, not a miss (Codex: "do not score clarifying questions as misses").
+_CLARIFY_MARKERS = (
+    "could you", "do you mean", "did you mean", "which ", "which one",
+    "can you clarify", "could you clarify", "are you asking", "do you want",
+)
+
+# A declarative ABSENCE claim: the model asserts a field is empty / not provided.
+# When this is paired with a WRONG cite over a field that actually HAS a value, it
+# is a confident-wrong (a false absence claim is harmful), regardless of wording
+# (Codex: "count wrong absence claims as confident wrong" -- the old hedge list let
+# 'not provided' escape the counter).
+_ABSENCE_MARKERS = (
+    "not applicable", "n/a", "not answered", "hasn't been answered",
+    "has not been answered", "no value", "not provided", "not been provided",
+    "not entered", "has not been entered", "not yet entered", "hasn't been entered",
+    "don't have", "do not have", "no record", "nothing on file",
+)
+
+_UNSURE_MARKERS = ("i'm not sure", "i am not sure", "unclear", "cannot find",
+                   "could not find")
+
+
+def _is_clarifying(answer: str) -> bool:
+    """The answer asks for clarification rather than answering."""
     a = (answer or "").strip().lower()
     if not a:
         return False
-    hedges = (
-        "?", "could you", "do you mean", "did you mean", "which ", "not applicable",
-        "n/a", "not answered", "hasn't been answered", "has not been answered",
-        "no value", "not provided", "not been provided", "i'm not sure",
-        "unclear", "cannot find", "could not find", "don't have", "do not have",
-    )
-    return not any(h in a for h in hedges)
+    if any(m in a for m in _CLARIFY_MARKERS):
+        return True
+    # a bare question with no declarative content is also a clarifier
+    return a.endswith("?") and not any(m in a for m in _ABSENCE_MARKERS)
+
+
+def _claims_absence(answer: str) -> bool:
+    """The answer declaratively claims a value is absent/not-provided."""
+    a = (answer or "").strip().lower()
+    return any(m in a for m in _ABSENCE_MARKERS)
+
+
+def _asserts_something(answer: str) -> bool:
+    """The answer makes a confident declarative claim -- either asserts a value OR
+    asserts an absence -- rather than hedging/clarifying. A wrong cite paired with
+    THIS is a confident-wrong (a false PRESENCE or a false ABSENCE both count)."""
+    a = (answer or "").strip().lower()
+    if not a:
+        return False
+    if _is_clarifying(a):
+        return False
+    if any(m in a for m in _UNSURE_MARKERS):
+        return False
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -182,9 +221,11 @@ def _asserts_value(answer: str) -> bool:
 
 JUDGE_PROMPT = (
     "You are grading a 'secretary' assistant's answer to a question about a "
-    "filled USCIS I-90 form. You are given the QUESTION, the expected field ids "
-    "the answer should be grounded in, the secretary's ANSWER, and the field ids "
-    "the secretary said it used. Judge ONLY these three things and return JSON.\n\n"
+    "filled USCIS I-90 form. You are given the QUESTION, the EXPECTED FIELD VALUES "
+    "(the id->value map the answer SHOULD be grounded in), the FULL FORM STATE "
+    "(every filled field's id->value, so you can tell a correct-but-unrequested "
+    "value from a made-up one), the secretary's ANSWER, and the field ids it said "
+    "it used. Judge these and return JSON.\n\n"
     "- synthesis_ok (bool): if the question needs values from several fields, did "
     "the answer gather the right values and attribute each correctly? (true if the "
     "question is single-field and answered correctly).\n"
@@ -192,25 +233,40 @@ JUDGE_PROMPT = (
     "fields, did the answer either cover all candidates and name them, OR ask a "
     "sensible clarifying question -- rather than silently guess one? (true if the "
     "question is not ambiguous).\n"
-    "- hallucinated (bool): did the answer assert any value or fact NOT supported "
-    "by the expected fields (made something up)? true = it hallucinated.\n"
+    "- hallucinated (bool): did the answer assert a value or fact that matches "
+    "NEITHER the expected fields NOR any value in the FULL FORM STATE -- i.e. it "
+    "MADE SOMETHING UP, OR it reported a WRONG value for a field (e.g. gave the "
+    "current name where the question asked for the previous name)? "
+    "IMPORTANT: a value that is CORRECT but came from a non-expected field (e.g. "
+    "also volunteering the interpreter's real email when only the applicant's was "
+    "asked) is OVER-INCLUSION, NOT a hallucination -- set hallucinated=false and "
+    "set over_inclusion=true for that.\n"
+    "- over_inclusion (bool): did the answer include correct values from fields "
+    "beyond what the question asked (true), or stay on-scope (false)?\n"
     "- note (string): one short sentence on the most important issue, or 'ok'.\n\n"
     "Return JSON ONLY:\n"
     '{"synthesis_ok": <bool>, "disambig_ok": <bool>, "hallucinated": <bool>, '
-    '"note": "<short>"}\n\n'
+    '"over_inclusion": <bool>, "note": "<short>"}\n\n'
     "QUESTION: {query}\n"
-    "EXPECTED_FIELD_IDS: {expected}\n"
+    "EXPECTED_FIELD_VALUES (id: value, '<empty>' if applicable but unanswered, "
+    "'<not applicable>' if hidden for this applicant): {expected_values}\n"
+    "FULL_FORM_STATE (every filled field id: value): {full_state}\n"
     "SECRETARY_ANSWER: {answer}\n"
     "SECRETARY_SOURCED_FROM: {sourced}\n"
 )
 
 
-def _judge_case(case, result: dict, timeout_s: int = 180) -> dict:
-    """Run the Sonnet judge on one (query, answer) via the claude CLI."""
+def _judge_case(case, result: dict, expected_values: dict, full_state: dict,
+                timeout_s: int = 180) -> dict:
+    """Run the Sonnet judge on one (query, answer) via the claude CLI. The judge
+    gets BOTH the expected-field values AND the full form state, so it can verify
+    values are correct (Codex: "include ground-truth values") AND distinguish
+    correct-but-over-included values from true fabrication / wrong values."""
     exe = shutil.which("claude") or "claude"
     prompt = (JUDGE_PROMPT
               .replace("{query}", case.query)
-              .replace("{expected}", json.dumps(case.expected_field_ids))
+              .replace("{expected_values}", json.dumps(expected_values))
+              .replace("{full_state}", json.dumps(full_state))
               .replace("{answer}", result.get("answer", ""))
               .replace("{sourced}", json.dumps(result.get("sourced_from", []))))
     cmd = [exe, "-p", "--model", JUDGE_MODEL, "--output-format", "json"]
@@ -229,6 +285,7 @@ def _judge_case(case, result: dict, timeout_s: int = 180) -> dict:
             "synthesis_ok": bool(verdict.get("synthesis_ok", False)),
             "disambig_ok": bool(verdict.get("disambig_ok", False)),
             "hallucinated": bool(verdict.get("hallucinated", False)),
+            "over_inclusion": bool(verdict.get("over_inclusion", False)),
             "note": str(verdict.get("note", "")),
         }
     except subprocess.TimeoutExpired:
@@ -262,6 +319,9 @@ async def main() -> None:
     ap.add_argument("--no-judge", action="store_true",
                     help="Skip the Sonnet prose judge (grounding scores only).")
     ap.add_argument("--limit", type=int, default=0, help="Cap cases (debug).")
+    ap.add_argument("--allow-errors", action="store_true",
+                    help="Do NOT abort on secretary API/parse failures (default is "
+                         "to abort so an infra failure cannot corrupt the metrics).")
     args = ap.parse_args()
 
     corpus = build_corpus()
@@ -277,9 +337,51 @@ async def main() -> None:
     print("rendered secretary context: ~%d tokens, %d cases" % (ctx_tokens, len(corpus)),
           flush=True)
 
+    # Ground-truth value lookup for a case's expected fields (for the judge + the
+    # false-absence check). Renders the same value the secretary saw: a real value,
+    # '<empty>' if applicable-but-unanswered, '<not applicable>' if hidden.
+    def _expected_values(case) -> dict:
+        out = {}
+        for fid in case.expected_field_ids:
+            shown = SHOWN_MAP.get(fid, True)
+            raw = FIELD_VALUES.get(fid, None)
+            if not shown:
+                out[fid] = "<not applicable>"
+            elif raw is None or raw == "":
+                out[fid] = "<empty>"
+            else:
+                out[fid] = raw
+        return out
+
+    # The FULL form state (every filled field), so the judge can tell a
+    # correct-but-over-included value from a fabricated one. Option tokens are
+    # resolved to labels (same as the rendered context the secretary read).
+    _schema_idx = {f["id"]: f for f in schema["fields"]}
+
+    def _full_state() -> dict:
+        out = {}
+        for fid, raw in FIELD_VALUES.items():
+            fld = _schema_idx.get(fid, {})
+            if fld.get("type") in ("radio", "select", "checkbox") and fld.get("options"):
+                for o in fld["options"]:
+                    if isinstance(o, dict) and str(o.get("value")) == str(raw):
+                        raw = str(o.get("spoken_label") or o.get("label") or raw)
+                        break
+            out[fid] = raw
+        return out
+
+    full_state = _full_state()
+
+    def _any_expected_has_value(case) -> bool:
+        for fid in case.expected_field_ids:
+            if SHOWN_MAP.get(fid, True) and FIELD_VALUES.get(fid, None) not in (None, ""):
+                return True
+        return False
+
     client = None if args.dry_run else _client()
 
     rows = []
+    errors = []  # (case_id, marker) for API/parse failures
     # per-tier accumulators
     stat = {t: defaultdict(float) for t in TIERS}
 
@@ -290,55 +392,89 @@ async def main() -> None:
         else:
             result = await _ask_secretary(client, context, case.query)
 
-        g = _score_grounding(case.expected_field_ids, result.get("sourced_from", []))
-        asserts = _asserts_value(result.get("answer", ""))
-        confident_wrong = g["wrong_cite"] and asserts
+        # Abort on an infra failure (auth/quota/transport/parse): a silent
+        # empty-answer would be scored as a normal recall miss and corrupt the
+        # headline (Codex: "abort runs when secretary calls fail").
+        err_marker = result.get("_error") or result.get("_parse")
+        if err_marker:
+            errors.append((case.case_id, err_marker))
+            if not args.allow_errors:
+                print("\nABORT: secretary call failed on %s (%s). Infra failure -- "
+                      "not writing characterization artifacts. Re-run when resolved, "
+                      "or pass --allow-errors to score anyway." % (case.case_id, err_marker),
+                      flush=True)
+                sys.exit(1)
 
-        # judge
+        answer = result.get("answer", "")
+        g = _score_grounding(case.expected_field_ids, result.get("sourced_from", []))
+
+        clarifying = _is_clarifying(answer)
+        # A clarifying question on a genuinely-ambiguous query is a SUCCESS, not a
+        # miss: credit it as a hit and full recall (Codex: don't score clarifiers
+        # as misses). Only the ambiguous tier has genuinely-ambiguous queries.
+        clarify_success = clarifying and case.tier == "ambiguous"
+        hit = g["hit"] or clarify_success
+        recall = 1.0 if clarify_success else g["recall"]
+
+        # confident-wrong: a WRONG cite paired with a confident declarative claim
+        # (asserting a value OR a false absence). A clarifying/hedged answer is not
+        # confident-wrong. A false-absence claim over a field that HAS a value is
+        # the harmful case the old hedge-list let through.
+        asserts = _asserts_something(answer)
+        false_absence = _claims_absence(answer) and _any_expected_has_value(case)
+        confident_wrong = (g["wrong_cite"] or false_absence) and asserts and not clarifying
+
+        # judge (gets expected values + full form state, so it can separate
+        # over-inclusion of CORRECT values from true fabrication / wrong values)
         judge = {}
         if not args.dry_run and not args.no_judge:
-            judge = _judge_case(case, result)
+            judge = _judge_case(case, result, _expected_values(case), full_state)
 
         s = stat[case.tier]
         s["n"] += 1
         s["precision"] += g["precision"]
-        s["recall"] += g["recall"]
+        s["recall"] += recall
         s["strict"] += 1 if g["strict"] else 0
-        s["hit"] += 1 if g["hit"] else 0
+        s["hit"] += 1 if hit else 0
         s["confident_wrong"] += 1 if confident_wrong else 0
+        s["clarify"] += 1 if clarifying else 0
         if judge and "_judge_error" not in judge:
             s["judged"] += 1
             s["synthesis_ok"] += 1 if judge.get("synthesis_ok") else 0
             s["disambig_ok"] += 1 if judge.get("disambig_ok") else 0
             s["hallucinated"] += 1 if judge.get("hallucinated") else 0
+            s["over_inclusion"] += 1 if judge.get("over_inclusion") else 0
 
         rows.append({
             "case_id": case.case_id,
             "tier": case.tier,
             "query": case.query,
-            "answer": result.get("answer", ""),
+            "answer": answer,
             "sourced_from": ";".join(result.get("sourced_from", [])),
             "expected": ";".join(case.expected_field_ids),
             "precision": round(g["precision"], 3),
-            "recall": round(g["recall"], 3),
+            "recall": round(recall, 3),
             "strict": int(g["strict"]),
-            "hit": int(g["hit"]),
+            "hit": int(hit),
+            "clarifying": int(clarifying),
             "confident_wrong": int(confident_wrong),
+            "false_absence": int(false_absence),
             "synthesis_ok": int(judge.get("synthesis_ok")) if judge.get("synthesis_ok") is not None and "_judge_error" not in judge else "",
             "disambig_ok": int(judge.get("disambig_ok")) if judge.get("disambig_ok") is not None and "_judge_error" not in judge else "",
             "hallucinated": int(judge.get("hallucinated")) if judge.get("hallucinated") is not None and "_judge_error" not in judge else "",
+            "over_inclusion": int(judge.get("over_inclusion")) if judge.get("over_inclusion") is not None and "_judge_error" not in judge else "",
             "judge_note": judge.get("note", judge.get("_judge_error", "")),
-            "parse_err": result.get("_parse", result.get("_error", "")),
+            "parse_err": err_marker or "",
         })
-        print("  [%d/%d] %-26s (%s) hit=%d cw=%d" % (
-            ci + 1, len(corpus), case.case_id, case.tier, g["hit"],
-            int(confident_wrong)), flush=True)
+        print("  [%d/%d] %-26s (%s) hit=%d cw=%d%s" % (
+            ci + 1, len(corpus), case.case_id, case.tier, int(hit),
+            int(confident_wrong), " CLARIFY" if clarifying else ""), flush=True)
 
     # ---- per-tier summary ----
     print("\n=== PER-TIER CHARACTERIZATION (means; counts where noted) ===", flush=True)
-    hdr = ("%-14s %4s %6s %6s %7s %5s %10s %9s %9s %8s" %
+    hdr = ("%-14s %4s %6s %6s %7s %5s %10s %9s %9s %8s %8s" %
            ("tier", "n", "prec", "rec", "strict", "hit", "confid_wrong",
-            "synth_ok", "disamb_ok", "halluc"))
+            "synth_ok", "disamb_ok", "halluc", "over_inc"))
     print(hdr, flush=True)
     summary = {}
     for t in TIERS:
@@ -357,19 +493,30 @@ async def main() -> None:
             "synthesis_ok_rate": round(s["synthesis_ok"] / jd, 3) if judged else None,
             "disambig_ok_rate": round(s["disambig_ok"] / jd, 3) if judged else None,
             "hallucinated": int(s["hallucinated"]) if judged else None,
+            "over_inclusion": int(s["over_inclusion"]) if judged else None,
         }
-        print("%-14s %4d %6.3f %6.3f %7.3f %5.3f %10d %9s %9s %8s" % (
+        print("%-14s %4d %6.3f %6.3f %7.3f %5.3f %10d %9s %9s %8s %8s" % (
             t, int(s["n"]), summary[t]["precision"], summary[t]["recall"],
             summary[t]["strict_rate"], summary[t]["hit_rate"],
             summary[t]["confident_wrong"],
             "-" if not judged else "%.3f" % summary[t]["synthesis_ok_rate"],
             "-" if not judged else "%.3f" % summary[t]["disambig_ok_rate"],
             "-" if not judged else str(summary[t]["hallucinated"]),
+            "-" if not judged else str(summary[t]["over_inclusion"]),
         ), flush=True)
 
     total_cw = sum(int(stat[t]["confident_wrong"]) for t in TIERS)
-    print("\nHEADLINE -- total confident-wrong cases: %d / %d" % (total_cw, len(corpus)),
+    total_clarify = sum(int(stat[t]["clarify"]) for t in TIERS)
+    total_halluc = sum(int(stat[t]["hallucinated"]) for t in TIERS)
+    total_overinc = sum(int(stat[t]["over_inclusion"]) for t in TIERS)
+    print("\nHEADLINE -- hallucinations (made-up/wrong values): %d / %d | "
+          "over-inclusion (correct extra values): %d | confident-wrong (cite+claim): "
+          "%d | clarifying: %d" % (
+              total_halluc, len(corpus), total_overinc, total_cw, total_clarify),
           flush=True)
+    if errors:
+        print("WARNING: %d case(s) had API/parse errors (scored anyway via "
+              "--allow-errors): %s" % (len(errors), errors), flush=True)
 
     if args.dry_run:
         print("\n[dry-run] scoring + report assembly verified; no live numbers recorded.",
@@ -397,7 +544,11 @@ async def main() -> None:
                        "provenance": "SYNTHETIC; recall is an UPPER BOUND (clean "
                                      "values + on-distribution queries)"},
             "per_tier": summary,
+            "total_hallucinated": total_halluc,
+            "total_over_inclusion": total_overinc,
             "total_confident_wrong": total_cw,
+            "total_clarifying": total_clarify,
+            "errors": errors,
         }, f, indent=2)
     print("\nwrote %s\nwrote %s" % (csv_path, meta_path), flush=True)
 

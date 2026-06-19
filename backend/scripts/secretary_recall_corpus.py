@@ -89,7 +89,12 @@ FIELD_VALUES = {
     # Contact
     "p5_line3_daytimephonenumber": "3125550148",
     "p5_line5_emailaddress": "adaeze.okafor@example.com",
-    # Interpreter used
+    # Interpreter used -> the applicant did NOT self-certify English proficiency,
+    # so p5_checkbox1a ("I can read and understand English") is left UNCHECKED
+    # (absent from field_values), and the Part 6 interpreter block is filled.
+    # These two facts are consistent (no-English-self-cert => interpreter used);
+    # the app_interpreter_used case tests whether the secretary reads the Part 6
+    # VALUE fields rather than guessing from the unchecked Part 5 checkbox.
     "p6_line1a_interpretersfamilyname": "Garcia",
     "p6_line1b_interpretersgivenname": "Maria",
     "p6_line3d_state": "Illinois",
@@ -97,20 +102,32 @@ FIELD_VALUES = {
 }
 
 # Applicability overrides (everything else defaults to shown=true).
-# The preparer block is NOT applicable (applicant self-prepared).
-SHOWN_MAP = {
-    "p7_line1a_familyname": False,
+# The preparer block is NOT applicable (applicant self-prepared) -- hide the WHOLE
+# Part 7 block (every p7_* field), so the "self-prepared" context is clean and the
+# applicability tier is not muddied by leaked secondary preparer fields.
+_P7_HIDDEN = {
     "p7_line1b_preparersgivenname": False,
+    "p7_line1a_familyname": False,
     "p7_line2_nameofbusinessor": False,
     "p7_line3a_streetnumbername": False,
+    "p7_unit_type3b_unit": False,
+    "p7_line3b_aptsteflrnumber": False,
     "p7_line3c_citytown": False,
     "p7_line3d_state": False,
     "p7_line3e_zipcode": False,
+    "p7_line3f_province": False,
+    "p7_line3g_postalcode": False,
     "p7_line3h_country": False,
     "p7_line4_preparersdaytimephonenumber": False,
     "p7_line5_preparersfaxnumber": False,
     "p7_line6_preparersemailaddress": False,
+    "p7_checkbox7": False,
+    "p7_checkbox7extend": False,
+    "p7_line8a_signatureofpreparer": False,
     "p7_line8b_dateofsignature": False,
+}
+SHOWN_MAP = {
+    **_P7_HIDDEN,
     # current middle name: applicable (shown) but left empty -> tier-6 contrast
     "p1_line3c_middlename": True,
 }
@@ -322,8 +339,11 @@ def build_corpus() -> list:
              "applicable but empty -> not provided"),
         Case("app_interpreter_used", "applicability",
              "Was an interpreter used?",
-             ["p6_line1a_interpretersfamilyname", "p6_line1b_interpretersgivenname"],
-             "interpreter name filled -> yes"),
+             ["p6_line1a_interpretersfamilyname", "p6_line1b_interpretersgivenname",
+              "p5_checkbox1a"],
+             "interpreter NAME fields filled -> yes; the Part 5 English-proficiency "
+             "checkbox (p5_checkbox1a) is UNCHECKED, consistent with interpreter "
+             "used -- the trap is inferring 'no' from the unchecked checkbox"),
         Case("app_preparer_used", "applicability",
              "Did someone else prepare this form for them?",
              ["p7_line1a_familyname"],
