@@ -59,6 +59,37 @@ def main() -> None:
     rows = list(best.values())
     rows.sort(key=lambda r: (int(r["size"]), r["model"], r["case_id"]))
 
+    # RE-SCORE `detected` from the captured flagged_ids using the CURRENT scorer
+    # (prefix-tolerant `_detected`). The voice model truncates field ids in its
+    # tool call ('p1_line6e' for 'p1_line6e_state'), which the original
+    # exact-match scoring wrongly counted as misses; re-scoring corrects those
+    # cells WITHOUT re-calling the API (the model's flags were captured; only the
+    # scoring of them was wrong). For text models this is a no-op (full ids ->
+    # prefix-of reduces to equality). Builds the expected-conflict sets per
+    # case_id from the corpus (keyed by the base case id without the size prefix
+    # normalization -- the corpus case_id already includes the size, e.g.
+    # 's132_zipstate_near_0').
+    from backend.scripts.g1b_corpus import build_corpus
+    from backend.scripts.probe_g1b_model_size_bakeoff import _detected
+    expected_by_case: dict = {}
+    for size in sorted({int(r["size"]) for r in rows}):
+        for c in build_corpus(size):
+            expected_by_case[c.case_id] = c.expected_conflicts
+    rescored = 0
+    for r in rows:
+        exp = expected_by_case.get(r["case_id"])
+        if exp is None:
+            continue
+        # flagged_ids is a flat ';'-joined union of all flagged fields -> one set;
+        # _detected's "any expected field matches any flagged field" works on it.
+        flagged = [set(x for x in r["flagged_ids"].split(";") if x)] if r["flagged_ids"] else []
+        new_det = int(bool(exp) and _detected(exp, flagged))
+        if str(new_det) != r["detected"]:
+            r["detected"] = str(new_det)
+            rescored += 1
+    if rescored:
+        print(f"re-scored {rescored} cells (prefix-tolerant detection)", flush=True)
+
     out = os.path.join(OUT_DIR, "g1b_bakeoff_MERGED.csv")
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)

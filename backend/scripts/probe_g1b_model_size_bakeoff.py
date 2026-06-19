@@ -17,12 +17,13 @@ many (per-field read-back, verbal section verify, human translator review, user
 review), so this measures "which model, which size, how good/fast/cheap," not a
 pass/fail.
 
-MODELS (text generateContent; ids verified callable 2026-06-17):
-  gemini-2.5-flash-lite, gemini-2.5-flash, gemini-3.1-flash-lite,
-  gemini-3-flash-preview.
-  NOTE: the voice model (2.5-flash-live / native-audio) is bidi-ONLY (no
-  generateContent), so "voice model as text checker" needs the Live-session
-  harness and is a SEPARATE probe -- not run here (flagged in the bead).
+MODELS:
+  TEXT generateContent path: gemini-2.5-flash-lite, gemini-2.5-flash,
+  gemini-3.1-flash-lite, gemini-3-flash-preview, gemini-3.5-flash.
+  LIVE bidi path (the voice model, gemini-2.5-flash-native-audio): it is bidi-ONLY
+  (no generateContent and TEXT modality is rejected, error 1007), so it IS run
+  here but via a Live session in tool-calling mode (_run_live) -- it reports the
+  verdict through a flat report_conflicts tool call, NOT JSON text. See _run_live.
 
 PII: synthetic fabricated values only (g1b_corpus.py persona). No real PHI.
 
@@ -343,11 +344,28 @@ def _flagged_sets(verdict: dict) -> list:
     return out
 
 
+def _ids_match(a: str, b: str) -> bool:
+    """Two field ids refer to the same field if equal OR one is a PREFIX of the
+    other. The native-audio (voice) model truncates ids in its tool call --
+    'p1_line6e' for 'p1_line6e_state' -- so exact-set matching wrongly scored
+    those as misses (fresh-eyes finding, PR for 0zp3). Prefix matching corrects
+    the voice model's recall without changing the text models (which return full
+    ids -> prefix-of reduces to equality). A bare prefix like 'p1' would be too
+    loose, but the model returns line-level ids ('p1_line6e'), which are specific
+    enough; we require the shorter id to be at least the 'pN_lineNN' stem."""
+    if a == b:
+        return True
+    short, lng = (a, b) if len(a) <= len(b) else (b, a)
+    # require the prefix to reach at least the line stem (avoid 'p1' matching all)
+    return len(short) >= len("p1_line6") and lng.startswith(short)
+
+
 def _detected(expected: list, flagged: list) -> bool:
     for exp in expected:
-        for fl in flagged:
-            if exp & fl:
-                return True
+        for ef in exp:
+            for fl in flagged:
+                if any(_ids_match(ef, ff) for ff in fl):
+                    return True
     return False
 
 

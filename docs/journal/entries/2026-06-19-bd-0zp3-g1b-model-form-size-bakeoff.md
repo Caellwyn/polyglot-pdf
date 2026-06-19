@@ -45,7 +45,8 @@ Key results:
 model (`gemini-2.5-flash-native-audio`) as the checker. It cannot emit TEXT
 (modality 1007), so it was driven text-in over a Live session in TOOL-CALLING mode
 (reports the verdict through a `report_conflicts` tool call). It works (recall
-0.875->1.000, precision ~0.76-0.79) but at 6-9s cold-per-call latency -- no
+1.000 at every size after prefix-tolerant re-scoring, precision ~0.76-0.80) but at
+6-9s cold-per-call latency -- no
 accuracy win over 2.5-flash, and the Live-session tech debt (holding sockets
 across minutes-long idle gaps past the ~30-60s idle timeout, history-token
 buildup, dropped-socket handling) is not worth it for discrete batch validation a
@@ -61,7 +62,19 @@ LATENCY (context caching + payload trim) and 2.5-flash-lite per-page PRECISION
 (anti-hedging prompt + few-shot, the FPs are concentrated and promptable). Code
 Execution for deterministic lookups noted there as a deferred precision lever.
 
-**Fresh-eyes:** [filled at closeout -- see below].
+**Fresh-eyes (Sonnet, 1 round, GAPS-FOUND (2) + 3 supporting findings -- all
+adopted):** caught a real measurement bug -- the voice model's tool call TRUNCATES
+field ids (`p1_line6e` for `p1_line6e_state`), so exact-set scoring wrongly counted
+3 cases as misses and reported voice recall as 0.875/0.957 at sizes 20/40. Fixed
+with prefix-tolerant `_detected` + a re-score pass in `g1b_merge.py` (corrects the
+data without re-calling the API); true voice recall is 1.000 at all sizes. Also
+adopted: added the voice + 3.5-flash rows to the distance/class tables (EC2);
+disclosed that precision is CASE-LEVEL (the user-visible spurious-pair rate is
+higher); corrected the "marginal" claim about the TX-in-radio corpus artifact (it's
+a 12-pt precision swing at 132 that flips the lite ordering); fixed a stale
+docstring. The corpus filler artifact + the case-vs-group precision question were
+folded into the follow-up bead (08zv). Adopt 5 / reject 0 / defer 0; no
+out-of-scope beads filed by fresh-eyes.
 
 ## Lessons
 

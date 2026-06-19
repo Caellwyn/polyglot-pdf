@@ -22,10 +22,10 @@ arm** (the model already running the session, driven text-in via a Live session
 in tool-calling mode -- it cannot emit TEXT, so it reports the verdict through a
 flat `report_conflicts` tool call; the deeply-nested tool schema first tried
 triggered the native-audio 1011 "internal error", a malformed-tool-declaration
-symptom, fixed by flattening). It lands BETWEEN the lites and 2.5-flash:
-recall 0.875->0.957->1.000 across the three sizes (matching 2.5-flash at the
-large end), precision ~0.76-0.79, and ~6-9s latency (faster than 2.5-flash, far
-slower than the lites). It ran with ZERO errors once the tool schema was fixed.
+symptom, fixed by flattening). It matches 2.5-flash on recall (1.000
+at ALL three sizes, after prefix-tolerant re-scoring -- see the matrix note),
+precision ~0.76-0.80, and ~6-9s latency (faster than 2.5-flash, far slower than
+the lites). It ran with ZERO errors once the tool schema was fixed.
 **Rejected** for the checker role: the latency + the Live-session tech debt are not
 worth it when a plain unary HTTP call is cheaper, faster, and simpler (full
 rationale in the Recommendation). **`gemini-3.5-flash`** was also added (132 only,
@@ -56,18 +56,25 @@ precision = 1 - false-alarm rate; latency = per-call wall clock; cost =
 | 3-flash-preview | 40 | 0.957 | 0.917 | 12.5s | 43.5s | $0.00125 | ~34% |
 | 3-flash-preview | 132 | 1.000 | 0.833 | 24.7s | 56.1s | $0.00236 | ~25% |
 | 3.5-flash | 132 | 1.000 | 0.862 | 11.1s | 39.7s | $0.00553 | 0 |
-| voice (2.5-flash-native-audio) | 20 | 0.875 | 0.778 | 6.0s | 8.4s | $0.00045* | 0 |
-| voice (2.5-flash-native-audio) | 40 | 0.957 | 0.786 | 7.55s | 9.6s | $0.00068* | 0 |
+| voice (2.5-flash-native-audio) | 20 | 1.000 | 0.800 | 6.0s | 8.4s | $0.00045* | 0 |
+| voice (2.5-flash-native-audio) | 40 | 1.000 | 0.793 | 7.55s | 9.6s | $0.00068* | 0 |
 | voice (2.5-flash-native-audio) | 132 | 1.000 | 0.758 | 9.33s | 15.1s | $0.00165* | 0 |
 
-(latency/cost from CLEAN calls only. `3-flash-preview`'s err rate is the fraction
-of its calls that timed out even after retries -- a reliability result, not an
-artifact. `3.5-flash` was run only at 132 -- the end-of-form sweep it was a
-candidate for -- at full input rate (NO context caching modeled). `voice`
-cost is marked `*` = INPUT-ONLY: the Live API did not stream usable token usage,
-and the model emits AUDIO whose output tokens are unmeasured here, so its true
-cost is HIGHER than shown. `3.5-flash` list prices ($1.50/M in, ~$6/M out) are
-unverified -- used for relative comparison.)
+(latency/cost from CLEAN calls only. PRECISION is CASE-LEVEL: a clean case counts
+as 1 false positive if it flags anything, and a contradiction case's EXTRA flagged
+groups beyond the expected one are not counted -- so the user-visible spurious-PAIR
+rate is HIGHER than (1 - precision) here; the models emit ~1.9-2.6 flagged groups
+per correct catch. Read precision as "fraction of validated boundaries that fired
+a false alarm," not "fraction of flagged pairs that were wrong." `3-flash-preview`'s
+err rate is the fraction of its calls that timed out even after retries. `3.5-flash`
+ran only at 132 (the end-of-form sweep) at full input rate (NO context caching
+modeled); its list prices ($1.50/M in, ~$6/M out) are unverified. `voice` recall is
+1.000 at every size; its detection was re-scored with PREFIX-TOLERANT field-id
+matching because the native-audio tool call TRUNCATES ids (`p1_line6e` for
+`p1_line6e_state`) -- exact-match scoring wrongly showed 0.875/0.957 at sizes 20/40,
+a scoring artifact, not a real miss. `voice` cost `*` = INPUT-ONLY (the Live API
+streamed no usable token usage AND the model emits AUDIO whose output tokens are
+unmeasured -- true cost is HIGHER).)
 
 ### Reading the matrix
 
@@ -111,9 +118,11 @@ field-index gap between the two contradicting fields:
 | model | single/0 | near (1-5) | mid (6-20) | far (21+) |
 |---|---:|---:|---:|---:|
 | 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 0.833 | 1.000 | 1.000 | 1.000 |
-| 3-flash-preview | 1.000 | 0.938 | 1.000 | 1.000 |
+| 2.5-flash-lite | 0.833 | 0.979 | 1.000 | 1.000 |
+| voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 |
+| 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3.1-flash-lite | 1.000 | 1.000 | 0.875 | 1.000 |
+| 3.5-flash (132 only) | 1.000 | 1.000 | 1.000 | 1.000 |
 
 **Distance does NOT degrade recall.** Every model catches the far-apart (21+
 fields, cross-section) contradictions at 1.000. The few sub-1.0 cells are
@@ -131,16 +140,22 @@ differently and is worth a future targeted corpus.)
 | model | zip_state | state_country | province_us | city_state | future_dob | admission_dob | cross_date |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 0.833 | 1.000 | 1.000 |
+| 2.5-flash-lite | 1.000 | 0.917 | 1.000 | 1.000 | 0.833 | 1.000 | 1.000 |
+| voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3.1-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.750 | 1.000 |
-| 3-flash-preview | 1.000 | 1.000 | 1.000 | 0.750 | 1.000 | 1.000 | 1.000 |
+| 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| 3.5-flash (132 only) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 
-**The G1 state_country blind spot is GONE.** In G1, 2.5-flash-lite missed 3 of 5
-US-state-vs-foreign-country cases (its worst class). Embedded in a full-size form
-with a sharper prompt, every model -- flash-lite included -- catches
-state_country at 1.000. The remaining sub-1.0 cells are single-case slips in the
-small date classes (3 cases each), not a reliable weakness. Net: no class is a
-systematic blind spot for the flash-lite tiers at form scale.
+**The G1 state_country blind spot is essentially GONE.** In G1, 2.5-flash-lite
+missed 3 of 5 US-state-vs-foreign-country cases (its worst class). Embedded in a
+full-size form with a sharper prompt, recovery is near-total: every model is at
+1.000 on state_country EXCEPT 2.5-flash-lite at 0.917 (one slip in ~12 cases) --
+a dramatic improvement from G1's 0.40. The other sub-1.0 cells (2.5-flash-lite
+future_dob 0.833, 3.1-flash-lite admission_dob 0.750) are single-case slips in the
+small 3-case date classes, not reliable weaknesses. Net: no class is a systematic
+blind spot for the flash-lite tiers at form scale. (The voice model and 2.5-flash
+are clean across all classes; 3-flash-preview's earlier apparent city_state miss
+was an error-cell artifact, gone after the merge dedup preferred its clean run.)
 
 ---
 
@@ -182,10 +197,18 @@ buckets (read off the model's own `reason` text on flagged clean cases):
    Ontario is a province, not a US state. The inverse-error of a real bug class.
 3. **US territories.** "San Juan is not a city in Puerto Rico" (it is); "Puerto
    Rico is a US territory, not a foreign country" (a non-conflict). A knowledge gap.
-4. **Corpus filler artifact (NOT a model fault).** A generic filler put "TX" into
-   a Yes/No radio field; the model correctly flagged it as invalid for a Yes/No
-   question. This inflated the 132 FP counts a little -- the true precision is
-   marginally better than the headline once this is discounted.
+4. **Corpus filler artifact (NOT a model fault) -- and it is NOT marginal at 132.**
+   A generic filler put "TX" into a Yes/No radio field (`p3_checkbox4[1]`, because
+   "United States" contains "state"); the model correctly flagged it as invalid
+   for a Yes/No question. For 3.1-flash-lite at 132, 4 of its 13 FPs are
+   SOLELY this artifact -- discounting them moves its precision 0.649 -> ~0.727,
+   a 12-point jump that actually FLIPS the lite ordering at 132 (artifact-corrected
+   3.1-flash-lite 0.727 edges past 2.5-flash-lite 0.686). The A/B "lead with
+   2.5-flash-lite" call rests on cost (3-4x cheaper input) and small-size precision,
+   NOT this 132 precision number -- but the artifact should be fixed in the corpus
+   before any precision figure is quoted as final. (The fix: type-aware filler that
+   never puts a non-option value into a radio/checkbox field.) Filed into the
+   follow-up bead.
 
 Buckets 1-3 are exactly what prompt + few-shot tuning targets (the follow-up bead).
 None is a recall problem; all are over-flagging, which is the safer failure
@@ -250,8 +273,9 @@ The voice model (`gemini-2.5-flash-native-audio`) WAS measured as a 5th arm,
 driven text-in via a Live session in tool-calling mode (it cannot emit TEXT; it
 reports through a flat `report_conflicts` tool call -- a nested tool schema first
 triggered the native-audio 1011 "internal error", a malformed-declaration symptom,
-fixed by flattening). Results: recall 0.875->0.957->1.000 across sizes (matching
-2.5-flash at 132), precision ~0.76-0.79, **but 6-9s latency** -- ~8-10x slower
+fixed by flattening). Results: recall 1.000 at every size (matching 2.5-flash;
+after prefix-tolerant re-scoring -- the tool call truncates field ids), precision
+~0.76-0.80, **but 6-9s latency** -- ~8-10x slower
 than the lites, no better than 2.5-flash on accuracy. **Rejected.** The 6-9s is a
 cold per-call number (fresh websocket connect + full SI processing + audio
 synthesis every call); a warm/cached session could lower it, BUT the engineering
