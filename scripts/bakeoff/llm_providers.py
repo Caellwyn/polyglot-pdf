@@ -30,7 +30,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import sys
 from typing import Callable, Optional, Protocol
 
 # token_info shape: {"input": int|None, "output": int|None, optionally

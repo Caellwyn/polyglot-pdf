@@ -80,7 +80,13 @@ function readJsonBody(req: Connect.IncomingMessage): Promise<ExtractRequest> {
     let size = 0;
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > 1_000_000) { reject(new Error('request body too large')); return; }
+      if (size > 1_000_000) {
+        // Stop accumulating: drain the rest of the stream so chunks[] does not
+        // keep growing after we've already decided to reject.
+        req.destroy();
+        reject(new Error('request body too large'));
+        return;
+      }
       chunks.push(c);
     });
     req.on('end', () => {
@@ -158,11 +164,15 @@ async function handleExtract(
     return;
   }
   // pdf/schema filenames are optional metadata overrides; constrain them to a
-  // bare filename so they cannot redirect the read/write outside the kit dir.
+  // bare filename WITH the expected extension so they cannot redirect the
+  // read/write outside the kit dir AND cannot point the extractor at a non-PDF /
+  // write a non-.json (the safe stem regex alone would accept "form.exe").
   const pdfFile = body.pdfFile ?? 'form.pdf';
   const schemaFile = body.schemaFile ?? 'schema.json';
-  if (!KIT_ID_RE.test(pdfFile.replace(/\.pdf$/i, '')) || !KIT_ID_RE.test(schemaFile.replace(/\.json$/i, ''))) {
-    sendJson(res, 400, { ok: false, detail: 'invalid pdf/schema filename' });
+  const validName = (name: string, ext: RegExp): boolean =>
+    ext.test(name) && KIT_ID_RE.test(name.replace(ext, ''));
+  if (!validName(pdfFile, /\.pdf$/i) || !validName(schemaFile, /\.json$/i)) {
+    sendJson(res, 400, { ok: false, detail: 'invalid pdf/schema filename (need a safe *.pdf / *.json name)' });
     return;
   }
 
@@ -205,10 +215,18 @@ async function handleExtract(
   child.stdout.on('data', (d) => { stdout += d.toString(); });
   child.stderr.on('data', (d) => { stderr += d.toString(); });
 
+  // A failed spawn (e.g. no Python on PATH) fires BOTH 'error' and 'close', so
+  // guard against a double response -- the second sendJson would throw
+  // ERR_HTTP_HEADERS_SENT after res.end() and bury the real diagnostic.
+  let responded = false;
   child.on('error', (err) => {
+    if (responded) return;
+    responded = true;
     sendJson(res, 500, { ok: false, detail: `failed to launch extractor: ${err.message}` });
   });
   child.on('close', (code) => {
+    if (responded) return;
+    responded = true;
     // extract_form.py prints a "[OK]/[INVALID] wrote ... ; <validation detail>"
     // line and exits 0 only when the draft validated. Surface its last line as
     // the human-readable detail.
