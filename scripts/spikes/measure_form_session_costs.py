@@ -18,7 +18,13 @@ Outputs, per run:
     tokens, total cost
   - the same name + .meta.json -- run config, per-turn latency (activity_end ->
     first audio byte), per-question tool-call record (compliance), the raw
-    prompt-token curve + detected eviction drops, captured errors.
+    prompt-token curve + detected eviction drops, captured errors, and -- for the
+    i90 schema -- the G3 fill-correctness score (meta["fill_accuracy"]: per-field
+    canon-compared right/wrong + accuracy) plus every get_field_value recall
+    lookup the model made (meta["field_value_lookups"]). G3 (bd polyglot-pdf-jnjj.7)
+    is the clean correctness instrument the noisy jnjj.25 confirm-counts could not
+    be -- it scores whether the reduced-SI (DTI+eviction) arm fills the form as
+    CORRECTLY as the full-SI baseline.
 
 Arms (--arm):
   unbounded      one session, no compression, no resets (raw growth curve)
@@ -53,6 +59,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -229,11 +236,99 @@ I90_QUESTIONS = [
      "wrong": "Mexico."},
 ]
 
+# G3 fill-accuracy scoring (bd polyglot-pdf-jnjj.7). The EXPECTED canonical value
+# each field should hold after a correct fill -- the answer extracted from the
+# question's "say" prompt (NOT the spoken sentence). Scoring normalizes both the
+# model-written value and this expected value (see _canon_value) before comparing,
+# so "Apartment" vs "apartment" or "737 01" vs "73701" match. Keyed by field_id;
+# any I90 field absent here is scored leniently (non-empty == filled) and flagged.
+I90_EXPECTED = {
+    "p1_line1_aliennumber": "12345678",
+    "p1_line2_acctidentifier": "1234567890",
+    "p1_line3a_familyname": "Vasquez",
+    "p1_line3b_givenname": "Maria",
+    "p1_line3c_middlename": "Elena",
+    "p1_checkbox4": "no",
+    "p1_line6a_incareofname": "Daniel Vasquez",
+    "p1_line6b_streetnumbername": "1234 Maple Street",
+    "p1_unit_type6c_unit": "Apartment",
+    "p1_line6c_aptsteflrnumber": "12B",
+    "p1_line6d_cityortown": "Austin",
+    "p1_line6e_state": "Texas",
+    "p1_line6f_zipcode": "73701",
+    "p1_line6g_province": "",
+    "p1_line6h_postalcode": "",
+    "p1_line6i_country": "United States",
+    "p1_line7a_streetnumbername": "1234 Maple Street",
+    "p1_unit_type7b_unit": "Apartment",
+    "p1_line7b_aptsteflrnumber": "12B",
+    "p1_line7c_cityortown": "Austin",
+    "p1_line7d_state": "Texas",
+    "p1_line7e_zipcode": "73701",
+    "p1_line7f_province": "",
+    "p1_line7g_postalcode": "",
+    "p1_line7h_country": "United States",
+}
+
+_WORD_DIGITS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+}
+
+
+def _canon_value(v) -> str:
+    """Canonicalize a field value for fill-accuracy comparison (bd jnjj.7).
+
+    Lowercase, map spelled-out digits to numerals, strip ALL non-alphanumerics.
+    So "Twelve B"/"12B", "73701"/"737 01", "Apartment"/"apartment" all collapse to
+    the same key. Deliberately lossy -- it scores whether the right DATA landed,
+    not punctuation/format (format is the normalizer layer's job, not G3's)."""
+    if v is None:
+        return ""
+    s = str(v).strip().lower()
+    toks = [_WORD_DIGITS.get(t, t) for t in re.split(r"\s+", s) if t]
+    joined = "".join(toks)
+    return re.sub(r"[^a-z0-9]", "", joined)
+
+
+def score_fill_accuracy(client, plan, expected) -> dict:
+    """Per-field fill correctness for one arm (bd jnjj.7 / G3).
+
+    For each scripted field: did the model write a value that canon-matches the
+    expected answer? Returns counts + a per-field detail list. Empty-expected
+    fields (US-filer province/postal "not applicable") are correct when the model
+    left them blank OR wrote an explicit empty -- the harness scripts a spoken
+    "I do not have a province" answer, so a model that correctly declines to fill
+    is RIGHT, and a model that invents a value is WRONG."""
+    detail = []
+    matched = 0
+    for q in plan:
+        fid = q["field_id"]
+        written = client.state.get(fid, {}).get("value")
+        exp = expected.get(fid)
+        if exp is None:
+            ok = written not in (None, "")  # lenient: unknown field, count as filled
+            scored = "lenient"
+        elif exp == "":
+            ok = _canon_value(written) == ""   # correct to leave blank
+            scored = "expect-empty"
+        else:
+            ok = _canon_value(written) == _canon_value(exp)
+            scored = "exact"
+        matched += 1 if ok else 0
+        detail.append({"field_id": fid, "expected": exp, "written": written,
+                       "ok": ok, "scored": scored})
+    return {"matched": matched, "total": len(plan),
+            "accuracy": round(matched / len(plan), 4) if plan else 0.0,
+            "detail": detail}
+
+
 # --schema registry: source path + matching question plan. Default is "demo" for
 # back-compat with the pre-jnjj.24 callers; "i90" is the production-faithful set.
 SCHEMAS = {
-    "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS},
-    "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS},
+    "demo": {"path": DEMO_SCHEMA_PATH, "questions": DEMO_QUESTIONS, "expected": {}},
+    "i90": {"path": I90_SCHEMA_PATH, "questions": I90_QUESTIONS,
+            "expected": I90_EXPECTED},
 }
 
 CSV_COLUMNS = [
@@ -377,6 +472,19 @@ class FakeClientWebSocket:
         self.service: FormFillingService | None = None
         self.first_audio_at: float | None = None
         self.sent_messages: list[str] = []
+        # G3 (bd polyglot-pdf-jnjj.7): spoken_name -> field_id, the harness analogue
+        # of the frontend's spokenNameToFieldId map, so the FakeClient can answer
+        # get_field_value recall lookups (the model retrieves a prior section's value
+        # by EXACT spoken name -- what the full SI did "for free" from context). Keyed
+        # on the field's spoken `name`, lowercased; that is the name production asks by
+        # (the next_hint / previous_spoken_names both read schema_fields[fid]["name"]).
+        self.spoken_to_fid: dict[str, str] = {
+            (f.get("name") or fid).strip().lower(): fid
+            for fid, f in self.schema_fields.items()
+        }
+        # G3 recall instrumentation: each get_field_value call the model makes is
+        # recorded as (requested_spoken_name, found, returned_value) for scoring.
+        self.field_value_lookups: list[dict] = []
         # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
         # supplies the next field's FULL schema on next_field_hint_response, which
         # the backend renders into the confirm_field next_field_guidance. Mirrors the
@@ -416,6 +524,22 @@ class FakeClientWebSocket:
                               "confirmed": self.state[fid].get("confirmed", False)}
                         for fid in want if fid in self.state}
             self._reply(lambda: self.service.handle_form_state_response(rid, snapshot))
+        elif mtype == "get_field_value":
+            # G3 recall path (bd polyglot-pdf-jnjj.7): the model is retrieving a
+            # prior field's value by EXACT spoken name -- the lookup the reduced-SI
+            # arms must do via a tool call instead of reading it from the SI dump.
+            # Mirror the frontend: spokenNameToFieldId -> stored value -> {found,value}.
+            rid = msg.get("request_id")
+            spoken = (msg.get("spoken_name") or "").strip().lower()
+            fid = self.spoken_to_fid.get(spoken)
+            entry = self.state.get(fid) if fid else None
+            value = entry.get("value") if entry else None
+            found = fid is not None
+            self.field_value_lookups.append(
+                {"spoken_name": spoken, "field_id": fid, "found": found,
+                 "value": value})
+            self._reply(lambda: self.service.handle_field_value_response(
+                rid, value, found))
         elif mtype == "get_next_field_hint":
             rid = msg.get("request_id")
             hint = self.next_hint()
@@ -863,6 +987,17 @@ async def run(args) -> int:
                       or s["level"] in ("error", "exception", "critical")]
     meta["client_confirmed_fields"] = [fid for fid, e in client.state.items()
                                        if e.get("confirmed")]
+    # G3 fill-correctness (bd polyglot-pdf-jnjj.7): the clean instrument the noisy
+    # jnjj.25 confirm-counts could not be. Scores whether the model wrote the RIGHT
+    # value per field (canon-compared to the expected answer), plus the recall
+    # lookups it made via get_field_value. This is the correctness arm of A5's flip.
+    expected = SCHEMAS[args.schema].get("expected") or {}
+    meta["fill_accuracy"] = score_fill_accuracy(client, plan, expected)
+    meta["field_value_lookups"] = client.field_value_lookups
+    _fa = meta["fill_accuracy"]
+    print(f"fill accuracy: {_fa['matched']}/{_fa['total']} "
+          f"({_fa['accuracy']:.0%}); get_field_value lookups: "
+          f"{len(client.field_value_lookups)}")
 
     csv_path = out_dir / f"{base_name}.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
