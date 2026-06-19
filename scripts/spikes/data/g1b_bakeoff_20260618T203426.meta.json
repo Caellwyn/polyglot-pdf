@@ -1,0 +1,63 @@
+{
+  "bead": "polyglot-pdf-0zp3",
+  "stamp": "20260618T203426",
+  "today_for_date_checks": "2026-06-17",
+  "sizes": [
+    20,
+    40,
+    132
+  ],
+  "models": {
+    "gemini-2.5-flash-native-audio-preview-12-2025": {
+      "in": 0.5,
+      "out": 2.0,
+      "live": true
+    }
+  },
+  "provenance": "SYNTHETIC full-size form states over real I-90 fields",
+  "note_voice_model": "2.5-flash-live/native-audio is bidi-only; not run here as a text checker -- separate probe needed.",
+  "summary": {
+    "gemini-2.5-flash-native-audio-preview-12-2025@20": {
+      "recall": 0.875,
+      "precision": 0.7777777777777778,
+      "tp": 14,
+      "fn": 2,
+      "fp": 4,
+      "tn": 9,
+      "lat_p50": 5.992187976837158,
+      "lat_p90": 8.417504072189331,
+      "cost_mean": 0.00045437931034482756,
+      "in_med": 910,
+      "out_med": null,
+      "errors": 0
+    },
+    "gemini-2.5-flash-native-audio-preview-12-2025@40": {
+      "recall": 0.9565217391304348,
+      "precision": 0.7857142857142857,
+      "tp": 22,
+      "fn": 1,
+      "fp": 6,
+      "tn": 9,
+      "lat_p50": 7.548967480659485,
+      "lat_p90": 9.595914125442505,
+      "cost_mean": 0.0006761973684210527,
+      "in_med": 1350.0,
+      "out_med": null,
+      "errors": 0
+    },
+    "gemini-2.5-flash-native-audio-preview-12-2025@132": {
+      "recall": 1.0,
+      "precision": 0.7575757575757576,
+      "tp": 25,
+      "fn": 0,
+      "fp": 8,
+      "tn": 7,
+      "lat_p50": 9.334115266799927,
+      "lat_p90": 15.138834953308105,
+      "cost_mean": 0.001647075,
+      "in_med": 3290.0,
+      "out_med": null,
+      "errors": 0
+    }
+  }
+}

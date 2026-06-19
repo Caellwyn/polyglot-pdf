@@ -57,13 +57,74 @@ from backend.scripts.g1b_corpus import build_corpus  # noqa: E402
 # (which is the Live/native-audio audio-tier table). Values per the maintainer's
 # brief + ai.google.dev/gemini-api/docs/pricing (2026-06-17). Output includes
 # thinking tokens. Pin them here so the cost column is explicit and auditable.
+# "live": True marks a bidi Live (native-audio) model that CANNOT do
+# generate_content (TEXT modality is rejected, error 1007) -- it is driven over a
+# Live session in text-in / AUDIO-out mode and reports its verdict via a TOOL CALL
+# (report_conflicts), which we read instead of parsing JSON text. This is the
+# exact voice model (USE_PREMIUM_MODEL=false tier). Honest cost note: it emits
+# AUDIO, so "out" is the AUDIO-output rate ($2.00/M for 2.5 native-audio, per the
+# maintainer + config.py GEMINI_PRICING_BY_FAMILY), NOT a text-out rate -- a
+# text-out Live 2.5 model is not available on this API key. Latency includes audio
+# synthesis, so it is NOT a pure-text-latency number.
 MODELS = {
     "gemini-2.5-flash-lite":  {"in": 0.10, "out": 0.40},
     "gemini-2.5-flash":       {"in": 0.30, "out": 2.50},
     "gemini-3.1-flash-lite":  {"in": 0.25, "out": 2.00},
     "gemini-3-flash-preview": {"in": 0.50, "out": 4.00},
+    # 3.5-flash: the accuracy tier for the end-of-form sweep. List prices per the
+    # AI Studio pricing page (in $1.50/M; out ~$6.00/M) -- VERIFY before quoting a
+    # final $/form; the matrix uses them for relative cost. Context caching (cached
+    # SI read at a fraction of the input rate) is the intended cost-offset in
+    # production but is NOT modeled here (every call pays full input rate).
+    "gemini-3.5-flash":       {"in": 1.50, "out": 6.00},
+    "gemini-2.5-flash-native-audio-preview-12-2025":
+                              {"in": 0.50, "out": 2.00, "live": True},
 }
 _PER_1M = 1_000_000
+
+# Tool the Live model must call to report its verdict (the structured channel that
+# replaces JSON text, since native-audio cannot emit TEXT).
+# FLAT tool schema. The native-audio Live endpoint rejects a NESTED
+# array-of-objects tool declaration with a 1011 "internal error" (the historical
+# 1011 cause is a missing/empty/malformed tool declaration, not endpoint
+# flakiness -- maintainer, 2026-06-18; confirmed: nested schema -> 7/8 fail,
+# flat schema -> 8/8 succeed). So each conflict is reported as ONE
+# semicolon-joined field_id string in a flat array of strings -- the deepest the
+# native-audio model reliably accepts. Reasons are dropped (the scorer only needs
+# the field-id sets; reason text would also be a PII sink we do not log).
+_REPORT_TOOL = {
+    "function_declarations": [{
+        "name": "report_conflicts",
+        "description": "Report every cross-field contradiction found in the form. "
+                       "Call this exactly once. Pass an empty array if none.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "conflict_field_groups": {
+                    "type": "array",
+                    "description": "One entry per conflict, each a semicolon-joined "
+                                   "list of the field_ids implicated in that "
+                                   "conflict (e.g. 'addr_state;addr_zip'). Empty "
+                                   "array if there is no contradiction.",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["conflict_field_groups"],
+        },
+    }],
+}
+
+
+def _live_groups_to_verdict(groups) -> dict:
+    """Map the flat report_conflicts args (a list of ';'-joined field-id strings)
+    into the standard {"conflicts": [{"field_ids": [...]}]} verdict shape the
+    scorer consumes."""
+    conflicts = []
+    for g in groups or []:
+        ids = [x.strip() for x in str(g).split(";") if x.strip()]
+        if ids:
+            conflicts.append({"field_ids": ids})
+    return {"conflicts": conflicts}
 
 SIZES = [20, 40, 132]
 
@@ -175,6 +236,103 @@ async def _run(client, model: str, fields: list) -> dict:
             "in_tok": None, "out_tok": None, "error": last_exc, "retries": _MAX_TRIES}
 
 
+# The Live (native-audio) model's system instruction: the SAME checker rules as the
+# text PROMPT, but it reports via the report_conflicts TOOL instead of JSON text
+# (native-audio cannot emit TEXT). Built by stripping the PROMPT's JSON-output tail
+# and the "{state}" placeholder (the payload is sent as a separate turn).
+_LIVE_SI = (
+    PROMPT.split("Return JSON ONLY:")[0].rstrip()
+    + "\n\nYou MUST call the report_conflicts tool EXACTLY ONCE with every "
+      "contradiction you find. Use the exact field_id values from the input. "
+      "Pass an empty conflicts list if there is no contradiction. Do not speak "
+      "your answer; report it only through the tool call."
+)
+
+
+async def _run_live(client, model: str, fields: list) -> dict:
+    """One verdict from a bidi Live (native-audio) model, driven text-in /
+    tool-out (it cannot emit TEXT). Reads the report_conflicts tool call. Native
+    audio occasionally throws 1011 -- retried like a transport error. Latency is
+    the full session round-trip (includes audio synthesis); token usage from the
+    Live API's usage_metadata when present."""
+    payload = "FIELDS:\n" + _payload_json(fields)
+    cfg = types.LiveConnectConfig(
+        response_modalities=[types.Modality.AUDIO],
+        system_instruction=_LIVE_SI,
+        tools=[_REPORT_TOOL],
+    )
+    # The Live API's streamed messages did NOT carry usage_metadata in testing, so
+    # count the INPUT tokens directly (SI + payload) as the cost basis. Output is
+    # a tiny tool call BUT the model also synthesizes AUDIO (modality requirement);
+    # audio-output tokens are the real output cost and are NOT captured here -- so
+    # the Live cost we report is INPUT-ONLY and UNDERSTATES true cost. Noted in the
+    # findings. Input dominates anyway (large payload vs a few-field tool call).
+    live_in_tok = None
+    try:
+        ct = await client.aio.models.count_tokens(
+            model=model, contents=[_LIVE_SI, payload])
+        live_in_tok = getattr(ct, "total_tokens", None)
+    except Exception:  # noqa: BLE001
+        pass
+    # A modest retry budget covers genuinely transient transport hiccups. (The
+    # 1011 errors were a malformed-tool-schema bug, now fixed by the flat
+    # _REPORT_TOOL above -- NOT endpoint waves -- so a big retry budget is no
+    # longer needed.)
+    live_tries = 5
+    last_exc = "unknown"
+    for attempt in range(live_tries):
+        t = time.time()
+        try:
+            async def _do():
+                groups = None
+                in_tok = out_tok = None
+                async with client.aio.live.connect(model=model, config=cfg) as s:
+                    await s.send_realtime_input(text=payload)
+                    async for r in s.receive():
+                        tc = getattr(r, "tool_call", None)
+                        if tc and tc.function_calls:
+                            for fc in tc.function_calls:
+                                if fc.name == "report_conflicts":
+                                    groups = list((dict(fc.args) or {}).get(
+                                        "conflict_field_groups", []))
+                            break
+                        sc = getattr(r, "server_content", None)
+                        if sc and getattr(sc, "turn_complete", False):
+                            break
+                        um = getattr(r, "usage_metadata", None)
+                        if um:
+                            in_tok = getattr(um, "prompt_token_count", in_tok)
+                            out_tok = getattr(um, "response_token_count", None) or \
+                                getattr(um, "candidates_token_count", out_tok)
+                return groups, in_tok, out_tok
+
+            groups, in_tok, out_tok = await asyncio.wait_for(_do(), timeout=_CALL_TIMEOUT_S)
+            dt = time.time() - t
+            # Prefer the streamed usage in_tok if present; else the counted input.
+            in_tok = in_tok if in_tok is not None else live_in_tok
+            if groups is None:
+                # Model never called the tool -- a real model behavior (like a
+                # text model emitting non-JSON); NOT retried, scored empty.
+                return {"verdict": {"conflicts": []}, "latency_s": dt,
+                        "in_tok": in_tok, "out_tok": out_tok,
+                        "error": "no_tool_call", "retries": attempt}
+            return {"verdict": _live_groups_to_verdict(groups), "latency_s": dt,
+                    "in_tok": in_tok, "out_tok": out_tok, "error": "", "retries": attempt}
+        except Exception as exc:  # noqa: BLE001
+            last_exc = type(exc).__name__
+            # transient transport hiccup -- APIError/ConnectionClosed retried.
+            retryable = last_exc in _RETRYABLE or "APIError" in last_exc or \
+                "ConnectionClosed" in last_exc
+            if retryable and attempt < live_tries - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t,
+                    "in_tok": None, "out_tok": None,
+                    "error": last_exc, "retries": attempt}
+    return {"verdict": {"conflicts": []}, "latency_s": 0.0,
+            "in_tok": None, "out_tok": None, "error": last_exc, "retries": _MAX_TRIES}
+
+
 def _flagged_sets(verdict: dict) -> list:
     out = []
     for c in verdict.get("conflicts", []):
@@ -194,9 +352,16 @@ def _detected(expected: list, flagged: list) -> bool:
 
 
 def _cost(model: str, in_tok, out_tok) -> float | None:
-    if in_tok is None or out_tok is None:
-        return None
     r = MODELS[model]
+    if in_tok is None:
+        return None
+    # Live (native-audio) path has no measurable out_tok (audio-output tokens not
+    # streamed) -- report INPUT-ONLY cost, an UNDERSTATEMENT (see _run_live note).
+    # Text path requires both in and out.
+    if out_tok is None:
+        if r.get("live"):
+            return (in_tok * r["in"]) / _PER_1M
+        return None
     return (in_tok * r["in"] + out_tok * r["out"]) / _PER_1M
 
 
@@ -255,7 +420,10 @@ async def main() -> None:
                 "verdict": {"conflicts": [{"field_ids": sorted(s)} for s in flagged]},
                 "latency_s": 0.0, "in_tok": 10, "out_tok": 2, "error": "", "retries": 0}
         async with sem:
-            r = await _run(client, model, case.fields)
+            if MODELS[model].get("live"):
+                r = await _run_live(client, model, case.fields)
+            else:
+                r = await _run(client, model, case.fields)
         return size, case, model, r
 
     def _record(size, case, model, r):
