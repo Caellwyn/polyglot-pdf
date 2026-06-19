@@ -86,14 +86,32 @@ are benign over-inclusion (judge: "ok" / "not incorrect"). The honest split:
    sourced `p1_line6h_postalcode` (the FOREIGN postal-code field, empty) instead of
    `p1_line6f_zipcode` (the US zip, 62704) and answered "not entered yet." A
    wrong-but-plausible sibling field -> a confident wrong "not answered."
-2. `app_interpreter_used` -- "was an interpreter used?" The model sourced a
-   NON-EXISTENT field id (`p5_checkbox1a`) and asserted "no interpreter," when the
-   interpreter name fields were filled (Maria Garcia). The single hallucination,
-   and the only answer that asserts a flatly false fact.
+   (Caveat: this is also a borderline GROUND-TRUTH case -- the query literally says
+   "postal code," and `p1_line6h_postalcode` IS spoken "mailing postal code," so the
+   model's literal match is defensible; the corpus expected the US-applicant
+   domain-aliasing answer "zip = postal code." Read this as much a corpus-design
+   ambiguity as a model error.)
+2. `app_interpreter_used` -- "was an interpreter used?" The model sourced
+   `p5_checkbox1a` (a REAL field: spoken "I can read and understand English") and
+   asserted "no interpreter, the applicant can read and understand English," while
+   the Part 6 interpreter name fields were filled (Maria Garcia). The single
+   hallucination -- but NOT an invented id: it is a REASONING error. The model
+   inferred "no interpreter needed" from the English-proficiency self-cert checkbox
+   and ignored the filled interpreter block. (Earlier drafts of this doc wrongly
+   called `p5_checkbox1a` non-existent; it is real and was in the rendered context.
+   The fix is therefore NOT a "cite only ids in context" guard -- that would not
+   have caught it -- but making the Part 5 English-proficiency vs Part 6
+   interpreter-used relationship explicit, or instructing the model to check the
+   interpreter NAME fields directly for an interpreter-used question.)
 
 **Benign over-inclusion (cited extra CORRECT fields; judge ok):**
 `amb_their_name`, `syn_name_change_summary`, `dist_mailing_vs_physical`,
 `dist_born_abroad`, `dist_full_legal_history`, `app_preparer_used`.
+
+**Ambiguous-but-correct over-inclusion (1):** `amb_last_name` -- "what's their last
+name?" returned current AND previous family name (both correct values); the user
+asked only for the current one. Judge flagged synthesis_ok=0 for over-retrieval.
+(This is the 9th confident-wrong case -- precision noise, not harm.)
 
 **Disambiguation soft-spots (correct values, weak handling of ambiguity):**
 - `amb_country` -- "what country is on file?" omitted country-of-birth, named only
@@ -109,13 +127,17 @@ are benign over-inclusion (judge: "ok" / "not incorrect"). The honest split:
    principal voices answers back for user confirmation. Over-inclusion is the
    dominant error and it is self-correcting under that net (the user hears the
    extra detail and ignores/corrects it).
-2. **The two real risks are field-DISAMBIGUATION errors, not invention.** Both
-   truly-wrong cases are the model picking a wrong sibling field (zip vs foreign
-   postal; a hallucinated checkbox). Prompt/context work to target: make
-   near-duplicate fields (us-zip vs foreign-postal; the yes/no applicability
-   checkboxes) more distinguishable in the rendered context, and instruct the
-   model to cite ONLY ids that appear in the context (the invented `p5_checkbox1a`
-   would have been caught by a "must exist in context" rule).
+2. **The two real risks are field-DISAMBIGUATION / REASONING errors, not
+   invention.** Neither truly-wrong case is a hallucinated id -- both cite REAL
+   fields. `alias_zip_mailing` picked a wrong sibling field (us-zip vs foreign
+   postal -- and is partly a corpus-ground-truth ambiguity). `app_interpreter_used`
+   is a reasoning error (inferred "no interpreter" from a real English-proficiency
+   checkbox, ignoring the filled interpreter block). Prompt/context work to target:
+   make near-duplicate fields (us-zip vs foreign-postal) more distinguishable in
+   the rendered context, and for cross-field inference questions ("was an
+   interpreter used?") steer the model to check the relevant VALUE fields directly
+   rather than a tangential self-cert checkbox. A "cite only ids in context" guard
+   would NOT have helped here (both ids were in context).
 3. **Precision is tunable.** "Answer ONLY what was asked; do not volunteer related
    fields" in the secretary prompt would lift precision/strict-match; whether that
    is desirable is a product call (a real secretary volunteering "you also have a
@@ -140,7 +162,14 @@ are benign over-inclusion (judge: "ok" / "not incorrect"). The honest split:
   alone, NOT on aliases.
 - **Applicability (`shown`) is a synthetic fixture map**, not computed from the
   real `show_if`/`controls_fields` logic; it models how the frontend tracks
-  shown/hidden but the specific hidden set is hand-authored.
+  shown/hidden but the specific hidden set is hand-authored. NOTE the fixture
+  hides the preparer block INCOMPLETELY -- 12 Part-7 fields are marked hidden but
+  ~7 secondary ones (unit type, province, postal, the preparer checkboxes, the
+  signature field) default to shown=true. So the applicability tier's "self
+  prepared" context is mixed, not cleanly hidden, which slightly inflates that
+  tier's difficulty (e.g. `app_preparer_used` sourced a leaked
+  `p7_line8a_signatureofpreparer`). A cleaner fixture (hide the WHOLE Part-7
+  block) would be a fairer applicability test.
 - **Small per-tier N** (5-10). Tier rates are directional; the verbatim CSV rows
   are the primary evidence.
 - The `confident_wrong` counter in the probe is a coarse precondition flag
