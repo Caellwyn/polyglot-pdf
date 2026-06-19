@@ -58,10 +58,10 @@ WRONG value would not be.
 
 | metric (whole battery, n=49; ONE run) | value |
 |---|---|
-| hit rate (cited >=1 correct field, clarifiers count) | **~0.93** |
-| mean grounding recall | **~0.90** |
-| mean grounding precision | **~0.78** (over-sharing pulls this down) |
-| strict exact-set match | ~0.59 |
+| hit rate (cited >=1 correct field, clarifiers count) | **46/49 (0.94)** |
+| mean grounding recall | **0.89** |
+| mean grounding precision | **0.81** (over-sharing pulls this down) |
+| strict exact-set match | 0.63 |
 | **Sonnet-judged hallucination (made-up/WRONG value)** | **5/49** (varies 2-5 run to run) |
 | Sonnet-judged over-inclusion (correct EXTRA value) | **4/49** (varies; ~9 the prior run) |
 | confident-wrong (coarse cite+claim signal) | 16/49 (over-counts harm) |
