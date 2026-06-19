@@ -49,6 +49,7 @@ interface ExtractRequest {
   id?: string;
   pdfFile?: string;    // metadata.pdf override; default form.pdf
   schemaFile?: string; // metadata.schema override; default schema.json
+  force?: boolean;     // re-extract over an EXISTING schema (default: refuse)
 }
 
 interface ExtractResponse {
@@ -110,6 +111,23 @@ function sendJson(res: ServerResponse, status: number, body: ExtractResponse): v
 }
 
 /**
+ * Same-origin check for the side-effecting POST. A browser sets `Origin` on
+ * cross-origin (incl. no-cors) requests; a same-origin fetch from the editor
+ * either omits Origin or sets it to the dev server's own origin. We accept only
+ * when Origin is absent (same-origin fetch / curl) OR its host matches the
+ * request's Host header. This blocks a malicious page from driving the endpoint.
+ */
+function isSameOrigin(req: Connect.IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true; // same-origin fetches may omit Origin; curl has none
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false; // unparseable Origin -> refuse
+  }
+}
+
+/**
  * Vite plugin: registers POST/GET /api/extract on the dev server. GET is a cheap
  * capability probe (the UI uses it to decide whether to show the button); POST
  * runs the extraction for one kit.
@@ -139,7 +157,29 @@ export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
           sendJson(res, 405, { ok: false, detail: 'use POST to run extraction' });
           return;
         }
-        void handleExtract(req, res, { formKitsRoot, extractScript, repoRoot });
+        // Same-origin guard (Codex): this is a SIDE-EFFECTING localhost endpoint
+        // (spawns a local/paid extractor, writes files). Without an origin check a
+        // malicious page could no-cors POST to localhost and trigger it. Reject any
+        // request whose Origin host is not this dev server's own host.
+        if (!isSameOrigin(req)) {
+          sendJson(res, 403, { ok: false, detail: 'cross-origin extraction requests are refused' });
+          return;
+        }
+        // Convert any async throw into the JSON error contract (Codex): a floating
+        // promise would otherwise surface as an unhandled rejection that can take
+        // down the dev server instead of returning 4xx/5xx.
+        handleExtract(req, res, {
+          formKitsRoot, extractScript, repoRoot,
+          // Forward EXTRACTOR_MODEL to the script's --model so a configured
+          // provider swap (e.g. EXTRACTOR_PROVIDER=gemini + a gemini-* model)
+          // actually takes effect from the button (Codex). Unset -> the script's
+          // own default (claude-opus-4-8) stands.
+          model: process.env.EXTRACTOR_MODEL,
+        }).catch((err) => {
+          if (!res.headersSent) {
+            sendJson(res, 500, { ok: false, detail: err instanceof Error ? err.message : 'internal error' });
+          }
+        });
       });
     },
   };
@@ -148,7 +188,7 @@ export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
 async function handleExtract(
   req: Connect.IncomingMessage,
   res: ServerResponse,
-  ctx: { formKitsRoot: string; extractScript: string; repoRoot: string },
+  ctx: { formKitsRoot: string; extractScript: string; repoRoot: string; model?: string },
 ): Promise<void> {
   let body: ExtractRequest;
   try {
@@ -158,9 +198,17 @@ async function handleExtract(
     return;
   }
 
+  // Type-check BEFORE the regex (Codex): a non-string id like {"id":123} would
+  // coerce to "123" and pass KIT_ID_RE, then a non-string pdfFile/schemaFile
+  // could throw deeper in. Require strings (or absent, for the optional ones).
   const id = body.id;
-  if (!id || !KIT_ID_RE.test(id)) {
+  if (typeof id !== 'string' || !KIT_ID_RE.test(id)) {
     sendJson(res, 400, { ok: false, detail: 'missing or invalid kit id (must be a single safe folder name)' });
+    return;
+  }
+  if ((body.pdfFile != null && typeof body.pdfFile !== 'string')
+      || (body.schemaFile != null && typeof body.schemaFile !== 'string')) {
+    sendJson(res, 400, { ok: false, detail: 'pdfFile/schemaFile must be strings' });
     return;
   }
   // pdf/schema filenames are optional metadata overrides; constrain them to a
@@ -203,8 +251,30 @@ async function handleExtract(
   }
 
   const outPath = path.join(kitDir, schemaFile);
+  // Refuse to clobber an EXISTING schema unless force=true (Codex): a stale
+  // catalogue, a second tab, or a same-id kit in another root could otherwise
+  // overwrite hand-reviewed work. `force` is the explicit re-extract opt-in.
+  if (fs.existsSync(outPath) && body.force !== true) {
+    sendJson(res, 409, {
+      ok: false,
+      detail: `"${schemaFile}" already exists for kit "${id}"; re-extract would overwrite it `
+        + '(pass force:true to replace it).',
+      schemaFile,
+    });
+    return;
+  }
+
+  // Write to a TEMP file and promote only on a validated success (Codex): the
+  // extractor writes outPath even when validation FAILS and exits non-zero, which
+  // would leave a broken schema.json at the real path (hiding the Run button /
+  // letting the user open a broken draft). Extracting to a temp + atomic rename
+  // means a failed run never lands at outPath.
+  const tmpOut = path.join(kitDir, `.extract_${process.pid}_${schemaFile}.tmp`);
   const py = resolvePythonExe(ctx.repoRoot);
-  const args = [ctx.extractScript, '--pdf', pdfPath, '--out', outPath];
+  const args = [ctx.extractScript, '--pdf', pdfPath, '--out', tmpOut];
+  if (ctx.model) args.push('--model', ctx.model);
+
+  const cleanupTmp = () => { try { if (fs.existsSync(tmpOut)) fs.rmSync(tmpOut); } catch { /* best effort */ } };
 
   const child = spawn(py, args, {
     cwd: ctx.repoRoot,
@@ -215,27 +285,59 @@ async function handleExtract(
   child.stdout.on('data', (d) => { stdout += d.toString(); });
   child.stderr.on('data', (d) => { stderr += d.toString(); });
 
+  // Kill the (possibly minutes-long, possibly paid) extractor if the client
+  // disconnects -- tab closed/refreshed, request aborted (Codex). `responded`
+  // also suppresses the close handler's response in that case.
+  let responded = false;
+  const onClientGone = () => {
+    if (responded) return;
+    responded = true;
+    child.kill();
+    cleanupTmp();
+  };
+  req.on('close', onClientGone);
+
   // A failed spawn (e.g. no Python on PATH) fires BOTH 'error' and 'close', so
   // guard against a double response -- the second sendJson would throw
   // ERR_HTTP_HEADERS_SENT after res.end() and bury the real diagnostic.
-  let responded = false;
   child.on('error', (err) => {
     if (responded) return;
     responded = true;
+    req.off('close', onClientGone);
+    cleanupTmp();
     sendJson(res, 500, { ok: false, detail: `failed to launch extractor: ${err.message}` });
   });
   child.on('close', (code) => {
     if (responded) return;
     responded = true;
+    req.off('close', onClientGone);
     // extract_form.py prints a "[OK]/[INVALID] wrote ... ; <validation detail>"
     // line and exits 0 only when the draft validated. Surface its last line as
     // the human-readable detail.
     const lines = (stdout + stderr).trim().split(/\r?\n/).filter(Boolean);
     const lastLine = lines.length ? lines[lines.length - 1] : '(no output)';
-    const ok = code === 0 && fs.existsSync(outPath);
+    const ok = code === 0 && fs.existsSync(tmpOut);
+    if (ok) {
+      // Promote the temp file to the real path only on success.
+      try {
+        fs.renameSync(tmpOut, outPath);
+      } catch (err) {
+        cleanupTmp();
+        sendJson(res, 500, { ok: false, detail: `extraction succeeded but could not write ${schemaFile}: ${err instanceof Error ? err.message : err}` });
+        return;
+      }
+    } else {
+      cleanupTmp(); // a failed run must not leave anything at outPath
+    }
+    // The script's detail line names its --out arg, which is the temp path; show
+    // the real output path to the user instead of the internal .tmp name (replace
+    // both the absolute temp path and its bare basename, whichever the line used).
+    const cleanDetail = lastLine
+      .split(tmpOut).join(outPath)
+      .split(path.basename(tmpOut)).join(schemaFile);
     sendJson(res, ok ? 200 : 500, {
       ok,
-      detail: ok ? lastLine : `extraction failed (exit ${code}): ${lastLine}`,
+      detail: ok ? cleanDetail : `extraction failed (exit ${code}): ${cleanDetail}`,
       schemaFile,
       exitCode: code ?? -1,
     });

@@ -208,12 +208,18 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null);
     setError(null);
     setExtractingId(kit.id);
+    // `busy` also disables Change-folder / Refresh while extraction runs, so the
+    // user cannot switch folders mid-run and have this captured `root` refresh
+    // clobber the new folder's state when the (minutes-long) extraction returns
+    // (Codex). Captured here so the refresh below targets the SAME root.
+    setBusy(true);
+    const extractionRoot = root;
     try {
       const result = await runExtraction(kit.id, {
         pdfFile: kit.pdfFile, schemaFile: kit.schemaFile,
       });
       if (result.ok) {
-        await refresh(root);
+        await refresh(extractionRoot);
         setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
       } else {
         setError(`Extraction failed for "${kit.id}": ${result.detail}`);
@@ -222,6 +228,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       setError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
       setExtractingId(null);
+      setBusy(false);
     }
   }, [root, refresh]);
 
