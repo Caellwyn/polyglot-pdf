@@ -35,7 +35,9 @@ weakness is OVER-RETRIEVAL (low precision), not fabrication.** That is the safe
 failure direction for this architecture: an over-inclusive answer is caught by the
 principal's verify-back; a confident *fabrication* would not be. There was exactly
 **1 hallucination in 49 cases**, and **2 truly-wrong answers** total (see below) --
-both on fields outside the rendered context's clean mapping.
+both are field-disambiguation / reasoning errors over fields that WERE in the
+rendered context (a wrong sibling field, and a wrong inference from a real
+checkbox), not invented ids.
 
 | metric (whole battery, n=49) | value |
 |---|---|
