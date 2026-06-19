@@ -248,22 +248,26 @@ I90_EXPECTED = {
     "p1_line3a_familyname": "Vasquez",
     "p1_line3b_givenname": "Maria",
     "p1_line3c_middlename": "Elena",
-    "p1_checkbox4": "no",
+    # Radio/select fields store the CANONICAL option VALUE (the bracketed widget id
+    # or the 2-letter state code), NOT the spoken label -- that is what the frontend
+    # writes and what get_form_state returns. Scoring against the spoken label would
+    # mark a CORRECT structured fill as wrong (the first-draft fixture bug).
+    "p1_checkbox4": "P1_checkbox4[1]",            # "No, name has not changed"
     "p1_line6a_incareofname": "Daniel Vasquez",
     "p1_line6b_streetnumbername": "1234 Maple Street",
-    "p1_unit_type6c_unit": "Apartment",
+    "p1_unit_type6c_unit": "P1_checkbox6c_Unit[0]",   # Apartment
     "p1_line6c_aptsteflrnumber": "12B",
     "p1_line6d_cityortown": "Austin",
-    "p1_line6e_state": "Texas",
+    "p1_line6e_state": "TX",                       # Texas (select stores the code)
     "p1_line6f_zipcode": "73701",
     "p1_line6g_province": "",
     "p1_line6h_postalcode": "",
     "p1_line6i_country": "United States",
     "p1_line7a_streetnumbername": "1234 Maple Street",
-    "p1_unit_type7b_unit": "Apartment",
+    "p1_unit_type7b_unit": "P1_checkbox7b_Unit[0]",   # Apartment
     "p1_line7b_aptsteflrnumber": "12B",
     "p1_line7c_cityortown": "Austin",
-    "p1_line7d_state": "Texas",
+    "p1_line7d_state": "TX",                       # Texas (select stores the code)
     "p1_line7e_zipcode": "73701",
     "p1_line7f_province": "",
     "p1_line7g_postalcode": "",
