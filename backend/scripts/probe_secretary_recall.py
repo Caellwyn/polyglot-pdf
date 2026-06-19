@@ -337,9 +337,23 @@ async def main() -> None:
     print("rendered secretary context: ~%d tokens, %d cases" % (ctx_tokens, len(corpus)),
           flush=True)
 
+    _schema_idx = {f["id"]: f for f in schema["fields"]}
+
+    def _resolve_token(fid, raw):
+        """Resolve a radio/select/checkbox option token to its label, so every
+        value the judge sees matches what the secretary read in the rendered
+        context (option tokens -> labels)."""
+        fld = _schema_idx.get(fid, {})
+        if fld.get("type") in ("radio", "select", "checkbox") and fld.get("options"):
+            for o in fld["options"]:
+                if isinstance(o, dict) and str(o.get("value")) == str(raw):
+                    return str(o.get("spoken_label") or o.get("label") or raw)
+        return raw
+
     # Ground-truth value lookup for a case's expected fields (for the judge + the
-    # false-absence check). Renders the same value the secretary saw: a real value,
-    # '<empty>' if applicable-but-unanswered, '<not applicable>' if hidden.
+    # false-absence check). Renders the same value the secretary saw: a real value
+    # (option tokens resolved to labels), '<empty>' if applicable-but-unanswered,
+    # '<not applicable>' if hidden.
     def _expected_values(case) -> dict:
         out = {}
         for fid in case.expected_field_ids:
@@ -350,25 +364,14 @@ async def main() -> None:
             elif raw is None or raw == "":
                 out[fid] = "<empty>"
             else:
-                out[fid] = raw
+                out[fid] = _resolve_token(fid, raw)
         return out
 
     # The FULL form state (every filled field), so the judge can tell a
     # correct-but-over-included value from a fabricated one. Option tokens are
     # resolved to labels (same as the rendered context the secretary read).
-    _schema_idx = {f["id"]: f for f in schema["fields"]}
-
     def _full_state() -> dict:
-        out = {}
-        for fid, raw in FIELD_VALUES.items():
-            fld = _schema_idx.get(fid, {})
-            if fld.get("type") in ("radio", "select", "checkbox") and fld.get("options"):
-                for o in fld["options"]:
-                    if isinstance(o, dict) and str(o.get("value")) == str(raw):
-                        raw = str(o.get("spoken_label") or o.get("label") or raw)
-                        break
-            out[fid] = raw
-        return out
+        return {fid: _resolve_token(fid, raw) for fid, raw in FIELD_VALUES.items()}
 
     full_state = _full_state()
 

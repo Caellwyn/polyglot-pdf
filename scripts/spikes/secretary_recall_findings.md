@@ -38,11 +38,15 @@ drive focus. The verify-back-and-confirm loop is the real net.)
     with a confident (non-hedging, non-clarifying) assertion. A coarse precision
     signal -- it over-counts harm (see triage); the judge's `hallucinated` is the
     real harm count.
-- **Artifacts:** `scripts/spikes/data/secretary_recall_20260618T183519.csv`
-  (every query/answer/sourced_from/judge row verbatim) + `...183519.meta.json`.
+- **Artifacts:** `scripts/spikes/data/secretary_recall_20260618T190211.csv`
+  (every query/answer/sourced_from/judge row verbatim) + `...190211.meta.json`.
   Reproduce: `GEMINI_API_KEY=... PYTHONPATH=... backend/scripts/probe_secretary_recall.py`.
   The probe is NON-DETERMINISTIC (live model sampling) -- exact per-case verdicts
-  vary run to run; the tier-level shape is stable. The numbers below are one run.
+  AND the headline counts vary run to run (observed: hallucination count swung
+  2-to-5 across two runs of the same battery). The numbers below are ONE run; the
+  STABLE signal is the tier shape + the failure-MODE set, not a precise count. A
+  larger battery or multi-seed averaging would be needed to pin a number (a
+  follow-up, not this feasibility pass).
 
 ## Headline
 
@@ -52,15 +56,15 @@ weakness is current-vs-previous-NAME confusion, plus a tendency to OVER-SHARE
 over-inclusive answer is caught by the principal's verify-back loop; a confident
 WRONG value would not be.
 
-| metric (whole battery, n=49) | value |
+| metric (whole battery, n=49; ONE run) | value |
 |---|---|
-| hit rate (cited >=1 correct field, clarifiers count) | **44/49 (0.90)** |
-| mean grounding recall | **0.87** |
-| mean grounding precision | **0.75** (over-sharing pulls this down) |
+| hit rate (cited >=1 correct field, clarifiers count) | **~0.93** |
+| mean grounding recall | **~0.90** |
+| mean grounding precision | **~0.78** (over-sharing pulls this down) |
 | strict exact-set match | ~0.59 |
-| **Sonnet-judged hallucination (made-up/WRONG value)** | **2/49** |
-| Sonnet-judged over-inclusion (correct EXTRA value) | **9/49** |
-| confident-wrong (coarse cite+claim signal) | 17/49 (over-counts harm) |
+| **Sonnet-judged hallucination (made-up/WRONG value)** | **5/49** (varies 2-5 run to run) |
+| Sonnet-judged over-inclusion (correct EXTRA value) | **4/49** (varies; ~9 the prior run) |
+| confident-wrong (coarse cite+claim signal) | 16/49 (over-counts harm) |
 | rendered context size | **~9,500 tokens** (note: ~2x the research-plan estimate) |
 
 ## Per-tier characterization (one run -- directional, small N)
@@ -68,11 +72,11 @@ WRONG value would not be.
 | tier | n | recall | precision | hit | synth_ok | disamb_ok | halluc | over_inc |
 |---|---|---|---|---|---|---|---|---|
 | easy | 5 | 1.00 | 0.87 | 1.00 | 1.00 | 1.00 | 0 | 1 |
-| aliasing | 6 | 0.67 | 0.67 | 0.67 | 0.83 | 1.00 | 0 | 0 |
-| ambiguous | 10 | 0.87 | 0.72 | 0.90 | 0.90 | 1.00 | 0 | 3 |
-| synthesis | 10 | 0.93 | 0.77 | 1.00 | 0.80 | 1.00 | 2 | 1 |
-| distant | 9 | 0.89 | 0.77 | 0.89 | 0.89 | 1.00 | 0 | 2 |
-| applicability | 9 | 0.85 | 0.76 | 0.89 | 1.00 | 1.00 | 0 | 2 |
+| aliasing | 6 | 0.83 | 0.83 | 0.83 | 0.83 | 1.00 | 1 | 0 |
+| ambiguous | 10 | 0.77 | 0.68 | 0.80 | 0.90 | 1.00 | 0 | 2 |
+| synthesis | 10 | 0.95 | 0.77 | 1.00 | 0.80 | 1.00 | 2 | 1 |
+| distant | 9 | 0.92 | 0.93 | 1.00 | 0.89 | 1.00 | 0 | 0 |
+| applicability | 9 | 0.93 | 0.80 | 1.00 | 0.78 | 1.00 | 2 | 0 |
 
 (Per-tier N is small -- read the rates as directional, not precise. The verbatim
 CSV rows are the real evidence; the disambig_ok rate of ~1.0 is the strongest
@@ -85,54 +89,69 @@ Reading the tiers:
   previous-name cluster.
 - **ambiguous:** recall high, disambiguation excellent (~1.0) -- the model covers
   the candidate set or names each. Precision dips from benign over-inclusion.
-- **synthesis:** the tier that produced BOTH hallucinations this run -- multi-field
-  name gathers where the model confused current vs previous name (see triage).
-- **distant / applicability:** good at relate-two-far-apart-fields and at the
-  hidden-vs-empty distinction (preparer block correctly read as not-applicable;
-  applicable-but-empty fields read as "not answered yet").
+- **synthesis / applicability:** the tiers that produce most hallucinations --
+  multi-field name gathers and "have they answered X" name questions where the
+  model confuses current vs previous name (see triage).
+- **distant:** good at relate-two-far-apart-fields and at the hidden-vs-empty
+  distinction (preparer block correctly read as not-applicable; applicable-but-empty
+  fields read as "not answered yet").
 
 ## Triage of the flagged cases (honest accounting)
 
-The corrected judge separates harm from over-sharing:
+The corrected judge separates harm from over-sharing. Across the two runs, the
+hallucinations cluster into THREE stable failure modes (the exact set in any single
+run varies with sampling; this run had 5):
 
-**Hallucinations -- the cases that matter (2):** BOTH are the SAME failure mode --
-current-vs-previous (green-card) NAME confusion, in the synthesis tier:
-1. "What was their full name on the green card?" -> reported the green-card family
-   name as the CURRENT family name (the issued-card name) instead of the prior
-   name. A wrong value, not a made-up one.
-2. "Did their name change, and from what to what?" -> got the DIRECTION backwards
-   (stated changed-from = the current name). The values are real; the
-   from/to mapping is inverted.
-This is exactly the legal-intake risk the bead called out ("a confident wrong
-'name'"). It is NOT field-invention -- the model reads the right cluster but
-mis-assigns which member is "current" vs "previous." It is also the highest-stakes
-error class on this form and the clearest target for prompt/context hardening
-(label the current-name vs previous-name groups more explicitly; the I-90's own
-field names are nearly identical across the two clusters).
+**Mode 1 -- current-vs-previous NAME confusion (the dominant, highest-stakes
+mode; recurs every run).** When a query targets the previous/green-card name, the
+model reports the CURRENT name (or reverses the from/to direction of a name change),
+e.g.:
+- "What was their full name on the green card?" -> gives the current family name
+  (Okafor) instead of the prior one (Eze).
+- "Did their name change, and from what to what?" -> inverts the direction.
+- "Have they given their previous name?" -> answers with the current name.
+This IS the legal-intake risk the bead named ("a confident wrong 'name'"). Not
+field-invention -- the model reads the right cluster but mis-assigns which member is
+"current" vs "previous." The I-90's own field labels are near-identical across the
+two clusters, which is almost certainly the cause. **The #1 target for prompt/context
+hardening.**
 
-**Over-inclusion -- benign (9):** correct values volunteered beyond the question
-(e.g. "what's their last name?" -> current AND previous; "their email?" ->
-applicant AND interpreter). Values are right; the model just over-answers. Caught
-by verify-back. Whether to suppress this is a product call -- a human secretary
-volunteering "you also have a previous name on file" may be a feature.
+**Mode 2 -- near-duplicate sibling field (recurs).** "Postal code on their mailing
+address?" -> sources the FOREIGN `p1_line6h_postalcode` (empty) instead of the US
+`p1_line6f_zipcode` (62704) and claims no value. (Partly a corpus ground-truth
+ambiguity -- the query literally says "postal code.")
 
-**Confident-wrong (17, coarse):** the deterministic cite+claim signal. It includes
-the 2 hallucinations, most of the 9 over-inclusions, and a few borderline
-ground-truth cases (e.g. "postal code" literally matching the foreign
-`p1_line6h_postalcode` field rather than the US `zipcode` the corpus expected).
-Use the judge's `hallucinated` (2), not this counter, for the harm read.
+**Mode 3 -- cross-field inference on a yes/no question (recurs).** "Was an
+interpreter used?" -> infers "no" from the unchecked English-proficiency checkbox
+while the Part 6 interpreter NAME fields are filled. Fix: steer yes/no questions to
+the relevant VALUE fields, not a tangential self-cert checkbox.
+
+**Over-inclusion -- benign (4 this run, ~9 the prior run):** correct values
+volunteered beyond the question (e.g. "their last name?" -> current AND previous;
+"their email?" -> applicant AND interpreter). Values are right; the model just
+over-answers. Caught by verify-back. Whether to suppress is a product call -- a
+human secretary volunteering "you also have a previous name on file" may be a
+feature.
+
+**Confident-wrong (16, coarse):** the deterministic cite+claim signal. It includes
+the hallucinations, most of the over-inclusions, and a few borderline ground-truth
+cases. Use the judge's `hallucinated`, not this counter, for the harm read.
 
 ## What this suggests
 
-1. **Feasibility: yes, with the verification net.** High recall + only 2
-   wrong-value cases (both a single, nameable failure mode) is what the
-   principal/secretary split needs, BECAUSE the principal voices answers back for
-   user confirmation. Over-sharing is self-correcting under that net.
-2. **The one real risk is current-vs-previous NAME disambiguation.** Both
-   hallucinations are this. Prompt/context work to target: make the current-name
-   vs previous/green-card-name clusters unmistakable in the rendered context (the
+1. **Feasibility: yes, with the verification net.** High recall (~0.90) + a small
+   handful of wrong-value cases (2-5 across runs, clustering into 3 nameable failure
+   modes) is what the principal/secretary split needs, BECAUSE the principal voices
+   answers back for user confirmation. Over-sharing is self-correcting under that
+   net. Caveat: the harm count is NOISY at n=49 -- treat feasibility as "promising,
+   pending a larger/multi-seed run," not "proven at X%."
+2. **The dominant real risk is current-vs-previous NAME disambiguation** (mode 1
+   above, every run). Prompt/context work to target: make the current-name vs
+   previous/green-card-name clusters unmistakable in the rendered context (the
    I-90's own field labels are near-identical), and for "from what to what"
-   name-change questions, pin which field is the FROM and which is the TO.
+   name-change questions, pin which field is the FROM and which is the TO. Modes 2
+   (us-zip vs foreign-postal sibling) and 3 (yes/no inference from a tangential
+   checkbox) are secondary targets.
 3. **Over-inclusion is tunable, but may be desirable.** "Answer only what was
    asked" would lift precision; whether to is a product call.
 4. **Context size is ~2x the plan's estimate (~9.5k vs 2.7-5.9k tokens).** Feeds
