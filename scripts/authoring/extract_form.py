@@ -43,6 +43,22 @@ import arm_llm_native  # noqa: E402
 DEFAULT_PLAIN = True
 
 
+def _has_usable_position(pos: object) -> bool:
+    """True only for a pdf_position with a positive width AND height.
+
+    The LLM frequently emits a placeholder rect (all-zero, or missing
+    width/height) that is truthy as a dict but useless for the editor's
+    click-to-jump mapping. A genuine AcroForm widget always has positive width
+    and height, so we treat anything else as "no usable position" and let the
+    deterministic dump-rect back-fill replace it (bd 7a9.18)."""
+    if not isinstance(pos, dict):
+        return False
+    try:
+        return float(pos.get("width") or 0) > 0 and float(pos.get("height") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _backfill_positions(schema: dict, dump_path: str) -> int:
     """Deterministically set `pdf_position` on each field from the AcroForm dump.
 
@@ -70,7 +86,14 @@ def _backfill_positions(schema: dict, dump_path: str) -> int:
 
     filled = 0
     for field in schema.get("fields", []):
-        if field.get("pdf_position"):
+        # Back-fill when the position is MISSING *or* DEGENERATE. The LLM often
+        # emits a placeholder {page, x:0, y:0, width:0, height:0} -- a truthy dict
+        # that a bare `if field.get("pdf_position")` would treat as already set,
+        # leaving the zeros in place (the editor then can't map the field to the
+        # PDF, so click-to-jump dies -- bd 7a9.18). A real widget always has a
+        # positive width AND height, so a non-positive either means it needs the
+        # deterministic dump rect.
+        if _has_usable_position(field.get("pdf_position")):
             continue
         # A field's position = the rect of its (first) pdf_field_name; for a
         # consolidated options[] field, use the first option's widget.
