@@ -66,6 +66,16 @@ from backend.scripts.secretary_recall_corpus import (  # noqa: E402
 
 MODEL = "gemini-2.5-flash-lite"
 
+# Cheap-model fallback chain (all Gemini, so within the same BAA family). If the
+# preferred model is in a 503 outage (as 2.5-flash-lite was 2026-06-19), the probe
+# degrades to the next AVAILABLE one so measurement is not blocked by a Google-side
+# outage. The model actually used is recorded in the artifact.
+MODEL_FALLBACKS = [
+    "gemini-2.5-flash-lite",        # preferred (the secretary's target model)
+    "gemini-3.1-flash-lite",        # newer lite tier; sub-second when 2.5-lite is down
+    "gemini-flash-lite-latest",     # rolling alias to the current lite model
+]
+
 OUT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "scripts", "spikes", "data",
@@ -85,6 +95,28 @@ def _client() -> genai.Client:
         print("NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
+
+
+async def _resolve_model(client, preferred=None) -> str:
+    """Return the first AVAILABLE model from the fallback chain (a 1-token probe
+    per candidate). Lets the measurement survive a single-model outage. Reassigns
+    the module global MODEL so the rest of the probe uses the chosen one."""
+    global MODEL
+    chain = ([preferred] if preferred else []) + [m for m in MODEL_FALLBACKS
+                                                  if m != preferred]
+    last = None
+    for m in chain:
+        try:
+            await client.aio.models.generate_content(model=m, contents="OK")
+            MODEL = m
+            if m != MODEL_FALLBACKS[0]:
+                print("NOTE: preferred model unavailable; using fallback %s" % m, flush=True)
+            return m
+        except genai.errors.ServerError as exc:
+            last = "%s: %s" % (m, type(exc).__name__)
+            print("  (model %s unavailable, trying next)" % m, flush=True)
+    print("ALL fallback models unavailable (%s)" % last, flush=True)
+    sys.exit(2)
 
 
 def _values_block(field_values: dict) -> str:
@@ -152,6 +184,10 @@ async def main() -> None:
                          "(explicit deferred to scale, bd jnjj.41). Add explicit "
                          "to gather the deferred-decision numbers.")
     ap.add_argument("--dry-run", action="store_true", help="No API calls; wiring check.")
+    ap.add_argument("--model", default=None,
+                    help="Override the preferred model (else the fallback chain "
+                         "starting at gemini-2.5-flash-lite). Falls through to an "
+                         "available model on a single-model outage.")
     args = ap.parse_args()
 
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
@@ -173,6 +209,8 @@ async def main() -> None:
         return
 
     client = _client()
+    used_model = await _resolve_model(client, preferred=args.model)
+    print("using model: %s" % used_model, flush=True)
     results = {}
     cache_create_latency = None
     cache_name = None
@@ -257,6 +295,8 @@ async def main() -> None:
             "bead": "polyglot-pdf-jnjj.27",
             "stamp": stamp,
             "model": MODEL,
+            "preferred_model": MODEL_FALLBACKS[0],
+            "is_fallback_model": MODEL != MODEL_FALLBACKS[0],
             "catalog_tokens_est": cat_tokens,
             "queries": len(queries),
             "arms": results,
