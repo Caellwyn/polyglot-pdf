@@ -283,10 +283,15 @@ _WORD_DIGITS = {
 def _canon_value(v) -> str:
     """Canonicalize a field value for fill-accuracy comparison (bd jnjj.7).
 
-    Lowercase, map spelled-out digits to numerals, strip ALL non-alphanumerics.
-    So "Twelve B"/"12B", "73701"/"737 01", "Apartment"/"apartment" all collapse to
-    the same key. Deliberately lossy -- it scores whether the right DATA landed,
-    not punctuation/format (format is the normalizer layer's job, not G3's)."""
+    Lowercase, map SINGLE spelled-out digits (zero-nine) to numerals, strip ALL
+    non-alphanumerics. So "73701"/"737 01", "Apartment"/"apartment", "12 B"/"12-B"
+    all collapse to the same key. Deliberately lossy -- it scores whether the right
+    DATA landed, not punctuation/format (format is the normalizer layer's job, not
+    G3's). NOTE: only SINGLE-digit words map (not "twelve"/"thirty") -- the model
+    transcribes spoken multi-digit numbers to numerals itself before writing the
+    field, so I90_EXPECTED holds the numeral form the model actually writes
+    ("1234 Maple Street", "12B"); a spelled-out write would correctly score as a
+    miss (the model failed to transcribe)."""
     if v is None:
         return ""
     s = str(v).strip().lower()
@@ -476,16 +481,24 @@ class FakeClientWebSocket:
         self.service: FormFillingService | None = None
         self.first_audio_at: float | None = None
         self.sent_messages: list[str] = []
-        # G3 (bd polyglot-pdf-jnjj.7): spoken_name -> field_id, the harness analogue
+        # G3 (bd polyglot-pdf-jnjj.7): spoken_name -> [field_ids], the harness analogue
         # of the frontend's spokenNameToFieldId map, so the FakeClient can answer
         # get_field_value recall lookups (the model retrieves a prior section's value
         # by EXACT spoken name -- what the full SI did "for free" from context). Keyed
         # on the field's spoken `name`, lowercased; that is the name production asks by
         # (the next_hint / previous_spoken_names both read schema_fields[fid]["name"]).
-        self.spoken_to_fid: dict[str, str] = {
-            (f.get("name") or fid).strip().lower(): fid
-            for fid, f in self.schema_fields.items()
-        }
+        # Scoped to the PLAN's fields (not the whole 132-field I-90): the I-90 reuses
+        # spoken names across parts (e.g. "City or Town" exists in Parts 1/6/7), so a
+        # whole-schema map collides and a never-filled out-of-plan field would shadow
+        # the one the run actually fills (fresh-eyes jnjj.38). Mapped to a LIST so the
+        # lookup can prefer a field that is actually filled in client.state.
+        _plan_fids = {q["field_id"] for q in plan}
+        self.spoken_to_fids: dict[str, list[str]] = {}
+        for fid, f in self.schema_fields.items():
+            if fid not in _plan_fids:
+                continue
+            key = (f.get("name") or fid).strip().lower()
+            self.spoken_to_fids.setdefault(key, []).append(fid)
         # G3 recall instrumentation: each get_field_value call the model makes is
         # recorded as (requested_spoken_name, found, returned_value) for scoring.
         self.field_value_lookups: list[dict] = []
@@ -535,7 +548,13 @@ class FakeClientWebSocket:
             # Mirror the frontend: spokenNameToFieldId -> stored value -> {found,value}.
             rid = msg.get("request_id")
             spoken = (msg.get("spoken_name") or "").strip().lower()
-            fid = self.spoken_to_fid.get(spoken)
+            candidates = self.spoken_to_fids.get(spoken, [])
+            # Prefer a candidate that is actually FILLED (the value the model is
+            # recalling); else the first candidate (name known but unfilled); else
+            # None (name not in the plan). 'found' mirrors production: the field name
+            # is known -- distinct from whether it has a value (jnjj.38 fresh-eyes).
+            fid = next((c for c in candidates if self.state.get(c, {}).get("value")
+                        not in (None, "")), candidates[0] if candidates else None)
             entry = self.state.get(fid) if fid else None
             value = entry.get("value") if entry else None
             found = fid is not None
