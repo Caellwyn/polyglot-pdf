@@ -99,7 +99,14 @@ function resolvePythonExe(repoRoot: string): string {
   // falls back to a bare `python3` that lacks PyMuPDF/google-genai and fails in
   // exactly the worktree setup this feature supports (Codex r2).
   const explicit = process.env.EXTRACTOR_PYTHON;
-  if (explicit && fs.existsSync(explicit)) return explicit;
+  if (explicit) {
+    // Resolve to an ABSOLUTE path: the existence check runs from the Vite
+    // process cwd but spawn() uses cwd: repoRoot, so a relative override would
+    // be re-resolved against the wrong dir at spawn time (Codex r4). Resolve it
+    // against repoRoot so check-time and spawn-time agree.
+    const resolved = path.resolve(repoRoot, explicit);
+    if (fs.existsSync(resolved)) return resolved;
+  }
 
   const roots = [repoRoot];
   const mainRoot = resolveMainRepoRoot(repoRoot);
@@ -167,11 +174,21 @@ function readJsonBody(req: Connect.IncomingMessage): Promise<ExtractRequest> {
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) { resolve({}); return; }
+      let parsed: unknown;
       try {
-        resolve(JSON.parse(raw) as ExtractRequest);
+        parsed = JSON.parse(raw);
       } catch {
         reject(new Error('invalid JSON body'));
+        return;
       }
+      // Require a JSON OBJECT: JSON.parse("null")/"5"/"[]" are valid JSON but not
+      // an ExtractRequest, and the later `body.id` access on a non-object would
+      // throw (Codex r4). Reject them as a clean 400 instead.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        reject(new Error('request body must be a JSON object'));
+        return;
+      }
+      resolve(parsed as ExtractRequest);
     });
     req.on('error', reject);
   });

@@ -94,6 +94,14 @@ describe('handleExtract -- request validation (no spawn)', () => {
     expect(res.body.detail).toMatch(/invalid kit id/i);
   });
 
+  it('rejects a non-object JSON body (null/array/scalar)', async () => {
+    for (const body of [null, 5, 'str', [1, 2]]) {
+      const res = await run(body);
+      expect(res.statusCode).toBe(400);
+      expect(res.body.detail).toMatch(/must be a JSON object/i);
+    }
+  });
+
   it('rejects a traversal kit id', async () => {
     const res = await run({ id: '../escape' });
     expect(res.statusCode).toBe(400);
