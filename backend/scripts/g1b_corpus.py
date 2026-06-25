@@ -84,6 +84,12 @@ _PERSONA = {
     "middlename": "Thi",
     "preferred": "Linh Nguyen",
     "dateofbirth": "1988-04-12",
+    # "city and state" combo fields take a COMBINED value, not a bare state --
+    # the longest-key-first match makes "cityandstate" win over "state" so a
+    # "port of entry city and state" field gets "Houston, TX", not "TX" (which
+    # the model flags as incomplete -- same class of filler artifact as the
+    # TX-in-radio Codex caught).
+    "cityandstate": "Houston, TX",
     "cityortown": "Houston",
     "citytown": "Houston",
     "citytownofbirth": "Hanoi",
