@@ -123,7 +123,7 @@ field-index gap between the two contradicting fields:
 | model | single/0 | near (1-5) | mid (6-20) | far (21+) |
 |---|---:|---:|---:|---:|
 | 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 0.833 | 0.979 | 1.000 | 1.000 |
+| 2.5-flash-lite | 0.833 | 1.000 | 1.000 | 1.000 |
 | voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 |
 | 3.1-flash-lite | 1.000 | 1.000 | 0.875 | 1.000 |
