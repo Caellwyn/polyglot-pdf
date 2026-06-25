@@ -33,7 +33,7 @@ Key results:
   REVERSING G1's worry; more context HELPED. The G1 state_country blind spot is
   gone. Distance does NOT degrade recall (cross-section contradictions caught as
   reliably as adjacent ones).
-- **Precision is the differentiator.** Flash-lite tiers ~0.65-0.80 (they
+- **Precision is the differentiator.** Flash-lite tiers ~0.62-0.80 (they
   over-flag valid US city/state pairs -- "New York is not in New York"), 2.5-flash
   ~0.82-0.89, all at negligible cost. The flash-lites are sub-second; the bigger
   models 8-25s.
@@ -62,19 +62,27 @@ LATENCY (context caching + payload trim) and 2.5-flash-lite per-page PRECISION
 (anti-hedging prompt + few-shot, the FPs are concentrated and promptable). Code
 Execution for deterministic lookups noted there as a deferred precision lever.
 
-**Fresh-eyes (Sonnet, 1 round, GAPS-FOUND (2) + 3 supporting findings -- all
-adopted):** caught a real measurement bug -- the voice model's tool call TRUNCATES
-field ids (`p1_line6e` for `p1_line6e_state`), so exact-set scoring wrongly counted
-3 cases as misses and reported voice recall as 0.875/0.957 at sizes 20/40. Fixed
-with prefix-tolerant `_detected` + a re-score pass in `g1b_merge.py` (corrects the
-data without re-calling the API); true voice recall is 1.000 at all sizes. Also
-adopted: added the voice + 3.5-flash rows to the distance/class tables (EC2);
-disclosed that precision is CASE-LEVEL (the user-visible spurious-pair rate is
-higher); corrected the "marginal" claim about the TX-in-radio corpus artifact (it's
-a 12-pt precision swing at 132 that flips the lite ordering); fixed a stale
-docstring. The corpus filler artifact + the case-vs-group precision question were
-folded into the follow-up bead (08zv). Adopt 5 / reject 0 / defer 0; no
-out-of-scope beads filed by fresh-eyes.
+**Fresh-eyes (Sonnet, 5 rounds to convergence, all findings adopted):** round 1
+caught a real measurement bug -- the voice model's tool call TRUNCATES field ids
+(`p1_line6e` for `p1_line6e_state`), so exact-set scoring wrongly counted 3 cases
+as misses and reported voice recall as 0.875/0.957 at sizes 20/40. Fixed with
+prefix-tolerant `_detected` + a re-score pass in `g1b_merge.py` (corrects the data
+without re-calling the API); true voice recall is 1.000 at all sizes. That fix
+rippled: rounds 2-4 chased the derived staleness it exposed -- the accuracy cells,
+then the LATENCY cells (recomputed every matrix cell from MERGED.csv, now with a
+programmatic 0-mismatch check), then an error-counting inconsistency (an API
+timeout is "no measurement", not a miss -- made `g1b_analyze.py` exclude errored
+rows to match the matrix), then prose-vs-table rounding. Round 5 reached the last
+prose inconsistency (the headline precision range understated the measured floor;
+unified to ~0.62-0.80). Also adopted across rounds: voice + 3.5-flash added to the
+distance/class tables (EC2); disclosed precision is CASE-LEVEL (the user-visible
+spurious-pair rate is higher); corrected the TX-in-radio corpus-artifact impact
+(a ~8-pt precision swing at 132 that flips the lite ordering); fixed a stale
+docstring + a self-contradictory voice-run meta. The corpus filler fix + the
+case-vs-group precision question were folded into the follow-up bead (08zv). No
+out-of-scope beads filed by fresh-eyes. (The 3-round ceiling was exceeded with
+maintainer authorization -- each round's gaps were a descending cascade from the
+one root fix, not new defects, and convergence was the goal.)
 
 ## Lessons
 

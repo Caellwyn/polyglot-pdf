@@ -1,16 +1,16 @@
 # G1b bake-off -- model x form-size matrix for the out-of-band B checker
 
 **Bead:** polyglot-pdf-0zp3 (follow-up to G1 / jnjj.5)
-**Date:** 2026-06-18
+**Date:** 2026-06-19
 **Question:** For the out-of-band end-of-section + end-of-form contradiction
 checker (Pillar B, reframed from "replace the in-SI check" to "additional layer"
 by the maintainer on 2026-06-17), WHICH cheap text model, and does accuracy
 survive a realistic page- or form-sized payload? Measured speed, cost, and
-accuracy across 4 models x 3 form sizes.
+accuracy across 6 models (5 text + the voice model) x up to 3 form sizes.
 
 **Headline:** the two **flash-lite tiers are the operationally viable choice** --
-sub-second, cheap, near-perfect recall -- but they trade ~25-35% false-positive
-rate (precision ~0.65-0.73). The **bigger models buy precision, not recall**, at a
+sub-second, cheap, near-perfect recall -- but they trade a ~20-38% false-positive
+rate (precision ~0.62-0.80). The **bigger models buy precision, not recall**, at a
 10-25x latency penalty; `gemini-3-flash-preview` is additionally **unreliable
 under load** (7-39% of its calls timed out) and is not recommended. Since this is
 ONE layer among many (read-back, verbal section verify, human translator review),
@@ -92,7 +92,7 @@ unmeasured -- true cost is HIGHER).)
    cleaner (~0.82-0.89) but 10-22x slower.
 
 3. **The latency cliff is stark.** The flash-lite tiers answer in up to 1.4s at
-   every size; 2.5-flash takes 8-18s (p90 up to 40.6s at 132 fields);
+   every size; 2.5-flash takes 7.7-18.2s p50 (p90 up to 40.6s at 132 fields);
    3-flash-preview is 10-25s (p90 25.7-56.1s). For an end-of-section checker that
    gates the section auto-advance (per the validation-delegation contract), a
    sub-second answer vs a 20-second one is the difference between invisible and a
@@ -180,7 +180,7 @@ voice model, 2.5-flash, and 3.5-flash are clean across all classes.)
   immigrant's birth country differing from their US address is NORMAL (an
   immigration form), to avoid measuring a naive checker.
 - **Precision has run-to-run noise** (the models are non-deterministic; a clean
-  case flagged or not swings a few points). The HEADLINE (flash-lite ~0.65-0.80
+  case flagged or not swings a few points). The HEADLINE (flash-lite ~0.62-0.80
   vs 2.5-flash ~0.82-0.89, and the latency cliff) is robust to that noise; do not
   over-read a single precision cell to 3 digits.
 
@@ -248,12 +248,12 @@ lives in several run files merged by `g1b_merge.py`:
 (<1.1s at every size), ~0.96-1.0 recall, negligible cost. Lead with
 `2.5-flash-lite` on cost ($0.10/M in vs `3.1-flash-lite`'s $0.25/M, marginally
 better precision at 132); `3.1-flash-lite` is the A/B alternative (slightly faster
-+ better at small sizes). The precision gap (~0.65-0.80) is the known weakness --
++ better at small sizes). The precision gap (~0.62-0.80) is the known weakness --
 addressed below.
 
 **End-of-form (132) -> `2.5-flash` over standard HTTP.** On the 132 sweep it has
-recall 1.000 AND the best precision in the set (0.89). It is slow (p50 18s, p90
-40s) but the end-of-form pass happens ONCE, at submit, where a few seconds is
+recall 1.000 AND the best precision in the set (0.89). It is slow (p50 18.2s, p90
+40.6s) but the end-of-form pass happens ONCE, at submit, where a few seconds is
 acceptable (unlike a section boundary that gates voice flow). **`3.5-flash` was
 measured here and is NOT preferred:** same recall (1.00), slightly LOWER precision
 (0.86), ~4x more expensive ($0.0055 vs $0.0013/call at full rate), and only
