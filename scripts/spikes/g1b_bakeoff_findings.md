@@ -91,11 +91,12 @@ unmeasured -- true cost is HIGHER).)
    valid US city/state pair, "unsure, better flag it"). 2.5-flash is markedly
    cleaner (~0.82-0.89) but 10-22x slower.
 
-3. **The latency cliff is stark.** The flash-lite tiers answer in <1.4s at every
-   size; 2.5-flash takes 8-18s (p90 up to 40s at 132 fields); 3-flash-preview is
-   10-25s (p90 26-56s). For an end-of-section checker that gates the section
-   auto-advance (per the validation-delegation contract), a sub-second answer vs a
-   20-second one is the difference between invisible and a stall.
+3. **The latency cliff is stark.** The flash-lite tiers answer in up to 1.4s at
+   every size; 2.5-flash takes 8-18s (p90 up to 40.6s at 132 fields);
+   3-flash-preview is 10-25s (p90 25.7-56.1s). For an end-of-section checker that
+   gates the section auto-advance (per the validation-delegation contract), a
+   sub-second answer vs a 20-second one is the difference between invisible and a
+   stall.
 
 4. **Cost is negligible for all of them at this call volume.** Even the priciest
    cell (3-flash-preview @ 132) is $0.0024/call; at 3-20 calls per WHOLE form
@@ -105,9 +106,10 @@ unmeasured -- true cost is HIGHER).)
 5. **`gemini-3-flash-preview` is out** on reliability alone: 39% of its size-40
    calls timed out (>60s) even after 4 retries, vs ~0% for the other text models.
    The priciest, slowest candidate is also the flakiest. Not recommended. (Its
-   accuracy cells -- e.g. precision 1.000 at 40 -- are computed from the FEW calls
-   that survived, so they are not reliable comparison numbers; the headline is the
-   error rate, not the precision.)
+   accuracy cells are not reliable comparison numbers -- e.g. its precision 1.000
+   at size 40 is an ARTIFACT: ALL 15 clean cases at that size timed out, so there
+   are zero clean observations and precision is effectively undefined, not merely
+   small-sample. The headline for this model is the error rate, not the accuracy.)
 
 ---
 
