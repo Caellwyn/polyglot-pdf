@@ -146,8 +146,11 @@ def _summary(label, lats):
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=12, help="Number of queries to time per arm.")
-    ap.add_argument("--arms", default="uncached,implicit,explicit",
-                    help="Comma list: uncached,implicit,explicit.")
+    ap.add_argument("--arms", default="uncached,implicit",
+                    help="Comma list: uncached,implicit,explicit. Default omits "
+                         "explicit: the secretary uses IMPLICIT caching now "
+                         "(explicit deferred to scale, bd jnjj.41). Add explicit "
+                         "to gather the deferred-decision numbers.")
     ap.add_argument("--dry-run", action="store_true", help="No API calls; wiring check.")
     args = ap.parse_args()
 

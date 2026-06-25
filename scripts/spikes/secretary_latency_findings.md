@@ -59,8 +59,20 @@ above the ~1-2k implicit minimum. Caching is viable on token-size grounds.
 At $1.00 / 1M tokens / hour, a ~9,500-token cache costs ~**$0.0095/hour** to store
 (~1 cent/hr). For a session of minutes, storage cost is negligible; the question is
 whether the 90% input discount on repeated secretary calls beats $0 storage +
-best-effort implicit hits. This feeds Gate 3 (cost, jnjj.28); recorded here as a
-fact, decided there.
+best-effort implicit hits.
+
+### DECISION (maintainer, 2026-06-19): implicit now, explicit at scale
+
+**Use IMPLICIT caching for the secretary now.** It is free, on-by-default for 2.5+,
+needs no lifecycle management, and the catalog clears its minimum. The existing
+`TextAIGemini` adapter already sends requests as a stable catalog prefix + small
+fresh tail -- the exact structure that maximizes implicit-hit odds.
+
+**EXPLICIT caching is deferred to scale (~100 concurrent users; bd jnjj.41).** At
+low/demo concurrency the per-hour storage fee + create/TTL/delete lifecycle is
+overhead the input-discount does not pay back; explicit only wins once enough
+concurrent sessions share the same cached catalog to amortize storage. Revisit when
+the concurrency makes the discount beat implicit's best-effort hits net of storage.
 
 ### Cache-creation latency
 
@@ -95,13 +107,16 @@ explicit `caches.create()` lands "once Gate 2" (this bead).
 ### Methodology
 
 `backend/scripts/probe_secretary_latency.py` times the BLOCKING flash-lite lookup
-against live Gemini in three arms over the I-90 static catalog (~9.5k tokens) + a
-battery of prose queries (reused from the Gate-1 corpus):
+against live Gemini over the I-90 static catalog (~9.5k tokens) + a battery of prose
+queries (reused from the Gate-1 corpus). Since the secretary uses IMPLICIT caching
+now (decision above), the GO/KILL rests on the first two arms; the explicit arm is
+informational for the deferred jnjj.41 decision (run with `--arms ...,explicit`):
 - **uncached** -- full catalog sent fresh each call (the no-caching floor);
-- **implicit** -- stable catalog prefix repeated; Gemini's automatic implicit cache
-  may fire (a warm-up call primes it; `cached_content_token_count` confirms hits);
-- **explicit** -- `caches.create()` the catalog once (creation timed separately),
-  then `cached_content=` calls (guaranteed hit).
+- **implicit** (the operative arm) -- stable catalog prefix repeated; Gemini's
+  automatic implicit cache may fire (a warm-up call primes it;
+  `cached_content_token_count` confirms hits);
+- **explicit** (informational, deferred) -- `caches.create()` the catalog once
+  (creation timed separately), then `cached_content=` calls (guaranteed hit).
 
 SCOPING (decided, not a deploy ask): the gate's real question is whether the
 blocking flash-lite `generate_content` round-trip is fast enough. That is
@@ -113,23 +128,34 @@ API round-trip numbers, not full in-session tool-call numbers.
 
 ### Measured so far
 
-- **Explicit cache CREATE latency: ~0.78s** (live, one-time per session, ~3k-token
-  payload). Confirms flash-lite supports `caches.create()` and that cache creation
-  is sub-second -- a one-time cost amortized across all session lookups.
+- **IMPLICIT caching AUTO-FIRES, no setup -- confirmed live.** On the partial run,
+  9/12 catalog+query calls reported `cached_content_token_count` ~**10,168 of
+  ~11,053 prompt tokens (~92%)** cached, with ZERO explicit cache management -- just
+  the stable catalog prefix. This is the load-bearing cost result: the secretary's
+  static catalog rides the implicit cache automatically (the cheaper $0.01/M rate on
+  ~92% of the input), exactly as the architecture intended. (2 of the 12 showed
+  `cached_tokens=0` -- implicit-cache misses when the prefix had aged out; best-
+  effort, as documented.) This feeds Gate 3 (cost, jnjj.28).
+- **Explicit cache CREATE latency: ~0.78s** (live, one-time per session). Confirms
+  flash-lite supports `caches.create()`. Informational only (explicit deferred to
+  jnjj.41).
 
-### BLOCKED: live generation latency pending flash-lite availability
+### Latency: NOT yet cleanly measurable (flash-lite outage contaminates it)
 
-At measurement time (2026-06-19) `gemini-2.5-flash-lite` `generate_content` was
-returning **503 UNAVAILABLE** persistently (sustained model-demand outage, not
-transient -- exhausted 5 backoff retries + the SDK's own tenacity layer; 0/3 on a
-bare availability probe). DIAGNOSTIC: the sibling `gemini-2.5-flash` answered
-normally (~0.67s) and `caches.create()` on flash-lite itself worked (0.78s) -- so
-the outage is **flash-lite-generation-specific**, not an account/key/region issue.
+At measurement time (2026-06-19) `gemini-2.5-flash-lite` was in a sustained,
+INTERMITTENT **503 UNAVAILABLE** outage (flash-lite-generation-specific: the sibling
+`gemini-2.5-flash` answered ~0.67s and flash-lite `caches.create()` worked, so it
+is not an account/key/region issue). The successful calls during the outage ran
+**~3.4-6.3s** -- BUT this latency is OUTAGE-CONTAMINATED, not representative:
+- a bare 1-token "Say OK" prompt ALSO took 3.6-6.3s during the outage, so the
+  latency is dominated by the model's degraded state, NOT the ~9.5k catalog payload;
+- 503s were interspersed throughout (a model under load / recovering).
 
-The probe is built, validated (dry-run + a working explicit-cache-create live), and
-RETRY-RESILIENT; only the live generation numbers are blocked, purely by Gemini-side
-availability. A re-run is scheduled for when flash-lite recovers. The GO/KILL on
-"fast enough for live conversation" is recorded once those numbers land. (Early
-indication, NOT the verdict: the working sibling flash at sub-second and the 0.78s
-cache-create both point toward a comfortable GO, but the real flash-lite round-trip
-must be measured before recording it.)
+**No GO/KILL is recorded yet** -- recording a KILL off outage-degraded numbers would
+wrongly blame the architecture for a temporary Google availability event. The probe
+is built, validated, retry-resilient, and confirms implicit caching fires; only a
+clean, stable-service latency sample remains. A re-run is scheduled for when
+flash-lite is stable; the GO/KILL on "fast enough for live conversation" lands then.
+(Reference, NOT the verdict: the sibling flash at sub-second under normal load
+suggests flash-lite's normal round-trip is likely well under the conversational
+pain threshold, but the real number must be measured on stable service.)
