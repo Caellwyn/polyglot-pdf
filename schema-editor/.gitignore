@@ -40,3 +40,6 @@ lerna-debug.log*
 
 # Vite cache
 .vite
+
+# TypeScript incremental build info
+*.tsbuildinfo

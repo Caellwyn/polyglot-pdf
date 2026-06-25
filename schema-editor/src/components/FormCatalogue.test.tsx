@@ -478,3 +478,138 @@ describe('FormCatalogue', () => {
     await waitFor(() => expect(clearOpenKit).toHaveBeenCalled());
   });
 });
+
+// --- Run-extraction button (bd 7a9.17) ------------------------------------- //
+//
+// A schemaless kit WITH a pdf gets a "Run extraction" button ONLY when the host
+// endpoint is reachable (vite dev). We drive both the GET capability probe and
+// the POST extraction through a mocked fetch.
+describe('FormCatalogue -- run extraction', () => {
+  // A PDF-only kit (form.pdf present, no schema.json) is the button's precondition.
+  const pdfOnlyKit = () =>
+    mockKit('w7', { 'form.pdf': 'PDF', 'metadata.json': JSON.stringify({ label: 'W7', status: 'draft' }) });
+
+  function fetchMock(handlers: {
+    get?: () => Response;
+    post?: (body: unknown) => Response;
+  }): typeof fetch {
+    const impl = async (_input: unknown, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return handlers.get?.() ?? ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response);
+      }
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      return handlers.post?.(body) ?? ({ ok: false, status: 500, json: async () => ({ ok: false, detail: 'x' }) } as unknown as Response);
+    };
+    return vi.fn(impl) as unknown as typeof fetch;
+  }
+  const okJson = (b: unknown) => ({ ok: true, status: 200, json: async () => b } as unknown as Response);
+  const errJson = (b: unknown) => ({ ok: false, status: 500, json: async () => b } as unknown as Response);
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('hides the button (shows the manual hint) when the endpoint is absent', async () => {
+    global.fetch = fetchMock({ get: () => ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response) });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('W7')).toBeTruthy());
+
+    // No button; the degraded instruction hint is shown instead.
+    expect(screen.queryByText('Run extraction')).toBeNull();
+    expect(screen.getByText(/Run the extractor to produce its schema/i)).toBeTruthy();
+  });
+
+  it('shows the button for a schemaless+pdf kit when the endpoint is available', async () => {
+    global.fetch = fetchMock({ get: () => okJson({ ok: true, detail: 'available' }) });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+  });
+
+  it('does NOT show the button for a kit that already has a schema', async () => {
+    global.fetch = fetchMock({ get: () => okJson({ ok: true, detail: 'available' }) });
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
+    expect(screen.queryByText('Run extraction')).toBeNull();
+  });
+
+  it('runs extraction on click and surfaces the success notice', async () => {
+    let posted: unknown = null;
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: (body) => { posted = body; return okJson({ ok: true, detail: '61 fields, validated', schemaFile: 'schema.json' }); },
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(screen.getByText(/Extracted "w7"/)).toBeTruthy());
+    // The kit id (and resolved filenames) reached the endpoint.
+    expect(posted).toMatchObject({ id: 'w7', pdfFile: 'form.pdf', schemaFile: 'schema.json' });
+  });
+
+  it('surfaces an error notice when extraction fails', async () => {
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: () => errJson({ ok: false, detail: 'extraction failed (exit 1): boom' }),
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(screen.getByText(/Extraction failed for "w7".*boom/i)).toBeTruthy());
+  });
+
+  it('disables folder controls and refuses drops WHILE extraction is in flight (Codex r3)', async () => {
+    // Hold the POST open so extraction stays in-flight while we probe the guards.
+    let releasePost: (r: Response) => void = () => {};
+    const postHeld = new Promise<Response>((resolve) => { releasePost = resolve; });
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: () => postHeld as unknown as Response,
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    // Button shows the in-flight label and Change-folder is disabled.
+    await waitFor(() => expect(screen.getByText('Extracting...')).toBeTruthy());
+    expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(true);
+
+    // A drop mid-extraction is refused (its finally must NOT clear the guard).
+    const pdf = { name: 'b.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
+    fireEvent.drop(screen.getByTestId('form-catalogue'), { dataTransfer: { files: [pdf] } });
+    await waitFor(() => expect(screen.getByText(/Extraction is running/i)).toBeTruthy());
+    // The drop did NOT onboard a new kit (the guard held).
+    expect(root.created['b']).toBeUndefined();
+
+    // Let extraction finish; controls re-enable.
+    releasePost({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'done', schemaFile: 'schema.json' }) } as unknown as Response);
+    await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(false));
+  });
+});

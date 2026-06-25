@@ -38,14 +38,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pathlib
 import re
-import shutil
-import subprocess
 import sys
 from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from llm_providers import resolve_provider  # noqa: E402
 from schema_contract import SCHEMA_CONTRACT, acroform_field_list  # noqa: E402
 from structural_enrich import (  # noqa: E402
     DEFAULT_DISABLED, SIGNALS, enrich, enriched_field_list,
@@ -227,122 +225,6 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
     return "\n".join(parts)
 
 
-def _run_gemini(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[dict, dict]:
-    """Gemini backend (paid, google-genai SDK). Returns (schema, token_info)."""
-    from google import genai  # lazy: only needed for the gemini path
-    from google.genai import types
-
-    timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "600000"))
-    client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
-        http_options=types.HttpOptions(timeout=timeout_ms),
-    )
-    contents: list = []
-    if pdf_path:
-        contents.append(types.Part.from_bytes(
-            data=pathlib.Path(pdf_path).read_bytes(),
-            mime_type="application/pdf",
-        ))
-    contents.append(prompt)
-
-    resp = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.0,
-            max_output_tokens=65536,
-        ),
-    )
-    schema = _normalize_schema(_extract_json(resp.text))
-    tok = {}
-    usage = getattr(resp, "usage_metadata", None)
-    if usage is not None:
-        tok = {"input": getattr(usage, "prompt_token_count", None),
-               "output": getattr(usage, "candidates_token_count", None)}
-    return schema, tok
-
-
-def _run_claude_cli(prompt: str, model: str, pdf_path: Optional[str]) -> tuple[dict, dict]:
-    """Claude backend via the local `claude` CLI in headless print mode.
-
-    Uses the maintainer's Claude Code subscription auth (free in-environment).
-    The CLI reads the PDF itself via its Read tool; we grant directory access
-    with --add-dir so it can reach the form. Returns (schema, token_info).
-    """
-    exe = shutil.which("claude") or "claude"
-    outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "outputs")
-    # acceptEdits auto-approves the model's Write to the scratch file in
-    # outputs/ (an --add-dir grants READ; a headless write would otherwise hang
-    # on a permission prompt the -p session cannot answer -- bd 7a9.10).
-    cmd = [exe, "-p", "--model", model, "--output-format", "json",
-           "--permission-mode", "acceptEdits", "--add-dir", outputs_dir]
-    if pdf_path:
-        cmd += ["--add-dir", os.path.dirname(os.path.abspath(pdf_path))]
-    # The schema for a real form is ~30K+ output tokens -- piping it through the
-    # CLI's final message hits the per-message output ceiling and yields
-    # truncated/pointer results (observed on I-90, bd 7a9.10; certain on I-589).
-    # So the model WRITES the JSON to a scratch file and we read it back.
-    scratch = os.path.join(outputs_dir, f"_cli_schema_{os.getpid()}.json")
-    if os.path.exists(scratch):
-        os.remove(scratch)
-    wrapped = (
-        prompt
-        + "\n\nIMPORTANT -- how to deliver your output: the FormSchema JSON is "
-        "far too large for a chat message, so do NOT print it. Instead, use "
-        "your Write tool to write the COMPLETE FormSchema JSON object (and "
-        "nothing else -- no fences, no commentary) to this exact file path:\n  "
-        + scratch
-        + "\nThen end with a final message of just: WROTE OK"
-    )
-    timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "1200"))
-    try:
-        proc = subprocess.run(
-            cmd, input=wrapped, capture_output=True, text=True,
-            encoding="utf-8", timeout=timeout_s,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(f"claude CLI exited {proc.returncode}: "
-                               f"{(proc.stderr or proc.stdout)[:500]}")
-        envelope = json.loads(proc.stdout)
-        if envelope.get("is_error"):
-            raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
-        result_text = envelope.get("result", "")
-
-        schema = None
-        if os.path.exists(scratch):
-            with open(scratch, encoding="utf-8") as fh:
-                schema = _normalize_schema(_extract_json(fh.read()))
-        else:
-            # Older-behavior fallback: the model printed the JSON instead.
-            try:
-                schema = _normalize_schema(_extract_json(result_text))
-            except json.JSONDecodeError:
-                schema = None
-        if not (isinstance(schema, dict) and schema.get("fields")):
-            # Reject empty/fragment parses (a truncated message can "parse" as
-            # a single field object). Dump the envelope for diagnosis.
-            dbg = os.path.join(outputs_dir, "_claude_cli_fail_envelope.json")
-            with open(dbg, "w", encoding="utf-8") as fh:
-                json.dump(envelope, fh, indent=2)
-            raise RuntimeError(
-                f"claude CLI produced no usable schema "
-                f"(scratch_file_existed={os.path.exists(scratch)} "
-                f"[deleted on cleanup], "
-                f"subtype={envelope.get('subtype')!r}, "
-                f"num_turns={envelope.get('num_turns')}, "
-                f"result_chars={len(result_text)}); envelope dumped to {dbg}")
-    finally:
-        if os.path.exists(scratch):
-            os.remove(scratch)
-    usage = envelope.get("usage") or {}
-    tok = {"input": usage.get("input_tokens"),
-           "output": usage.get("output_tokens"),
-           "cost_usd_equiv": envelope.get("total_cost_usd")}
-    return schema, tok
-
-
 def run(pdf_path: str, acroform_path: str, model: str,
         fewshot_truth: Optional[str] = None,
         send_pdf: bool = True,
@@ -354,16 +236,15 @@ def run(pdf_path: str, acroform_path: str, model: str,
                           disabled=disabled, order_caveat=order_caveat,
                           plain=plain)
 
-    # Only `gemini*` takes the SDK path; EVERY other model name (claude/opus/
-    # sonnet/haiku -- or anything else) routes to the local `claude` CLI, which
-    # will itself reject a name it doesn't recognize. So an unknown model surfaces
-    # as a CLI error, not a silent wrong backend.
-    is_gemini = model.lower().startswith("gemini")
-    backend = "gemini" if is_gemini else "claude-cli"
-    if is_gemini:
-        schema, tok = _run_gemini(prompt, model, pdf_for_prompt)
-    else:
-        schema, tok = _run_claude_cli(prompt, model, pdf_for_prompt)
+    # The LLM out-call is behind a provider seam (bd 7a9.17, llm_providers.py):
+    # EXTRACTOR_PROVIDER overrides; otherwise the model name dispatches (gemini*
+    # -> the paid SDK, everything else -> the local `claude` CLI, which itself
+    # rejects a name it doesn't recognize -- so an unknown model surfaces as a
+    # CLI error, not a silent wrong backend). The seam is the swap point for a
+    # remote/hosted/better-model backend later.
+    provider = resolve_provider(model)
+    backend = provider.name
+    schema, tok = provider.run(prompt, model, pdf_for_prompt)
 
     schema.setdefault("_bakeoff", {})
     schema["_bakeoff"].update({

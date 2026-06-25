@@ -126,6 +126,14 @@ navigation-confirmation — i.e. the pure client-state logic, not the voice/WS p
 > the section-refactor cleanup. Don't mistake them for passing coverage; re-enabling
 > one means renaming it back and fixing it.
 
+> **Running a Vite dev server from a git worktree needs `server.fs.allow`.** A
+> worktree's `node_modules` is typically a junction into the main checkout, so Vite
+> serves realpath-resolved modules (e.g. the pdfjs worker via
+> `new URL(..., import.meta.url)`) from a path OUTSIDE the worktree root and refuses
+> it with "403 Restricted". Add the realpath-resolved `node_modules` to
+> `server.fs.allow` (a no-op in a normal checkout). The schema-editor does this; see
+> [../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md](../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md).
+
 ## E2E + manual testing
 
 There is **no automated E2E suite yet.** Writing a repeatable one is tracked by
@@ -223,4 +231,4 @@ is to mutate one production assertion (e.g. flip a close code) and confirm the t
 goes red. (`polyglot-pdf-uov.9` found this in `test_idle_timeout.py`; the honest
 idle-watchdog spec drives the real `_handle_fill_session` watchdog.)
 
-*Last updated: 2026-06-13 (self-fulfilling-mock anti-pattern, bd polyglot-pdf-uov.9). See [../journal/entries/2026-06-13-bd-uov.9-t2-2-ws-auth-lifecycle-spec.md](../journal/entries/2026-06-13-bd-uov.9-t2-2-ws-auth-lifecycle-spec.md).*
+*Last updated: 2026-06-19 (worktree Vite `server.fs.allow` for junctioned node_modules, bd polyglot-pdf-7a9.17). See [../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md](../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md).*
