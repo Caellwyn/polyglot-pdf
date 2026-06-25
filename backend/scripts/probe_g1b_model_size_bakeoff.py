@@ -344,29 +344,11 @@ def _flagged_sets(verdict: dict) -> list:
     return out
 
 
-def _ids_match(a: str, b: str) -> bool:
-    """Two field ids refer to the same field if equal OR one is a PREFIX of the
-    other. The native-audio (voice) model truncates ids in its tool call --
-    'p1_line6e' for 'p1_line6e_state' -- so exact-set matching wrongly scored
-    those as misses (fresh-eyes finding, PR for 0zp3). Prefix matching corrects
-    the voice model's recall without changing the text models (which return full
-    ids -> prefix-of reduces to equality). A bare prefix like 'p1' would be too
-    loose, but the model returns line-level ids ('p1_line6e'), which are specific
-    enough; we require the shorter id to be at least the 'pN_lineNN' stem."""
-    if a == b:
-        return True
-    short, lng = (a, b) if len(a) <= len(b) else (b, a)
-    # require the prefix to reach at least the line stem (avoid 'p1' matching all)
-    return len(short) >= len("p1_line6") and lng.startswith(short)
-
-
-def _detected(expected: list, flagged: list) -> bool:
-    for exp in expected:
-        for ef in exp:
-            for fl in flagged:
-                if any(_ids_match(ef, ff) for ff in fl):
-                    return True
-    return False
+# Scoring lives in the STDLIB-ONLY g1b_scoring module so the offline tools can
+# import it without google.genai. `_detected` here is full-group matching (every
+# expected conflict group must be COVERED by some flagged group) -- Codex review:
+# any-overlap matching inflated far-distance recall.
+from backend.scripts.g1b_scoring import detected as _detected  # noqa: E402
 
 
 def _cost(model: str, in_tok, out_tok) -> float | None:
@@ -448,12 +430,18 @@ async def main() -> None:
         flagged = _flagged_sets(r["verdict"])
         det = _detected(case.expected_conflicts, flagged)
         c = cell[(model, size)]
-        if case.is_contradiction:
-            c["tp" if det else "fn"] += 1
-        else:
-            c["fp" if flagged else "tn"] += 1
+        # An ERRORED call (retries exhausted) is "no measurement" -- do NOT count it
+        # as a miss/FP. Only the error rate is tracked for it. (Codex review: the
+        # probe's own counters previously counted timeouts as FN/TN, so a fresh
+        # matrix/meta understated recall and inflated precision; g1b_analyze already
+        # excluded errors -- this makes the probe consistent with it.)
         if r["error"]:
             c["errors"] += 1
+        else:
+            if case.is_contradiction:
+                c["tp" if det else "fn"] += 1
+            else:
+                c["fp" if flagged else "tn"] += 1
         c["lat"].append(r["latency_s"])
         if r["in_tok"] is not None:
             c["in"].append(r["in_tok"])
@@ -470,7 +458,11 @@ async def main() -> None:
             "latency_s": round(r["latency_s"], 3),
             "in_tok": r["in_tok"], "out_tok": r["out_tok"],
             "cost_usd": cost, "error": r["error"], "retries": r.get("retries", 0),
+            # flat union (back-compat) + per-GROUP structure (so a re-score can do
+            # full-group matching without re-running): groups '|'-separated,
+            # fields within a group ';'-separated.
             "flagged_ids": ";".join(sorted({i for s in flagged for i in s})),
+            "flagged_groups": "|".join(";".join(sorted(s)) for s in flagged),
         })
 
     for size in sizes:

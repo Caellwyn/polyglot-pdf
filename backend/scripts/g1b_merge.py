@@ -39,10 +39,12 @@ def main() -> None:
     # key -> best row. "best" = a non-errored row beats an errored one; among
     # equal-error rows, the LAST file (most recent run) wins.
     best: dict = {}
-    fieldnames = None
+    fieldnames: list = []
     for f in files:
         for r in csv.DictReader(open(f, encoding="utf-8")):
-            fieldnames = list(r.keys())
+            for k in r:  # union of columns across run files (schemas may differ)
+                if k not in fieldnames:
+                    fieldnames.append(k)
             key = (r["size"], r["model"], r["case_id"])
             cur = best.get(key)
             r_err = bool(r["error"])
@@ -59,45 +61,42 @@ def main() -> None:
     rows = list(best.values())
     rows.sort(key=lambda r: (int(r["size"]), r["model"], r["case_id"]))
 
-    # RE-SCORE `detected` from the captured flagged_ids using the CURRENT scorer
-    # (prefix-tolerant `_detected`). The voice model truncates field ids in its
-    # tool call ('p1_line6e' for 'p1_line6e_state'), which the original
-    # exact-match scoring wrongly counted as misses; re-scoring corrects those
-    # cells WITHOUT re-calling the API (the model's flags were captured; only the
-    # scoring of them was wrong). For text models this is a no-op (full ids ->
-    # prefix-of reduces to equality). Builds the expected-conflict sets per
-    # case_id from the corpus (keyed by the base case id without the size prefix
-    # normalization -- the corpus case_id already includes the size, e.g.
-    # 's132_zipstate_near_0').
+    # RE-SCORE `detected` from the captured per-group flags using the CURRENT
+    # stdlib scorer (full-group, prefix-tolerant). This corrects rows from OLDER
+    # run files (which were scored with the previous any-overlap / exact-match
+    # logic) without re-calling the API. It needs the PER-GROUP structure
+    # (`flagged_groups`, groups '|'-separated, fields ';'-separated); rows from
+    # runs predating that column are left as-scored (no flagged_groups to re-derive
+    # from). Imports the STDLIB-ONLY scorer + corpus -- NO google.genai, so the
+    # offline merge runs without the API SDK (Codex review).
     from backend.scripts.g1b_corpus import build_corpus
-    from backend.scripts.probe_g1b_model_size_bakeoff import _detected
+    from backend.scripts.g1b_scoring import detected as _detected
     expected_by_case: dict = {}
     for size in sorted({int(r["size"]) for r in rows}):
         for c in build_corpus(size):
             expected_by_case[c.case_id] = c.expected_conflicts
-    rescored = 0
+    rescored = skipped_no_groups = 0
     for r in rows:
         exp = expected_by_case.get(r["case_id"])
-        if exp is None:
+        if exp is None or r.get("error"):
             continue
-        # flagged_ids is a flat ';'-joined UNION of all flagged fields -> one set;
-        # _detected's "any expected field matches any flagged field" works on it.
-        # CAVEAT: every current corpus case has exactly ONE expected conflict group,
-        # so the flatten is lossless here. If a future case expected TWO separate
-        # groups, this re-score could over-detect (it would mark the case detected
-        # if ANY group's field was flagged, even a different group's). Re-derive
-        # detected from the structured per-group flags if multi-group cases are added.
-        flagged = [set(x for x in r["flagged_ids"].split(";") if x)] if r["flagged_ids"] else []
-        new_det = int(bool(exp) and _detected(exp, flagged))
+        if "flagged_groups" not in r or r.get("flagged_groups") is None:
+            skipped_no_groups += 1
+            continue
+        flagged = [set(f for f in g.split(";") if f)
+                   for g in r["flagged_groups"].split("|") if g]
+        new_det = int(_detected(exp, flagged))
         if str(new_det) != r["detected"]:
             r["detected"] = str(new_det)
             rescored += 1
     if rescored:
-        print(f"re-scored {rescored} cells (prefix-tolerant detection)", flush=True)
+        print(f"re-scored {rescored} cells (full-group, prefix-tolerant)", flush=True)
+    if skipped_no_groups:
+        print(f"left {skipped_no_groups} pre-flagged_groups rows as-scored", flush=True)
 
     out = os.path.join(OUT_DIR, "g1b_bakeoff_MERGED.csv")
     with open(out, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w = csv.DictWriter(f, fieldnames=fieldnames, restval="")
         w.writeheader()
         w.writerows(rows)
 

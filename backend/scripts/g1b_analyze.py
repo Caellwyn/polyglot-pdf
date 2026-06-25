@@ -25,9 +25,16 @@ OUT_DIR = os.path.join(
 
 
 def _latest_csv() -> str:
-    files = sorted(glob.glob(os.path.join(OUT_DIR, "g1b_bakeoff_*.csv")))
+    # Exclude the MERGED file: lexically 'MERGED' sorts AFTER every timestamped
+    # 'g1b_bakeoff_2026...' run, so an unfiltered glob would default to the stale
+    # merged set instead of the latest fresh run (Codex review). To analyze the
+    # merged dataset, pass its path explicitly.
+    files = sorted(
+        f for f in glob.glob(os.path.join(OUT_DIR, "g1b_bakeoff_2026*.csv"))
+        if "MERGED" not in os.path.basename(f)
+    )
     if not files:
-        print("no g1b_bakeoff_*.csv found", flush=True)
+        print("no timestamped g1b_bakeoff_2026*.csv found", flush=True)
         sys.exit(1)
     return files[-1]
 
