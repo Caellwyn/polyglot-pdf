@@ -1,303 +1,252 @@
 # G1b bake-off -- model x form-size matrix for the out-of-band B checker
 
 **Bead:** polyglot-pdf-0zp3 (follow-up to G1 / jnjj.5)
-**Date:** 2026-06-19
+**Date:** 2026-06-25 (corrected re-run after a Codex methodology review)
 **Question:** For the out-of-band end-of-section + end-of-form contradiction
-checker (Pillar B, reframed from "replace the in-SI check" to "additional layer"
-by the maintainer on 2026-06-17), WHICH cheap text model, and does accuracy
-survive a realistic page- or form-sized payload? Measured speed, cost, and
-accuracy across 6 models (5 text + the voice model) x up to 3 form sizes.
+checker (Pillar B, reframed from "replace the in-SI check" to "an additional
+safety layer" by the maintainer on 2026-06-17), WHICH cheap model, and does
+accuracy survive a realistic page- or form-sized payload -- including a
+contradiction whose two halves sit far apart? Measured speed, cost, and accuracy
+across 6 models (5 text + the voice model) x up to 3 form sizes.
 
-**Headline:** the two **flash-lite tiers are the operationally viable choice** --
-sub-second, cheap, near-perfect recall -- but they trade a ~20-38% false-positive
-rate (precision ~0.62-0.80). The **bigger models buy precision, not recall**, at a
-10-25x latency penalty; `gemini-3-flash-preview` is additionally **unreliable
-under load** (7-39% of its calls timed out) and is not recommended. Since this is
-ONE layer among many (read-back, verbal section verify, human translator review),
-recall is the metric that matters and all models have it; the false-positive cost
-is a UX-tuning problem, not a blocker.
+> **This is the CORRECTED report.** A first pass concluded "distance does not
+> degrade recall." A code review (Codex) then found the far-distance test cases
+> were unsound (they paired the applicant's state with a DIFFERENT person's ZIP),
+> the "same fact stated twice" class was a duplicate of another, the advertised
+> `duration_year` class was never generated, the size-132 payload actually
+> transmitted only ~84 fields (empty clusters were dropped), and a filler bug
+> injected invalid values into clean cases. The corpus was rebuilt and the sweep
+> re-run. **The corrected data REVERSES the headline finding** (see below). The
+> original conclusions were partly an artifact of the flawed corpus.
 
-**The voice model itself (`gemini-2.5-flash-native-audio`) was added as a 5th
-arm** (the model already running the session, driven text-in via a Live session
-in tool-calling mode -- it cannot emit TEXT, so it reports the verdict through a
-flat `report_conflicts` tool call; the deeply-nested tool schema first tried
-triggered the native-audio 1011 "internal error", a malformed-tool-declaration
-symptom, fixed by flattening). It matches 2.5-flash on recall (1.000
-at ALL three sizes, after prefix-tolerant re-scoring -- see the matrix note),
-precision ~0.76-0.80, and ~6-9s latency (faster than 2.5-flash, far slower than
-the lites). It ran with ZERO errors once the tool schema was fixed.
-**Rejected** for the checker role: the latency + the Live-session tech debt are not
-worth it when a plain unary HTTP call is cheaper, faster, and simpler (full
-rationale in the Recommendation). **`gemini-3.5-flash`** was also added (132 only,
-the end-of-form sweep): recall 1.000, precision 0.86, but ~4x costlier than
-2.5-flash at full rate with no precision gain -- also not preferred.
+**Headline:** at form scale the models split into TWO groups on the hard cases.
+On the easy, local contradictions (zip-vs-state, dates adjacent, city-in-state)
+ALL models do well. But on **far-apart, cross-section contradictions** -- the
+realistic "a fact stated in two different places" case -- the **cheap text models
+(2.5-flash, 2.5-flash-lite, 3.1-flash-lite) miss roughly half**, and on the
+**`duration_year` class** (e.g. "I have lived in the US for 20 years" in a later
+section vs an admission date of 2020) **2.5-flash and 2.5-flash-lite catch ZERO of
+3**. The models that hold up on the hard cases are the **voice model
+(native-audio), 3-flash-preview, and 3.5-flash**. So "a cheap flash-lite handles
+everything" does NOT survive the corrected test: the cheap tier is fine for
+per-section local checks but unreliable for the end-of-form, cross-section pass.
 
 ---
 
 ## The matrix (merged, deduped dataset: `scripts/spikes/data/g1b_bakeoff_MERGED.csv`)
 
-575 cells: 4 text models x {20,40,132} + the voice model x {20,40,132} + 3.5-flash
-x {132}, ~36 labeled cases per (model x size). Recall = contradictions caught;
+577 cells: 5 text models x {20,40,132} + the voice model x {20,40,132} + 3.5-flash
+x {132}, ~36 labeled cases per (model x size). Recall = contradictions caught
+(full-group: every field of an expected conflict must be flagged together);
 precision = 1 - false-alarm rate; latency = per-call wall clock; cost =
-(in_tok x in_rate + out_tok x out_rate).
+(in_tok x in_rate + out_tok x out_rate). Errored (timeout / 5xx) calls are
+EXCLUDED from accuracy -- an API failure is "no measurement", not a miss.
 
 | model | size | recall | precision | lat p50 | lat p90 | cost/call | err rate |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **2.5-flash-lite** | 20 | 1.000 | 0.727 | 0.7s | 0.8s | $0.00012 | 0 |
-| **2.5-flash-lite** | 40 | 1.000 | 0.688 | 0.8s | 1.1s | $0.00018 | ~3% |
-| **2.5-flash-lite** | 132 | 0.960 | 0.686 | 1.0s | 1.4s | $0.00039 | 0 |
-| **3.1-flash-lite** | 20 | 1.000 | 0.800 | 0.8s | 1.0s | $0.00039 | 0 |
-| **3.1-flash-lite** | 40 | 1.000 | 0.622 | 0.8s | 1.0s | $0.00052 | 0 |
-| **3.1-flash-lite** | 132 | 0.960 | 0.649 | 0.8s | 1.1s | $0.00103 | 0 |
-| 2.5-flash | 20 | 1.000 | 0.889 | 7.7s | 13.8s | $0.00049 | 0 |
-| 2.5-flash | 40 | 1.000 | 0.821 | 10.9s | 19.5s | $0.00064 | 0 |
-| **2.5-flash** | 132 | 1.000 | 0.893 | 18.2s | 40.6s | $0.00125 | 0 |
-| 3-flash-preview | 20 | 1.000 | 0.941 | 10.2s | 25.7s | $0.00088 | ~7% |
-| 3-flash-preview | 40 | 1.000 | 1.000 | 12.9s | 38.3s | $0.00126 | ~39% |
-| 3-flash-preview | 132 | 1.000 | 0.833 | 24.7s | 56.1s | $0.00236 | ~25% |
-| 3.5-flash | 132 | 1.000 | 0.862 | 11.1s | 39.7s | $0.00553 | 0 |
-| voice (2.5-flash-native-audio) | 20 | 1.000 | 0.800 | 6.0s | 8.4s | $0.00045* | 0 |
-| voice (2.5-flash-native-audio) | 40 | 1.000 | 0.793 | 7.5s | 9.6s | $0.00068* | 0 |
-| voice (2.5-flash-native-audio) | 132 | 1.000 | 0.758 | 9.3s | 15.1s | $0.00165* | 0 |
+| 2.5-flash-lite | 20 | 1.000 | 0.727 | 1.2s | 8.0s | $0.00013 | 0 |
+| 2.5-flash-lite | 40 | 1.000 | 0.618 | 6.3s | 8.3s | $0.00022 | ~3% |
+| 2.5-flash-lite | 132 | 0.870 | 0.588 | 7.1s | 9.6s | $0.00063 | ~10% |
+| 3.1-flash-lite | 20 | 0.938 | 0.714 | 0.9s | 1.1s | $0.00042 | 0 |
+| 3.1-flash-lite | 40 | 0.952 | 0.645 | 0.9s | 1.1s | $0.00059 | 0 |
+| 3.1-flash-lite | 132 | 0.667 | 0.545 | 1.1s | 1.4s | $0.00148 | 0 |
+| 2.5-flash | 20 | 1.000 | 0.941 | 10.0s | 15.9s | $0.00049 | 0 |
+| 2.5-flash | 40 | 1.000 | 0.955 | 12.3s | 20.5s | $0.00068 | 0 |
+| 2.5-flash | 132 | 0.889 | 0.649 | 33.0s | 56.9s | $0.00199 | 0 |
+| 3-flash-preview | 20 | 1.000 | 1.000 | 10.3s | 23.3s | $0.00088 | ~17% |
+| 3-flash-preview | 40 | 1.000 | 0.808 | 20.1s | 54.4s | $0.00157 | ~28% |
+| 3-flash-preview | 132 | 1.000 | 0.634 | 36.4s | 51.8s | $0.00384 | ~2% |
+| 3.5-flash | 132 | 0.963 | 0.634 | 14.5s | 26.1s | $0.00813 | 0 |
+| voice (2.5-flash-native-audio) | 20 | 0.938 | 1.000 | 6.2s | 7.7s | $0.00047* | 0 |
+| voice (2.5-flash-native-audio) | 40 | 1.000 | 0.808 | 9.4s | 16.1s | $0.00078* | 0 |
+| voice (2.5-flash-native-audio) | 132 | 0.963 | 0.634 | 17.5s | 23.0s | $0.00236* | 0 |
 
-(latency/cost from CLEAN calls only. PRECISION is CASE-LEVEL: a clean case counts
-as 1 false positive if it flags anything, and a contradiction case's EXTRA flagged
-groups beyond the expected one are not counted -- so the user-visible spurious-PAIR
-rate is HIGHER than (1 - precision) here; the models emit ~1.9-2.6 flagged groups
-per correct catch. Read precision as "fraction of validated boundaries that fired
-a false alarm," not "fraction of flagged pairs that were wrong." `3-flash-preview`'s
-err rate is the fraction of its calls that timed out even after retries. `3.5-flash`
-ran only at 132 (the end-of-form sweep) at full input rate (NO context caching
-modeled); its list prices ($1.50/M in, ~$6/M out) are unverified. `voice` recall is
-1.000 at every size; its detection was re-scored with PREFIX-TOLERANT field-id
-matching because the native-audio tool call TRUNCATES ids (`p1_line6e` for
-`p1_line6e_state`) -- exact-match scoring wrongly showed 0.875/0.957 at sizes 20/40,
-a scoring artifact, not a real miss. `voice` cost `*` = INPUT-ONLY (the Live API
-streamed no usable token usage AND the model emits AUDIO whose output tokens are
-unmeasured -- true cost is HIGHER).)
+Notes: precision is CASE-LEVEL (a clean case flagging anything = 1 FP; extra
+flagged groups on a contradiction case are not counted). The voice model emits
+AUDIO + reports via a tool call; its `*` cost is INPUT-ONLY (audio-output tokens
+unmeasured), so its true cost is higher. `3-flash-preview` is unreliable
+(17-28% timeouts at the smaller sizes) -- its accuracy cells are from the surviving
+calls. `3.5-flash` list prices ($1.50/M in, ~$6/M out) are unverified. **A
+sustained Google 5xx (ServerError) wave hit 2.5-flash-lite during the runs**,
+inflating its latency (retries) and its error rate; a second run + the merge's
+prefer-non-errored dedup recovered near-full accuracy coverage.
 
 ### Reading the matrix
 
-1. **Recall is a near-solved problem at form scale.** Every model catches
-   essentially every contradiction (>=0.96) at every size; the two cases where a
-   flash-lite tier dips to 0.96 at 132 fields are single-case slips, not a trend.
-   This REVERSES the worry from G1 (where flash-lite on tiny 3-5 field clusters
-   scored 0.85): MORE context helped, it did not hurt. A page- or form-sized
-   payload is NOT too big for these models to find the needle.
-
-2. **Precision is the real differentiator, and the cheap models pay for speed
-   with false alarms.** 2.5-flash-lite and 3.1-flash-lite sit at ~0.62-0.80
-   precision -- they over-flag coherent data (most often flagging a perfectly
-   valid US city/state pair, "unsure, better flag it"). 2.5-flash is markedly
-   cleaner (~0.82-0.89) but 10-22x slower.
-
-3. **The latency cliff is stark.** The flash-lite tiers answer in up to 1.4s at
-   every size; 2.5-flash takes 7.7-18.2s p50 (p90 up to 40.6s at 132 fields);
-   3-flash-preview is 10-25s (p90 25.7-56.1s). For an end-of-section checker that
-   gates the section auto-advance (per the validation-delegation contract), a
-   sub-second answer vs a 20-second one is the difference between invisible and a
-   stall.
-
-4. **Cost is negligible for all of them at this call volume.** Even the priciest
-   cell (3-flash-preview @ 132) is $0.0024/call; at 3-20 calls per WHOLE form
-   that is well under a cent of validator cost per form. Cost does NOT
-   discriminate here -- speed and precision do.
-
-5. **`gemini-3-flash-preview` is out** on reliability alone: 39% of its size-40
-   calls timed out (>60s) even after 4 retries, vs ~0% for the other text models.
-   The priciest, slowest candidate is also the flakiest. Not recommended. (Its
-   accuracy cells are not reliable comparison numbers -- e.g. its precision 1.000
-   at size 40 is an ARTIFACT: ALL 15 clean cases at that size timed out, so there
-   are zero clean observations and precision is effectively undefined, not merely
-   small-sample. The headline for this model is the error rate, not the accuracy.)
+1. **Local contradictions: everyone is good.** At distance <= 20 fields
+   (adjacent or same-section), every model catches essentially every
+   contradiction. The split is entirely on the FAR cases (next section).
+2. **Recall drops at size 132** for the text models (2.5-flash 0.889,
+   2.5-flash-lite 0.870, 3.1-flash-lite 0.667) -- partly the harder full-group
+   scoring, mostly the far/duration cases that only exist at 132.
+3. **Precision is the cheap models' weakness AND it worsens with size** -- the
+   flash-lites sit at ~0.55-0.73 (they over-flag valid US city/state pairs, and
+   now also flag the applicant's mailing-vs-physical addresses as a conflict even
+   when both are valid). 2.5-flash is much cleaner at the small sizes (0.94-0.96)
+   but collapses to 0.649 at 132.
+4. **Latency: only 3.1-flash-lite stays sub-2s at every size.** 2.5-flash-lite was
+   dragged up by the 5xx-retry wave; 2.5-flash / 3-flash-preview / 3.5-flash are
+   10-36s at 132. For a per-section gate, sub-2s matters; for a once-at-submit
+   end-of-form pass, 15-30s is tolerable.
+5. **Cost is small for all** (well under a cent per call even at 132); it does not
+   discriminate. Speed and (cross-section) accuracy do.
 
 ---
 
-## Accuracy by contradiction DISTANCE (does a far-apart contradiction survive?)
+## Accuracy by contradiction DISTANCE (the corrected far-distance test)
 
-The maintainer's key worry: a contradiction whose two halves sit far apart (a
-birthday stated in two places; "how long in the US? [11+ yrs]" vs "year entered:
-2022" in a different section). Recall pooled over sizes, bucketed by the
-field-index gap between the two contradicting fields:
+The maintainer's key worry: a contradiction whose two halves sit far apart -- a
+fact stated in two different sections (a birthday restated later; "how long in the
+US?" vs a stated entry year). The far(21+) cases are now GENUINE cross-section
+pairs: a Part-1 field vs a Part-8 additional-information textarea, ~85-96 fields
+apart. Recall (detected/total, errors excluded), pooled over sizes:
 
 | model | single/0 | near (1-5) | mid (6-20) | far (21+) |
 |---|---:|---:|---:|---:|
-| 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 0.833 | 1.000 | 1.000 | 1.000 |
-| voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 |
-| 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 |
-| 3.1-flash-lite | 1.000 | 1.000 | 0.875 | 1.000 |
-| 3.5-flash (132 only) | 1.000 | 1.000 | 1.000 | 1.000 |
+| 2.5-flash | 6/6 | 48/48 | 4/4 | **3/6** |
+| 2.5-flash-lite | 6/6 | 46/46 | 3/3 | **2/5** |
+| 3.1-flash-lite | 6/6 | 41/48 | 2/4 | **4/6** |
+| voice (2.5-flash-native-audio) | 6/6 | 46/48 | 4/4 | **6/6** |
+| 3-flash-preview | 6/6 | 47/47 | 4/4 | **6/6** |
+| 3.5-flash | 3/3 | 16/16 | 2/2 | **5/6** |
 
-**Distance does NOT degrade recall.** Every model catches the far-apart (21+
-fields, cross-section) contradictions at 1.000. The few sub-1.0 cells are
-scattered across near/mid/single, not concentrated at "far" -- there is no
-"the halves were too far apart to notice" failure mode in this data. A
-cross-section contradiction 80 fields apart is caught as reliably as an adjacent
-one. (Caveat: the far bucket is mostly the synthetic cross-section ZIP/state and
-date pairs; a subtler semantic long-range contradiction class might behave
-differently and is worth a future targeted corpus.)
+**Distance DOES degrade recall -- for the cheap text models.** The cheap tier
+(2.5-flash, 2.5-flash-lite, 3.1-flash-lite) catches only 2-4 of ~6 far cases,
+while the voice model and 3-flash-preview catch ALL of them and 3.5-flash catches
+5/6. This is the REVERSE of the (flawed) first pass. The far bucket is small (5-6
+cases per model), so do not over-read the exact fraction -- but the direction is
+consistent and matches the class breakdown below. (Caveat: the far cases all use
+the Part-8 free-text restatement device; a different far-contradiction construction
+might behave differently and is worth a future targeted corpus.)
 
----
+## Accuracy by contradiction CLASS
 
-## Accuracy by contradiction CLASS (pooled over sizes)
+Recall (detected/total, errors excluded), pooled over sizes:
 
-| model | zip_state | state_country | province_us | city_state | future_dob | admission_dob | cross_date |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 2.5-flash | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 2.5-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 0.833 | 1.000 | 1.000 |
-| voice (2.5-flash-native-audio) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 3.1-flash-lite | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.750 | 1.000 |
-| 3-flash-preview | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| 3.5-flash (132 only) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| model | zip_state | state_country | province_us | city_state | future_dob | admission_dob | cross_date | duration_year |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2.5-flash | 15/15 | 12/12 | 9/9 | 12/12 | 6/6 | 4/4 | 3/3 | **0/3** |
+| 2.5-flash-lite | 14/14 | 12/12 | 8/8 | 12/12 | 6/6 | 3/3 | 2/2 | **0/3** |
+| 3.1-flash-lite | 15/15 | 9/12 | 5/9 | 12/12 | 6/6 | 2/4 | 3/3 | **1/3** |
+| voice (2.5-flash-native-audio) | 15/15 | 12/12 | 7/9 | 12/12 | 6/6 | 4/4 | 3/3 | **3/3** |
+| 3-flash-preview | 15/15 | 12/12 | 8/8 | 12/12 | 6/6 | 4/4 | 3/3 | **3/3** |
+| 3.5-flash | 5/5 | 4/4 | 3/3 | 4/4 | 3/3 | 2/2 | 3/3 | **2/3** |
 
-**The G1 state_country blind spot is GONE.** In G1, 2.5-flash-lite missed 3 of 5
-US-state-vs-foreign-country cases (its worst class). Embedded in a full-size form
-with a sharper prompt, EVERY model -- flash-lite included -- now catches
-state_country at 1.000 (vs G1's 0.40). The only sub-1.0 cells are single-case
-slips in the small 3-case date classes (2.5-flash-lite future_dob 0.833,
-3.1-flash-lite admission_dob 0.750), not reliable weaknesses. Net: no class is a
-systematic blind spot for the flash-lite tiers at form scale. (All recall numbers
-EXCLUDE errored calls -- an API timeout is "no measurement", not a miss; the
-voice model, 2.5-flash, and 3.5-flash are clean across all classes.)
+**`duration_year` is the discriminator.** It states a length-of-residence in a
+Part-8 textarea ("I have lived in the United States for over 20 years.") that
+contradicts the `date of admission` (e.g. 2020) -- a semantic, far-apart, requires-
+arithmetic check. **2.5-flash and 2.5-flash-lite catch 0 of 3; 3.1-flash-lite 1
+of 3.** The voice model and 3-flash-preview catch all 3; 3.5-flash 2 of 3. The
+genuine `cross_date` class (DOB restated with a different year in Part 8) is caught
+by everyone -- a date contradiction is more salient than a fuzzy duration. So the
+cheap models' far-distance failure is concentrated in the duration/semantic class,
+not all long-range checks. (3.1-flash-lite is also notably weaker than its siblings
+on `state_country` 9/12, `province_us` 5/9, and `admission_dob` 2/4 -- it is the
+least reliable of the three cheap models despite similar headline recall.)
 
 ---
 
 ## Provenance + honesty
 
 - **Corpus is SYNTHETIC** (no real transcripts exist; pre-pilot, no PII logged).
-  Field ids/names/types/sections are the REAL 132-field I-90 (`form-kits/i-90/
-  schema.json`); values are a coherent hand-authored persona; contradictions are
-  injected. Recall numbers are an UPPER BOUND on real-world recall -- real
-  sessions are messier. (`backend/scripts/g1b_corpus.py`.)
-- **132 = the real full I-90**, used as the realistic worst case -- NOT a
-  synthetic 200-pad. 20 ~ a section, 40 ~ a page.
-- **Two corpus bugs were caught + fixed before the reported run** (both inflated
-  false positives): (a) the base persona's physical address contradicted an
-  injected mailing address; (b) a substring-match bug assigned the residence city
-  to the birth-city field. After the fixes, the remaining false positives are
-  genuine model behavior. The prompt also explicitly tells the model that an
-  immigrant's birth country differing from their US address is NORMAL (an
-  immigration form), to avoid measuring a naive checker.
-- **Precision has run-to-run noise** (the models are non-deterministic; a clean
-  case flagged or not swings a few points). The HEADLINE (flash-lite ~0.62-0.80
-  vs 2.5-flash ~0.82-0.89, and the latency cliff) is robust to that noise; do not
-  over-read a single precision cell to 3 digits.
+  Field ids/names/types/sections are the REAL 132-field I-90; values are a
+  coherent hand-authored persona; contradictions are injected. Recall numbers are
+  an UPPER BOUND on real-world recall. (`backend/scripts/g1b_corpus.py`.)
+- **132 = the real full I-90**, and after the Codex fix the size-132 payload
+  genuinely transmits ~124 filled fields (the remaining ~8 are legitimately-empty
+  optional fields -- foreign-province lines blank for a US address). 20 ~ a
+  section, 40 ~ a page.
+- **Small per-cell N on the hard classes** (cross_date / duration_year / far are
+  3-6 cases each, and only exist at size 132). The DIRECTION (cheap models miss
+  duration/far) is robust and consistent across the distance and class views; the
+  exact fractions are not precise. A larger hard-case corpus is the obvious
+  follow-up.
+- **Precision has run-to-run noise** (models are non-deterministic) and is
+  CASE-LEVEL; the user-visible spurious-PAIR rate is higher.
 
 ## False-positive analysis (where the precision loss comes from)
 
-The flash-lite false positives are NOT random -- they fall into a few diagnosable
-buckets (read off the model's own `reason` text on flagged clean cases):
+The flash-lite false positives are diagnosable (model `reason` text on flagged
+clean cases):
+1. **City-in-state hedging** -- flags a VALID US city/state pair ("New York is not
+   in New York"); it cannot reliably confirm a city belongs to a state, so hedges.
+2. **Mailing-vs-physical** -- now that the corpus fills BOTH a mailing (Houston)
+   and a separate-but-coherent physical (Austin) address, the cheap models flag
+   "your mailing city differs from your physical city" as a conflict even though
+   two different valid addresses are allowed. A real failure mode for a checker.
+3. **Foreign address misread** as a US-state-vs-foreign-country conflict (Ontario
+   read as a US state).
+4. **US territories** -- "San Juan is not in Puerto Rico" (it is).
 
-1. **City-in-state hedging (the dominant one).** The model flags a VALID US
-   city/state pair, e.g. "the city 'New York' is not located in the state 'New
-   York'." It happens on ~40-50% of coherent US addresses, across many city/state
-   pairs (slightly worse when city and state share a name). It cannot reliably
-   confirm a city belongs to a state, so it hedges by flagging. (Note the
-   asymmetry: its RECALL on real city/state contradictions is perfect -- it flags
-   aggressively in both directions.)
-2. **Foreign address misread as a US-state-vs-foreign-country conflict.** Sees
-   "Ontario / Canada" and flags "US state filled with a foreign country" -- but
-   Ontario is a province, not a US state. The inverse-error of a real bug class.
-3. **US territories.** "San Juan is not a city in Puerto Rico" (it is); "Puerto
-   Rico is a US territory, not a foreign country" (a non-conflict). A knowledge gap.
-4. **Corpus filler artifact (NOT a model fault) -- and it is NOT marginal at 132.**
-   A generic filler put "TX" into a Yes/No radio field (`p3_checkbox4[1]`, because
-   "United States" contains "state"); the model correctly flagged it as invalid
-   for a Yes/No question. For 3.1-flash-lite at 132, 4 of its 13 FPs are
-   SOLELY this artifact -- discounting them moves its precision 0.649 -> ~0.727,
-   a ~8-point jump that actually FLIPS the lite ordering at 132 (artifact-corrected
-   3.1-flash-lite 0.727 edges past 2.5-flash-lite 0.686). The A/B "lead with
-   2.5-flash-lite" call rests on cost (3-4x cheaper input) and small-size precision,
-   NOT this 132 precision number -- but the artifact should be fixed in the corpus
-   before any precision figure is quoted as final. (The fix: type-aware filler that
-   never puts a non-option value into a radio/checkbox field.) Filed into the
-   follow-up bead.
+All are OVER-flagging (the safe failure direction for a defense-in-depth layer)
+and are promptable; filed to the follow-up bead (08zv).
 
-Buckets 1-3 are exactly what prompt + few-shot tuning targets (the follow-up bead).
-None is a recall problem; all are over-flagging, which is the safer failure
-direction for a defense-in-depth layer.
+## Run mechanics
 
-## Run mechanics (why this took multiple runs -- recorded for the next probe)
-
-A single all-models-all-sizes sweep proved impractical and is the reason the data
-lives in several run files merged by `g1b_merge.py`:
-- The probe originally had NO per-call timeout, so one stalled API call hung the
-  serial loop for ~2 hours. Fixed with a 60s `asyncio.wait_for` deadline +
-  retry.
-- The slow models (2.5-flash, 3-flash-preview at 8-25s/call) made a serial sweep
-  take hours; fixed with bounded concurrency (semaphore). But high concurrency on
-  the big 132-field payloads triggered rate-limit -> timeout spirals, so the big
-  sizes were re-run at lower concurrency (3-4).
-- Long background runs did not survive session/host interruptions; fixed with
-  INCREMENTAL CSV checkpointing (every 16 rows) so a killed run keeps its
-  completed cells. The final dataset is the per-size/per-model pieces merged,
-  deduped preferring non-errored rows.
-- `3-flash-preview` stayed flaky even at low concurrency (its residual error rate
-  in the merged set: 15/38 @ size40, 10/40 @ size132) -- which is itself the
-  recommendation against it.
+The sweep ran in pieces (per-size / per-model run files merged + deduped). Lessons
+carried from the prior runs: a per-call timeout (a hung call once froze a run for
+~2h), bounded concurrency tuned per size (high concurrency on big 132-field
+payloads triggers a rate-limit/timeout spiral -- 132 runs at concurrency 3-4),
+incremental CSV checkpointing (a killed run keeps completed cells), and a
+merge/dedup that prefers non-errored rows (so a cell that 5xx'd in one run is
+filled by another). `3-flash-preview` stays flaky; a sustained Google 5xx wave on
+`2.5-flash-lite` during this sweep was the reason for the second flash-lite run.
 
 ---
 
 ## Recommendation (exit criterion 3)
 
-**Two-tier UNARY HTTP design. Use a flash-lite for the per-section/page check and
-`2.5-flash` for the end-of-form sweep. Drop the Live-API idea entirely.**
+**Two-tier UNARY HTTP, but with the model split driven by the corrected data:**
 
-**Per-section / per-page -> a flash-lite over standard HTTP.** Sub-second
-(<1.1s at every size), ~0.96-1.0 recall, negligible cost. Lead with
-`2.5-flash-lite` on cost ($0.10/M in vs `3.1-flash-lite`'s $0.25/M, marginally
-better precision at 132); `3.1-flash-lite` is the A/B alternative (slightly faster
-+ better at small sizes). The precision gap (~0.62-0.80) is the known weakness --
-addressed below.
+**Per-section / per-page (LOCAL contradictions) -> a flash-lite over HTTP.** On
+the local classes (zip/state, city/state, adjacent dates) the flash-lite tiers are
+essentially perfect and (for 3.1-flash-lite) sub-2s. Lead with **2.5-flash-lite**
+on cost, OR **3.1-flash-lite** if its sub-2s latency is needed and its slightly
+weaker state_country/province recall is acceptable. This tier does NOT need to
+catch far/duration contradictions -- those don't occur within one section.
 
-**End-of-form (132) -> `2.5-flash` over standard HTTP.** On the 132 sweep it has
-recall 1.000 AND the best precision in the set (0.89). It is slow (p50 18.2s, p90
-40.6s) but the end-of-form pass happens ONCE, at submit, where a few seconds is
-acceptable (unlike a section boundary that gates voice flow). **`3.5-flash` was
-measured here and is NOT preferred:** same recall (1.00), slightly LOWER precision
-(0.86), ~4x more expensive ($0.0055 vs $0.0013/call at full rate), and only
-marginally faster at the median (p90 essentially tied at ~40s). 2.5-flash wins on
-raw numbers. (Caveat: `3.5-flash`'s case rests on CONTEXT CACHING, which was not
-modeled here -- caching could change the cost comparison, but it helps 2.5-flash
-too. Worth a future measurement, not a blocker.)
+**End-of-form (CROSS-SECTION pass) -> NOT a flash-lite.** This is the corrected
+finding: the cheap models miss ~half the far cases and ALL of the duration_year
+class, which is exactly what an end-of-form pass exists to catch. Use a model that
+held up on the hard cases:
+- **2.5-flash** is NOT sufficient either -- it also caught 0/3 duration_year and
+  only 3/6 far. (It is fine on everything local, but the end-of-form pass is about
+  the hard cases.)
+- **3.5-flash** (recall 0.963 at 132, far 5/6, duration 2/3) or the **voice model
+  via its Live tool-calling path** (far 6/6, duration 3/3) are the models that
+  actually catch the cross-section contradictions. 3.5-flash is the simplest
+  (plain HTTP); it is the priciest text model ($0.008/call uncached) but context
+  caching (untested here) would cut that, and at a handful of end-of-form calls
+  per submission the absolute cost is tiny.
+- **3-flash-preview** has the best hard-case recall but is too unreliable
+  (17-28% timeouts) and slow to recommend.
 
-**Precision is the residual problem, and it is promptable, not a model upgrade.**
-The flash-lite false positives are CONCENTRATED and diagnosable (see the FP
-analysis section): city-in-state hedging ("New York is not in New York"),
-foreign-province-read-as-US-state, and US-territory confusion -- plus one corpus
-filler artifact. The cheap fix is prompt + few-shot ("do NOT flag an abbreviation
-mismatch unless certain"; an `NY -> New York` example), or a confidence gate /
-cheap second-pass confirm -- since recall is NOT the problem. This is filed as its
-own follow-up bead, not part of this measurement.
+**So the corrected recommendation is: 2.5-flash-lite (or 3.1-flash-lite) for the
+per-section local check, and 3.5-flash for the end-of-form cross-section pass --
+a genuine per-boundary model split, which the FIRST (flawed) pass wrongly said was
+unnecessary.** The precision gap (cheap models over-flag ~30-45%) is a separate,
+promptable problem (follow-up bead 08zv).
 
-### Rejected: the Live API (voice model) as the checker
+### The Live API (voice model) -- best hard-case recall, but still rejected as the checker
 
-The voice model (`gemini-2.5-flash-native-audio`) WAS measured as a 5th arm,
-driven text-in via a Live session in tool-calling mode (it cannot emit TEXT; it
-reports through a flat `report_conflicts` tool call -- a nested tool schema first
-triggered the native-audio 1011 "internal error", a malformed-declaration symptom,
-fixed by flattening). Results: recall 1.000 at every size (matching 2.5-flash;
-after prefix-tolerant re-scoring -- the tool call truncates field ids), precision
-~0.76-0.80, **but 6-9s latency** -- ~8-10x slower
-than the lites, no better than 2.5-flash on accuracy. **Rejected.** The 6-9s is a
-cold per-call number (fresh websocket connect + full SI processing + audio
-synthesis every call); a warm/cached session could lower it, BUT the engineering
-overhead (holding sockets across the minutes-long idle gap between boundaries,
-the ~30-60s Live idle timeout, history-token buildup, dropped-socket handling) is
-real tech debt for a task that a plain unary HTTP call does cheaper, faster, and
-with bulletproof state management. Forcing a stateful streaming pipeline to do
-discrete batch validation is the wrong tool. Not pursued further.
+The voice model has the best far/duration recall (6/6, 3/3) tied with
+3-flash-preview, AND it is the model already in the session. But it is driven over
+a Live session in tool-calling mode (it cannot emit TEXT), at 6-18s cold-per-call
+latency, with the Live-session tech debt (sockets held across idle gaps past the
+~30-60s timeout, history-token buildup, dropped-socket handling). For an
+out-of-band batch check a plain HTTP call to 3.5-flash gets comparable hard-case
+recall without that overhead. So the voice model stays rejected as the checker --
+but its strong hard-case recall is a data point if the "voice model does
+double-duty" idea is ever revisited.
 
-**Not recommended:** `gemini-3-flash-preview` (slowest, priciest, AND unreliable
--- 7-39% of its calls timed out).
+### Follow-ups filed (bead polyglot-pdf-08zv + new)
 
-### Follow-ups filed (not part of this bead)
-
-- Optimize **latency for 2.5-flash** (the end-of-form tier) and **precision for
-  2.5-flash-lite** (the per-page tier) -- the two real residual levers.
-- Measure **context caching** for the end-of-form tier (would offset 2.5-flash /
-  3.5-flash cost; the production pattern).
-- **Code Execution** for deterministic lookups (NY<->New York, ZIP tables) as a
-  precision lever -- noted, deferred (a flavor of the deterministic-checker the
-  maintainer set aside as too fragile for now).
+- Optimize **2.5-flash-lite per-page PRECISION** (anti-hedging prompt + few-shot;
+  the FPs are concentrated: city-in-state, mailing-vs-physical, territories).
+- Optimize **end-of-form LATENCY/COST** via context caching for the chosen
+  accuracy-tier model (3.5-flash).
+- **Larger hard-case corpus**: the far/duration/cross_date classes are 3-6 cases
+  each; the per-boundary-split recommendation rests on a small (but consistent)
+  sample and deserves a bigger labeled set before it ships as policy.
+- Code Execution for deterministic lookups (NY<->New York, ZIP tables) as a
+  precision lever -- noted, deferred.

@@ -28,18 +28,24 @@ the voice model + 3.5-flash, over 20/40/132-field synthetic-but-real-I-90 form
 states with contradictions injected at varied DISTANCES (adjacent vs
 cross-section, up to 83 fields apart).
 
-Key results:
-- **Recall is near-solved at form scale** (all models >=0.96 at every size) --
-  REVERSING G1's worry; more context HELPED. The G1 state_country blind spot is
-  gone. Distance does NOT degrade recall (cross-section contradictions caught as
-  reliably as adjacent ones).
-- **Precision is the differentiator.** Flash-lite tiers ~0.62-0.80 (they
-  over-flag valid US city/state pairs -- "New York is not in New York"), 2.5-flash
-  ~0.82-0.89, all at negligible cost. The flash-lites are sub-second; the bigger
-  models 8-25s.
-- **Recommendation: two-tier UNARY HTTP.** 2.5-flash-lite per page (<1s), 2.5-flash
-  end-of-form (best precision 0.89). NOT a per-boundary-different-model split (the
-  bead anticipated maybe needing it; the data says no).
+Key results (CORRECTED -- a Codex review rebuilt the corpus and the conclusions
+CHANGED; see the "Codex review" note and the lesson below):
+- **Local contradictions: every model is good.** zip/state, city/state, adjacent
+  dates -- all caught at form scale.
+- **Far-apart, cross-section contradictions DEGRADE recall for the cheap text
+  models.** On genuine cross-section cases (a Part-1 field vs a Part-8 textarea
+  ~85-96 fields apart), 2.5-flash catches 3/6, 2.5-flash-lite 2/5, 3.1-flash-lite
+  4/6; the voice model and 3-flash-preview catch 6/6, 3.5-flash 5/6. On the
+  `duration_year` class ("lived in US 20 years" vs a 2020 admission date),
+  2.5-flash AND 2.5-flash-lite catch 0/3. This is the REVERSE of the first
+  (flawed-corpus) pass, which had concluded "distance does not degrade recall."
+- **Precision is the cheap models' weakness** (~0.55-0.73; they over-flag valid
+  city/state pairs and the mailing-vs-physical addresses), worsening at 132.
+- **Recommendation: a GENUINE per-boundary model split** -- 2.5-flash-lite (or
+  3.1-flash-lite) for the per-section LOCAL check, and 3.5-flash for the
+  end-of-form CROSS-SECTION pass (the cheap models, AND 2.5-flash, miss the
+  far/duration cases the end-of-form pass exists to catch). The first pass wrongly
+  said no split was needed.
 
 **Live API evaluated and REJECTED.** The maintainer asked to test the actual voice
 model (`gemini-2.5-flash-native-audio`) as the checker. It cannot emit TEXT
@@ -84,6 +90,21 @@ out-of-scope beads filed by fresh-eyes. (The 3-round ceiling was exceeded with
 maintainer authorization -- each round's gaps were a descending cascade from the
 one root fix, not new defects, and convergence was the goal.)
 
+**Codex review (post-PR, 10 findings, ALL adopted -- and it CHANGED the
+conclusions).** Where 7 fresh-eyes rounds verified INTERNAL CONSISTENCY (does the
+doc match the data), Codex questioned MEASUREMENT VALIDITY (is the data measuring
+what it claims). It found: the far-distance cases paired the applicant's state with
+a DIFFERENT person's ZIP (not a contradiction); `cross_date` duplicated
+`admission_dob`; the advertised `duration_year` class was never generated; size-132
+actually transmitted ~84 fields (empty clusters dropped); the TX-in-radio filler
+artifact; the scorer counted partial-group flags as catches (inflating
+far-distance recall); the probe counted timeouts as misses; the offline merge
+imported the API SDK; the analyze "latest CSV" glob picked the stale MERGED file.
+Fixed all (4 code-only + 5 corpus changes), rebuilt the corpus, and RE-RAN the live
+sweep -- which reversed the headline finding (distance DOES degrade recall; the
+cheap models miss duration_year entirely). Maintainer chose full rigor (fix
+everything + re-run) over caveat-and-defer.
+
 ## Lessons
 
 - **A measurement harness needs a per-call TIMEOUT, or one hung call freezes the
@@ -100,12 +121,29 @@ one root fix, not new defects, and convergence was the goal.)
   (an array of ';'-joined strings) fixed it to 0 errors. Confirmed by isolation:
   no-tools calls succeeded 8/8 while the nested-tool calls failed. When a Live
   model 1011s, suspect the tool schema first.
-- **A corpus filler bug masquerades as a model weakness.** Early precision numbers
-  were inflated by two corpus bugs (a base persona physical address that
-  contradicted injected mailing addresses; a substring-match that put the
-  residence city into the birth-city field) -- the model was CORRECTLY flagging my
-  bad test data. Read the model's `reason` text on false positives before trusting
-  a precision number.
+- **A corpus filler bug masquerades as a model weakness.** Precision numbers were
+  repeatedly inflated by filler bugs (a substring persona that put 'TX' into a
+  Yes/No checkbox AND into a 'city and state' field; a base physical address that
+  contradicted injected mailing addresses; a substring-match that put the residence
+  city into the birth-city field) -- the model was CORRECTLY flagging my bad test
+  data. Read the model's `reason` text on false positives before trusting a
+  precision number. Type-gate filler by field type so a non-option value can never
+  land in a constrained field.
+- **Internal-consistency review and measurement-validity review are DIFFERENT, and
+  both are needed.** Seven adversarial fresh-eyes rounds drove the doc to perfect
+  internal consistency (the matrix reproduced from the CSV with 0 mismatches) and
+  STILL missed that the corpus itself was measuring the wrong thing -- unsound
+  far-distance cases, a duplicated class, a never-generated class, a payload that
+  was 84 fields not 132. Codex caught those by asking "is this measuring what it
+  claims?" not "does the doc match the data?". For a MEASUREMENT artifact, schedule
+  a validity pass (does each case test what its label says? does the payload match
+  the advertised size? is every claimed class actually generated?) separate from
+  the consistency pass -- a self-consistent report can still be confidently wrong.
+- **A methodology fix can REVERSE the conclusion -- re-run, do not patch.** The
+  corpus fixes changed the measured recall enough to flip the headline (far
+  distance went from "no effect" to "the cheap models miss half"). When a fix
+  changes the INPUT to a measurement, the old output is void; re-run the sweep, do
+  not try to reason about what the number "would have been".
 - **Don't dismiss a model from a too-narrow list filter.** I initially reported
   `3.5-flash` as nonexistent; it was in the model list, my grep was too narrow.
   The maintainer caught it. Verify a model id by calling it, not by filtering a
