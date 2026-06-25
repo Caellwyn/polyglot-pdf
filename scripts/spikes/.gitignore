@@ -1,1 +1,7 @@
 tak_token_curve.csv
+
+# bd polyglot-pdf-jnjj.39: --debug artifacts hold the model's transcripts + the
+# exact field values it wrote (user data / PHI). The harness is a never-deployed
+# spike, but these files must NEVER be committed. The cost CSV/meta.json siblings
+# in data/ stay committable (no PHI -- token counts + field IDs only).
+*.debug.json

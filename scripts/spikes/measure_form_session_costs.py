@@ -300,6 +300,44 @@ def _canon_value(v) -> str:
     return re.sub(r"[^a-z0-9]", "", joined)
 
 
+def _jsonable(obj):
+    """Best-effort JSON-safe copy for the debug artifact (bd jnjj.39). Tool args /
+    responses are plain dicts/strings in practice, but a stray non-serializable
+    value (e.g. a sentinel) must never crash the debug write -- coerce it to its
+    repr rather than raising."""
+    try:
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        if isinstance(obj, dict):
+            return {str(k): _jsonable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_jsonable(v) for v in obj]
+        return repr(obj)
+
+
+def attribute_tools_by_window(tool_io, q_windows):
+    """Reliable per-question tool attribution (bd jnjj.39 criterion 2).
+
+    The legacy per_question_tools stamps each async tool call with the loop's
+    mutable current_q, which under-attributes when calls land after the loop moved
+    on. Instead, bucket each captured tool call by which question's TIME WINDOW
+    (t_start..t_end of that question's turns) its timestamp falls in. Calls before
+    q1's window (e.g. greeting) bucket to q0. Returns {q: [tool_names...]}."""
+    out: dict[str, list[str]] = {}
+    for rec in tool_io:
+        ts = rec["ts"]
+        q = 0
+        for w in q_windows:
+            if w["t_start"] <= ts <= w["t_end"]:
+                q = w["q"]
+                break
+            if ts > w["t_end"]:
+                q = w["q"]  # after this window's end, before the next starts
+        out.setdefault(str(q), []).append(rec["tool"])
+    return out
+
+
 def score_fill_accuracy(client, plan, expected) -> dict:
     """Per-field fill correctness for one arm (bd jnjj.7 / G3).
 
@@ -502,6 +540,12 @@ class FakeClientWebSocket:
         # G3 recall instrumentation: each get_field_value call the model makes is
         # recorded as (requested_spoken_name, found, returned_value) for scoring.
         self.field_value_lookups: list[dict] = []
+        # bd jnjj.39 debug mode: collect the model's OUTPUT transcript chunks (each
+        # {"type":"transcript"} message) with a timestamp, joined per-question later
+        # by time window. Populated only when start_session was called with
+        # send_transcript=True (the --debug path). LOCAL-ONLY -- transcripts are user
+        # speech (PHI); the harness is a never-deployed spike.
+        self.transcript_chunks: list[dict] = []
         # DTI (bd polyglot-pdf-jnjj.25): in DTI mode the client owns the schema and
         # supplies the next field's FULL schema on next_field_hint_response, which
         # the backend renders into the confirm_field next_field_guidance. Mirrors the
@@ -581,7 +625,14 @@ class FakeClientWebSocket:
             else:
                 self._reply(lambda: self.service.handle_confirm_field_response(
                     rid, False, "no_value"))
-        # section_switched / transcripts / status messages need no reply
+        elif mtype == "transcript":
+            # bd jnjj.39 debug: the model's output speech, streamed in chunks. Stamp
+            # each with a monotonic ts so it can be joined per-question by time window.
+            text = msg.get("data")
+            if text:
+                self.transcript_chunks.append(
+                    {"ts": time.monotonic(), "text": str(text)})
+        # section_switched / status messages need no reply
 
     def _reply(self, fn):
         # Resolve on the next loop tick, like a (very fast) frontend round-trip.
@@ -815,9 +866,16 @@ async def run(args) -> int:
 
     log_sink: list[dict] = []
     usage_dumps: list[dict] = []
+    # (q_at_call, tool_name) for the legacy per_question_tools view; also a
+    # timestamped record (bd jnjj.39) so attribution can be recomputed by which
+    # question WINDOW the call's timestamp falls in, not the mutable counter.
     tool_log: list[tuple[int, str]] = []
+    tool_io: list[dict] = []          # bd jnjj.39: {ts, q_at_call, tool, args, response}
+    model_transcript: list[dict] = []  # bd jnjj.39: {ts, q_at_call, text} output speech
+    q_windows: list[dict] = []        # bd jnjj.39: {q, fid, t_start, t_end} for attribution
     rows: list[dict] = []
     current_q = {"n": 0}
+    DEBUG = bool(getattr(args, "debug", False))
 
     try:
         adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
@@ -876,15 +934,28 @@ async def run(args) -> int:
             accept_connection=True, schema=arm_schema, current_values={},
             system_instruction=si,
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
-            current_section_id=current_section_id)
+            current_section_id=current_section_id,
+            # bd jnjj.39: in --debug, request the model's OUTPUT transcript so the
+            # FakeClient can capture what it SAID per turn. Off by default -- normal
+            # runs neither request nor pay for transcription.
+            send_transcript=DEBUG)
 
         # Tap tool calls AFTER start_session wired the real chain.
         orig_tool_cb = adapter._on_tool_call
 
         async def _tool_tap(tool_name, arguments):
             tool_log.append((current_q["n"], tool_name))
+            _ts = time.monotonic()
             try:
-                return await orig_tool_cb(tool_name, arguments)
+                resp = await orig_tool_cb(tool_name, arguments)
+                if DEBUG:
+                    # bd jnjj.39: the exact args the model SENT and the response it GOT
+                    # back -- the single most useful diagnosis signal (was missing). The
+                    # response carries the success/error message + next_field_guidance.
+                    tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
+                                    "tool": tool_name, "args": _jsonable(arguments),
+                                    "response": _jsonable(resp)})
+                return resp
             except Exception as _e:
                 # bd polyglot-pdf-jnjj.38: the adapter logs a tool-callback exception
                 # via _log.exception (traceback DEV-only, str(e) scrubbed for PHI), so
@@ -896,6 +967,10 @@ async def run(args) -> int:
                 meta.setdefault("tool_callback_exceptions", []).append(
                     {"q": current_q["n"], "tool": tool_name,
                      "error_type": type(_e).__name__})
+                if DEBUG:
+                    tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
+                                    "tool": tool_name, "args": _jsonable(arguments),
+                                    "response": {"_exception": type(_e).__name__}})
                 raise
 
         adapter._on_tool_call = _tool_tap
@@ -975,6 +1050,7 @@ async def run(args) -> int:
                     await asyncio.sleep(0.1)
                 last_total = await _wait_turn(adapter, last=0)  # new-session greeting
 
+            _q_t_start = time.monotonic()  # bd jnjj.39: window for tool/transcript attribution
             if args.path == "happy":
                 await speak(q["say"], "value")
                 await speak(CONFIRM_YES, "confirm")
@@ -983,6 +1059,9 @@ async def run(args) -> int:
                 await speak(REJECT, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(CONFIRM_YES, "confirm")
+            if DEBUG:
+                q_windows.append({"q": i, "fid": fid, "t_start": _q_t_start,
+                                  "t_end": time.monotonic()})
 
             d = tracker.delta_and_advance()
             ti, ai = d["_session_text_input_tokens"], d["_session_audio_input_tokens"]
@@ -1048,7 +1127,61 @@ async def run(args) -> int:
     print(f"run total: {sum(r['total tokens'] for r in rows)} tokens, ${total:.4f}; "
           f"evictions detected: {len(meta['eviction_drops'])}; "
           f"confirmed fields: {len(meta['client_confirmed_fields'])}/{len(plan)}")
+
+    if DEBUG:
+        _write_debug_artifact(out_dir / f"{base_name}.debug.json", plan, q_windows,
+                              tool_io, client.transcript_chunks,
+                              meta["per_question_tools"])
+        print(f"wrote {out_dir / (base_name + '.debug.json')}  "
+              f"(LOCAL-ONLY -- contains transcripts/field values)")
     return 0
+
+
+def _chunks_in_window(chunks, w):
+    """Join transcript chunks whose ts falls in window w into one de-chunked string."""
+    parts = [c["text"] for c in chunks if w["t_start"] <= c["ts"] <= w["t_end"]]
+    return "".join(parts).strip()
+
+
+def _write_debug_artifact(path, plan, q_windows, tool_io, transcript_chunks,
+                          legacy_per_q_tools):
+    """Assemble the bd jnjj.39 per-run debug file: per question, what the model SAID
+    (output transcript, de-chunked), and the exact tool ARGS it sent + RESPONSE it
+    got back -- attributed by TIME WINDOW, not the mutable loop counter. Also surfaces
+    the reliable attribution vs the legacy per_question_tools so the two can be
+    compared (criterion 2). LOCAL-ONLY: transcripts + tool args/responses are user
+    data; the harness is a never-deployed spike (mirrors the DEV_LOGGING precedent)."""
+    reliable = attribute_tools_by_window(tool_io, q_windows)
+    questions = []
+    for w in q_windows:
+        q = w["q"]
+        q_tools = [r for r in tool_io
+                   if w["t_start"] <= r["ts"] <= w["t_end"]]
+        questions.append({
+            "q": q,
+            "field_id": w["fid"],
+            "model_said": _chunks_in_window(transcript_chunks, w),
+            "tool_io": [{"tool": r["tool"], "args": r["args"],
+                         "response": r["response"]} for r in q_tools],
+            "tools_reliable": reliable.get(str(q), []),
+            "tools_legacy": legacy_per_q_tools.get(str(q), []),
+        })
+    # Tool calls that fell OUTSIDE any question window (greeting / trailing).
+    out_of_window = [{"tool": r["tool"], "args": r["args"],
+                      "response": r["response"], "q_at_call": r["q_at_call"]}
+                     for r in tool_io
+                     if not any(w["t_start"] <= r["ts"] <= w["t_end"]
+                                for w in q_windows)]
+    artifact = {
+        "note": ("bd polyglot-pdf-jnjj.39 debug artifact. LOCAL-ONLY -- holds "
+                 "transcripts + field values (user data). Per question: model_said "
+                 "(output speech), tool_io (exact args sent + response received), and "
+                 "tools_reliable (timestamp-window attribution) vs tools_legacy "
+                 "(the old mutable-counter attribution) for comparison."),
+        "questions": questions,
+        "out_of_window_tool_io": out_of_window,
+    }
+    path.write_text(json.dumps(artifact, indent=2, default=str), encoding="utf-8")
 
 
 def main() -> int:
@@ -1087,6 +1220,13 @@ def main() -> int:
     ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "data"))
     ap.add_argument("--synth-only", action="store_true",
                     help="build the audio cache and exit (no live calls)")
+    ap.add_argument("--debug", action="store_true",
+                    help="model-behavior visibility (bd polyglot-pdf-jnjj.39): write a "
+                         "per-run <base>.debug.json with, per question, the model's "
+                         "OUTPUT transcript, the exact tool ARGS it sent + the tool "
+                         "RESPONSE it got back, and timestamp-attributed tool calls. "
+                         "LOCAL-ONLY (the file holds transcripts/field values = user "
+                         "data); off by default so normal cost/fill runs stay clean.")
     return asyncio.run(run(ap.parse_args()))
 
 
