@@ -579,4 +579,37 @@ describe('FormCatalogue -- run extraction', () => {
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(screen.getByText(/Extraction failed for "w7".*boom/i)).toBeTruthy());
   });
+
+  it('disables folder controls and refuses drops WHILE extraction is in flight (Codex r3)', async () => {
+    // Hold the POST open so extraction stays in-flight while we probe the guards.
+    let releasePost: (r: Response) => void = () => {};
+    const postHeld = new Promise<Response>((resolve) => { releasePost = resolve; });
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: () => postHeld as unknown as Response,
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    // Button shows the in-flight label and Change-folder is disabled.
+    await waitFor(() => expect(screen.getByText('Extracting...')).toBeTruthy());
+    expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(true);
+
+    // A drop mid-extraction is refused (its finally must NOT clear the guard).
+    const pdf = { name: 'b.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
+    fireEvent.drop(screen.getByTestId('form-catalogue'), { dataTransfer: { files: [pdf] } });
+    await waitFor(() => expect(screen.getByText(/Extraction is running/i)).toBeTruthy());
+    // The drop did NOT onboard a new kit (the guard held).
+    expect(root.created['b']).toBeUndefined();
+
+    // Let extraction finish; controls re-enable.
+    releasePost({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'done', schemaFile: 'schema.json' }) } as unknown as Response);
+    await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(false));
+  });
 });

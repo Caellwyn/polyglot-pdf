@@ -127,6 +127,13 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   }, [liveProgress]);
 
   const handlePickFolder = React.useCallback(async () => {
+    // Refuse a folder switch while extraction is in flight: the running
+    // extraction captured the current root and will refresh it on completion, so
+    // switching now would have that stale refresh clobber the new folder (Codex r3).
+    if (extractingId !== null) {
+      setError('Extraction is running -- wait for it to finish before changing folders.');
+      return;
+    }
     // Guard unsaved edits BEFORE opening the picker (returns false to abort), but
     // do NOT mutate state yet: if the user then cancels the native picker, the
     // open kit must survive intact (Codex PR #224). Only after the picker returns
@@ -144,12 +151,19 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       if (isUserAbort(err)) return; // picker cancelled -> open kit left intact
       setError(err instanceof Error ? err.message : 'Failed to open folder');
     }
-  }, [refresh, confirmFolderChange, clearOpenKit]);
+  }, [refresh, confirmFolderChange, clearOpenKit, extractingId]);
 
   const handleDrop = React.useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     setNotice(null); // any drop attempt supersedes a prior "Added X" notice
+    if (extractingId !== null) {
+      // A drop mid-extraction would run its own onboard/refresh against the same
+      // folder the extraction captured -- and its finally must not be able to
+      // clear the extraction guard (Codex r3). Refuse until extraction finishes.
+      setError('Extraction is running -- wait for it to finish before adding a form.');
+      return;
+    }
     if (!root) {
       setError('Open a form-kits folder first, then drop a PDF to add a form.');
       return;
@@ -174,7 +188,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [root, refresh]);
+  }, [root, refresh, extractingId]);
 
   // Promote/demote a kit's metadata.json status (bd nr8u, D2). Only complete kits
   // reach GCS via the deploy gate, so this is the human's publish/unpublish toggle.
@@ -204,15 +218,17 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // Run the PDF->schema extractor for a schemaless kit (bd 7a9.17). On success
   // the kit gains a schema.json on disk; refresh so its card lights up openable.
   const handleRunExtraction = React.useCallback(async (kit: CatalogueEntry) => {
-    if (!root) return;
+    if (!root || extractingId !== null) return;
     setNotice(null);
     setError(null);
+    // `extractingId` (NOT the shared `busy`) is the extraction-in-flight guard:
+    // folder-switch and drop both refuse while it is set, so the user cannot
+    // switch folders mid-run and have this captured `root` refresh clobber the
+    // new folder's state when the (minutes-long) extraction returns. It must be a
+    // DEDICATED flag -- a concurrent drop's own `finally { setBusy(false) }` would
+    // otherwise clear a shared `busy` and re-open the folder controls (Codex r3).
+    // `root` is captured so the refresh below targets the SAME folder.
     setExtractingId(kit.id);
-    // `busy` also disables Change-folder / Refresh while extraction runs, so the
-    // user cannot switch folders mid-run and have this captured `root` refresh
-    // clobber the new folder's state when the (minutes-long) extraction returns
-    // (Codex). Captured here so the refresh below targets the SAME root.
-    setBusy(true);
     const extractionRoot = root;
     try {
       const result = await runExtraction(kit.id, {
@@ -228,9 +244,8 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       setError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
       setExtractingId(null);
-      setBusy(false);
     }
-  }, [root, refresh]);
+  }, [root, refresh, extractingId]);
 
   if (!supported) {
     return (
@@ -250,11 +265,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       onDrop={handleDrop}
     >
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy}>
+        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy || extractingId !== null}>
           {root ? 'Change folder' : 'Open form-kits folder'}
         </button>
         {root && (
-          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy}>
+          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy || extractingId !== null}>
             Refresh
           </button>
         )}

@@ -127,6 +127,28 @@ function resolveMainRepoRoot(repoRoot: string): string | null {
   }
 }
 
+/**
+ * Kill the extractor AND its descendants (the `claude`/`gemini` process that
+ * extract_form.py spawns). A plain child.kill() signals only the direct child
+ * (the Python wrapper), so on POSIX we signal the process GROUP (the child was
+ * spawned `detached`, so -pid addresses the group) and on Windows we taskkill the
+ * tree (no process groups). Best effort -- the race where the child already
+ * exited is fine.
+ */
+function killTree(child: ReturnType<typeof spawn>): void {
+  const pid = child.pid;
+  if (pid == null) { child.kill(); return; }
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F']);
+    } else {
+      process.kill(-pid, 'SIGTERM'); // negative pid -> the whole process group
+    }
+  } catch {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+}
+
 function readJsonBody(req: Connect.IncomingMessage): Promise<ExtractRequest> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -337,9 +359,14 @@ export async function handleExtract(
 
   const cleanupTmp = () => { try { if (fs.existsSync(tmpOut)) fs.rmSync(tmpOut); } catch { /* best effort */ } };
 
+  // `detached` puts the child in its OWN process group so an abort can kill the
+  // WHOLE tree -- extract_form.py spawns the `claude`/`gemini` subprocess, and a
+  // plain child.kill() would signal only the Python wrapper, leaving the
+  // (paid, minutes-long) model process running after a tab close (Codex r3).
   const child = spawn(py, args, {
     cwd: ctx.repoRoot,
     env: { ...process.env, PYTHONUTF8: '1' }, // force UTF-8 stdio (cp1252 trap)
+    detached: process.platform !== 'win32', // POSIX: new process group to signal
   });
   let stdout = '';
   let stderr = '';
@@ -356,7 +383,7 @@ export async function handleExtract(
   const onClientGone = () => {
     if (responded) return;
     responded = true;
-    child.kill();
+    killTree(child);
     cleanupTmp();
   };
   res.on('close', onClientGone);
