@@ -864,7 +864,20 @@ async def run(args) -> int:
 
         async def _tool_tap(tool_name, arguments):
             tool_log.append((current_q["n"], tool_name))
-            return await orig_tool_cb(tool_name, arguments)
+            try:
+                return await orig_tool_cb(tool_name, arguments)
+            except Exception as _e:
+                # bd polyglot-pdf-jnjj.38: the adapter logs a tool-callback exception
+                # via _log.exception (traceback DEV-only, str(e) scrubbed for PHI), so
+                # a CRASHING handler is otherwise invisible in the harness output -- the
+                # fill silently never lands and reads as a model "skip"/"drift". Record
+                # the exception type per question in the meta so a handler bug can never
+                # again masquerade as model behavior. (This caught a real
+                # FormField-vs-dict AttributeError during jnjj.38 diagnosis.)
+                meta.setdefault("tool_callback_exceptions", []).append(
+                    {"q": current_q["n"], "tool": tool_name,
+                     "error_type": type(_e).__name__})
+                raise
 
         adapter._on_tool_call = _tool_tap
 
