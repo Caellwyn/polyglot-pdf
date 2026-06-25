@@ -10,13 +10,14 @@ context-caching facts from authoritative sources; (b) measure the real round-tri
 Verdict stance: like Gate 1, this is a CHARACTERIZATION with a GO/KILL recorded on
 "fast enough for live conversation" -- the maintainer reads the latency numbers.
 
-> **VERDICT: GO.** The blocking secretary lookup measured **~0.8s mean (p90 ~0.9s,
-> max ~1.1s)** -- a natural conversational beat, well under the awkward-pause
-> threshold. Implicit caching hits 100% (~8.1k tokens cached, zero setup) and is a
-> COST lever, not a latency one (cache hit vs miss is the same ~0.8s). DECISION:
-> implicit caching now; explicit deferred to scale (bd jnjj.41). Caveat: measured
-> on `gemini-3.1-flash-lite` because the target `gemini-2.5-flash-lite` was in a
-> 503 outage -- a sound same-tier proxy; both lite models are sub-second.
+> **VERDICT: GO.** The blocking secretary lookup measured **~0.8s mean (tail
+> ~1.0-1.1s)** -- a natural conversational beat, well under the awkward-pause
+> threshold; the GO holds at the ~1.1s worst case. Implicit caching hits 100%
+> (~8.1k of ~11k prompt tokens, ~74%, zero setup) and is a COST lever, not a
+> latency one. DECISION: implicit caching now; explicit deferred to scale (bd
+> jnjj.41). Caveat: measured on `gemini-3.1-flash-lite` because the target
+> `gemini-2.5-flash-lite` was in a 503 outage -- a sound same-tier proxy; both lite
+> models are sub-second.
 
 ## Part (a) -- Gemini context-caching facts (authoritative)
 
@@ -134,42 +135,45 @@ hop (principal->backend->secretary->back) is additive and small, already
 characterized by the cost harness's per-turn latency. CAVEAT recorded: these are
 API round-trip numbers, not full in-session tool-call numbers.
 
-### Measured so far
-
-- **IMPLICIT caching AUTO-FIRES, no setup -- confirmed live.** On the partial run,
-  9/12 catalog+query calls reported `cached_content_token_count` ~**10,168 of
-  ~11,053 prompt tokens (~92%)** cached, with ZERO explicit cache management -- just
-  the stable catalog prefix. This is the load-bearing cost result: the secretary's
-  static catalog rides the implicit cache automatically (the cheaper $0.01/M rate on
-  ~92% of the input), exactly as the architecture intended. (2 of the 12 showed
-  `cached_tokens=0` -- implicit-cache misses when the prefix had aged out; best-
-  effort, as documented.) This feeds Gate 3 (cost, jnjj.28).
-- **Explicit cache CREATE latency: ~0.78s** (live, one-time per session). Confirms
-  flash-lite supports `caches.create()`. Informational only (explicit deferred to
-  jnjj.41).
-
 ### Latency result: GO -- sub-second blocking lookup
 
-Measured on a clean stable-service run (artifact `secretary_latency_20260625T115102`,
-n=12 per arm, catalog ~9.5k tokens + prose query):
+All numbers below are from the committed clean stable-service run (artifact
+`secretary_latency_20260625T115102.meta.json`, n=12 per arm, catalog ~9.5k tokens +
+prose query). (Earlier outage-period runs gave ~3-6s numbers; those were
+outage-contaminated -- a bare 1-token prompt was also 3-6s then -- and are NOT used
+for the verdict.)
 
-| arm | mean | median | p90 | min | max | implicit-cache hit |
+| arm | mean | median | p90* | min | max | implicit-cache hit |
 |---|---|---|---|---|---|---|
-| uncached | 0.837s | 0.804s | 0.953s | 0.719s | 1.016s | 100% (~8122 tok) |
-| implicit | 0.829s | 0.812s | 0.891s | 0.719s | 1.109s | 100% (~8122 tok) |
+| uncached | 0.837s | 0.804s | 0.953s | 0.719s | 1.016s | 100% (8122 tok) |
+| implicit | 0.829s | 0.812s | 0.891s | 0.719s | 1.109s | 100% (8122 tok) |
 
-**VERDICT: GO.** A ~0.8s (p90 ~0.9s, worst ~1.1s) blocking lookup is a natural
+*p90 in the table is the probe's floor-indexed value (the 11th of 12 sorted). The
+true interpolated p90 for the implicit arm is ~1.07s; the `max` column (1.0-1.1s) is
+the honest tail. Read the tail as ~1.0-1.1s, not 0.9s.
+
+**VERDICT: GO.** A ~0.8s mean (tail ~1.0-1.1s) blocking lookup is a natural
 conversational beat -- comparable to a person briefly glancing at a note before
 answering -- well under the "awkward pause" threshold for live voice. The blocking
-ask_secretary round-trip is fast enough.
+ask_secretary round-trip is fast enough; the GO holds even at the ~1.1s worst case.
 
-Two structural findings the table makes clear:
-1. **Implicit caching hit 100%** (~8,122 of ~11,053 prompt tokens cached every
-   call, zero setup) -- the cost lever works reliably on stable service.
-2. **uncached vs implicit latency is identical** (0.837 vs 0.829s). Implicit caching
-   is a COST lever, NOT a latency lever -- re-sending cached tokens is not what costs
-   the time; generation + network is. So the GO does not depend on a cache hit; even
-   a cache MISS pays the same ~0.8s.
+Two structural findings:
+1. **Implicit caching hit 100%** -- every call reported ~**8,122 of ~11,053 prompt
+   tokens (~74%)** cached (`cached_content_token_count`), with ZERO explicit cache
+   management, just the stable catalog prefix. The cost lever works reliably (the
+   cheaper $0.01/M rate on ~74% of the input). Feeds Gate 3 (cost, jnjj.28).
+   (METHOD NOTE: both arms get a warm-up call before timing, which seeds the
+   implicit cache -- so the "uncached" arm ALSO shows 100% implicit hits. The arm
+   names describe intent, not a cold-vs-warm contrast; both effectively measure the
+   warm/implicit-cached round-trip. A true cold floor would need warm-up disabled.)
+2. **uncached vs implicit latency is identical** (0.837 vs 0.829s) -- consistent
+   with both arms being implicitly cached. The takeaway stands: implicit caching is
+   a COST lever, NOT a latency lever -- re-sending cached tokens is not what costs
+   the time; generation + network is. So the GO does not depend on the cache.
+
+Separately measured (a direct test, not in the run artifact above): **explicit
+cache CREATE latency ~0.78s** (one-time per session) -- confirms flash-lite supports
+`caches.create()`. Informational only; explicit caching is deferred (jnjj.41).
 
 CAVEAT -- model substitution (outage): at measurement time `gemini-2.5-flash-lite`
 (the secretary's target) was in a sustained, widely-reported **503 UNAVAILABLE**

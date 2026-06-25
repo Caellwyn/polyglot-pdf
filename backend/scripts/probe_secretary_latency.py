@@ -6,11 +6,16 @@ the real round-trip latency of that lookup against LIVE gemini-2.5-flash-lite, i
 three caching arms over the same I-90 static catalog + a battery of prose queries
 (reused from the Gate-1 corpus):
 
-  uncached   every call sends the full ~9.5k-token catalog fresh (the floor: no
-             caching benefit). The latency the principal pays with no caching.
+  uncached   every call sends the full ~9.5k-token catalog inline (no explicit
+             cache). NOTE: this arm is NOT a cold/no-cache floor -- the warm-up call
+             below seeds Gemini's IMPLICIT cache (on by default for 2.5+), so the
+             stable catalog prefix still gets implicit hits here too. In practice
+             this arm measures the same warm round-trip as `implicit`; the pair
+             exists to confirm that (it does -- the latencies match). For a true
+             cold floor, warm-up would have to be disabled.
   implicit   stable catalog prefix repeated call-to-call; Gemini's implicit cache
-             (on by default for 2.5+) may fire. A warm-up call primes it; measured
-             calls report cached_content_token_count to confirm hits.
+             fires. A warm-up call primes it; measured calls report
+             cached_content_token_count to confirm hits.
   explicit   client.caches.create() the catalog once (creation latency measured
              separately), then cached_content= calls. Guaranteed cache hit.
 
@@ -104,13 +109,15 @@ async def _resolve_model(client, preferred=None) -> str:
     global MODEL
     chain = ([preferred] if preferred else []) + [m for m in MODEL_FALLBACKS
                                                   if m != preferred]
+    first = chain[0]  # the requested/preferred model -- success on it is NOT a fallback
     last = None
     for m in chain:
         try:
             await client.aio.models.generate_content(model=m, contents="OK")
             MODEL = m
-            if m != MODEL_FALLBACKS[0]:
-                print("NOTE: preferred model unavailable; using fallback %s" % m, flush=True)
+            if m != first:
+                print("NOTE: requested model %s unavailable; using fallback %s"
+                      % (first, m), flush=True)
             return m
         except genai.errors.ServerError as exc:
             last = "%s: %s" % (m, type(exc).__name__)
@@ -209,8 +216,11 @@ async def main() -> None:
         return
 
     client = _client()
+    preferred_model = args.model or MODEL_FALLBACKS[0]
     used_model = await _resolve_model(client, preferred=args.model)
-    print("using model: %s" % used_model, flush=True)
+    is_fallback = used_model != preferred_model
+    print("using model: %s%s" % (used_model, " (fallback)" if is_fallback else ""),
+          flush=True)
     results = {}
     cache_create_latency = None
     cache_name = None
@@ -295,8 +305,8 @@ async def main() -> None:
             "bead": "polyglot-pdf-jnjj.27",
             "stamp": stamp,
             "model": MODEL,
-            "preferred_model": MODEL_FALLBACKS[0],
-            "is_fallback_model": MODEL != MODEL_FALLBACKS[0],
+            "preferred_model": preferred_model,
+            "is_fallback_model": is_fallback,
             "catalog_tokens_est": cat_tokens,
             "queries": len(queries),
             "arms": results,
