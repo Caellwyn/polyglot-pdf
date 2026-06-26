@@ -385,7 +385,7 @@ class TestUSCISAccountNormalization:
         "type": "text",
         "minLength": 12,
         "maxLength": 12,
-        "pattern": r"^\d{12}$",   # mirrors the I-90 schema -- enforces DIGITS, not just length
+        "pattern": r"^[0-9]{12}$",   # mirrors the I-90 schema -- ASCII digits only (Codex PR #249)
         "format_preset": "uscis_account",
     }
 
@@ -414,6 +414,19 @@ class TestUSCISAccountNormalization:
         result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
         assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+    def test_uscis_account_rejects_non_ascii_digits(self):
+        # The pattern is ^[0-9]{12}$ (ASCII), NOT ^\d{12}$ -- Python re's \d matches
+        # Unicode digits (Arabic-Indic, fullwidth), which the frontend mirror and the
+        # PDF comb field do not accept. 12 fullwidth digits must be REJECTED so the
+        # backend can't apply a value the client/PDF would refuse (Codex PR #249).
+        from backend.utils.field_validator import validate_updates
+        # 12 fullwidth digits (U+FF10..U+FF19); written as escapes to keep this
+        # source file ASCII-only (CLAUDE.md scar #6 -- cp1252 crash risk).
+        fullwidth = "".join(chr(0xFF10 + d) for d in [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2])
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": fullwidth})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"]
+        assert result["validation_errors"]
 
     @pytest.mark.parametrize("raw", [
         "ABC123456789012",   # letters + 12 digits -- letters are NOT punctuation
