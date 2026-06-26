@@ -52,7 +52,8 @@ from google.genai import types
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.scripts.secretary_context import (  # noqa: E402
-    render_secretary_context,
+    render_context,
+    CONTEXT_FORMATS,
     estimate_tokens,
 )
 from backend.scripts.secretary_recall_corpus import (  # noqa: E402
@@ -61,7 +62,15 @@ from backend.scripts.secretary_recall_corpus import (  # noqa: E402
     SHOWN_MAP,
 )
 
-MODEL_SECRETARY = "gemini-2.5-flash-lite"
+# Default to gemini-3.1-flash-lite: gemini-2.5-flash-lite has been in a sustained,
+# widely-reported flapping/503 degradation for days (2026-06), which makes it an
+# unreliable MEASUREMENT substrate -- runs abort or stall, and a per-call fallback
+# would mix models mid-battery and muddy the data (a comparison must hold the model
+# CONSTANT). 3.1-flash-lite is the same lite tier, stable + sub-second, ~2.5x the
+# price (negligible at research scale -- the whole trial has cost <$1). Override
+# with --model. Production resilience (the 2.5->3.1 fallback) lives in TextAIGemini
+# (jnjj.42), where mixing models across calls is correct; here we want consistency.
+MODEL_SECRETARY = "gemini-3.1-flash-lite"
 JUDGE_MODEL = "claude-sonnet-4-6"
 
 OUT_DIR = os.path.join(
@@ -110,27 +119,43 @@ def _client() -> genai.Client:
     return genai.Client(api_key=key)
 
 
-async def _ask_secretary(client, context: str, query: str) -> dict:
+async def _ask_secretary(client, context: str, query: str, max_retries: int = 5) -> dict:
     """One flash-lite call for one query. Returns {answer, sourced_from} or a
-    fail-soft empty with a parse/error marker."""
+    fail-soft empty with a parse/error marker.
+
+    Retries transient 503 UNAVAILABLE (flash-lite demand spikes) with exponential
+    backoff before giving up -- otherwise a single sporadic blip aborts the whole
+    49-case run (this is a RECALL probe, so retry wait is irrelevant to the score).
+    A genuine non-transient error, or exhausted retries, returns the error marker.
+    """
     prompt = SECRETARY_PROMPT.replace("{context}", context).replace("{query}", query)
-    try:
-        resp = await client.aio.models.generate_content(
-            model=MODEL_SECRETARY,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        raw = resp.text or ""
-        v = json.loads(raw)
-        answer = v.get("answer", "")
-        sourced = v.get("sourced_from", [])
-        if not isinstance(sourced, list):
-            return {"answer": answer, "sourced_from": [], "_parse": "bad_sourced_type"}
-        return {"answer": str(answer), "sourced_from": [str(x) for x in sourced]}
-    except json.JSONDecodeError:
-        return {"answer": "", "sourced_from": [], "_parse": "json_error"}
-    except Exception as exc:  # noqa: BLE001
-        return {"answer": "", "sourced_from": [], "_error": type(exc).__name__}
+    attempt = 0
+    while True:
+        try:
+            resp = await client.aio.models.generate_content(
+                model=MODEL_SECRETARY,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+            raw = resp.text or ""
+            v = json.loads(raw)
+            answer = v.get("answer", "")
+            sourced = v.get("sourced_from", [])
+            if not isinstance(sourced, list):
+                return {"answer": answer, "sourced_from": [], "_parse": "bad_sourced_type"}
+            return {"answer": str(answer), "sourced_from": [str(x) for x in sourced]}
+        except json.JSONDecodeError:
+            return {"answer": "", "sourced_from": [], "_parse": "json_error"}
+        except genai.errors.ServerError as exc:
+            attempt += 1
+            if attempt > max_retries:
+                return {"answer": "", "sourced_from": [], "_error": type(exc).__name__}
+            wait = min(2 ** attempt, 30)
+            print("    (503/transient; retry %d/%d after %ds)" % (attempt, max_retries, wait),
+                  flush=True)
+            await asyncio.sleep(wait)
+        except Exception as exc:  # noqa: BLE001
+            return {"answer": "", "sourced_from": [], "_error": type(exc).__name__}
 
 
 # --------------------------------------------------------------------------- #
@@ -313,6 +338,7 @@ def _extract_json_obj(text: str):
 # --------------------------------------------------------------------------- #
 
 async def main() -> None:
+    global MODEL_SECRETARY
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
                     help="Perfect-oracle stub (no API calls, no judge).")
@@ -322,7 +348,19 @@ async def main() -> None:
     ap.add_argument("--allow-errors", action="store_true",
                     help="Do NOT abort on secretary API/parse failures (default is "
                          "to abort so an infra failure cannot corrupt the metrics).")
+    ap.add_argument("--format", default="grouped", choices=sorted(CONTEXT_FORMATS),
+                    help="Context-rendering format (jnjj.37): grouped (the jnjj.26 "
+                         "baseline), flat (JSON array), or prose (markdown). Same "
+                         "battery + judge; compare the metrics across formats.")
+    ap.add_argument("--model", default=MODEL_SECRETARY,
+                    help="Secretary model (default gemini-2.5-flash-lite). Override "
+                         "to a sibling lite model (e.g. gemini-3.1-flash-lite) when "
+                         "the default is in a 503 outage -- a format COMPARISON is "
+                         "relative, so a consistent sibling model across formats is "
+                         "valid; record which model was used.")
     args = ap.parse_args()
+
+    MODEL_SECRETARY = args.model
 
     corpus = build_corpus()
     if args.limit:
@@ -332,10 +370,10 @@ async def main() -> None:
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     schema = json.load(open(os.path.join(root, "form-kits", "i-90", "schema.json"),
                             encoding="utf-8"))
-    context = render_secretary_context(schema, FIELD_VALUES, SHOWN_MAP)
+    context = render_context(schema, FIELD_VALUES, SHOWN_MAP, fmt=args.format)
     ctx_tokens = estimate_tokens(context)
-    print("rendered secretary context: ~%d tokens, %d cases" % (ctx_tokens, len(corpus)),
-          flush=True)
+    print("rendered secretary context [%s]: ~%d tokens, %d cases" % (
+        args.format, ctx_tokens, len(corpus)), flush=True)
 
     _schema_idx = {f["id"]: f for f in schema["fields"]}
 
@@ -529,8 +567,10 @@ async def main() -> None:
     # ---- persist ----
     os.makedirs(OUT_DIR, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
-    csv_path = os.path.join(OUT_DIR, "secretary_recall_%s.csv" % stamp)
-    meta_path = os.path.join(OUT_DIR, "secretary_recall_%s.meta.json" % stamp)
+    # Tag artifacts by format so a multi-format comparison (jnjj.37) does not collide.
+    base = "secretary_recall_%s_%s" % (args.format, stamp)
+    csv_path = os.path.join(OUT_DIR, base + ".csv")
+    meta_path = os.path.join(OUT_DIR, base + ".meta.json")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()
@@ -541,7 +581,7 @@ async def main() -> None:
             "stamp": stamp,
             "secretary_model": MODEL_SECRETARY,
             "judge_model": None if args.no_judge else JUDGE_MODEL,
-            "context_format": "grouped-by-section (single, feasibility-first)",
+            "context_format": args.format,
             "context_tokens_est": ctx_tokens,
             "corpus": {"total": len(corpus),
                        "provenance": "SYNTHETIC; recall is an UPPER BOUND (clean "

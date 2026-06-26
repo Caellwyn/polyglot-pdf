@@ -226,6 +226,109 @@ def render_secretary_context(schema: dict, field_values: dict, shown_map: dict) 
     return "\n".join(out).rstrip() + "\n"
 
 
+def render_flat_json(schema: dict, field_values: dict, shown_map: dict) -> str:
+    """Format (a) -- a FLAT JSON array of field objects (no section grouping).
+
+    Max reference fidelity: every field is a discrete JSON object with its exact
+    id, so prose->field grounding has the cleanest handle; weakest on structure
+    (the model must reconstruct which fields form an address cluster, etc.). One
+    of the candidate formats compared in jnjj.37."""
+    field_values = field_values or {}
+    shown_map = shown_map or {}
+    sec_label = _section_label_map(schema)
+    objs = []
+    for f in schema.get("fields", []):
+        fid = f["id"]
+        obj = {
+            "id": fid,
+            "spoken_name": f.get("spoken_name", ""),
+            "name": f.get("name", "") or f.get("label", ""),
+            "type": f.get("type", ""),
+            "section": sec_label.get(f.get("section_id"), f.get("section_id", "")),
+            "value": _value_str(f, field_values, fid),
+            "shown": bool(shown_map.get(fid, True)),
+        }
+        help_obj = f.get("help") or {}
+        instr = (help_obj.get("instructions") or "").strip()
+        if instr:
+            obj["help"] = instr
+        fmt_hint = (help_obj.get("format_hint") or "").strip()
+        if fmt_hint:
+            obj["format_hint"] = fmt_hint
+        opts = f.get("options")
+        if opts:
+            obj["options"] = [
+                (o.get("label", o.get("value", "")) if isinstance(o, dict) else str(o))
+                for o in opts
+            ]
+        objs.append(obj)
+    return json.dumps(objs, indent=1, ensure_ascii=True) + "\n"
+
+
+def render_prose(schema: dict, field_values: dict, shown_map: dict) -> str:
+    """Format (c) -- PROSE / markdown: each field as a natural-language sentence,
+    grouped by section under markdown headings.
+
+    Max reasoning fluency (reads like documentation the model can reason over);
+    weakest on precise id reference (the model must echo an id embedded in prose).
+    One of the candidate formats compared in jnjj.37."""
+    field_values = field_values or {}
+    shown_map = shown_map or {}
+    idx = _field_index(schema)
+    out = []
+    last_part = None
+    for part_label, section_label, field_ids in _ordered_groups(schema):
+        if part_label != last_part:
+            out.append("# {p}".format(p=part_label))
+            last_part = part_label
+        out.append("## {s}".format(s=section_label))
+        for fid in field_ids:
+            field = idx.get(fid)
+            if field is None:
+                continue
+            spoken = field.get("spoken_name", "") or field.get("name", "")
+            value = _value_str(field, field_values, fid)
+            shown = shown_map.get(fid, True)
+            if not shown:
+                state = "is not applicable to this applicant"
+            elif value == EMPTY:
+                state = "has not been answered yet"
+            else:
+                state = 'is "%s"' % value
+            sent = "The %s (field `%s`) %s." % (spoken, fid, state)
+            help_obj = field.get("help") or {}
+            instr = (help_obj.get("instructions") or "").strip()
+            if instr:
+                sent += " " + instr
+            opts = field.get("options")
+            if opts:
+                labels = [(o.get("label", o.get("value", "")) if isinstance(o, dict)
+                           else str(o)) for o in opts]
+                sent += " Options: " + ", ".join(labels) + "."
+            out.append(sent)
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+# Format registry: name -> renderer(schema, field_values, shown_map) -> str.
+CONTEXT_FORMATS = {
+    "grouped": render_secretary_context,   # jnjj.26 baseline (grouped-by-section)
+    "flat": render_flat_json,              # flat JSON array
+    "prose": render_prose,                 # prose / markdown
+}
+
+
+def render_context(schema: dict, field_values: dict, shown_map: dict,
+                   fmt: str = "grouped") -> str:
+    """Dispatch to one of the CONTEXT_FORMATS renderers by name (jnjj.37)."""
+    try:
+        renderer = CONTEXT_FORMATS[fmt]
+    except KeyError:
+        raise ValueError("unknown context format %r; valid: %s"
+                         % (fmt, sorted(CONTEXT_FORMATS)))
+    return renderer(schema, field_values, shown_map)
+
+
 def render_static_catalog(schema: dict) -> str:
     """Render the VALUE-FREE static catalog: per-field metadata only (id,
     spoken_name, name, type, options, help, section), NO current values and NO
