@@ -1135,7 +1135,7 @@ async def run(args) -> int:
           f"confirmed fields: {len(meta['client_confirmed_fields'])}/{len(plan)}")
 
     if DEBUG:
-        _write_debug_artifact(out_dir / f"{base_name}.debug.json", plan, q_windows,
+        _write_debug_artifact(out_dir / f"{base_name}.debug.json", q_windows,
                               tool_io, client.transcript_chunks, input_transcript,
                               meta["per_question_tools"])
         print(f"wrote {out_dir / (base_name + '.debug.json')}  "
@@ -1149,7 +1149,7 @@ def _chunks_in_window(chunks, w):
     return "".join(parts).strip()
 
 
-def _write_debug_artifact(path, plan, q_windows, tool_io, transcript_chunks,
+def _write_debug_artifact(path, q_windows, tool_io, transcript_chunks,
                           input_transcript, legacy_per_q_tools):
     """Assemble the bd jnjj.39 per-run debug file: per question, what the model HEARD
     (input transcript), what it SAID (output transcript, de-chunked), and the exact

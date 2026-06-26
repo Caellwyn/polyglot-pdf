@@ -336,11 +336,14 @@ class LiveAIGemini(ILiveAI):
         # -- to tell context-compression activation from a silent no-op (bd l3a.1).
         self._on_raw_usage = None
         # Optional diagnostic observer for the INPUT-transcription TEXT (what Gemini
-        # heard), default None = production no-op (bd polyglot-pdf-jnjj.39). Same
-        # harness-observer pattern as _on_raw_usage. Production NEVER sets this: the
-        # liveness path (_on_user_activity) is deliberately text-LESS to keep PHI out
-        # (the input transcript is user speech). Only the LOCAL-ONLY measurement spike
-        # opts in -- so the PHI boundary is preserved (default-off, never deployed).
+        # heard), default None = production no-op (bd polyglot-pdf-jnjj.39). Follows
+        # the _on_raw_usage harness-observer shape (default-None, set directly by the
+        # measurement spike); its receive-loop except branch LOGS the error (a PHI-
+        # safe internal message, never the transcript) rather than swallowing it, so
+        # an observer bug is visible. Production NEVER sets this: the liveness path
+        # (_on_user_activity) is deliberately text-LESS to keep PHI out (the input
+        # transcript is user speech). Only the LOCAL-ONLY measurement spike opts in --
+        # so the PHI boundary is preserved (default-off, never deployed).
         self._on_input_transcript = None
         self._system_instruction: Optional[str] = None
         self._function_declarations: Optional[List[Dict[str, Any]]] = None
