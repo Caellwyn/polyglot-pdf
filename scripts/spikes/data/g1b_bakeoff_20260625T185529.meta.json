@@ -1,0 +1,50 @@
+{
+  "bead": "polyglot-pdf-0zp3",
+  "stamp": "20260625T185529",
+  "today_for_date_checks": "2026-06-17",
+  "sizes": [
+    132
+  ],
+  "models": {
+    "gemini-3-flash-preview": {
+      "in": 0.5,
+      "out": 4.0
+    },
+    "gemini-3.5-flash": {
+      "in": 1.5,
+      "out": 6.0
+    }
+  },
+  "provenance": "SYNTHETIC full-size form states over real I-90 fields",
+  "note_voice_model": "2.5-flash-native-audio is bidi-only (TEXT modality rejected); when run, it goes via a Live session in tool-calling mode (_run_live), not generate_content.",
+  "summary": {
+    "gemini-3-flash-preview@132": {
+      "recall": 1.0,
+      "precision": 0.6428571428571429,
+      "tp": 27,
+      "fn": 0,
+      "fp": 15,
+      "tn": 0,
+      "lat_p50": 41.6073694229126,
+      "lat_p90": 58.48881244659424,
+      "cost_mean": 0.0034939761904761906,
+      "in_med": 4814.0,
+      "out_med": 271.5,
+      "errors": 0
+    },
+    "gemini-3.5-flash@132": {
+      "recall": 0.9629629629629629,
+      "precision": 0.6341463414634146,
+      "tp": 26,
+      "fn": 1,
+      "fp": 15,
+      "tn": 0,
+      "lat_p50": 12.799420475959778,
+      "lat_p90": 25.561092376708984,
+      "cost_mean": 0.008219357142857143,
+      "in_med": 4814.0,
+      "out_med": 148.5,
+      "errors": 0
+    }
+  }
+}

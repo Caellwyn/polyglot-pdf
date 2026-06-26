@@ -1,0 +1,68 @@
+{
+  "bead": "polyglot-pdf-0zp3",
+  "stamp": "20260625T183559",
+  "today_for_date_checks": "2026-06-17",
+  "sizes": [
+    132
+  ],
+  "models": {
+    "gemini-2.5-flash-lite": {
+      "in": 0.1,
+      "out": 0.4
+    },
+    "gemini-3.1-flash-lite": {
+      "in": 0.25,
+      "out": 2.0
+    },
+    "gemini-2.5-flash": {
+      "in": 0.3,
+      "out": 2.5
+    }
+  },
+  "provenance": "SYNTHETIC full-size form states over real I-90 fields",
+  "note_voice_model": "2.5-flash-native-audio is bidi-only (TEXT modality rejected); when run, it goes via a Live session in tool-calling mode (_run_live), not generate_content.",
+  "summary": {
+    "gemini-2.5-flash-lite@132": {
+      "recall": 0.8571428571428571,
+      "precision": 0.6428571428571429,
+      "tp": 18,
+      "fn": 3,
+      "fp": 10,
+      "tn": 2,
+      "lat_p50": 9.2772136926651,
+      "lat_p90": 16.940011501312256,
+      "cost_mean": 0.0005465,
+      "in_med": 4814,
+      "out_med": 136,
+      "errors": 9
+    },
+    "gemini-3.1-flash-lite@132": {
+      "recall": 0.5925925925925926,
+      "precision": 0.8,
+      "tp": 16,
+      "fn": 11,
+      "fp": 4,
+      "tn": 11,
+      "lat_p50": 0.8586404323577881,
+      "lat_p90": 0.9921379089355469,
+      "cost_mean": 0.0013062738095238095,
+      "in_med": 4814.0,
+      "out_med": 52.0,
+      "errors": 0
+    },
+    "gemini-2.5-flash@132": {
+      "recall": 0.9259259259259259,
+      "precision": 0.8620689655172413,
+      "tp": 25,
+      "fn": 2,
+      "fp": 4,
+      "tn": 10,
+      "lat_p50": 57.63181018829346,
+      "lat_p90": 167.65602493286133,
+      "cost_mean": 0.0017536048780487806,
+      "in_med": 4814,
+      "out_med": 136,
+      "errors": 1
+    }
+  }
+}

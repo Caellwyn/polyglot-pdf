@@ -1,0 +1,32 @@
+{
+  "bead": "polyglot-pdf-0zp3",
+  "stamp": "20260625T191126",
+  "today_for_date_checks": "2026-06-17",
+  "sizes": [
+    132
+  ],
+  "models": {
+    "gemini-2.5-flash-lite": {
+      "in": 0.1,
+      "out": 0.4
+    }
+  },
+  "provenance": "SYNTHETIC full-size form states over real I-90 fields",
+  "note_voice_model": "2.5-flash-native-audio is bidi-only (TEXT modality rejected); when run, it goes via a Live session in tool-calling mode (_run_live), not generate_content.",
+  "summary": {
+    "gemini-2.5-flash-lite@132": {
+      "recall": 0.8571428571428571,
+      "precision": 0.6428571428571429,
+      "tp": 18,
+      "fn": 3,
+      "fp": 10,
+      "tn": 2,
+      "lat_p50": 9.2871173620224,
+      "lat_p90": 22.19940972328186,
+      "cost_mean": 0.0005417878787878788,
+      "in_med": 4814,
+      "out_med": 150,
+      "errors": 9
+    }
+  }
+}
