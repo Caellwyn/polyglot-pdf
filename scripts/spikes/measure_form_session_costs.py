@@ -1003,7 +1003,22 @@ async def run(args) -> int:
 
             adapter._on_tool_call = _tool_tap
 
-        _install_tool_tap()
+        # Auto-reinstall the tap whenever the adapter's callbacks are (re)set. A
+        # section switch runs set_callbacks AND sends the new-section greeting INSIDE
+        # the single switch_to_section call (start_session -> set_callbacks ->
+        # send_initiating_message), so reinstalling only AFTER switch_to_section
+        # returns leaves the greeting response -- where a DTI recall/get_field_value
+        # tool call can occur -- running on the raw callback (Codex PR #246 round 2).
+        # Wrapping set_callbacks re-applies the tap the instant callbacks are set,
+        # BEFORE the greeting, closing that gap for every section.
+        _orig_set_callbacks = adapter.set_callbacks
+
+        def _set_callbacks_then_tap(*a, **k):
+            _orig_set_callbacks(*a, **k)
+            _install_tool_tap()
+
+        adapter.set_callbacks = _set_callbacks_then_tap
+        _install_tool_tap()  # initial install (first start_session already ran)
 
         for _ in range(150):
             if getattr(adapter, "_session_ready", False):
@@ -1030,6 +1045,8 @@ async def run(args) -> int:
         # field. Initialized to the post-greeting instant.
         _prev_q_end = time.monotonic()
 
+        _last_activity_end = {"ts": _prev_q_end}  # bd jnjj.39: window boundary anchor
+
         async def speak(text: str, label: str):
             nonlocal last_total
             pcm = synth_cached(text)
@@ -1040,6 +1057,10 @@ async def run(args) -> int:
                 await asyncio.sleep(_CHUNK_MS / 1000.0)
             t_end = time.monotonic()
             await service.send_activity_end()
+            # bd jnjj.39 / Codex PR #246: the question-window boundary is the user's
+            # activity_end (BEFORE awaiting Gemini's response), so the response that
+            # carries the NEXT field's prompt falls into the NEXT window's model_said.
+            _last_activity_end["ts"] = t_end
             new_total = await _wait_turn(adapter, last=last_total)
             stalled = new_total == last_total
             last_total = new_total
@@ -1085,11 +1106,10 @@ async def run(args) -> int:
                     if getattr(adapter, "_session_ready", False):
                         break
                     await asyncio.sleep(0.1)
-                # switch_to_section re-ran set_callbacks and clobbered the tap; restore
-                # it so tool I/O + per_question_tools keep capturing past section 1
-                # (Codex PR #246). _on_raw_usage / _on_input_transcript / _log are NOT
-                # touched by set_callbacks, so only the tool tap needs reinstalling.
-                _install_tool_tap()
+                # The tap was already re-applied inside switch_to_section (the
+                # set_callbacks wrapper above runs before the section greeting), so
+                # nothing to reinstall here. _on_raw_usage / _on_input_transcript /
+                # _log survive set_callbacks untouched.
                 last_total = await _wait_turn(adapter, last=0)  # new-session greeting
                 # A section restart re-greets; the new section's first-field prompt is
                 # in THAT greeting, so anchor the next window to post-greeting here
@@ -1107,7 +1127,10 @@ async def run(args) -> int:
                 await speak(REJECT, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(CONFIRM_YES, "confirm")
-            _prev_q_end = time.monotonic()
+            # End the window at the LAST user activity_end (set by speak), NOT now:
+            # Gemini's confirm response after it carries the NEXT field's prompt, which
+            # must fall into the next window's model_said (Codex PR #246 round 2).
+            _prev_q_end = _last_activity_end["ts"]
             if DEBUG:
                 q_windows.append({"q": i, "fid": fid, "t_start": _q_t_start,
                                   "t_end": _prev_q_end})
