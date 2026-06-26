@@ -1,1 +1,5 @@
 tak_token_curve.csv
+
+# *.debug.json (the bd jnjj.39 --debug PHI artifacts) are ignored REPO-WIDE in the
+# root .gitignore so an arbitrary --out-dir can't leak one; no spike-local rule
+# needed here.

@@ -335,6 +335,16 @@ class LiveAIGemini(ILiveAI):
         # the cost path does not consume -- e.g. cached_content_token_count / traffic_type
         # -- to tell context-compression activation from a silent no-op (bd l3a.1).
         self._on_raw_usage = None
+        # Optional diagnostic observer for the INPUT-transcription TEXT (what Gemini
+        # heard), default None = production no-op (bd polyglot-pdf-jnjj.39). Follows
+        # the _on_raw_usage harness-observer shape (default-None, set directly by the
+        # measurement spike); its receive-loop except branch LOGS the error (a PHI-
+        # safe internal message, never the transcript) rather than swallowing it, so
+        # an observer bug is visible. Production NEVER sets this: the liveness path
+        # (_on_user_activity) is deliberately text-LESS to keep PHI out (the input
+        # transcript is user speech). Only the LOCAL-ONLY measurement spike opts in --
+        # so the PHI boundary is preserved (default-off, never deployed).
+        self._on_input_transcript = None
         self._system_instruction: Optional[str] = None
         self._function_declarations: Optional[List[Dict[str, Any]]] = None
 
@@ -1688,6 +1698,28 @@ class LiveAIGemini(ILiveAI):
                                             except Exception:
                                                 # Liveness signal must never crash the receive loop.
                                                 self._log.exception("on_user_activity_callback_error")
+                                        # bd polyglot-pdf-jnjj.39: optional diagnostic
+                                        # observer for the input-transcript TEXT (what
+                                        # Gemini heard). Default None in production (PHI:
+                                        # the liveness path above stays text-less); only
+                                        # the local-only measurement spike sets it.
+                                        if (input_transcription is not None
+                                                and getattr(input_transcription, "text", None)
+                                                and self._on_input_transcript is not None):
+                                            try:
+                                                self._on_input_transcript(input_transcription.text)
+                                            except Exception as _obs_err:
+                                                # A diagnostic observer must never crash the
+                                                # loop. Log ONLY the exception TYPE, never the
+                                                # traceback/message: this observer receives the
+                                                # raw input transcript (user speech), and an
+                                                # error mid-parse could embed that text in the
+                                                # exception -- _log.exception would then leak
+                                                # PHI to logs (Codex PR #246 round 3). Type name
+                                                # is safe metadata.
+                                                self._log.warning(
+                                                    "on_input_transcript_observer_error",
+                                                    error_type=type(_obs_err).__name__)
 
                                         # Handle output transcription (what Gemini said)
                                         transcription = getattr(server_content, "output_transcription", None)
