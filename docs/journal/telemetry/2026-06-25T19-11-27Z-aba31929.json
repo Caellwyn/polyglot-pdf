@@ -1,0 +1,78 @@
+{
+  "recorded_at": "2026-06-25T19:11:27Z",
+  "session_id": "aba31929-9507-419b-8b94-a8b0aa95f3f3",
+  "beads": [
+    "polyglot-pdf-jnjj.27"
+  ],
+  "arm": "A",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-06-18T21:05:59.325Z",
+    "last_ts": "2026-06-25T19:11:15.046Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 58990,
+      "output_tokens": 418728,
+      "cache_read_input_tokens": 180739063,
+      "cache_creation_input_tokens": 2198317
+    },
+    "subagent": {
+      "input_tokens": 25289,
+      "output_tokens": 106996,
+      "cache_read_input_tokens": 22073417,
+      "cache_creation_input_tokens": 1576919
+    },
+    "total": {
+      "input_tokens": 84279,
+      "output_tokens": 525724,
+      "cache_read_input_tokens": 202812480,
+      "cache_creation_input_tokens": 3775236
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 58990,
+        "output_tokens": 418728,
+        "cache_read_input_tokens": 180739063,
+        "cache_creation_input_tokens": 2198317
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 24348,
+        "output_tokens": 19272,
+        "cache_read_input_tokens": 4754873,
+        "cache_creation_input_tokens": 290493
+      },
+      "claude-haiku-4-5-20251001": {
+        "input_tokens": 759,
+        "output_tokens": 27107,
+        "cache_read_input_tokens": 7874240,
+        "cache_creation_input_tokens": 762701
+      },
+      "claude-sonnet-4-6": {
+        "input_tokens": 182,
+        "output_tokens": 60617,
+        "cache_read_input_tokens": 9444304,
+        "cache_creation_input_tokens": 523725
+      }
+    }
+  },
+  "subagent_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-8",
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 576,
+    "subagent": 429
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

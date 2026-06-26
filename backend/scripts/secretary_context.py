@@ -163,16 +163,19 @@ def _options_str(field: dict) -> str:
     return " | options: [" + "; ".join(labels) + "]"
 
 
-def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict) -> str:
+def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict,
+                  with_state: bool = True) -> str:
+    """Render one field. with_state=True emits the `value=.. | shown=..` line
+    (the full secretary context, for recall). with_state=False emits ONLY the
+    static metadata (id/spoken/name/type/options/help) -- the value-free,
+    session-INVARIANT catalog used as the cacheable prefix (the dynamic
+    values+applicability ride a separate tail; see render_static_catalog)."""
     spoken = field.get("spoken_name", "")
     name = field.get("name", "") or field.get("label", "")
     ftype = field.get("type", "")
     help_obj = field.get("help") or {}
     instr = (help_obj.get("instructions") or "").strip()
     fmt_hint = (help_obj.get("format_hint") or "").strip()
-    value = _value_str(field, field_values, fid)
-    # shown: explicit map wins; default True (applicable) when unspecified.
-    shown = shown_map.get(fid, True)
 
     head = '  - id={fid} | "{spoken}"'.format(fid=fid, spoken=spoken)
     if name and name != spoken:
@@ -180,11 +183,13 @@ def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict) ->
     head += ' | type={t}{opts}'.format(t=ftype, opts=_options_str(field))
 
     lines = [head]
-    state = '    value={v} | shown={s}'.format(
-        v=('"%s"' % value if value != EMPTY else EMPTY),
-        s=("true" if shown else "false"),
-    )
-    lines.append(state)
+    if with_state:
+        value = _value_str(field, field_values, fid)
+        shown = shown_map.get(fid, True)
+        lines.append('    value={v} | shown={s}'.format(
+            v=('"%s"' % value if value != EMPTY else EMPTY),
+            s=("true" if shown else "false"),
+        ))
     if instr:
         h = "    help: " + instr
         if fmt_hint:
@@ -219,6 +224,47 @@ def render_secretary_context(schema: dict, field_values: dict, shown_map: dict) 
             out.append(_render_field(field, fid, field_values, shown_map))
         out.append("")  # blank line between sections
     return "\n".join(out).rstrip() + "\n"
+
+
+def render_static_catalog(schema: dict) -> str:
+    """Render the VALUE-FREE static catalog: per-field metadata only (id,
+    spoken_name, name, type, options, help, section), NO current values and NO
+    applicability. This is session-INVARIANT -- the correct content for a cacheable
+    prefix (implicit or explicit). The dynamic values + applicability go in a
+    separate tail (render_values_tail), so the cached prefix stays stable across
+    secretary calls within a session even as answers change."""
+    idx = _field_index(schema)
+    out = []
+    last_part = None
+    for part_label, section_label, field_ids in _ordered_groups(schema):
+        if part_label != last_part:
+            out.append("=== {p} ===".format(p=part_label))
+            last_part = part_label
+        out.append("Section: {s}".format(s=section_label))
+        for fid in field_ids:
+            field = idx.get(fid)
+            if field is None:
+                continue
+            out.append(_render_field(field, fid, {}, {}, with_state=False))
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render_values_tail(schema: dict, field_values: dict, shown_map: dict) -> str:
+    """Render the DYNAMIC tail: current value + applicability per field, keyed by
+    id (no metadata -- that lives in the cached static catalog). This is the small,
+    fresh, uncached part of a secretary request."""
+    field_values = field_values or {}
+    shown_map = shown_map or {}
+    idx = _field_index(schema)
+    out = ["CURRENT VALUES (id: value | shown):"]
+    for fid in idx:
+        value = _value_str(idx[fid], field_values, fid)
+        shown = shown_map.get(fid, True)
+        out.append("  %s: %s | shown=%s" % (
+            fid, ('"%s"' % value if value != EMPTY else EMPTY),
+            "true" if shown else "false"))
+    return "\n".join(out) + "\n"
 
 
 def estimate_tokens(text: str) -> int:
