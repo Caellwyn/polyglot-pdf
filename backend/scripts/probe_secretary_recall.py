@@ -353,11 +353,11 @@ async def main() -> None:
                          "baseline), flat (JSON array), or prose (markdown). Same "
                          "battery + judge; compare the metrics across formats.")
     ap.add_argument("--model", default=MODEL_SECRETARY,
-                    help="Secretary model (default gemini-2.5-flash-lite). Override "
-                         "to a sibling lite model (e.g. gemini-3.1-flash-lite) when "
-                         "the default is in a 503 outage -- a format COMPARISON is "
-                         "relative, so a consistent sibling model across formats is "
-                         "valid; record which model was used.")
+                    help="Secretary model (default %s). The default is the stable "
+                         "lite tier; override to e.g. gemini-2.5-flash-lite for a "
+                         "target-model number when it is healthy. A format COMPARISON "
+                         "is relative, so hold the model CONSTANT across formats; the "
+                         "model used is recorded in the artifact." % MODEL_SECRETARY)
     args = ap.parse_args()
 
     MODEL_SECRETARY = args.model
@@ -577,7 +577,11 @@ async def main() -> None:
         w.writerows(rows)
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({
-            "bead": "polyglot-pdf-jnjj.26",
+            # Harness born in jnjj.26 (recall feasibility); also drives jnjj.37
+            # (context-format comparison). The owning bead for a given run is in
+            # the findings doc, not hardcoded here -- this names the probe, not one
+            # bead, so multi-bead reuse is not mislabeled.
+            "probe": "secretary_recall (jnjj.26 harness; reused jnjj.37+)",
             "stamp": stamp,
             "secretary_model": MODEL_SECRETARY,
             "judge_model": None if args.no_judge else JUDGE_MODEL,

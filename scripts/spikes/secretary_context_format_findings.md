@@ -8,8 +8,10 @@ same Sonnet judge, to pick the format that best sets the secretary up for succes
 
 > **RECOMMENDATION: keep GROUPED-BY-SECTION.** It wins on recall, precision,
 > strict-match, and synthesis quality, at moderate token cost. Flat-JSON costs ~40%
-> more tokens for WORSE accuracy (dominated). Prose is ~23% cheaper but lowest on
-> every accuracy metric. The jnjj.26 baseline choice is validated by the data.
+> more tokens for WORSE accuracy on every axis (dominated -- and it is actually the
+> WORST on strict-match and synthesis). Prose is ~23% cheaper but worst on recall,
+> precision, and disambiguation. Both alternatives lose to grouped on the headline
+> metrics; the jnjj.26 baseline choice is validated by the data.
 
 ## What was run
 
@@ -51,13 +53,15 @@ prose 15 -- effectively tied, and a coarse signal, see jnjj.26 findings.)
 - **Grouped wins or ties on every accuracy axis** and is clearly best on
   strict-match (0.744 vs ~0.67) and synthesis quality (0.920) -- i.e. it best
   supports gathering the EXACT right field set, which is the secretary's core job.
-- **Flat JSON is dominated:** +40% tokens (13.3k vs 9.5k) for LOWER recall,
-  precision, and strict-match. The "max reference fidelity" hypothesis did not pay
-  off -- the JSON structure/quoting overhead bought no grounding benefit and hurt
-  reasoning (the model has to reconstruct which fields form a cluster from a flat
-  list). Reject.
-- **Prose is the cheapest** (7.3k, -23%) but **lowest on every accuracy metric**
-  (recall 0.889, precision 0.820, disambig 0.915). The "reasoning fluency"
+- **Flat JSON is dominated:** +40% tokens (13.3k vs 9.5k) for LOWER recall and
+  precision than grouped -- AND it is the WORST of the three on strict-match (0.672)
+  and synthesis (synth_ok 0.885). The "max reference fidelity" hypothesis did not
+  pay off -- the JSON structure/quoting overhead bought no grounding benefit and
+  hurt reasoning (the model has to reconstruct which fields form a cluster from a
+  flat list). Reject.
+- **Prose is the cheapest** (7.3k, -23%) but worst on recall (0.889), precision
+  (0.820), and disambiguation (0.915); it edges out flat on strict (0.678) and
+  synthesis (0.904) but still trails grouped on both. The "reasoning fluency"
   hypothesis cost grounding precision, as expected -- ids embedded in prose are a
   weaker reference handle. Not recommended as the default, but it is the
   token-efficiency lever IF cost ever dominates (see below).
@@ -87,6 +91,12 @@ accuracy is the priority and the cost delta is noise.
   hinge on it.
 - Synthetic corpus -- recall is an UPPER BOUND (clean values + on-distribution
   queries), same caveat as jnjj.26.
+- The committed artifacts carry a legacy `"bead": "polyglot-pdf-jnjj.26"` label
+  (the recall harness was born under jnjj.26 and reused here); the OWNING bead for
+  this comparison is jnjj.37, per this doc + the journal. The probe's meta field was
+  corrected going forward (now `"probe"`, not a hardcoded bead) but these
+  already-generated artifacts were not regenerated just to relabel (the numbers are
+  authoritative; only the label was stale).
 - Non-deterministic (live model sampling) -- the ~1-3 point gaps between formats are
   modest; grouped's edge on strict-match (0.744 vs ~0.67) is the most robust
   signal. A multi-seed average would tighten the small differences, but the
