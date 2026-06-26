@@ -63,14 +63,17 @@ until a flash-lite-specific number surfaces. Treat 2048 as the working minimum.
 
 ### Does our catalog clear the minimum?
 
-YES, comfortably. The Gate-1 rendered static catalog measured **~9,500 tokens**
-(grouped-by-section I-90, 132 fields) -- ~4.6x the 2048 explicit minimum and well
-above the ~1-2k implicit minimum. Caching is viable on token-size grounds.
+YES, comfortably. The VALUE-FREE static catalog (the cacheable prefix --
+grouped-by-section I-90, 132 fields, metadata only) measures **~8,400 tokens** --
+~4.1x the 2048 explicit minimum and well above the ~1-2k implicit minimum. (The full
+per-call request is ~11.8k prompt tokens: ~8.4k catalog + ~1.6k values tail + SI +
+query.) Caching is viable on token-size grounds.
 
 ### Cost of holding an explicit cache (flash-lite)
 
-At $1.00 / 1M tokens / hour, a ~9,500-token cache costs ~**$0.0095/hour** to store
-(~1 cent/hr). For a session of minutes, storage cost is negligible; the question is
+At $1.00 / 1M tokens / hour, the ~8,400-token cached prefix costs ~**$0.0084/hour**
+to store (~1 cent/hr). For a session of minutes, storage cost is negligible; the
+question is
 whether the 90% input discount on repeated secretary calls beats $0 storage +
 best-effort implicit hits.
 
@@ -99,7 +102,7 @@ cache = client.caches.create(
     model="gemini-2.5-flash-lite",
     config=types.CreateCachedContentConfig(
         system_instruction=SECRETARY_SI,
-        contents=[static_catalog],     # the ~9.5k-token field catalog
+        contents=[static_catalog],     # the ~8.4k-token value-free field catalog
         ttl="600s",
     ),
 )
@@ -120,7 +123,7 @@ explicit `caches.create()` lands "once Gate 2" (this bead).
 ### Methodology
 
 `backend/scripts/probe_secretary_latency.py` times the BLOCKING flash-lite lookup
-against live Gemini over the I-90 static catalog (~9.5k tokens) + a battery of prose
+against live Gemini over the value-free I-90 catalog (~8.4k tok prefix + ~1.6k values tail) + a battery of prose
 queries (reused from the Gate-1 corpus). Since the secretary uses IMPLICIT caching
 now (decision above), the GO/KILL rests on the first two arms; the explicit arm is
 informational for the deferred jnjj.41 decision (run with `--arms ...,explicit`):
@@ -158,12 +161,13 @@ sampling only the first (easy/aliasing) tier block, hid the tail (Codex finding)
 **VERDICT: CONDITIONAL GO.** The TYPICAL lookup is fine for live conversation --
 **median ~0.95s, p90 ~1.2-1.4s** is a natural conversational beat. BUT the **tail is
 heavy and unpredictable**: this run had a **7.2s** spike (an earlier run hit 20.2s),
-`retried=0` (NOT outage/retry). Per the per-case CSV, the tail is **only partly
-explained** by cache state: this run's 7.2s outlier was a cache MISS
-(`dist_mailing_vs_physical`, cached=0), but the prior run's 20s outlier was a cache
-HIT -- so a cache miss can spike AND a warm call can spike. It does not track query
-tier either. Treat the tail as **unpredictable cheap-model variance**, partly
-mitigated by the cache (a hit avoids re-processing ~8k tokens) but not eliminated. A
+`retried=0` (NOT outage/retry). Per the committed per-case CSV, cache state does NOT
+predict the tail: the 7.2s outlier (`dist_mailing_vs_physical`) was a cache MISS,
+yet the next-slowest calls (1.4-1.6s) were cache HITS while the other cache misses
+were FAST (~1s) -- so within this run the upper tail is not a cache-miss effect. (An
+earlier run's 20s outlier was itself a cache HIT, corroborating that a warm call can
+also spike.) It does not track query tier either. Treat the tail as **unpredictable
+cheap-model variance** -- caching is a cost lever that does not tame it. A
 multi-second blocking pause mid-conversation is a real UX failure.
 
 So the blocking round-trip is fast enough ON THE MEDIAN, but shipping it
