@@ -183,8 +183,12 @@ I90_QUESTIONS = [
     # "A12345678" phrasing once cn0e lands.
     {"field_id": "p1_line1_aliennumber", "say": "My alien registration number is one two three four five six seven eight.",
      "wrong": "My alien registration number is eight seven six five four three two one."},
-    {"field_id": "p1_line2_acctidentifier", "say": "My USCIS online account number is 1234567890.",
-     "wrong": "My USCIS online account number is 9876543210."},
+    # USCIS online account number is EXACTLY 12 digits (the field's min/max_length).
+    # The old 10-digit fixture was itself invalid and would fail length even with
+    # clean transcription (bd polyglot-pdf-jnjj.40 -- the harness answer, not just
+    # the model, was wrong on this field).
+    {"field_id": "p1_line2_acctidentifier", "say": "My USCIS online account number is 1 2 3 4 5 6 7 8 9 0 1 2.",
+     "wrong": "My USCIS online account number is 9 8 7 6 5 4 3 2 1 0 9 8."},
     {"field_id": "p1_line3a_familyname", "say": "My current family name is Vasquez.",
      "wrong": "My current family name is Vargas."},
     {"field_id": "p1_line3b_givenname", "say": "My current given name is Maria.",
@@ -244,7 +248,7 @@ I90_QUESTIONS = [
 # any I90 field absent here is scored leniently (non-empty == filled) and flagged.
 I90_EXPECTED = {
     "p1_line1_aliennumber": "12345678",
-    "p1_line2_acctidentifier": "1234567890",
+    "p1_line2_acctidentifier": "123456789012",
     "p1_line3a_familyname": "Vasquez",
     "p1_line3b_givenname": "Maria",
     "p1_line3c_middlename": "Elena",

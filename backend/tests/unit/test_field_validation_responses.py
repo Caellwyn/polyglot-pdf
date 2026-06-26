@@ -366,4 +366,84 @@ class TestANumberNormalization:
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
+class TestUSCISAccountNormalization:
+    """uscis_account format_preset strips punctuation before the length check
+    (bd polyglot-pdf-jnjj.40).
+
+    The DTI stall was triggered because Gemini's speech-to-text transcribed a
+    spoken USCIS online account number with a "$" and commas (the original 10-digit
+    fixture transcribed as "$1,234,567,890"; a 12-digit value corrupts the same way,
+    e.g. "$1,234,567,890,12"), which then failed the exactly-12-character length
+    check and the model refused the field, derailing the section. Normalizing to
+    bare digits BEFORE validation accepts the value, so the punctuation can never
+    re-trigger the stall.
+    """
+
+    ACCT_FIELD = {
+        "id": "p1_line2_acctidentifier",
+        "name": "USCIS Online Account Number",
+        "type": "text",
+        "minLength": 12,
+        "maxLength": 12,
+        "pattern": r"^[0-9]{12}$",   # mirrors the I-90 schema -- ASCII digits only (Codex PR #249)
+        "format_preset": "uscis_account",
+    }
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("123456789012", "123456789012"),       # already canonical 12 digits
+        ("$1,234,567,890,12", "123456789012"),   # the STT-mangled form (jnjj.40)
+        ("1,234,567,890,12", "123456789012"),    # commas only
+        ("1 2 3 4 5 6 7 8 9 0 1 2", "123456789012"),  # spaced digit-by-digit
+    ])
+    def test_uscis_account_normalized_and_accepted(self, raw, expected):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" in result["valid_fields"], f"{raw!r} should be accepted"
+        assert result["form_state"]["p1_line2_acctidentifier"] == expected, \
+            f"{raw!r} should store canonical {expected!r}"
+        assert result["validation_errors"] == []
+
+    @pytest.mark.parametrize("raw", [
+        "1234567890",       # 10 digits -- too short (the old harness-fixture value)
+        "1234567890123",    # 13 digits -- too long
+    ])
+    def test_uscis_account_still_enforces_length_after_normalizing(self, raw):
+        # Stripping punctuation must NOT relax the exactly-12-digit rule -- a wrong
+        # digit COUNT is still rejected (so the fix tolerates formatting, not bad data).
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+    def test_uscis_account_rejects_non_ascii_digits(self):
+        # The pattern is ^[0-9]{12}$ (ASCII), NOT ^\d{12}$ -- Python re's \d matches
+        # Unicode digits (Arabic-Indic, fullwidth), which the frontend mirror and the
+        # PDF comb field do not accept. 12 fullwidth digits must be REJECTED so the
+        # backend can't apply a value the client/PDF would refuse (Codex PR #249).
+        from backend.utils.field_validator import validate_updates
+        # 12 fullwidth digits (U+FF10..U+FF19); written as escapes to keep this
+        # source file ASCII-only (CLAUDE.md scar #6 -- cp1252 crash risk).
+        fullwidth = "".join(chr(0xFF10 + d) for d in [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2])
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": fullwidth})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"]
+        assert result["validation_errors"]
+
+    @pytest.mark.parametrize("raw", [
+        "ABC123456789012",   # letters + 12 digits -- letters are NOT punctuation
+        "12345678901A",      # 11 digits + a trailing letter (exactly 12 chars)
+        "ABCDEFGHIJKL",      # all letters, 12 chars
+    ])
+    def test_uscis_account_rejects_letters_not_strips_them(self, raw):
+        # Normalization strips PUNCTUATION only -- embedded LETTERS are KEPT so a
+        # genuinely wrong value stays invalid instead of being silently coerced to
+        # digits (Codex PR #249). The kept letters fail the ^\d{12}$ pattern.
+        from backend.utils.field_validator import normalize_value, validate_updates
+        # The letter must survive normalization (not be stripped to digits).
+        assert any(c.isalpha() for c in str(normalize_value(self.ACCT_FIELD, raw))), \
+            f"{raw!r} letters must be KEPT, not stripped"
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v

@@ -191,8 +191,9 @@ class ValidationHandler:
                 if validation.date_constraint is not None:
                     field_dict['date_constraint'] = validation.date_constraint
                 # format_preset drives normalize_value() in field_validator (e.g.
-                # a_number strips the "A" prefix before pattern validation) -- it
-                # MUST be passed through or normalization never runs (bd 0zr).
+                # a_number strips the "A" prefix, uscis_account strips punctuation,
+                # before length/pattern validation) -- it MUST be passed through or
+                # normalization never runs (bd 0zr / jnjj.40).
                 if validation.format_preset is not None:
                     field_dict['format_preset'] = validation.format_preset
 

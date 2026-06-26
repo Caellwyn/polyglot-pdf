@@ -110,7 +110,7 @@ export interface PDFPosition {
 /**
  * Common format presets for validation
  */
-export type FormatPreset = 'ssn' | 'a_number' | 'zip' | 'phone' | 'email' | 'date';
+export type FormatPreset = 'ssn' | 'a_number' | 'zip' | 'phone' | 'email' | 'date' | 'uscis_account';
 
 /**
  * Validation rules for a field

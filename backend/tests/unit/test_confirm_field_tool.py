@@ -261,6 +261,12 @@ class TestConfirmFieldFailsWhenNotRecorded:
         # Corrective guidance tells Gemini to collect the value first.
         assert "no value" in response["message"].lower()
         assert "update_form_fields" in response["message"]
+        # no_value is NON-retryable: re-confirming the SAME empty field fails
+        # identically and wedges the model in a confirm loop (the DTI stall, bd
+        # polyglot-pdf-jnjj.40). The model must FILL, not retry the bare confirm.
+        assert response["retryable"] is False
+        # ...and the guidance must say so explicitly.
+        assert "again" in response["message"].lower()  # "do NOT call confirm_field ... again"
         # We did NOT advance -- no next-field hint requested on a failed confirm.
         mock_coordinator.request_next_field_hint.assert_not_called()
 
@@ -279,6 +285,10 @@ class TestConfirmFieldFailsWhenNotRecorded:
 
         assert response["success"] is False
         assert response["status"] == "error"
+        # A timeout IS retryable (re-asking can succeed) -- unlike the no_value case
+        # (bd polyglot-pdf-jnjj.40). Pin the invariant so a future change to the
+        # retryable param can't silently make the timeout path non-retryable.
+        assert response["retryable"] is True
         # Must NOT claim the form is done.
         assert "do not assume" in response["message"].lower()
         mock_coordinator.request_next_field_hint.assert_not_called()

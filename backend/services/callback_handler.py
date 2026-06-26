@@ -481,15 +481,25 @@ class CallbackHandler:
             if reason == "no_value":
                 guidance = (
                     f"Field '{field_id}' has no value yet, so it cannot be "
-                    f"confirmed. Ask the user for the value and call "
-                    f"update_form_fields to fill it BEFORE confirming."
+                    f"confirmed. Do NOT call confirm_field for it again -- that "
+                    f"will keep failing. Ask the user for the value and call "
+                    f"update_form_fields to fill it; only THEN confirm. (Only if "
+                    f"THIS field is OPTIONAL and the user has none may you fill it "
+                    f"with an empty value via update_form_fields; for a REQUIRED "
+                    f"field keep asking for a real value -- an empty value will be "
+                    f"rejected. Never retry the bare confirm either way.)"
                 )
-            else:
-                guidance = (
-                    f"Field '{field_id}' could not be confirmed. Ask the user for "
-                    f"the value and fill it with update_form_fields before "
-                    f"confirming again."
-                )
+                # no_value is NOT retryable: re-confirming the SAME empty field fails
+                # identically and wedges the model in a confirm loop (the DTI stall,
+                # bd polyglot-pdf-jnjj.40). The recovery is to FILL, not retry; mark
+                # it non-retryable so the model redirects instead of re-attempting.
+                return self._confirm_failure_response(
+                    field_id, guidance, retryable=False)
+            guidance = (
+                f"Field '{field_id}' could not be confirmed. Ask the user for "
+                f"the value and fill it with update_form_fields before "
+                f"confirming again."
+            )
             return self._confirm_failure_response(field_id, guidance)
 
         # Recorded -- the confirmation actually took. Log it (anonymized, no PII)
@@ -617,7 +627,8 @@ class CallbackHandler:
 
         return response
 
-    def _confirm_failure_response(self, field_id: str, message: str) -> Dict[str, Any]:
+    def _confirm_failure_response(self, field_id: str, message: str,
+                                  retryable: bool = True) -> Dict[str, Any]:
         """Build the confirm_field tool response for a confirm that did NOT take
         (bd polyglot-pdf-wpw.2).
 
@@ -629,13 +640,18 @@ class CallbackHandler:
         services layer does not depend on adapter internals (and does not pull the
         heavy genai SDK module in at import time); the key set is kept in sync with
         WS-C2 deliberately. ``message`` is a fixed, caller-controlled string --
-        never a field value (PII-free)."""
+        never a field value (PII-free).
+
+        ``retryable`` defaults True (a transient/timeout confirm -- re-ask is the
+        right move) but is set False for the no_value case: re-confirming an empty
+        field fails identically and wedges the model in a confirm loop, so the
+        recovery is to FILL, not retry (bd polyglot-pdf-jnjj.40)."""
         response = {
             "success": False,
             "field_confirmed": None,
             "next_field_hint": None,
             "status": "error",
-            "retryable": True,
+            "retryable": retryable,
             "error": message,
             "message": message,
         }
