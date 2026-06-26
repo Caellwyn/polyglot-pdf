@@ -198,8 +198,12 @@ async def _run(client, model: str, fields: list) -> dict:
     timeout. Returns {verdict, latency_s, in_tok, out_tok, error, retries}."""
     prompt = PROMPT.replace("{state}", _payload_json(fields))
     last_exc = "unknown"
+    # latency_s is END-TO-END wall clock from the FIRST attempt, INCLUDING failed
+    # attempts and backoff waits (Codex review: timing only the final attempt
+    # understated the real user-visible latency in exactly the flaky conditions
+    # this probe evaluates). t0 is set once, before the retry loop.
+    t0 = time.time()
     for attempt in range(_MAX_TRIES):
-        t = time.time()
         try:
             resp = await asyncio.wait_for(
                 client.aio.models.generate_content(
@@ -208,7 +212,7 @@ async def _run(client, model: str, fields: list) -> dict:
                 ),
                 timeout=_CALL_TIMEOUT_S,
             )
-            dt = time.time() - t
+            dt = time.time() - t0
             u = resp.usage_metadata
             in_tok = getattr(u, "prompt_token_count", None) if u else None
             out_tok = getattr(u, "candidates_token_count", None) if u else None
@@ -230,10 +234,10 @@ async def _run(client, model: str, fields: list) -> dict:
             if last_exc in _RETRYABLE and attempt < _MAX_TRIES - 1:
                 await asyncio.sleep(1.5 * (attempt + 1))  # linear backoff
                 continue
-            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t,
+            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t0,
                     "in_tok": None, "out_tok": None,
                     "error": last_exc, "retries": attempt}
-    return {"verdict": {"conflicts": []}, "latency_s": 0.0,
+    return {"verdict": {"conflicts": []}, "latency_s": time.time() - t0,
             "in_tok": None, "out_tok": None, "error": last_exc, "retries": _MAX_TRIES}
 
 
@@ -281,8 +285,8 @@ async def _run_live(client, model: str, fields: list) -> dict:
     # longer needed.)
     live_tries = 5
     last_exc = "unknown"
+    t0 = time.time()  # end-to-end wall clock incl. retries+backoff (Codex review)
     for attempt in range(live_tries):
-        t = time.time()
         try:
             async def _do():
                 groups = None
@@ -308,7 +312,7 @@ async def _run_live(client, model: str, fields: list) -> dict:
                 return groups, in_tok, out_tok
 
             groups, in_tok, out_tok = await asyncio.wait_for(_do(), timeout=_CALL_TIMEOUT_S)
-            dt = time.time() - t
+            dt = time.time() - t0
             # Prefer the streamed usage in_tok if present; else the counted input.
             in_tok = in_tok if in_tok is not None else live_in_tok
             if groups is None:
@@ -327,7 +331,7 @@ async def _run_live(client, model: str, fields: list) -> dict:
             if retryable and attempt < live_tries - 1:
                 await asyncio.sleep(1.5 * (attempt + 1))
                 continue
-            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t,
+            return {"verdict": {"conflicts": []}, "latency_s": time.time() - t0,
                     "in_tok": None, "out_tok": None,
                     "error": last_exc, "retries": attempt}
     return {"verdict": {"conflicts": []}, "latency_s": 0.0,
@@ -349,6 +353,7 @@ def _flagged_sets(verdict: dict) -> list:
 # expected conflict group must be COVERED by some flagged group) -- Codex review:
 # any-overlap matching inflated far-distance recall.
 from backend.scripts.g1b_scoring import detected as _detected  # noqa: E402
+from backend.scripts.g1b_scoring import is_model_format_error as _is_model_format_error  # noqa: E402
 
 
 def _cost(model: str, in_tok, out_tok) -> float | None:
@@ -430,14 +435,16 @@ async def main() -> None:
         flagged = _flagged_sets(r["verdict"])
         det = _detected(case.expected_conflicts, flagged)
         c = cell[(model, size)]
-        # An ERRORED call (retries exhausted) is "no measurement" -- do NOT count it
-        # as a miss/FP. Only the error rate is tracked for it. (Codex review: the
-        # probe's own counters previously counted timeouts as FN/TN, so a fresh
-        # matrix/meta understated recall and inflated precision; g1b_analyze already
-        # excluded errors -- this makes the probe consistent with it.)
-        if r["error"]:
+        # TWO kinds of "error" must be scored DIFFERENTLY (Codex review):
+        #  - TRANSPORT failure (timeout / 5xx / connect) = "no measurement";
+        #    excluded from tp/fn/fp/tn, only the error rate tracks it.
+        #  - MODEL-FORMAT failure (json_error / no_tool_call) = the model produced
+        #    no usable verdict = an empty verdict = a MISS on a contradiction (FN),
+        #    a clean-pass on a clean case (TN). Excluding it would inflate recall.
+        if r["error"] and not _is_model_format_error(r["error"]):
             c["errors"] += 1
         else:
+            # scored: a model-format error has flagged=[] -> det=False already.
             if case.is_contradiction:
                 c["tp" if det else "fn"] += 1
             else:

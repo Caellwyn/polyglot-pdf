@@ -55,7 +55,9 @@ _SCHEMA_PATH = os.path.join(
 
 
 def _load_fields() -> list:
-    """The real I-90 leaf fields in document order: (id, spoken_name, type)."""
+    """The real I-90 leaf fields in document order: id, spoken_name, type,
+    section_id, and the raw `options` list (so the filler can pick a valid
+    in-domain option value for radio/checkbox/select fields)."""
     with open(_SCHEMA_PATH, encoding="utf-8") as f:
         schema = json.load(f)
     out = []
@@ -64,9 +66,25 @@ def _load_fields() -> list:
         name = fld.get("spoken_name") or fld.get("name") or fid
         ftype = fld.get("type", "text")
         sec = fld.get("section_id", "")
+        opts = fld.get("options") or []
         if fid:
-            out.append({"field_id": fid, "name": name, "type": ftype, "section_id": sec})
+            out.append({"field_id": fid, "name": name, "type": ftype,
+                        "section_id": sec, "options": opts})
     return out
+
+
+def _first_option_value(field: dict) -> str:
+    """The FIRST option's value for a radio/checkbox/select field -- always a
+    coherent, in-domain answer. Each option entry is either a dict with a
+    `value` key or a bare string. Returns "" if the field has no options."""
+    for opt in field.get("options") or []:
+        if isinstance(opt, dict):
+            val = opt.get("value")
+            if val is not None:
+                return str(val)
+        elif opt is not None:
+            return str(opt)
+    return ""
 
 
 # A coherent persona: realistic filler values keyed by a substring of the field id
@@ -146,6 +164,24 @@ _CLUSTER_FILL = {
     "p7_line3e_zipcode": "77003",
     "p7_line3h_country": "United States",
     "p7_line6_preparersemailaddress": "john.smith@example.com",
+    # date-of-signature fields typed `date` in the schema (so they take a date,
+    # not a signer name). Per-id so they read coherently alongside the signatures.
+    "p6_line6b_dateofsignature": "2025-06-01",
+    "p7_line8b_dateofsignature": "2025-06-01",
+}
+
+
+# Per-id values for the `signature`-typed fields. The applicant signs Part 5, the
+# interpreter signs Part 6, and the preparer signs Part 7 -- so each signature must
+# show ITS OWN signer's name, not the applicant's. The applicant's "date of
+# signature" is typed `signature` in the schema but is a DATE, so it gets a date.
+# (The Part 6/7 date-of-signature fields are typed `date` and handled via
+# _CLUSTER_FILL above.)
+_SIGNATURE_FILL = {
+    "p5_line6a_signatureofapplicant": "Linh Nguyen",
+    "p5_line6b_dateofsignature": "2025-06-01",
+    "p6_line6a_signature": "Maria Garcia",
+    "p7_line8a_signatureofpreparer": "John Smith",
 }
 
 
@@ -154,15 +190,33 @@ def _filler(field: dict) -> str:
     land in a radio/checkbox/select -- Codex review #2: 'United States' contains
     'state', so the substring persona used to inject 'TX' into a Yes/No checkbox),
     then by per-id cluster fill, then by id/name persona substring."""
-    fid = field["field_id"].lower()
+    fid_raw = field["field_id"]
+    fid = fid_raw.lower()
     t = field["type"]
     # TYPE-GATED values win over substring persona for constrained field types.
-    if t in ("radio", "checkbox"):
-        return "No"
-    if t == "select":
-        # the only select fields here are US state pickers
-        return "TX"
+    # radio/checkbox/select are NOT all Yes/No: unit type, sex, ethnicity, race,
+    # eye/hair color, and state pickers each have their own option set. Fill with a
+    # VALID in-domain OPTION VALUE from the schema, never a bare "No"/"TX" that may
+    # not be one of the options (Codex review #2). Two coherence carve-outs:
+    #   - the BASE mailing/physical state pickers stay 'TX' so the base persona's
+    #     Houston/TX/77027 address stays internally coherent (injection cases
+    #     override the state explicitly anyway);
+    #   - everything else takes option[0].value, which is always coherent.
+    if t in ("radio", "checkbox", "select"):
+        # per-id cluster fill wins (e.g. physical/interpreter/preparer state = 'TX')
+        if fid_raw in _CLUSTER_FILL:
+            return _CLUSTER_FILL[fid_raw]
+        # keep the base MAILING state coherent with the base ZIP (Houston/TX/77027)
+        if fid_raw == "p1_line6e_state":
+            return "TX"
+        return _first_option_value(field)
     if t == "signature":
+        # each signature shows ITS OWN signer (applicant/interpreter/preparer);
+        # a signature field that is actually a date gets a date.
+        if fid_raw in _SIGNATURE_FILL:
+            return _SIGNATURE_FILL[fid_raw]
+        if "date" in fid:
+            return "2025-06-01"
         return "Linh Nguyen"
     # explicit per-id cluster fill (physical/interpreter/preparer)
     if field["field_id"] in _CLUSTER_FILL:
@@ -227,6 +281,7 @@ def _distance(payload: list, id_a: str, id_b: str) -> int:
 # Real I-90 field ids used for injection (verified present in schema.json).
 # Address clusters live in different SECTIONS, so pairing across them yields a
 # large, cross-section distance; pairing within one cluster yields a small one.
+MAIL_STREET = "p1_line6b_streetnumbername"
 MAIL_STATE = "p1_line6e_state"
 MAIL_ZIP = "p1_line6f_zipcode"
 MAIL_COUNTRY = "p1_line6i_country"
@@ -258,7 +313,12 @@ P8_INFO_E = "p8_line5d_additionalinfo[2]"     # idx 131
 # the mailing cluster in a contradiction case never creates an UNLABELED
 # mailing-vs-physical mismatch (Codex review #5 cousin). Two different-but-each-valid
 # addresses is a legitimate clean situation the checker must not flag.
+PHYS_STREET = "p1_line7a_streetnumbername"
 _PHYS_COHERENT = {
+    # include a street so the physical address is internally coherent: the base
+    # _CLUSTER_FILL gives p1_line7a a Houston street ("4200 Westheimer Rd"), which
+    # would be incoherent once the physical city/state become Austin/TX here.
+    PHYS_STREET: "456 Congress Ave",
     PHYS_CITY: "Austin",
     PHYS_STATE: "TX",
     PHYS_ZIP: "78701",
@@ -417,6 +477,10 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
     ]):
         base = _base_state(all_fields, size)
         _set_physical(base)
+        # replace the base Houston street so the new city/state is coherent: a
+        # "4200 Westheimer Rd, New York, NY" address is internally inconsistent and
+        # a model may legitimately flag it, contaminating the precision traps.
+        _set(base, MAIL_STREET, "123 Main St")
         _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, state)
         _set(base, MAIL_ZIP, zipc); _set(base, MAIL_COUNTRY, "United States")
         cases.append(Case(f"s{size}_clean_us_{i}", size, "clean", 0, base))
@@ -430,6 +494,7 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
     ]):
         base = _base_state(all_fields, size)
         _set_physical(base)
+        _set(base, MAIL_STREET, "123 Main St")
         _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, "")
         _set(base, MAIL_PROV, prov); _set(base, MAIL_ZIP, "")
         _set(base, MAIL_COUNTRY, country)
@@ -443,6 +508,7 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
     ]):
         base = _base_state(all_fields, size)
         _set_physical(base)
+        _set(base, MAIL_STREET, "123 Main St")
         _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, state)
         _set(base, MAIL_ZIP, zipc); _set(base, MAIL_COUNTRY, "United States")
         cases.append(Case(f"s{size}_clean_territory_{i}", size, "clean", 0, base))
@@ -456,8 +522,12 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
         base = _base_state(all_fields, size)
         if _index_of(base, PHYS_STATE) < 0:
             continue
+        # coherent street for each address (the base persona street is Houston's,
+        # which would be incoherent with these new mailing/physical cities)
+        _set(base, MAIL_STREET, "123 Main St")
         _set(base, MAIL_CITY, mail[0]); _set(base, MAIL_STATE, mail[1]); _set(base, MAIL_ZIP, mail[2])
-        # physical = a coherent city/state/zip of its own (distinct from mailing)
+        # physical = a coherent street/city/state/zip of its own (distinct from mailing)
+        _set(base, PHYS_STREET, "456 Oak Ave")
         _set(base, PHYS_CITY, phys[0]); _set(base, PHYS_STATE, phys[1]); _set(base, PHYS_ZIP, phys[2])
         _set(base, MAIL_COUNTRY, "United States")
         cases.append(Case(f"s{size}_clean_dual_{i}", size, "clean", 0, base))

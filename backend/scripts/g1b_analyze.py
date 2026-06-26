@@ -18,6 +18,19 @@ import os
 import sys
 from collections import defaultdict
 
+from backend.scripts.g1b_scoring import is_model_format_error
+
+
+def _measured(r) -> bool:
+    """A row counts toward accuracy if it has NO error, OR a MODEL-FORMAT error
+    (json_error / no_tool_call) -- which is scored as an empty verdict (a miss),
+    not excluded. Only TRANSPORT errors (timeout / 5xx) are excluded (Codex
+    review). The detected/n_flagged the probe wrote already reflect the empty
+    verdict for a model-format error, so scoring the row as-is is correct."""
+    err = r.get("error", "")
+    return (not err) or is_model_format_error(err)
+
+
 OUT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "scripts", "spikes", "data",
@@ -72,11 +85,10 @@ def main() -> None:
         det = defaultdict(int)
         tot = defaultdict(int)
         for r in rows:
-            # Exclude ERRORED calls -- an API timeout is "no measurement", not a
-            # miss; counting it as FN unfairly penalizes a model for infra
-            # flakiness (and disagrees with the probe's own matrix). Consistent
-            # with the recall/precision-by-size block below.
-            if r["model"] == model and r["is_contradiction"] == "1" and not r["error"]:
+            # _measured(): exclude TRANSPORT errors ("no measurement") but SCORE
+            # model-format errors (json_error / no_tool_call) as empty-verdict
+            # misses. Consistent with the probe's _record and the by-size block.
+            if r["model"] == model and r["is_contradiction"] == "1" and _measured(r):
                 b = _distance_bucket(int(r["distance"]))
                 tot[b] += 1
                 det[b] += r["detected"] == "1"
@@ -94,7 +106,7 @@ def main() -> None:
         det = defaultdict(int)
         tot = defaultdict(int)
         for r in rows:
-            if r["model"] == model and r["is_contradiction"] == "1" and not r["error"]:
+            if r["model"] == model and r["is_contradiction"] == "1" and _measured(r):
                 tot[r["cls"]] += 1
                 det[r["cls"]] += r["detected"] == "1"
         cells = " ".join(f"{_pct(det[c], tot[c]):>13}" for c in classes)
@@ -109,7 +121,7 @@ def main() -> None:
         for size in sizes:
             tp = fn = fp = 0
             for r in rows:
-                if r["model"] == model and int(r["size"]) == size and not r["error"]:
+                if r["model"] == model and int(r["size"]) == size and _measured(r):
                     if r["is_contradiction"] == "1":
                         tp += r["detected"] == "1"
                         fn += r["detected"] == "0"

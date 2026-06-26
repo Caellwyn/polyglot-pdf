@@ -50,18 +50,22 @@ CHANGED; see the "Codex review" note and the lesson below):
 **Live API evaluated and REJECTED.** The maintainer asked to test the actual voice
 model (`gemini-2.5-flash-native-audio`) as the checker. It cannot emit TEXT
 (modality 1007), so it was driven text-in over a Live session in TOOL-CALLING mode
-(reports the verdict through a `report_conflicts` tool call). It works (recall
-1.000 at every size after prefix-tolerant re-scoring, precision ~0.76-0.80) but at
-6-9s cold-per-call latency -- no
-accuracy win over 2.5-flash, and the Live-session tech debt (holding sockets
-across minutes-long idle gaps past the ~30-60s idle timeout, history-token
-buildup, dropped-socket handling) is not worth it for discrete batch validation a
-plain HTTP call does better. Maintainer's call: stop forcing a stateful streaming
-pipeline into a unary job.
+(reports the verdict through a `report_conflicts` tool call). On the corrected
+corpus its recall is 0.938/1.000/0.963 (20/40/132) and -- notably -- it is one of
+only two models that catch ALL the far/duration cross-section cases (6/6 far,
+3/3 duration_year), BETTER than 2.5-flash on the hard cases. But at 6-18s
+per-call latency plus the Live-session tech debt (holding sockets across
+minutes-long idle gaps past the ~30-60s timeout, history-token buildup,
+dropped-socket handling), a plain HTTP call to 3.5-flash gets comparable hard-case
+recall without that overhead. So it stays REJECTED as the checker -- but its
+strong hard-case recall is a data point if "voice model does double-duty" is ever
+revisited.
 
-**3.5-flash measured** (132 only): recall 1.000, precision 0.86, but ~4x costlier
-than 2.5-flash at full rate with no precision gain. Not preferred (caveat: context
-caching, not modeled here, could shift its cost case -- noted for the follow-up).
+**3.5-flash measured** (132 only): recall 0.963, precision 0.634, far 5/6,
+duration_year 2/3 -- it is the simplest (plain HTTP) model that HOLDS UP on the
+cross-section cases the cheap tier misses, so it is the RECOMMENDED end-of-form
+model. It is the priciest text model ($0.008/call uncached), but context caching
+(untested) would cut that and the absolute per-form cost is tiny.
 
 **Follow-up filed: bd polyglot-pdf-08zv** (G1c) -- optimize 2.5-flash end-of-form
 LATENCY (context caching + payload trim) and 2.5-flash-lite per-page PRECISION

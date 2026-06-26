@@ -22,17 +22,39 @@ from __future__ import annotations
 # 'p1' or 'p1_line6' must NOT match every p1_line6* field.
 _MIN_PREFIX = len("p1_line6e")  # 9 chars -- the line+letter stem
 
+# Error markers that are MODEL-FORMAT failures (the model produced no usable
+# verdict) rather than TRANSPORT failures. A model-format failure is scored as an
+# empty verdict (a MISS on a contradiction), NOT excluded as "no measurement"
+# (Codex review). Everything else (TimeoutError, ServerError, ConnectError, ...)
+# is a transport failure and is excluded from accuracy.
+_MODEL_FORMAT_ERRORS = frozenset({"json_error", "no_tool_call"})
+
+
+def is_model_format_error(err: str) -> bool:
+    """True if `err` is a model-format failure (score as empty verdict), False for
+    transport failures (exclude from accuracy) or no error."""
+    return err in _MODEL_FORMAT_ERRORS
+
 
 def ids_match(a: str, b: str) -> bool:
     """True if two field ids refer to the same field: equal, OR one is a prefix of
-    the other AND the shorter id reaches at least the line+letter stem. The
-    native-audio (voice) model truncates ids in its tool call, so exact matching
-    wrongly scored those as misses; for full-length text-model ids this reduces to
-    equality."""
+    the other AND the shorter id reaches at least the line+letter stem AND the
+    longer id's continuation is a '_' SUFFIX (a truncation), NOT a '[' bracket
+    (a distinct repeat entry). The native-audio (voice) model truncates ids at
+    underscore boundaries ('p1_line6e' for 'p1_line6e_state'), so exact matching
+    wrongly scored those as misses; but 'p8_line5d_additionalinfo' and
+    'p8_line5d_additionalinfo[1]' are DIFFERENT Part-8 repeats and must NOT match
+    (Codex review: prefix-matching them overstated far-case recall). For
+    full-length text-model ids this reduces to equality."""
     if a == b:
         return True
     short, lng = (a, b) if len(a) <= len(b) else (b, a)
-    return len(short) >= _MIN_PREFIX and lng.startswith(short)
+    if len(short) < _MIN_PREFIX or not lng.startswith(short):
+        return False
+    # the next char in the longer id must be '_' (a dropped suffix), not '[' (a
+    # distinct bracketed repeat) -- and not a continuation of the same token.
+    nxt = lng[len(short)]
+    return nxt == "_"
 
 
 def _group_covered(expected_group: set, flagged_group: set) -> bool:
