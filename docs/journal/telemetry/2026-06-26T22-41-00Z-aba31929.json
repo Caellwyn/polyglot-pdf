@@ -1,0 +1,84 @@
+{
+  "recorded_at": "2026-06-26T22:41:00Z",
+  "session_id": "aba31929-9507-419b-8b94-a8b0aa95f3f3",
+  "beads": [
+    "polyglot-pdf-jnjj.37"
+  ],
+  "arm": "A",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-06-18T21:05:59.325Z",
+    "last_ts": "2026-06-26T22:40:46.647Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 89651,
+      "output_tokens": 743960,
+      "cache_read_input_tokens": 527088106,
+      "cache_creation_input_tokens": 5707929
+    },
+    "subagent": {
+      "input_tokens": 33923,
+      "output_tokens": 159954,
+      "cache_read_input_tokens": 33632321,
+      "cache_creation_input_tokens": 2505909
+    },
+    "total": {
+      "input_tokens": 123574,
+      "output_tokens": 903914,
+      "cache_read_input_tokens": 560720427,
+      "cache_creation_input_tokens": 8213838
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 89651,
+        "output_tokens": 743960,
+        "cache_read_input_tokens": 527088106,
+        "cache_creation_input_tokens": 5707929
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 27868,
+        "output_tokens": 27461,
+        "cache_read_input_tokens": 6332403,
+        "cache_creation_input_tokens": 420282
+      },
+      "claude-haiku-4-5-20251001": {
+        "input_tokens": 5694,
+        "output_tokens": 33305,
+        "cache_read_input_tokens": 10920963,
+        "cache_creation_input_tokens": 1000096
+      },
+      "claude-sonnet-4-6": {
+        "input_tokens": 361,
+        "output_tokens": 99188,
+        "cache_read_input_tokens": 16378955,
+        "cache_creation_input_tokens": 1085531
+      }
+    }
+  },
+  "subagent_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-8",
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 1114,
+    "subagent": 670
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 4,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
