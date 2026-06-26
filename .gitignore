@@ -66,3 +66,11 @@ tmp_*
 .beads/experiment_state.json
 .venv-backend/
 backend/.venv
+
+# bd polyglot-pdf-jnjj.39: --debug measurement artifacts hold model transcripts +
+# the exact field values written (user data / PHI). The cost harness is a
+# never-deployed spike, but these must NEVER be committed regardless of the run's
+# --out-dir (a repo-wide rule -- scripts/spikes/.gitignore only covered the default
+# location; Codex PR #246). The committable cost CSV/meta.json siblings are NOT
+# matched by this pattern.
+*.debug.json

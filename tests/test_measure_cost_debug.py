@@ -21,6 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 pytest.importorskip("numpy")
 from scripts.spikes.measure_form_session_costs import (  # noqa: E402
     attribute_tools_by_window,
+    _attribute_records_by_window,
     _chunks_in_window,
     _jsonable,
 )
@@ -56,6 +57,25 @@ def test_window_attribution_beats_legacy_on_late_call():
     # attributes it to q2 (the last window it passed), never silently drops it.
     tool_io = [{"ts": 24.0, "tool": "update_form_fields"}]
     assert attribute_tools_by_window(tool_io, windows) == {"2": ["update_form_fields"]}
+
+
+def test_records_attribution_keeps_late_call_with_its_question():
+    """Codex PR #246: a late tool call attributed to qN by the name view must also
+    carry its args/response on qN's records -- the two views agree, so a question's
+    tool_io is never empty while tools_reliable claims it owns a call."""
+    windows = [
+        {"q": 1, "t_start": 0.0, "t_end": 10.0},
+        {"q": 2, "t_start": 12.0, "t_end": 22.0},
+    ]
+    late = {"ts": 24.0, "tool": "update_form_fields",
+            "args": {"field_id": "f"}, "response": {"ok": True}}
+    by_q = _attribute_records_by_window([late], windows)
+    names = attribute_tools_by_window([late], windows)
+    # Same question in both views, and the RECORD (args/response) is present there.
+    assert names == {"2": ["update_form_fields"]}
+    assert [r["tool"] for r in by_q["2"]] == ["update_form_fields"]
+    assert by_q["2"][0]["args"] == {"field_id": "f"}
+    assert by_q["2"][0]["response"] == {"ok": True}
 
 
 def test_window_attribution_pre_q1_is_q0():

@@ -324,7 +324,21 @@ def attribute_tools_by_window(tool_io, q_windows):
     on. Instead, bucket each captured tool call by which question's TIME WINDOW
     (t_start..t_end of that question's turns) its timestamp falls in. Calls before
     q1's window (e.g. greeting) bucket to q0. Returns {q: [tool_names...]}."""
-    out: dict[str, list[str]] = {}
+    return {q: [r["tool"] for r in recs]
+            for q, recs in _attribute_records_by_window(tool_io, q_windows).items()}
+
+
+def _attribute_records_by_window(tool_io, q_windows):
+    """Bucket each tool-I/O RECORD (not just its name) by question time window.
+
+    Shared by the tool-name attribution above and the per-question tool_io in the
+    debug artifact, so the two are ALWAYS consistent: a call attributed to qN by
+    tools_reliable appears in qN's tool_io with its args/response (Codex PR #246 --
+    a strict in-window filter previously pushed a late call's args/response to
+    out_of_window even though tools_reliable claimed qN owned it). A call that lands
+    after a window closes attributes to the last window it passed; one before q1's
+    window buckets to q0. Returns {str(q): [record, ...]}."""
+    out: dict[str, list[dict]] = {}
     for rec in tool_io:
         ts = rec["ts"]
         q = 0
@@ -334,7 +348,7 @@ def attribute_tools_by_window(tool_io, q_windows):
                 break
             if ts > w["t_end"]:
                 q = w["q"]  # after this window's end, before the next starts
-        out.setdefault(str(q), []).append(rec["tool"])
+        out.setdefault(str(q), []).append(rec)
     return out
 
 
@@ -946,40 +960,50 @@ async def run(args) -> int:
             # runs neither request nor pay for transcription.
             send_transcript=DEBUG)
 
-        # Tap tool calls AFTER start_session wired the real chain.
-        orig_tool_cb = adapter._on_tool_call
+        # Tap tool calls AFTER start_session wired the real chain. The tap wraps the
+        # REAL callback; it must be RE-INSTALLED after every switch_to_section, which
+        # calls start_session -> set_callbacks and overwrites adapter._on_tool_call
+        # with the un-wrapped handler (Codex PR #246). Without re-install the tap --
+        # and per_question_tools -- silently stop capturing after section 1, the very
+        # multi-section case the debug artifact exists to diagnose. _install_tool_tap
+        # captures the CURRENT underlying callback each time so a re-install never
+        # double-wraps a prior tap.
+        def _install_tool_tap():
+            orig_tool_cb = adapter._on_tool_call
 
-        async def _tool_tap(tool_name, arguments):
-            tool_log.append((current_q["n"], tool_name))
-            _ts = time.monotonic()
-            try:
-                resp = await orig_tool_cb(tool_name, arguments)
-                if DEBUG:
-                    # bd jnjj.39: the exact args the model SENT and the response it GOT
-                    # back -- the single most useful diagnosis signal (was missing). The
-                    # response carries the success/error message + next_field_guidance.
-                    tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
-                                    "tool": tool_name, "args": _jsonable(arguments),
-                                    "response": _jsonable(resp)})
-                return resp
-            except Exception as _e:
-                # bd polyglot-pdf-jnjj.38: the adapter logs a tool-callback exception
-                # via _log.exception (traceback DEV-only, str(e) scrubbed for PHI), so
-                # a CRASHING handler is otherwise invisible in the harness output -- the
-                # fill silently never lands and reads as a model "skip"/"drift". Record
-                # the exception type per question in the meta so a handler bug can never
-                # again masquerade as model behavior. (This caught a real
-                # FormField-vs-dict AttributeError during jnjj.38 diagnosis.)
-                meta.setdefault("tool_callback_exceptions", []).append(
-                    {"q": current_q["n"], "tool": tool_name,
-                     "error_type": type(_e).__name__})
-                if DEBUG:
-                    tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
-                                    "tool": tool_name, "args": _jsonable(arguments),
-                                    "response": {"_exception": type(_e).__name__}})
-                raise
+            async def _tool_tap(tool_name, arguments):
+                tool_log.append((current_q["n"], tool_name))
+                _ts = time.monotonic()
+                try:
+                    resp = await orig_tool_cb(tool_name, arguments)
+                    if DEBUG:
+                        # bd jnjj.39: the exact args the model SENT and the response it
+                        # GOT back -- the single most useful diagnosis signal (was
+                        # missing). The response carries the message + next_field_guidance.
+                        tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
+                                        "tool": tool_name, "args": _jsonable(arguments),
+                                        "response": _jsonable(resp)})
+                    return resp
+                except Exception as _e:
+                    # bd polyglot-pdf-jnjj.38: the adapter logs a tool-callback exception
+                    # via _log.exception (traceback DEV-only, str(e) scrubbed for PHI), so
+                    # a CRASHING handler is otherwise invisible in the harness output --
+                    # the fill silently never lands and reads as a model "skip"/"drift".
+                    # Record the exception type per question so a handler bug can never
+                    # again masquerade as model behavior. (Caught a real FormField-vs-dict
+                    # AttributeError during jnjj.38 diagnosis.)
+                    meta.setdefault("tool_callback_exceptions", []).append(
+                        {"q": current_q["n"], "tool": tool_name,
+                         "error_type": type(_e).__name__})
+                    if DEBUG:
+                        tool_io.append({"ts": _ts, "q_at_call": current_q["n"],
+                                        "tool": tool_name, "args": _jsonable(arguments),
+                                        "response": {"_exception": type(_e).__name__}})
+                    raise
 
-        adapter._on_tool_call = _tool_tap
+            adapter._on_tool_call = _tool_tap
+
+        _install_tool_tap()
 
         for _ in range(150):
             if getattr(adapter, "_session_ready", False):
@@ -998,6 +1022,13 @@ async def run(args) -> int:
         last_total = await _wait_turn(adapter, last=last_total)
         meta["greeting_tokens"] = tracker.snapshot()["_session_total_tokens"]
         tracker.base = tracker.snapshot()
+        # bd jnjj.39 (Codex PR #246): each question's window STARTS where the previous
+        # one ended, not when we begin speaking this answer -- the AI's PROMPT for
+        # this field is emitted at the tail of the prior turn (q1's prompt is in the
+        # greeting). Anchoring t_start to the prior window's end captures that prompt
+        # in THIS field's model_said instead of losing it / mis-filing it on the prior
+        # field. Initialized to the post-greeting instant.
+        _prev_q_end = time.monotonic()
 
         async def speak(text: str, label: str):
             nonlocal last_total
@@ -1054,9 +1085,20 @@ async def run(args) -> int:
                     if getattr(adapter, "_session_ready", False):
                         break
                     await asyncio.sleep(0.1)
+                # switch_to_section re-ran set_callbacks and clobbered the tap; restore
+                # it so tool I/O + per_question_tools keep capturing past section 1
+                # (Codex PR #246). _on_raw_usage / _on_input_transcript / _log are NOT
+                # touched by set_callbacks, so only the tool tap needs reinstalling.
+                _install_tool_tap()
                 last_total = await _wait_turn(adapter, last=0)  # new-session greeting
+                # A section restart re-greets; the new section's first-field prompt is
+                # in THAT greeting, so anchor the next window to post-greeting here
+                # (don't reach back across the session boundary). bd jnjj.39.
+                _prev_q_end = time.monotonic()
 
-            _q_t_start = time.monotonic()  # bd jnjj.39: window for tool/transcript attribution
+            # Window starts where the previous question ended (captures this field's
+            # AI prompt, emitted at the tail of the prior turn). bd jnjj.39 / PR #246.
+            _q_t_start = _prev_q_end
             if args.path == "happy":
                 await speak(q["say"], "value")
                 await speak(CONFIRM_YES, "confirm")
@@ -1065,9 +1107,10 @@ async def run(args) -> int:
                 await speak(REJECT, "reject")
                 await speak(q["say"], "corrected-value")
                 await speak(CONFIRM_YES, "confirm")
+            _prev_q_end = time.monotonic()
             if DEBUG:
                 q_windows.append({"q": i, "fid": fid, "t_start": _q_t_start,
-                                  "t_end": time.monotonic()})
+                                  "t_end": _prev_q_end})
 
             d = tracker.delta_and_advance()
             ti, ai = d["_session_text_input_tokens"], d["_session_audio_input_tokens"]
@@ -1158,28 +1201,30 @@ def _write_debug_artifact(path, q_windows, tool_io, transcript_chunks,
     per_question_tools so the two can be compared (criterion 2). LOCAL-ONLY:
     transcripts + tool args/responses are user data; the harness is a never-deployed
     spike (mirrors the DEV_LOGGING precedent)."""
-    reliable = attribute_tools_by_window(tool_io, q_windows)
+    # One attribution, used for BOTH tool_io and tools_reliable so they agree: a
+    # call attributed to qN appears in qN's tool_io with its args/response, even a
+    # late call that lands after the window closed (Codex PR #246).
+    by_q = _attribute_records_by_window(tool_io, q_windows)
     questions = []
     for w in q_windows:
         q = w["q"]
-        q_tools = [r for r in tool_io
-                   if w["t_start"] <= r["ts"] <= w["t_end"]]
+        q_recs = by_q.get(str(q), [])
         questions.append({
             "q": q,
             "field_id": w["fid"],
             "model_heard": _chunks_in_window(input_transcript, w),
             "model_said": _chunks_in_window(transcript_chunks, w),
             "tool_io": [{"tool": r["tool"], "args": r["args"],
-                         "response": r["response"]} for r in q_tools],
-            "tools_reliable": reliable.get(str(q), []),
+                         "response": r["response"]} for r in q_recs],
+            "tools_reliable": [r["tool"] for r in q_recs],
             "tools_legacy": legacy_per_q_tools.get(str(q), []),
         })
-    # Tool calls that fell OUTSIDE any question window (greeting / trailing).
+    # Tool calls attributed to q0 -- before q1's window (the greeting), the only
+    # genuinely out-of-question bucket now that late calls attach to their last
+    # passed question above.
     out_of_window = [{"tool": r["tool"], "args": r["args"],
                       "response": r["response"], "q_at_call": r["q_at_call"]}
-                     for r in tool_io
-                     if not any(w["t_start"] <= r["ts"] <= w["t_end"]
-                                for w in q_windows)]
+                     for r in by_q.get("0", [])]
     artifact = {
         "note": ("bd polyglot-pdf-jnjj.39 debug artifact. LOCAL-ONLY -- holds "
                  "transcripts + field values (user data). Per question: model_heard "
