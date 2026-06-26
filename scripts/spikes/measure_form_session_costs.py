@@ -871,7 +871,7 @@ async def run(args) -> int:
     # question WINDOW the call's timestamp falls in, not the mutable counter.
     tool_log: list[tuple[int, str]] = []
     tool_io: list[dict] = []          # bd jnjj.39: {ts, q_at_call, tool, args, response}
-    model_transcript: list[dict] = []  # bd jnjj.39: {ts, q_at_call, text} output speech
+    input_transcript: list[dict] = []  # bd jnjj.39: {ts, text} what the model HEARD
     q_windows: list[dict] = []        # bd jnjj.39: {q, fid, t_start, t_end} for attribution
     rows: list[dict] = []
     current_q = {"n": 0}
@@ -886,6 +886,12 @@ async def run(args) -> int:
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
             "total": getattr(u, "total_token_count", None)})
+        if DEBUG:
+            # bd jnjj.39: observe the INPUT transcript (what the model heard) so the
+            # debug artifact can answer "did it parse the synthetic-audio digits?".
+            # Default-off diagnostic observer; production never sets it (PHI).
+            adapter._on_input_transcript = lambda text: input_transcript.append(
+                {"ts": time.monotonic(), "text": str(text)})
 
         service = FormFillingService(live_ai=adapter, settings=settings)
 
@@ -1130,7 +1136,7 @@ async def run(args) -> int:
 
     if DEBUG:
         _write_debug_artifact(out_dir / f"{base_name}.debug.json", plan, q_windows,
-                              tool_io, client.transcript_chunks,
+                              tool_io, client.transcript_chunks, input_transcript,
                               meta["per_question_tools"])
         print(f"wrote {out_dir / (base_name + '.debug.json')}  "
               f"(LOCAL-ONLY -- contains transcripts/field values)")
@@ -1144,13 +1150,14 @@ def _chunks_in_window(chunks, w):
 
 
 def _write_debug_artifact(path, plan, q_windows, tool_io, transcript_chunks,
-                          legacy_per_q_tools):
-    """Assemble the bd jnjj.39 per-run debug file: per question, what the model SAID
-    (output transcript, de-chunked), and the exact tool ARGS it sent + RESPONSE it
-    got back -- attributed by TIME WINDOW, not the mutable loop counter. Also surfaces
-    the reliable attribution vs the legacy per_question_tools so the two can be
-    compared (criterion 2). LOCAL-ONLY: transcripts + tool args/responses are user
-    data; the harness is a never-deployed spike (mirrors the DEV_LOGGING precedent)."""
+                          input_transcript, legacy_per_q_tools):
+    """Assemble the bd jnjj.39 per-run debug file: per question, what the model HEARD
+    (input transcript), what it SAID (output transcript, de-chunked), and the exact
+    tool ARGS it sent + RESPONSE it got back -- all attributed by TIME WINDOW, not
+    the mutable loop counter. Also surfaces the reliable attribution vs the legacy
+    per_question_tools so the two can be compared (criterion 2). LOCAL-ONLY:
+    transcripts + tool args/responses are user data; the harness is a never-deployed
+    spike (mirrors the DEV_LOGGING precedent)."""
     reliable = attribute_tools_by_window(tool_io, q_windows)
     questions = []
     for w in q_windows:
@@ -1160,6 +1167,7 @@ def _write_debug_artifact(path, plan, q_windows, tool_io, transcript_chunks,
         questions.append({
             "q": q,
             "field_id": w["fid"],
+            "model_heard": _chunks_in_window(input_transcript, w),
             "model_said": _chunks_in_window(transcript_chunks, w),
             "tool_io": [{"tool": r["tool"], "args": r["args"],
                          "response": r["response"]} for r in q_tools],
@@ -1174,10 +1182,10 @@ def _write_debug_artifact(path, plan, q_windows, tool_io, transcript_chunks,
                                 for w in q_windows)]
     artifact = {
         "note": ("bd polyglot-pdf-jnjj.39 debug artifact. LOCAL-ONLY -- holds "
-                 "transcripts + field values (user data). Per question: model_said "
-                 "(output speech), tool_io (exact args sent + response received), and "
-                 "tools_reliable (timestamp-window attribution) vs tools_legacy "
-                 "(the old mutable-counter attribution) for comparison."),
+                 "transcripts + field values (user data). Per question: model_heard "
+                 "(input transcript), model_said (output speech), tool_io (exact args "
+                 "sent + response received), and tools_reliable (timestamp-window "
+                 "attribution) vs tools_legacy (the old mutable-counter attribution)."),
         "questions": questions,
         "out_of_window_tool_io": out_of_window,
     }
