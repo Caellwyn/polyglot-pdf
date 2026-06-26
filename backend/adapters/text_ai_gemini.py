@@ -260,7 +260,8 @@ class TextAIGemini(ITextAI):
         if isinstance(exc, genai.errors.ServerError):
             return True
         if isinstance(exc, genai.errors.ClientError):
-            code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            # google-genai APIError always sets .code to the HTTP status int.
+            code = getattr(exc, "code", None)
             return code in (404, 429)
         return False
 

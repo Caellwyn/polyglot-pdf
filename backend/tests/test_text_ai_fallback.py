@@ -10,6 +10,7 @@ ASCII only (CLAUDE.md scar #6).
 import types as pytypes
 
 import pytest
+import structlog.testing
 from google.genai import errors
 
 from backend.adapters.text_ai_gemini import TextAIGemini
@@ -151,6 +152,35 @@ async def test_validate_succeeds_via_fallback():
     assert verdict == {"conflicts": []}
     assert a._client.aio.models.tried[:2] == [
         "gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]
+
+
+@pytest.mark.asyncio
+async def test_fallback_logs_is_fallback_true():
+    # Exit criterion 2: when a fallback model serves the call, the structured log
+    # must record is_fallback=True (so degraded traffic is visible in telemetry).
+    a = _adapter({"gemini-2.5-flash-lite": _server_error(503)})
+    with structlog.testing.capture_logs() as logs:
+        await a._generate(stable_prefix=["sys"], fresh_tail=["q"])
+    usage = [e for e in logs if e.get("event") == "text_ai_usage"]
+    assert usage, "expected a text_ai_usage log event"
+    assert any(e.get("is_fallback") is True for e in usage), (
+        "expected is_fallback=True on the serving (fallback) model's usage log; "
+        "got: %r" % usage
+    )
+    # the dedicated fallback-warning event also fired, naming the served model
+    assert any(e.get("event") == "text_ai_used_fallback_model"
+               and e.get("model") == "gemini-3.1-flash-lite" for e in logs)
+
+
+@pytest.mark.asyncio
+async def test_primary_success_logs_is_fallback_false():
+    # The is_fallback=False annotation on normal calls is load-bearing for
+    # separating baseline from degraded traffic -- assert it is present.
+    a = _adapter({})  # primary serves
+    with structlog.testing.capture_logs() as logs:
+        await a._generate(stable_prefix=["sys"], fresh_tail=["q"])
+    usage = [e for e in logs if e.get("event") == "text_ai_usage"]
+    assert usage and all(e.get("is_fallback") is False for e in usage)
 
 
 @pytest.mark.asyncio
