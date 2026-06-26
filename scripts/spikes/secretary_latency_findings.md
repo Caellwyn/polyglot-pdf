@@ -10,14 +10,16 @@ context-caching facts from authoritative sources; (b) measure the real round-tri
 Verdict stance: like Gate 1, this is a CHARACTERIZATION with a GO/KILL recorded on
 "fast enough for live conversation" -- the maintainer reads the latency numbers.
 
-> **VERDICT: GO.** The blocking secretary lookup measured **~0.8s mean (tail
-> ~1.0-1.1s)** -- a natural conversational beat, well under the awkward-pause
-> threshold; the GO holds at the ~1.1s worst case. Implicit caching hits 100%
-> (~8.1k of ~11k prompt tokens, ~74%, zero setup) and is a COST lever, not a
-> latency one. DECISION: implicit caching now; explicit deferred to scale (bd
-> jnjj.41). Caveat: measured on `gemini-3.1-flash-lite` because the target
-> `gemini-2.5-flash-lite` was in a 503 outage -- a sound same-tier proxy; both lite
-> models are sub-second.
+> **VERDICT: CONDITIONAL GO.** On a full-corpus run (n=49/arm, all tiers) the
+> blocking lookup is **median ~0.95s, p90 ~1.25s** -- conversational -- BUT the tail
+> is heavy: 2/98 calls spiked to **8.5s and 20.2s** (no retries, not cache-related;
+> random model-side spikes). Median-fast, but the tail is a real UX risk: ship it
+> WITH a timeout + graceful filler on the blocking call (bd jnjj.43), not raw.
+> Implicit caching hits 94-98% (zero setup) and is a COST lever, not a latency one.
+> DECISION: implicit caching now; explicit deferred to scale (bd jnjj.41). Caveat:
+> measured on `gemini-3.1-flash-lite` (target `gemini-2.5-flash-lite` was in a 503
+> outage) -- so the tail may be partly a degraded-service artifact; re-confirm on a
+> healthy 2.5-flash-lite, but design for the tail regardless.
 
 ## Part (a) -- Gemini context-caching facts (authoritative)
 
@@ -135,55 +137,60 @@ hop (principal->backend->secretary->back) is additive and small, already
 characterized by the cost harness's per-turn latency. CAVEAT recorded: these are
 API round-trip numbers, not full in-session tool-call numbers.
 
-### Latency result: GO -- sub-second blocking lookup
+### Latency result: CONDITIONAL GO -- ~1s typical, but a heavy unpredictable tail
 
-All numbers below are from the committed clean stable-service run (artifact
-`secretary_latency_20260625T115102.meta.json`, n=12 per arm, catalog ~9.5k tokens +
-prose query). (Earlier outage-period runs gave ~3-6s numbers; those were
-outage-contaminated -- a bare 1-token prompt was also 3-6s then -- and are NOT used
-for the verdict.)
+Numbers from the committed full-corpus run (artifact
+`secretary_latency_20260625T181149.meta.json`, **n=49 per arm across ALL 6
+difficulty tiers**, value-FREE static catalog ~8.4k tokens cached prefix + ~1.6k
+values tail + per-query prose). `retried=0` on every call, so these are clean
+(no retry-backoff contamination). This SUPERSEDES an earlier n=12 run that, by
+sampling only the first (easy/aliasing) tier block, hid the tail (Codex finding).
 
-| arm | mean | median | p90* | min | max | implicit-cache hit |
+| arm | mean | median | p90 | **max** | retried | implicit-cache hit |
 |---|---|---|---|---|---|---|
-| uncached | 0.837s | 0.804s | 0.953s | 0.719s | 1.016s | 100% (8122 tok) |
-| implicit | 0.829s | 0.812s | 0.891s | 0.719s | 1.109s | 100% (8122 tok) |
+| uncached | 1.17s | 0.99s | 1.25s | **8.55s** | 0 | 94% (~7628 tok) |
+| implicit | 1.35s | 0.94s | 1.24s | **20.22s** | 0 | 98% (~7960 tok) |
 
-*p90 in the table is the probe's floor-indexed value (the 11th of 12 sorted). The
-true interpolated p90 for the implicit arm is ~1.07s; the `max` column (1.0-1.1s) is
-the honest tail. Read the tail as ~1.0-1.1s, not 0.9s.
+**VERDICT: CONDITIONAL GO.** The TYPICAL lookup is fine for live conversation --
+**median ~0.95s, p90 ~1.25s** is a natural conversational beat. BUT the **tail is
+heavy and unpredictable**: 2 of 98 calls spiked to **8.5s and 20.2s**, with
+`retried=0` (NOT outage/retry artifacts) and NOT correlated with cache state (the
+20s call was a normal cache HIT) or query tier -- i.e. random model-side generation
+spikes. A 20s blocking pause mid-conversation is a real UX failure.
 
-**VERDICT: GO.** A ~0.8s mean (tail ~1.0-1.1s) blocking lookup is a natural
-conversational beat -- comparable to a person briefly glancing at a note before
-answering -- well under the "awkward pause" threshold for live voice. The blocking
-ask_secretary round-trip is fast enough; the GO holds even at the ~1.1s worst case.
+So the blocking round-trip is fast enough ON THE MEDIAN, but shipping it
+unmitigated is NOT safe. **Required mitigation (a real follow-up, bd jnjj.43):** a
+**timeout + graceful filler** on the blocking ask_secretary call -- if the secretary
+hasn't answered in ~2-3s, the principal says a natural "let me check that for you"
+and either continues async or proceeds. With that guard the median-fast lookup is a
+clear GO; without it the tail is a liability. (This tail behavior may also be
+partly the fallback model / a degraded service window -- see the model caveat -- so
+re-confirm on a healthy 2.5-flash-lite, but DESIGN for the tail regardless.)
 
-Two structural findings:
-1. **Implicit caching hit 100%** -- every call reported ~**8,122 of ~11,053 prompt
-   tokens (~74%)** cached (`cached_content_token_count`), with ZERO explicit cache
-   management, just the stable catalog prefix. The cost lever works reliably (the
-   cheaper $0.01/M rate on ~74% of the input). Feeds Gate 3 (cost, jnjj.28).
-   (METHOD NOTE: both arms get a warm-up call before timing, which seeds the
-   implicit cache -- so the "uncached" arm ALSO shows 100% implicit hits. The arm
-   names describe intent, not a cold-vs-warm contrast; both effectively measure the
-   warm/implicit-cached round-trip. A true cold floor would need warm-up disabled.)
-2. **uncached vs implicit latency is identical** (0.837 vs 0.829s) -- consistent
-   with both arms being implicitly cached. The takeaway stands: implicit caching is
-   a COST lever, NOT a latency lever -- re-sending cached tokens is not what costs
-   the time; generation + network is. So the GO does not depend on the cache.
+Two structural findings hold:
+1. **Implicit caching hit 94-98%** -- ~7.6-8.0k of ~11.8k prompt tokens cached
+   (`cached_content_token_count`) with ZERO setup, just the VALUE-FREE static
+   catalog prefix. Confirms the prefix/tail split works AND still caches: the
+   cacheable prefix is now genuinely session-invariant (no per-user values baked in
+   -- Codex finding fixed). The cost lever works. Feeds Gate 3 (cost, jnjj.28).
+2. **uncached vs implicit median latency is ~the same** (~0.95s) -- implicit caching
+   is a COST lever, NOT a latency one; generation + network dominates, not
+   re-sending cached tokens. So neither the GO nor the tail risk depends on the
+   cache.
 
-Separately measured (a direct test, not in the run artifact above): **explicit
-cache CREATE latency ~0.78s** (one-time per session) -- confirms flash-lite supports
-`caches.create()`. Informational only; explicit caching is deferred (jnjj.41).
+Separately measured (a direct test, not in this run): **explicit cache CREATE
+latency ~0.78s** (one-time per session). Informational; explicit deferred (jnjj.41).
 
 CAVEAT -- model substitution (outage): at measurement time `gemini-2.5-flash-lite`
 (the secretary's target) was in a sustained, widely-reported **503 UNAVAILABLE**
 outage, so the probe's fallback chain measured on **`gemini-3.1-flash-lite`**
-(`is_fallback_model: true` in the artifact) -- the newer same-tier lite model,
-~0.42s on a bare call. This is a sound proxy, and arguably stronger evidence (newer
-model): both lite models sit in the same sub-second band (during its brief uptime
-windows, 2.5-flash-lite also answered ~0.44s bare). The GO is robust across both.
-Re-confirm on 2.5-flash-lite when it recovers if a target-model number is wanted,
-but the verdict does not hinge on it.
+(`is_fallback_model: true` in the artifact) -- the newer same-tier lite model. For
+the MEDIAN this is a sound proxy (both lite models median sub-second). For the TAIL
+it is a CAVEAT: the 8.5s/20s spikes were measured on the fallback during a degraded
+window for the model family, so part of the heavy tail may be service degradation
+rather than intrinsic. Re-confirm the tail on a healthy 2.5-flash-lite -- but the
+mitigation (timeout + filler, jnjj.43) is warranted regardless, because cheap-model
+tails are heavy in general and outages recur (jnjj.42).
 
 NOTE (resilience): this outage motivated a probe-level model fallback chain
 (2.5-flash-lite -> 3.1-flash-lite -> flash-lite-latest, all within the Gemini BAA),

@@ -60,7 +60,8 @@ from google.genai import types
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.scripts.secretary_context import (  # noqa: E402
-    render_secretary_context,
+    render_static_catalog,
+    render_values_tail,
     estimate_tokens,
 )
 from backend.scripts.secretary_recall_corpus import (  # noqa: E402
@@ -126,39 +127,38 @@ async def _resolve_model(client, preferred=None) -> str:
     sys.exit(2)
 
 
-def _values_block(field_values: dict) -> str:
-    """The small fresh tail: current values, one per line (the per-query part)."""
-    lines = ["CURRENT VALUES:"]
-    for fid, v in field_values.items():
-        lines.append("  %s = %s" % (fid, v))
-    return "\n".join(lines)
-
-
 async def _timed_call(client, *, contents, cached_content=None, mime="application/json",
                       max_retries=5):
-    """One generate_content call; returns (latency_s, cached_tokens, prompt_tokens).
+    """One generate_content call; returns (call_s, blocked_s, cached, prompt).
 
     Retries transient 503 UNAVAILABLE (flash-lite demand spikes) with exponential
-    backoff. The RETRY WAIT is excluded from the measured latency -- only the
-    successful call's wall time is timed, so an overloaded-model retry does not
-    inflate the round-trip number we report.
+    backoff. Returns TWO latencies (Codex finding -- the principal is blocked for the
+    WHOLE retry interval, so the gate must not hide backoff):
+      call_s    -- the successful attempt's wall time (the clean round-trip);
+      blocked_s -- wall time from the FIRST attempt incl. all retry backoff (the
+                   real conversational pause when the model is overloaded).
+    On a clean call the two are equal. The report uses blocked_s for the gate and
+    flags any case where they diverge (a retry happened).
     """
     cfg_kwargs = {"response_mime_type": mime}
     if cached_content is not None:
         cfg_kwargs["cached_content"] = cached_content
     config = types.GenerateContentConfig(**cfg_kwargs)
     attempt = 0
+    t_first = time.monotonic()
     while True:
         t0 = time.monotonic()
         try:
             resp = await client.aio.models.generate_content(
                 model=MODEL, contents=contents, config=config,
             )
-            dt = time.monotonic() - t0
+            now = time.monotonic()
+            call_s = now - t0
+            blocked_s = now - t_first
             um = resp.usage_metadata
             cached = getattr(um, "cached_content_token_count", 0) or 0 if um else 0
             prompt = getattr(um, "prompt_token_count", 0) or 0 if um else 0
-            return dt, cached, prompt
+            return call_s, blocked_s, cached, prompt
         except genai.errors.ServerError as exc:
             attempt += 1
             if attempt > max_retries:
@@ -198,17 +198,45 @@ async def main() -> None:
     args = ap.parse_args()
 
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
-    corpus = build_corpus()[: args.n]
+    # STRATIFY across difficulty tiers, not the first-N (which is one tier block):
+    # the corpus is grouped by tier, so build_corpus()[:n] would skip the longer
+    # synthesis/distant/applicability queries whose generation dominates latency.
+    # Round-robin by tier so a small --n still spans easy..applicability. n<=0 or
+    # n>=len uses the FULL corpus.
+    full = build_corpus()
+    if args.n <= 0 or args.n >= len(full):
+        corpus = full
+    else:
+        by_tier = {}
+        for c in full:
+            by_tier.setdefault(c.tier, []).append(c)
+        corpus, ti = [], 0
+        tiers = list(by_tier.values())
+        while len(corpus) < args.n:
+            row = tiers[ti % len(tiers)]
+            idx = ti // len(tiers)
+            if idx < len(row):
+                corpus.append(row[idx])
+            ti += 1
+            if ti > 10000:  # safety
+                break
     queries = [c.query for c in corpus]
 
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     schema = json.load(open(os.path.join(root, "form-kits", "i-90", "schema.json"),
                             encoding="utf-8"))
-    catalog = render_secretary_context(schema, FIELD_VALUES, SHOWN_MAP)
-    values_tail = _values_block(FIELD_VALUES)
+    # Value-FREE static catalog = the cacheable prefix (session-invariant). Values +
+    # applicability ride a SEPARATE fresh tail, so the cached prefix stays stable as
+    # answers change (Codex finding: do not bake per-user values into the catalog).
+    catalog = render_static_catalog(schema)
+    values_tail = render_values_tail(schema, FIELD_VALUES, SHOWN_MAP)
     cat_tokens = estimate_tokens(catalog)
-    print("catalog ~%d tokens | %d queries | arms=%s" % (cat_tokens, len(queries), arms),
-          flush=True)
+    tail_tokens = estimate_tokens(values_tail)
+    tier_counts = {}
+    for c in corpus:
+        tier_counts[c.tier] = tier_counts.get(c.tier, 0) + 1
+    print("static catalog ~%d tok | values tail ~%d tok | %d queries %s | arms=%s" % (
+        cat_tokens, tail_tokens, len(queries), tier_counts, arms), flush=True)
 
     if args.dry_run:
         print("[dry-run] wiring ok; would time %d calls/arm against %s." % (len(queries), MODEL),
@@ -226,7 +254,6 @@ async def main() -> None:
     cache_name = None
 
     for arm in arms:
-        lats, cached_hits = [], []
         if arm == "explicit":
             # Create the cache once; time creation separately.
             t0 = time.monotonic()
@@ -246,29 +273,43 @@ async def main() -> None:
         # Warm-up (not timed): primes implicit cache / first-call overhead.
         warm_q = "What is their date of birth?"
         if arm == "explicit":
+            # explicit: the catalog lives in the cache; only the fresh tail + query
+            # go in contents.
             await _timed_call(client, contents=[values_tail + "\n\nQUESTION: " + warm_q],
                               cached_content=cache_name)
         else:
             await _timed_call(client, contents=[SECRETARY_SI + "\n\n" + catalog + "\n\n"
                                                 + values_tail + "\n\nQUESTION: " + warm_q])
 
+        lats, blocked_lats, cached_hits, n_retried = [], [], [], 0
         for i, q in enumerate(queries):
             if arm == "explicit":
                 contents = [values_tail + "\n\nQUESTION: " + q]
-                dt, cached, prompt = await _timed_call(client, contents=contents,
-                                                       cached_content=cache_name)
+                call_s, blocked_s, cached, prompt = await _timed_call(
+                    client, contents=contents, cached_content=cache_name)
             else:
-                # uncached + implicit send the same payload; implicit relies on the
-                # stable leading catalog prefix firing Gemini's automatic cache.
+                # uncached + implicit send: [SI][static catalog][fresh values tail]
+                # [query]. The VALUE-FREE catalog is the stable leading prefix that
+                # implicit caching keys on; values ride the fresh tail.
                 contents = [SECRETARY_SI + "\n\n" + catalog + "\n\n" + values_tail
                             + "\n\nQUESTION: " + q]
-                dt, cached, prompt = await _timed_call(client, contents=contents)
-            lats.append(dt)
+                call_s, blocked_s, cached, prompt = await _timed_call(
+                    client, contents=contents)
+            lats.append(call_s)
+            blocked_lats.append(blocked_s)
             cached_hits.append(cached)
-            print("    [%s %d/%d] %.3fs (cached_tokens=%d, prompt=%d)" % (
-                arm, i + 1, len(queries), dt, cached, prompt), flush=True)
+            retried = blocked_s - call_s > 0.05
+            if retried:
+                n_retried += 1
+            print("    [%s %d/%d] call=%.3fs blocked=%.3fs (cached=%d, prompt=%d)%s" % (
+                arm, i + 1, len(queries), call_s, blocked_s, cached, prompt,
+                " RETRIED" if retried else ""), flush=True)
 
         summ = _summary(arm, lats)
+        # blocked-latency summary (retry-inclusive) -- the honest gate number.
+        bsumm = _summary(arm + "_blocked", blocked_lats)
+        summ["blocked"] = {k: bsumm[k] for k in bsumm if k != "arm"}
+        summ["n_retried"] = n_retried
         summ["mean_cached_tokens"] = round(statistics.mean(cached_hits), 1) if cached_hits else 0
         summ["cache_hit_rate"] = round(sum(1 for c in cached_hits if c > 0) / len(cached_hits), 3) if cached_hits else 0
         results[arm] = summ
@@ -281,18 +322,25 @@ async def main() -> None:
                 print("  [explicit] cache delete failed: %s" % type(exc).__name__, flush=True)
 
     # ---- report ----
-    print("\n=== LATENCY (seconds) ===", flush=True)
-    print("%-10s %4s %7s %8s %6s %6s %6s %11s %9s" % (
-        "arm", "n", "mean", "median", "p90", "min", "max", "cache_hit%", "cachedTok"),
-        flush=True)
+    print("\n=== LATENCY (seconds) -- call_s = clean round-trip; blocked = "
+          "retry-inclusive (the real conversational pause) ===", flush=True)
+    print("%-10s %4s %7s %8s %6s %6s %8s %8s %7s %11s" % (
+        "arm", "n", "mean", "median", "p90", "max", "blk_mean", "blk_max",
+        "retried", "cache_hit%"), flush=True)
     for arm in arms:
         s = results.get(arm, {})
         if not s.get("n"):
             continue
-        print("%-10s %4d %7.3f %8.3f %6.3f %6.3f %6.3f %10.0f%% %9.1f" % (
-            arm, s["n"], s["mean_s"], s["median_s"], s["p90_s"], s["min_s"],
-            s["max_s"], 100 * s.get("cache_hit_rate", 0), s.get("mean_cached_tokens", 0)),
+        blk = s.get("blocked", {})
+        print("%-10s %4d %7.3f %8.3f %6.3f %6.3f %8.3f %8.3f %7d %10.0f%%" % (
+            arm, s["n"], s["mean_s"], s["median_s"], s["p90_s"], s["max_s"],
+            blk.get("mean_s", s["mean_s"]), blk.get("max_s", s["max_s"]),
+            s.get("n_retried", 0), 100 * s.get("cache_hit_rate", 0)),
             flush=True)
+    if any(results.get(a, {}).get("n_retried", 0) for a in arms):
+        print("NOTE: some calls retried (503); blk_* columns include backoff -- the "
+              "honest blocking pause. For the GO use a run with retried=0, or the "
+              "clean call_s of a 0-retry run.", flush=True)
     if cache_create_latency is not None:
         print("\nexplicit cache CREATE latency: %.3fs (one-time, per session)" % cache_create_latency,
               flush=True)
@@ -307,8 +355,10 @@ async def main() -> None:
             "model": MODEL,
             "preferred_model": preferred_model,
             "is_fallback_model": is_fallback,
-            "catalog_tokens_est": cat_tokens,
+            "static_catalog_tokens_est": cat_tokens,
+            "values_tail_tokens_est": tail_tokens,
             "queries": len(queries),
+            "query_tiers": tier_counts,
             "arms": results,
             "explicit_cache_create_latency_s": cache_create_latency,
         }, f, indent=2)
