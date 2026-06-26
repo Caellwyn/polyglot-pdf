@@ -366,4 +366,52 @@ class TestANumberNormalization:
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
+class TestUSCISAccountNormalization:
+    """uscis_account format_preset strips punctuation before the length check
+    (bd polyglot-pdf-jnjj.40).
+
+    The DTI stall was triggered because Gemini's speech-to-text transcribed the
+    spoken 12-digit USCIS online account number as "$1,234,567,890" (with a "$"
+    and commas), which then failed the exactly-12-character length check and the
+    model refused the field, derailing the section. Normalizing to bare digits
+    BEFORE validation accepts the value, so the punctuation can never re-trigger
+    the stall.
+    """
+
+    ACCT_FIELD = {
+        "id": "p1_line2_acctidentifier",
+        "name": "USCIS Online Account Number",
+        "type": "text",
+        "minLength": 12,
+        "maxLength": 12,
+        "format_preset": "uscis_account",
+    }
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("123456789012", "123456789012"),       # already canonical 12 digits
+        ("$1,234,567,890,12", "123456789012"),   # the STT-mangled form (jnjj.40)
+        ("1,234,567,890,12", "123456789012"),    # commas only
+        ("1 2 3 4 5 6 7 8 9 0 1 2", "123456789012"),  # spaced digit-by-digit
+    ])
+    def test_uscis_account_normalized_and_accepted(self, raw, expected):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" in result["valid_fields"], f"{raw!r} should be accepted"
+        assert result["form_state"]["p1_line2_acctidentifier"] == expected, \
+            f"{raw!r} should store canonical {expected!r}"
+        assert result["validation_errors"] == []
+
+    @pytest.mark.parametrize("raw", [
+        "1234567890",       # 10 digits -- too short (the old harness-fixture value)
+        "1234567890123",    # 13 digits -- too long
+    ])
+    def test_uscis_account_still_enforces_length_after_normalizing(self, raw):
+        # Stripping punctuation must NOT relax the exactly-12-digit rule -- a wrong
+        # digit COUNT is still rejected (so the fix tolerates formatting, not bad data).
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v

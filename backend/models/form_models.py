@@ -156,8 +156,11 @@ class ValidationRules(BaseModel):
         description="Date-specific validation (e.g., birth date must be in past)"
     )
 
-    # Format presets (common validation patterns)
-    format_preset: Optional[Literal["ssn", "a_number", "phone", "email", "zip"]] = Field(
+    # Format presets (common validation patterns). Digit-only presets (a_number,
+    # uscis_account) drive normalize_value() to strip punctuation before length/
+    # pattern checks, so speech-to-text formatting (commas, "$") does not fail an
+    # otherwise-valid digit string (bd polyglot-pdf-jnjj.40).
+    format_preset: Optional[Literal["ssn", "a_number", "phone", "email", "zip", "uscis_account"]] = Field(
         None,
         description="Predefined format validation"
     )

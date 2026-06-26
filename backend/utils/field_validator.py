@@ -39,21 +39,33 @@ class ValidationError:
         return result
 
 
+# Digit-only field presets: input is a sequence of digits, but speech-to-text and
+# natural phrasing routinely add punctuation (commas, a "$", spaces, dashes). The
+# stored/validated form is bare digits, so normalize_value strips non-digits for
+# these BEFORE the length/pattern check (bd polyglot-pdf-jnjj.40). a_number also
+# drops a leading "A" prefix; the rest are pure digit sequences.
+_DIGIT_PRESETS = frozenset({"a_number", "uscis_account"})
+
+
 def normalize_value(field: Dict[str, Any], value: Any) -> Any:
     """Normalize a raw input value to the field's canonical stored form.
 
     Keyed on the field's format_preset so user/AI input can be accepted in the
     natural way it is spoken or written and still satisfy the strict pattern.
-    Currently handles a_number: an Alien Registration Number is spoken/written as
-    "A" + 7-9 digits (often with dashes or spaces), but the PDF comb field stores
-    bare digits (pattern ^\\d{7,9}$, 9 cells). So we strip a leading A/a and all
-    non-digits, leaving the canonical digits. Non-a_number fields and non-string
-    values pass through unchanged (bd polyglot-pdf-0zr).
+    Digit-only presets (a_number, uscis_account -- see _DIGIT_PRESETS) keep ONLY
+    digits: an Alien Registration Number is spoken as "A" + 7-9 digits and a USCIS
+    account number as 12 digits, but speech-to-text formats them with commas / a
+    "$" / spaces (e.g. Gemini transcribed the spoken "1234567890" as "$1,234,567,890",
+    which then failed the length check and stalled DTI -- bd polyglot-pdf-jnjj.40).
+    So we strip a leading A/a (a_number only) and all non-digits, leaving the
+    canonical digits that the comb field stores. Non-digit-preset fields and
+    non-string values pass through unchanged (bd polyglot-pdf-0zr).
     """
     preset = field.get("format_preset")
-    if preset == "a_number" and isinstance(value, str):
+    if preset in _DIGIT_PRESETS and isinstance(value, str):
         stripped = value.strip()
-        # Drop a single leading A/a (the A-Number prefix), then keep only digits.
+        # Drop a single leading A/a (the A-Number prefix) before keeping digits;
+        # harmless for uscis_account, which never starts with a letter.
         if stripped[:1] in ("A", "a"):
             stripped = stripped[1:]
         digits = re.sub(r"\D", "", stripped)
