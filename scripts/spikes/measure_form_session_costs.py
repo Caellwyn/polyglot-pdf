@@ -1130,6 +1130,14 @@ async def run(args) -> int:
             # End the window at the LAST user activity_end (set by speak), NOT now:
             # Gemini's confirm response after it carries the NEXT field's prompt, which
             # must fall into the next window's model_said (Codex PR #246 round 2).
+            #
+            # KNOWN TRADEOFF (bd polyglot-pdf-jnjj.44, a deliberate single-boundary
+            # limitation, not a bug): one Gemini turn both CONFIRMS field N and ASKS
+            # field N+1, so a single time-boundary cannot perfectly split them. With
+            # this activity_end boundary the next PROMPT attributes correctly to N+1,
+            # but field N's confirm_field tool call -- emitted in that same post-
+            # activity_end response -- also buckets to N+1's tool_io. The proper fix
+            # (attribute tool calls vs transcript by SEPARATE rules) is jnjj.44.
             _prev_q_end = _last_activity_end["ts"]
             if DEBUG:
                 q_windows.append({"q": i, "fid": fid, "t_start": _q_t_start,
