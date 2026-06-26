@@ -40,11 +40,16 @@ class ValidationError:
 
 
 # Digit-only field presets: input is a sequence of digits, but speech-to-text and
-# natural phrasing routinely add punctuation (commas, a "$", spaces, dashes). The
-# stored/validated form is bare digits, so normalize_value strips non-digits for
-# these BEFORE the length/pattern check (bd polyglot-pdf-jnjj.40). a_number also
-# drops a leading "A" prefix; the rest are pure digit sequences.
+# natural phrasing routinely add PUNCTUATION (commas, a "$", spaces, dashes, dots).
+# The stored/validated form is bare digits, so normalize_value strips that
+# punctuation BEFORE the length/pattern check (bd polyglot-pdf-jnjj.40). a_number
+# ALSO drops a single leading "A" prefix. CRUCIALLY, only punctuation is stripped --
+# embedded LETTERS are left in place so a genuinely wrong value (e.g. "ABC1234...")
+# stays invalid instead of being silently coerced to digits (Codex PR #249).
 _DIGIT_PRESETS = frozenset({"a_number", "uscis_account"})
+# Punctuation/formatting characters STT and humans add to digit strings. Letters
+# are deliberately NOT in this class.
+_DIGIT_PUNCT_RE = re.compile(r"[\s,.$-]")
 
 
 def normalize_value(field: Dict[str, Any], value: Any) -> Any:
@@ -52,24 +57,28 @@ def normalize_value(field: Dict[str, Any], value: Any) -> Any:
 
     Keyed on the field's format_preset so user/AI input can be accepted in the
     natural way it is spoken or written and still satisfy the strict pattern.
-    Digit-only presets (a_number, uscis_account -- see _DIGIT_PRESETS) keep ONLY
-    digits: an Alien Registration Number is spoken as "A" + 7-9 digits and a USCIS
-    account number as 12 digits, but speech-to-text formats them with commas / a
-    "$" / spaces (e.g. Gemini transcribed the spoken "1234567890" as "$1,234,567,890",
-    which then failed the length check and stalled DTI -- bd polyglot-pdf-jnjj.40).
-    So we strip a leading A/a (a_number only) and all non-digits, leaving the
-    canonical digits that the comb field stores. Non-digit-preset fields and
-    non-string values pass through unchanged (bd polyglot-pdf-0zr).
+    Digit-only presets (a_number, uscis_account -- see _DIGIT_PRESETS): an Alien
+    Registration Number is spoken as "A" + 7-9 digits and a USCIS account number as
+    12 digits, but speech-to-text formats them with commas / a "$" / spaces (e.g.
+    Gemini transcribed the spoken digits as "$1,234,567,890", which failed the
+    length check and stalled DTI -- bd polyglot-pdf-jnjj.40). So we drop a single
+    leading A/a (a_number only) and strip PUNCTUATION (_DIGIT_PUNCT_RE), leaving the
+    canonical digits the comb field stores. Embedded LETTERS are kept (not stripped)
+    so a wrong value like "ABC123456789012" stays invalid rather than being coerced
+    to digits (Codex PR #249). Non-digit-preset fields and non-string values pass
+    through unchanged (bd polyglot-pdf-0zr).
     """
     preset = field.get("format_preset")
     if preset in _DIGIT_PRESETS and isinstance(value, str):
         stripped = value.strip()
-        # Drop a single leading A/a (the A-Number prefix) before keeping digits;
-        # harmless for uscis_account, which never starts with a letter.
-        if stripped[:1] in ("A", "a"):
+        # Drop a single leading A/a -- the A-Number prefix. ONLY for a_number:
+        # uscis_account is pure digits, so a leading letter there is an error to
+        # preserve, not a prefix to drop.
+        if preset == "a_number" and stripped[:1] in ("A", "a"):
             stripped = stripped[1:]
-        digits = re.sub(r"\D", "", stripped)
-        return digits
+        # Strip punctuation only; KEEP any remaining letters so validation rejects
+        # them rather than silently dropping them.
+        return _DIGIT_PUNCT_RE.sub("", stripped)
     return value
 
 

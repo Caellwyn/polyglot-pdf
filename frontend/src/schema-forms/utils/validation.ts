@@ -23,18 +23,23 @@ const DIGIT_PRESETS = new Set(["a_number", "uscis_account"]);
  *
  * Digit-only presets (a_number, uscis_account): an Alien Registration Number is
  * spoken as "A" + 7-9 digits and a USCIS account number as 12 digits, often with
- * dashes/spaces/commas, but the PDF comb field stores bare digits. Strip a leading
- * A/a (a_number) and all non-digits. Other presets and non-string values pass
- * through unchanged (bd polyglot-pdf-jnjj.40).
+ * dashes/spaces/commas, but the PDF comb field stores bare digits. Drop a single
+ * leading A/a (a_number only) and strip PUNCTUATION; KEEP embedded letters so a
+ * wrong value like "ABC1234..." stays invalid instead of being coerced to digits
+ * (Codex PR #249). Mirrors the backend normalize_value + _DIGIT_PUNCT_RE. Other
+ * presets and non-string values pass through unchanged (bd polyglot-pdf-jnjj.40).
  */
 export function normalizeFieldValue(field: FormField, value: any): any {
   const preset = field.validation?.format_preset;
   if (preset && DIGIT_PRESETS.has(preset) && typeof value === "string") {
     let stripped = value.trim();
-    if (stripped[0] === "A" || stripped[0] === "a") {
+    // a_number only: a leading letter is its "A" prefix. For uscis_account a
+    // leading letter is an error to preserve, not a prefix to drop.
+    if (preset === "a_number" && (stripped[0] === "A" || stripped[0] === "a")) {
       stripped = stripped.slice(1);
     }
-    return stripped.replace(/\D/g, "");
+    // Strip punctuation only (NOT letters), matching the backend _DIGIT_PUNCT_RE.
+    return stripped.replace(/[\s,.$-]/g, "");
   }
   return value;
 }

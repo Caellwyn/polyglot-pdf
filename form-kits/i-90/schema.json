@@ -392,7 +392,8 @@
         "type": "uscis_account",
         "format_preset": "uscis_account",
         "min_length": 12,
-        "max_length": 12
+        "max_length": 12,
+        "pattern": "^\\d{12}$"
       },
       "pdf_position": {
         "page": 1,

@@ -482,10 +482,12 @@ class CallbackHandler:
                 guidance = (
                     f"Field '{field_id}' has no value yet, so it cannot be "
                     f"confirmed. Do NOT call confirm_field for it again -- that "
-                    f"will keep failing. First ask the user for the value and call "
-                    f"update_form_fields to fill it; only THEN confirm. If the user "
-                    f"says they do not have one, fill it with an empty value via "
-                    f"update_form_fields and move on -- never retry the bare confirm."
+                    f"will keep failing. Ask the user for the value and call "
+                    f"update_form_fields to fill it; only THEN confirm. (Only if "
+                    f"THIS field is OPTIONAL and the user has none may you fill it "
+                    f"with an empty value via update_form_fields; for a REQUIRED "
+                    f"field keep asking for a real value -- an empty value will be "
+                    f"rejected. Never retry the bare confirm either way.)"
                 )
                 # no_value is NOT retryable: re-confirming the SAME empty field fails
                 # identically and wedges the model in a confirm loop (the DTI stall,

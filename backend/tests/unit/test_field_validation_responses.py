@@ -385,6 +385,7 @@ class TestUSCISAccountNormalization:
         "type": "text",
         "minLength": 12,
         "maxLength": 12,
+        "pattern": r"^\d{12}$",   # mirrors the I-90 schema -- enforces DIGITS, not just length
         "format_preset": "uscis_account",
     }
 
@@ -410,6 +411,23 @@ class TestUSCISAccountNormalization:
         # Stripping punctuation must NOT relax the exactly-12-digit rule -- a wrong
         # digit COUNT is still rejected (so the fix tolerates formatting, not bad data).
         from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+    @pytest.mark.parametrize("raw", [
+        "ABC123456789012",   # letters + 12 digits -- letters are NOT punctuation
+        "12345678901A",      # 11 digits + a trailing letter (exactly 12 chars)
+        "ABCDEFGHIJKL",      # all letters, 12 chars
+    ])
+    def test_uscis_account_rejects_letters_not_strips_them(self, raw):
+        # Normalization strips PUNCTUATION only -- embedded LETTERS are KEPT so a
+        # genuinely wrong value stays invalid instead of being silently coerced to
+        # digits (Codex PR #249). The kept letters fail the ^\d{12}$ pattern.
+        from backend.utils.field_validator import normalize_value, validate_updates
+        # The letter must survive normalization (not be stripped to digits).
+        assert any(c.isalpha() for c in str(normalize_value(self.ACCT_FIELD, raw))), \
+            f"{raw!r} letters must be KEPT, not stripped"
         result = validate_updates([self.ACCT_FIELD], {"p1_line2_acctidentifier": raw})
         assert "p1_line2_acctidentifier" not in result["valid_fields"], f"{raw!r} should be rejected"
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
