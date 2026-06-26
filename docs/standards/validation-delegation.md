@@ -1,8 +1,8 @@
 # Validation delegation (cheap-model validator) -- frozen contract
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
+**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
 
-*Last updated: 2026-06-17. Current-state section updated to reflect jnjj.14 landing (ITextAI port + TextAIGemini adapter wired). See [../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*
+*Last updated: 2026-06-26. Added the TextAIGemini model-fallback chain (jnjj.42) to the current-state adapter description; added text_ai_gemini.py to Tracks. See [../journal/entries/2026-06-26-bd-jnjj.42-text-ai-model-fallback.md](../journal/entries/2026-06-26-bd-jnjj.42-text-ai-model-fallback.md) for closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -53,7 +53,12 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   `client.aio.models.generate_content`, NOT the Live bidi path. Accepts
   `stable_prefix` + `fresh_tail` separately so the leading token sequence is stable
   for implicit caching; logs `cached_content_token_count` on every call (`cache_hit`
-  bool) for observability.
+  bool) for observability. **Model-fallback (jnjj.42):** `_generate()` walks an
+  ordered Gemini fallback chain (configured model -> `DEFAULT_FALLBACK_MODELS`:
+  3.1-flash-lite, flash-lite-latest) on a transient availability error (5xx, or
+  404/429); auth/config 4xx (400/401/403) fail fast. Logs the serving model +
+  `is_fallback`. `validate()` fail-open is preserved (fallback just fires it less).
+  Chain is all-Gemini (BAA-safe).
 - Wiring: `backend/dependencies.py::get_text_ai()` constructs a fresh `TextAIGemini`
   reading `settings.MODEL_LABELING` (default `gemini-2.5-flash`; set
   `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).
