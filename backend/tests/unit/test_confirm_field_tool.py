@@ -285,6 +285,10 @@ class TestConfirmFieldFailsWhenNotRecorded:
 
         assert response["success"] is False
         assert response["status"] == "error"
+        # A timeout IS retryable (re-asking can succeed) -- unlike the no_value case
+        # (bd polyglot-pdf-jnjj.40). Pin the invariant so a future change to the
+        # retryable param can't silently make the timeout path non-retryable.
+        assert response["retryable"] is True
         # Must NOT claim the form is done.
         assert "do not assume" in response["message"].lower()
         mock_coordinator.request_next_field_hint.assert_not_called()

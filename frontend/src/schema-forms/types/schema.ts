@@ -93,7 +93,7 @@ export interface ValidationRules {
   custom_error?: string;
   digits_only?: boolean; // Only allow numeric digits (0-9)
   date_constraint?: "past_only" | "future_only" | "within_5_years";
-  format_preset?: "ssn" | "a_number" | "phone" | "email" | "zip";
+  format_preset?: "ssn" | "a_number" | "phone" | "email" | "zip" | "uscis_account";
 }
 
 export interface ConditionalDisplay {

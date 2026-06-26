@@ -154,7 +154,7 @@ class ValidationRules(BaseModel):
     )
 
     # Format presets (common validation patterns)
-    format_preset: Optional[Literal["ssn", "a_number", "phone", "email", "zip"]] = Field(
+    format_preset: Optional[Literal["ssn", "a_number", "phone", "email", "zip", "uscis_account"]] = Field(
         None,
         description="Predefined format validation"
     )

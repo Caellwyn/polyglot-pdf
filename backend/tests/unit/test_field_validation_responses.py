@@ -370,12 +370,13 @@ class TestUSCISAccountNormalization:
     """uscis_account format_preset strips punctuation before the length check
     (bd polyglot-pdf-jnjj.40).
 
-    The DTI stall was triggered because Gemini's speech-to-text transcribed the
-    spoken 12-digit USCIS online account number as "$1,234,567,890" (with a "$"
-    and commas), which then failed the exactly-12-character length check and the
-    model refused the field, derailing the section. Normalizing to bare digits
-    BEFORE validation accepts the value, so the punctuation can never re-trigger
-    the stall.
+    The DTI stall was triggered because Gemini's speech-to-text transcribed a
+    spoken USCIS online account number with a "$" and commas (the original 10-digit
+    fixture transcribed as "$1,234,567,890"; a 12-digit value corrupts the same way,
+    e.g. "$1,234,567,890,12"), which then failed the exactly-12-character length
+    check and the model refused the field, derailing the section. Normalizing to
+    bare digits BEFORE validation accepts the value, so the punctuation can never
+    re-trigger the stall.
     """
 
     ACCT_FIELD = {

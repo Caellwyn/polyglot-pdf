@@ -8,19 +8,28 @@ import type { FormField, ValidationRules } from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
 
 /**
+ * Digit-only presets: input is a sequence of digits but is spoken/written with
+ * punctuation (an "A" prefix, commas, "$", spaces, dashes). The stored form is
+ * bare digits. Keep in sync with the backend _DIGIT_PRESETS in
+ * backend/utils/field_validator.py (bd polyglot-pdf-jnjj.40).
+ */
+const DIGIT_PRESETS = new Set(["a_number", "uscis_account"]);
+
+/**
  * Normalize a raw input value to the field's canonical stored form, keyed on
  * format_preset. Mirrors the backend normalize_value() in
  * backend/utils/field_validator.py so client and server agree on what gets
  * stored (bd polyglot-pdf-0zr).
  *
- * a_number: an Alien Registration Number is spoken/written as "A" + 7-9 digits
- * (often with dashes/spaces), but the PDF comb field stores bare digits. Strip a
- * leading A/a and all non-digits. Non-a_number fields and non-string values pass
- * through unchanged.
+ * Digit-only presets (a_number, uscis_account): an Alien Registration Number is
+ * spoken as "A" + 7-9 digits and a USCIS account number as 12 digits, often with
+ * dashes/spaces/commas, but the PDF comb field stores bare digits. Strip a leading
+ * A/a (a_number) and all non-digits. Other presets and non-string values pass
+ * through unchanged (bd polyglot-pdf-jnjj.40).
  */
 export function normalizeFieldValue(field: FormField, value: any): any {
   const preset = field.validation?.format_preset;
-  if (preset === "a_number" && typeof value === "string") {
+  if (preset && DIGIT_PRESETS.has(preset) && typeof value === "string") {
     let stripped = value.trim();
     if (stripped[0] === "A" || stripped[0] === "a") {
       stripped = stripped.slice(1);
@@ -375,7 +384,7 @@ function asDateBound(bound: number | string | undefined): string | undefined {
 function validateFormatPreset(
   field: FormField,
   value: string,
-  preset: "ssn" | "a_number" | "phone" | "email" | "zip"
+  preset: "ssn" | "a_number" | "phone" | "email" | "zip" | "uscis_account"
 ): string | null {
   switch (preset) {
     case "ssn":
@@ -391,6 +400,15 @@ function validateFormatPreset(
       // validate the digits (matches backend pattern ^\d{7,9}$). bd 0zr.
       if (!/^\d{7,9}$/.test(value)) {
         return `${field.name} must be a valid A-Number (7-9 digits)`;
+      }
+      break;
+
+    case "uscis_account":
+      // USCIS online account number is exactly 12 digits; punctuation (commas/"$"
+      // from speech-to-text) is stripped by normalizeFieldValue before we get here
+      // (bd polyglot-pdf-jnjj.40).
+      if (!/^\d{12}$/.test(value)) {
+        return `${field.name} must be a 12-digit USCIS online account number`;
       }
       break;
 
