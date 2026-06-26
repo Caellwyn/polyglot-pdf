@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import datetime
 import json
 import os
@@ -121,8 +122,21 @@ async def _resolve_model(client, preferred=None) -> str:
                       % (first, m), flush=True)
             return m
         except genai.errors.ServerError as exc:
+            # 5xx (e.g. 503 overload) -- availability; try the next model.
             last = "%s: %s" % (m, type(exc).__name__)
-            print("  (model %s unavailable, trying next)" % m, flush=True)
+            print("  (model %s unavailable [5xx], trying next)" % m, flush=True)
+        except genai.errors.ClientError as exc:
+            # 4xx. 404 (model not found) / 429 (rate/quota) are AVAILABILITY cases
+            # for fallback purposes -- try the next model. Other 4xx (401/403 auth,
+            # 400 bad request) are config errors -- fail fast, do not mask them.
+            code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            if code in (404, 429):
+                last = "%s: ClientError %s" % (m, code)
+                print("  (model %s unavailable [%s], trying next)" % (m, code), flush=True)
+            else:
+                print("ABORT: config/auth error on model %s: %s"
+                      % (m, type(exc).__name__), flush=True)
+                raise
     print("ALL fallback models unavailable (%s)" % last, flush=True)
     sys.exit(2)
 
@@ -184,9 +198,13 @@ def _summary(label, lats):
 
 async def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=12, help="Number of queries to time per arm.")
+    ap.add_argument("--n", type=int, default=0,
+                    help="Queries to time per arm. DEFAULT 0 = FULL corpus (the "
+                         "verdict basis -- a small n samples only the easy tiers and "
+                         "hides the latency tail, Codex finding). Pass a small n only "
+                         "for a quick smoke check, NOT for a GO/KILL.")
     ap.add_argument("--arms", default="uncached,implicit",
-                    help="Comma list: uncached,implicit,explicit. Default omits "
+                    help="Comma list from {uncached,implicit,explicit}. Default omits "
                          "explicit: the secretary uses IMPLICIT caching now "
                          "(explicit deferred to scale, bd jnjj.41). Add explicit "
                          "to gather the deferred-decision numbers.")
@@ -197,7 +215,15 @@ async def main() -> None:
                          "available model on a single-model outage.")
     args = ap.parse_args()
 
-    arms = [a.strip() for a in args.arms.split(",") if a.strip()]
+    arms_in = [a.strip() for a in args.arms.split(",") if a.strip()]
+    valid_arms = {"uncached", "implicit", "explicit"}
+    bad_arms = [a for a in arms_in if a not in valid_arms]
+    if bad_arms:
+        print("ERROR: unknown arm(s) %s; valid: %s" % (bad_arms, sorted(valid_arms)),
+              flush=True)
+        sys.exit(2)
+
+    arms = arms_in
     # STRATIFY across difficulty tiers, not the first-N (which is one tier block):
     # the corpus is grouped by tier, so build_corpus()[:n] would skip the longer
     # synthesis/distant/applicability queries whose generation dominates latency.
@@ -250,6 +276,7 @@ async def main() -> None:
     print("using model: %s%s" % (used_model, " (fallback)" if is_fallback else ""),
           flush=True)
     results = {}
+    per_case_rows = []
     cache_create_latency = None
     cache_name = None
 
@@ -282,7 +309,8 @@ async def main() -> None:
                                                 + values_tail + "\n\nQUESTION: " + warm_q])
 
         lats, blocked_lats, cached_hits, n_retried = [], [], [], 0
-        for i, q in enumerate(queries):
+        for i, case in enumerate(corpus):
+            q = case.query
             if arm == "explicit":
                 contents = [values_tail + "\n\nQUESTION: " + q]
                 call_s, blocked_s, cached, prompt = await _timed_call(
@@ -301,9 +329,18 @@ async def main() -> None:
             retried = blocked_s - call_s > 0.05
             if retried:
                 n_retried += 1
-            print("    [%s %d/%d] call=%.3fs blocked=%.3fs (cached=%d, prompt=%d)%s" % (
-                arm, i + 1, len(queries), call_s, blocked_s, cached, prompt,
-                " RETRIED" if retried else ""), flush=True)
+            # Per-case row -- so the tail characterization (which case_id/tier spiked,
+            # and whether it correlated with cache state) is AUDITABLE from the
+            # artifact (Codex finding), not just an aggregate claim.
+            per_case_rows.append({
+                "arm": arm, "case_id": case.case_id, "tier": case.tier,
+                "call_s": round(call_s, 3), "blocked_s": round(blocked_s, 3),
+                "cached_tokens": cached, "prompt_tokens": prompt,
+                "retried": int(retried),
+            })
+            print("    [%s %d/%d] %-26s (%s) call=%.3fs blocked=%.3fs (cached=%d, prompt=%d)%s" % (
+                arm, i + 1, len(corpus), case.case_id, case.tier, call_s, blocked_s,
+                cached, prompt, " RETRIED" if retried else ""), flush=True)
 
         summ = _summary(arm, lats)
         # blocked-latency summary (retry-inclusive) -- the honest gate number.
@@ -362,7 +399,15 @@ async def main() -> None:
             "arms": results,
             "explicit_cache_create_latency_s": cache_create_latency,
         }, f, indent=2)
-    print("\nwrote %s" % meta_path, flush=True)
+    # Per-case rows (CSV) -- so the tail claim (which case spiked, cache state) is
+    # auditable, not just aggregates (Codex finding).
+    csv_path = os.path.join(OUT_DIR, "secretary_latency_%s.csv" % stamp)
+    if per_case_rows:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(per_case_rows[0].keys()))
+            w.writeheader()
+            w.writerows(per_case_rows)
+    print("\nwrote %s\nwrote %s" % (meta_path, csv_path), flush=True)
 
 
 if __name__ == "__main__":
