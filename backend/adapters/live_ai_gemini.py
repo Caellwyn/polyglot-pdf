@@ -1708,9 +1708,18 @@ class LiveAIGemini(ILiveAI):
                                                 and self._on_input_transcript is not None):
                                             try:
                                                 self._on_input_transcript(input_transcription.text)
-                                            except Exception:
-                                                # A diagnostic observer must never crash the loop.
-                                                self._log.exception("on_input_transcript_observer_error")
+                                            except Exception as _obs_err:
+                                                # A diagnostic observer must never crash the
+                                                # loop. Log ONLY the exception TYPE, never the
+                                                # traceback/message: this observer receives the
+                                                # raw input transcript (user speech), and an
+                                                # error mid-parse could embed that text in the
+                                                # exception -- _log.exception would then leak
+                                                # PHI to logs (Codex PR #246 round 3). Type name
+                                                # is safe metadata.
+                                                self._log.warning(
+                                                    "on_input_transcript_observer_error",
+                                                    error_type=type(_obs_err).__name__)
 
                                         # Handle output transcription (what Gemini said)
                                         transcription = getattr(server_content, "output_transcription", None)
