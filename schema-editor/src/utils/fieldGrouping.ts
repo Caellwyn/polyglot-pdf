@@ -110,19 +110,32 @@ function rewriteReferences(
       changed = true;
     }
 
+    // copy_to is a plain string[] of target field ids (unused in current real
+    // schemas, but rewritten for completeness so no reference list is skipped).
+    if (f.copy_to && f.copy_to.some(id => mergedAway.has(id))) {
+      next.copy_to = remapList(f.copy_to);
+      changed = true;
+    }
+
     if (f.controls_fields) {
+      // Track controls changes separately so a show_if/copy_to-only change does
+      // NOT trigger a spurious rewrite of an otherwise-untouched controls array.
+      let controlsChanged = false;
       const newControls = f.controls_fields.map(ctrl => {
         const c = { ...ctrl };
         for (const key of CONTROL_ACTION_KEYS) {
           const list = ctrl[key];
           if (list && list.some(id => mergedAway.has(id))) {
             c[key] = remapList(list);
-            changed = true;
+            controlsChanged = true;
           }
         }
         return c;
       });
-      if (changed) next.controls_fields = newControls;
+      if (controlsChanged) {
+        next.controls_fields = newControls;
+        changed = true;
+      }
     }
 
     return changed ? next : f;

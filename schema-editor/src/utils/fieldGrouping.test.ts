@@ -263,4 +263,35 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     const f = merged.fields[0];
     expect(f.options!.every(o => o.source_type === 'checkbox')).toBe(true);
   });
+
+  it('does NOT rewrite an untouched controls_fields array when only show_if changed', () => {
+    const schema = w7Schema();
+    const controls = [{ operator: 'is_checked' as const, value: true, shows: ['reason_c'] }];
+    schema.fields.push({
+      id: 'mixed', name: 'Mixed', type: 'text', section_id: 'reason',
+      pdf_field_name: 'mixed[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' }, // points at merged-away
+      controls_fields: controls, // points only at reason_c (survives)
+    });
+    schema.sections[0].fields.push('mixed');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const mixed = merged.fields.find(f => f.id === 'mixed')!;
+    expect(mixed.show_if!.field).toBe('reason_a'); // show_if rewritten
+    expect(mixed.controls_fields).toBe(controls); // untouched array kept by reference
+  });
+
+  it('rewrites copy_to references to a merged-away field onto the primary', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'mirror', name: 'Mirror', type: 'text', section_id: 'reason',
+      pdf_field_name: 'mirror[0]', read_only: false, required: false,
+      copy_to: ['reason_b', 'reason_c'],
+    });
+    schema.sections[0].fields.push('mirror');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const mirror = merged.fields.find(f => f.id === 'mirror')!;
+    expect(mirror.copy_to).toEqual(['reason_a', 'reason_c']);
+  });
 });
