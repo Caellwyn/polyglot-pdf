@@ -73,6 +73,17 @@ so the guard genuinely fires; added a test asserting the empty-input case return
 quality fix verified by the new test + full suite). Adopt: 2 (one shared fix).
 Reject: 0. Defer: 0.
 
+Codex outer review (PR #258): ERROR -- Codex hit its usage limit (same as PR #254).
+Per doctrine an ERROR routes to the Opus-4.8 fallback reviewer (reviewer of last
+resort), not an auto-clear or a maintainer stop. The Opus fallback independently
+re-reviewed the full diff (verified fill_language at both render sites + the getter
+wiring + None-safe degradation; non-DTI byte-identity; the DTI-branch cleanup;
+the now-real empty-metadata guard; resume/section-switch/change_fill_language
+metadata sourcing; F1 not-from-manifest) and returned NO-GAPS, no defects filed.
+The review record for this PR is the Opus-4.8 fallback NO-GAPS, because Codex was
+unavailable (usage limit). Closed by hand (the watcher's Codex-only --close-on-clean
+did not fire).
+
 ## Lessons
 
 A "move values to a new channel" task has a silent failure mode: a value that has
