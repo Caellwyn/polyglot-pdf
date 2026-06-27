@@ -24,11 +24,15 @@ const SCHEMA: FormSchema = {
   source: 'pdf',
   form_metadata: { title: 'W7', form_number: 'W-7', total_widgets: 3, total_fields: 3, version: '1', language: 'en' },
   parts: [],
-  sections: [{ id: 'reason', label: 'Reason', order: 0, fields: ['reason_a', 'reason_b', 'note'] }],
+  sections: [
+    { id: 'reason', label: 'Reason', order: 0, fields: ['reason_a', 'reason_b', 'note'] },
+    { id: 'other', label: 'Other', order: 1, fields: ['other_a'] },
+  ],
   fields: [
     { id: 'reason_a', name: 'Reason A', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_a[0]', read_only: false, required: false, spoken_name: 'reason a' },
     { id: 'reason_b', name: 'Reason B', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_b[0]', read_only: false, required: false, spoken_name: 'reason b' },
     { id: 'note', name: 'Note', type: 'text', section_id: 'reason', pdf_field_name: 'note[0]', read_only: false, required: false, spoken_name: 'note' },
+    { id: 'other_a', name: 'Other A', type: 'checkbox', section_id: 'other', pdf_field_name: 'other_a[0]', read_only: false, required: false, spoken_name: 'other a' },
   ],
 } as unknown as FormSchema;
 
@@ -97,5 +101,14 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
     fireEvent.click(screen.getByLabelText('Select reason_a for merge'));
     const mergeBtn = await screen.findByRole('button', { name: 'Merge' });
     expect(mergeBtn).toBeDisabled();
+  });
+
+  it('disables Merge with an explanation when the selection spans sections (Codex PR #256)', async () => {
+    await openForm();
+    fireEvent.click(screen.getByLabelText('Select reason_a for merge'));
+    fireEvent.click(screen.getByLabelText('Select other_a for merge'));
+    const mergeBtn = await screen.findByRole('button', { name: 'Merge' });
+    expect(mergeBtn).toBeDisabled();
+    expect(screen.getByText(/span multiple sections/i)).toBeInTheDocument();
   });
 });

@@ -6,49 +6,52 @@
 // already consume this consolidated shape (FieldOption.pdf_field_name,
 // consolidated_widgets[]); this module is purely an editor-side mutation.
 //
-// SHAPE (same STRUCTURE as the real consolidated fields in
-// schemas/i-90/i-90_schema.json -- a radio field with options[] +
-// consolidated_widgets[]):
-//   - each option is { value, label, pdf_field_name, source_type } -- pdf_field_name
-//     is the source widget's full name; source_type records the widget's original
-//     type for a lossless un-merge.
-//   - value is the source field's id (a stable, unique token). NOTE this differs
-//     in CONTENT from i-90's hand-built consolidated fields, where option.value is
-//     the PDF widget's short name (e.g. "P1_checkbox4[0]"); the structure is the
-//     same and the runtime matches on option.value regardless of what token it
-//     holds, but a newly-merged field's option.value is the schema field id.
-//   - consolidated_widgets[] mirrors each option.value, so the runtime can map a
-//     selected option back to its PDF widget.
+// LOSSLESS, SEMANTICS-AWARE design (Codex review on PR #256):
+//   - Merge STASHES each source field's complete original FormField, plus the
+//     original conditional references it rewrites, under a private _ungroup key
+//     on the merged field. Un-merge restores them verbatim -- so help, validation,
+//     hidden, show_if, controls_fields and every other per-field property survive
+//     a merge -> un-merge round-trip (NOT a lossy whitelist rebuild). The backend
+//     and runtime ignore the extra _ungroup key.
+//   - Merge REWRITES dependent conditionals with the CORRECT runtime semantics:
+//     a reference that selected a now-merged-away widget ("is_checked" on that
+//     widget) becomes "equals <that widget's option value>" on the consolidated
+//     radio, because the merged field's runtime value is the selected option's
+//     value (see frontend shouldShowField). A bare id swap would leave an
+//     is_checked condition that never fires against a radio. Un-merge restores the
+//     original conditions from the stash.
+//   - Guards: only radio/checkbox fields that (a) are not already consolidated and
+//     (b) carry a pdf_field_name are groupable; a merge is rejected if the
+//     selection spans more than one section (which would silently move a field
+//     across the Form > Parts > Sections hierarchy).
 //
-// MERGE SEMANTICS (the care is here, not the UI -- per the bead):
-//   - the FIRST field in the selection is the PRIMARY: its id, section_id,
-//     spoken_name, help, validation, and section slot all survive. The merged
-//     field keeps the primary's id so existing show_if / controls_fields
-//     references to it stay valid; references to MERGED-AWAY fields are rewritten
-//     to point at the primary (so none dangle).
-//   - every selected field (primary included) contributes one option. Already-
-//     consolidated fields are NOT groupable (would drop their existing options).
-//   - un-merge is RECONSTRUCTIVE: it rebuilds one separate field per option from
-//     the option's value (-> id), pdf_field_name, label, and source_type. This
-//     keeps the saved schema clean (no private stash object) at the cost of not
-//     restoring rich per-source metadata (help/validation) that simple
-//     radio/checkbox widgets do not carry. Each field's id and TYPE round-trip
-//     through a merge -> un-merge.
+// SHAPE (same structure as i-90's hand-built consolidated fields): the merged
+// field is a radio with options[] (each { value, label, pdf_field_name }) +
+// consolidated_widgets[]. option.value is the source field's id; the runtime
+// matches on option.value regardless of the token it holds.
 
-import type { FormField, FormSchema, FieldOption, ControlActionKey } from '../types/schema';
+import type {
+  FormField,
+  FormSchema,
+  FieldOption,
+  ControlActionKey,
+  ConditionalDisplay,
+  ConditionalControl,
+} from '../types/schema';
 
 // Field types that can participate in a merge group. A consolidated options[]
 // field is a single-select group, so only radio/checkbox source fields qualify.
 const GROUPABLE_TYPES = new Set<FormField['type']>(['radio', 'checkbox']);
 
-// A field is groupable if it is a radio/checkbox AND is not itself already a
-// consolidated options group. Excluding already-consolidated fields prevents a
-// "merge of a merged field" that would silently drop its existing options[]
-// (the {...primary, options} spread in mergeFields would overwrite them) --
-// bd polyglot-pdf-s4dp.1, fresh-eyes finding.
+// A field is groupable if it is a radio/checkbox, is not itself already a
+// consolidated options group, AND carries a pdf_field_name. Excluding
+// already-consolidated fields prevents a re-merge that would drop their options;
+// requiring a pdf_field_name prevents producing an unfillable, non-reversible
+// option (canUngroup needs every option to have one) -- Codex PR #256.
 export function isGroupableField(field: FormField): boolean {
   if (!GROUPABLE_TYPES.has(field.type)) return false;
-  return !(field.options && field.options.length > 0);
+  if (field.options && field.options.length > 0) return false;
+  return !!field.pdf_field_name;
 }
 
 // The controls_fields action arrays whose entries are target field ids that a
@@ -56,6 +59,12 @@ export function isGroupableField(field: FormField): boolean {
 const CONTROL_ACTION_KEYS: ControlActionKey[] = [
   'shows', 'hides', 'unlocks', 'locks', 'makes_required', 'makes_optional',
 ];
+
+// "Selection" operators -- conditions that test whether a (checkbox/radio) widget
+// is the selected one. When that widget is merged into a consolidated radio, the
+// runtime value becomes the selected option's value, so these must convert to
+// `equals <option value>` rather than keep a widget-level is_checked/equals.
+const SELECTION_OPERATORS = new Set(['is_checked', 'equals', 'is_not_empty']);
 
 // Best human-readable label for a source field becoming one option.
 function optionLabelFor(field: FormField): string {
@@ -69,108 +78,179 @@ export function canUngroup(field: FormField): boolean {
   return opts.length >= 2 && opts.every(o => !!o.pdf_field_name);
 }
 
+// Stash written on the merged field so un-merge is a lossless inverse. Held under
+// a private key; the backend/runtime ignore unknown field keys.
+interface UngroupStash {
+  // Each source field's complete original object, in option order. sources[0] is
+  // the primary (its id == the merged field id).
+  sources: FormField[];
+  // Dependent fields whose show_if / controls_fields this merge rewrote, with
+  // their pre-merge values, so un-merge can restore them verbatim.
+  rewrites: Array<{
+    fieldId: string;
+    show_if?: ConditionalDisplay;
+    controls_fields?: ConditionalControl[];
+    copy_to?: string[];
+    // sentinels distinguishing "had no key" from "key not rewritten" on restore.
+    had_show_if: boolean;
+    had_controls: boolean;
+    had_copy_to: boolean;
+  }>;
+}
+
+// FormField does not declare the private stash key, so read/write it through a
+// narrow cast kept in one place.
+const STASH_KEY = '_ungroup';
+function readStash(field: FormField): UngroupStash | undefined {
+  return (field as unknown as Record<string, unknown>)[STASH_KEY] as UngroupStash | undefined;
+}
+
 export interface MergeResult {
   schema: FormSchema;
   // id of the merged (primary) field, so the caller can re-select it. null when
-  // the merge was a no-op (invalid selection) AND no usable primary id exists
-  // (e.g. an empty fieldIds list) -- the caller treats schema-unchanged as the
-  // no-op signal and does not re-select on null.
+  // the merge was a no-op (invalid selection) AND no usable primary id exists.
   mergedFieldId: string | null;
 }
 
-// Rewrite every reference to a merged-away (non-primary) field id so it points
-// at the surviving primary instead. After a merge, the merged-away fields no
-// longer exist, so any field whose show_if / controls_fields targeted one would
-// be left dangling (validateSchema would warn, and the runtime's conditional
-// engine could misbehave). Pointing those references at the primary keeps the
-// conditional logic intact -- the primary now carries those widgets as options.
+// Why a merge could not proceed (for surfacing a reason in the UI). null = ok.
+export type MergeBlockReason = 'too-few' | 'cross-section' | 'missing-pdf-name';
+
+// Validate a selection without mutating: returns the block reason, or null if the
+// fields can be merged. The UI uses this to enable/disable + explain the control.
+export function mergeBlockReason(schema: FormSchema, fieldIds: string[]): MergeBlockReason | null {
+  const byId = new Map(schema.fields.map(f => [f.id, f]));
+  const picked = Array.from(new Set(fieldIds))
+    .map(id => byId.get(id))
+    .filter((f): f is FormField => f !== undefined);
+
+  const groupable = picked.filter(f => GROUPABLE_TYPES.has(f.type) && !(f.options && f.options.length > 0));
+  if (groupable.length < 2) return 'too-few';
+  if (groupable.some(f => !f.pdf_field_name)) return 'missing-pdf-name';
+  // All selected groupable fields must live in the same section, else a merge
+  // would silently move fields across the hierarchy (Codex PR #256).
+  const sections = new Set(groupable.map(f => f.section_id ?? '__none__'));
+  if (sections.size > 1) return 'cross-section';
+  return null;
+}
+
+// Convert ONE conditional value reference from a merged-away widget to the
+// consolidated radio. For a selection-style operator, the condition "this widget
+// is selected" maps to "primary equals <the merged-away widget's option value>".
+function rewriteShowIf(
+  cond: ConditionalDisplay,
+  mergedAwayToValue: Map<string, string>,
+  primaryId: string,
+): ConditionalDisplay | null {
+  if (!mergedAwayToValue.has(cond.field)) return null; // not pointing at a merged-away field
+  const optionValue = mergedAwayToValue.get(cond.field)!;
+  if (SELECTION_OPERATORS.has(cond.operator)) {
+    return { field: primaryId, operator: 'equals', value: optionValue };
+  }
+  // A non-selection operator (e.g. is_empty) keeps its operator but retargets.
+  return { ...cond, field: primaryId };
+}
+
+// Rewrite every dependent field's show_if / controls_fields that referenced a
+// merged-away field. Returns the rewritten fields AND a record of what changed
+// (so un-merge can restore the originals). mergedAwayToValue maps each
+// merged-away field id to its option value on the consolidated radio.
 function rewriteReferences(
   fields: FormField[],
-  mergedAway: Set<string>,
+  mergedAwayToValue: Map<string, string>,
   primaryId: string,
-): FormField[] {
-  const remap = (id: string): string => (mergedAway.has(id) ? primaryId : id);
-  const remapList = (ids?: string[]): string[] | undefined => {
+): { fields: FormField[]; rewrites: UngroupStash['rewrites'] } {
+  const rewrites: UngroupStash['rewrites'] = [];
+  const mergedAway = new Set(mergedAwayToValue.keys());
+
+  const remapControlList = (ids?: string[]): string[] | undefined => {
     if (!ids) return ids;
-    // remap then de-dupe (two merged-away ids could both map to the primary).
     const out: string[] = [];
     for (const id of ids) {
-      const r = remap(id);
+      const r = mergedAway.has(id) ? primaryId : id;
       if (!out.includes(r)) out.push(r);
     }
     return out;
   };
 
-  return fields.map(f => {
+  const newFields = fields.map(f => {
     let changed = false;
     const next: FormField = { ...f };
+    const record: UngroupStash['rewrites'][number] = {
+      fieldId: f.id, had_show_if: !!f.show_if, had_controls: !!f.controls_fields,
+      had_copy_to: !!f.copy_to,
+    };
+    let recorded = false;
 
     if (f.show_if && mergedAway.has(f.show_if.field)) {
-      next.show_if = { ...f.show_if, field: primaryId };
-      changed = true;
+      const rewritten = rewriteShowIf(f.show_if, mergedAwayToValue, primaryId);
+      if (rewritten) {
+        record.show_if = f.show_if; // original
+        next.show_if = rewritten;
+        changed = true;
+        recorded = true;
+      }
     }
 
     // copy_to is a plain string[] of target field ids (unused in current real
-    // schemas, but rewritten for completeness so no reference list is skipped).
+    // schemas, but rewritten for completeness so no reference list dangles).
     if (f.copy_to && f.copy_to.some(id => mergedAway.has(id))) {
-      next.copy_to = remapList(f.copy_to);
+      record.copy_to = f.copy_to; // original
+      next.copy_to = remapControlList(f.copy_to);
       changed = true;
+      recorded = true;
     }
 
     if (f.controls_fields) {
-      // Track controls changes separately so a show_if/copy_to-only change does
-      // NOT trigger a spurious rewrite of an otherwise-untouched controls array.
       let controlsChanged = false;
       const newControls = f.controls_fields.map(ctrl => {
         const c = { ...ctrl };
         for (const key of CONTROL_ACTION_KEYS) {
           const list = ctrl[key];
           if (list && list.some(id => mergedAway.has(id))) {
-            c[key] = remapList(list);
+            c[key] = remapControlList(list);
             controlsChanged = true;
           }
         }
         return c;
       });
       if (controlsChanged) {
+        record.controls_fields = f.controls_fields; // original
         next.controls_fields = newControls;
         changed = true;
+        recorded = true;
       }
     }
 
+    if (recorded) rewrites.push(record);
     return changed ? next : f;
   });
+
+  return { fields: newFields, rewrites };
 }
 
 // Merge the given fields (by id, in selection order) into one consolidated
 // options[] field. Returns the original schema unchanged if the selection is
-// invalid (fewer than 2 resolvable groupable fields). The first id is the
-// primary whose identity survives.
+// invalid (see mergeBlockReason). The first id is the primary whose identity
+// survives.
 export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult {
-  const byId = new Map(schema.fields.map(f => [f.id, f]));
-  const selected = fieldIds
-    .map(id => byId.get(id))
-    .filter((f): f is FormField => f !== undefined && isGroupableField(f));
-
-  // Need at least two distinct groupable fields to form a group.
-  const distinct = Array.from(new Set(selected.map(f => f.id)))
-    .map(id => byId.get(id)!)
-    // preserve selection order
-    .sort((a, b) => fieldIds.indexOf(a.id) - fieldIds.indexOf(b.id));
-
-  if (distinct.length < 2) {
-    // No-op: signal via unchanged schema; mergedFieldId is the first selected id
-    // if one exists, else null (empty/invalid selection) -- never undefined.
+  if (mergeBlockReason(schema, fieldIds) !== null) {
     return { schema, mergedFieldId: fieldIds[0] ?? null };
   }
 
+  const byId = new Map(schema.fields.map(f => [f.id, f]));
+  const distinct = Array.from(new Set(fieldIds))
+    .map(id => byId.get(id)!)
+    .filter(f => isGroupableField(f))
+    .sort((a, b) => fieldIds.indexOf(a.id) - fieldIds.indexOf(b.id));
+
   const primary = distinct[0];
   const mergedIds = new Set(distinct.map(f => f.id));
-  const mergedAway = new Set(distinct.slice(1).map(f => f.id)); // non-primary
 
-  // Build one option per source field. value = source id (stable/unique);
-  // pdf_field_name carried from the source widget; label best-effort human text;
-  // source_type records the widget's original type so un-merge can restore it.
+  // option.value = source id (stable/unique); each merged-away id maps to its
+  // option value so dependent conditionals can be rewritten with correct semantics.
+  const mergedAwayToValue = new Map<string, string>();
+  for (const f of distinct.slice(1)) mergedAwayToValue.set(f.id, f.id);
+
   const options: FieldOption[] = distinct.map(f => ({
     value: f.id,
     label: optionLabelFor(f),
@@ -178,32 +258,56 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     source_type: f.type,
   }));
 
+  // Carry each NON-PRIMARY source's own trigger-side controls onto the merged
+  // radio, re-keyed to fire when that option is selected (operator: equals,
+  // value: the option value). Otherwise merging A+B would drop the rule by which
+  // selecting B unlocked/showed follow-up fields (Codex PR #256). The primary's
+  // controls already survive via the {...primary} spread below; we append the
+  // others. Each carried rule's existing operator/value is replaced with the
+  // option-select condition, since on the radio "B" is expressed as that value.
+  const carriedControls: ConditionalControl[] = [];
+  for (const f of distinct.slice(1)) {
+    for (const ctrl of f.controls_fields || []) {
+      carriedControls.push({ ...ctrl, operator: 'equals', value: f.id });
+    }
+  }
+
+  // Replace the primary in place; drop the other merged fields. Rewrite dependent
+  // conditionals on the SURVIVING fields, recording originals for a lossless undo.
+  const survivors: FormField[] = [];
+  for (const f of schema.fields) {
+    if (f.id === primary.id) continue; // primary re-added below as the merged field
+    if (!mergedIds.has(f.id)) survivors.push(f);
+  }
+  const { fields: rewrittenSurvivors, rewrites } = rewriteReferences(
+    survivors, mergedAwayToValue, primary.id,
+  );
+
+  // The merged field carries the primary's identity + the stash for un-merge.
+  const stash: UngroupStash = { sources: distinct, rewrites };
+  const mergedControls = [...(primary.controls_fields || []), ...carriedControls];
   const mergedField: FormField = {
     ...primary,
-    // A consolidated group is single-select; present it as a radio.
     type: 'radio',
     options,
     consolidated_widgets: distinct.map(f => f.id),
-  };
+    ...(mergedControls.length > 0 ? { controls_fields: mergedControls } : {}),
+    [STASH_KEY]: stash,
+  } as FormField;
 
-  // Replace the primary in place; drop the other merged fields. Keeping the
-  // primary's position means the field list / section order barely shifts.
-  const replacedFields: FormField[] = [];
+  // Reassemble fields, putting the merged field where the primary was.
+  const newFields: FormField[] = [];
+  const survivorById = new Map(rewrittenSurvivors.map(f => [f.id, f]));
   for (const f of schema.fields) {
     if (f.id === primary.id) {
-      replacedFields.push(mergedField);
-    } else if (!mergedIds.has(f.id)) {
-      replacedFields.push(f);
+      newFields.push(mergedField);
+    } else if (survivorById.has(f.id)) {
+      newFields.push(survivorById.get(f.id)!);
     }
     // merged-away (non-primary) fields are dropped
   }
 
-  // Rewrite any show_if / controls_fields references to a merged-away id so they
-  // point at the surviving primary instead of dangling (fresh-eyes finding).
-  const newFields = rewriteReferences(replacedFields, mergedAway, primary.id);
-
-  // Remove merged-away ids from every section's field list so section ordering
-  // stays valid (validateSchema flags a section referencing a missing field).
+  // Remove merged-away ids from the (single) section's field list.
   const newSections = schema.sections.map(section => {
     const fields = section.fields.filter(id => id === primary.id || !mergedIds.has(id));
     return fields.length === section.fields.length ? section : { ...section, fields };
@@ -215,30 +319,70 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   };
 }
 
-// Un-merge a consolidated field back into one standalone field per option. The
-// first reconstructed field reuses the merged field's id/section/type so the
-// primary's identity round-trips; the rest derive their id from option.value.
+// Un-merge a consolidated field back into its separate per-widget fields. When a
+// stash is present (a field merged in-editor), it is a LOSSLESS inverse: the
+// original source fields and rewritten dependent conditionals are restored
+// verbatim. Without a stash (a hand-authored consolidated field loaded from
+// disk), it falls back to reconstructing each option into a standalone field.
 // Returns the schema unchanged if the field is not un-groupable.
 export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
   const field = schema.fields.find(f => f.id === fieldId);
   if (!field || !field.options || !canUngroup(field)) return schema;
 
-  // Ids that already exist OTHER than this consolidated field -- a reconstructed
-  // id must not collide with one of these (that would silently merge two fields
-  // back together). The consolidated field id itself is excluded: option 0
-  // legitimately reclaims it as the primary.
-  const otherIds = new Set(
-    schema.fields.map(f => f.id).filter(id => id !== fieldId)
-  );
+  const stash = readStash(field);
 
-  // Reconstruct one field per option. Option 0 keeps the primary id; the rest
-  // derive their id from option.value, de-duped against surviving fields AND
-  // already-rebuilt ids.
+  if (stash) {
+    // Lossless path: restore the stashed source fields verbatim (minus the stash
+    // key itself) and revert the rewritten dependents.
+    const rebuilt = stash.sources.map(src => {
+      const copy = { ...src } as Record<string, unknown>;
+      delete copy[STASH_KEY];
+      return copy as unknown as FormField;
+    });
+    const rebuiltIds = rebuilt.map(f => f.id);
+    const restoreById = new Map(stash.rewrites.map(r => [r.fieldId, r]));
+
+    const newFields: FormField[] = [];
+    for (const f of schema.fields) {
+      if (f.id === fieldId) {
+        newFields.push(...rebuilt);
+        continue;
+      }
+      const r = restoreById.get(f.id);
+      if (r) {
+        const restored = { ...f };
+        if (r.had_show_if) restored.show_if = r.show_if;
+        else delete (restored as Record<string, unknown>).show_if;
+        if (r.had_controls) restored.controls_fields = r.controls_fields;
+        else delete (restored as Record<string, unknown>).controls_fields;
+        if (r.had_copy_to) restored.copy_to = r.copy_to;
+        else delete (restored as Record<string, unknown>).copy_to;
+        newFields.push(restored);
+      } else {
+        newFields.push(f);
+      }
+    }
+
+    const newSections = schema.sections.map(section => {
+      const pos = section.fields.indexOf(fieldId);
+      if (pos === -1) return section;
+      const fields = [...section.fields];
+      fields.splice(pos, 1, ...rebuiltIds);
+      return { ...section, fields };
+    });
+
+    return { ...schema, fields: newFields, sections: newSections };
+  }
+
+  // Fallback path (no stash -- hand-authored consolidated field). Reconstruct one
+  // field per option. This cannot recover metadata the source never had on the
+  // option, but it does preserve each option's pdf_field_name + source_type.
+  const otherIds = new Set(schema.fields.map(f => f.id).filter(id => id !== fieldId));
   const usedIds = new Set<string>();
   const rebuilt: FormField[] = field.options.map((opt, idx) => {
     let id: string;
     if (idx === 0) {
-      id = fieldId; // primary keeps its id
+      id = fieldId;
     } else {
       const base = String(opt.value || `${fieldId}_${idx}`);
       let candidate = base;
@@ -253,9 +397,6 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
     return {
       id,
       name: opt.label || id,
-      // Restore the source widget's original type recorded at merge time; fall
-      // back to checkbox for options merged before source_type was tracked (or
-      // hand-authored consolidated fields).
       type: opt.source_type || 'checkbox',
       section_id: field.section_id,
       pdf_field_name: opt.pdf_field_name || '',
@@ -266,18 +407,12 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
     };
   });
 
-  // Splice the rebuilt fields in where the consolidated field was.
   const newFields: FormField[] = [];
   for (const f of schema.fields) {
-    if (f.id === fieldId) {
-      newFields.push(...rebuilt);
-    } else {
-      newFields.push(f);
-    }
+    if (f.id === fieldId) newFields.push(...rebuilt);
+    else newFields.push(f);
   }
 
-  // Restore the rebuilt ids into the consolidated field's section slot (replace
-  // the single primary id with the full rebuilt id list, in order).
   const rebuiltIds = rebuilt.map(f => f.id);
   const newSections = schema.sections.map(section => {
     const pos = section.fields.indexOf(fieldId);

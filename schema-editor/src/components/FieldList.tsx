@@ -1,7 +1,7 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
-import { isGroupableField } from '../utils/fieldGrouping';
+import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 
 interface FieldListProps {
   schema: FormSchema;
@@ -322,22 +322,31 @@ export const FieldList: React.FC<FieldListProps> = ({
       </div>
 
       {/* Merge action bar (bd polyglot-pdf-s4dp.1): appears once 2+ groupable
-          fields are ticked. Merges them into one consolidated options[] field. */}
-      {groupingEnabled && groupSelection.length > 0 && (
+          fields are ticked. Merges them into one consolidated options[] field.
+          The Merge button is disabled (with an explanation) when the selection
+          can't be merged -- too few, spanning sections, or missing a PDF mapping
+          (Codex PR #256). */}
+      {groupingEnabled && groupSelection.length > 0 && (() => {
+        const reason = mergeBlockReason(schema, groupSelection);
+        const reasonText =
+          reason === 'too-few' ? 'Select 2 or more radio/checkbox fields to merge'
+          : reason === 'cross-section' ? 'Selected fields span multiple sections -- merge within one section'
+          : reason === 'missing-pdf-name' ? 'A selected field has no PDF mapping and cannot be merged'
+          : 'Merge selected fields into one options field';
+        return (
         <div className="p-2 border-b border-gray-200 bg-primary-50 flex items-center gap-2">
           <span className="text-xs text-gray-700 flex-1">
             {groupSelection.length} field{groupSelection.length === 1 ? '' : 's'} selected to merge
+            {reason && reason !== 'too-few' && (
+              <span className="block text-amber-700">{reasonText}</span>
+            )}
           </span>
           <button
             type="button"
             className="btn-sm btn-primary disabled:opacity-50"
-            disabled={groupSelection.length < 2}
+            disabled={reason !== null}
             onClick={() => onMergeFields?.()}
-            title={
-              groupSelection.length < 2
-                ? 'Select 2 or more fields to merge'
-                : 'Merge selected fields into one options field'
-            }
+            title={reasonText}
           >
             Merge
           </button>
@@ -349,7 +358,8 @@ export const FieldList: React.FC<FieldListProps> = ({
             Clear
           </button>
         </div>
-      )}
+        );
+      })()}
 
       <div className="flex-1 overflow-auto custom-scrollbar">
       <div className="p-2 space-y-1">

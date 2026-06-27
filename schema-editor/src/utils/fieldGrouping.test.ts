@@ -9,6 +9,7 @@ import {
   ungroupField,
   canUngroup,
   isGroupableField,
+  mergeBlockReason,
 } from './fieldGrouping';
 import type { FormSchema, FormField } from '../types/schema';
 
@@ -49,15 +50,20 @@ function w7Schema(): FormSchema {
 }
 
 describe('isGroupableField', () => {
-  it('accepts radio and checkbox, rejects text', () => {
-    expect(isGroupableField({ type: 'checkbox' } as FormField)).toBe(true);
-    expect(isGroupableField({ type: 'radio' } as FormField)).toBe(true);
-    expect(isGroupableField({ type: 'text' } as FormField)).toBe(false);
+  it('accepts radio and checkbox with a pdf_field_name, rejects text', () => {
+    expect(isGroupableField({ type: 'checkbox', pdf_field_name: 'c[0]' } as FormField)).toBe(true);
+    expect(isGroupableField({ type: 'radio', pdf_field_name: 'r[0]' } as FormField)).toBe(true);
+    expect(isGroupableField({ type: 'text', pdf_field_name: 't[0]' } as FormField)).toBe(false);
+  });
+
+  it('rejects a radio/checkbox WITHOUT a pdf_field_name (would be unfillable + non-reversible)', () => {
+    expect(isGroupableField({ type: 'checkbox' } as FormField)).toBe(false);
+    expect(isGroupableField({ type: 'checkbox', pdf_field_name: '' } as FormField)).toBe(false);
   });
 
   it('rejects an already-consolidated field (has options) so a re-merge cannot drop its options', () => {
     expect(isGroupableField({
-      type: 'radio',
+      type: 'radio', pdf_field_name: 'r[0]',
       options: [{ value: 'a', label: 'A', pdf_field_name: 'a[0]' }],
     } as FormField)).toBe(false);
   });
@@ -169,18 +175,27 @@ describe('ungroupField (crit 2: reversible)', () => {
     expect(ungroupField(schema, 'plain')).toBe(schema);
   });
 
-  it('de-dupes a reconstructed id that would collide with a surviving field', () => {
+  it('de-dupes a reconstructed id that would collide with a surviving field (fallback path)', () => {
+    // A hand-authored consolidated field (NO stash) takes the reconstruction
+    // path, where option.value -> id can collide with a surviving field id.
     const schema = w7Schema();
-    // Merge a + b, leaving reason_b's id free... then add a NEW field that
-    // already owns the would-be reconstructed id to force a collision.
-    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
-    // reason_c..e survive; inject a field that squats on 'reason_b'.
-    merged.fields.push({
-      id: 'reason_b', name: 'Squatter', type: 'text', section_id: 'reason',
-      pdf_field_name: 'squat[0]', read_only: false, required: false,
-    });
-    const unmerged = ungroupField(merged, 'reason_a');
-    // The reconstructed second option must NOT reuse the squatted id.
+    schema.fields = [
+      {
+        id: 'race', name: 'Race', type: 'checkbox', section_id: 'reason',
+        pdf_field_name: 'race[0]', read_only: false, required: false,
+        options: [
+          { value: 'race', label: 'A', pdf_field_name: 'a[0]' },
+          { value: 'white', label: 'B', pdf_field_name: 'b[0]' },
+        ],
+      },
+      // a surviving field squats on the would-be reconstructed id 'white'
+      {
+        id: 'white', name: 'Squatter', type: 'text', section_id: 'reason',
+        pdf_field_name: 'squat[0]', read_only: false, required: false,
+      },
+    ];
+    schema.sections[0].fields = ['race', 'white'];
+    const unmerged = ungroupField(schema, 'race');
     const ids = unmerged.fields.map(f => f.id);
     const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
     expect(dupes).toHaveLength(0);
@@ -226,7 +241,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     expect(unmerged.fields.find(f => f.id === 'reason_b')!.type).toBe('checkbox');
   });
 
-  it('rewrites show_if references to a merged-away field onto the primary', () => {
+  it('rewrites show_if with CORRECT runtime semantics (is_checked on a widget -> equals option value)', () => {
     const schema = w7Schema();
     // an unrelated field shows only when reason_b (about to be merged away) is set
     schema.fields.push({
@@ -238,8 +253,25 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
 
     const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
     const detail = merged.fields.find(f => f.id === 'detail')!;
-    // reason_b no longer exists; the reference now points at the primary reason_a
-    expect(detail.show_if!.field).toBe('reason_a');
+    // reason_b is now an option of the merged radio reason_a; "is this widget
+    // checked" becomes "radio equals reason_b's option value" -- a bare id swap
+    // would leave is_checked, which never fires against a radio (Codex PR #256).
+    expect(detail.show_if).toEqual({ field: 'reason_a', operator: 'equals', value: 'reason_b' });
+  });
+
+  it('restores the original show_if on un-merge (lossless inverse of the rewrite)', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    });
+    schema.sections[0].fields.push('detail');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const unmerged = ungroupField(merged, 'reason_a');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'reason_b', operator: 'is_checked' });
   });
 
   it('rewrites controls_fields references to a merged-away field onto the primary (de-duped)', () => {
@@ -293,5 +325,77 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
     const mirror = merged.fields.find(f => f.id === 'mirror')!;
     expect(mirror.copy_to).toEqual(['reason_a', 'reason_c']);
+  });
+});
+
+describe('Codex PR #256 fixes', () => {
+  it('rejects a cross-section merge (would move a field across the hierarchy)', () => {
+    const schema = w7Schema();
+    // move reason_b into a different section
+    schema.sections.push({ id: 'other', label: 'Other', order: 1, fields: [] });
+    const rb = schema.fields.find(f => f.id === 'reason_b')!;
+    rb.section_id = 'other';
+    schema.sections[0].fields = schema.sections[0].fields.filter(id => id !== 'reason_b');
+    schema.sections[1].fields = ['reason_b'];
+
+    expect(mergeBlockReason(schema, ['reason_a', 'reason_b'])).toBe('cross-section');
+    expect(mergeFields(schema, ['reason_a', 'reason_b']).schema).toBe(schema); // no-op
+  });
+
+  it('rejects merging a field without a pdf_field_name', () => {
+    const schema = w7Schema();
+    schema.fields.find(f => f.id === 'reason_b')!.pdf_field_name = '';
+    expect(mergeBlockReason(schema, ['reason_a', 'reason_b'])).toBe('missing-pdf-name');
+    expect(mergeFields(schema, ['reason_a', 'reason_b']).schema).toBe(schema);
+  });
+
+  it('preserves ALL source metadata (help/validation/hidden) through merge -> un-merge', () => {
+    const schema = w7Schema();
+    const rb = schema.fields.find(f => f.id === 'reason_b')!;
+    rb.help = { instructions: 'pick me' };
+    rb.validation = { pattern: '^x$' };
+    rb.hidden = true;
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const unmerged = ungroupField(merged, 'reason_a');
+    const restored = unmerged.fields.find(f => f.id === 'reason_b')!;
+    expect(restored.help).toEqual({ instructions: 'pick me' });
+    expect(restored.validation).toEqual({ pattern: '^x$' });
+    expect(restored.hidden).toBe(true);
+  });
+
+  it('preserves a non-primary source field own controls_fields through round-trip', () => {
+    const schema = w7Schema();
+    const rb = schema.fields.find(f => f.id === 'reason_b')!;
+    rb.controls_fields = [{ operator: 'is_checked', value: true, shows: ['reason_e'] }];
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    // the merged radio carries reason_b's rule, re-keyed to fire on its option value
+    const mergedRule = merged.fields[0].controls_fields!.find(c => c.value === 'reason_b');
+    expect(mergedRule).toBeDefined();
+    expect(mergedRule!.operator).toBe('equals');
+    expect(mergedRule!.shows).toEqual(['reason_e']);
+
+    // un-merge restores reason_b with its original controls intact
+    const unmerged = ungroupField(merged, 'reason_a');
+    const restored = unmerged.fields.find(f => f.id === 'reason_b')!;
+    expect(restored.controls_fields).toEqual([{ operator: 'is_checked', value: true, shows: ['reason_e'] }]);
+  });
+
+  it('un-groups a hand-authored CHECKBOX group (no stash, fallback path)', () => {
+    const schema = w7Schema();
+    schema.fields = [{
+      id: 'p3_race', name: 'Race', type: 'checkbox', section_id: 'reason',
+      pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+      options: [
+        { value: 'white', label: 'White', pdf_field_name: 'white[0]' },
+        { value: 'asian', label: 'Asian', pdf_field_name: 'asian[0]' },
+      ],
+    }];
+    schema.sections[0].fields = ['p3_race'];
+    expect(canUngroup(schema.fields[0])).toBe(true);
+    const unmerged = ungroupField(schema, 'p3_race');
+    expect(unmerged.fields).toHaveLength(2);
+    expect(unmerged.fields.map(f => f.pdf_field_name)).toEqual(['white[0]', 'asian[0]']);
   });
 });
