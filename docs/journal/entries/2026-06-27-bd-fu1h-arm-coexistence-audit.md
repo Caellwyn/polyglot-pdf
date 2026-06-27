@@ -17,7 +17,7 @@ so the audit gates the remaining epic work.
 
 ## What shipped
 
-A findings doc, `docs/audits/2026-06-27-naive-jit-dti-arm-coexistence.md`, with 7
+A findings doc, `docs/audits/2026-06-27-naive-jit-dti-arm-coexistence.md`, with 8
 findings -- each VERIFIED against the cited code (not inferred from a subagent
 summary), severity-tagged (BLOCKER-FOR-C/D / LATENT / BENIGN), with file:line + the
 triggering scenario. Method: two parallel Explore agents mapped the backend
@@ -64,7 +64,18 @@ Exit-criteria scorecard (this is an investigate/document bead):
    PASS (F1->uogm, F3/F4->h1bn notes; F2/F5/F6/F7 marked benign).
 3. Clear go/no-go for uogm + h1bn -- PASS (GO for both, F1 constraint on C).
 
-Fresh-eyes adversarial assess: <FRESH_EYES_PLACEHOLDER -- filled at closeout>.
+Fresh-eyes adversarial assess (Sonnet): verified the audit's CLAIMS against the code
+(the right test for a document-deliverable bead) -- all substance holds: every
+finding's claim accurate, severity labels correct, F1 (the only blocker) verified,
+go/no-go correct, all 3 exit criteria PASS. Found 2 cite-accuracy GAPS in the doc
+itself (`SYSTEM_INSTRUCTION` mis-cited as ~427, actual :372; a reversed
+`368-348` range) + 2 completeness suggestions (F1 should also cite the
+`manual_section_switch` payload path; a 6th shared surface -- the USE_DTI-gated
+compression-window derivation). ADOPTED all 4: fixed both cites to the verified line
+numbers, added the manual-switch evidence to F1, and added F8 (compression
+derivation, BENIGN). Re-spawn not needed -- the substance was already NO-GAPS; the
+adopted items are doc-accuracy fixes I verified against the code directly. Adopt: 4.
+Reject: 0. Defer: 0.
 
 ## Lessons
 

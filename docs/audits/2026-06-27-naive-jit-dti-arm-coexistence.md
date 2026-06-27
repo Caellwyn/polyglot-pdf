@@ -23,18 +23,21 @@ arm. DTI/JIT are experimental.
 
 ## The shared surfaces (where the arms can collide)
 
-1. **`build_form_context` 3-way branch** (`backend/services/ai_context.py:368-348`):
-   `if USE_DTI -> elif USE_JIT_SCHEMA or schema.jit_mode -> else legacy`. Precedence
-   is **DTI > JIT > legacy**, mutually exclusive at the SI level.
+1. **`build_form_context` 3-way branch** (`backend/services/ai_context.py`): DTI at
+   `:368` -> JIT at `:400` (`elif USE_JIT_SCHEMA or schema.jit_mode`) -> legacy `else`
+   at `:500`. Precedence is **DTI > JIT > legacy**, mutually exclusive at the SI level.
 2. **The SI templates + shared initiating-message templates** (`backend/config.py`):
-   `SYSTEM_INSTRUCTION` (~427), `JIT_SYSTEM_INSTRUCTION` (~434), `DTI_SYSTEM_INSTRUCTION`
-   (~504), and `INITIATING_MESSAGE` / `RESUME_INITIATING_MESSAGE` /
-   `DISCLAIMER_INITIATING_MESSAGE` (~579-597), which ALL three arms share for the opener.
+   `SYSTEM_INSTRUCTION` (:372), `JIT_SYSTEM_INSTRUCTION` (:434), `DTI_SYSTEM_INSTRUCTION`
+   (:504), and `INITIATING_MESSAGE` / `RESUME_INITIATING_MESSAGE` /
+   `DISCLAIMER_INITIATING_MESSAGE` (:579-597), which ALL three arms share for the opener.
 3. **Two handshake shapes** (`backend/routes/websocket_routes.py:699-748`): `handshake`
    (full schema) vs `handshake_jit` (manifest + first_field_schema + `jit_mode:true`).
 4. **The client-driven opener** (`change_spoken_language` -> `send_initiating_message`),
    plus the section-switch opener (`form_filling_service.py:846-852`).
 5. **`_dti_extra_fields` vs `_schema["fields"]`** (DTI validation/lookup set vs current-field source).
+6. **The compression-window derivation** (`backend/adapters/live_ai_gemini.py:1217-1222`):
+   `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR AND USE_DTI` derives the window from the SI
+   floor. DTI-gated, so it is a shared surface only the DTI arm touches. See F8 (benign).
 
 ## Severity legend
 
@@ -48,12 +51,15 @@ arm. DTI/JIT are experimental.
 
 ### F1. Section switch sends NO manifest -> DTI progress/metadata block will be empty after a switch -- **BLOCKER-FOR-C (uogm)**
 
-**Scenario.** A manual section switch sends `extractSectionFields` (the new section's
-FULL field list) with NO `manifest` key (`frontend/src/webFormConnection.ts:1048`,
-`section_info_response`; consumed at `backend/routes/websocket_routes.py` switch handler
--> `form_filling_service.py:802` `build_form_context_message(section_schema, ...)`). The
-DTI branch reads `schema.get("manifest") or {}` (`ai_context.py:369`), so on a switch
-`current_section = {}` and `section_fields = []`.
+**Scenario.** A section switch sends `extractSectionFields` (the new section's FULL
+field list) with NO `manifest` key, on BOTH switch payloads: the AI-initiated
+`section_info_response` (`frontend/src/webFormConnection.ts:1086`,
+`schema: sectionSchema`) and the manual `manual_section_switch`
+(`webFormConnection.ts:2435-2438`, `schema: sectionSchema`). It is consumed at the
+`backend/routes/websocket_routes.py` switch handler -> `form_filling_service.py:802`
+`build_form_context_message(section_schema, ...)`. The DTI branch reads
+`schema.get("manifest") or {}` (`ai_context.py:369`), so on a switch
+`current_section = {}` and `section_fields = []` for either payload.
 
 **Why it matters for C.** Today this is benign for DTI because the static SI **discards**
 the computed progress (`ai_context.py:374-392` computes `total_fields`/`filled_count`
@@ -183,6 +189,24 @@ Evidence: `config.py:579-597`; `form_filling_service.py:415-419`.
 
 ---
 
+### F8. Compression-window derivation is gated on `USE_DTI` -> uogm changing SI size shifts it automatically -- **BENIGN (no action; note for C)**
+
+**Scenario.** The context-compression window is derived from the SI floor only when
+`CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR AND USE_DTI`
+(`backend/adapters/live_ai_gemini.py:1217-1222` -> `derive_compression_window` at
+`:170`). uogm changes what the DTI SI + injection carry, which changes the SI floor.
+
+**Why BENIGN.** The derivation reads the floor at session build time, so it tracks any
+SI-size change automatically -- there is nothing for uogm to update, and the gate is
+DTI-only so legacy/JIT are untouched. Recorded so C's implementor does NOT file a
+separate "did I break compression sizing?" concern: they did not, it self-adjusts.
+(If uogm moves a LOT onto the injection such that the per-turn injection dwarfs the SI,
+h1bn's cost measurement will catch any window mis-sizing -- already in its scope.)
+
+Evidence: `live_ai_gemini.py:170,1217-1222`.
+
+---
+
 ## Go / no-go for the remaining epic children
 
 - **uogm (C) -- GO, with one required design constraint (F1).** Build the
@@ -209,9 +233,10 @@ as a standalone bead (which would just duplicate the child):
 
 - **F1 -> uogm notes** (the metadata-source constraint; must-do for C).
 - **F3 + F4 -> h1bn notes** (added to D's edge-case verification list).
-- **F2, F5, F6, F7** are BENIGN/by-design and explicitly marked so they are not
+- **F2, F5, F6, F7, F8** are BENIGN/by-design and explicitly marked so they are not
   re-investigated. F6 (both-flags-on) and F7 have optional, non-blocking hardening
-  ideas noted inline; neither warrants a bead now.
+  ideas noted inline; neither warrants a bead now. F8 (compression-window derivation)
+  self-adjusts to uogm's SI-size change -- no action, noted so C does not re-raise it.
 
 The optional "both flags on -> startup warning" hardening (F6) is the only thing that
 could be a future bead; deliberately NOT filed (config mistake, not a real risk while
