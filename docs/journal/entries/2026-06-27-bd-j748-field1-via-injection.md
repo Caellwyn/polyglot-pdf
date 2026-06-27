@@ -124,7 +124,21 @@ and made `send_initiating_message` resolve the field from the hint's `field_id`
 were blockers (correctness/compliance: the pre-disclaimer prompt is a real
 compliance bug); all addressed by the rework, none deferred. This is exactly the
 value of the outer review -- fresh-eyes (which only saw the diff, not the frontend
-flow) had cleared it NO-GAPS. Codex rounds to clean: see merge ping.
+flow) had cleared it NO-GAPS.
+
+Codex round 2 (re-review of the rework): ERROR -- Codex returned a quota/error
+notice instead of a verdict. Per the closeout doctrine an ERROR routes to the
+Opus-4.8 fallback reviewer (reviewer of last resort), NOT an auto-clear or a
+maintainer stop. The Opus fallback adversarially re-reviewed the reworked diff
+(verified the hint-id regex against the real frontend hint format, that every
+opener path resolves a field_id with no opener regression, the spoken-hint strip,
+non-DTI byte-identical output, the no-PII test's effectiveness, and the new tests'
+non-tautology) and returned NO-GAPS on both rubrics. It flagged two doc/comment
+self-contradictions within my diff (the websocket-routing.md summary line still
+described the removed server trigger; merge_field_schema's docstring still said the
+SI renders fields[0]) -- both fixed inline (doc/comment-only, no behavior change).
+The review record for this PR is the Opus-4.8 fallback NO-GAPS, because Codex was
+unavailable (quota/error on round 2).
 
 ## Lessons
 

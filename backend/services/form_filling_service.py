@@ -1015,10 +1015,14 @@ class FormFillingService:
         on next_field_hint_response; we record it here (SCHEMA ONLY -- no user
         values) so _build_fields_from_schema can validate it.
 
-        Stored in a SEPARATE dict, NOT appended to self._schema['fields'] -- the DTI
-        SI branch renders schema['fields'][0] as the CURRENT field, so growing that
-        list would make an SI rebuild (recovery restart) describe a stale early
-        field (Codex PR #229 round-2 follow-up). Idempotent by field id.
+        Stored in a SEPARATE dict, NOT appended to self._schema['fields']: the
+        handshake's schema['fields'][0] is the session/section's first field, and
+        keeping later fields out of that list avoids polluting it (e.g. a recovery
+        restart's context build, Codex PR #229 round-2 follow-up). The DTI initiating
+        message resolves the CURRENT field by the hint's field_id, looking it up in
+        self._schema['fields'] PLUS this dict (_resolve_hint_field_schema, bd
+        polyglot-pdf-j748), so recorded later fields are reachable for guidance
+        without being positional. Idempotent by field id.
         """
         if not field_schema or not field_schema.get("id"):
             return
