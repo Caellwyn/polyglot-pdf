@@ -55,7 +55,7 @@ same Sonnet judge, to pick the format that best sets the secretary up for succes
 
 (recall/precision/strict/hit/judge rates are means across the 6 difficulty tiers;
 halluc/over_inc are whole-battery counts. The halluc/over_inc differences -- grouped
-2/4, flat 1/5, prose 2/4 -- are within run-to-run sampling noise, not a real signal.)
+2/4, flat 1/5, prose 2/5 -- are within run-to-run sampling noise, not a real signal.)
 
 ## Reading it
 
@@ -75,7 +75,7 @@ halluc/over_inc are whole-battery counts. The halluc/over_inc differences -- gro
   precision, as expected -- ids embedded in prose are a weaker reference handle. Not
   recommended as the default, but it is the token-efficiency lever IF cost ever
   dominates (see below).
-- Hallucination (grouped 2, flat 1, prose 2) and over-inclusion (4 / 5 / 4) barely
+- Hallucination (grouped 2, flat 1, prose 2) and over-inclusion (4 / 5 / 5) barely
   move across formats -- the 1-count differences are within run-to-run sampling
   noise, not a format effect. These failure modes are model/architecture properties,
   not format-driven (consistent with the jnjj.26 finding).
