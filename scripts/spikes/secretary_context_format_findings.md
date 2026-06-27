@@ -14,10 +14,16 @@ same Sonnet judge, to pick the format that best sets the secretary up for succes
 > (recall 0.889, precision 0.797, strict 0.626, synth 0.887, disambig 0.933). The
 > jnjj.26 baseline choice is validated by the data.
 >
-> *Data note: the flat renderer originally used non-authoritative `section_id` for
-> 4 Part-3 fields (Codex round 1); FIXED to use the authoritative `_ordered_groups`
-> mapping, and all three formats were REGENERATED on the corrected renderer
-> (2026-06-27, gemini-3.1-flash-lite). The numbers above are the finalized set.*
+> *Data note: two renderer fairness bugs were fixed (Codex r1+r2): flat used
+> non-authoritative `section_id` for 4 Part-3 fields (FIXED -> authoritative
+> `_ordered_groups`); and render_prose omitted the field `type` that grouped/flat
+> both carry (FIXED -> prose sentences now name the type). grouped + flat are the
+> finalized 2026-06-27 set on the corrected renderer. PROSE'S committed artifact
+> still PRECEDES the type fix and MUST be regenerated (`--format prose`) before the
+> prose row is final -- the regen kept stalling on machine-sleep this session. The
+> qualitative ranking (grouped wins every axis; prose weakest/cheapest) is very
+> likely robust to prose gaining type info, but re-run prose to finalize its exact
+> numbers. See bd jnjj.37 handoff.*
 
 ## What was run
 
@@ -71,9 +77,10 @@ halluc/over_inc are whole-battery counts. The halluc/over_inc differences -- gro
   precision, as expected -- ids embedded in prose are a weaker reference handle. Not
   recommended as the default, but it is the token-efficiency lever IF cost ever
   dominates (see below).
-- Hallucination (2) and over-inclusion (4) are identical across all three -- those
-  failure modes are model/architecture properties, not format-driven (consistent
-  with the jnjj.26 finding).
+- Hallucination (grouped 2, flat 1, prose 2) and over-inclusion (4 / 5 / 4) barely
+  move across formats -- the 1-count differences are within run-to-run sampling
+  noise, not a format effect. These failure modes are model/architecture properties,
+  not format-driven (consistent with the jnjj.26 finding).
 
 ## Recommendation
 
@@ -97,11 +104,9 @@ accuracy is the priority and the cost delta is noise.
   hinge on it.
 - Synthetic corpus -- recall is an UPPER BOUND (clean values + on-distribution
   queries), same caveat as jnjj.26.
-- The committed artifacts carry a legacy `"bead": "polyglot-pdf-jnjj.26"` label
-  (the recall harness was born under jnjj.26 and reused here); the OWNING bead for
-  this comparison is jnjj.37, per this doc + the journal. The probe's meta field was
-  corrected (now `"probe"`, not a hardcoded bead); the committed artifacts are the
-  REGENERATED 2026-06-27 set and carry the `"probe"` label.
+- The committed artifacts are the REGENERATED 2026-06-27 set and carry the probe's
+  `"probe"` origin label (the recall harness was born under jnjj.26 and reused
+  here); the OWNING bead for this comparison is jnjj.37, per this doc + the journal.
 - Non-deterministic (live model sampling) -- the ~1-3 point gaps between formats are
   modest; grouped's edge on strict-match (0.726 vs flat 0.691 / prose 0.626) is the
   most robust signal. A multi-seed average would tighten the small differences, but

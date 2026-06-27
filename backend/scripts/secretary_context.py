@@ -295,6 +295,7 @@ def render_prose(schema: dict, field_values: dict, shown_map: dict) -> str:
             if field is None:
                 continue
             spoken = field.get("spoken_name", "") or field.get("name", "")
+            ftype = field.get("type", "")
             value = _value_str(field, field_values, fid)
             shown = shown_map.get(fid, True)
             if not shown:
@@ -303,7 +304,10 @@ def render_prose(schema: dict, field_values: dict, shown_map: dict) -> str:
                 state = "has not been answered yet"
             else:
                 state = 'is "%s"' % value
-            sent = "The %s (field `%s`) %s." % (spoken, fid, state)
+            # Include the field TYPE -- grouped/flat both carry it, so prose must too
+            # for an apples-to-apples comparison (Codex jnjj.37 round 2).
+            type_clause = (" (a %s field)" % ftype) if ftype else ""
+            sent = "The %s (field `%s`%s) %s." % (spoken, fid, type_clause, state)
             help_obj = field.get("help") or {}
             instr = (help_obj.get("instructions") or "").strip()
             if instr:
