@@ -76,6 +76,28 @@ It also noted the now-vestigial stale comment in the unchanged
 `test_dti_si_size_is_independent_of_section_size` (untouched lines, left for the
 epic). Adopt: 0 inline fixes needed. Reject: 0. Defer: 1 bead (39ik).
 
+Codex outer review (PR #252, round 1): COMMENTS -- 4 P1 inline findings, all the
+SAME class of true-but-out-of-scope observation: removing a placeholder from the
+SI removes information the model needs, and Child A does not restore it. Each maps
+1:1 to an already-filed dependent child bead, so nothing is lost and none is a
+Child-A blocker:
+- Field-1 guidance/field_id no longer reaches the model (Codex's sharpest, and
+  correct: `send_initiating_message` strips the field_id) -> **j748** (B),
+  which DEPENDS ON 1ac3 and exists precisely to deliver field 1 via the injection.
+- `fill_language` lost -> **uogm** (C): fill_language becomes a render_field_guidance param.
+- End-of-section confirmation policy lost -> **uogm** (C): confirmation_policy via
+  render_section_metadata.
+- Section-lookup context (section_list / previous_spoken_names) lost -> **uogm**
+  (C): same render_section_metadata block.
+Critically, `USE_DTI` defaults to **false** (config.py:128; no `.env` override),
+so the affected DTI path is experimental + off in the default/production config --
+this PR regresses no live or default behavior. The approved plan structures A/B/C
+as sequential children (j748 depends on 1ac3), and the bead/PR contract is one
+bead = one PR, so Child A ships as its own PR that lands before B/C. Codex
+disposition: deferred to existing dependent beads (j748/uogm), NOT looped (a
+re-review with no code change would re-report the same inherent-to-design findings
+and burn a round). Recorded for the maintainer's merge decision.
+
 ## Lessons
 
 Run backend tests from the WORKTREE, not the main checkout. An early
