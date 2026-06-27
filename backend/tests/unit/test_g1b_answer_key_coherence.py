@@ -191,23 +191,25 @@ def test_option_values_are_resolved_to_human_labels():
 
 
 def test_p5_certification_matches_who_filled_the_form():
-    """Part 5 certification must match reality and the form's single-path conditional
-    logic. The form gates each Part-5 dependent on an `equals` test against ONE
-    p5_checkbox1a option under strict equality (shouldShowField), so selecting BOTH
-    the interpreter and preparer statements would hide BOTH dependents -- a payload a
-    real client cannot send (Codex review, PR #253). The persona therefore uses the
-    interpreter path ONLY: the interpreter statement is selected, the language field
-    is filled, and the ENTIRE Part 7 preparer block (plus the representative-name
-    field) is NA."""
+    """Part 5 must match the form's REAL conditional logic. p5_checkbox1a is a
+    checkbox GROUP (array trigger); shouldShowField's `equals` does a strict scalar
+    compare, so it never matches an array -- BOTH Part-5 dependents
+    (p5_line1b_language, p5_line2_nameofrepresentative) are unreachable in the
+    production renderer and must be NA, the same "a real client cannot send a hidden
+    field" rule that makes p2_checkbox2[5] NA (fresh-eyes review, PR #253; frontend
+    bug bd vq4m). The interpreter STATEMENT is still selected (that IS sendable), and
+    the entire Part 7 preparer block is NA (no separate preparer)."""
     interp = "interpreter named in Part 6"
     eng = "I can read and understand English"
     d = {f["field_id"]: f["value"] for f in build_corpus(132)[-1].fields}
     assert interp in d["p5_checkbox1a"]
     assert eng not in d["p5_checkbox1a"]
-    assert d.get("p5_line1b_language") == "Vietnamese"
-    # interpreter path -> no preparer statement, no representative name, no Part 7
-    assert "p5_line2_nameofrepresentative" not in d
+    # both Part-5 dependents are NA (never visible -> a real client can't send them)
+    assert ANSWER_KEY["p5_line1b_language"] is None
     assert ANSWER_KEY["p5_line2_nameofrepresentative"] is None
+    assert "p5_line1b_language" not in d
+    assert "p5_line2_nameofrepresentative" not in d
+    # no separate preparer -> entire Part 7 NA
     for fid in ("p7_line1a_familyname", "p7_line3d_state", "p7_checkbox7",
                 "p7_line8a_signatureofpreparer"):
         assert ANSWER_KEY[fid] is None, f"{fid} should be NA (no preparer)"

@@ -110,37 +110,39 @@ finding). The schema self-inconsistency itself is out of scope for wf3q -> filed
 The clean-corpus PRECISION re-measure (exit criterion 3) was run on the two cheap
 text models the recall finding points at (2.5-flash-lite per-section, 2.5-flash
 end-of-form), all three sizes, ~360 live calls, ~$0.09. On the final CLEAN corpus
-(run `g1b_bakeoff_20260627T122758`, after the fresh-eyes fix AND both Codex review
-rounds -- option-label resolution, the p2 NA fix, the single-path Part-5/Part-7
-fix, ZIP isolation, the corpus fingerprint, and the distance-after-filter fix):
+(run `g1b_bakeoff_20260627T135913`, after the fresh-eyes fixes AND both Codex review
+rounds AND the fresh-eyes verification pass -- option-label resolution, the p2 + p5
+NA fixes, the Part-7-NA single path, ZIP isolation, the corpus fingerprint, and the
+distance-after-filter fix):
 
 | model | size | recall | precision |
 |-------|-----:|-------:|----------:|
-| 2.5-flash-lite | 20 | 1.000 | 0.800 |
-| 2.5-flash-lite | 40 | 0.857 | 0.818 |
-| 2.5-flash-lite | 132 | 0.741 | 0.833 |
+| 2.5-flash-lite | 20 | 1.000 | 0.842 |
+| 2.5-flash-lite | 40 | 0.857 | 0.947 |
+| 2.5-flash-lite | 132 | 0.815 | 0.815 |
 | 2.5-flash | 20 | 1.000 | 1.000 |
 | 2.5-flash | 40 | 1.000 | 1.000 |
-| 2.5-flash | 132 | 0.926 | 1.000 |
+| 2.5-flash | 132 | 1.000 | 0.964 |
 
 These precision numbers are now TRUSTWORTHY: every remaining false positive is a
 GENUINE checker over-flag on a COHERENT payload, not a corpus artifact. The
 breakdown by clean-trap type (both models, all sizes) proves it:
 
 - `clean_baseline` (the full validated persona, the densest trap): **0/6 flagged**;
-  `clean_us` (coherent US addresses): **0/30 flagged**. After Codex's option-label
-  fix there are ZERO lone `p1_line8_male` / `p5_checkbox1a` over-flags -- those were
-  corpus artifacts (the checker saw the opaque token `P1_Line8_female[0]` with no
-  meaning), not model noise as an earlier writeup wrongly claimed. 2.5-flash is
-  precision 1.000 at every size.
+  `clean_us` (coherent US addresses): 1/30. After Codex's option-label fix there are
+  ZERO lone `p1_line8_male` / `p5_checkbox1a` over-flags -- those were corpus
+  artifacts (the checker saw the opaque token `P1_Line8_female[0]` with no meaning),
+  not model noise as an earlier writeup wrongly claimed. 2.5-flash is precision
+  1.000 at sizes 20/40 and 0.964 at 132.
 - The remaining false positives concentrate exactly where a cheap checker is
-  genuinely weak: foreign addresses 7/24, US territories 3/18, dual mailing+physical
-  2/8 -- all coherent payloads the prompt explicitly says NOT to flag (a foreign
+  genuinely weak: foreign addresses 6/24, US territories 2/18, dual mailing+physical
+  1/8 -- all coherent payloads the prompt explicitly says NOT to flag (a foreign
   province+postal+country with no US state; Puerto Rico / Guam / USVI ZIPs; a
-  mailing + a distinct physical address). 2.5-flash-lite drives all of these.
+  mailing + a distinct physical address). 2.5-flash-lite drives nearly all of these.
 
-So the precision story is now real: 2.5-flash is FULLY precise (1.000 at all sizes)
-and the weakness is the lite model on hard foreign/territory coherent addresses.
+So the precision story is now real: 2.5-flash is near-perfect (precision 1.000 at
+sizes 20/40, 0.964 at 132) and the weakness is the lite model on hard
+foreign/territory coherent addresses.
 
 ## Codex outer review (PR #253)
 
@@ -198,7 +200,30 @@ adopted; several were consequences of the round-1 fixes themselves:
    unaffected (the clean corpus changed contradiction payloads too -> narrowed to
    precision-only).
 
-The clean numbers above are the post-round-2 re-measure. This unblocks bd 08zv
+## Fresh-eyes verification pass (Codex limit reached)
+
+After Codex round 2 the per-PR Codex limit was reached, so the maintainer directed a
+verification pass via the adversarial fresh-eyes reviewer (Opus) instead. It found
+ONE real gap that BOTH Codex rounds missed: the round-2 Part-5 fix rested on a false
+premise about the production renderer. `p5_checkbox1a` is a checkbox GROUP, so its
+value is a string ARRAY; `shouldShowField`'s `equals` operator does a strict scalar
+compare (`array === "P5_Checkbox1b[0]"` -> always false), so `p5_line1b_language`
+(and `p5_line2_nameofrepresentative`) are NEVER visible regardless of selection --
+the SAME "a real client cannot send a hidden field" condition that makes
+`p2_checkbox2[5]` NA. By the PR's own rule, both Part-5 dependents must be NA, not
+filled.
+
+Fixed: both `p5_line1b_language` and `p5_line2_nameofrepresentative` are now NA (the
+interpreter STATEMENT is still selected on `p5_checkbox1a` -- that IS sendable -- and
+the interpreter's language survives in the reachable Part 6 field `p6_language`).
+The underlying frontend bug (`equals` not handling an array trigger) is filed as bd
+polyglot-pdf-vq4m, which also covers the same-class p4 accommodation-description
+fields (already NA; their NA_REASON now notes the secondary cause). A re-spawned
+fresh-eyes pass returned NO-GAPS, including a full sweep of every `show_if equals`
+gate in the schema confirming no other array-gated field is wrongly filled. Persona
+is now 72 filled + 60 NA.
+
+The clean numbers above are the post-verification re-measure. This unblocks bd 08zv
 (G1c precision/latency tuning), which must not trust any precision result until the
 corpus is clean. The recall finding (bd 0zp3 / PR #242) was already shippable; the
 precision numbers are now trustworthy too.
@@ -231,9 +256,9 @@ another owner's active work is out of scope for this closeout).
 - `backend/tests/unit/test_g1b_answer_key_coherence.py` (new) -- 9 coherence guards.
 - `scripts/spikes/g1b_bakeoff_findings.md` -- a precision-update banner pointing at
   the clean-corpus re-measure (bd 0zp3's findings doc; pointer only).
-- `scripts/spikes/data/g1b_bakeoff_20260627T122758.{csv,meta.json}` (new) -- the
+- `scripts/spikes/data/g1b_bakeoff_20260627T135913.{csv,meta.json}` (new) -- the
   clean-corpus precision re-measure run (final corpus, post fresh-eyes + BOTH Codex
-  review rounds; carries the corpus_fp column).
+  rounds + the fresh-eyes verification fix; carries the corpus_fp column).
 - `backend/scripts/probe_g1b_model_size_bakeoff.py` -- stamps corpus_fp on every
   row + meta (so g1b_merge merges only same-corpus runs).
 - `backend/scripts/g1b_merge.py` -- filters to the current corpus_fp; excludes
