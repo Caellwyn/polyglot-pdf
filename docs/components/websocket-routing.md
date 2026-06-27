@@ -55,17 +55,25 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.
 
-6. **DTI session-start initiating message (`USE_DTI` only).** After
-   `start_session`, the backend fires the initiating message immediately so field
-   1's full guidance (its exact `field_id`, instructions, format, options) reaches
-   Gemini at session start. In DTI mode the system instruction is fully static and
-   carries no field data, so this injection is the ONLY channel that delivers field
-   1 (fields 2..N arrive in the `confirm_field` tool response); without it the
-   model would have no `field_id` to fill the first field (epic polyglot-pdf-13w7,
-   bd polyglot-pdf-j748). Legacy/JIT skip this step — their SI still carries the
-   field catalog, so Gemini is kicked off by the SI's `next_field_hint` directive
-   alone (a DTI-gated trigger avoids a double-greeting). On a mid-section reconnect
-   the RESUME template is used (no greeting) but still carries field 1's guidance.
+**DTI current-field guidance rides the initiating message (`USE_DTI` only).** In
+DTI mode the system instruction is fully static and carries no field data, so the
+current field's full guidance (its exact `field_id`, instructions, format, options)
+must reach Gemini via the **initiating message** (`send_initiating_message`) —
+fields 2..N otherwise arrive in the `confirm_field` tool response (epic
+polyglot-pdf-13w7, bd polyglot-pdf-j748). The opener is **client-driven**, not a
+server-side trigger in the handshake path: after the disclaimer the client
+re-handshakes (`switchToFirstSection` → `startSection`) and `handleSessionReady`
+auto-sends `change_spoken_language` with the user's spoken language + the
+`computeNextField`-selected hint, which calls `send_initiating_message`. That method
+resolves the field to render from the `field_id` embedded in the hint (looked up in
+the handshake schema + the recorded later-field schemas), NOT from a positional
+`fields[0]`, so it stays correct on a mid-form spoken-language change (field N) and
+on a full-section handshake (where `fields[0]` is not the next field). If the hint
+resolves to no known field, no guidance block is sent (the spoken hint + static SI
+still let the model proceed). A server-side trigger was deliberately NOT added: it
+would fire before the disclaimer is read on the initial connect and double up with
+the client opener on reconnect (Codex PR #254). Legacy/JIT carry the field catalog
+in the SI, so their initiating message has no guidance block (DTI-gated).
 
 ## Control-channel message types (client → backend)
 

@@ -357,35 +357,70 @@ async def test_initiating_message_no_guidance_in_non_dti():
 
 @pytest.mark.asyncio
 async def test_resume_initiating_message_carries_field1_guidance():
-    """Reconnect/resume: the RESUME template (no greeting) must STILL carry field
-    1's guidance so a mid-section reconnect re-anchors Gemini to the current
+    """Reconnect/resume: the RESUME template (no greeting) must STILL carry the
+    current field's guidance so a mid-section reconnect re-anchors Gemini to the
     field_id the static SI no longer supplies."""
     svc, captured = _service_with_settings(use_dti=True)
     svc._is_resume_session = True
     svc._schema = {"fields": [NESTED_FIELD]}
 
-    await svc.send_initiating_message("English", "alien registration number")
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
 
     msg = captured[0]
     # Resume template -> no greeting...
     assert "greet user warmly" not in msg.lower()
-    # ...but the field-1 guidance is present.
+    # ...but the current field's guidance is present.
     assert "ID: p1_line1_aliennumber" in msg
 
 
 @pytest.mark.asyncio
-async def test_initiating_message_empty_schema_no_crash():
-    """Section-complete / no-field edge case: an empty fields list must not inject a
-    'No fields available' sentinel or crash -- the guidance block is simply empty."""
+async def test_initiating_message_resolves_field_from_hint_not_position():
+    """The rendered field is the one the HINT points at, NOT schema['fields'][0].
+    This is the Codex PR #254 fix: on a mid-form spoken-language change the current
+    field is field N (held in _dti_extra_fields), while schema['fields'][0] is the
+    stale handshake field 1; rendering fields[0] would inject the WRONG field_id and
+    the static SI tells the model to copy that stale id. Would FAIL against the old
+    fields[0] code; PASSES against hint-id resolution."""
     svc, captured = _service_with_settings(use_dti=True)
     svc._is_resume_session = False
-    svc._schema = {"fields": []}
+    # Handshake field 1 (positional fields[0]) is a DIFFERENT field than the hint...
+    other = {"id": "p1_line3a_familyname", "spoken_name": "family name", "type": "text"}
+    svc._schema = {"fields": [other]}
+    # ...and the hint's field lives in the recorded later-field schemas.
+    svc._dti_extra_fields = {"p1_line1_aliennumber": NESTED_FIELD}
 
-    await svc.send_initiating_message("English", "the first unfilled field")
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
 
     msg = captured[0]
-    assert "No fields available" not in msg
-    assert "ID:" not in msg
+    # Renders the HINT's field, not the positional first field.
+    assert "ID: p1_line1_aliennumber" in msg
+    assert "p1_line3a_familyname" not in msg
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_unresolvable_hint_renders_no_guidance():
+    """If the hint's field_id resolves to no known schema (or there is no id in the
+    hint), render NO guidance block -- never a wrong/stale field, never the
+    'No fields available' sentinel. The spoken hint + static SI still let Gemini
+    proceed for that one turn (it just lacks the verbatim id)."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    # (a) hint id that matches nothing known
+    await svc.send_initiating_message(
+        "English", "some field (field_id: 'nonexistent_id')"
+    )
+    # (b) hint with no field_id parenthetical at all
+    await svc.send_initiating_message("English", "the first unfilled field")
+
+    for msg in captured:
+        assert "ID:" not in msg
+        assert "No fields available" not in msg
 
 
 @pytest.mark.asyncio
@@ -417,7 +452,11 @@ async def test_initiating_message_logs_only_length(monkeypatch):
     svc._is_resume_session = False
     svc._schema = {"fields": [NESTED_FIELD]}
 
-    await svc.send_initiating_message("English", "alien registration number")
+    # Hint carries the id so the guidance block IS rendered (the case that embeds
+    # field data into the message -- exactly what must NOT reach the log).
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
 
     send_calls = [(e, kw) for (e, kw) in calls if e == "send_initiating_message"]
     assert send_calls, "send_initiating_message was not logged"

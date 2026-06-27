@@ -26,29 +26,44 @@ docstring), whose surface (`ai_context.py`) this PR already edits.
 - **config.py**: `INITIATING_MESSAGE` + `RESUME_INITIATING_MESSAGE` gain a trailing
   `{current_field_guidance}` placeholder. The caller passes `""` in non-DTI mode,
   so legacy/JIT output is byte-for-byte unchanged.
-- **form_filling_service.py**: `send_initiating_message` now renders field 1's
-  guidance from `self._schema["fields"][0]` (the client-selected first unfilled
-  field, same source the old DTI SI branch used) via `render_field_guidance` -- the
-  SAME renderer that delivers fields 2..N -- and threads it into both templates.
-  DTI-gated (`getattr(self._settings, "USE_DTI", False)`). The field_id stays IN
-  the guidance block (context the model copies verbatim) but is still stripped from
-  the SPOKEN hint (bd dx7), so Gemini does not read the id aloud. Logging still
-  records only `message_length` (no-PII guard, bd uov.15).
-- **websocket_routes.py**: added the missing DTI session-start trigger -- fire the
-  initiating message right after `start_session` so field 1 reaches Gemini at
-  session/section start (the legacy/JIT path is kicked off by the SI alone, so it
-  is DTI-gated to avoid a double-greeting). Resume is honored via
-  `service._is_resume_session`.
+- **form_filling_service.py**: `send_initiating_message` renders the CURRENT field's
+  guidance via `render_field_guidance` -- the SAME renderer that delivers fields
+  2..N -- and threads it into both templates, DTI-gated
+  (`getattr(self._settings, "USE_DTI", False)`). The field to render is resolved by
+  the `field_id` embedded in the (unstripped) `next_field_hint`, looked up via a new
+  `_resolve_hint_field_schema` helper that scans the handshake `self._schema["fields"]`
+  plus the recorded later-field schemas `self._dti_extra_fields` -- NOT a positional
+  `fields[0]`. (The original `fields[0]` approach was wrong: this same opener fires
+  on a mid-form spoken-language change, where the current field is field N held in
+  `_dti_extra_fields`, and on a full-section handshake `fields[0]` is not the
+  client's `computeNextField` selection -- Codex PR #254 findings #2/#6.) If the id
+  resolves to no known schema, no block is rendered (never a wrong/stale field). The
+  field_id stays IN the guidance block (context the model copies verbatim) but is
+  still stripped from the SPOKEN hint (bd dx7). Logging records only `message_length`
+  (no-PII guard, bd uov.15).
+- **websocket_routes.py**: the DTI field-1 opener is CLIENT-driven, not a server-side
+  trigger. I first added a server-side trigger after `start_session`, but Codex (PR
+  #254) showed it was wrong on four counts: it fired BEFORE the disclaimer is read
+  on the initial connect (the client connects pre-disclaimer), double-fired with the
+  client's existing `change_spoken_language` opener on reconnect, used `fill_language`
+  as the spoken language, and prompted for "the first unfilled field" at a
+  section-complete boundary. Removed it. After the disclaimer the client
+  re-handshakes and `handleSessionReady` auto-sends `change_spoken_language` (correct
+  spoken language + `computeNextField` hint), which is the field-1 opener. (Also kept
+  the get_settings/settings shadowing fix: no function-local re-import.)
 - **ai_context.py**: the static DTI SI branch no longer `.format()`s the (now
   absent) placeholders -- it returns the constant directly, removing the dead
   `current_field_guidance` compute that PR #252 left behind. Also rewrote the
   `render_field_guidance` docstring to describe the injection path, not the SI
   (this IS bead polyglot-pdf-39ik, folded in).
-- **Tests** (test_dti.py, 5 new): field-1 id+guidance present in the DTI initiating
-  message and identical to `render_field_guidance` output (criterion 1); no
-  guidance block in non-DTI mode; the RESUME template still carries field-1
-  guidance (reconnect edge); empty-schema injects no `No fields available`
-  sentinel and does not crash; logging records only `message_length`. Full backend
+- **Tests** (test_dti.py): the DTI initiating message carries the current field's
+  id+guidance, identical to `render_field_guidance` output (criterion 1); the field
+  is resolved from the HINT id, not position (a cross-field test where `fields[0]`
+  differs from the hint's id, which the id lives in `_dti_extra_fields` -- this would
+  FAIL against the old `fields[0]` code); an unresolvable/absent hint id renders NO
+  block (no wrong field, no `No fields available` sentinel); no guidance in non-DTI
+  mode; the RESUME template still carries guidance; logging records only
+  `message_length` (deterministic monkeypatch of the module logger). Full backend
   suite: 441 passed / 2 skipped (from the worktree).
 
 **A real bug the suite caught.** My first session-start trigger referenced
@@ -94,6 +109,23 @@ input is realistic, and the empty-schema guard. Two findings beyond the rubric:
   h1bn (which owns the fix). Out of j748's session-start-only scope.
 Adopt: 1 (PII test hardening). Reject: 0. Defer: 0 net new (88m6 closed as dup of h1bn).
 
+Codex outer review (PR #254, round 1): COMMENTS -- 6 P1 inline findings, all REAL
+and all on MY implementation (unlike PR #252's out-of-scope findings). They
+converged on one root design error: I assumed (a) there was no existing
+session-start opener and (b) `schema["fields"][0]` is always the current field --
+both false. Codex found the client already drives an opener
+(`handleSessionReady` -> `change_spoken_language`), so my server-side trigger
+double-fired, fired pre-disclaimer, and used the wrong language; and that
+`fields[0]` is stale at field 2+ / wrong on a full-section handshake. I verified
+every finding against the code, then RE-DESIGNED (with a Plan pass): removed the
+server-side trigger entirely (the client opener covers every start/reconnect path)
+and made `send_initiating_message` resolve the field from the hint's `field_id`
+(handshake schema + `_dti_extra_fields`), rendering nothing if unresolvable. All 6
+were blockers (correctness/compliance: the pre-disclaimer prompt is a real
+compliance bug); all addressed by the rework, none deferred. This is exactly the
+value of the outer review -- fresh-eyes (which only saw the diff, not the frontend
+flow) had cleared it NO-GAPS. Codex rounds to clean: see merge ping.
+
 ## Lessons
 
 A function-local `import`/rebind of a name that also exists at module scope makes
@@ -137,8 +169,8 @@ this bead's to transition. Noted and left.
 ## Files touched
 
 - `backend/config.py` -- `{current_field_guidance}` suffix on both initiating templates.
-- `backend/services/form_filling_service.py` -- render + thread field-1 guidance (DTI-gated) in `send_initiating_message`.
-- `backend/routes/websocket_routes.py` -- DTI session-start initiating-message trigger; fix `get_settings`/`settings` shadowing.
+- `backend/services/form_filling_service.py` -- `send_initiating_message` renders the CURRENT field's guidance (DTI-gated), resolved from the hint's field_id via the new `_resolve_hint_field_schema` helper (handshake schema + `_dti_extra_fields`); `import re`.
+- `backend/routes/websocket_routes.py` -- removed the server-side session-start trigger (field-1 opener is client-driven); kept the `get_settings`/`settings` no-shadowing fix.
 - `backend/services/ai_context.py` -- static DTI SI returned directly (drop dead `.format`); fix `render_field_guidance` docstring (bd 39ik).
-- `backend/tests/unit/test_dti.py` -- 5 new DTI initiating-message tests.
-- `docs/components/websocket-routing.md` -- document the DTI session-start initiating message.
+- `backend/tests/unit/test_dti.py` -- DTI initiating-message tests: current-field id+guidance, hint-id resolution (not position), unresolvable-id renders nothing, non-DTI empty, resume carries guidance, deterministic no-PII log test.
+- `docs/components/websocket-routing.md` -- document the client-driven DTI opener + hint-based field resolution.

@@ -2,6 +2,7 @@ from fastapi import WebSocket
 from typing import Any, Dict, Optional, List
 import asyncio
 import json
+import re
 import time
 from copy import deepcopy
 import structlog
@@ -331,6 +332,32 @@ class FormFillingService:
         _log.info("sending_disclaimer_message", session_id=self._session_id, language=spoken_language)
         await self._live_ai.send_client_content(message)
 
+    def _resolve_hint_field_schema(self, next_field_hint: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Resolve the CURRENT field's full schema from a next_field_hint, for DTI
+        initiating-message guidance (bd polyglot-pdf-j748).
+
+        The hint embeds the field_id as a quoted parenthetical
+        ("... (field_id: '<id>', ...)"); extract it and look the id up among the
+        field schemas this stateless service knows: the handshake's
+        self._schema['fields'] (field 1 at session/section start) plus
+        self._dti_extra_fields (fields 2..N, recorded from next_field_hint_response).
+        Returns the raw field dict, or None if the hint has no field_id or it does
+        not resolve to a known schema -- callers then render NO guidance block rather
+        than guessing a wrong field.
+        """
+        if not next_field_hint:
+            return None
+        m = re.search(r"field_id:\s*'([^']*)'", next_field_hint)
+        if not m:
+            return None
+        field_id = m.group(1)
+        if not field_id:
+            return None
+        for field in (self._schema or {}).get("fields") or []:
+            if field.get("id") == field_id:
+                return field
+        return self._dti_extra_fields.get(field_id)
+
     async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
         """
         Send initiating message to Gemini to prompt conversation in specific language.
@@ -355,23 +382,27 @@ class FormFillingService:
         # below; in legacy/JIT via the system instruction's FIELDS block.
         spoken_hint = strip_field_id_from_hint(next_field_hint)
 
-        # DTI field-1 channel (epic polyglot-pdf-13w7, bd polyglot-pdf-j748): the
-        # static DTI SI carries no field data, so field 1's exact field_id +
-        # guidance must ride the initiating message. Render it from the current
-        # field schema (schema["fields"][0] -- the client-selected first unfilled
-        # field, same source the DTI SI branch used) via render_field_guidance, the
-        # SAME renderer that delivers fields 2..N in the confirm_field response, so
-        # the model sees identical guidance whichever path delivers it. The id is
-        # NOT stripped here: this block is CONTEXT for the model to act on (and copy
-        # the id verbatim from), not text to read aloud. Non-DTI modes leave it
-        # empty so legacy/JIT output is unchanged (their SI still carries field data).
+        # DTI current-field channel (epic polyglot-pdf-13w7, bd polyglot-pdf-j748):
+        # the static DTI SI carries no field data, so the CURRENT field's exact
+        # field_id + guidance must ride the initiating message, rendered by the SAME
+        # render_field_guidance that delivers fields 2..N in the confirm_field
+        # response. The current field is whatever next_field_hint points at -- resolve
+        # it by the field_id embedded in the UNSTRIPPED hint, NOT schema["fields"][0]:
+        # this same opener fires on a mid-form spoken-language change (where the
+        # current field is field N, not the handshake's field 1), and on a full-section
+        # handshake schema["fields"][0] is merely the positional first field, not the
+        # client's computeNextField selection (Codex PR #254). The id is NOT stripped
+        # here: this block is CONTEXT the model acts on (and copies the id verbatim
+        # from), not text to read aloud. If the id cannot be resolved to a known
+        # field schema, render NOTHING rather than a wrong field. Non-DTI modes leave
+        # it empty so legacy/JIT output is unchanged (their SI still carries field data).
         current_field_guidance = ""
         if getattr(self._settings, "USE_DTI", False):
-            fields = (self._schema or {}).get("fields") or []
-            if fields:
+            field = self._resolve_hint_field_schema(next_field_hint)
+            if field:
                 current_field_guidance = (
                     "\n\nCURRENT FIELD (copy this field_id verbatim; do NOT read it aloud):\n"
-                    + render_field_guidance(fields[0])
+                    + render_field_guidance(field)
                 )
 
         # On mid-section reconnects use the resume template so Gemini skips

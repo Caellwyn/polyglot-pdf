@@ -240,34 +240,26 @@ async def _handle_fill_session(
 			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
 		)
 
-	# DTI session-start trigger (epic polyglot-pdf-13w7, bd polyglot-pdf-j748).
-	# In DTI mode the static SI carries no field data, so unlike legacy/JIT it cannot
-	# kick off the conversation with field 1's id/guidance. Fire the initiating
-	# message right after start_session so field 1's guidance reaches Gemini via the
-	# injection (render_field_guidance inside send_initiating_message reads
-	# schema["fields"][0]). DTI-gated so legacy/JIT keep their SI-driven kickoff with
-	# no double-greeting. Resume is honored: send_initiating_message selects the
-	# RESUME template via service._is_resume_session (set above), so a mid-section
-	# reconnect re-anchors Gemini to the current field_id the static SI no longer
-	# supplies.
-	if schema and getattr(get_settings(), "USE_DTI", False):
-		try:
-			await service.send_initiating_message(
-				fill_language,
-				initial_field_hint or "the first unfilled field",
-			)
-		except Exception as exc:
-			log.error("dti_session_start_initiating_message_failed",
-			          session_id=session_id, error=str(exc))
+	# DTI field-1 opener (epic polyglot-pdf-13w7, bd polyglot-pdf-j748): the static
+	# DTI SI carries no field data, so field 1's guidance must ride the initiating
+	# message. That opener is driven by the CLIENT, not a server-side trigger here:
+	# after the disclaimer the client tears down + re-handshakes (switchToFirstSection
+	# -> startSection), and handleSessionReady auto-sends `change_spoken_language`
+	# with the user's SPOKEN language + the computeNextField-selected hint, which
+	# calls service.send_initiating_message (it renders field-1 guidance from the
+	# hint's field_id). A server-side trigger here would (a) fire BEFORE the
+	# disclaimer is read on the initial connect, (b) double up with the client opener
+	# on reconnect, and (c) use fill_language as the spoken language -- so it is
+	# deliberately absent (Codex PR #254).
 
 	try:
 		# Flag to drop audio during section switch
 		drop_audio = False
-		
+
 		# Start watchdog to close connection after idle timeout.
-		# (get_settings is imported at module scope; a function-local re-import here
-		# would shadow it and UnboundLocalError the DTI session-start gate above,
-		# which calls get_settings() before this line -- bd polyglot-pdf-j748.)
+		# (get_settings is imported at module scope; do NOT re-import it function-locally
+		# -- that shadows the module name for the whole function and UnboundLocalErrors
+		# any earlier reference -- bd polyglot-pdf-j748.)
 		local_settings = get_settings()
 		idle_timeout = local_settings.WS_IDLE_TIMEOUT_SEC
 
