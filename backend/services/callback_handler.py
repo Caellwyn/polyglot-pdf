@@ -61,6 +61,9 @@ class CallbackHandler:
         self._request_form_state_from_client = None
         self._get_next_field_schema_for_jit = None
         self._merge_field_schema = None
+        # Secretary (bd polyglot-pdf-jnjj.45c): async handler that runs the
+        # ask_secretary lookup. Injected by FormFillingService; None until then.
+        self._handle_ask_secretary = None
 
     def set_tool_handlers(
         self,
@@ -70,6 +73,7 @@ class CallbackHandler:
         request_form_state_from_client,
         get_next_field_schema_for_jit,
         merge_field_schema=None,
+        handle_ask_secretary=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -78,6 +82,7 @@ class CallbackHandler:
         self._request_form_state_from_client = request_form_state_from_client
         self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
         self._merge_field_schema = merge_field_schema
+        self._handle_ask_secretary = handle_ask_secretary
     
     async def send_form_update(
         self,
@@ -274,6 +279,9 @@ class CallbackHandler:
         if normalized == "confirm_field":
             return await self._handle_confirm_field_tool(arguments)
 
+        if normalized == "ask_secretary":
+            return await self._handle_ask_secretary_tool(arguments)
+
         # Unknown tool: acknowledge with empty payload so the model can continue
         return {}
     
@@ -424,6 +432,66 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE", tool="get_field_value",
                  spoken_name_length=len(spoken_name or ""), found=response.get("found"))
         _log.info("-" * 80)
+        return response
+
+    async def _handle_ask_secretary_tool(
+        self,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle ask_secretary tool call (bd polyglot-pdf-jnjj.45c).
+
+        The principal asks a plain-language question about the form; the secretary
+        (cheap text model) answers in prose. Delegates to the injected
+        FormFillingService handler, which assembles the form context (cached full
+        schema + a fresh values/shown tail from the client) and runs the BLOCKING
+        TextAIGemini.ask() under a timeout. The tool response carries the prose
+        answer back for the principal to voice.
+
+        Fail-open: if no handler is wired or the lookup yields nothing (timeout /
+        error / empty), tell the principal to ask the user directly rather than
+        leaving it stuck. Never surfaces an exception to the model.
+
+        PII: log the query LENGTH + answer length only -- never the query text or
+        the answer prose (both reach stdout -> Cloud Run logs).
+        """
+        query = arguments.get("query", "") if isinstance(arguments, dict) else ""
+
+        fallback = (
+            "The secretary could not look that up right now. Ask the user directly "
+            "for the information you need."
+        )
+
+        if not self._handle_ask_secretary:
+            _log.warning("ask_secretary_no_handler", session_id=self._session_id)
+            return {"answer": fallback, "available": False}
+
+        try:
+            answer = await self._handle_ask_secretary(query)
+        except Exception as exc:  # noqa: BLE001
+            # The handler is expected to fail-open internally, but guard here too so
+            # a bug can never crash the tool-call path / session loop.
+            _log.warning(
+                "ask_secretary_handler_error",
+                exc_type=type(exc).__name__,
+                session_id=self._session_id,
+            )
+            answer = ""
+
+        if not answer:
+            response = {"answer": fallback, "available": False}
+        else:
+            response = {"answer": answer, "available": True}
+
+        _log.info("-" * 80)
+        _log.info(
+            "GEMINI TOOL RESPONSE", tool="ask_secretary",
+            query_length=len(query or ""),
+            answer_length=len(response["answer"]),
+            available=response["available"],
+        )
+        _log.info("-" * 80)
+        # Dev logging (gated, may include content): mirrors the other tools.
+        _dev_log.log_tool_response("ask_secretary", response, session_id=self._session_id)
         return response
 
     # NOTE: the complete_section tool handler was removed (section completion is

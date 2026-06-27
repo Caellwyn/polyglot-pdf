@@ -133,15 +133,16 @@ async def test_validate_fail_open_when_no_client():
 
 
 @pytest.mark.asyncio
-async def test_ask_raises_not_implemented():
-    """ask() raises NotImplementedError until the secretary bead lands."""
+async def test_ask_empty_context_fails_open():
+    """ask() is implemented now (bd polyglot-pdf-jnjj.45b): an empty context (no
+    schema to ground the answer in) fail-opens to "" rather than raising. The
+    full implemented behavior is covered by the test_ask_* block below."""
     from backend.adapters.text_ai_gemini import TextAIGemini
 
     with patch("backend.adapters.text_ai_gemini.genai"):
         adapter = TextAIGemini(api_key="test-key", vertexai=False)
 
-    with pytest.raises(NotImplementedError):
-        await adapter.ask("what is the zip code?", {})
+    assert await adapter.ask("what is the zip code?", {}) == ""
 
 
 @pytest.mark.asyncio
@@ -213,3 +214,136 @@ def test_get_text_ai_wiring():
         result = get_text_ai(settings)
 
     assert isinstance(result, TextAIGemini)
+
+
+# --------------------------------------------------------------------------- #
+# ask() -- the secretary path (bd polyglot-pdf-jnjj.45b).
+# --------------------------------------------------------------------------- #
+
+# A tiny 2-field schema is enough to exercise the catalog/tail rendering and the
+# byte-stable-prefix invariant without depending on the real I-90 file.
+_ASK_SCHEMA = {
+    "fields": [
+        {"id": "f_first", "spoken_name": "first name", "name": "First Name",
+         "type": "text", "help": {"instructions": "Your given name."}},
+        {"id": "f_last", "spoken_name": "last name", "name": "Last Name",
+         "type": "text", "help": {"instructions": "Your family name."}},
+    ],
+    "sections": [{"id": "s1", "label": "Names", "fields": ["f_first", "f_last"]}],
+    "parts": [{"id": "p1", "label": "Part 1", "section_ids": ["s1"]}],
+}
+
+
+@pytest.mark.asyncio
+async def test_ask_returns_prose_answer(adapter_with_client):
+    """ask() returns the secretary's `answer` prose from the JSON response."""
+    response = _make_response(
+        text='{"answer": "Their first name is Ada.", "sourced_from": ["f_first"]}')
+    adapter = adapter_with_client(response)
+    out = await adapter.ask("what is their first name?", {
+        "schema": _ASK_SCHEMA,
+        "field_values": {"f_first": "Ada"},
+        "shown_map": {"f_first": True, "f_last": True},
+    })
+    assert out == "Their first name is Ada."
+
+
+@pytest.mark.asyncio
+async def test_ask_stable_prefix_is_byte_identical_across_value_changes(adapter_with_client):
+    """The cache precondition: the stable_prefix (SI + value-free catalog) sent as
+    contents[0] is BYTE-IDENTICAL across two ask() calls whose field VALUES differ
+    -- only the appended fresh tail (contents[1]) changes. If this breaks, Gemini's
+    implicit cache stops firing (bd polyglot-pdf-jnjj.45, maintainer 2026-06-27)."""
+    response = _make_response(text='{"answer": "ok", "sourced_from": []}')
+    adapter = adapter_with_client(response)
+    gen = adapter._client.aio.models.generate_content
+
+    await adapter.ask("q1", {
+        "schema": _ASK_SCHEMA,
+        "field_values": {"f_first": "Ada"},
+        "shown_map": {"f_first": True},
+    })
+    contents_1 = gen.call_args.kwargs["contents"]
+
+    await adapter.ask("a DIFFERENT question", {
+        "schema": _ASK_SCHEMA,
+        "field_values": {"f_first": "Grace", "f_last": "Hopper"},
+        "shown_map": {"f_first": True, "f_last": False},
+    })
+    contents_2 = gen.call_args.kwargs["contents"]
+
+    # contents[0] = stable prefix (SI + catalog); MUST be byte-identical.
+    assert contents_1[0] == contents_2[0], "stable prefix drifted -> cache breaks"
+    # contents[1] = fresh tail (values + query); SHOULD differ (values changed).
+    assert contents_1[1] != contents_2[1], "fresh tail did not change with values"
+
+
+@pytest.mark.asyncio
+async def test_ask_logs_no_pii(adapter_with_client):
+    """ask() must never log the query, the rendered values/context, or the answer
+    prose -- only ids/counts/lengths (validation-delegation contract 6)."""
+    secret_query = "SECRET_QUERY_TOKEN"
+    secret_value = "SECRET_VALUE_TOKEN"
+    secret_answer = "SECRET_ANSWER_TOKEN"
+    response = _make_response(
+        text='{"answer": "%s", "sourced_from": ["f_first"]}' % secret_answer)
+    adapter = adapter_with_client(response)
+
+    logged = []
+    # Capture every structured-log call (event + kwargs) made during ask().
+    for level in ("info", "warning", "error"):
+        setattr(adapter._log, level,
+                (lambda *a, **k: logged.append((a, k))))
+
+    await adapter.ask(secret_query, {
+        "schema": _ASK_SCHEMA,
+        "field_values": {"f_first": secret_value},
+        "shown_map": {"f_first": True},
+    })
+
+    blob = repr(logged)
+    assert secret_query not in blob
+    assert secret_value not in blob
+    assert secret_answer not in blob
+
+
+@pytest.mark.asyncio
+async def test_ask_fail_open_on_api_error(adapter_with_client):
+    """An API exception fail-opens to "" so the principal asks the user directly."""
+    response = _make_response(text='{"answer": "x", "sourced_from": []}')
+    adapter = adapter_with_client(response)
+    adapter._client.aio.models.generate_content = AsyncMock(
+        side_effect=RuntimeError("boom"))
+    out = await adapter.ask("q", {"schema": _ASK_SCHEMA, "field_values": {},
+                                  "shown_map": {}})
+    assert out == ""
+
+
+@pytest.mark.asyncio
+async def test_ask_fail_open_on_bad_json(adapter_with_client):
+    """Unparseable JSON fail-opens to ""."""
+    response = _make_response(text="not json at all")
+    adapter = adapter_with_client(response)
+    out = await adapter.ask("q", {"schema": _ASK_SCHEMA, "field_values": {},
+                                  "shown_map": {}})
+    assert out == ""
+
+
+@pytest.mark.asyncio
+async def test_ask_fail_open_on_missing_schema(adapter_with_client):
+    """No catalog to ground in -> fail-open "" (cannot retrieve)."""
+    response = _make_response(text='{"answer": "x", "sourced_from": []}')
+    adapter = adapter_with_client(response)
+    out = await adapter.ask("q", {"schema": None, "field_values": {}})
+    assert out == ""
+
+
+@pytest.mark.asyncio
+async def test_ask_fail_open_on_no_client():
+    """No configured client -> fail-open "" without raising."""
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    with patch("backend.adapters.text_ai_gemini.genai"):
+        adapter = TextAIGemini(api_key="k", vertexai=False)
+    adapter._client = None
+    out = await adapter.ask("q", {"schema": _ASK_SCHEMA})
+    assert out == ""

@@ -39,6 +39,7 @@ def get_text_ai(settings: Settings = Depends(get_settings)) -> ITextAI:
 def get_form_filling_service(
     live_ai: ILiveAI = Depends(get_live_ai),
     settings: Settings = Depends(get_settings),
+    text_ai: ITextAI = Depends(get_text_ai),
 ) -> Any:
     # Lazy import to avoid circular import at module import time
     from backend.services.form_filling_service import FormFillingService
@@ -46,5 +47,6 @@ def get_form_filling_service(
     return FormFillingService(
         live_ai=live_ai,
         settings=settings,
+        text_ai=text_ai,
     )
 

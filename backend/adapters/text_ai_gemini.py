@@ -6,6 +6,41 @@ from google import genai
 from google.genai import types
 
 from backend.ports.text_ai_port import ITextAI
+from backend.services.secretary_context import (
+    render_static_catalog,
+    render_values_tail,
+)
+
+# Secretary system instruction -- the "find relevant fields -> copy values ->
+# answer in prose" structure validated by the Gate-1 RECALL probe
+# (backend/scripts/probe_secretary_recall.py SECRETARY_PROMPT) and reused by the
+# Gate-2 latency probe. Kept here as a module constant so it is BYTE-STABLE: it
+# leads the cacheable stable_prefix in ask(), and any per-call variation would
+# break Gemini's implicit cache (bd polyglot-pdf-jnjj.45, maintainer 2026-06-27).
+# The form catalog + the prose question are appended by ask(); this is the
+# behavioral rubric only (no form data), so it never changes within a session.
+SECRETARY_SI = (
+    "You are the SECRETARY for a USCIS immigration form-filling assistant. A "
+    "colleague (the voice assistant talking to the applicant) asks you prose "
+    "questions about the form. You hold the form's fields and the applicant's "
+    "current answers below.\n\n"
+    "Each field shows: its id, spoken name, type, current value (or <empty>), and "
+    "whether it is shown (applicable) to this applicant. A field can be shown but "
+    "<empty> (applicable, not answered yet) OR not shown (not applicable to this "
+    "applicant) -- treat these as DIFFERENT.\n\n"
+    "Answer the colleague's question. Work in this order:\n"
+    "1. Find ALL fields relevant to the question (there may be several).\n"
+    "2. Copy their current values.\n"
+    "3. Answer in natural, brief prose using ONLY those values. If a relevant "
+    "field is <empty> but applicable, say it has not been answered yet. If it is "
+    "not applicable to this applicant, say so. If the question is genuinely "
+    "ambiguous across several fields, either answer for all of them and name each, "
+    "or ask a short clarifying question. NEVER invent a value that is not shown.\n\n"
+    "Return JSON ONLY, no other text:\n"
+    '{"answer": "<your prose answer>", "sourced_from": ["<field_id>", ...]}\n'
+    "Put in sourced_from the exact field ids you used to answer (the fields whose "
+    "values your answer is grounded in). Use ids exactly as shown."
+)
 
 
 class TextAIGemini(ITextAI):
@@ -171,16 +206,100 @@ class TextAIGemini(ITextAI):
             return {"conflicts": []}
 
     async def ask(self, query: str, context: dict) -> str:
-        """Secretary query -- NOT YET IMPLEMENTED (A-pillar secretary bead).
+        """Secretary query (bd polyglot-pdf-jnjj.45b): map a prose question about
+        the form to a prose answer, using the cheap text model.
 
-        Stub raises NotImplementedError so callers that attempt to use this
-        before the secretary bead ships get a clear failure, not a silent
-        no-op. The port contract + fail-open semantics will be wired here.
+        context (assembled by the ask_secretary handler, jnjj.45c):
+          schema:       full form schema (the whole form catalog, supplied by the
+                        client at handshake and cached in-session)
+          field_values: flat {field_id: value | {value, confirmed}} current state
+          shown_map:    {field_id: bool} applicability (SEPARATE from value)
+
+        Request shape (maintainer 2026-06-27): the secretary is the TEXT model --
+        every call resends the FULL SI + context (no server-side memory). The
+        request is built so Gemini's implicit cache (~1/10 rate) fires:
+          stable_prefix = [SECRETARY_SI + render_static_catalog(schema)]
+                          -- BYTE-STABLE within a session (never mutated); the
+                          cacheable prefix.
+          fresh_tail    = [render_values_tail(...) + the prose query]
+                          -- small, fresh, APPEND-ONLY. _generate concatenates
+                          prefix + tail, so the leading bytes stay identical
+                          call-to-call even as values change.
+
+        Returns the secretary's PROSE answer (the {answer, sourced_from} probe
+        shape; we return `answer`). Fail-open: on missing client / bad context /
+        API or parse error, returns "" so the principal asks the user directly
+        (ITextAI.ask contract).
+
+        PII: logs field ids/counts/model only -- NEVER the query, the rendered
+        context/values, or the answer prose (callback_handler PII discipline;
+        validation-delegation contract 6).
         """
-        raise NotImplementedError(
-            "ask() is implemented in the A-pillar secretary bead "
-            "(polyglot-pdf-jnjj secretary task); not available yet."
-        )
+        if self._client is None:
+            self._log.warning("text_ai_no_client_ask_fail_open")
+            return ""
+
+        if not isinstance(context, dict):
+            self._log.warning("text_ai_ask_bad_context_fail_open")
+            return ""
+
+        schema = context.get("schema")
+        if not isinstance(schema, dict) or not schema.get("fields"):
+            # No catalog to ground the answer in -- cannot retrieve; fail open.
+            self._log.warning("text_ai_ask_no_schema_fail_open")
+            return ""
+
+        field_values = context.get("field_values") or {}
+        shown_map = context.get("shown_map") or {}
+
+        raw = ""
+        try:
+            # stable_prefix: SECRETARY_SI + value-free catalog. Kept byte-stable so
+            # implicit caching keys on it (the maintainer's append-only invariant).
+            stable_prefix = [
+                SECRETARY_SI
+                + "\n\n"
+                + render_static_catalog(schema)
+            ]
+            # fresh_tail: current values + applicability, then the prose query,
+            # APPENDED after the stable prefix.
+            fresh_tail = [
+                render_values_tail(schema, field_values, shown_map)
+                + "\n\nQUESTION: "
+                + str(query)
+            ]
+
+            raw = await self._generate(
+                stable_prefix=stable_prefix,
+                fresh_tail=fresh_tail,
+                response_mime_type="application/json",
+            )
+            verdict = json.loads(raw)
+            answer = verdict.get("answer", "")
+            sourced = verdict.get("sourced_from", [])
+            if not isinstance(answer, str):
+                answer = str(answer)
+            self._log.info(
+                "text_ai_ask_complete",
+                # ids/counts only -- never the query/answer/values.
+                sourced_field_ids=[str(x) for x in sourced][:10]
+                if isinstance(sourced, list) else [],
+                sourced_count=len(sourced) if isinstance(sourced, list) else 0,
+                answer_len=len(answer),
+            )
+            return answer
+        except json.JSONDecodeError:
+            self._log.warning(
+                "text_ai_ask_parse_error_fail_open",
+                raw_length=len(raw) if isinstance(raw, str) else None,
+            )
+            return ""
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning(
+                "text_ai_ask_error_fail_open",
+                exc_type=type(exc).__name__,
+            )
+            return ""
 
     # ------------------------------------------------------------------
     # Internal helpers
