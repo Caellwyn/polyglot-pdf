@@ -113,17 +113,21 @@ def _dti_schema():
     }
 
 
-def test_dti_branch_carries_current_field_guidance(monkeypatch):
+def test_dti_si_is_static_carries_no_field_guidance(monkeypatch):
+    """Static-SI epic (polyglot-pdf-1ac3/13w7): the DTI SI is fully static and
+    carries NO field guidance. Field 1's guidance (its exact id, instructions,
+    etc.) reaches the model via the dynamic injection, not the SI -- so the SI
+    must NOT contain any field's id or instructions, and must NOT be a whole-form
+    dump or a names-only manifest block."""
     monkeypatch.setattr(ai_context_mod, "get_settings", _dti_settings)
     si = build_form_context(_dti_schema(), {}, "English",
                             section_number=1, total_sections=8, section_label="Part 1")
-    # The current field's guidance (incl. its instructions) is in the SI...
-    assert "ID: p1_line1_aliennumber" in si
-    assert "Instructions: Your A-Number" in si
-    # ...but NOT a whole-form dump or a names-only manifest block.
+    # No field guidance in the SI -- not field 1's id, not its instructions.
+    assert "p1_line1_aliennumber" not in si
+    assert "ID:" not in si
+    assert "Instructions: Your A-Number" not in si
+    # ...and not a whole-form dump or a names-only manifest block either.
     assert "FIELD MANIFEST" not in si
-    # Progress is computed over the real section (3 fields), not the one-field list.
-    assert "/3" in si
 
 
 def test_dti_si_size_is_independent_of_section_size(monkeypatch):
@@ -196,17 +200,23 @@ def test_coordinator_no_schema_when_legacy_client():
     assert coord.consume_pending_next_field_schema() is None
 
 
-def test_dti_current_field_is_client_selected_field_zero(monkeypatch):
-    """DTI's CURRENT FIELD = schema['fields'][0], which the CLIENT pre-selects as the
-    first unfilled+visible field (computeNextField). The backend must NOT re-derive
-    selection -- an incomplete re-selection mis-picks confirmed/hidden/show_if fields
-    (Codex PR #229 round 2). So fields[0] is authoritative, hint agrees by
-    construction."""
+def test_dti_si_is_fully_static_zero_placeholders(monkeypatch):
+    """Static-SI epic (polyglot-pdf-1ac3/13w7) exit criteria 1 + 2: the DTI SI is
+    a fully static constant -- zero '{' placeholders -- and it instructs the model
+    to copy the current field_id VERBATIM from the latest injected guidance and
+    NEVER invent it. The rendered SI is identical regardless of the schema (no
+    interpolated form/section/field state)."""
     monkeypatch.setattr(ai_context_mod, "get_settings", _dti_settings)
     si = build_form_context(_dti_schema(), {}, "English",
                             section_number=1, total_sections=8, section_label="P1")
-    # fields[0] (the client's selection) is rendered as CURRENT FIELD.
-    assert "ID: p1_line1_aliennumber" in si
+    # Criterion 1: no leftover placeholders survive into the rendered SI.
+    assert "{" not in si and "}" not in si
+    # The static constant itself carries zero placeholders.
+    from backend.config import get_settings
+    assert "{" not in get_settings().DTI_SYSTEM_INSTRUCTION
+    # Criterion 2: the SI tells the model to copy the id verbatim and never invent.
+    assert "verbatim" in si.lower()
+    assert "never invent" in si.lower() or "never invent, reconstruct" in si.lower()
 
 
 def test_merge_field_schema_extends_validation_set_without_mutating_schema():
