@@ -11,19 +11,16 @@ same Sonnet judge, to pick the format that best sets the secretary up for succes
 > synthesis (0.920), and disambiguation (0.965) -- at moderate token cost. Flat-JSON
 > costs ~40% more tokens and trails grouped on every axis (dominated), though it
 > beats prose. Prose is ~23% cheaper but the WEAKEST on every accuracy metric
-> (recall 0.889, precision 0.797, strict 0.626, synth 0.887, disambig 0.933). The
-> jnjj.26 baseline choice is validated by the data.
+> (recall 0.883, precision 0.814, strict 0.626, synth 0.904, disambig 0.931 -- worst
+> or tied on every accuracy axis). The jnjj.26 baseline choice is validated by the data.
 >
 > *Data note: two renderer fairness bugs were fixed (Codex r1+r2): flat used
 > non-authoritative `section_id` for 4 Part-3 fields (FIXED -> authoritative
 > `_ordered_groups`); and render_prose omitted the field `type` that grouped/flat
-> both carry (FIXED -> prose sentences now name the type). grouped + flat are the
-> finalized 2026-06-27 set on the corrected renderer. PROSE'S committed artifact
-> still PRECEDES the type fix and MUST be regenerated (`--format prose`) before the
-> prose row is final -- the regen kept stalling on machine-sleep this session. The
-> qualitative ranking (grouped wins every axis; prose weakest/cheapest) is very
-> likely robust to prose gaining type info, but re-run prose to finalize its exact
-> numbers. See bd jnjj.37 handoff.*
+> both carry (FIXED -> prose sentences now name the type). All three formats are the
+> finalized 2026-06-27 set on the corrected renderer (gemini-3.1-flash-lite); the
+> numbers above are final. Adding type to prose nudged its precision/synthesis up
+> slightly but it remains the weakest accuracy format -- the ranking is unchanged.*
 
 ## What was run
 
@@ -54,7 +51,7 @@ same Sonnet judge, to pick the format that best sets the secretary up for succes
 |---|---|---|---|---|---|---|---|---|---|
 | **grouped** | 9,469 | **0.931** | **0.853** | **0.726** | **0.96** | **0.920** | **0.965** | 2 | 4 |
 | flat | 13,271 | 0.913 | 0.830 | 0.691 | 0.94 | 0.904 | 0.948 | 1 | 5 |
-| prose | 7,291 | 0.889 | 0.797 | 0.626 | 0.92 | 0.887 | 0.933 | 2 | 4 |
+| prose | 7,812 | 0.883 | 0.814 | 0.626 | 0.92 | 0.904 | 0.931 | 2 | 5 |
 
 (recall/precision/strict/hit/judge rates are means across the 6 difficulty tiers;
 halluc/over_inc are whole-battery counts. The halluc/over_inc differences -- grouped
@@ -71,9 +68,10 @@ halluc/over_inc are whole-battery counts. The halluc/over_inc differences -- gro
   The "max reference fidelity" hypothesis did not pay off: the JSON structure/
   quoting overhead bought no grounding benefit and hurt reasoning (the model must
   reconstruct which fields form a cluster from a flat list). Reject.
-- **Prose is the cheapest** (7.3k, -23%) but the WEAKEST of the three on every
-  accuracy metric -- recall (0.889), precision (0.797), strict (0.626), synthesis
-  (0.887), disambiguation (0.933). The "reasoning fluency" hypothesis cost grounding
+- **Prose is the cheapest** (7.8k, -17%) but the WEAKEST (or tied) on every
+  accuracy metric -- recall (0.883), precision (0.814), strict (0.626, lowest),
+  synthesis (0.904, tied with flat), disambiguation (0.931). The "reasoning fluency"
+  hypothesis cost grounding
   precision, as expected -- ids embedded in prose are a weaker reference handle. Not
   recommended as the default, but it is the token-efficiency lever IF cost ever
   dominates (see below).
