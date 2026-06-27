@@ -16,6 +16,7 @@ from .field_utils import (
     find_similar_field_names,
     strip_field_id_from_hint,
 )
+from .ai_context import render_field_guidance
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
@@ -350,8 +351,28 @@ class FormFillingService:
 
         # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
         # read the raw field_id aloud (bd polyglot-pdf-dx7). The field_id is still
-        # available to Gemini via the system instruction's FIELDS block.
+        # delivered to Gemini -- in DTI mode via the current-field guidance block
+        # below; in legacy/JIT via the system instruction's FIELDS block.
         spoken_hint = strip_field_id_from_hint(next_field_hint)
+
+        # DTI field-1 channel (epic polyglot-pdf-13w7, bd polyglot-pdf-j748): the
+        # static DTI SI carries no field data, so field 1's exact field_id +
+        # guidance must ride the initiating message. Render it from the current
+        # field schema (schema["fields"][0] -- the client-selected first unfilled
+        # field, same source the DTI SI branch used) via render_field_guidance, the
+        # SAME renderer that delivers fields 2..N in the confirm_field response, so
+        # the model sees identical guidance whichever path delivers it. The id is
+        # NOT stripped here: this block is CONTEXT for the model to act on (and copy
+        # the id verbatim from), not text to read aloud. Non-DTI modes leave it
+        # empty so legacy/JIT output is unchanged (their SI still carries field data).
+        current_field_guidance = ""
+        if getattr(self._settings, "USE_DTI", False):
+            fields = (self._schema or {}).get("fields") or []
+            if fields:
+                current_field_guidance = (
+                    "\n\nCURRENT FIELD (copy this field_id verbatim; do NOT read it aloud):\n"
+                    + render_field_guidance(fields[0])
+                )
 
         # On mid-section reconnects use the resume template so Gemini skips
         # the greeting and section re-introduction (bd polyglot-pdf-vmxx).
@@ -362,7 +383,8 @@ class FormFillingService:
         )
         message = template.format(
             spoken_language=spoken_language,
-            next_field_hint=spoken_hint
+            next_field_hint=spoken_hint,
+            current_field_guidance=current_field_guidance
         )
 
         # Never log the rendered message text: it embeds next_field_hint, which is

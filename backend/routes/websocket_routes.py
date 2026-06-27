@@ -239,15 +239,37 @@ async def _handle_fill_session(
 			form_session_id=form_session_id,  # Persistent ID from frontend
 			current_section_id=section_id,  # Current section for token-log context (bd polyglot-pdf-tb7)
 		)
-	
+
+	# DTI session-start trigger (epic polyglot-pdf-13w7, bd polyglot-pdf-j748).
+	# In DTI mode the static SI carries no field data, so unlike legacy/JIT it cannot
+	# kick off the conversation with field 1's id/guidance. Fire the initiating
+	# message right after start_session so field 1's guidance reaches Gemini via the
+	# injection (render_field_guidance inside send_initiating_message reads
+	# schema["fields"][0]). DTI-gated so legacy/JIT keep their SI-driven kickoff with
+	# no double-greeting. Resume is honored: send_initiating_message selects the
+	# RESUME template via service._is_resume_session (set above), so a mid-section
+	# reconnect re-anchors Gemini to the current field_id the static SI no longer
+	# supplies.
+	if schema and getattr(get_settings(), "USE_DTI", False):
+		try:
+			await service.send_initiating_message(
+				fill_language,
+				initial_field_hint or "the first unfilled field",
+			)
+		except Exception as exc:
+			log.error("dti_session_start_initiating_message_failed",
+			          session_id=session_id, error=str(exc))
+
 	try:
 		# Flag to drop audio during section switch
 		drop_audio = False
 		
-		# Start watchdog to close connection after idle timeout
-		from backend.config import get_settings
-		settings = get_settings()
-		idle_timeout = settings.WS_IDLE_TIMEOUT_SEC
+		# Start watchdog to close connection after idle timeout.
+		# (get_settings is imported at module scope; a function-local re-import here
+		# would shadow it and UnboundLocalError the DTI session-start gate above,
+		# which calls get_settings() before this line -- bd polyglot-pdf-j748.)
+		local_settings = get_settings()
+		idle_timeout = local_settings.WS_IDLE_TIMEOUT_SEC
 
 		async def watchdog_task():
 			while True:
