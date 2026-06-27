@@ -17,6 +17,7 @@ import {
 } from './utils/fileSystemAccess';
 import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
 import { getCompletionStats } from './utils/validation';
+import { mergeFields, ungroupField } from './utils/fieldGrouping';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
 import type { FormField, FormConfig, FormSchema } from './types/schema';
 
@@ -37,6 +38,11 @@ export const App: React.FC = () => {
     undo, redo,
   } = useSchemaHistory();
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
+  // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
+  // is the set of fields ticked for a merge; insertion order is preserved (the
+  // first ticked field is the merge primary). Separate from selectedFieldId,
+  // which drives the single-field editor panel.
+  const [groupSelection, setGroupSelection] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   // The File System Access handle the human picked: once set, saves write
@@ -66,6 +72,7 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSelectedFieldId(null);
+    setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
@@ -102,6 +109,7 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     setSelectedFieldId(null);
+    setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
@@ -160,6 +168,8 @@ export const App: React.FC = () => {
     setSelectedForm(null);
     setSavedFileName(null);
     setSavingToKit(false);
+    setSelectedFieldId(null);
+    setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     clearSchema();
     fileHandleRef.current = null;
     if (pdfBlobUrlRef.current) {
@@ -237,6 +247,40 @@ export const App: React.FC = () => {
     });
 
     commitSchema({ ...schema, fields: newFields });
+  }, [schema, commitSchema]);
+
+  // Toggle a field's membership in the merge selection (bd polyglot-pdf-s4dp.1).
+  // Order matters: the first-added field is the merge primary, so we append on
+  // add and filter on remove rather than rebuilding the array.
+  const toggleGroupSelection = React.useCallback((fieldId: string) => {
+    setGroupSelection(prev =>
+      prev.includes(fieldId) ? prev.filter(id => id !== fieldId) : [...prev, fieldId]
+    );
+  }, []);
+
+  const clearGroupSelection = React.useCallback(() => setGroupSelection([]), []);
+
+  // Merge the currently-selected fields into one consolidated options[] field
+  // (bd polyglot-pdf-s4dp.1). The first-selected field is the primary whose
+  // identity survives; each selected widget's pdf_field_name moves onto its
+  // option. Selects the merged field and clears the merge selection.
+  const handleMergeFields = React.useCallback(() => {
+    if (!schema || groupSelection.length < 2) return;
+    const { schema: next, mergedFieldId } = mergeFields(schema, groupSelection);
+    if (next === schema) return; // no-op (invalid selection)
+    commitSchema(next);
+    setSelectedFieldId(mergedFieldId);
+    setGroupSelection([]);
+  }, [schema, groupSelection, commitSchema]);
+
+  // Un-merge a consolidated field back into one standalone field per option
+  // (bd polyglot-pdf-s4dp.1, reverse of handleMergeFields).
+  const handleUnmergeField = React.useCallback((fieldId: string) => {
+    if (!schema) return;
+    const next = ungroupField(schema, fieldId);
+    if (next === schema) return; // not un-groupable -- no-op
+    commitSchema(next);
+    setSelectedFieldId(fieldId); // primary keeps its id
   }, [schema, commitSchema]);
 
   // Suggested filename for a fresh save (the form's schema basename, *_edited).
@@ -561,6 +605,10 @@ export const App: React.FC = () => {
                 onSelectField={setSelectedFieldId}
                 onReorderFields={handleReorderFields}
                 onMoveOption={handleMoveOption}
+                groupSelection={groupSelection}
+                onToggleGroupSelection={toggleGroupSelection}
+                onClearGroupSelection={clearGroupSelection}
+                onMergeFields={handleMergeFields}
               />
             </div>
           </div>
@@ -575,6 +623,7 @@ export const App: React.FC = () => {
                 field={selectedField}
                 schema={schema}
                 onUpdateField={handleUpdateField}
+                onUnmergeField={handleUnmergeField}
               />
             </div>
           </div>
