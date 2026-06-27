@@ -1,8 +1,10 @@
 """Secretary Gate 1 RECALL probe -- can flash-lite answer prose form queries?
 
-bd polyglot-pdf-jnjj.26. Renders the I-90 secretary context (secretary_context.py)
-from the shared fixture (secretary_recall_corpus.FIELD_VALUES / SHOWN_MAP), asks
-gemini-2.5-flash-lite each prose query in the stratified battery
+bd polyglot-pdf-jnjj.26 (harness; reused by jnjj.37 for the context-format
+comparison). Renders the I-90 secretary context (secretary_context.py) from the
+shared fixture (secretary_recall_corpus.FIELD_VALUES / SHOWN_MAP), asks the cheap
+secretary model (MODEL_SECRETARY, default gemini-3.1-flash-lite -- see the constant
+for why; override with --model) each prose query in the stratified battery
 (secretary_recall_corpus.build_corpus), and characterizes the answers:
 
   - GROUNDING (deterministic): does the answer's `sourced_from` field-id trace

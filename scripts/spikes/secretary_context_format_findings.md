@@ -6,6 +6,17 @@ THREE context-rendering formats over the SAME stratified 49-query battery + the
 same Sonnet judge, to pick the format that best sets the secretary up for success
 (it must support BOTH cross-field reasoning AND precise field-id reference).
 
+> **DATA-FRESHNESS NOTE (2026-06-27):** Codex round 1 caught that `render_flat_json`
+> was using each field's non-authoritative `section_id` (4 Part-3 fields got a stray
+> section vs grouped/prose). **The renderer is FIXED** (flat now uses the
+> authoritative `_ordered_groups` mapping, matching grouped/prose). The committed
+> **flat artifact predates that fix** and so should be REGENERATED before this
+> comparison is treated as final -- a clean re-run on the corrected renderer kept
+> stalling on machine-sleep this session. grouped/prose are unaffected by the fix.
+> The qualitative conclusion (grouped wins; flat dominated; prose cheapest-weakest)
+> is robust to the small flat section-metadata change, but re-run flat to finalize
+> the exact flat numbers. See bd jnjj.37 handoff comment.
+
 > **RECOMMENDATION: keep GROUPED-BY-SECTION.** It wins on recall, precision,
 > strict-match, and synthesis quality, at moderate token cost. Flat-JSON costs ~40%
 > more tokens for WORSE accuracy on every axis (dominated -- and it is actually the

@@ -235,7 +235,15 @@ def render_flat_json(schema: dict, field_values: dict, shown_map: dict) -> str:
     of the candidate formats compared in jnjj.37."""
     field_values = field_values or {}
     shown_map = shown_map or {}
-    sec_label = _section_label_map(schema)
+    # Authoritative field->section label, from _ordered_groups (which walks
+    # sections[].fields), NOT each field's own section_id -- the latter is
+    # non-authoritative (some I-90 fields point to a section not in sections[]),
+    # and using it would feed flat DIFFERENT section metadata than grouped/prose,
+    # corrupting the apples-to-apples format comparison (Codex jnjj.37 finding).
+    fid_section = {}
+    for _part, section_label, field_ids in _ordered_groups(schema):
+        for fid in field_ids:
+            fid_section[fid] = section_label
     objs = []
     for f in schema.get("fields", []):
         fid = f["id"]
@@ -244,7 +252,7 @@ def render_flat_json(schema: dict, field_values: dict, shown_map: dict) -> str:
             "spoken_name": f.get("spoken_name", ""),
             "name": f.get("name", "") or f.get("label", ""),
             "type": f.get("type", ""),
-            "section": sec_label.get(f.get("section_id"), f.get("section_id", "")),
+            "section": fid_section.get(fid, ""),
             "value": _value_str(f, field_values, fid),
             "shown": bool(shown_map.get(fid, True)),
         }
