@@ -100,6 +100,12 @@ export interface FieldOption {
   // label_translations).
   spoken_label?: string;
   label_translations?: Record<string, string>;
+  // The field type of the separate widget this option was merged FROM (bd
+  // polyglot-pdf-s4dp.1). Recorded at merge time so un-merge can restore each
+  // source field's original type (radio vs checkbox) instead of guessing --
+  // without it, un-grouping a merged radio would come back as checkbox. The
+  // backend/runtime ignore this extra option key.
+  source_type?: FieldType;
 }
 
 export interface ConditionalDisplay {

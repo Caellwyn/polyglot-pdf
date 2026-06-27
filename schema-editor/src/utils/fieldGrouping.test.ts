@@ -54,6 +54,13 @@ describe('isGroupableField', () => {
     expect(isGroupableField({ type: 'radio' } as FormField)).toBe(true);
     expect(isGroupableField({ type: 'text' } as FormField)).toBe(false);
   });
+
+  it('rejects an already-consolidated field (has options) so a re-merge cannot drop its options', () => {
+    expect(isGroupableField({
+      type: 'radio',
+      options: [{ value: 'a', label: 'A', pdf_field_name: 'a[0]' }],
+    } as FormField)).toBe(false);
+  });
 });
 
 describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
@@ -188,5 +195,72 @@ describe('round-trip preserves the primary identity', () => {
     const primary = unmerged.fields.find(f => f.id === 'reason_a');
     expect(primary).toBeDefined();
     expect(primary!.pdf_field_name).toBe('form1[0].#subform[0].reason_a[0]');
+  });
+});
+
+describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
+  it('returns null (never undefined) for mergedFieldId on an empty selection', () => {
+    const schema = w7Schema();
+    const { schema: out, mergedFieldId } = mergeFields(schema, []);
+    expect(out).toBe(schema);
+    expect(mergedFieldId).toBeNull();
+  });
+
+  it('restores each source field TYPE on un-merge (radio stays radio)', () => {
+    const schema = w7Schema();
+    // make both sources radio (the degenerate "merge two standalone radios" case)
+    schema.fields.forEach(f => { if (f.id.startsWith('reason_')) f.type = 'radio'; });
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const unmerged = ungroupField(merged, 'reason_a');
+    expect(unmerged.fields.find(f => f.id === 'reason_a')!.type).toBe('radio');
+    expect(unmerged.fields.find(f => f.id === 'reason_b')!.type).toBe('radio');
+  });
+
+  it('preserves a mixed radio+checkbox merge through un-merge', () => {
+    const schema = w7Schema();
+    schema.fields.find(f => f.id === 'reason_a')!.type = 'radio';
+    schema.fields.find(f => f.id === 'reason_b')!.type = 'checkbox';
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const unmerged = ungroupField(merged, 'reason_a');
+    expect(unmerged.fields.find(f => f.id === 'reason_a')!.type).toBe('radio');
+    expect(unmerged.fields.find(f => f.id === 'reason_b')!.type).toBe('checkbox');
+  });
+
+  it('rewrites show_if references to a merged-away field onto the primary', () => {
+    const schema = w7Schema();
+    // an unrelated field shows only when reason_b (about to be merged away) is set
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    });
+    schema.sections[0].fields.push('detail');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const detail = merged.fields.find(f => f.id === 'detail')!;
+    // reason_b no longer exists; the reference now points at the primary reason_a
+    expect(detail.show_if!.field).toBe('reason_a');
+  });
+
+  it('rewrites controls_fields references to a merged-away field onto the primary (de-duped)', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'trigger', name: 'Trigger', type: 'checkbox', section_id: 'reason',
+      pdf_field_name: 'trigger[0]', read_only: false, required: false,
+      controls_fields: [{ operator: 'is_checked', value: true, shows: ['reason_a', 'reason_b', 'reason_c'] }],
+    });
+    schema.sections[0].fields.push('trigger');
+
+    // merge a+b -> both map to reason_a; the shows list must de-dupe to [reason_a, reason_c]
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const trigger = merged.fields.find(f => f.id === 'trigger')!;
+    expect(trigger.controls_fields![0].shows).toEqual(['reason_a', 'reason_c']);
+  });
+
+  it('records source_type on each merged option', () => {
+    const schema = w7Schema();
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const f = merged.fields[0];
+    expect(f.options!.every(o => o.source_type === 'checkbox')).toBe(true);
   });
 });
