@@ -64,6 +64,10 @@ class CallbackHandler:
         # Secretary (bd polyglot-pdf-jnjj.45c): async handler that runs the
         # ask_secretary lookup. Injected by FormFillingService; None until then.
         self._handle_ask_secretary = None
+        # Live getter for the current fill language (bd polyglot-pdf-uogm): a getter,
+        # not a snapshot, so a mid-session change_fill_language is reflected in the
+        # next field's guidance without a second source of truth to go stale.
+        self._get_fill_language = None
 
     def set_tool_handlers(
         self,
@@ -74,6 +78,7 @@ class CallbackHandler:
         get_next_field_schema_for_jit,
         merge_field_schema=None,
         handle_ask_secretary=None,
+        get_fill_language=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -83,6 +88,7 @@ class CallbackHandler:
         self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
         self._merge_field_schema = merge_field_schema
         self._handle_ask_secretary = handle_ask_secretary
+        self._get_fill_language = get_fill_language
     
     async def send_form_update(
         self,
@@ -643,13 +649,18 @@ class CallbackHandler:
             # DTI (bd polyglot-pdf-jnjj.22): the next field's full guidance is
             # CLIENT-SUPPLIED -- the client owns the schema, so it rides the
             # next_field_hint_response and is stashed on the coordinator. Render it
-            # (same render_field_guidance the DTI system instruction uses for field
-            # 1) into next_field_guidance. Skip on timeout / no hint.
+            # (same render_field_guidance the initiating message uses for field 1)
+            # into next_field_guidance, carrying the live fill_language so fields
+            # 2..N also tell the model the value language (bd polyglot-pdf-uogm).
+            # Skip on timeout / no hint.
             next_field_guidance = None
             if get_settings().USE_DTI and next_hint and self._request_coordinator:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
                 if client_next_schema:
-                    next_field_guidance = render_field_guidance(client_next_schema)
+                    fill_language = self._get_fill_language() if self._get_fill_language else None
+                    next_field_guidance = render_field_guidance(
+                        client_next_schema, fill_language=fill_language
+                    )
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
                     # 'unknown' (in DTI/JIT mode _schema['fields'] holds only field 1;

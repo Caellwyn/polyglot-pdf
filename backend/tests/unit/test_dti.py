@@ -467,3 +467,117 @@ async def test_initiating_message_logs_only_length(monkeypatch):
     blob = repr((event, kwargs))
     assert "p1_line1_aliennumber" not in blob
     assert "Your A-Number" not in blob
+
+
+# ---------------------------------------------------------------------------
+# Remaining values to injection (bd polyglot-pdf-uogm): fill_language rides every
+# field render; form/section metadata rides the initiating message; the SI stays
+# fully static (zero per-form value).
+# ---------------------------------------------------------------------------
+
+def test_render_field_guidance_appends_fill_language():
+    """fill_language rides the field render when set; omitted -> byte-identical to
+    the no-arg render (so non-DTI / legacy callers are unaffected)."""
+    text = render_field_guidance(NESTED_FIELD, fill_language="Spanish")
+    assert "Fill language: Spanish" in text
+    assert "Fill language" not in render_field_guidance(NESTED_FIELD)
+    assert render_field_guidance(NESTED_FIELD, fill_language=None) == render_field_guidance(NESTED_FIELD)
+
+
+def test_render_section_metadata_block():
+    from backend.services.ai_context import render_section_metadata
+    block = render_section_metadata(
+        form_title="I-90", section_number=2, total_sections=8,
+        section_label="Part 2", previous_spoken_names=["first name", "last name"],
+    )
+    assert "I-90" in block
+    assert "Section 2 of 8" in block
+    assert "Part 2" in block
+    assert "first name" in block
+    # confirmation policy is derived from section_number/total when not passed
+    assert "confirmation" in block.lower()
+
+
+def test_render_section_metadata_empty_inputs_minimal():
+    """A single-section form with no metadata still renders cleanly (just the title),
+    never crashes, never emits empty section/progress lines."""
+    from backend.services.ai_context import render_section_metadata
+    block = render_section_metadata(form_title="Demo")
+    assert block.startswith("FORM CONTEXT:")
+    assert "Demo" in block
+    assert "Section" not in block  # no section line without numbers
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_field1_carries_fill_language():
+    """The field-1 guidance in the DTI initiating message carries the fill language
+    so the model writes VALUES in the configured (non-spoken) language."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._fill_language = "Spanish"
+    svc._schema = {"fields": [NESTED_FIELD]}
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+    assert "Fill language: Spanish" in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_metadata_from_section_metadata_not_manifest():
+    """bd fu1h F1 regression guard: the metadata block is built from
+    _last_section_metadata (what the switch path carries), NOT schema["manifest"].
+    Here the schema has NO manifest (section-switch shape) yet the block is fully
+    populated -- this would render empty if it sourced from the manifest."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._schema = {"form_metadata": {"title": "I-90"}, "fields": [NESTED_FIELD]}
+    svc._last_section_metadata = {
+        "section_number": 3, "total_sections": 8, "section_label": "Part 3",
+        "previous_spoken_names": ["alien registration number"],
+    }
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+    msg = captured[0]
+    assert "FORM CONTEXT:" in msg
+    assert "I-90" in msg
+    assert "Section 3 of 8" in msg
+    assert "Part 3" in msg
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_no_metadata_block_in_non_dti():
+    """Non-DTI: no metadata block, no fill_language segment -- byte-identical to
+    pre-uogm legacy/JIT output."""
+    svc, captured = _service_with_settings(use_dti=False)
+    svc._is_resume_session = False
+    svc._fill_language = "Spanish"
+    svc._schema = {"form_metadata": {"title": "I-90"}, "fields": [NESTED_FIELD]}
+    svc._last_section_metadata = {"section_number": 3, "total_sections": 8}
+    await svc.send_initiating_message("English", "First Name")
+    msg = captured[0]
+    assert "FORM CONTEXT:" not in msg
+    assert "Fill language" not in msg
+
+
+def test_dti_si_byte_identical_across_forms(monkeypatch):
+    """Exit criterion 2: the DTI SI is byte-identical across two different
+    forms/sections -- it carries zero per-form value (all of it moved to injection)."""
+    monkeypatch.setattr(ai_context_mod, "get_settings", _dti_settings)
+
+    def si_for(title, field, lang, sec, total, label):
+        schema = {
+            "form_metadata": {"title": title},
+            "fields": [field],
+            "manifest": {"current_section": {"section_id": "s", "section_label": label,
+                                             "fields": [{"field_id": field["id"],
+                                                         "spoken_name": field.get("spoken_name", "x")}]},
+                         "previous_sections": []},
+        }
+        return build_form_context(schema, {}, lang, section_number=sec,
+                                  total_sections=total, section_label=label)
+
+    a = si_for("Form A", NESTED_FIELD, "English", 1, 8, "Part 1")
+    b = si_for("Form B", FLAT_FIELD, "French", 4, 12, "Part 4")
+    assert a == b, "DTI SI must carry no per-form value"
+    assert "{" not in a  # criterion 1 holds

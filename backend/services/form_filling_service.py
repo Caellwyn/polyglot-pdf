@@ -17,7 +17,7 @@ from .field_utils import (
     find_similar_field_names,
     strip_field_id_from_hint,
 )
-from .ai_context import render_field_guidance
+from .ai_context import render_field_guidance, render_section_metadata
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
@@ -214,6 +214,9 @@ class FormFillingService:
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
             merge_field_schema=self.merge_field_schema,
             handle_ask_secretary=self.handle_ask_secretary,
+            # Live getter so fields 2..N's guidance carries the CURRENT fill language
+            # even after a mid-session change_fill_language (bd polyglot-pdf-uogm).
+            get_fill_language=lambda: self._fill_language,
         )
 
         # Use web form tool declarations (stateless)
@@ -403,13 +406,37 @@ class FormFillingService:
         # field schema, render NOTHING rather than a wrong field. Non-DTI modes leave
         # it empty so legacy/JIT output is unchanged (their SI still carries field data).
         current_field_guidance = ""
+        section_metadata_block = ""
         if getattr(self._settings, "USE_DTI", False):
             field = self._resolve_hint_field_schema(next_field_hint)
             if field:
+                # fill_language rides the field render (bd polyglot-pdf-uogm) so the
+                # model writes VALUES in the configured language; the static SI no
+                # longer carries it.
                 current_field_guidance = (
                     "\n\nCURRENT FIELD (copy this field_id verbatim; do NOT read it aloud):\n"
-                    + render_field_guidance(field)
+                    + render_field_guidance(field, fill_language=self._fill_language)
                 )
+
+            # DTI form/section metadata channel (bd polyglot-pdf-uogm): the static SI
+            # carries no form/session state, so the title/section/progress/previous-
+            # names/confirmation-policy block rides the initiating message at session
+            # AND section start. Source is self._last_section_metadata (seeded at
+            # session start + set on every switch) + the stored schema's form title --
+            # NOT schema["manifest"], which is absent on a section-switch handshake
+            # (bd polyglot-pdf-fu1h F1; a manifest-sourced block would be empty on
+            # sections 2..N).
+            sm = self._last_section_metadata or {}
+            form_title = (self._schema or {}).get("form_metadata", {}).get("title", "Form")
+            block = render_section_metadata(
+                form_title=form_title,
+                section_number=sm.get("section_number"),
+                total_sections=sm.get("total_sections"),
+                section_label=sm.get("section_label"),
+                previous_spoken_names=sm.get("previous_spoken_names"),
+            )
+            if block:
+                section_metadata_block = "\n\n" + block
 
         # On mid-section reconnects use the resume template so Gemini skips
         # the greeting and section re-introduction (bd polyglot-pdf-vmxx).
@@ -418,11 +445,13 @@ class FormFillingService:
             if self._is_resume_session
             else self._settings.INITIATING_MESSAGE
         )
+        # Append the DTI metadata block AFTER the formatted template (not a new
+        # placeholder) so non-DTI output is byte-identical (block is "" there).
         message = template.format(
             spoken_language=spoken_language,
             next_field_hint=spoken_hint,
             current_field_guidance=current_field_guidance
-        )
+        ) + section_metadata_block
 
         # Never log the rendered message text: it embeds next_field_hint, which is
         # derived from form field data (no-PII policy, docs/standards/hipaa-pii-policy.md).

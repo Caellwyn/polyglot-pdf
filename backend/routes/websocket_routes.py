@@ -187,11 +187,25 @@ async def _handle_fill_session(
 		# Update schema with fill_language
 		service.update_schema(schema, current_values or {}, fill_language)
 
+		# Seed the section metadata on the service so the DTI initiating message's
+		# form/section metadata block (bd polyglot-pdf-uogm) has a source at SESSION
+		# START -- not just after a section switch (which sets it at
+		# _switch_to_section_locked). Sourced from the handshake, NOT schema["manifest"]
+		# (bd polyglot-pdf-fu1h F1). Also benefits restart_gemini_session, which already
+		# reads _last_section_metadata. Navigation state only -- no field values.
+		service._last_section_metadata = {
+			"section_id": section_id,
+			"section_number": section_number,
+			"total_sections": total_sections,
+			"section_label": section_label,
+			"previous_spoken_names": previous_spoken_names or [],
+		}
+
 		# Build full form context system instruction
 		# Phase 3: Include section metadata
 		# EXPERIMENTAL: Pass next_field_hint to system instruction for initiation directive
 		system_instruction = service.build_form_context_message(
-			schema, 
+			schema,
 			current_values or {},
 			section_number=section_number,
 			section_label=section_label,
