@@ -946,7 +946,9 @@ class FormFillingService:
 
         The timeout here is the INTERIM tail-latency guard (Gate 2 measured
         occasional multi-second spikes); the graceful "please hold" filler is
-        jnjj.43.
+        jnjj.43. Note it bounds ONLY the model call -- the preceding client
+        form-state round-trip has its own ~5s coordinator timeout, so the
+        worst-case total blocking wait is ~SECRETARY_TIMEOUT_S + 5s.
 
         PII: logs ids/counts/latency/timeout only -- never the query, the values,
         or the answer (callback_handler PII discipline).

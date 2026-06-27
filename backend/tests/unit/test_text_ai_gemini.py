@@ -301,6 +301,13 @@ async def test_ask_logs_no_pii(adapter_with_client):
         "shown_map": {"f_first": True},
     })
 
+    # Guard against a vacuous pass: if the setattr patch failed to shadow the
+    # bound logger's methods, `logged` would be empty and the PII checks below
+    # would pass without ever inspecting a real log call (fresh-eyes PR finding).
+    # ask() emits text_ai_ask_complete on the happy path, so at least one call
+    # MUST have been captured.
+    assert logged, "no log calls captured -- the PII check would pass vacuously"
+
     blob = repr(logged)
     assert secret_query not in blob
     assert secret_value not in blob

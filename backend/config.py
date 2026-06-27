@@ -81,10 +81,13 @@ class Settings(BaseModel):
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
 	# Secretary (bd polyglot-pdf-jnjj.45) interim tail-latency guard: the
 	# ask_secretary call is BLOCKING (the principal waits mid-conversation), and
-	# Gate 2 (jnjj.27) measured occasional multi-second spikes. This caps the
-	# blocking wait; on timeout the handler fail-opens (tells the principal to ask
-	# the user directly). This is the STOPGAP; the graceful "please hold" filler is
-	# jnjj.43. Generous default so a normal ~1s lookup is never cut off.
+	# Gate 2 (jnjj.27) measured occasional multi-second spikes. This caps ONLY the
+	# model call (TextAIGemini.ask); the preceding client form-state round-trip has
+	# its own ~5s coordinator timeout, so the worst-case total blocking wait is
+	# ~SECRETARY_TIMEOUT_S + 5s, not SECRETARY_TIMEOUT_S alone. On timeout the
+	# handler fail-opens (tells the principal to ask the user directly). This is the
+	# STOPGAP; the graceful "please hold" filler is jnjj.43. Generous default so a
+	# normal ~1s lookup is never cut off.
 	SECRETARY_TIMEOUT_S: float = float(os.getenv("SECRETARY_TIMEOUT_S", "8.0"))
 	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
 	# True (DEFAULT) -> Vertex via service-account ADC + GOOGLE_CLOUD_PROJECT
