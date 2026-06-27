@@ -70,7 +70,29 @@ local to `local_settings`. Recorded as a durable lesson via `bd remember`
 - 39ik #1 (docstring no longer references `{current_field_guidance}`/the SI; it
   describes the injection path) -- PASS: docstring rewritten (ai_context.py).
 
-Fresh-eyes adversarial assess: <FRESH_EYES_PLACEHOLDER -- filled at closeout>.
+Fresh-eyes adversarial assess (Sonnet, arm B picker -> sonnet): NO-GAPS on both
+bead rubrics in round 1. It verified the get_settings shadowing fix is real and
+complete, non-DTI byte-identical output, no double-greeting, the strip-regex test
+input is realistic, and the empty-schema guard. Two findings beyond the rubric:
+- Finding 1 (test quality, ADOPTED): my `test_initiating_message_logs_only_length`
+  was vacuous -- it used pytest `caplog`, but `_log` is a structlog logger not
+  routed through stdlib in tests, so `caplog.records` is empty and the assertions
+  passed for free. First rewrote to `structlog.testing.capture_logs()`, but that
+  FAILED in the FULL suite (passed isolated) -- the module-level lazy `_log` is
+  already realized against the suite's structlog config, so a global-config swap
+  does not reliably intercept it (ordering-dependent flake). Final approach:
+  monkeypatch the module's `_log` with a fake whose `.info()` records the call
+  kwargs -- deterministic and ordering-independent. Mutation-verified twice
+  (injected `leak=field_id` -> test FAILED; reverted -> passed). Since the rubric
+  was already NO-GAPS and this is a self-contained test-only fix I mutation-verified
+  directly, I did not re-spawn fresh-eyes for it.
+- Finding 2 (out-of-scope, FILED then CLOSED as duplicate): restart_gemini_session
+  does not fire the initiating injection in DTI mode (Level-3 farewell + restart
+  loses field 1). Fresh-eyes filed polyglot-pdf-88m6; on review it is an exact
+  duplicate of epic child h1bn's edge-case (a) ("restart_gemini_session ... must
+  fire an initiating injection after set_callbacks"), so I closed 88m6 pointing at
+  h1bn (which owns the fix). Out of j748's session-start-only scope.
+Adopt: 1 (PII test hardening). Reject: 0. Defer: 0 net new (88m6 closed as dup of h1bn).
 
 ## Lessons
 

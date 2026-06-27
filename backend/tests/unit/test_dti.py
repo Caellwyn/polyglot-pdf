@@ -389,21 +389,42 @@ async def test_initiating_message_empty_schema_no_crash():
 
 
 @pytest.mark.asyncio
-async def test_initiating_message_logs_only_length(caplog):
+async def test_initiating_message_logs_only_length(monkeypatch):
     """No-PII guard (bd uov.15): the rendered message embeds field data, so the log
     must record only message_length -- never the field_id, instructions, or guidance
-    text."""
-    import logging
+    text. Captures the ACTUAL log-call kwargs by monkeypatching the module logger's
+    info(), which is deterministic and ordering-independent (NOT pytest caplog --
+    _log is a structlog logger not routed through stdlib in tests; NOT capture_logs
+    -- the module-level lazy logger is already realized against the suite's structlog
+    config, so global-config swaps do not reliably intercept it. fresh-eyes finding
+    on this PR, then a full-suite ordering failure on capture_logs)."""
+    import backend.services.form_filling_service as ffs_mod
+
+    calls = []
+
+    class _FakeLog:
+        def info(self, event, **kwargs):
+            calls.append((event, kwargs))
+
+        # send_initiating_message only calls .info; stub the rest as no-ops so an
+        # unrelated log call cannot AttributeError the test.
+        def __getattr__(self, _name):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(ffs_mod, "_log", _FakeLog())
 
     svc, captured = _service_with_settings(use_dti=True)
     svc._is_resume_session = False
     svc._schema = {"fields": [NESTED_FIELD]}
 
-    with caplog.at_level(logging.INFO):
-        await svc.send_initiating_message("English", "alien registration number")
+    await svc.send_initiating_message("English", "alien registration number")
 
-    logged = "\n".join(r.getMessage() for r in caplog.records) + str(
-        [getattr(r, "__dict__", {}) for r in caplog.records]
-    )
-    assert "p1_line1_aliennumber" not in logged
-    assert "Your A-Number" not in logged
+    send_calls = [(e, kw) for (e, kw) in calls if e == "send_initiating_message"]
+    assert send_calls, "send_initiating_message was not logged"
+    event, kwargs = send_calls[0]
+    # message_length is the only size signal logged...
+    assert "message_length" in kwargs
+    # ...and NO logged kwarg (key or value) carries the field_id or instructions.
+    blob = repr((event, kwargs))
+    assert "p1_line1_aliennumber" not in blob
+    assert "Your A-Number" not in blob
