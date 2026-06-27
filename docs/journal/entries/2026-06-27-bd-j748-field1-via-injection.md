@@ -121,6 +121,13 @@ session-start gate. Use module-scope names inside that function; no local rebind
   tool-call-flow, etc.) do not describe the initiating-message field-1 channel and
   are stale from other recent commits to files this branch did not touch. Left.
 
+## Telemetry
+
+The harness telemetry row was SKIPPED (warn-only): `harness_ledger.py` exit 1 --
+"could not locate a transcript JSONL for this session" (the worktree path did not
+resolve to a `~/.claude/projects/<sanitized-cwd>/` transcript). Per the closeout
+skill this never blocks the merge; noting the gap here.
+
 ## Beads housekeeping
 
 No orphans. Three stale in_progress beads (hrn, jf6w, ue5s) are pre-existing,
