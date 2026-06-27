@@ -52,6 +52,11 @@ from google.genai import types
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.scripts.g1b_corpus import build_corpus  # noqa: E402
+from backend.scripts.g1b_corpus import corpus_fingerprint  # noqa: E402
+
+# Stamp every row + the meta with the corpus version so the offline re-scorer
+# merges only same-corpus runs (Codex review, PR #253). Computed once at import.
+_CORPUS_FP = corpus_fingerprint()
 
 # Per-1M USD text rates (input, output) for the TEXT generateContent models.
 # These are the *text* model prices, DISTINCT from config.py's GEMINI_PRICING_BY_FAMILY
@@ -470,6 +475,10 @@ async def main() -> None:
             # fields within a group ';'-separated.
             "flagged_ids": ";".join(sorted({i for s in flagged for i in s})),
             "flagged_groups": "|".join(";".join(sorted(s)) for s in flagged),
+            # corpus version: lets g1b_merge.py combine ONLY same-corpus runs, so a
+            # clean-corpus run is never blended with older contaminated runs that
+            # share case_ids (Codex review, PR #253).
+            "corpus_fp": _CORPUS_FP,
         })
 
     for size in sizes:
@@ -550,6 +559,7 @@ async def main() -> None:
         json.dump(_nan_to_none({
             "bead": "polyglot-pdf-0zp3",
             "stamp": stamp,
+            "corpus_fp": _CORPUS_FP,
             "today_for_date_checks": TODAY,
             "sizes": sizes,
             "models": {m: MODELS[m] for m in models},

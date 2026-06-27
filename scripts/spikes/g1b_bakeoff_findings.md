@@ -4,8 +4,8 @@
 > precision was measured on was rebuilt on a HAND-VALIDATED coherent I-90 answer
 > key (`backend/scripts/g1b_answer_key.py`), removing the unlabeled-contradiction
 > contamination Codex round 3 found. A clean-corpus re-measure on the two cheap
-> text models (run `g1b_bakeoff_20260627T111636`) gives TRUSTWORTHY precision:
-> 2.5-flash 0.88-1.00, 2.5-flash-lite 0.71-0.88, with every residual false
+> text models (run `g1b_bakeoff_20260627T115647`) gives TRUSTWORTHY precision:
+> 2.5-flash 1.00 at every size, 2.5-flash-lite 0.79-0.91, with every residual false
 > positive a genuine over-flag on a coherent foreign/territory/dual address (NOT a
 > corpus artifact; the full validated persona baseline is 0/6 flagged). The RECALL
 > findings below are unaffected (recall was always measured on labeled

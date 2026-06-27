@@ -113,6 +113,54 @@ def load_schema_fields() -> list:
     return out
 
 
+# Separator for a multi-select checkbox GROUP value in the answer key (e.g. an
+# applicant who selects BOTH the interpreter statement AND the preparer statement
+# on p5_checkbox1a). A checkbox group has no schema-defined separator, so the
+# corpus uses "; " purely as the answer-key encoding; option_label resolves each
+# part to its label so the checker reads the joined human meaning.
+MULTI_SEP = "; "
+
+
+def option_label(field: dict, value: str) -> str:
+    """Resolve an option-typed field's raw VALUE token(s) to its human LABEL(s).
+
+    The answer key stores the schema's raw option value (e.g. "P5_Checkbox1b[0]")
+    so validate_answer_key() can check it against the schema. But a contradiction
+    checker reading the payload sees only that opaque token and cannot tell whether
+    the selected option is coherent -- so a clean case like p1_line8_male =
+    "P1_Line8_female[0]" or p5_checkbox1a = "P5_Checkbox1b[0]" gets spuriously
+    flagged (Codex review on PR #253: those lone-field FPs were corpus artifacts,
+    not model noise). Resolving the value to its LABEL ("Female"; "The interpreter
+    named in Part 6 has read to me ...") gives the checker the same meaning a human
+    reader has.
+
+    A multi-select checkbox GROUP value is MULTI_SEP-joined raw tokens; each part is
+    resolved to its label and re-joined. Falls back to the raw token if the field
+    has no options or a token is not among them (so a non-option field or an injected
+    free-text value passes through unchanged).
+
+    Only OPAQUE tokens are relabeled. A token is opaque if it contains a '[' or '_'
+    (the PDF-widget naming: "P5_Checkbox1b[0]", "hispanic_latino",
+    "P3_checkbox7_White[0]"). Values that are ALREADY human-legible short codes --
+    state abbreviations ("TX"), eye/hair colors ("black") -- are left AS-IS, so the
+    payload keeps the schema's state OPTION VALUE (the bead's "use state
+    abbreviations" rule) rather than expanding "TX" to "Texas"."""
+    opts = {str(o.get("value")): str(o.get("label"))
+            for o in (field.get("options") or [])
+            if isinstance(o, dict) and o.get("label")}
+    if not opts:
+        return str(value)
+
+    def _resolve(token: str) -> str:
+        # leave already-legible short codes (no '[' and no '_') unchanged
+        if "[" not in token and "_" not in token:
+            return token
+        return opts.get(token, token)
+
+    parts = [p.strip() for p in str(value).split(MULTI_SEP) if p.strip()] or [str(value)]
+    return MULTI_SEP.join(_resolve(p) for p in parts)
+
+
 # ===========================================================================
 # THE VALIDATED ANSWER KEY: field_id -> value.
 #   - A string value is the coherent answer.
@@ -176,15 +224,16 @@ ANSWER_KEY: dict = {
     "p2_checkbox1": "P2_checkbox1[0]",
     # Commuter port-of-entry: gated on commuter reason; NA for a plain LPR.
     "p2_line2h1_cityandstate": None,
-    # Reason for new card = previous card lost/stolen/destroyed -> option [5].
-    # NOTE on a schema discrepancy: p2_checkbox1.controls_fields unlocks the
-    # reason field (p2_checkbox2[5]) for BOTH option [0] (plain LPR) and option [1]
-    # (commuter), but p2_checkbox2[5].show_if narrows it to option [1] only. The
-    # controls_fields map is authoritative (the editor/frontend unlock source) and
-    # semantically correct -- EVERY I-90 applicant must give a reason for the new
-    # card -- so the reason field is filled here for a plain LPR. (The narrower
-    # show_if is the inconsistent annotation; left as-is, out of scope for wf3q.)
-    "p2_checkbox2[5]": "P2_checkbox2[5]",
+    # Reason for new card (p2_checkbox2[5]): NA for THIS persona. The schema is
+    # self-inconsistent here -- p2_checkbox1.controls_fields unlocks the reason
+    # field for option [0] (plain LPR) too, but p2_checkbox2[5].show_if requires
+    # option [1] (commuter). The PRODUCTION renderer gates on show_if
+    # (frontend shouldShowField) and HIDES the field for a plain LPR, rejecting any
+    # hidden-field update -- so a real client could NOT send this field for this
+    # persona. The corpus must reflect what a real client sends, so the field is NA
+    # here (Codex review on PR #253). The schema discrepancy itself is tracked in
+    # bd polyglot-pdf-zi2s.
+    "p2_checkbox2[5]": None,
     # "issued but never received": gated on Conditional-PR (checkbox1 option [2]); NA.
     "p2_checkbox3": None,
 
@@ -217,14 +266,21 @@ ANSWER_KEY: dict = {
     "p4_line1c_accomodationrequested": None,  # NA
 
     # ---- Part 5: Applicant's statement, contact, signature ----
-    # Interpreter read the form to her -> option [1] ("P5_Checkbox1b[0]"), which
-    # unlocks the language field AND makes Part 6 coherent/required. NOT option [0]
-    # ("I read English") -- that would contradict having an interpreter.
-    "p5_checkbox1a": "P5_Checkbox1b[0]",
+    # p5_checkbox1a is a checkbox GROUP (multi-select). This persona is not fluent
+    # in written English AND used a preparer, so BOTH statements apply:
+    #   - "P5_Checkbox1b[0]" = the interpreter named in Part 6 read the form to her
+    #     (unlocks p5_line1b_language, makes Part 6 coherent/required);
+    #   - "P5_Checkbox2[0]" = at her request, the preparer named in Part 7 prepared
+    #     it (unlocks p5_line2_nameofrepresentative).
+    # Selecting only the interpreter statement while Part 7 is fully populated would
+    # be an unlabeled contradiction (a preparer exists but the applicant did not
+    # certify it) -- Codex review on PR #253. NOT "P5_Checkbox1a[0]" ("I read
+    # English") -- that would contradict having an interpreter.
+    "p5_checkbox1a": "P5_Checkbox1b[0]; P5_Checkbox2[0]",
     "p5_line1b_language": "Vietnamese",
-    # Preparer-in-lieu-of-statement gate (option [2]) not selected -> NA. (A
-    # preparer still HELPED -- Part 7 -- but that is a separate certification.)
-    "p5_line2_nameofrepresentative": None,
+    # Preparer-in-lieu statement IS selected (above), so the representative-name
+    # field is unlocked and filled with the Part 7 preparer.
+    "p5_line2_nameofrepresentative": "John Smith",
     "p5_line3_daytimephonenumber": "713-555-0142",
     "p5_line4_mobilephonenumber": "713-555-0199",
     "p5_line5_emailaddress": "linh.nguyen@example.com",
@@ -320,6 +376,7 @@ NA_REASON: dict = {
     "p1_line7f_province": "US physical address, no foreign province",
     "p1_line7g_postalcode": "US physical address, no foreign postal code",
     "p2_line2h1_cityandstate": "commuter port-of-entry; persona is a plain LPR",
+    "p2_checkbox2[5]": "reason-for-new-card field is show_if-gated to commuter (option [1]); production hides it for a plain LPR, so a real client cannot send it (see bd zi2s)",
     "p2_checkbox3": "issued-but-never-received gate p2_checkbox1 = Conditional PR (not selected)",
     "p4_checkbox1a": "accommodation gate p4_checkbox1 = No",
     "p4_line1a_accomodationrequested": "accommodation gate p4_checkbox1 = No",
@@ -327,7 +384,6 @@ NA_REASON: dict = {
     "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No",
     "p4_checkbox1c": "accommodation gate p4_checkbox1 = No",
     "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No",
-    "p5_line2_nameofrepresentative": "preparer-in-lieu certification (p5_checkbox1a option [2]) not selected",
     "p6_line3f_province": "US interpreter address, no foreign province",
     "p6_line3g_postalcode": "US interpreter address, no foreign postal code",
     "p7_line3f_province": "US preparer address, no foreign province",
@@ -386,7 +442,8 @@ def validate_answer_key() -> list:
         if ANSWER_KEY.get(fid) is not None:
             problems.append(f"NA_REASON for a non-NA (or unknown) field: {fid}")
 
-    # 3. Option-typed fields must hold a real schema option VALUE.
+    # 3. Option-typed fields must hold a real schema option VALUE. A checkbox GROUP
+    #    may hold several, MULTI_SEP-joined; each part must be a valid option.
     for fid, val in ANSWER_KEY.items():
         if val is None or fid not in by_id:
             continue
@@ -398,10 +455,12 @@ def validate_answer_key() -> list:
                     valid.add(str(opt["value"]))
                 elif not isinstance(opt, dict) and opt is not None:
                     valid.add(str(opt))
-            if str(val) not in valid:
-                problems.append(
-                    f"{fid}: value {val!r} is not one of the schema options "
-                    f"{sorted(valid)}")
+            parts = [p.strip() for p in str(val).split(MULTI_SEP) if p.strip()]
+            for part in parts:
+                if part not in valid:
+                    problems.append(
+                        f"{fid}: value part {part!r} is not one of the schema "
+                        f"options {sorted(valid)}")
 
     # 4. copy_from page-header repeats must equal their source EXACTLY.
     for fid, f in by_id.items():

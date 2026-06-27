@@ -46,9 +46,15 @@ Contradiction CLASSES (the bake-off's taxonomy):
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field as dc_field
 
-from backend.scripts.g1b_answer_key import ANSWER_KEY, load_schema_fields
+from backend.scripts.g1b_answer_key import (
+    ANSWER_KEY,
+    load_schema_fields,
+    option_label,
+)
 
 
 @dataclass
@@ -69,13 +75,19 @@ def _base_state(all_fields: list, size: int) -> list:
     """First `size` fields in document order, filled from the VALIDATED answer key.
     NA fields (ANSWER_KEY value None) are omitted -- exactly as production omits
     empty fields -- so the payload carries only coherent, filled values. Returns a
-    list of mutable {field_id, name, value} dicts."""
+    list of mutable {field_id, name, value} dicts.
+
+    Option-typed values are resolved from the raw schema token to the human LABEL
+    (option_label) so the checker reads "Female" / "The interpreter ... read to me"
+    instead of the opaque "P1_Line8_female[0]" / "P5_Checkbox1b[0]" -- otherwise the
+    checker spuriously flags coherent non-first options (Codex review, PR #253)."""
     out = []
     for f in all_fields[:size]:
         val = ANSWER_KEY.get(f["field_id"])
         if val is None:
             continue  # NA / conditional-hidden -> omitted from the payload
-        out.append({"field_id": f["field_id"], "name": f["name"], "value": val})
+        out.append({"field_id": f["field_id"], "name": f["name"],
+                    "value": option_label(f, val)})
     return out
 
 
@@ -184,6 +196,11 @@ def build_corpus(size: int) -> list:
             return None
         ids = list(expected[0])
         dist = _distance(base, ids[0], ids[1]) if len(ids) >= 2 else 0
+        # Drop any field an injection blanked (e.g. a US ZIP cleared for a foreign
+        # country) -- production omits empties, and a "" left in the payload would
+        # itself read oddly. Distance is computed ABOVE on the implicated pair
+        # (always non-empty), so filtering here does not shift it.
+        base[:] = [f for f in base if f["value"] not in ("", None)]
         return Case(
             case_id=f"s{size}_{case_suffix}",
             size=size, cls=cls, distance=dist,
@@ -212,28 +229,33 @@ def build_corpus(size: int) -> list:
         if c:
             cases.append(c)
 
-    # state_country -- US state filled together with a foreign country. The city is
-    # set coherent with the US state; only {state, country} is the contradiction.
+    # state_country -- US state filled together with a foreign country. City is set
+    # coherent with the US state; the base US ZIP (77027) is CLEARED, since a US ZIP
+    # alongside a foreign country would be a SECOND unlabeled contradiction (Codex
+    # review, PR #253). Only {state, country} is the contradiction.
     for i, (city, state, country) in enumerate([
         ("Albany", "NY", "Canada"), ("Sacramento", "CA", "Mexico"),
         ("Austin", "TX", "United Kingdom"), ("Springfield", "IL", "Germany"),
     ]):
         c = mk(f"statecountry_{i}", "state_country",
-               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_COUNTRY, country)],
+               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_ZIP, ""),
+                (MAIL_COUNTRY, country)],
                [{MAIL_STATE, MAIL_COUNTRY}], [MAIL_STATE, MAIL_COUNTRY])
         if c:
             cases.append(c)
 
     # province_us -- foreign province alongside a US state (province is NA in the
-    # clean base, so it must be ADDED). City coherent with the US state; only
-    # {state, province} is the contradiction.
+    # clean base, so it must be ADDED). City coherent with the US state; the base US
+    # ZIP (77027) is CLEARED so it does not become a SECOND unlabeled
+    # ZIP-vs-state contradiction (Codex review, PR #253). Only {state, province} is
+    # the contradiction.
     for i, (city, prov, state) in enumerate([
         ("Albany", "Ontario", "NY"), ("Sacramento", "Bavaria", "CA"),
         ("Orlando", "Quebec", "FL"),
     ]):
         c = mk(f"provinceus_{i}", "province_us",
-               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_PROV, prov),
-                (MAIL_COUNTRY, "United States")],
+               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_ZIP, ""),
+                (MAIL_PROV, prov), (MAIL_COUNTRY, "United States")],
                [{MAIL_STATE, MAIL_PROV}], [MAIL_STATE, MAIL_PROV],
                add_ids=(MAIL_PROV,))
         if c:
@@ -306,21 +328,25 @@ def build_corpus(size: int) -> list:
     # Each starts from the validated base and applies a COHERENT address variant
     # (street + city + state + zip + country all mutually consistent), so a good
     # checker must NOT flag it. These are the false-positive traps.
-    def clean(case_suffix, mutations):
+    def clean(case_suffix, required, optional=()):
+        """A clean case. `required` mutations MUST be in the size window (else the
+        case is skipped). `optional` mutations are applied BEST-EFFORT and silently
+        skipped when out of window -- used for the physical cluster, which is absent
+        at size 20: a mailing-only clean case is still coherent there, and skipping
+        the whole case instead would DROP its stable case id and leave g1b_merge to
+        retain stale rows from old run files (Codex review, PR #253)."""
         base = _base_state(all_fields, size)
-        ok = True
-        for fid, val in mutations:
-            # a clean mutation only ever sets an already-present (filled) field;
-            # if it is out of window, skip this case so we never emit a half-applied
-            # address (which could itself be an artifact).
+        for fid, val in required:
             if _set(base, fid, val) < 0:
-                ok = False
-                break
-        if not ok:
-            return None
+                return None  # a required field is out of window -> skip the case
+        for fid, val in optional:
+            _set(base, fid, val)  # best-effort; -1 (out of window) is fine
         return Case(f"s{size}_{case_suffix}", size, "clean", 0, base)
 
     # Coherent US mailing address (street kept consistent with the new city/state).
+    # Physical == mailing is OPTIONAL: at size 20 only the mailing address is in the
+    # window, which is still a coherent clean case (and preserves the stable
+    # s20_clean_us_* ids the offline re-scorer expects).
     for i, (street, city, state, zipc) in enumerate([
         ("123 Main St", "New York", "NY", "10001"),
         ("742 Sunset Blvd", "Los Angeles", "CA", "90001"),
@@ -328,13 +354,15 @@ def build_corpus(size: int) -> list:
         ("400 Michigan Ave", "Chicago", "IL", "60601"),
         ("55 Pine St", "Seattle", "WA", "98101"),
     ]):
-        c = clean(f"clean_us_{i}", [
-            (MAIL_STREET, street), (MAIL_CITY, city), (MAIL_STATE, state),
-            (MAIL_ZIP, zipc), (MAIL_COUNTRY, "United States"),
-            # keep physical == mailing so the dual-address invariant stays coherent
-            (PHYS_STREET, street), (PHYS_CITY, city), (PHYS_STATE, state),
-            (PHYS_ZIP, zipc), (PHYS_COUNTRY, "United States"),
-        ])
+        c = clean(f"clean_us_{i}",
+                  required=[
+                      (MAIL_STREET, street), (MAIL_CITY, city), (MAIL_STATE, state),
+                      (MAIL_ZIP, zipc), (MAIL_COUNTRY, "United States"),
+                  ],
+                  optional=[
+                      (PHYS_STREET, street), (PHYS_CITY, city), (PHYS_STATE, state),
+                      (PHYS_ZIP, zipc), (PHYS_COUNTRY, "United States"),
+                  ])
         if c:
             cases.append(c)
 
@@ -422,8 +450,34 @@ def build_corpus(size: int) -> list:
     return [c for c in cases if c is not None]
 
 
+_CORPUS_SIZES = (20, 40, 132)
+
+
+def corpus_fingerprint() -> str:
+    """A short, stable hash over the ENTIRE corpus CONTENT (all sizes) -- every
+    case's id + its filled {field_id: value} payload + its expected-conflict id
+    groups. Any change to a value, a label resolution, an injected contradiction, a
+    clean variant, or the answer key flows into the hash, so a different corpus
+    yields a different fingerprint.
+
+    The probe stamps this onto every CSV row + the meta so the offline re-scorer
+    (g1b_merge.py) can MERGE ONLY runs of the SAME corpus version. Without it, merge
+    dedups by (size, model, case_id) and silently blends rows measured on an OLDER,
+    contaminated corpus with clean-corpus rows, corrupting the class-level numbers
+    (Codex review, PR #253)."""
+    h = hashlib.sha256()
+    for size in _CORPUS_SIZES:
+        for c in sorted(build_corpus(size), key=lambda x: x.case_id):
+            payload = {f["field_id"]: f["value"] for f in c.fields}
+            groups = sorted(sorted(g) for g in c.expected_conflicts)
+            h.update(json.dumps(
+                [c.case_id, payload, groups], sort_keys=True).encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
 if __name__ == "__main__":
     from collections import Counter
+    print(f"corpus_fingerprint = {corpus_fingerprint()}")
     for size in (20, 40, 132):
         corpus = build_corpus(size)
         nc = sum(1 for c in corpus if c.is_contradiction)

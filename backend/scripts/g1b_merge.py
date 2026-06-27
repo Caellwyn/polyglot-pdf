@@ -36,12 +36,31 @@ def main() -> None:
         print("no bake-off CSVs found", flush=True)
         return
 
+    # Merge ONLY runs of the CURRENT corpus version. The corpus content changed in
+    # bd wf3q (validated answer key + label resolution + isolated injections), so a
+    # row from an OLDER run shares case_ids with the new corpus but was measured on
+    # DIFFERENT payloads; deduping by (size, model, case_id) across versions would
+    # silently blend contaminated + clean numbers (Codex review, PR #253). Rows
+    # carrying a `corpus_fp` that does not match the current corpus -- and rows from
+    # runs that predate the column entirely (no `corpus_fp`) -- are EXCLUDED, with
+    # the dropped count reported so the exclusion is never silent.
+    from backend.scripts.g1b_corpus import corpus_fingerprint
+    current_fp = corpus_fingerprint()
+
     # key -> best row. "best" = a non-errored row beats an errored one; among
     # equal-error rows, the LAST file (most recent run) wins.
     best: dict = {}
     fieldnames: list = []
+    dropped_fp = dropped_no_fp = 0
     for f in files:
         for r in csv.DictReader(open(f, encoding="utf-8")):
+            row_fp = r.get("corpus_fp")
+            if not row_fp:
+                dropped_no_fp += 1
+                continue  # pre-fingerprint run (old corpus) -- never merge
+            if row_fp != current_fp:
+                dropped_fp += 1
+                continue  # a different corpus version -- never merge
             for k in r:  # union of columns across run files (schemas may differ)
                 if k not in fieldnames:
                     fieldnames.append(k)
@@ -57,6 +76,14 @@ def main() -> None:
                     best[key] = r
                 elif cur_err == r_err:
                     best[key] = r  # later file wins ties
+    if dropped_no_fp or dropped_fp:
+        print(f"[corpus-version filter] excluded {dropped_no_fp} pre-fingerprint "
+              f"row(s) + {dropped_fp} other-corpus row(s); merging only corpus_fp="
+              f"{current_fp}", flush=True)
+    if not best:
+        print(f"no rows match the current corpus_fp={current_fp}; re-run the probe "
+              f"on this corpus before merging.", flush=True)
+        return
 
     rows = list(best.values())
     rows.sort(key=lambda r: (int(r["size"]), r["model"], r["case_id"]))

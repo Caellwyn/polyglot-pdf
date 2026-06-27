@@ -16,9 +16,10 @@ from backend.scripts.g1b_answer_key import (
     ANSWER_KEY,
     NA_REASON,
     load_schema_fields,
+    option_label,
     validate_answer_key,
 )
-from backend.scripts.g1b_corpus import build_corpus
+from backend.scripts.g1b_corpus import build_corpus, corpus_fingerprint
 
 _US_STATES = {
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL",
@@ -151,3 +152,80 @@ def test_corpus_shapes_are_stable():
     assert "duration_year" not in sizes_classes[20]
     assert "cross_date" in sizes_classes[132]
     assert "duration_year" in sizes_classes[132]
+
+
+def test_clean_us_cases_survive_at_size_20():
+    """The s20_clean_us_* ids must exist at size 20 (mailing-only) -- the physical
+    cluster is out of the size-20 window, but the case is still a coherent clean
+    mailing address. If they were dropped, g1b_merge.py would retain stale rows
+    from old run files for those ids (Codex review, PR #253)."""
+    ids = {c.case_id for c in build_corpus(20)}
+    for i in range(5):
+        assert f"s20_clean_us_{i}" in ids, f"s20_clean_us_{i} missing at size 20"
+
+
+def test_option_values_are_resolved_to_human_labels():
+    """Opaque option tokens are shown to the checker as their human label (so a
+    coherent non-first option is not spuriously flagged), while already-legible
+    short codes (states, colors) are left as-is (Codex review, PR #253)."""
+    d = {f["field_id"]: f["value"] for f in build_corpus(132)[-1].fields}
+    assert d["p1_line8_male"] == "Female"                 # opaque -> label
+    assert d["p3_ethnicity"] == "Not Hispanic or Latino"  # opaque (underscore)
+    assert d["p3_race"] == "Asian"
+    assert d["p1_line6e_state"] == "TX"   # already legible short code -> unchanged
+    assert d["p3_eye_color"] == "brown"   # already legible -> unchanged
+
+
+def test_p5_certification_matches_who_filled_the_form():
+    """Part 5 certification must match reality: this persona used an interpreter AND
+    a preparer, so p5_checkbox1a selects BOTH statements and the representative-name
+    field is filled. Selecting only the interpreter while Part 7 is populated would
+    be an unlabeled contradiction (Codex review, PR #253)."""
+    interp = "interpreter named in Part 6"
+    prep = "preparer named in Part 7"
+    d = {f["field_id"]: f["value"] for f in build_corpus(132)[-1].fields}
+    assert interp in d["p5_checkbox1a"] and prep in d["p5_checkbox1a"]
+    assert d.get("p5_line2_nameofrepresentative") == "John Smith"
+
+
+def test_show_if_gated_reason_field_is_na_for_plain_lpr():
+    """p2_checkbox2[5] (reason for new card) is show_if-gated to commuter status;
+    the production renderer hides it for a plain LPR and rejects hidden updates, so
+    a real client cannot send it -- it must be NA here (Codex review, PR #253)."""
+    assert ANSWER_KEY["p2_checkbox2[5]"] is None
+    assert ANSWER_KEY["p2_checkbox1"] == "P2_checkbox1[0]"  # plain LPR
+    for size in (20, 40, 132):
+        for case in build_corpus(size):
+            assert "p2_checkbox2[5]" not in {f["field_id"] for f in case.fields}
+
+
+def test_injection_cases_carry_no_secondary_address_contradiction():
+    """An address-injection case must carry ONLY its labeled contradiction: the
+    mailing city is coherent with the injected state, and a US ZIP is not left
+    alongside a foreign country / foreign province (Codex review, PR #253)."""
+    city_state = {"Charleston": "WV", "Sacramento": "CA", "Austin": "TX",
+                  "Orlando": "FL", "Columbus": "OH", "Albany": "NY",
+                  "Springfield": "IL"}
+    for case in build_corpus(132):
+        if case.cls not in ("zip_state", "state_country", "province_us"):
+            continue
+        d = {f["field_id"]: f["value"] for f in case.fields}
+        city = d.get("p1_line6d_cityortown")
+        st = d.get("p1_line6e_state")
+        assert city != "Houston" or st == "TX", (
+            f"{case.case_id}: stale Houston city with state {st}")
+        if city in city_state:
+            assert city_state[city] == st, (
+                f"{case.case_id}: city {city} incoherent with state {st}")
+        # foreign country / province cases must not also carry a US ZIP
+        if case.cls in ("state_country", "province_us"):
+            assert "p1_line6f_zipcode" not in d, (
+                f"{case.case_id}: US ZIP left alongside foreign country/province")
+
+
+def test_corpus_fingerprint_is_stable_and_nonempty():
+    """The fingerprint must be deterministic (same value across two builds) and
+    non-empty -- g1b_merge.py relies on it to merge only same-corpus runs."""
+    fp1 = corpus_fingerprint()
+    fp2 = corpus_fingerprint()
+    assert fp1 == fp2 and len(fp1) == 12
