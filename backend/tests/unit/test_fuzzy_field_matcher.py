@@ -89,28 +89,49 @@ class TestIdIndexing:
 
 
 class TestIdVariantRecovery:
-    """Positional-mangled id variants resolve to the real field (the fix's job)."""
+    """Positional-mangled id variants resolve to the real field (the fix's job).
+
+    These cases MUST exercise the id-recovery path (via_id=True). Asserting via_id
+    is what keeps the test honest: without it, a case whose semantic tail also
+    matches the spoken name would pass via the OLD spoken-name codepath and stay
+    green even if the id-indexing fix were reverted (fresh-eyes Gap 2).
+    """
 
     @pytest.mark.parametrize(
         "hallucinated,expected_id",
         [
-            ("p1_line3_family_name", "p1_line3a_familyname"),
+            # tail absent from spoken-name tokens -> can ONLY resolve via the id path
             ("p1_line1_familyname", "p1_line3a_familyname"),
             ("p1_line1_givenname", "p1_line3b_givenname"),
         ],
     )
-    def test_resolves_to_real_field(self, i90_fields, hallucinated, expected_id):
+    def test_resolves_via_id_path(self, i90_fields, hallucinated, expected_id):
         result = fuzzy_match_hint(hallucinated, i90_fields)
         assert result.status == "resolved"
         assert result.top_candidate.field.id == expected_id
+        # Proves the recovery came from the id index, not an incidental spoken match.
+        assert result.top_candidate.via_id is True
+
+    def test_reverting_id_index_would_drop_these(self, i90_fields):
+        # Belt-and-suspenders for Gap 2: the spoken-name normalization of these
+        # hallucinated ids does NOT match any field's spoken name above threshold,
+        # so the ONLY thing that resolves them is the id index. (If someone reverts
+        # the id-indexing, test_resolves_via_id_path fails outright -- this just
+        # documents WHY.)
+        from backend.utils.fuzzy_field_matcher import build_searchable_index
+        index = build_searchable_index(i90_fields)
+        # 'familyname'/'givenname' keys exist ONLY because the id pass added them.
+        assert index["familyname"][2] is True  # is_id
+        assert index["givenname"][2] is True
 
     def test_account_variant_recovers_via_spoken_name(self, i90_fields):
         # 'p1_line2_uscis_account' is too far from the id 'acctidentifier' to clear
         # the strict id bar, but the spoken-name path ('account identifier') still
-        # catches it -- the two paths are complementary.
+        # catches it -- the two paths are complementary. This one is via_id=False.
         result = fuzzy_match_hint("p1_line2_uscis_account", i90_fields)
         assert result.status == "resolved"
         assert result.top_candidate.field.id == "p1_line2_acctidentifier"
+        assert result.top_candidate.via_id is False
 
 
 class TestMisFillGuards:
@@ -135,6 +156,41 @@ class TestMisFillGuards:
         for hallucinated in ("p1_line1_familyname", "p1_line1_givenname"):
             result = fuzzy_match_hint(hallucinated, present_only)
             assert result.status != "resolved", hallucinated
+
+
+class TestSharedTailCollision:
+    """A stripped id tail shared by >1 field must NOT identify a single field.
+
+    The I-90 schema has many ids sharing a tail across parts (familyname,
+    streetnumbername, ...). If both are in the candidate set, indexing the tail
+    would silently route a hallucinated id to whichever claimed the key first --
+    the exact mis-fill the fix exists to prevent (fresh-eyes Gap 1).
+    """
+
+    @pytest.fixture
+    def shared_tail_fields(self):
+        return [
+            _field("p1_line3a_familyname", "Family Name", "your family name"),
+            _field("p7_line1a_familyname", "Preparer Family Name", "preparer family name"),
+        ]
+
+    def test_ambiguous_tail_not_indexed_as_id(self, shared_tail_fields):
+        index = build_searchable_index(shared_tail_fields)
+        # The shared 'familyname' tail is NOT added as an is_id entry (it can't
+        # identify one field). The spoken-name entries remain.
+        assert "familyname" not in index or index["familyname"][2] is False
+
+    def test_hallucinated_id_with_shared_tail_does_not_resolve(self, shared_tail_fields):
+        # A hallucinated id whose tail is shared must reject, not mis-fill.
+        result = fuzzy_match_hint("p7_line1_familyname", shared_tail_fields)
+        assert result.status != "resolved"
+
+    def test_spoken_names_still_disambiguate_shared_tail(self, shared_tail_fields):
+        # The distinct spoken names still resolve each field correctly.
+        r1 = fuzzy_match_hint("your family name", shared_tail_fields)
+        assert r1.status == "resolved" and r1.top_candidate.field.id == "p1_line3a_familyname"
+        r2 = fuzzy_match_hint("preparer family name", shared_tail_fields)
+        assert r2.status == "resolved" and r2.top_candidate.field.id == "p7_line1a_familyname"
 
 
 class TestRegressionGuards:

@@ -203,43 +203,63 @@ def build_searchable_index(
     """
     index: Dict[str, Tuple[FormField, str, bool]] = {}
 
+    # Pass 1: name-based entries (spoken_name, aliases, name). First to claim a
+    # normalized key wins.
     for field in fields:
-        # (original_text, is_id) in priority order; first to claim a normalized key wins.
-        searchable_texts: List[Tuple[str, bool]] = []
+        searchable_texts: List[str] = []
 
         # Priority 1: spoken_name (AI-friendly canonical label)
         spoken_name = getattr(field, "spoken_name", None)
         if spoken_name:
-            searchable_texts.append((spoken_name, False))
+            searchable_texts.append(spoken_name)
 
         # Priority 2: spoken_aliases (fuzzy search variants)
         spoken_aliases = getattr(field, "spoken_aliases", None) or []
-        searchable_texts.extend((a, False) for a in spoken_aliases[:3])  # Max 3 aliases
+        searchable_texts.extend(spoken_aliases[:3])  # Max 3 aliases
 
         # Priority 3: field name (fallback)
         if field.name:
-            searchable_texts.append((field.name, False))
+            searchable_texts.append(field.name)
 
-        # Priority 4: field id with its positional prefix stripped (last-resort).
-        # The model is GIVEN the exact id in next_field_guidance but under the
-        # reduced DTI system instruction it sometimes invents a variant of that id
-        # in update_form_fields. The variants preserve the SEMANTIC tail
-        # ("familyname") and mangle the POSITIONAL head ("p1_line1_" for
-        # "p1_line3a_"), so we index the stripped tail -- matching the raw id here
-        # instead would let "p1_line1_familyname" be pulled onto whatever field
-        # shares the "p1_line1" prefix and APPLY the value to the wrong field. The
-        # is_id flag holds these to ID_MATCH_THRESHOLD so an incidental id-fragment
-        # collision can't silently mis-fill (bd polyglot-pdf-jnjj.46).
-        if field.id:
-            searchable_texts.append((strip_positional_prefix(field.id), True))
-
-        # Index all searchable texts
-        for text, is_id in searchable_texts:
+        for text in searchable_texts:
             if not text:
                 continue
             normalized = normalize_text(text)
             if normalized and normalized not in index:
-                index[normalized] = (field, text, is_id)
+                index[normalized] = (field, text, False)
+
+    # Pass 2 (last-resort): field id with its positional prefix stripped. The model
+    # is GIVEN the exact id in next_field_guidance but under the reduced DTI system
+    # instruction it sometimes invents a variant of that id in update_form_fields.
+    # The variants preserve the SEMANTIC tail ("familyname") and mangle the
+    # POSITIONAL head ("p1_line1_" for "p1_line3a_"), so we index the stripped tail
+    # -- matching the raw id here would let "p1_line1_familyname" be pulled onto
+    # whatever field shares the "p1_line1" prefix and APPLY the value to the wrong
+    # field. The is_id flag holds these to ID_MATCH_THRESHOLD so an incidental
+    # id-fragment collision can't silently mis-fill (bd polyglot-pdf-jnjj.46).
+    #
+    # CRITICAL: a stripped tail can be SHARED by several fields (I-90 has many
+    # "familyname"/"streetnumbername" ids across parts). Such a tail cannot identify
+    # a single field, so indexing it would silently route a hallucinated id to
+    # whichever field claimed the key first -- the exact mis-fill this guards
+    # against. Index a stripped-id key ONLY when it maps to exactly ONE field; an
+    # ambiguous tail is dropped (the caller then rejects the hint as unknown, which
+    # is the safe outcome -- a rejected field beats a wrong-filled one).
+    stripped_owners: Dict[str, set] = {}
+    stripped_first: Dict[str, Tuple[FormField, str]] = {}
+    for field in fields:
+        if not field.id:
+            continue
+        normalized = normalize_text(strip_positional_prefix(field.id))
+        if not normalized or normalized in index:
+            continue  # collides with a name entry; names take priority
+        stripped_owners.setdefault(normalized, set()).add(field.id)
+        stripped_first.setdefault(normalized, (field, strip_positional_prefix(field.id)))
+
+    for normalized, owners in stripped_owners.items():
+        if len(owners) == 1:
+            field, original = stripped_first[normalized]
+            index[normalized] = (field, original, True)
 
     return index
 
