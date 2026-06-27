@@ -105,16 +105,23 @@ def render_section_metadata(
     """
     lines: List[str] = []
 
-    title = form_title or "Form"
-    if section_number is not None and total_sections is not None:
-        if section_label:
+    # The title/section line renders only when there is SUBSTANTIVE position info
+    # (a section number, a section label) or a real form title -- NOT a bare "Form"
+    # fallback alone, which would be meaningless noise. This is what lets the
+    # "nothing to render -> return ''" guard below actually fire (so the caller's
+    # `if block:` skip works on a metadata-less session) rather than always emitting
+    # a useless "FORM CONTEXT:\nForm" line (fresh-eyes finding on this PR).
+    has_position = section_number is not None and total_sections is not None
+    if has_position or section_label or form_title:
+        title = form_title or "Form"
+        if has_position and section_label:
             lines.append(f"{title} | Section {section_number} of {total_sections}: {section_label}")
-        else:
+        elif has_position:
             lines.append(f"{title} | Section {section_number} of {total_sections}")
-    elif section_label:
-        lines.append(f"{title} | {section_label}")
-    else:
-        lines.append(title)
+        elif section_label:
+            lines.append(f"{title} | {section_label}")
+        else:
+            lines.append(title)
 
     if previous_spoken_names:
         lines.append(
@@ -123,7 +130,7 @@ def render_section_metadata(
         )
 
     policy = confirmation_policy
-    if policy is None and section_number is not None and total_sections is not None:
+    if policy is None and has_position:
         policy = get_confirmation_policy(section_number, total_sections)
     if policy:
         lines.append(f"End-of-section confirmation: {policy}")

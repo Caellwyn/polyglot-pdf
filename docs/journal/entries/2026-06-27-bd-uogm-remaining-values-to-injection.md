@@ -60,7 +60,18 @@ deterministically since the --debug artifact does not capture the injected messa
 body). One field showed an un-confirmed `confirm_field` (8/9 confirmed) -- benign
 live confirm-timing variance; the fill itself succeeded with the correct id.
 
-Fresh-eyes adversarial assess: <FRESH_EYES_PLACEHOLDER -- filled at closeout>.
+Fresh-eyes adversarial assess (Sonnet, arm B): both exit criteria PASS, F1 honored,
+no rubric FAIL. It found 2 in-scope quality findings with one shared root:
+`render_section_metadata` never returned `""` -- its title branch always appended a
+line (defaulting to "Form"), so the `if not lines: return ""` guard was dead, the
+docstring's "returns '' if nothing renders" was false, and a metadata-less DTI
+session would emit a useless `FORM CONTEXT:\nForm` line. ADOPTED: render the title
+line only when there is substantive input (a section position, a label, or a REAL
+form title), and pass the real title-or-None from the caller (not a "Form" default),
+so the guard genuinely fires; added a test asserting the empty-input case returns
+"". Re-spawn not needed (the criteria were already met; this is a self-contained
+quality fix verified by the new test + full suite). Adopt: 2 (one shared fix).
+Reject: 0. Defer: 0.
 
 ## Lessons
 

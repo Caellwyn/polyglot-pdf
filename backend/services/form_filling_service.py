@@ -427,7 +427,9 @@ class FormFillingService:
             # (bd polyglot-pdf-fu1h F1; a manifest-sourced block would be empty on
             # sections 2..N).
             sm = self._last_section_metadata or {}
-            form_title = (self._schema or {}).get("form_metadata", {}).get("title", "Form")
+            # Pass the REAL title or None (not a "Form" default) so render_section_metadata's
+            # "nothing substantive -> return ''" guard can fire on a metadata-less session.
+            form_title = (self._schema or {}).get("form_metadata", {}).get("title") or None
             block = render_section_metadata(
                 form_title=form_title,
                 section_number=sm.get("section_number"),

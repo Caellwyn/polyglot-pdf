@@ -498,14 +498,26 @@ def test_render_section_metadata_block():
     assert "confirmation" in block.lower()
 
 
-def test_render_section_metadata_empty_inputs_minimal():
-    """A single-section form with no metadata still renders cleanly (just the title),
-    never crashes, never emits empty section/progress lines."""
+def test_render_section_metadata_title_only():
+    """A real form title with no section info renders just the title line (no
+    fabricated section/progress)."""
     from backend.services.ai_context import render_section_metadata
     block = render_section_metadata(form_title="Demo")
     assert block.startswith("FORM CONTEXT:")
     assert "Demo" in block
     assert "Section" not in block  # no section line without numbers
+
+
+def test_render_section_metadata_returns_empty_when_nothing_substantive():
+    """No real title and no section info -> NO block (the guard is real, not dead):
+    a metadata-less DTI session must not emit a bare 'FORM CONTEXT: Form' line
+    (fresh-eyes finding on this PR)."""
+    from backend.services.ai_context import render_section_metadata
+    assert render_section_metadata() == ""
+    assert render_section_metadata(form_title=None) == ""
+    # ...but any one substantive input is enough to render.
+    assert render_section_metadata(section_label="Part 1") != ""
+    assert render_section_metadata(section_number=1, total_sections=8) != ""
 
 
 @pytest.mark.asyncio
