@@ -66,7 +66,15 @@ backend suite: 436 passed, 2 skipped, 3 deselected (run from the worktree).
    rule present -- PASS (no field guidance block; new "CURRENT FIELD -- READ THIS
    FIRST" block instructs verbatim copy and "NEVER invent, reconstruct, guess").
 
-Fresh-eyes adversarial assess: <FRESH_EYES_PLACEHOLDER -- filled at closeout>.
+Fresh-eyes adversarial assess (Sonnet, arm B picker -> sonnet on a 152-line
+diff): NO-GAPS in round 1. Both criteria met; `.format()` verified safe with zero
+placeholders; ASCII-only confirmed; no load-bearing static behavior dropped; both
+rewritten tests confirmed non-tautological. It filed one out-of-scope bead,
+polyglot-pdf-39ik (a stale `render_field_guidance` docstring + a `{next_field_hint}`
+mention in an `ai_context.py` comment -- Child C territory, the .format() cleanup).
+It also noted the now-vestigial stale comment in the unchanged
+`test_dti_si_size_is_independent_of_section_size` (untouched lines, left for the
+epic). Adopt: 0 inline fixes needed. Reject: 0. Defer: 1 bead (39ik).
 
 ## Lessons
 
