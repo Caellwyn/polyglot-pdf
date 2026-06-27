@@ -568,19 +568,27 @@ class Settings(BaseModel):
 
 	# === INITIATING MESSAGE TEMPLATE ===
 	# Used to prompt Gemini to initiate conversation in a specific language
-	# Triggered by: language selection change, section switching
-	# Placeholders: {spoken_language}, {next_field_hint}
+	# Triggered by: session start (DTI), language selection change, section switching
+	# Placeholders: {spoken_language}, {next_field_hint}, {current_field_guidance}
+	# {current_field_guidance} is the DTI injection channel for field 1 (epic
+	# polyglot-pdf-13w7, bd polyglot-pdf-j748): the static SI no longer carries any
+	# field data, so field 1's exact field_id + guidance ride here, rendered by the
+	# same render_field_guidance() that delivers fields 2..N in the confirm_field
+	# response. The caller passes "" in non-DTI mode (legacy/JIT still carry field
+	# data in the SI), so this suffix is a no-op there.
 	INITIATING_MESSAGE: str = (
-		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field."
+		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field.{current_field_guidance}"
 	)
 
 	# === RESUME INITIATING MESSAGE TEMPLATE ===
 	# Used instead of INITIATING_MESSAGE when the handshake carries resume:true.
 	# The user is already mid-section; skip greeting and section re-introduction.
-	# Placeholders: {spoken_language}, {next_field_hint}
+	# Placeholders: {spoken_language}, {next_field_hint}, {current_field_guidance}
+	# ({current_field_guidance} as in INITIATING_MESSAGE: the DTI field-1 channel,
+	# "" in non-DTI mode.)
 	RESUME_INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. Do NOT greet the user. Do NOT introduce the form or section. "
-		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally."
+		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally.{current_field_guidance}"
 	)
 
 	# === DISCLAIMER INITIATING MESSAGE ===

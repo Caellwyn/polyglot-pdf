@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-06-15. bd polyglot-pdf-l3a.4: the idle watchdog now resets on MEANINGFUL activity (a native-VAD user turn via the adapter `on_user_activity` callback, or a non-audio control/text message) -- NOT on raw inbound audio frames, which in native VAD mode stream continuously incl. silence and previously kept a walked-away session alive (see "Idle watchdog" below). Prior 2026-06-15: bd njvh: the `confirm_field_response` control message now carries an optional `section_complete` flag that the WS route reads and threads to the confirm handler (which skips the racing next-field-hint at a section boundary) -- see ws-protocol.md for the field, tool-call-flow.md for the handler behavior. (No change to route dispatch structure.) Prior 2026-06-14 (terminal `reconnect_failed` status + connection-timeout modal on auto-reconnect give-up, bd polyglot-pdf-jf6w). Prior 2026-06-14: bd uj57 emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). Prior 2026-06-13: bd 0tgc onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires); bd b6k4 createMicDropWarn extracted from connection.ts closure (no routing or protocol change); 2026-06-12 removed dead `request_next_field_hint` branch from handleFormUpdated (bd dlbr) + GoAway forward message (bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
+*Last updated: 2026-06-27. See [../journal/entries/2026-06-27-bd-j748-field1-via-injection.md](../journal/entries/2026-06-27-bd-j748-field1-via-injection.md) for closeout details: in DTI mode the CLIENT-driven initiating message (handleSessionReady -> change_spoken_language) now carries the current field's full guidance + exact field_id, since the static DTI SI no longer holds field data; send_initiating_message resolves the field from the hint's field_id (bd polyglot-pdf-j748). Prior 2026-06-15: bd polyglot-pdf-l3a.4: the idle watchdog now resets on MEANINGFUL activity (a native-VAD user turn via the adapter `on_user_activity` callback, or a non-audio control/text message) -- NOT on raw inbound audio frames, which in native VAD mode stream continuously incl. silence and previously kept a walked-away session alive (see "Idle watchdog" below). Prior 2026-06-15: bd njvh: the `confirm_field_response` control message now carries an optional `section_complete` flag that the WS route reads and threads to the confirm handler (which skips the racing next-field-hint at a section boundary) -- see ws-protocol.md for the field, tool-call-flow.md for the handler behavior. (No change to route dispatch structure.) Prior 2026-06-14 (terminal `reconnect_failed` status + connection-timeout modal on auto-reconnect give-up, bd polyglot-pdf-jf6w). Prior 2026-06-14: bd uj57 emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no routing change). Prior 2026-06-13: bd 0tgc onStopCapture/onFormComplete now wired in createConnectionManager (audio stop before section switch fires; form-complete notification fires); bd b6k4 createMicDropWarn extracted from connection.ts closure (no routing or protocol change); 2026-06-12 removed dead `request_next_field_hint` branch from handleFormUpdated (bd dlbr) + GoAway forward message (bd c5t). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-09-bd-aun-section-switch-durability.md](../journal/entries/2026-06-09-bd-aun-section-switch-durability.md) for the client-side switch-durability guards (re-entrancy + watchdog + error surfacing), [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the `connection.ts` dev test-injection hook, and [journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md](../journal/entries/2026-06-04-bd-333-native-vad-smoke-test.md) for the session_ready native_vad field.*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -54,6 +54,26 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
 
 Malformed handshakes close with specific codes: non-text first frame → `1003`;
 bad JSON / not-an-object / missing schema → `1007`; bad `source` → `1008`.
+
+**DTI current-field guidance rides the initiating message (`USE_DTI` only).** In
+DTI mode the system instruction is fully static and carries no field data, so the
+current field's full guidance (its exact `field_id`, instructions, format, options)
+must reach Gemini via the **initiating message** (`send_initiating_message`) —
+fields 2..N otherwise arrive in the `confirm_field` tool response (epic
+polyglot-pdf-13w7, bd polyglot-pdf-j748). The opener is **client-driven**, not a
+server-side trigger in the handshake path: after the disclaimer the client
+re-handshakes (`switchToFirstSection` → `startSection`) and `handleSessionReady`
+auto-sends `change_spoken_language` with the user's spoken language + the
+`computeNextField`-selected hint, which calls `send_initiating_message`. That method
+resolves the field to render from the `field_id` embedded in the hint (looked up in
+the handshake schema + the recorded later-field schemas), NOT from a positional
+`fields[0]`, so it stays correct on a mid-form spoken-language change (field N) and
+on a full-section handshake (where `fields[0]` is not the next field). If the hint
+resolves to no known field, no guidance block is sent (the spoken hint + static SI
+still let the model proceed). A server-side trigger was deliberately NOT added: it
+would fire before the disclaimer is read on the initial connect and double up with
+the client opener on reconnect (Codex PR #254). Legacy/JIT carry the field catalog
+in the SI, so their initiating message has no guidance block (DTI-gated).
 
 ## Control-channel message types (client → backend)
 

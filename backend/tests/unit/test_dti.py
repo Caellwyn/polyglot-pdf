@@ -11,6 +11,10 @@ The end-to-end "model advances on next_field_guidance" check is the live
 voice-harness gate (bd jnjj.25), not a unit test.
 """
 
+from unittest.mock import AsyncMock
+
+import pytest
+
 import backend.services.ai_context as ai_context_mod
 from backend.services.ai_context import build_form_context, render_field_guidance
 from backend.services.manifest_service import get_field_guidance
@@ -275,3 +279,191 @@ def test_coordinator_late_response_does_not_stash_stale_schema():
     coord = RequestCoordinator(websocket=None, session_id="t")
     coord.handle_next_field_hint_response("stale_unknown_id", "hint", NESTED_FIELD)
     assert coord.consume_pending_next_field_schema() is None
+
+
+# ---------------------------------------------------------------------------
+# Field-1 guidance via the initiating message (bd polyglot-pdf-j748, epic 13w7).
+# The static DTI SI carries no field data; field 1's exact id + guidance must
+# ride the INITIATING MESSAGE instead.
+# ---------------------------------------------------------------------------
+
+def _service_with_settings(use_dti: bool):
+    """A FormFillingService with a capturing live_ai stub and a Settings whose
+    USE_DTI is forced to `use_dti`, using the REAL initiating-message templates."""
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import Settings
+
+    settings = Settings()
+    # Force the flag deterministically (env-independent) on a FRESH Settings, so
+    # the cached get_settings() instance is never mutated.
+    settings.USE_DTI = use_dti
+    svc = FormFillingService(live_ai=AsyncMock(), settings=settings)
+
+    captured = []
+
+    async def _capture(msg):
+        captured.append(msg)
+
+    svc._live_ai.send_client_content = _capture
+    return svc, captured
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_carries_field1_guidance_in_dti():
+    """Exit criterion 1: in DTI mode the initiating message carries field 1's
+    EXACT field_id + guidance (so the model copies the id verbatim instead of
+    reconstructing it from the SI, which no longer holds field data)."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    # The real spoken hint embeds the field_id as a quoted parenthetical (the
+    # format strip_field_id_from_hint matches, bd dx7).
+    await svc.send_initiating_message(
+        "Spanish", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+
+    assert len(captured) == 1
+    msg = captured[0]
+    # The exact field_id + guidance is in the injection (the whole point).
+    assert "p1_line1_aliennumber" in msg
+    assert "ID: p1_line1_aliennumber" in msg
+    assert "Instructions: Your A-Number" in msg
+    # Single-source identity: the embedded block IS render_field_guidance's output.
+    assert render_field_guidance(NESTED_FIELD) in msg
+    # The SPOKEN directive still strips the raw "(field_id: ...)" parenthetical so
+    # Gemini does not read the id aloud (bd dx7); only the guidance block carries it.
+    assert "(field_id:" not in msg
+    # Fresh connect still greets.
+    assert "greet" in msg.lower()
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_no_guidance_in_non_dti():
+    """Legacy/JIT modes keep the SI's field catalog, so the initiating message must
+    NOT carry a guidance block -- output is unchanged from before j748."""
+    svc, captured = _service_with_settings(use_dti=False)
+    svc._is_resume_session = False
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    await svc.send_initiating_message("English", "First Name")
+
+    assert len(captured) == 1
+    msg = captured[0]
+    assert "p1_line1_aliennumber" not in msg
+    assert "ID:" not in msg
+    assert "greet" in msg.lower()  # still the normal greeting template
+
+
+@pytest.mark.asyncio
+async def test_resume_initiating_message_carries_field1_guidance():
+    """Reconnect/resume: the RESUME template (no greeting) must STILL carry the
+    current field's guidance so a mid-section reconnect re-anchors Gemini to the
+    field_id the static SI no longer supplies."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = True
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+
+    msg = captured[0]
+    # Resume template -> no greeting...
+    assert "greet user warmly" not in msg.lower()
+    # ...but the current field's guidance is present.
+    assert "ID: p1_line1_aliennumber" in msg
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_resolves_field_from_hint_not_position():
+    """The rendered field is the one the HINT points at, NOT schema['fields'][0].
+    This is the Codex PR #254 fix: on a mid-form spoken-language change the current
+    field is field N (held in _dti_extra_fields), while schema['fields'][0] is the
+    stale handshake field 1; rendering fields[0] would inject the WRONG field_id and
+    the static SI tells the model to copy that stale id. Would FAIL against the old
+    fields[0] code; PASSES against hint-id resolution."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    # Handshake field 1 (positional fields[0]) is a DIFFERENT field than the hint...
+    other = {"id": "p1_line3a_familyname", "spoken_name": "family name", "type": "text"}
+    svc._schema = {"fields": [other]}
+    # ...and the hint's field lives in the recorded later-field schemas.
+    svc._dti_extra_fields = {"p1_line1_aliennumber": NESTED_FIELD}
+
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+
+    msg = captured[0]
+    # Renders the HINT's field, not the positional first field.
+    assert "ID: p1_line1_aliennumber" in msg
+    assert "p1_line3a_familyname" not in msg
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_unresolvable_hint_renders_no_guidance():
+    """If the hint's field_id resolves to no known schema (or there is no id in the
+    hint), render NO guidance block -- never a wrong/stale field, never the
+    'No fields available' sentinel. The spoken hint + static SI still let Gemini
+    proceed for that one turn (it just lacks the verbatim id)."""
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    # (a) hint id that matches nothing known
+    await svc.send_initiating_message(
+        "English", "some field (field_id: 'nonexistent_id')"
+    )
+    # (b) hint with no field_id parenthetical at all
+    await svc.send_initiating_message("English", "the first unfilled field")
+
+    for msg in captured:
+        assert "ID:" not in msg
+        assert "No fields available" not in msg
+
+
+@pytest.mark.asyncio
+async def test_initiating_message_logs_only_length(monkeypatch):
+    """No-PII guard (bd uov.15): the rendered message embeds field data, so the log
+    must record only message_length -- never the field_id, instructions, or guidance
+    text. Captures the ACTUAL log-call kwargs by monkeypatching the module logger's
+    info(), which is deterministic and ordering-independent (NOT pytest caplog --
+    _log is a structlog logger not routed through stdlib in tests; NOT capture_logs
+    -- the module-level lazy logger is already realized against the suite's structlog
+    config, so global-config swaps do not reliably intercept it. fresh-eyes finding
+    on this PR, then a full-suite ordering failure on capture_logs)."""
+    import backend.services.form_filling_service as ffs_mod
+
+    calls = []
+
+    class _FakeLog:
+        def info(self, event, **kwargs):
+            calls.append((event, kwargs))
+
+        # send_initiating_message only calls .info; stub the rest as no-ops so an
+        # unrelated log call cannot AttributeError the test.
+        def __getattr__(self, _name):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(ffs_mod, "_log", _FakeLog())
+
+    svc, captured = _service_with_settings(use_dti=True)
+    svc._is_resume_session = False
+    svc._schema = {"fields": [NESTED_FIELD]}
+
+    # Hint carries the id so the guidance block IS rendered (the case that embeds
+    # field data into the message -- exactly what must NOT reach the log).
+    await svc.send_initiating_message(
+        "English", "alien registration number (field_id: 'p1_line1_aliennumber')"
+    )
+
+    send_calls = [(e, kw) for (e, kw) in calls if e == "send_initiating_message"]
+    assert send_calls, "send_initiating_message was not logged"
+    event, kwargs = send_calls[0]
+    # message_length is the only size signal logged...
+    assert "message_length" in kwargs
+    # ...and NO logged kwarg (key or value) carries the field_id or instructions.
+    blob = repr((event, kwargs))
+    assert "p1_line1_aliennumber" not in blob
+    assert "Your A-Number" not in blob

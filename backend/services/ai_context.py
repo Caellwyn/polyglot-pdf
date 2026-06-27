@@ -14,11 +14,13 @@ def render_field_guidance(field: Optional[Dict[str, Any]]) -> str:
     """Render a single field's guidance as the readable text block the model reads
     (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
 
-    Single source of truth: this same text feeds the DTI system instruction
-    (field 1, via {current_field_guidance}) and the confirm_field tool response
-    (fields 2..N), so the model sees identical guidance whichever path delivers it.
-    Accepts a raw field dict (full schema) and reduces it via
-    manifest_service.get_field_guidance.
+    Single source of truth for the INJECTION path: this same text delivers field 1
+    via the initiating message (FormFillingService.send_initiating_message) and
+    fields 2..N via the confirm_field tool response, so the model sees identical
+    guidance whichever path delivers it. The DTI system instruction itself is fully
+    static and carries NO field guidance (epic polyglot-pdf-13w7, beads
+    polyglot-pdf-1ac3 + polyglot-pdf-j748). Accepts a raw field dict (full schema)
+    and reduces it via manifest_service.get_field_guidance.
     """
     guidance = get_field_guidance(field) if field else None
     if not guidance:
@@ -376,34 +378,18 @@ def build_form_context(
             )
             unfilled_count = total_fields - filled_count
 
-        # The CURRENT field's full guidance = schema["fields"][0]. On the JIT/DTI
-        # handshake the CLIENT already selects the first unfilled+VISIBLE field as
-        # fields[0] via computeNextField(skipConfirmed:true) -- which applies the
-        # confirmed-state, hidden, and show_if filtering that backend code must NOT
-        # re-derive (an incomplete backend re-selection mis-picks confirmed/hidden
-        # fields; Codex PR #229 round 2). So trust the client's selection: fields[0]
-        # is the field {next_field_hint} also points at, by construction. (A first
-        # connect that hasn't learned jit_mode yet sends a full handshake where
-        # fields[0] is positional; that self-corrects on the next turn once the
-        # client persists jit_mode and the manifest-shaped handshake takes over.)
-        fields_list = schema.get("fields") or []
-        current_field = fields_list[0] if fields_list else None
-        current_field_guidance = render_field_guidance(current_field)
-
-        system_instruction = settings.DTI_SYSTEM_INSTRUCTION.format(
-            form_title=form_title,
-            section_number=section_num_text,
-            total_sections=total_sections_text,
-            section_label=section_label_text,
-            section_list=section_list_text,
-            filled_count=filled_count,
-            total_fields=total_fields,
-            fill_language=fill_language,
-            previous_spoken_names=previous_names_text,
-            next_field_hint=next_field_hint or "the first unfilled field",
-            current_field_guidance=current_field_guidance,
-            confirmation_policy=confirmation_policy,
-        )
+        # The DTI SI is fully static (epic polyglot-pdf-13w7, bd polyglot-pdf-1ac3):
+        # it carries no form/session state and no field guidance, so it takes no
+        # .format() arguments. Field 1's full guidance reaches the model via the
+        # INITIATING MESSAGE, not the SI: FormFillingService.send_initiating_message
+        # renders render_field_guidance(schema["fields"][0]) -- the client-selected
+        # first unfilled+visible field (computeNextField, Codex PR #229) -- into the
+        # initiating injection at session/section start (bd polyglot-pdf-j748).
+        # Fields 2..N arrive the same way via the confirm_field tool response. The
+        # remaining former placeholders (fill_language, form/section metadata,
+        # section_list, confirmation_policy) move onto the injection under
+        # bd polyglot-pdf-uogm.
+        system_instruction = settings.DTI_SYSTEM_INSTRUCTION
     # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled.
     # Also fire on a JIT-SHAPED schema (schema["jit_mode"], set by websocket_routes
     # when a handshake_jit arrives) even if USE_JIT_SCHEMA is off: such a schema has
