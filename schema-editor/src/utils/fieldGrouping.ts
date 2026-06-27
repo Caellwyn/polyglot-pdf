@@ -327,7 +327,12 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   // its own controls' target arrays are remapped (Opus fallback review).
   let primaryShowIf = primary.show_if;
   if (primaryShowIf && mergedAwayToValue.has(primaryShowIf.field)) {
-    primaryShowIf = rewriteShowIf(primaryShowIf, mergedAwayToValue, primary.id) ?? primaryShowIf;
+    const rw = rewriteShowIf(primaryShowIf, mergedAwayToValue, primary.id);
+    // A primary gated on a sibling option would become self-referential (the
+    // radio shown only when it equals one of its own option values -- an
+    // unreachable field, since it is hidden until set). Drop it instead of
+    // emitting an unsatisfiable condition (Opus fallback review, round 2).
+    primaryShowIf = rw && rw.field !== primary.id ? rw : undefined;
   }
   let primaryCopyTo = primary.copy_to;
   if (primaryCopyTo && primaryCopyTo.some(id => mergedAwayToValue.has(id))) {
@@ -338,28 +343,45 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     }
     primaryCopyTo = out;
   }
-  const primaryControls = (primary.controls_fields || []).map(remapControlTargets);
+  // The primary's own trigger-side controls fire on its (now radio) value. A
+  // widget-level selection operator (is_checked) would never fire against a
+  // radio, so re-key it to "equals the primary's option value" -- the same fix
+  // applied to carried non-primary controls (Opus fallback review, round 2).
+  const primaryControls = (primary.controls_fields || []).map(ctrl => {
+    const remapped = remapControlTargets(ctrl);
+    return SELECTION_OPERATORS.has(ctrl.operator)
+      ? { ...remapped, operator: 'equals' as const, value: primary.id }
+      : remapped;
+  });
 
   // The merged field carries the primary's identity + the stash for un-merge.
+  // show_if / copy_to / controls_fields are set EXPLICITLY (not via a conditional
+  // spread) so a dropped/rewritten value OVERRIDES the one inherited from
+  // {...primary} -- a conditional spread would silently keep the stale inherited
+  // value (e.g. a dropped self-referential show_if would survive). Round 2 fix.
   const stash: UngroupStash = { sources: distinct, rewrites };
   const mergedControls = [...primaryControls, ...carriedControls];
-  const mergedField: FormField = {
+  const mergedField = {
     ...primary,
     type: 'radio',
     options,
     consolidated_widgets: distinct.map(f => f.id),
-    ...(primaryShowIf ? { show_if: primaryShowIf } : {}),
-    ...(primaryCopyTo ? { copy_to: primaryCopyTo } : {}),
-    ...(mergedControls.length > 0 ? { controls_fields: mergedControls } : {}),
     [STASH_KEY]: stash,
-  } as FormField;
+  } as unknown as Record<string, unknown>;
+  if (primaryShowIf) mergedField.show_if = primaryShowIf;
+  else delete mergedField.show_if;
+  if (primaryCopyTo) mergedField.copy_to = primaryCopyTo;
+  else delete mergedField.copy_to;
+  if (mergedControls.length > 0) mergedField.controls_fields = mergedControls;
+  else delete mergedField.controls_fields;
+  const mergedFieldTyped = mergedField as unknown as FormField;
 
   // Reassemble fields, putting the merged field where the primary was.
   const newFields: FormField[] = [];
   const survivorById = new Map(rewrittenSurvivors.map(f => [f.id, f]));
   for (const f of schema.fields) {
     if (f.id === primary.id) {
-      newFields.push(mergedField);
+      newFields.push(mergedFieldTyped);
     } else if (survivorById.has(f.id)) {
       newFields.push(survivorById.get(f.id)!);
     }

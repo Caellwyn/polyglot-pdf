@@ -402,18 +402,16 @@ describe('Codex PR #256 fixes', () => {
 });
 
 describe('Opus fallback review fixes', () => {
-  it("rewrites the PRIMARY's own show_if / controls referencing a merged-away sibling", () => {
+  it("remaps the PRIMARY's own control TARGET arrays referencing a merged-away sibling", () => {
     const schema = w7Schema();
     const ra = schema.fields.find(f => f.id === 'reason_a')!; // the primary
-    ra.show_if = { field: 'reason_b', operator: 'is_checked' };
+    // a control targeting a merged-away sibling (reason_b) + a survivor (reason_e)
     ra.controls_fields = [{ operator: 'is_checked', value: true, shows: ['reason_b', 'reason_e'] }];
 
     const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
     const f = merged.fields.find(ff => ff.id === 'reason_a')!;
-    // primary's show_if rewritten with correct semantics
-    expect(f.show_if).toEqual({ field: 'reason_a', operator: 'equals', value: 'reason_b' });
-    // primary's controls target array remapped (reason_b -> reason_a), reason_e kept
-    expect(f.controls_fields!.find(c => c.value === true)!.shows).toEqual(['reason_a', 'reason_e']);
+    // target array remapped (reason_b -> reason_a, de-duped), reason_e kept
+    expect(f.controls_fields![0].shows).toEqual(['reason_a', 'reason_e']);
   });
 
   it("remaps a carried non-primary control's TARGET arrays (no dangling sibling)", () => {
@@ -442,5 +440,27 @@ describe('Opus fallback review fixes', () => {
   it('stripEditorState is a no-op (same reference) when no stash is present', () => {
     const schema = w7Schema();
     expect(stripEditorState(schema)).toBe(schema);
+  });
+
+  it("re-keys the PRIMARY's own selection-operator control to equals its option value (round 2)", () => {
+    const schema = w7Schema();
+    schema.fields.find(f => f.id === 'reason_a')!.controls_fields = [
+      { operator: 'is_checked', value: true, shows: ['reason_e'] },
+    ];
+    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
+    const ctrl = merged.fields[0].controls_fields![0];
+    // would-never-fire is_checked on a radio -> equals the primary's option value
+    expect(ctrl.operator).toBe('equals');
+    expect(ctrl.value).toBe('reason_a');
+    expect(ctrl.shows).toEqual(['reason_e']);
+  });
+
+  it('drops a primary show_if that would become self-referential (round 2)', () => {
+    const schema = w7Schema();
+    // primary gated on a sibling that is about to become one of its own options
+    schema.fields.find(f => f.id === 'reason_a')!.show_if = { field: 'reason_b', operator: 'is_checked' };
+    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
+    // a self-referential show_if (radio gated on its own value) is unreachable; dropped
+    expect(merged.fields[0].show_if).toBeUndefined();
   });
 });
