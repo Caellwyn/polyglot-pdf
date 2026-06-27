@@ -1,5 +1,16 @@
 # G1b bake-off -- model x form-size matrix for the out-of-band B checker
 
+> **PRECISION UPDATE (bd wf3q, 2026-06-27):** the "clean" corpus this report's
+> precision was measured on was rebuilt on a HAND-VALIDATED coherent I-90 answer
+> key (`backend/scripts/g1b_answer_key.py`), removing the unlabeled-contradiction
+> contamination Codex round 3 found. A clean-corpus re-measure on the two cheap
+> text models (run `g1b_bakeoff_20260627T111636`) gives TRUSTWORTHY precision:
+> 2.5-flash 0.88-1.00, 2.5-flash-lite 0.71-0.88, with every residual false
+> positive a genuine over-flag on a coherent foreign/territory/dual address (NOT a
+> corpus artifact; the full validated persona baseline is 0/6 flagged). The RECALL
+> findings below are unaffected (recall was always measured on labeled
+> contradictions). See `docs/journal/entries/2026-06-27-bd-wf3q-...md`.
+
 **Bead:** polyglot-pdf-0zp3 (follow-up to G1 / jnjj.5)
 **Date:** 2026-06-26 (corrected re-run after two rounds of Codex methodology review)
 **Question:** For the out-of-band end-of-section + end-of-form contradiction

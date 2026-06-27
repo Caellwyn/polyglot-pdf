@@ -1,237 +1,54 @@
-"""G1b bake-off corpus -- full-size labeled form states with embedded contradictions.
+"""G1b bake-off corpus -- full-size labeled form states over a VALIDATED clean key.
 
-bd polyglot-pdf-0zp3. Unlike the G1 corpus (g1_corpus.py: tiny 3-5 field clusters),
-this builds REALISTIC FULL-SIZE form states (20 / 40 / 132 fields) so the
+bd polyglot-pdf-0zp3 (the bake-off) + polyglot-pdf-wf3q (the clean answer key).
+This builds REALISTIC FULL-SIZE form states (20 / 40 / 132 fields) so the
 out-of-band checker is measured the way it actually runs: a contradiction buried
 in a page- or form-sized payload of coherent noise, not in isolation.
 
-PROVENANCE (same honesty rule as G1): SYNTHETIC. The field IDs / spoken names /
-types / section ids are REAL -- the 132 fields of form-kits/i-90/schema.json in
-document order. The VALUES are a hand-authored coherent persona; the
-contradictions are deliberately injected. No real user transcripts exist (pre-pilot,
-no PII logged). Recall numbers are an UPPER BOUND on real-world recall.
+CLEAN BASE = THE VALIDATED ANSWER KEY (g1b_answer_key.py)
+The clean form state is no longer mechanically filled (the old _filler /
+option[0] approach manufactured unlabeled contradictions -- name-change="Yes"
+with identical names, English-self-cert with an interpreter populated, full state
+names instead of abbreviations -- which a good checker correctly flagged but the
+corpus scored as false positives, so precision was untrustworthy: 86 of 128
+clean-case false positives were these artifacts). The base is now the
+HAND-VALIDATED, self-reviewed coherent persona in g1b_answer_key.ANSWER_KEY
+(field_id -> value; NA fields explicitly None, omitted from the payload). See that
+module's docstring for the persona and the coherence invariants.
+
+PROVENANCE: SYNTHETIC. The field IDs / spoken names / types / section ids are REAL
+(the 132 fields of form-kits/i-90/schema.json in document order). The VALUES are a
+hand-authored coherent persona; the contradictions are deliberately injected. No
+real user transcripts exist (pre-pilot, no PII logged). Recall numbers are an
+UPPER BOUND on real-world recall.
 
 132 = the real full I-90 (the realistic worst case; we do NOT synthesize a 200-pad
 -- a real form at its real length is the honest worst case). 20 ~ a section, 40 ~ a
 page. Sizes are produced by taking the first N fields in document order, then
-injecting a contradiction that fits inside that window. The filler fills the
-physical/interpreter/preparer clusters coherently (Codex review #8 found those were
-left empty and dropped from the payload), so the size-132 payload now genuinely
-transmits ~132 filled fields, not the prior ~84.
+injecting a contradiction that fits inside that window.
 
 Each case is a contract-2-style payload: a list of {field_id, name, value} for the
-filled fields (the checker reads filled values; empty fields are omitted as in
-production). Labels: the field-id set(s) that SHOULD be flagged, plus per-case
-metadata -- the contradiction CLASS and the DISTANCE (how many filled fields apart
-the two contradicting fields sit in payload order; 0 for single-field). Distance is
-the key new variable: does a model still catch a contradiction whose halves are
-40 fields apart (cross-section) as well as one whose halves are adjacent?
+FILLED fields (NA / empty fields are omitted, as in production). Labels: the
+field-id set(s) that SHOULD be flagged, plus per-case metadata -- the
+contradiction CLASS and the DISTANCE (how many filled fields apart the two
+contradicting fields sit in payload order; 0 for single-field/clean).
 
-Contradiction CLASSES (reuse G1's taxonomy + the cross-section semantic classes the
-maintainer named):
-  zip_state, state_country, province_us, city_state, future_dob, admission_dob
-  (as in g1_corpus.py), plus two GENUINE far-apart same-fact classes that pair a
-  Part 1 field against a Part 8 "additional information" free-text continuation
-  textarea (idx ~115-131, far from Part 1 -- a real cross-section gap, distance >20
-  at size 132, so they only fit in the 132-field window):
-  cross_date     -- the applicant's DATE OF BIRTH (Part 1 line 9) is RESTATED with a
-                    DIFFERENT year in a Part 8 additional-info textarea (e.g.
-                    'Applicant was born in 1990.' while line 9 says 1985-04-12)
+Contradiction CLASSES (the bake-off's taxonomy):
+  zip_state, state_country, province_us, city_state, future_dob, admission_dob,
+  plus two GENUINE far-apart same-fact classes pairing a Part 1 field against a
+  Part 8 "additional information" free-text continuation textarea (a real
+  cross-section gap, distance >20 at size 132, so they only fit in the 132-field
+  window):
+  cross_date     -- the applicant's DATE OF BIRTH (Part 1 line 9) is RESTATED with
+                    a DIFFERENT year in a Part 8 additional-info textarea.
   duration_year  -- a Part 8 additional-info textarea states a length-of-residence
-                    that contradicts the date of admission (Part 1 line 15): e.g.
-                    'lived in the United States for over 20 years' while admission is
-                    2020 (the maintainer's example)
+                    that contradicts the date of admission (Part 1 line 15).
 """
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import dataclass, field as dc_field
 
-_SCHEMA_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "form-kits", "i-90", "schema.json",
-)
-
-
-def _load_fields() -> list:
-    """The real I-90 leaf fields in document order: id, spoken_name, type,
-    section_id, and the raw `options` list (so the filler can pick a valid
-    in-domain option value for radio/checkbox/select fields)."""
-    with open(_SCHEMA_PATH, encoding="utf-8") as f:
-        schema = json.load(f)
-    out = []
-    for fld in schema["fields"]:
-        fid = fld.get("id")
-        name = fld.get("spoken_name") or fld.get("name") or fid
-        ftype = fld.get("type", "text")
-        sec = fld.get("section_id", "")
-        opts = fld.get("options") or []
-        if fid:
-            out.append({"field_id": fid, "name": name, "type": ftype,
-                        "section_id": sec, "options": opts})
-    return out
-
-
-def _first_option_value(field: dict) -> str:
-    """The FIRST option's value for a radio/checkbox/select field -- always a
-    coherent, in-domain answer. Each option entry is either a dict with a
-    `value` key or a bare string. Returns "" if the field has no options."""
-    for opt in field.get("options") or []:
-        if isinstance(opt, dict):
-            val = opt.get("value")
-            if val is not None:
-                return str(val)
-        elif opt is not None:
-            return str(opt)
-    return ""
-
-
-# A coherent persona: realistic filler values keyed by a substring of the field id
-# or spoken name. The bulk of the form is filled coherently so an injected
-# contradiction sits in real noise. Anything not matched gets a generic value by
-# type (so the payload is dense, like a near-complete form at a boundary).
-_PERSONA = {
-    "aliennumber": "A123456789",
-    "uscisonlineaccount": "1234567890123",
-    "ssn": "123-45-6789",
-    "familyname": "Nguyen",
-    "lastname": "Nguyen",
-    "givenname": "Linh",
-    "firstname": "Linh",
-    "middlename": "Thi",
-    "preferred": "Linh Nguyen",
-    "dateofbirth": "1988-04-12",
-    # "city and state" combo fields take a COMBINED value, not a bare state --
-    # the longest-key-first match makes "cityandstate" win over "state" so a
-    # "port of entry city and state" field gets "Houston, TX", not "TX" (which
-    # the model flags as incomplete -- same class of filler artifact as the
-    # TX-in-radio Codex caught).
-    "cityandstate": "Houston, TX",
-    "cityortown": "Houston",
-    "citytown": "Houston",
-    "citytownofbirth": "Hanoi",
-    "countryofbirth": "Vietnam",
-    "countryofcitizenship": "Vietnam",
-    "streetnumbername": "4200 Westheimer Rd",
-    "aptsteflrnumber": "12",
-    "state": "TX",
-    "zipcode": "77027",
-    "province": "",
-    "postalcode": "",
-    "country": "United States",
-    "dateofadmission": "2015-06-20",
-    "i94": "12345678901",
-    "passportnumber": "N1234567",
-    "travel": "2015-06-20",
-    "classofadmission": "F-1",
-    "destination": "Houston, TX",
-    "emailaddress": "linh.nguyen@example.com",
-    "daytimephone": "713-555-0142",
-    "mobilephone": "713-555-0199",
-    "dateofsignature": "2026-06-01",
-}
-
-
-# Per-field-id COHERENT values for the physical / interpreter / preparer clusters.
-# These were previously left EMPTY (and dropped from the payload), so the "132-field"
-# sweep actually transmitted only ~84 filled fields (Codex review #8). Filling them
-# with a GLOBALLY COHERENT persona -- physical address = the SAME as mailing (a real
-# applicant often has one address), a real interpreter, a real preparer -- means the
-# size-132 payload genuinely carries ~132 fields AND introduces no spurious
-# contradiction (every filled value is internally consistent). Injection cases
-# override only the specific fields their contradiction needs.
-_CLUSTER_FILL = {
-    # physical address (Part 1, lines 7a-7h) = same city/state/zip as mailing
-    "p1_line7a_streetnumbername": "4200 Westheimer Rd",
-    "p1_line7c_cityortown": "Houston",
-    "p1_line7d_state": "TX",
-    "p1_line7e_zipcode": "77027",
-    "p1_line7h_country": "United States",
-    # interpreter (Part 6)
-    "p6_line1a_interpretersfamilyname": "Garcia",
-    "p6_line1b_interpretersgivenname": "Maria",
-    "p6_line3c_citytown": "Houston",
-    "p6_line3d_state": "TX",
-    "p6_line3e_zipcode": "77002",
-    "p6_line3h_country": "United States",
-    "p6_line5_interpretersemailaddress": "maria.garcia@example.com",
-    # preparer (Part 7)
-    "p7_line1a_familyname": "Smith",
-    "p7_line1b_preparersgivenname": "John",
-    "p7_line3c_citytown": "Houston",
-    "p7_line3d_state": "TX",
-    "p7_line3e_zipcode": "77003",
-    "p7_line3h_country": "United States",
-    "p7_line6_preparersemailaddress": "john.smith@example.com",
-    # date-of-signature fields typed `date` in the schema (so they take a date,
-    # not a signer name). Per-id so they read coherently alongside the signatures.
-    "p6_line6b_dateofsignature": "2025-06-01",
-    "p7_line8b_dateofsignature": "2025-06-01",
-}
-
-
-# Per-id values for the `signature`-typed fields. The applicant signs Part 5, the
-# interpreter signs Part 6, and the preparer signs Part 7 -- so each signature must
-# show ITS OWN signer's name, not the applicant's. The applicant's "date of
-# signature" is typed `signature` in the schema but is a DATE, so it gets a date.
-# (The Part 6/7 date-of-signature fields are typed `date` and handled via
-# _CLUSTER_FILL above.)
-_SIGNATURE_FILL = {
-    "p5_line6a_signatureofapplicant": "Linh Nguyen",
-    "p5_line6b_dateofsignature": "2025-06-01",
-    "p6_line6a_signature": "Maria Garcia",
-    "p7_line8a_signatureofpreparer": "John Smith",
-}
-
-
-def _filler(field: dict) -> str:
-    """A coherent value for a field, by TYPE first (so a non-option value can never
-    land in a radio/checkbox/select -- Codex review #2: 'United States' contains
-    'state', so the substring persona used to inject 'TX' into a Yes/No checkbox),
-    then by per-id cluster fill, then by id/name persona substring."""
-    fid_raw = field["field_id"]
-    fid = fid_raw.lower()
-    t = field["type"]
-    # TYPE-GATED values win over substring persona for constrained field types.
-    # radio/checkbox/select are NOT all Yes/No: unit type, sex, ethnicity, race,
-    # eye/hair color, and state pickers each have their own option set. Fill with a
-    # VALID in-domain OPTION VALUE from the schema, never a bare "No"/"TX" that may
-    # not be one of the options (Codex review #2). Two coherence carve-outs:
-    #   - the BASE mailing/physical state pickers stay 'TX' so the base persona's
-    #     Houston/TX/77027 address stays internally coherent (injection cases
-    #     override the state explicitly anyway);
-    #   - everything else takes option[0].value, which is always coherent.
-    if t in ("radio", "checkbox", "select"):
-        # per-id cluster fill wins (e.g. physical/interpreter/preparer state = 'TX')
-        if fid_raw in _CLUSTER_FILL:
-            return _CLUSTER_FILL[fid_raw]
-        # keep the base MAILING state coherent with the base ZIP (Houston/TX/77027)
-        if fid_raw == "p1_line6e_state":
-            return "TX"
-        return _first_option_value(field)
-    if t == "signature":
-        # each signature shows ITS OWN signer (applicant/interpreter/preparer);
-        # a signature field that is actually a date gets a date.
-        if fid_raw in _SIGNATURE_FILL:
-            return _SIGNATURE_FILL[fid_raw]
-        if "date" in fid:
-            return "2025-06-01"
-        return "Linh Nguyen"
-    # explicit per-id cluster fill (physical/interpreter/preparer)
-    if field["field_id"] in _CLUSTER_FILL:
-        return _CLUSTER_FILL[field["field_id"]]
-    # persona substring match (MOST-SPECIFIC / longest key first, so
-    # "citytownofbirth" wins over "cityortown" and "countryofbirth" over "country")
-    key = (fid + " " + field["name"]).lower()
-    for needle in sorted(_PERSONA, key=len, reverse=True):
-        if needle in key:
-            return _PERSONA[needle]
-    if t == "date":
-        return "2015-06-20"
-    if t == "textarea":
-        return "N/A"
-    return "N/A"
+from backend.scripts.g1b_answer_key import ANSWER_KEY, load_schema_fields
 
 
 @dataclass
@@ -249,11 +66,17 @@ class Case:
 
 
 def _base_state(all_fields: list, size: int) -> list:
-    """First `size` fields in document order, each filled with coherent filler.
-    Returns a list of mutable {field_id, name, value} dicts."""
-    chosen = all_fields[:size]
-    return [{"field_id": f["field_id"], "name": f["name"], "value": _filler(f)}
-            for f in chosen]
+    """First `size` fields in document order, filled from the VALIDATED answer key.
+    NA fields (ANSWER_KEY value None) are omitted -- exactly as production omits
+    empty fields -- so the payload carries only coherent, filled values. Returns a
+    list of mutable {field_id, name, value} dicts."""
+    out = []
+    for f in all_fields[:size]:
+        val = ANSWER_KEY.get(f["field_id"])
+        if val is None:
+            continue  # NA / conditional-hidden -> omitted from the payload
+        out.append({"field_id": f["field_id"], "name": f["name"], "value": val})
+    return out
 
 
 def _index_of(payload: list, field_id: str) -> int:
@@ -264,11 +87,37 @@ def _index_of(payload: list, field_id: str) -> int:
 
 
 def _set(payload: list, field_id: str, value: str) -> int:
-    """Set a field's value in the payload; return its index (-1 if absent)."""
+    """Set a field's value in the payload (appending it if absent but the field is
+    one that belongs in this window). Returns its index, or -1 if it could not be
+    placed. A contradiction injected into a normally-NA field (e.g. a Part 8
+    free-text restatement) must be ADDED to the payload, since the clean base omits
+    NA fields."""
     i = _index_of(payload, field_id)
     if i >= 0:
         payload[i]["value"] = value
     return i
+
+
+def _add(payload: list, all_fields: list, field_id: str, value: str, size: int) -> int:
+    """Inject a value into a field that the clean base OMITS (it is NA for the
+    persona). Only valid if the field is within the first `size` fields in document
+    order; inserts it at its document-order position so distance stays meaningful.
+    Returns the new index, or -1 if the field is outside the size window."""
+    order = {f["field_id"]: idx for idx, f in enumerate(all_fields)}
+    if field_id not in order or order[field_id] >= size:
+        return -1
+    if _index_of(payload, field_id) >= 0:
+        return _set(payload, field_id, value)
+    name = next((f["name"] for f in all_fields if f["field_id"] == field_id), field_id)
+    # insert at the right document-order slot so the payload stays in order
+    target_doc = order[field_id]
+    insert_at = len(payload)
+    for i, f in enumerate(payload):
+        if order.get(f["field_id"], 10**9) > target_doc:
+            insert_at = i
+            break
+    payload.insert(insert_at, {"field_id": field_id, "name": name, "value": value})
+    return _index_of(payload, field_id)
 
 
 def _distance(payload: list, id_a: str, id_b: str) -> int:
@@ -279,86 +128,60 @@ def _distance(payload: list, id_a: str, id_b: str) -> int:
 
 
 # Real I-90 field ids used for injection (verified present in schema.json).
-# Address clusters live in different SECTIONS, so pairing across them yields a
-# large, cross-section distance; pairing within one cluster yields a small one.
 MAIL_STREET = "p1_line6b_streetnumbername"
 MAIL_STATE = "p1_line6e_state"
 MAIL_ZIP = "p1_line6f_zipcode"
 MAIL_COUNTRY = "p1_line6i_country"
 MAIL_CITY = "p1_line6d_cityortown"
 MAIL_PROV = "p1_line6g_province"
+MAIL_POSTAL = "p1_line6h_postalcode"
+PHYS_STREET = "p1_line7a_streetnumbername"
 PHYS_CITY = "p1_line7c_cityortown"
 PHYS_STATE = "p1_line7d_state"
 PHYS_ZIP = "p1_line7e_zipcode"
 PHYS_COUNTRY = "p1_line7h_country"
 DOB = "p1_line9_dateofbirth"
 ADMIT = "p1_line15_dateofadmission"
-# Far-apart clusters (later parts) for cross-section distance.
-INTERP_STATE = "p6_line3d_state"
-INTERP_ZIP = "p6_line3e_zipcode"
-PREP_STATE = "p7_line3d_state"
-PREP_ZIP = "p7_line3e_zipcode"
 # Part 8 "additional information" free-text continuation textareas (verified
 # textarea in schema.json, idx ~115-131 -- far from the Part 1 fields, so a Part-1
-# vs Part-8 pair has a large cross-section distance). Distinct ids per case so the
-# cross_date / duration_year cases never collide.
+# vs Part-8 pair has a large cross-section distance). In the clean base these are
+# NA (omitted); a cross_date / duration_year mutant ADDS one. Distinct ids per
+# case so the cases never collide.
 P8_INFO_A = "p8_line3d_additionalinfo"        # idx 115
 P8_INFO_B = "p8_line5d_additionalinfo[1]"     # idx 119
 P8_INFO_C = "p8_line4d_additionalinfo"        # idx 123
 P8_INFO_D = "p8_line5d_additionalinfo"        # idx 127
 P8_INFO_E = "p8_line5d_additionalinfo[2]"     # idx 131
 
-# A SEPARATE, internally-coherent physical address (the applicant's residence),
-# deliberately DIFFERENT from the base mailing address (Houston) so that overriding
-# the mailing cluster in a contradiction case never creates an UNLABELED
-# mailing-vs-physical mismatch (Codex review #5 cousin). Two different-but-each-valid
-# addresses is a legitimate clean situation the checker must not flag.
-PHYS_STREET = "p1_line7a_streetnumbername"
-_PHYS_COHERENT = {
-    # include a street so the physical address is internally coherent: the base
-    # _CLUSTER_FILL gives p1_line7a a Houston street ("4200 Westheimer Rd"), which
-    # would be incoherent once the physical city/state become Austin/TX here.
-    PHYS_STREET: "456 Congress Ave",
-    PHYS_CITY: "Austin",
-    PHYS_STATE: "TX",
-    PHYS_ZIP: "78701",
-    PHYS_COUNTRY: "United States",
-}
 
-
-def _set_physical(payload: list) -> None:
-    """Set the physical-address cluster to a coherent Austin/TX address (independent
-    of any mailing override), when those fields are inside the size window."""
-    for fid, val in _PHYS_COHERENT.items():
-        _set(payload, fid, val)
-
-
-def build_corpus(size: int, seed_offset: int = 0) -> list:
+def build_corpus(size: int) -> list:
     """Build the labeled corpus for one form size.
 
-    Each contradiction case starts from the coherent base state, then injects ONE
+    Each contradiction case starts from the VALIDATED clean base, then injects ONE
     labeled contradiction. Cases are skipped if their fields don't fit in `size`
     (so the 20-field set has fewer far-distance cases than the 132-field set --
     that asymmetry is real and recorded, not hidden).
     """
-    all_fields = _load_fields()
+    all_fields = load_schema_fields()
     cases: list = []
 
-    # ---- helper to make one contradiction case from a fresh base ----
-    def mk(case_suffix, cls, injects, expected, need_ids):
+    def mk(case_suffix, cls, injects, expected, need_ids, add_ids=()):
+        """Make one contradiction case. `injects` are (field_id, value) pairs set on
+        fields the clean base already fills; `add_ids` lists fields that are NA in
+        the clean base and must be ADDED (e.g. a Part 8 free-text restatement).
+        Returns None if any needed field is outside the size window."""
         base = _base_state(all_fields, size)
-        # All fields the contradiction depends on must be inside this size window.
+        # NA fields we will ADD must be inside the window.
+        for fid, val in injects:
+            if fid in add_ids:
+                if _add(base, all_fields, fid, val, size) < 0:
+                    return None
+            else:
+                if _set(base, fid, val) < 0:
+                    return None
+        # All implicated fields must be present in the payload now.
         if any(_index_of(base, fid) < 0 for fid in need_ids):
             return None
-        # Give the applicant a coherent physical address (Austin) INDEPENDENT of the
-        # mailing cluster, so overriding mailing below never creates an unlabeled
-        # mailing-vs-physical mismatch (Codex #5 cousin). No-op when physical is out
-        # of window. Injects run AFTER, so a case targeting physical still wins.
-        _set_physical(base)
-        for fid, val in injects:
-            _set(base, fid, val)
-        # distance = gap between the two implicated fields (first expected pair);
-        # single-field => 0.
         ids = list(expected[0])
         dist = _distance(base, ids[0], ids[1]) if len(ids) >= 2 else 0
         return Case(
@@ -368,48 +191,59 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
         )
 
     # ===== CONTRADICTION CASES =====
+    # Each address-injection case ALSO overrides the mailing CITY to one coherent
+    # with the injected state, so the ONLY contradiction is the labeled one. (The
+    # validated base city is Houston/TX; injecting a non-TX state while leaving
+    # "Houston" would create a SECOND, unlabeled city-vs-state contradiction --
+    # fresh-eyes finding, PR for wf3q.) The chosen city is a real city IN the
+    # injected state, so {city, state} is coherent and only {state, zip} (or
+    # {state, country} / {state, province}) is wrong.
+
     # zip_state -- mailing cluster (small distance, fields adjacent).
-    for i, (state, zipc) in enumerate([
-        ("West Virginia", "50301"), ("California", "10001"),
-        ("Texas", "02134"), ("Florida", "60601"), ("Ohio", "98101"),
+    for i, (city, state, zipc) in enumerate([
+        ("Charleston", "WV", "50301"), ("Sacramento", "CA", "10001"),
+        ("Austin", "TX", "02134"), ("Orlando", "FL", "60601"),
+        ("Columbus", "OH", "98101"),
     ]):
         c = mk(f"zipstate_near_{i}", "zip_state",
-               [(MAIL_STATE, state), (MAIL_ZIP, zipc), (MAIL_COUNTRY, "United States")],
+               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_ZIP, zipc),
+                (MAIL_COUNTRY, "United States")],
                [{MAIL_STATE, MAIL_ZIP}], [MAIL_STATE, MAIL_ZIP])
         if c:
             cases.append(c)
 
-    # (No "far zip_state" class: pairing the mailing STATE with an interpreter/
-    # preparer ZIP is NOT a contradiction -- a preparer's ZIP is a DIFFERENT
-    # PERSON's address and can legitimately differ (Codex review #5). Genuine
-    # far-distance coverage is the Part-1-vs-Part-8 cross_date / duration_year
-    # classes below.)
-
-    # state_country -- the class flash-lite fumbled in G1 (US state + foreign country).
-    for i, (state, country) in enumerate([
-        ("New York", "Canada"), ("California", "Mexico"),
-        ("Texas", "United Kingdom"), ("Illinois", "Germany"),
+    # state_country -- US state filled together with a foreign country. The city is
+    # set coherent with the US state; only {state, country} is the contradiction.
+    for i, (city, state, country) in enumerate([
+        ("Albany", "NY", "Canada"), ("Sacramento", "CA", "Mexico"),
+        ("Austin", "TX", "United Kingdom"), ("Springfield", "IL", "Germany"),
     ]):
         c = mk(f"statecountry_{i}", "state_country",
-               [(MAIL_STATE, state), (MAIL_COUNTRY, country)],
+               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_COUNTRY, country)],
                [{MAIL_STATE, MAIL_COUNTRY}], [MAIL_STATE, MAIL_COUNTRY])
         if c:
             cases.append(c)
 
-    # province_us -- foreign province alongside a US state.
-    for i, (prov, state) in enumerate([
-        ("Ontario", "New York"), ("Bavaria", "California"), ("Quebec", "Florida"),
+    # province_us -- foreign province alongside a US state (province is NA in the
+    # clean base, so it must be ADDED). City coherent with the US state; only
+    # {state, province} is the contradiction.
+    for i, (city, prov, state) in enumerate([
+        ("Albany", "Ontario", "NY"), ("Sacramento", "Bavaria", "CA"),
+        ("Orlando", "Quebec", "FL"),
     ]):
         c = mk(f"provinceus_{i}", "province_us",
-               [(MAIL_STATE, state), (MAIL_PROV, prov), (MAIL_COUNTRY, "United States")],
-               [{MAIL_STATE, MAIL_PROV}], [MAIL_STATE, MAIL_PROV])
+               [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_PROV, prov),
+                (MAIL_COUNTRY, "United States")],
+               [{MAIL_STATE, MAIL_PROV}], [MAIL_STATE, MAIL_PROV],
+               add_ids=(MAIL_PROV,))
         if c:
             cases.append(c)
 
-    # city_state -- the genuinely fuzzy world-knowledge class (valid matching zip).
+    # city_state -- a US city that is not located in the stated US state (valid
+    # matching zip for the WRONG state, so only the city<->state pair is the flag).
     for i, (city, state, zipc) in enumerate([
-        ("Chicago", "Texas", "75001"), ("Miami", "California", "90001"),
-        ("Seattle", "Nevada", "89101"), ("Boston", "Ohio", "43201"),
+        ("Chicago", "TX", "75001"), ("Miami", "CA", "90001"),
+        ("Seattle", "NV", "89101"), ("Boston", "OH", "43201"),
     ]):
         c = mk(f"citystate_{i}", "city_state",
                [(MAIL_CITY, city), (MAIL_STATE, state), (MAIL_ZIP, zipc),
@@ -435,10 +269,10 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
         if c:
             cases.append(c)
 
-    # cross_date (GENUINE) -- the applicant's DATE OF BIRTH (Part 1 line 9) is
-    # RESTATED with a DIFFERENT year in a Part 8 additional-info textarea. The two
-    # statements of the same fact sit far apart (Part 1 vs Part 8 -> distance >20),
-    # so these only fit at size 132 -- the large distance is the whole point.
+    # cross_date (GENUINE far-apart) -- the applicant's DATE OF BIRTH (Part 1 line
+    # 9) is RESTATED with a DIFFERENT year in a Part 8 additional-info textarea
+    # (NA in the clean base -> ADDED). Part 1 vs Part 8 -> distance >20, so these
+    # only fit at size 132 -- the large distance is the whole point.
     for i, (dob, born_year, p8field) in enumerate([
         ("1985-04-12", "1990", P8_INFO_A),
         ("1972-09-30", "1968", P8_INFO_B),
@@ -446,13 +280,13 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
     ]):
         c = mk(f"crossdate_{i}", "cross_date",
                [(DOB, dob), (p8field, f"Applicant was born in {born_year}.")],
-               [{DOB, p8field}], [DOB, p8field])
+               [{DOB, p8field}], [DOB, p8field], add_ids=(p8field,))
         if c:
             cases.append(c)
 
-    # duration_year (NEW, the maintainer's example) -- a Part 8 additional-info
-    # textarea states a length-of-residence that contradicts the date of admission
-    # (Part 1 line 15). Also a large Part-1-vs-Part-8 distance; size-132 only.
+    # duration_year (the maintainer's example) -- a Part 8 additional-info textarea
+    # (NA in the clean base -> ADDED) states a length-of-residence that contradicts
+    # the date of admission (Part 1 line 15). Large Part-1-vs-Part-8 distance.
     for i, (admit, info, p8field) in enumerate([
         ("2020-06-20",
          "I have lived in the United States for over 20 years.", P8_INFO_D),
@@ -464,80 +298,128 @@ def build_corpus(size: int, seed_offset: int = 0) -> list:
     ]):
         c = mk(f"durationyear_{i}", "duration_year",
                [(ADMIT, admit), (p8field, info)],
-               [{ADMIT, p8field}], [ADMIT, p8field])
+               [{ADMIT, p8field}], [ADMIT, p8field], add_ids=(p8field,))
         if c:
             cases.append(c)
 
-    # ===== CLEAN CASES (precision traps embedded in full state) =====
-    # Coherent US mailing address.
-    for i, (city, state, zipc) in enumerate([
-        ("New York", "New York", "10001"), ("Los Angeles", "California", "90001"),
-        ("Houston", "Texas", "77001"), ("Chicago", "Illinois", "60601"),
-        ("Seattle", "Washington", "98101"),
-    ]):
+    # ===== CLEAN CASES (precision traps embedded in full validated state) =====
+    # Each starts from the validated base and applies a COHERENT address variant
+    # (street + city + state + zip + country all mutually consistent), so a good
+    # checker must NOT flag it. These are the false-positive traps.
+    def clean(case_suffix, mutations):
         base = _base_state(all_fields, size)
-        _set_physical(base)
-        # replace the base Houston street so the new city/state is coherent: a
-        # "4200 Westheimer Rd, New York, NY" address is internally inconsistent and
-        # a model may legitimately flag it, contaminating the precision traps.
-        _set(base, MAIL_STREET, "123 Main St")
-        _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, state)
-        _set(base, MAIL_ZIP, zipc); _set(base, MAIL_COUNTRY, "United States")
-        cases.append(Case(f"s{size}_clean_us_{i}", size, "clean", 0, base))
+        ok = True
+        for fid, val in mutations:
+            # a clean mutation only ever sets an already-present (filled) field;
+            # if it is out of window, skip this case so we never emit a half-applied
+            # address (which could itself be an artifact).
+            if _set(base, fid, val) < 0:
+                ok = False
+                break
+        if not ok:
+            return None
+        return Case(f"s{size}_{case_suffix}", size, "clean", 0, base)
 
-    # Coherent foreign mailing address (province + postal + foreign country).
+    # Coherent US mailing address (street kept consistent with the new city/state).
+    for i, (street, city, state, zipc) in enumerate([
+        ("123 Main St", "New York", "NY", "10001"),
+        ("742 Sunset Blvd", "Los Angeles", "CA", "90001"),
+        ("88 Commerce St", "Houston", "TX", "77001"),
+        ("400 Michigan Ave", "Chicago", "IL", "60601"),
+        ("55 Pine St", "Seattle", "WA", "98101"),
+    ]):
+        c = clean(f"clean_us_{i}", [
+            (MAIL_STREET, street), (MAIL_CITY, city), (MAIL_STATE, state),
+            (MAIL_ZIP, zipc), (MAIL_COUNTRY, "United States"),
+            # keep physical == mailing so the dual-address invariant stays coherent
+            (PHYS_STREET, street), (PHYS_CITY, city), (PHYS_STATE, state),
+            (PHYS_ZIP, zipc), (PHYS_COUNTRY, "United States"),
+        ])
+        if c:
+            cases.append(c)
+
+    # Coherent FOREIGN mailing address (province + postal + foreign country, NO US
+    # state). State is cleared to "" and province/postal ADDED -- a legitimate
+    # foreign-address shape the checker must not flag. (Physical stays the US
+    # Houston address: a foreign mailing + US physical is a coherent dual address.)
+    def clean_foreign(case_suffix, city, prov, postal, country):
+        base = _base_state(all_fields, size)
+        if _index_of(base, MAIL_STATE) < 0:
+            return None
+        _set(base, MAIL_STREET, "10 King St")
+        _set(base, MAIL_CITY, city)
+        _set(base, MAIL_STATE, "")           # no US state for a foreign address
+        _add(base, all_fields, MAIL_PROV, prov, size)
+        _add(base, all_fields, MAIL_POSTAL, postal, size)
+        _set(base, MAIL_ZIP, "")             # no US zip for a foreign address
+        _set(base, MAIL_COUNTRY, country)
+        # drop the now-empty US state/zip from the payload (production omits empties)
+        base[:] = [f for f in base if f["value"] not in ("", None)]
+        return Case(f"s{size}_{case_suffix}", size, "clean", 0, base)
+
     for i, (city, prov, postal, country) in enumerate([
         ("Toronto", "Ontario", "M5H 2N2", "Canada"),
         ("Munich", "Bavaria", "80331", "Germany"),
         ("Mumbai", "Maharashtra", "400001", "India"),
         ("Manila", "Metro Manila", "1000", "Philippines"),
     ]):
-        base = _base_state(all_fields, size)
-        _set_physical(base)
-        _set(base, MAIL_STREET, "123 Main St")
-        _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, "")
-        _set(base, MAIL_PROV, prov); _set(base, MAIL_ZIP, "")
-        _set(base, MAIL_COUNTRY, country)
-        cases.append(Case(f"s{size}_clean_foreign_{i}", size, "clean", 0, base))
+        c = clean_foreign(f"clean_foreign_{i}", city, prov, postal, country)
+        if c:
+            cases.append(c)
 
-    # US territory ZIPs (valid; naive 50-state checker false-positives).
-    for i, (city, state, zipc) in enumerate([
+    # US territory ZIPs (valid; a naive 50-state checker false-positives). The
+    # territory is carried in the COUNTRY/city free text since the state picker has
+    # no territory option -- mirrors how the real form handles territories.
+    for i, (city, territory, zipc) in enumerate([
         ("San Juan", "Puerto Rico", "00901"),
         ("Hagatna", "Guam", "96910"),
-        ("Charlotte Amalie", "Virgin Islands", "00801"),
+        ("Charlotte Amalie", "U.S. Virgin Islands", "00801"),
     ]):
         base = _base_state(all_fields, size)
-        _set_physical(base)
-        _set(base, MAIL_STREET, "123 Main St")
-        _set(base, MAIL_CITY, city); _set(base, MAIL_STATE, state)
-        _set(base, MAIL_ZIP, zipc); _set(base, MAIL_COUNTRY, "United States")
+        if _index_of(base, MAIL_STATE) < 0:
+            continue
+        _set(base, MAIL_STREET, "1 Plaza St")
+        _set(base, MAIL_CITY, city)
+        _set(base, MAIL_STATE, "")           # territory has no 50-state code
+        _set(base, MAIL_ZIP, zipc)
+        _set(base, MAIL_COUNTRY, f"United States ({territory})")
+        # physical == this territory address (a no-op when the physical cluster is
+        # outside the size window -- at size 20 only the mailing territory address
+        # is in the payload, which is still coherent)
+        _set(base, PHYS_STREET, "1 Plaza St")
+        _set(base, PHYS_CITY, city)
+        _set(base, PHYS_STATE, "")
+        _set(base, PHYS_ZIP, zipc)
+        _set(base, PHYS_COUNTRY, f"United States ({territory})")
+        base[:] = [f for f in base if f["value"] not in ("", None)]
         cases.append(Case(f"s{size}_clean_territory_{i}", size, "clean", 0, base))
 
-    # Dual coherent addresses (mailing + physical, both valid but different) --
-    # only meaningful when the physical cluster fits in the size window.
+    # Dual coherent addresses (mailing + physical, both valid but DIFFERENT) -- a
+    # legitimate clean situation the checker must not flag. Only meaningful when the
+    # physical cluster fits in the size window.
     for i, (mail, phys) in enumerate([
-        (("New York", "New York", "10001"), ("Newark", "New Jersey", "07101")),
-        (("Chicago", "Illinois", "60601"), ("Milwaukee", "Wisconsin", "53201")),
+        (("123 Main St", "New York", "NY", "10001"),
+         ("9 Market St", "Newark", "NJ", "07101")),
+        (("400 Michigan Ave", "Chicago", "IL", "60601"),
+         ("12 Water St", "Milwaukee", "WI", "53201")),
     ]):
         base = _base_state(all_fields, size)
         if _index_of(base, PHYS_STATE) < 0:
             continue
-        # coherent street for each address (the base persona street is Houston's,
-        # which would be incoherent with these new mailing/physical cities)
-        _set(base, MAIL_STREET, "123 Main St")
-        _set(base, MAIL_CITY, mail[0]); _set(base, MAIL_STATE, mail[1]); _set(base, MAIL_ZIP, mail[2])
-        # physical = a coherent street/city/state/zip of its own (distinct from mailing)
-        _set(base, PHYS_STREET, "456 Oak Ave")
-        _set(base, PHYS_CITY, phys[0]); _set(base, PHYS_STATE, phys[1]); _set(base, PHYS_ZIP, phys[2])
+        _set(base, MAIL_STREET, mail[0]); _set(base, MAIL_CITY, mail[1])
+        _set(base, MAIL_STATE, mail[2]); _set(base, MAIL_ZIP, mail[3])
         _set(base, MAIL_COUNTRY, "United States")
+        _set(base, PHYS_STREET, phys[0]); _set(base, PHYS_CITY, phys[1])
+        _set(base, PHYS_STATE, phys[2]); _set(base, PHYS_ZIP, phys[3])
+        _set(base, PHYS_COUNTRY, "United States")
         cases.append(Case(f"s{size}_clean_dual_{i}", size, "clean", 0, base))
 
-    # Plain coherent baseline (the persona as-is, no injection) -- the densest
-    # clean case, the strongest false-positive trap at full size.
+    # Plain coherent baseline (the validated persona as-is, no mutation) -- the
+    # densest clean case, the strongest false-positive trap at full size.
     cases.append(Case(f"s{size}_clean_baseline_0", size, "clean", 0,
                       _base_state(all_fields, size)))
 
-    return cases
+    return [c for c in cases if c is not None]
 
 
 if __name__ == "__main__":
@@ -547,7 +429,8 @@ if __name__ == "__main__":
         nc = sum(1 for c in corpus if c.is_contradiction)
         cl = len(corpus) - nc
         dists = [c.distance for c in corpus if c.is_contradiction]
+        dmin = min(dists) if dists else 0
+        dmax = max(dists) if dists else 0
         print(f"size={size:>3}: {len(corpus)} cases = {nc} contradiction + {cl} clean; "
-              f"distances min/max = {min(dists)}/{max(dists)}")
+              f"distances min/max = {dmin}/{dmax}")
         print(f"          classes: {dict(Counter(c.cls for c in corpus if c.is_contradiction))}")
-

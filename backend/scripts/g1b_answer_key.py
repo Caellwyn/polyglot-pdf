@@ -1,0 +1,428 @@
+"""G1b clean answer key -- a HAND-VALIDATED coherent I-90 (bd polyglot-pdf-wf3q).
+
+WHY THIS EXISTS
+The G1b bake-off (probe_g1b_model_size_bakeoff.py) measures a contradiction
+checker's PRECISION on "clean" full I-90 form states. The prior filler
+(g1b_corpus.py's _filler/_first_option_value) generated those clean states
+mechanically -- option[0] for every radio/checkbox, substring-keyed persona
+values for the rest. That mechanism KEPT MANUFACTURING UNLABELED CONTRADICTIONS
+that a good checker correctly flagged but the corpus scored as false positives,
+so the precision numbers were not trustworthy. The three Codex-found artifact
+classes (and there were more latent ones):
+  - p1_checkbox4 option[0] = "Yes, my name legally changed" while the current and
+    previous name fields are identical (a real contradiction the checker caught);
+  - p5_checkbox1a option[0] = "I can read and understand English" while a Part 6
+    INTERPRETER is fully populated (self-cert vs interpreter -- contradiction);
+  - state pickers given full names ("California") instead of the schema's option
+    values ("CA").
+
+ROOT PROBLEM: a real I-90 is ~132 densely-INTERRELATED fields where many controls
+are semantic assertions that constrain other fields (name-change Yes/No gates the
+previous-name fields; the English/interpreter/preparer certification gates which
+of Parts 6/7 are populated; LPR-vs-commuter gates the port-of-entry field). Naive
+per-field filling cannot be coherent because it ignores those gates.
+
+THE FIX (maintainer-specified, bd wf3q): do BY HAND, with big-picture reasoning,
+exactly the validation task we ask the small gemini model to do. Read the schema
+(field semantics + option LABELS + conditional logic) together, build ONE coherent
+fictional persona, answer every field into a dictionary, mark conditional/NA fields
+explicitly, and self-review the dictionary to ZERO unlabeled contradictions. That
+validated dictionary IS the clean answer key below.
+
+PERSONA (coherent life history)
+  Linh Thi Nguyen -- a lawful permanent resident replacing a lost green card.
+  - Born Hanoi, Vietnam, 1985-04-12 (female).
+  - Admitted to the US as an LPR on 2015-06-20, class of admission IR1.
+  - Lives at 4200 Westheimer Rd, Apt 12, Houston, TX 77027 (mailing == physical:
+    one address, which is internally coherent and a legitimate clean situation).
+  - Her NAME HAS NOT CHANGED since her card was issued (p1_checkbox4 = "No"), so
+    the previous-name fields (5a-5c) are conditional-HIDDEN -> NA.
+  - Reason for new card: her previous card was lost/stolen/destroyed
+    (p2_checkbox2 option [5]); she is a plain Lawful Permanent Resident
+    (p2_checkbox1 option [0]), NOT a commuter, so the commuter port-of-entry
+    field (p2_line2h1) is conditional-HIDDEN -> NA, and the conditional-PR card
+    (p2_checkbox3) is HIDDEN -> NA.
+  - She is NOT fluent in written English, so an INTERPRETER (Maria Garcia,
+    Vietnamese) read the form to her: p5_checkbox1a = option [1] ("the interpreter
+    read to me"), which unlocks p5_line1b_language = "Vietnamese" and makes the
+    Part 6 interpreter block REQUIRED and coherent. She did NOT use a preparer in
+    lieu of self-statement (p5_checkbox1a is single-select), but a PREPARER (John
+    Smith) did help her, completing Part 7 as a NON-attorney (p7_checkbox7 option
+    [0]) -- so the attorney-representation-extends field (p7_checkbox7extend) is
+    conditional-HIDDEN -> NA.
+  - No disability accommodation requested (p4_checkbox1 = "No"), so the
+    accommodation sub-fields are conditional-HIDDEN -> NA.
+  - No removal proceedings, no I-407 abandonment (Part 3 = "No"/"No").
+  - Simple history -> NO Part 8 additional-information overflow entries are needed,
+    so every p8_line[3-5]* page/part/item/additionalinfo entry is NA EXCEPT the
+    page-header REPEATS (the copy_from fields), which MUST equal their Part 1
+    sources (A-number + name printed at the top of each continuation page).
+
+COHERENCE INVARIANTS the self-review enforced (these are exactly what the checker
+looks for, so any violation here would be a corpus artifact):
+  1. State pickers use schema OPTION VALUES (two-letter), never full names.
+  2. radio/checkbox values are real schema option values, chosen for SEMANTIC
+     coherence (the option LABEL must be true of the persona), NOT option[0].
+  3. ZIP <-> state <-> city <-> country are mutually consistent (Houston/TX/77027,
+     USA). No US state paired with a foreign country; no foreign province paired
+     with a US state.
+  4. DOB (1985) precedes admission (2015) precedes signature (2025); no future DOB.
+  5. Conditional fields whose gate is not satisfied are explicitly NA (value None),
+     with the gate recorded in NA_REASON -- they are OMITTED from the payload, as
+     production omits empty fields, so they can never be a spurious "incomplete".
+  6. copy_from page-header repeats equal their Part 1 source EXACTLY.
+  7. Two coherent statements of one fact never disagree (no Part-8 free text
+     restating the DOB or residence-length differently -- those textareas are NA
+     in the clean key; the bake-off's cross_date / duration_year MUTANTS are the
+     only place such a restatement appears, and there it is a LABELED conflict).
+
+This module is STDLIB-ONLY (json + os) so the offline tools can import it without
+google.genai. ASCII only (repo rule). PII: synthetic fabricated persona, no PHI.
+"""
+from __future__ import annotations
+
+import json
+import os
+
+_SCHEMA_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "form-kits", "i-90", "schema.json",
+)
+
+
+def load_schema_fields() -> list:
+    """The I-90 leaf fields in document order, each a dict with id, spoken_name,
+    type, section_id, options (the raw list), and copy_from (so the corpus can
+    verify the page-header repeats). One source of truth for field ORDER + names
+    so the answer key and the probe agree."""
+    with open(_SCHEMA_PATH, encoding="utf-8") as f:
+        schema = json.load(f)
+    out = []
+    for fld in schema["fields"]:
+        fid = fld.get("id")
+        if not fid:
+            continue
+        out.append({
+            "field_id": fid,
+            "name": fld.get("spoken_name") or fld.get("name") or fid,
+            "type": fld.get("type", "text"),
+            "section_id": fld.get("section_id", ""),
+            "options": fld.get("options") or [],
+            "copy_from": fld.get("copy_from"),
+        })
+    return out
+
+
+# ===========================================================================
+# THE VALIDATED ANSWER KEY: field_id -> value.
+#   - A string value is the coherent answer.
+#   - None marks a field that is conditional-HIDDEN or genuinely inapplicable for
+#     THIS persona (see NA_REASON). NA fields are omitted from the payload, just
+#     as production omits empty fields, so a checker never sees them.
+# Every option-typed value is a real schema option VALUE chosen so its LABEL is
+# true of the persona (see the module docstring). Verified against schema.json by
+# validate_answer_key() below (run this module as __main__).
+# ===========================================================================
+ANSWER_KEY: dict = {
+    # ---- Part 1: Information About You ----
+    "p1_line1_aliennumber": "A123456789",
+    "p1_line2_acctidentifier": "1234567890123",   # USCIS online account number (13 digits)
+    "p1_line3a_familyname": "Nguyen",
+    "p1_line3b_givenname": "Linh",
+    "p1_line3c_middlename": "Thi",
+    # Name has NOT changed -> option [1] "No"; gates 5a-5c HIDDEN.
+    "p1_checkbox4": "P1_checkbox4[1]",
+    "p1_line5a_familyname": None,   # NA: name-change gate = No
+    "p1_line5b_givenname": None,    # NA: name-change gate = No
+    "p1_line5c_middlename": None,   # NA: name-change gate = No
+
+    # ---- Part 1.2: Mailing address (4200 Westheimer Rd, Apt 12, Houston TX) ----
+    "p1_line6a_incareofname": None,           # NA: no in-care-of recipient
+    "p1_line6b_streetnumbername": "4200 Westheimer Rd",
+    # Unit type = Apartment -> unlocks the apt number field.
+    "p1_unit_type6c_unit": "P1_checkbox6c_Unit[0]",   # Apartment
+    "p1_line6c_aptsteflrnumber": "12",
+    "p1_line6d_cityortown": "Houston",
+    "p1_line6e_state": "TX",
+    "p1_line6f_zipcode": "77027",
+    "p1_line6g_province": None,    # NA: US address, no foreign province
+    "p1_line6h_postalcode": None,  # NA: US address, no foreign postal code
+    "p1_line6i_country": "United States",
+
+    # ---- Part 1.2.1: Physical address == mailing (one coherent address) ----
+    "p1_line7a_streetnumbername": "4200 Westheimer Rd",
+    "p1_unit_type7b_unit": "P1_checkbox7b_Unit[0]",   # Apartment
+    "p1_line7b_aptsteflrnumber": "12",
+    "p1_line7c_cityortown": "Houston",
+    "p1_line7d_state": "TX",
+    "p1_line7e_zipcode": "77027",
+    "p1_line7f_province": None,    # NA: US address
+    "p1_line7g_postalcode": None,  # NA: US address
+    "p1_line7h_country": "United States",
+
+    # ---- Part 1.3: Additional information about you ----
+    "p1_line8_male": "P1_Line8_female[0]",   # Female
+    "p1_line9_dateofbirth": "1985-04-12",
+    "p1_line10_citytownofbirth": "Hanoi",
+    "p1_line11_countryofbirth": "Vietnam",
+    "p1_line12_mothergivenname": "Lan",
+    "p1_line13_fathergivenname": "Minh",
+    "p1_line14_classofadmission": "IR1",
+    "p1_line15_dateofadmission": "2015-06-20",
+    "p1_line16_ssn": "123-45-6789",
+
+    # ---- Part 2: Application type ----
+    # Plain Lawful Permanent Resident -> option [0]. (NOT commuter, NOT conditional.)
+    "p2_checkbox1": "P2_checkbox1[0]",
+    # Commuter port-of-entry: gated on commuter reason; NA for a plain LPR.
+    "p2_line2h1_cityandstate": None,
+    # Reason for new card = previous card lost/stolen/destroyed -> option [5].
+    # NOTE on a schema discrepancy: p2_checkbox1.controls_fields unlocks the
+    # reason field (p2_checkbox2[5]) for BOTH option [0] (plain LPR) and option [1]
+    # (commuter), but p2_checkbox2[5].show_if narrows it to option [1] only. The
+    # controls_fields map is authoritative (the editor/frontend unlock source) and
+    # semantically correct -- EVERY I-90 applicant must give a reason for the new
+    # card -- so the reason field is filled here for a plain LPR. (The narrower
+    # show_if is the inconsistent annotation; left as-is, out of scope for wf3q.)
+    "p2_checkbox2[5]": "P2_checkbox2[5]",
+    # "issued but never received": gated on Conditional-PR (checkbox1 option [2]); NA.
+    "p2_checkbox3": None,
+
+    # ---- Part 3: Processing information ----
+    "p3_line1_locationappliedvisa": "Ho Chi Minh City, Vietnam",
+    "p3_line2_locationissuedvisa": "Ho Chi Minh City, Vietnam",
+    "p3_line3a_destination": "Houston, TX",
+    "p3_line3a1_cityandstate": "Houston, TX",
+    "p3_checkbox4[1]": "P3_checkbox4[0]",   # removal proceedings? No
+    "p3_checkbox5[1]": "P3_checkbox5[0]",   # filed I-407 / abandoned status? No
+
+    # ---- Part 3: Biographic information ----
+    "p3_ethnicity": "not_hispanic_latino",
+    "p3_race": "P3_checkbox7_Asian[0]",     # Asian
+    "p3_line8_heightfeet": "5",             # 5 ft 4 in
+    "p3_line8_heightinches": "4",
+    "p3_line9_heightinches1": "1",          # weight 130 lbs (digits 1,3,0)
+    "p3_line9_heightinches2": "3",
+    "p3_line9_heightinches3": "0",
+    "p3_eye_color": "brown",
+    "p3_hair_color": "black",
+
+    # ---- Part 4: Accommodations -- none requested ----
+    "p4_checkbox1[1]": "P4_checkbox1[0]",   # requesting accommodation? No
+    "p4_checkbox1a": None,                   # NA: gate = No
+    "p4_line1a_accomodationrequested": None,  # NA
+    "p4_checkbox1b": None,                    # NA: gate = No
+    "p4_line1b_accomodationrequested": None,  # NA
+    "p4_checkbox1c": None,                    # NA: gate = No
+    "p4_line1c_accomodationrequested": None,  # NA
+
+    # ---- Part 5: Applicant's statement, contact, signature ----
+    # Interpreter read the form to her -> option [1] ("P5_Checkbox1b[0]"), which
+    # unlocks the language field AND makes Part 6 coherent/required. NOT option [0]
+    # ("I read English") -- that would contradict having an interpreter.
+    "p5_checkbox1a": "P5_Checkbox1b[0]",
+    "p5_line1b_language": "Vietnamese",
+    # Preparer-in-lieu-of-statement gate (option [2]) not selected -> NA. (A
+    # preparer still HELPED -- Part 7 -- but that is a separate certification.)
+    "p5_line2_nameofrepresentative": None,
+    "p5_line3_daytimephonenumber": "713-555-0142",
+    "p5_line4_mobilephonenumber": "713-555-0199",
+    "p5_line5_emailaddress": "linh.nguyen@example.com",
+    "p5_line6a_signatureofapplicant": "Linh Nguyen",
+    "p5_line6b_dateofsignature": "2025-06-01",
+
+    # ---- Part 6: Interpreter (Maria Garcia, Vietnamese) ----
+    "p6_line1a_interpretersfamilyname": "Garcia",
+    "p6_line1b_interpretersgivenname": "Maria",
+    "p6_line2_nameofbusinessor": "Bayou City Language Services",
+    "p6_line3a_streetnumbername": "1000 Louisiana St",
+    "p6_unit_type3b_unit": "P6_checkbox3b_Unit[1]",   # Suite
+    "p6_line3b_aptsteflrnumber": "2300",
+    "p6_line3c_citytown": "Houston",
+    "p6_line3d_state": "TX",
+    "p6_line3e_zipcode": "77002",
+    "p6_line3f_province": None,    # NA: US address
+    "p6_line3g_postalcode": None,  # NA: US address
+    "p6_line3h_country": "United States",
+    "p6_line4_interpretersdaytimephonenumber": "713-555-0188",
+    "p6_line4_interpretersdaytimephonenumber[1]": "713-555-0177",
+    "p6_line5_interpretersemailaddress": "maria.garcia@example.com",
+    "p6_language": "Vietnamese",
+    "p6_line6a_signature": "Maria Garcia",
+    "p6_line6b_dateofsignature": "2025-06-01",
+
+    # ---- Part 7: Preparer (John Smith, non-attorney) ----
+    "p7_line1b_preparersgivenname": "John",
+    "p7_line1a_familyname": "Smith",
+    "p7_line2_nameofbusinessor": "Smith Immigration Assistance",
+    "p7_line3a_streetnumbername": "500 Main St",
+    "p7_unit_type3b_unit": "P7_checkbox3b_Unit[1]",   # Suite
+    "p7_line3b_aptsteflrnumber": "400",
+    "p7_line3c_citytown": "Houston",
+    "p7_line3d_state": "TX",
+    "p7_line3e_zipcode": "77003",
+    "p7_line3f_province": None,    # NA: US address
+    "p7_line3g_postalcode": None,  # NA: US address
+    "p7_line3h_country": "United States",
+    "p7_line4_preparersdaytimephonenumber": "713-555-0166",
+    "p7_line5_preparersfaxnumber": "713-555-0155",
+    "p7_line6_preparersemailaddress": "john.smith@example.com",
+    # Preparer is NOT an attorney -> option [0]; gates the extends-representation
+    # radio HIDDEN.
+    "p7_checkbox7": "P7_checkbox7[0]",
+    "p7_checkbox7extend": None,    # NA: attorney gate = not an attorney
+    "p7_line8a_signatureofpreparer": "John Smith",
+    "p7_line8b_dateofsignature": "2025-06-01",
+
+    # ---- Part 8: Additional information ----
+    # Page-header REPEATS (copy_from Part 1) MUST equal their source exactly.
+    "p1_line1_aliennumber[1]": "A123456789",
+    "p1_line3a_familyname[1]": "Nguyen",
+    "p1_line3b_givenname[1]": "Linh",
+    "p1_line3c_middlename[1]": "Thi",
+    # No overflow continuation is needed for this simple, coherent history -> every
+    # additional-information ENTRY (page/part/item/free-text) is NA. The bake-off
+    # cross_date / duration_year MUTANTS are the only place a Part-8 free-text
+    # restatement appears, and there it is a LABELED conflict, not clean.
+    "p8_line3a_pagenumber": None,
+    "p8_line3b_partnumber": None,
+    "p8_line3c_itemnumber": None,
+    "p8_line3d_additionalinfo": None,
+    "p8_line5a_pagenumber[1]": None,
+    "p8_line5b_partnumber[1]": None,
+    "p8_line5c_itemnumber[1]": None,
+    "p8_line5d_additionalinfo[1]": None,
+    "p8_line4a_pagenumber": None,
+    "p8_line4b_partnumber": None,
+    "p8_line4c_itemnumber": None,
+    "p8_line4d_additionalinfo": None,
+    "p8_line5a_pagenumber": None,
+    "p8_line5b_partnumber": None,
+    "p8_line5c_itemnumber": None,
+    "p8_line5d_additionalinfo": None,
+    "p8_line5a_pagenumber[2]": None,
+    "p8_line5b_partnumber[2]": None,
+    "p8_line5c_itemnumber[2]": None,
+    "p8_line5d_additionalinfo[2]": None,
+}
+
+
+# Why each NA field is inapplicable -- the conditional GATE that hides it, or the
+# plain reason it does not apply to this persona. Documented so a reviewer can
+# audit that every omission is intentional (not a forgotten field).
+NA_REASON: dict = {
+    "p1_line5a_familyname": "name-change gate p1_checkbox4 = No",
+    "p1_line5b_givenname": "name-change gate p1_checkbox4 = No",
+    "p1_line5c_middlename": "name-change gate p1_checkbox4 = No",
+    "p1_line6a_incareofname": "no in-care-of recipient",
+    "p1_line6g_province": "US mailing address, no foreign province",
+    "p1_line6h_postalcode": "US mailing address, no foreign postal code",
+    "p1_line7f_province": "US physical address, no foreign province",
+    "p1_line7g_postalcode": "US physical address, no foreign postal code",
+    "p2_line2h1_cityandstate": "commuter port-of-entry; persona is a plain LPR",
+    "p2_checkbox3": "issued-but-never-received gate p2_checkbox1 = Conditional PR (not selected)",
+    "p4_checkbox1a": "accommodation gate p4_checkbox1 = No",
+    "p4_line1a_accomodationrequested": "accommodation gate p4_checkbox1 = No",
+    "p4_checkbox1b": "accommodation gate p4_checkbox1 = No",
+    "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No",
+    "p4_checkbox1c": "accommodation gate p4_checkbox1 = No",
+    "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No",
+    "p5_line2_nameofrepresentative": "preparer-in-lieu certification (p5_checkbox1a option [2]) not selected",
+    "p6_line3f_province": "US interpreter address, no foreign province",
+    "p6_line3g_postalcode": "US interpreter address, no foreign postal code",
+    "p7_line3f_province": "US preparer address, no foreign province",
+    "p7_line3g_postalcode": "US preparer address, no foreign postal code",
+    "p7_checkbox7extend": "attorney-representation gate p7_checkbox7 = not an attorney",
+    "p8_line3a_pagenumber": "no additional-information overflow needed",
+    "p8_line3b_partnumber": "no additional-information overflow needed",
+    "p8_line3c_itemnumber": "no additional-information overflow needed",
+    "p8_line3d_additionalinfo": "no additional-information overflow needed",
+    "p8_line5a_pagenumber[1]": "no additional-information overflow needed",
+    "p8_line5b_partnumber[1]": "no additional-information overflow needed",
+    "p8_line5c_itemnumber[1]": "no additional-information overflow needed",
+    "p8_line5d_additionalinfo[1]": "no additional-information overflow needed",
+    "p8_line4a_pagenumber": "no additional-information overflow needed",
+    "p8_line4b_partnumber": "no additional-information overflow needed",
+    "p8_line4c_itemnumber": "no additional-information overflow needed",
+    "p8_line4d_additionalinfo": "no additional-information overflow needed",
+    "p8_line5a_pagenumber": "no additional-information overflow needed",
+    "p8_line5b_partnumber": "no additional-information overflow needed",
+    "p8_line5c_itemnumber": "no additional-information overflow needed",
+    "p8_line5d_additionalinfo": "no additional-information overflow needed",
+    "p8_line5a_pagenumber[2]": "no additional-information overflow needed",
+    "p8_line5b_partnumber[2]": "no additional-information overflow needed",
+    "p8_line5c_itemnumber[2]": "no additional-information overflow needed",
+    "p8_line5d_additionalinfo[2]": "no additional-information overflow needed",
+}
+
+
+def validate_answer_key() -> list:
+    """Self-check the answer key against schema.json. Returns a list of human
+    -readable problem strings; empty list == the key is structurally valid.
+
+    This is the MECHANICAL half of the validation (coverage, valid option values,
+    copy-field equality, NA bookkeeping). The SEMANTIC half (the coherence
+    invariants in the docstring) is the Opus-level hand review that produced the
+    values -- this function guards against drift, it does not replace that review.
+    """
+    fields = load_schema_fields()
+    by_id = {f["field_id"]: f for f in fields}
+    problems: list = []
+
+    schema_ids = set(by_id)
+    key_ids = set(ANSWER_KEY)
+
+    # 1. Every schema field is answered; no stray keys.
+    for fid in sorted(schema_ids - key_ids):
+        problems.append(f"MISSING from answer key: {fid}")
+    for fid in sorted(key_ids - schema_ids):
+        problems.append(f"STRAY key not in schema: {fid}")
+
+    # 2. Every None value has an NA_REASON, and every NA_REASON maps a None field.
+    for fid, val in ANSWER_KEY.items():
+        if val is None and fid not in NA_REASON:
+            problems.append(f"NA field with no NA_REASON: {fid}")
+    for fid in NA_REASON:
+        if ANSWER_KEY.get(fid) is not None:
+            problems.append(f"NA_REASON for a non-NA (or unknown) field: {fid}")
+
+    # 3. Option-typed fields must hold a real schema option VALUE.
+    for fid, val in ANSWER_KEY.items():
+        if val is None or fid not in by_id:
+            continue
+        f = by_id[fid]
+        if f["type"] in ("radio", "checkbox", "select") and f["options"]:
+            valid = set()
+            for opt in f["options"]:
+                if isinstance(opt, dict) and opt.get("value") is not None:
+                    valid.add(str(opt["value"]))
+                elif not isinstance(opt, dict) and opt is not None:
+                    valid.add(str(opt))
+            if str(val) not in valid:
+                problems.append(
+                    f"{fid}: value {val!r} is not one of the schema options "
+                    f"{sorted(valid)}")
+
+    # 4. copy_from page-header repeats must equal their source EXACTLY.
+    for fid, f in by_id.items():
+        src = f.get("copy_from")
+        if src:
+            if ANSWER_KEY.get(fid) != ANSWER_KEY.get(src):
+                problems.append(
+                    f"copy mismatch: {fid}={ANSWER_KEY.get(fid)!r} but its source "
+                    f"{src}={ANSWER_KEY.get(src)!r} (must be equal)")
+
+    return problems
+
+
+if __name__ == "__main__":
+    probs = validate_answer_key()
+    if probs:
+        print(f"ANSWER KEY INVALID -- {len(probs)} problem(s):")
+        for p in probs:
+            print("  -", p)
+        raise SystemExit(1)
+    fields = load_schema_fields()
+    answered = sum(1 for f in fields if ANSWER_KEY.get(f["field_id"]) is not None)
+    na = sum(1 for f in fields if ANSWER_KEY.get(f["field_id"]) is None)
+    print(f"answer key VALID: {len(fields)} fields = {answered} filled + {na} NA")
