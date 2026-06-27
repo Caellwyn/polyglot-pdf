@@ -10,6 +10,7 @@ import {
   canUngroup,
   isGroupableField,
   mergeBlockReason,
+  stripEditorState,
 } from './fieldGrouping';
 import type { FormSchema, FormField } from '../types/schema';
 
@@ -397,5 +398,49 @@ describe('Codex PR #256 fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     expect(unmerged.fields).toHaveLength(2);
     expect(unmerged.fields.map(f => f.pdf_field_name)).toEqual(['white[0]', 'asian[0]']);
+  });
+});
+
+describe('Opus fallback review fixes', () => {
+  it("rewrites the PRIMARY's own show_if / controls referencing a merged-away sibling", () => {
+    const schema = w7Schema();
+    const ra = schema.fields.find(f => f.id === 'reason_a')!; // the primary
+    ra.show_if = { field: 'reason_b', operator: 'is_checked' };
+    ra.controls_fields = [{ operator: 'is_checked', value: true, shows: ['reason_b', 'reason_e'] }];
+
+    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
+    const f = merged.fields.find(ff => ff.id === 'reason_a')!;
+    // primary's show_if rewritten with correct semantics
+    expect(f.show_if).toEqual({ field: 'reason_a', operator: 'equals', value: 'reason_b' });
+    // primary's controls target array remapped (reason_b -> reason_a), reason_e kept
+    expect(f.controls_fields!.find(c => c.value === true)!.shows).toEqual(['reason_a', 'reason_e']);
+  });
+
+  it("remaps a carried non-primary control's TARGET arrays (no dangling sibling)", () => {
+    const schema = w7Schema();
+    schema.fields.find(f => f.id === 'reason_b')!.controls_fields = [
+      { operator: 'is_checked', value: true, shows: ['reason_c'] }, // reason_c also merged away
+    ];
+    const merged = mergeFields(schema, ['reason_a', 'reason_b', 'reason_c']).schema;
+    const carried = merged.fields[0].controls_fields!.find(c => c.value === 'reason_b')!;
+    // reason_c was merged away -> remapped to the primary, not left dangling
+    expect(carried.shows).toEqual(['reason_a']);
+  });
+
+  it('stripEditorState removes the _ungroup stash from a saved schema', () => {
+    const schema = w7Schema();
+    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
+    // the in-memory merged field carries the stash...
+    expect((merged.fields[0] as unknown as Record<string, unknown>)._ungroup).toBeDefined();
+    // ...but the save-time copy does not.
+    const stripped = stripEditorState(merged);
+    expect((stripped.fields[0] as unknown as Record<string, unknown>)._ungroup).toBeUndefined();
+    // original schema object is untouched (stash still present for in-session ungroup)
+    expect((merged.fields[0] as unknown as Record<string, unknown>)._ungroup).toBeDefined();
+  });
+
+  it('stripEditorState is a no-op (same reference) when no stash is present', () => {
+    const schema = w7Schema();
+    expect(stripEditorState(schema)).toBe(schema);
   });
 });

@@ -105,6 +105,28 @@ function readStash(field: FormField): UngroupStash | undefined {
   return (field as unknown as Record<string, unknown>)[STASH_KEY] as UngroupStash | undefined;
 }
 
+// Strip editor-only state (the _ungroup stash) from a schema before it is
+// serialized to disk, so the saved artifact stays the clean consolidated shape
+// (Opus fallback review). The stash exists only to make an in-SESSION un-merge a
+// lossless inverse; persisting full duplicate source objects would bloat and
+// pollute the canonical form-kit JSON. Trade-off: un-merging a field that was
+// merged, SAVED, and RELOADED takes the (lossy) reconstruction fallback -- but
+// simple radio/checkbox widgets carry little metadata to lose, and within a
+// session the round-trip stays lossless. Returns a shallow-cloned schema; the
+// in-memory editor schema keeps its stash so a later same-session ungroup is
+// still lossless.
+export function stripEditorState(schema: FormSchema): FormSchema {
+  let touched = false;
+  const fields = schema.fields.map(f => {
+    if ((f as unknown as Record<string, unknown>)[STASH_KEY] === undefined) return f;
+    touched = true;
+    const copy = { ...f } as Record<string, unknown>;
+    delete copy[STASH_KEY];
+    return copy as unknown as FormField;
+  });
+  return touched ? { ...schema, fields } : schema;
+}
+
 export interface MergeResult {
   schema: FormSchema;
   // id of the merged (primary) field, so the caller can re-select it. null when
@@ -258,17 +280,34 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     source_type: f.type,
   }));
 
+  // Remap merged-away ids -> primary across a control rule's action-target arrays
+  // (a rule pointing at a sibling that is now only an option must not dangle).
+  const remapControlTargets = (ctrl: ConditionalControl): ConditionalControl => {
+    const c = { ...ctrl };
+    for (const key of CONTROL_ACTION_KEYS) {
+      const list = ctrl[key];
+      if (list && list.some(id => mergedAwayToValue.has(id))) {
+        const out: string[] = [];
+        for (const id of list) {
+          const r = mergedAwayToValue.has(id) ? primary.id : id;
+          if (!out.includes(r)) out.push(r);
+        }
+        c[key] = out;
+      }
+    }
+    return c;
+  };
+
   // Carry each NON-PRIMARY source's own trigger-side controls onto the merged
   // radio, re-keyed to fire when that option is selected (operator: equals,
   // value: the option value). Otherwise merging A+B would drop the rule by which
-  // selecting B unlocked/showed follow-up fields (Codex PR #256). The primary's
-  // controls already survive via the {...primary} spread below; we append the
-  // others. Each carried rule's existing operator/value is replaced with the
-  // option-select condition, since on the radio "B" is expressed as that value.
+  // selecting B unlocked/showed follow-up fields (Codex PR #256). Each carried
+  // rule's TARGET arrays are also remapped, so a rule that targeted another
+  // merged-away sibling does not dangle (Opus fallback review).
   const carriedControls: ConditionalControl[] = [];
   for (const f of distinct.slice(1)) {
     for (const ctrl of f.controls_fields || []) {
-      carriedControls.push({ ...ctrl, operator: 'equals', value: f.id });
+      carriedControls.push({ ...remapControlTargets(ctrl), operator: 'equals', value: f.id });
     }
   }
 
@@ -283,14 +322,34 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     survivors, mergedAwayToValue, primary.id,
   );
 
+  // The PRIMARY's own references to merged-away siblings must be rewritten too
+  // (it is excluded from `survivors`). show_if / copy_to retarget to the primary;
+  // its own controls' target arrays are remapped (Opus fallback review).
+  let primaryShowIf = primary.show_if;
+  if (primaryShowIf && mergedAwayToValue.has(primaryShowIf.field)) {
+    primaryShowIf = rewriteShowIf(primaryShowIf, mergedAwayToValue, primary.id) ?? primaryShowIf;
+  }
+  let primaryCopyTo = primary.copy_to;
+  if (primaryCopyTo && primaryCopyTo.some(id => mergedAwayToValue.has(id))) {
+    const out: string[] = [];
+    for (const id of primaryCopyTo) {
+      const r = mergedAwayToValue.has(id) ? primary.id : id;
+      if (!out.includes(r)) out.push(r);
+    }
+    primaryCopyTo = out;
+  }
+  const primaryControls = (primary.controls_fields || []).map(remapControlTargets);
+
   // The merged field carries the primary's identity + the stash for un-merge.
   const stash: UngroupStash = { sources: distinct, rewrites };
-  const mergedControls = [...(primary.controls_fields || []), ...carriedControls];
+  const mergedControls = [...primaryControls, ...carriedControls];
   const mergedField: FormField = {
     ...primary,
     type: 'radio',
     options,
     consolidated_widgets: distinct.map(f => f.id),
+    ...(primaryShowIf ? { show_if: primaryShowIf } : {}),
+    ...(primaryCopyTo ? { copy_to: primaryCopyTo } : {}),
     ...(mergedControls.length > 0 ? { controls_fields: mergedControls } : {}),
     [STASH_KEY]: stash,
   } as FormField;
