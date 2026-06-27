@@ -1,0 +1,78 @@
+{
+  "recorded_at": "2026-06-27T21:16:15Z",
+  "session_id": "8eebb56d-443d-4d22-9e57-d3b27c2a7657",
+  "beads": [
+    "polyglot-pdf-wf3q",
+    "polyglot-pdf-fwp6"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-06-27T06:36:22.813Z",
+    "last_ts": "2026-06-27T21:16:11.843Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 62890,
+      "output_tokens": 340886,
+      "cache_read_input_tokens": 126590235,
+      "cache_creation_input_tokens": 1704595
+    },
+    "subagent": {
+      "input_tokens": 16092,
+      "output_tokens": 50199,
+      "cache_read_input_tokens": 12951192,
+      "cache_creation_input_tokens": 510322
+    },
+    "total": {
+      "input_tokens": 78982,
+      "output_tokens": 391085,
+      "cache_read_input_tokens": 139541427,
+      "cache_creation_input_tokens": 2214917
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 62890,
+        "output_tokens": 340886,
+        "cache_read_input_tokens": 126590235,
+        "cache_creation_input_tokens": 1704595
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      }
+    },
+    "subagent": {
+      "claude-sonnet-4-6": {
+        "input_tokens": 105,
+        "output_tokens": 27719,
+        "cache_read_input_tokens": 7509821,
+        "cache_creation_input_tokens": 183311
+      },
+      "claude-opus-4-8": {
+        "input_tokens": 15987,
+        "output_tokens": 22480,
+        "cache_read_input_tokens": 5441371,
+        "cache_creation_input_tokens": 327011
+      }
+    }
+  },
+  "subagent_models": [
+    "claude-opus-4-8",
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 480,
+    "subagent": 200
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 2,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
