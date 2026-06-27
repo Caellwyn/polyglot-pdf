@@ -43,13 +43,20 @@ PERSONA (coherent life history)
     field (p2_line2h1) is conditional-HIDDEN -> NA, and the conditional-PR card
     (p2_checkbox3) is HIDDEN -> NA.
   - She is NOT fluent in written English, so an INTERPRETER (Maria Garcia,
-    Vietnamese) read the form to her: p5_checkbox1a = option [1] ("the interpreter
-    read to me"), which unlocks p5_line1b_language = "Vietnamese" and makes the
-    Part 6 interpreter block REQUIRED and coherent. She did NOT use a preparer in
-    lieu of self-statement (p5_checkbox1a is single-select), but a PREPARER (John
-    Smith) did help her, completing Part 7 as a NON-attorney (p7_checkbox7 option
-    [0]) -- so the attorney-representation-extends field (p7_checkbox7extend) is
-    conditional-HIDDEN -> NA.
+    Vietnamese) read the form to her: p5_checkbox1a = "P5_Checkbox1b[0]" ("the
+    interpreter read to me"), which unlocks p5_line1b_language = "Vietnamese" and
+    makes the Part 6 interpreter block REQUIRED and coherent.
+  - She did NOT use a separate preparer. The form's Part 5 conditional logic is
+    effectively single-path: p5_line1b_language (interpreter language) and
+    p5_line2_nameofrepresentative (preparer name) are EACH show_if-gated by an
+    `equals` test against ONE p5_checkbox1a option, and the production renderer
+    uses STRICT equality (shouldShowField), so a value selecting BOTH the
+    interpreter and preparer statements would hide BOTH dependents (a payload a
+    real client cannot send -- Codex review on PR #253). To stay coherent with the
+    form's real logic, the persona uses the interpreter path ONLY and leaves the
+    ENTIRE Part 7 preparer block NA (no preparer name, address, signature, etc.),
+    so there is no "Part 7 populated but preparer statement not certified"
+    contradiction. p5_line2_nameofrepresentative is therefore NA.
   - No disability accommodation requested (p4_checkbox1 = "No"), so the
     accommodation sub-fields are conditional-HIDDEN -> NA.
   - No removal proceedings, no I-407 abandonment (Part 3 = "No"/"No").
@@ -266,21 +273,19 @@ ANSWER_KEY: dict = {
     "p4_line1c_accomodationrequested": None,  # NA
 
     # ---- Part 5: Applicant's statement, contact, signature ----
-    # p5_checkbox1a is a checkbox GROUP (multi-select). This persona is not fluent
-    # in written English AND used a preparer, so BOTH statements apply:
-    #   - "P5_Checkbox1b[0]" = the interpreter named in Part 6 read the form to her
-    #     (unlocks p5_line1b_language, makes Part 6 coherent/required);
-    #   - "P5_Checkbox2[0]" = at her request, the preparer named in Part 7 prepared
-    #     it (unlocks p5_line2_nameofrepresentative).
-    # Selecting only the interpreter statement while Part 7 is fully populated would
-    # be an unlabeled contradiction (a preparer exists but the applicant did not
-    # certify it) -- Codex review on PR #253. NOT "P5_Checkbox1a[0]" ("I read
-    # English") -- that would contradict having an interpreter.
-    "p5_checkbox1a": "P5_Checkbox1b[0]; P5_Checkbox2[0]",
+    # Interpreter path ONLY -> "P5_Checkbox1b[0]" ("the interpreter named in Part 6
+    # read to me"), which unlocks p5_line1b_language and makes Part 6 coherent. The
+    # form gates the two Part-5 dependents (interpreter language, preparer name) on
+    # an `equals` test against ONE option, and the renderer uses strict equality, so
+    # a single coherent path must be chosen (Codex review on PR #253): interpreter,
+    # with the entire Part 7 preparer block NA. NOT "P5_Checkbox1a[0]" ("I read
+    # English") -- that would contradict having an interpreter; NOT a multi-value
+    # selecting both statements -- that would hide BOTH dependents under strict
+    # `equals` gating.
+    "p5_checkbox1a": "P5_Checkbox1b[0]",
     "p5_line1b_language": "Vietnamese",
-    # Preparer-in-lieu statement IS selected (above), so the representative-name
-    # field is unlocked and filled with the Part 7 preparer.
-    "p5_line2_nameofrepresentative": "John Smith",
+    # Preparer-statement option NOT selected (interpreter path) -> NA.
+    "p5_line2_nameofrepresentative": None,
     "p5_line3_daytimephonenumber": "713-555-0142",
     "p5_line4_mobilephonenumber": "713-555-0199",
     "p5_line5_emailaddress": "linh.nguyen@example.com",
@@ -307,28 +312,31 @@ ANSWER_KEY: dict = {
     "p6_line6a_signature": "Maria Garcia",
     "p6_line6b_dateofsignature": "2025-06-01",
 
-    # ---- Part 7: Preparer (John Smith, non-attorney) ----
-    "p7_line1b_preparersgivenname": "John",
-    "p7_line1a_familyname": "Smith",
-    "p7_line2_nameofbusinessor": "Smith Immigration Assistance",
-    "p7_line3a_streetnumbername": "500 Main St",
-    "p7_unit_type3b_unit": "P7_checkbox3b_Unit[1]",   # Suite
-    "p7_line3b_aptsteflrnumber": "400",
-    "p7_line3c_citytown": "Houston",
-    "p7_line3d_state": "TX",
-    "p7_line3e_zipcode": "77003",
-    "p7_line3f_province": None,    # NA: US address
-    "p7_line3g_postalcode": None,  # NA: US address
-    "p7_line3h_country": "United States",
-    "p7_line4_preparersdaytimephonenumber": "713-555-0166",
-    "p7_line5_preparersfaxnumber": "713-555-0155",
-    "p7_line6_preparersemailaddress": "john.smith@example.com",
-    # Preparer is NOT an attorney -> option [0]; gates the extends-representation
-    # radio HIDDEN.
-    "p7_checkbox7": "P7_checkbox7[0]",
-    "p7_checkbox7extend": None,    # NA: attorney gate = not an attorney
-    "p7_line8a_signatureofpreparer": "John Smith",
-    "p7_line8b_dateofsignature": "2025-06-01",
+    # ---- Part 7: Preparer -- ENTIRELY NA for this persona ----
+    # The persona used an interpreter, NOT a separate preparer (see the Part 5 note
+    # + the module docstring). Because Part 5's preparer-statement option is NOT
+    # selected, populating Part 7 would be an unlabeled contradiction ("a preparer
+    # exists but the applicant did not certify one" -- Codex review on PR #253), so
+    # the ENTIRE Part 7 block is NA.
+    "p7_line1b_preparersgivenname": None,
+    "p7_line1a_familyname": None,
+    "p7_line2_nameofbusinessor": None,
+    "p7_line3a_streetnumbername": None,
+    "p7_unit_type3b_unit": None,
+    "p7_line3b_aptsteflrnumber": None,
+    "p7_line3c_citytown": None,
+    "p7_line3d_state": None,
+    "p7_line3e_zipcode": None,
+    "p7_line3f_province": None,
+    "p7_line3g_postalcode": None,
+    "p7_line3h_country": None,
+    "p7_line4_preparersdaytimephonenumber": None,
+    "p7_line5_preparersfaxnumber": None,
+    "p7_line6_preparersemailaddress": None,
+    "p7_checkbox7": None,
+    "p7_checkbox7extend": None,
+    "p7_line8a_signatureofpreparer": None,
+    "p7_line8b_dateofsignature": None,
 
     # ---- Part 8: Additional information ----
     # Page-header REPEATS (copy_from Part 1) MUST equal their source exactly.
@@ -384,11 +392,31 @@ NA_REASON: dict = {
     "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No",
     "p4_checkbox1c": "accommodation gate p4_checkbox1 = No",
     "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No",
+    "p5_line2_nameofrepresentative": "preparer-statement option (P5_Checkbox2[0]) not selected; persona uses the interpreter path",
     "p6_line3f_province": "US interpreter address, no foreign province",
     "p6_line3g_postalcode": "US interpreter address, no foreign postal code",
-    "p7_line3f_province": "US preparer address, no foreign province",
-    "p7_line3g_postalcode": "US preparer address, no foreign postal code",
-    "p7_checkbox7extend": "attorney-representation gate p7_checkbox7 = not an attorney",
+    # Entire Part 7 preparer block NA: persona used an interpreter, not a separate
+    # preparer (the Part 5 preparer-statement option is not selected), so populating
+    # Part 7 would be an unlabeled contradiction.
+    "p7_line1b_preparersgivenname": "no separate preparer (interpreter path)",
+    "p7_line1a_familyname": "no separate preparer (interpreter path)",
+    "p7_line2_nameofbusinessor": "no separate preparer (interpreter path)",
+    "p7_line3a_streetnumbername": "no separate preparer (interpreter path)",
+    "p7_unit_type3b_unit": "no separate preparer (interpreter path)",
+    "p7_line3b_aptsteflrnumber": "no separate preparer (interpreter path)",
+    "p7_line3c_citytown": "no separate preparer (interpreter path)",
+    "p7_line3d_state": "no separate preparer (interpreter path)",
+    "p7_line3e_zipcode": "no separate preparer (interpreter path)",
+    "p7_line3f_province": "no separate preparer (interpreter path)",
+    "p7_line3g_postalcode": "no separate preparer (interpreter path)",
+    "p7_line3h_country": "no separate preparer (interpreter path)",
+    "p7_line4_preparersdaytimephonenumber": "no separate preparer (interpreter path)",
+    "p7_line5_preparersfaxnumber": "no separate preparer (interpreter path)",
+    "p7_line6_preparersemailaddress": "no separate preparer (interpreter path)",
+    "p7_checkbox7": "no separate preparer (interpreter path)",
+    "p7_checkbox7extend": "no separate preparer (interpreter path)",
+    "p7_line8a_signatureofpreparer": "no separate preparer (interpreter path)",
+    "p7_line8b_dateofsignature": "no separate preparer (interpreter path)",
     "p8_line3a_pagenumber": "no additional-information overflow needed",
     "p8_line3b_partnumber": "no additional-information overflow needed",
     "p8_line3c_itemnumber": "no additional-information overflow needed",

@@ -75,15 +75,28 @@ def test_clean_base_has_no_state_country_or_province_artifact():
                         f"province {pv!r} ({stk}/{pvk})")
 
 
+# The payload resolves option tokens to LABELS (option_label), so these guards
+# must compare against the resolved label, NOT the raw token -- a raw-token
+# comparison would never fire and the regression guard would be dead (Codex review,
+# PR #253). _by_id maps field_id -> schema field so we can resolve the token.
+_FIELDS_BY_ID = {f["field_id"]: f for f in load_schema_fields()}
+
+
+def _label_of(field_id: str, token: str) -> str:
+    """The human label the payload would carry for `token` on `field_id`."""
+    return option_label(_FIELDS_BY_ID[field_id], token)
+
+
 def test_name_change_coherence_holds_in_all_cases():
     """If the name-change radio says 'Yes' (option [0]), at least one previous-name
     field must be filled -- otherwise it is the original 'Yes but identical name'
     artifact. The persona is 'No', so this must hold across injected cases too."""
     prev = ("p1_line5a_familyname", "p1_line5b_givenname", "p1_line5c_middlename")
+    yes_label = _label_of("p1_checkbox4", "P1_checkbox4[0]")  # "Yes (Proceed ...)"
     for size in (20, 40, 132):
         for case in build_corpus(size):
             d = {f["field_id"]: f["value"] for f in case.fields}
-            if d.get("p1_checkbox4") == "P1_checkbox4[0]":  # "Yes, changed"
+            if d.get("p1_checkbox4") == yes_label:
                 assert any(d.get(k) for k in prev), (
                     f"{case.case_id}: name-change=Yes but no previous name given")
 
@@ -91,12 +104,13 @@ def test_name_change_coherence_holds_in_all_cases():
 def test_english_interpreter_coherence_holds_in_all_cases():
     """If the applicant self-certifies 'I can read English' (option [0]), an
     interpreter must NOT be populated -- otherwise it is the self-cert-vs-
-    interpreter artifact. The persona uses option [1] (interpreter read to me)."""
+    interpreter artifact. The persona uses the interpreter-read-to-me statement."""
     interp = ("p6_line1a_interpretersfamilyname", "p6_line1b_interpretersgivenname")
+    eng_label = _label_of("p5_checkbox1a", "P5_Checkbox1a[0]")  # "I can read ..."
     for size in (20, 40, 132):
         for case in build_corpus(size):
             d = {f["field_id"]: f["value"] for f in case.fields}
-            if d.get("p5_checkbox1a") == "P5_Checkbox1a[0]":  # "I read English"
+            if d.get("p5_checkbox1a") == eng_label:
                 assert not any(d.get(k) for k in interp), (
                     f"{case.case_id}: English self-cert but interpreter populated")
 
@@ -177,15 +191,27 @@ def test_option_values_are_resolved_to_human_labels():
 
 
 def test_p5_certification_matches_who_filled_the_form():
-    """Part 5 certification must match reality: this persona used an interpreter AND
-    a preparer, so p5_checkbox1a selects BOTH statements and the representative-name
-    field is filled. Selecting only the interpreter while Part 7 is populated would
-    be an unlabeled contradiction (Codex review, PR #253)."""
+    """Part 5 certification must match reality and the form's single-path conditional
+    logic. The form gates each Part-5 dependent on an `equals` test against ONE
+    p5_checkbox1a option under strict equality (shouldShowField), so selecting BOTH
+    the interpreter and preparer statements would hide BOTH dependents -- a payload a
+    real client cannot send (Codex review, PR #253). The persona therefore uses the
+    interpreter path ONLY: the interpreter statement is selected, the language field
+    is filled, and the ENTIRE Part 7 preparer block (plus the representative-name
+    field) is NA."""
     interp = "interpreter named in Part 6"
-    prep = "preparer named in Part 7"
+    eng = "I can read and understand English"
     d = {f["field_id"]: f["value"] for f in build_corpus(132)[-1].fields}
-    assert interp in d["p5_checkbox1a"] and prep in d["p5_checkbox1a"]
-    assert d.get("p5_line2_nameofrepresentative") == "John Smith"
+    assert interp in d["p5_checkbox1a"]
+    assert eng not in d["p5_checkbox1a"]
+    assert d.get("p5_line1b_language") == "Vietnamese"
+    # interpreter path -> no preparer statement, no representative name, no Part 7
+    assert "p5_line2_nameofrepresentative" not in d
+    assert ANSWER_KEY["p5_line2_nameofrepresentative"] is None
+    for fid in ("p7_line1a_familyname", "p7_line3d_state", "p7_checkbox7",
+                "p7_line8a_signatureofpreparer"):
+        assert ANSWER_KEY[fid] is None, f"{fid} should be NA (no preparer)"
+        assert fid not in d, f"{fid} should be omitted from the payload"
 
 
 def test_show_if_gated_reason_field_is_na_for_plain_lpr():

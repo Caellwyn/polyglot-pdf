@@ -194,13 +194,15 @@ def build_corpus(size: int) -> list:
         # All implicated fields must be present in the payload now.
         if any(_index_of(base, fid) < 0 for fid in need_ids):
             return None
-        ids = list(expected[0])
-        dist = _distance(base, ids[0], ids[1]) if len(ids) >= 2 else 0
         # Drop any field an injection blanked (e.g. a US ZIP cleared for a foreign
         # country) -- production omits empties, and a "" left in the payload would
-        # itself read oddly. Distance is computed ABOVE on the implicated pair
-        # (always non-empty), so filtering here does not shift it.
+        # read oddly. Filter BEFORE computing distance so the recorded gap matches
+        # the gap in the SENT payload (a cleared field sitting between the two
+        # implicated fields would otherwise inflate the distance -- Codex review,
+        # PR #253).
         base[:] = [f for f in base if f["value"] not in ("", None)]
+        ids = list(expected[0])
+        dist = _distance(base, ids[0], ids[1]) if len(ids) >= 2 else 0
         return Case(
             case_id=f"s{size}_{case_suffix}",
             size=size, cls=cls, distance=dist,
@@ -468,7 +470,12 @@ def corpus_fingerprint() -> str:
     h = hashlib.sha256()
     for size in _CORPUS_SIZES:
         for c in sorted(build_corpus(size), key=lambda x: x.case_id):
-            payload = {f["field_id"]: f["value"] for f in c.fields}
+            # Hash the FULL ORDERED payload exactly as the probe sends it
+            # (field_id, name, value, in order) -- not just an id->value map -- so a
+            # change to a spoken NAME or to document ORDER (same ids/values) still
+            # changes the fingerprint and prevents g1b_merge from blending rows
+            # measured on a different prompt (Codex review, PR #253).
+            payload = [[f["field_id"], f["name"], f["value"]] for f in c.fields]
             groups = sorted(sorted(g) for g in c.expected_conflicts)
             h.update(json.dumps(
                 [c.case_id, payload, groups], sort_keys=True).encode("utf-8"))

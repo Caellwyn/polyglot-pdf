@@ -97,45 +97,47 @@ deferred (a real schema reconciliation, genuinely out of scope).
 
 `p2_checkbox1.controls_fields` unlocks the Reason-for-New-Card field
 (`p2_checkbox2[5]`) for option [0] (plain LPR) AND option [1] (commuter), but
-`p2_checkbox2[5].show_if` narrows visibility to option [1] only. Every I-90
-applicant must give a reason, so a plain LPR should see it -- the `show_if` is too
-narrow. The answer key follows the authoritative `controls_fields` map and
-documents the call inline; reconciling the schema is out of scope for wf3q -> filed
-**bd polyglot-pdf-zi2s**.
+`p2_checkbox2[5].show_if` narrows visibility to option [1] only. The two annotations
+disagree. The PRODUCTION renderer gates on `show_if` (`shouldShowField`) and HIDES
+the field for a plain LPR, rejecting any hidden-field update -- so a real client
+could NOT send this field for this persona. The corpus must reflect what a real
+client sends, so the answer key marks `p2_checkbox2[5]` as **NA** (Codex round-1
+finding). The schema self-inconsistency itself is out of scope for wf3q -> filed
+**bd polyglot-pdf-zi2s** to reconcile it.
 
 ## Result / next
 
 The clean-corpus PRECISION re-measure (exit criterion 3) was run on the two cheap
 text models the recall finding points at (2.5-flash-lite per-section, 2.5-flash
 end-of-form), all three sizes, ~360 live calls, ~$0.09. On the final CLEAN corpus
-(run `g1b_bakeoff_20260627T115647`, after BOTH the fresh-eyes injection-city fix
-AND the Codex round-1 fixes -- option-label resolution, the p2/p5 coherence fixes):
+(run `g1b_bakeoff_20260627T122758`, after the fresh-eyes fix AND both Codex review
+rounds -- option-label resolution, the p2 NA fix, the single-path Part-5/Part-7
+fix, ZIP isolation, the corpus fingerprint, and the distance-after-filter fix):
 
 | model | size | recall | precision |
 |-------|-----:|-------:|----------:|
 | 2.5-flash-lite | 20 | 1.000 | 0.800 |
-| 2.5-flash-lite | 40 | 0.952 | 0.909 |
-| 2.5-flash-lite | 132 | 0.852 | 0.793 |
+| 2.5-flash-lite | 40 | 0.857 | 0.818 |
+| 2.5-flash-lite | 132 | 0.741 | 0.833 |
 | 2.5-flash | 20 | 1.000 | 1.000 |
 | 2.5-flash | 40 | 1.000 | 1.000 |
-| 2.5-flash | 132 | 0.963 | 1.000 |
+| 2.5-flash | 132 | 0.926 | 1.000 |
 
 These precision numbers are now TRUSTWORTHY: every remaining false positive is a
 GENUINE checker over-flag on a COHERENT payload, not a corpus artifact. The
 breakdown by clean-trap type (both models, all sizes) proves it:
 
 - `clean_baseline` (the full validated persona, the densest trap): **0/6 flagged**;
-  `clean_dual` (mailing + physical, both valid but different): **0/8 flagged**.
-- `clean_us` (coherent US addresses): 1/30. After Codex's option-label fix, there
-  are **ZERO** lone `p1_line8_male` / `p5_checkbox1a` over-flags -- those were
+  `clean_us` (coherent US addresses): **0/30 flagged**. After Codex's option-label
+  fix there are ZERO lone `p1_line8_male` / `p5_checkbox1a` over-flags -- those were
   corpus artifacts (the checker saw the opaque token `P1_Line8_female[0]` with no
-  meaning), not model noise as the earlier writeup wrongly claimed. 2.5-flash is now
+  meaning), not model noise as an earlier writeup wrongly claimed. 2.5-flash is
   precision 1.000 at every size.
 - The remaining false positives concentrate exactly where a cheap checker is
-  genuinely weak: foreign addresses 8/24, US territories 3/18 -- all coherent
-  payloads the prompt explicitly says NOT to flag (a foreign
-  province+postal+country with no US state; Puerto Rico / Guam / USVI ZIPs).
-  2.5-flash-lite drives all of these.
+  genuinely weak: foreign addresses 7/24, US territories 3/18, dual mailing+physical
+  2/8 -- all coherent payloads the prompt explicitly says NOT to flag (a foreign
+  province+postal+country with no US state; Puerto Rico / Guam / USVI ZIPs; a
+  mailing + a distinct physical address). 2.5-flash-lite drives all of these.
 
 So the precision story is now real: 2.5-flash is FULLY precise (1.000 at all sizes)
 and the weakness is the lite model on hard foreign/territory coherent addresses.
@@ -170,11 +172,36 @@ Codex round 1 returned 5 P1 findings -- all genuine, all adopted (none were nits
    meta so g1b_merge.py merges ONLY same-corpus runs (it now excludes
    pre-fingerprint / other-corpus rows, reporting the dropped count).
 
-Six new regression tests lock these in. The clean numbers above are the post-fix
-re-measure. This unblocks bd 08zv (G1c precision/latency tuning), which must
-not trust any precision result until the corpus is clean. The recall finding (bd
-0zp3 / PR #242) was already shippable; the precision numbers are now trustworthy
-too.
+Six new regression tests lock these in.
+
+Codex round 2 (on the round-1 fixes) returned 8 more findings -- all genuine, all
+adopted; several were consequences of the round-1 fixes themselves:
+
+6. **The new multi-select p5_checkbox1a HID its own dependents.** The form gates
+   p5_line1b_language and p5_line2_nameofrepresentative on an `equals` test against
+   ONE option, and the renderer uses STRICT equality, so selecting BOTH the
+   interpreter and preparer statements (the round-1 fix for #4) would hide BOTH
+   dependents -- the same "real client can't send it" trap as round-1 #2. Resolved
+   by choosing a SINGLE coherent path: interpreter ONLY, with the ENTIRE Part 7
+   preparer block marked NA (so there is no "Part 7 populated but not certified"
+   contradiction either). The persona is now 73 filled + 59 NA.
+7. **The corpus fingerprint hashed only {field_id: value}**, but the probe sends an
+   ordered list of {field_id, name, value}; a spoken-name or document-order change
+   would not change the fp. Fixed to hash the full ordered payload.
+8. **distance was computed BEFORE the blanked ZIP was filtered**, so a cleared field
+   between the implicated pair inflated the recorded distance (state_country was 2,
+   should be 1). Fixed: filter empties, then compute distance.
+   Plus four doc/test-accuracy fixes: the coherence guards compared raw tokens
+   against the now-label-resolved payload (dead guards -> compare resolved labels);
+   the answer-key persona docstring + the journal's p2 note still described the
+   pre-fix state; and the findings banner wrongly claimed the recall tables were
+   unaffected (the clean corpus changed contradiction payloads too -> narrowed to
+   precision-only).
+
+The clean numbers above are the post-round-2 re-measure. This unblocks bd 08zv
+(G1c precision/latency tuning), which must not trust any precision result until the
+corpus is clean. The recall finding (bd 0zp3 / PR #242) was already shippable; the
+precision numbers are now trustworthy too.
 
 ## Doc freshness
 
@@ -204,9 +231,9 @@ another owner's active work is out of scope for this closeout).
 - `backend/tests/unit/test_g1b_answer_key_coherence.py` (new) -- 9 coherence guards.
 - `scripts/spikes/g1b_bakeoff_findings.md` -- a precision-update banner pointing at
   the clean-corpus re-measure (bd 0zp3's findings doc; pointer only).
-- `scripts/spikes/data/g1b_bakeoff_20260627T115647.{csv,meta.json}` (new) -- the
-  clean-corpus precision re-measure run (final corpus, post fresh-eyes + Codex
-  round-1 fixes; carries the corpus_fp column).
+- `scripts/spikes/data/g1b_bakeoff_20260627T122758.{csv,meta.json}` (new) -- the
+  clean-corpus precision re-measure run (final corpus, post fresh-eyes + BOTH Codex
+  review rounds; carries the corpus_fp column).
 - `backend/scripts/probe_g1b_model_size_bakeoff.py` -- stamps corpus_fp on every
   row + meta (so g1b_merge merges only same-corpus runs).
 - `backend/scripts/g1b_merge.py` -- filters to the current corpus_fp; excludes

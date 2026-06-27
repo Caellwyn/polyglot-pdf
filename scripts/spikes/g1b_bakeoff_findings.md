@@ -4,12 +4,19 @@
 > precision was measured on was rebuilt on a HAND-VALIDATED coherent I-90 answer
 > key (`backend/scripts/g1b_answer_key.py`), removing the unlabeled-contradiction
 > contamination Codex round 3 found. A clean-corpus re-measure on the two cheap
-> text models (run `g1b_bakeoff_20260627T115647`) gives TRUSTWORTHY precision:
-> 2.5-flash 1.00 at every size, 2.5-flash-lite 0.79-0.91, with every residual false
+> text models (run `g1b_bakeoff_20260627T122758`) gives TRUSTWORTHY precision:
+> 2.5-flash 1.00 at every size, 2.5-flash-lite 0.80-0.83, with every residual false
 > positive a genuine over-flag on a coherent foreign/territory/dual address (NOT a
-> corpus artifact; the full validated persona baseline is 0/6 flagged). The RECALL
-> findings below are unaffected (recall was always measured on labeled
-> contradictions). See `docs/journal/entries/2026-06-27-bd-wf3q-...md`.
+> corpus artifact; the full validated persona baseline is 0/6 flagged).
+> **Scope:** this banner is PRECISION-only. The clean corpus also changed the
+> CONTRADICTION payloads (injected state values, option-label resolution, cleared
+> ZIPs), so the wf3q run's RECALL for the two rerun models differs from the recall
+> TABLES BELOW (e.g. 2.5-flash-lite@132 0.741 here vs 0.704 below). The
+> qualitative recall FINDING (cheap models miss far-apart
+> cross-section contradictions; use a per-boundary split) still holds, but the exact
+> recall NUMBERS below predate the clean corpus -- re-run the full sweep on
+> corpus_fp to refresh them before quoting a specific recall figure. See
+> `docs/journal/entries/2026-06-27-bd-wf3q-...md`.
 
 **Bead:** polyglot-pdf-0zp3 (follow-up to G1 / jnjj.5)
 **Date:** 2026-06-26 (corrected re-run after two rounds of Codex methodology review)
