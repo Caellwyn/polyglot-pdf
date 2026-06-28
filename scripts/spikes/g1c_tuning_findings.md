@@ -47,13 +47,19 @@ examples drawn from those exact buckets. Measured baseline vs tuned on
 | prompt | size | recall | precision | tp | fn | fp |
 |--------|-----:|-------:|----------:|---:|---:|---:|
 | baseline | 20 | 0.979 | 0.770 | 47 | 1 | 14 |
-| **tuned** | 20 | 0.979 | **0.958** | 46 | 1 | 2 |
+| **tuned** | 20 | 0.958 | **0.958** | 46 | 2 | 2 |
 | baseline | 40 | 0.889 | 0.889 | 56 | 7 | 7 |
 | **tuned** | 40 | 0.921 | **0.967** | 58 | 5 | 2 |
 
+(Scored probe-consistently: a `json_error` is a model-format failure = an empty
+verdict = a miss, NOT excluded -- `g1c_aggregate.py`. The one `json_error` in the
+tuned@20 runs is why tuned@20 recall is 0.958, not 0.979.)
+
 **Result: at the per-section sizes (20/40) the tuned prompt is a decisive win** --
-false positives drop ~7x (14->2 at size 20, 7->2 at size 40) with recall HELD or
-slightly improved. Exit criterion 2 met (precision lift + recall not regressed).
+false positives drop ~7x (14->2 at size 20, 7->2 at size 40). Recall is held within
+noise: at size 20 the 0.979->0.958 difference is a SINGLE case (one json_error, not
+a missed contradiction); at size 40 recall improves (0.889->0.921). Exit criterion 2
+met (precision lift + recall not regressed).
 
 (At size 132 -- off-tier for the lite model -- the tuned prompt trades precision
 for recall and is a wash; that does not bear on the per-section recommendation,
@@ -64,19 +70,27 @@ model's job.)
 
 ## Lever 1 -- END-OF-FORM (the 132-field sweep)
 
-### Caching is structurally INAPPLICABLE (exit criterion 1 answer)
+### Caching is INAPPLICABLE in practice (exit criterion 1 answer)
 
 The bead's premise was "cache SI+rules+few-shot so only the form answers pay full
-input rate." Measured token counts kill this:
+input rate." The key constraint: **caching only helps content that REPEATS
+byte-identically across calls.** For the checker, the only cross-call-stable
+content is the SI+rules prefix; the form payload is DIFFERENT every call (a
+different applicant's answers), so it can never be a cache hit. Measured token
+counts (`client.models.count_tokens`, 2026-06-27):
 
-- checker SI+rules prefix = **324 tokens**
-- full 132-field prompt = **2908 tokens**
-- Gemini cache MINIMUMS: 3.5-flash 4096, 2.5-flash 2048 (ai.google.dev/.../caching,
-  verified 2026-06-27)
+- checker SI+rules **prefix** (the only repeatable content) = **324 tokens**
+- full 132-field prompt (prefix + this form's answers) = **2908 tokens**
+- Gemini cache MINIMUMS: **2.5-flash 2048, 3.5-flash 4096**
+  (ai.google.dev/.../caching, verified via gemini-docs MCP 2026-06-27)
 
-Both the prefix AND the full prompt are below the cache minimum, so neither
-implicit nor explicit caching can engage. There is nothing large enough to cache.
-(`probe_g1c_tuning.py --lever latency` prints this feasibility check.)
+The repeatable prefix (324 tokens) is far below BOTH minimums (2048 and 4096), so
+neither implicit nor explicit caching of the prefix can engage on either model.
+Note the full prompt (2908 tokens) DOES exceed the 2.5-flash 2048 minimum -- but
+that is irrelevant, because the full prompt is unique per form and so never
+produces a cache hit; only the 324-token prefix repeats, and it is too small to
+cache. So caching cannot reduce billed input for this checker on EITHER model.
+(`probe_g1c_tuning.py --lever latency` prints the prefix-token feasibility check.)
 
 ### Payload trim is a NET LOSS
 

@@ -26,13 +26,22 @@ def _precision():
         return
     print(f"=== PRECISION LEVER: pooled over {len(files)} run(s) ===")
     agg = defaultdict(lambda: {"tp": 0, "fn": 0, "fp": 0, "tn": 0, "runs": set()})
+    # Score rows EXACTLY as the probe does (g1b_scoring): a MODEL-FORMAT failure
+    # (json_error / no_tool_call) is NOT skipped -- it is an empty verdict, i.e. a
+    # MISS on a contradiction (FN) and a clean-pass on a clean case (TN). Only a
+    # TRANSPORT failure (timeout / 5xx / connect) is excluded as "no measurement".
+    # Skipping json_error would undercount FN and inflate recall (fresh-eyes, 08zv).
+    from backend.scripts.g1b_scoring import is_model_format_error
     for f in files:
         for r in csv.DictReader(open(f, encoding="utf-8")):
             k = (r["prompt"], r["size"])
             c = agg[k]
             c["runs"].add(os.path.basename(f))
-            if r["error"]:
-                continue
+            err = r.get("error") or ""
+            if err and not is_model_format_error(err):
+                continue  # transport failure -> no measurement (excluded)
+            # model-format failure falls through with detected=0 / n_flagged=0,
+            # so it scores as FN (contradiction) or TN (clean) -- matching the probe.
             if r["is_contradiction"] == "1":
                 c["tp" if r["detected"] == "1" else "fn"] += 1
             else:

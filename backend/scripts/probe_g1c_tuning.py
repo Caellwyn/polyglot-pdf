@@ -17,13 +17,18 @@ residual levers G1b surfaced, each measured on the SAME clean corpus
   2.5-flash-lite, across all sizes. Reports precision lift AND confirms recall is
   not regressed (the gate: recall must not drop).
 
-  LEVER 1 -- LATENCY (end-of-form tier = gemini-3.5-flash, the accuracy tier per
-  0zp3's corrected finding -- NOT 2.5-flash, which misses the far/cross-section
-  contradictions). The 132-field sweep is slow (G1b p50 ~18s / p90 ~40s). This
-  probe measures EXPLICIT context caching (cache the stable SI+rules+few-shot via
-  the genai caches API so only the form answers pay full input rate) + a
-  payload-TRIM variant, vs the uncached baseline, at size 132. Reports the
-  latency + cost delta. (Run with --lever latency; see _run_latency.)
+  LEVER 1 -- LATENCY (end-of-form tier). The 132-field sweep is slow. This probe
+  measures, at size 132: a CACHE-FEASIBILITY check (it COUNTS the cacheable
+  prefix tokens and reports whether caching can engage -- it does NOT attempt to
+  create a cache, because the count shows it cannot) + a payload-TRIM variant, vs
+  the uncached baseline. FINDINGS (see g1c_tuning_findings.md): caching is
+  inapplicable (the only cross-call-repeatable content is the 324-token SI prefix,
+  below the 2.5-flash 2048 / 3.5-flash 4096 minimums); trim is a net precision
+  loss; and the model recommendation pivoted OFF 3.5-flash to the native-audio
+  voice model (recall 0.96 / precision 1.0 / ~7s @132 on the clean corpus, measured
+  separately via probe_g1b_model_size_bakeoff). This probe is run with
+  --model-default 3.5-flash purely to document why 3.5-flash is rejected; the
+  shipped end-of-form tier is the voice model. (Run with --lever latency.)
 
 PROVENANCE: SYNTHETIC clean corpus (g1b_answer_key persona). No real PHI.
 
@@ -56,28 +61,23 @@ from backend.scripts.g1b_corpus import build_corpus, corpus_fingerprint  # noqa:
 from backend.scripts.g1b_scoring import detected as _detected  # noqa: E402
 from backend.scripts.g1b_scoring import is_model_format_error as _is_model_format_error  # noqa: E402
 
-# Reuse the EXACT baseline prompt + payload renderer + retry machinery from the
-# G1b probe so "baseline" here is byte-identical to the measured G1b baseline.
+# Reuse the EXACT baseline prompt + payload renderer from the G1b probe so
+# "baseline" here is byte-identical to the measured G1b baseline. (The retry/timeout
+# loop is reimplemented locally as _run_with_prompt / _run_with_prompt_str so a
+# NON-baseline prompt can be swapped in; the local copies mirror G1b's _run.)
 from backend.scripts.probe_g1b_model_size_bakeoff import (  # noqa: E402
     PROMPT as BASELINE_PROMPT,
     TODAY,
     _payload_json,
-    _run,
     _flagged_sets,
     _client,
 )
 
-# Per-1M USD text rates (input, output) -- the two tiers 08zv tunes. Mirrors the
-# G1b table (input includes the cached-read discount modeling for the latency
-# lever, applied in _cost_cached).
+# Per-1M USD text rates (input, output) -- the two tiers 08zv tunes (G1b table).
 RATES = {
     "gemini-2.5-flash-lite": {"in": 0.10, "out": 0.40},
     "gemini-3.5-flash":      {"in": 1.50, "out": 6.00},
 }
-# Gemini implicit/explicit cached-input is billed at ~0.25x the normal input rate
-# (ai.google.dev pricing; the exact ratio varies by model -- used here only for the
-# RELATIVE cached-vs-uncached cost delta, not an absolute $/form quote).
-_CACHED_IN_DISCOUNT = 0.25
 _PER_1M = 1_000_000
 
 OUT_DIR = os.path.join(
@@ -310,14 +310,16 @@ def _write(rows, summary, lever):
     print(f"\nwrote {csv_path}\nwrote {meta_path}", flush=True)
 
 
-# 3.5-flash implicit/explicit caching MINIMUM (ai.google.dev/gemini-api/docs/caching,
-# verified via gemini-docs MCP 2026-06-27): 4096 input tokens. The checker's
-# cacheable prefix (SI + rules + few-shot) is ~324 tokens and even the FULL
-# 132-field prompt is ~2908 tokens -- BOTH far below 4096 -- so neither implicit
-# caching nor an explicit cache can engage. This probe MEASURES that (it tries the
-# explicit cache and reports it does not reduce billed input), plus a payload-TRIM
-# variant, against the uncached baseline, so exit criterion 1 has a measured delta.
+# Gemini caching MINIMUMS (ai.google.dev/gemini-api/docs/caching, verified via
+# gemini-docs MCP 2026-06-27): 3.5-flash 4096, 2.5-flash 2048 input tokens. The only
+# cross-call-REPEATABLE content is the checker SI+rules prefix (~324 tokens); the
+# form payload differs every call, so it can never be a cache hit. 324 is far below
+# BOTH minimums, so caching cannot engage on either model. This probe DOCUMENTS that
+# by COUNTING the prefix tokens (it does NOT attempt to create a cache -- the count
+# already settles it), plus a payload-TRIM variant vs the uncached baseline, so exit
+# criterion 1 has a measured answer.
 _CACHE_MIN_35 = 4096
+_CACHE_MIN_25 = 2048
 
 
 async def _lever_latency(args):
@@ -339,10 +341,13 @@ async def _lever_latency(args):
             ct = client.models.count_tokens(model=model, contents=prefix).total_tokens
         except Exception:  # noqa: BLE001
             ct = None
-        print(f"[cache feasibility] checker SI+rules prefix = {ct} tokens; "
-              f"3.5-flash cache minimum = {_CACHE_MIN_35}. "
-              f"Caching {'CAN' if (ct or 0) >= _CACHE_MIN_35 else 'CANNOT'} engage "
-              f"(prefix below minimum).", flush=True)
+        engages = (ct or 0) >= _CACHE_MIN_25  # 2048 is the LOWER of the two minimums
+        print(f"[cache feasibility] cross-call-repeatable prefix (SI+rules) = {ct} "
+              f"tokens; cache minimums: 2.5-flash {_CACHE_MIN_25}, 3.5-flash "
+              f"{_CACHE_MIN_35}. The repeatable prefix is the ONLY cacheable content "
+              f"(the form payload differs per call). Caching "
+              f"{'CAN' if engages else 'CANNOT'} engage on either model "
+              f"(prefix below both minimums).", flush=True)
 
     sizes = [132]
     sem = asyncio.Semaphore(args.concurrency)
