@@ -644,6 +644,16 @@ class TestCost:
         assert ledger.compute_cost(None)["total"] == 0.0
         assert ledger.compute_cost({})["total"] == 0.0
 
+    def test_malformed_counts_dict_does_not_raise(self):
+        # The warn-only promise must hold even for a malformed models dict (a
+        # None actor value, or a None/non-dict counts entry) -- never AttributeError
+        # (fresh-eyes finding). parse_transcript never produces these, but a
+        # hand-crafted or future-schema row might.
+        assert ledger.compute_cost({"orchestrator": None})["total"] == 0.0
+        c = ledger.compute_cost({"orchestrator": {"claude-opus-4-8": None}})
+        assert c["total"] == 0.0
+        assert c["orchestrator"]["claude-opus-4-8"] == 0.0
+
     def test_build_row_includes_cost_usd_block(self):
         # build_row must carry a cost_usd block derived from parsed["models"].
         parsed = {

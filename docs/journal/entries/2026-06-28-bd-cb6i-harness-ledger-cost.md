@@ -38,8 +38,14 @@ Added a price table + cost computation to `scripts/harness_ledger.py`:
 Verified on a real session row (the j268 closeout): **~$92 total** -- $82
 orchestrator (Opus) + $9.71 subagents (Sonnet + Haiku). Concrete, useful numbers.
 
-**Pre-PR assess:** rubric both criteria PASS (see PR body). Fresh-eyes
-<FRESH_EYES_OUTCOME>.
+**Pre-PR assess:** rubric both criteria PASS (see PR body). Fresh-eyes (Sonnet,
+1 round) verified the math (cache-read 0.1x, cache-write 1.25x, the combined
+$36.75 vector, the dated-haiku-id prefix resolve) and returned NO-GAPS. It noted
+two non-gap findings: (1) a latent AttributeError if a model entry's counts value
+were None (not reachable via parse_transcript, but the "never raises" contract is
+broader) -- ADOPTED: guard a None/non-dict counts (and a None actor value) to zero
++ a test; (2) a sub-penny (1e-14) rounding artifact when a model spans both actors
+-- left as-is (invisible at 6dp).
 
 **Scope note:** the bead's `surfaces` metadata named `backend/tests/` but the
 real test file is the top-level `tests/test_harness_ledger.py` (where the hrn.1

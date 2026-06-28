@@ -165,7 +165,12 @@ def compute_cost(models: dict | None) -> dict:
     unpriced: set = set()
 
     for actor in ("orchestrator", "subagent"):
-        for model_id, counts in (models or {}).get(actor, {}).items():
+        for model_id, counts in ((models or {}).get(actor) or {}).items():
+            # Defend the warn-only promise against a malformed/None counts dict
+            # (parse_transcript never produces this, but a hand-crafted or
+            # future-schema row might) -- treat it as zero rather than raising.
+            if not isinstance(counts, dict):
+                counts = {}
             rate = _price_for_model(model_id)
             if rate is None:
                 unpriced.add(model_id)
