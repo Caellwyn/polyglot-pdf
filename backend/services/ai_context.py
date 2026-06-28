@@ -10,7 +10,9 @@ from backend.services.manifest_service import (
 )
 
 
-def render_field_guidance(field: Optional[Dict[str, Any]]) -> str:
+def render_field_guidance(
+    field: Optional[Dict[str, Any]], fill_language: Optional[str] = None
+) -> str:
     """Render a single field's guidance as the readable text block the model reads
     (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
 
@@ -21,6 +23,11 @@ def render_field_guidance(field: Optional[Dict[str, Any]]) -> str:
     static and carries NO field guidance (epic polyglot-pdf-13w7, beads
     polyglot-pdf-1ac3 + polyglot-pdf-j748). Accepts a raw field dict (full schema)
     and reduces it via manifest_service.get_field_guidance.
+
+    fill_language (bd polyglot-pdf-uogm): when set, appends a "Fill language: <lang>"
+    segment so the language for field VALUES rides with EVERY field render -- the
+    static DTI SI no longer carries it. Omitted/None -> no segment (legacy/JIT and
+    the no-arg callers render byte-identically).
     """
     guidance = get_field_guidance(field) if field else None
     if not guidance:
@@ -64,7 +71,73 @@ def render_field_guidance(field: Optional[Dict[str, Any]]) -> str:
     if guidance.get("example"):
         parts.append(f"Example: {guidance['example']}")
 
+    # fill_language rides with every field render (bd polyglot-pdf-uogm): the
+    # language for field VALUES, distinct from the spoken language. Appended last
+    # so a no-arg / non-DTI render is byte-identical.
+    if fill_language:
+        parts.append(f"Fill language: {fill_language}")
+
     return " | ".join(parts)
+
+
+def render_section_metadata(
+    form_title: Optional[str] = None,
+    section_number: Optional[int] = None,
+    total_sections: Optional[int] = None,
+    section_label: Optional[str] = None,
+    previous_spoken_names: Optional[List[str]] = None,
+    confirmation_policy: Optional[str] = None,
+) -> str:
+    """Render the form/section metadata block carried by the DTI initiating message
+    (bd polyglot-pdf-uogm). The static DTI SI no longer carries form/session state,
+    so this block delivers it via the injection at session start AND section start.
+
+    IMPORTANT (bd polyglot-pdf-fu1h, F1): callers MUST source these values from the
+    section_metadata the service holds (FormFillingService._last_section_metadata)
+    /the switch payload carries -- NOT from schema["manifest"], which is ABSENT on a
+    section-switch handshake (extractSectionFields sends full fields, no manifest),
+    so a manifest-sourced block would be empty on sections 2..N.
+
+    Each line is omitted when its inputs are absent, so single-section forms and the
+    first-section (no prior switch) case degrade cleanly. When confirmation_policy is
+    not supplied but section_number+total_sections are, it is derived via
+    get_confirmation_policy. Returns "" if nothing renders.
+    """
+    lines: List[str] = []
+
+    # The title/section line renders only when there is SUBSTANTIVE position info
+    # (a section number, a section label) or a real form title -- NOT a bare "Form"
+    # fallback alone, which would be meaningless noise. This is what lets the
+    # "nothing to render -> return ''" guard below actually fire (so the caller's
+    # `if block:` skip works on a metadata-less session) rather than always emitting
+    # a useless "FORM CONTEXT:\nForm" line (fresh-eyes finding on this PR).
+    has_position = section_number is not None and total_sections is not None
+    if has_position or section_label or form_title:
+        title = form_title or "Form"
+        if has_position and section_label:
+            lines.append(f"{title} | Section {section_number} of {total_sections}: {section_label}")
+        elif has_position:
+            lines.append(f"{title} | Section {section_number} of {total_sections}")
+        elif section_label:
+            lines.append(f"{title} | {section_label}")
+        else:
+            lines.append(title)
+
+    if previous_spoken_names:
+        lines.append(
+            "Available fields from completed sections (use get_field_value with "
+            "these exact names): " + ", ".join(previous_spoken_names)
+        )
+
+    policy = confirmation_policy
+    if policy is None and has_position:
+        policy = get_confirmation_policy(section_number, total_sections)
+    if policy:
+        lines.append(f"End-of-section confirmation: {policy}")
+
+    if not lines:
+        return ""
+    return "FORM CONTEXT:\n" + "\n".join(lines)
 
 
 def get_confirmation_policy(section_number: int, total_sections: int) -> str:
@@ -356,39 +429,22 @@ def build_form_context(
             "Then ask 'Is everything correct?'"
         )
 
-    # DTI (Dynamic Turn Injection, bd polyglot-pdf-jnjj.22): thin-principal SI.
-    # Static backbone + ONLY the current field's guidance. No {fields_json} dump and
-    # no {manifest_text}: each NEXT field's guidance rides the confirm_field tool
-    # response. Reuses the JIT handshake shape (client sends the first field's full
-    # schema as schema["fields"][0] + a section manifest for progress counts), so
-    # progress is computed from the real section, not the one-field schema["fields"].
+    # DTI (Dynamic Turn Injection, bd polyglot-pdf-jnjj.22): the SI is FULLY STATIC
+    # (epic polyglot-pdf-13w7; 1ac3 made the constant zero-placeholder, uogm moved
+    # the last form/session values off it). It carries NO field data and NO
+    # form/session state, so the DTI branch takes NO schema-derived computation and
+    # returns the constant byte-identically across every form/section (criterion 2).
+    # Everything the model needs rides the INJECTION:
+    #   - the current field's guidance (incl. fill_language) -> the initiating
+    #     message (field 1) + the confirm_field response (fields 2..N), via
+    #     render_field_guidance (bd polyglot-pdf-j748 / uogm).
+    #   - form/section metadata (title, section n/total, label, progress,
+    #     previous names, confirmation policy) -> render_section_metadata on the
+    #     initiating message at session/section start (bd polyglot-pdf-uogm).
     # Precedence: DTI takes priority over JIT (mutually exclusive at the SI level).
     # getattr-guard so a minimal settings stub (some unit tests) without USE_DTI
     # falls through to the JIT/legacy branches rather than AttributeError-ing.
     if getattr(settings, "USE_DTI", False):
-        client_manifest = schema.get("manifest") or {}
-        current_section = client_manifest.get("current_section") or {}
-        section_fields = current_section.get("fields", [])
-        # Recompute progress from the real section field set (same fix as the JIT
-        # branch -- avoid "x/1" when schema["fields"] holds only the first field).
-        if current_section:
-            total_fields = len(section_fields)
-            filled_count = sum(
-                1 for f in section_fields if current_values.get(f.get("field_id"))
-            )
-            unfilled_count = total_fields - filled_count
-
-        # The DTI SI is fully static (epic polyglot-pdf-13w7, bd polyglot-pdf-1ac3):
-        # it carries no form/session state and no field guidance, so it takes no
-        # .format() arguments. Field 1's full guidance reaches the model via the
-        # INITIATING MESSAGE, not the SI: FormFillingService.send_initiating_message
-        # renders render_field_guidance(schema["fields"][0]) -- the client-selected
-        # first unfilled+visible field (computeNextField, Codex PR #229) -- into the
-        # initiating injection at session/section start (bd polyglot-pdf-j748).
-        # Fields 2..N arrive the same way via the confirm_field tool response. The
-        # remaining former placeholders (fill_language, form/section metadata,
-        # section_list, confirmation_policy) move onto the injection under
-        # bd polyglot-pdf-uogm.
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
     # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled.
     # Also fire on a JIT-SHAPED schema (schema["jit_mode"], set by websocket_routes
