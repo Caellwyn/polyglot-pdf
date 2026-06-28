@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in schemaFormState.ts / SchemaForm.tsx / FieldRenderer.tsx code comments + console strings (cosmetic, no schema-forms behavior change). Prior: 2026-06-12. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for client-side validation of AI-applied values (enum/format/required). bd polyglot-pdf-vmxx added a `resume: boolean` param to `getHandshakePayload`/`getJITHandshakePayload` -- callers pass `resume:true` on any reconnect after the first successful open so the backend can suppress the greeting; fresh connects pass the default `false`.*
+*Last updated: 2026-06-28. See [../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md](../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md) for the `equals`/`not_equals` checkbox-group (array-trigger) membership fix in `shouldShowField`.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -97,6 +97,13 @@ the option set itself is the constraint.
 
 `utils/validation.ts#shouldShowField` evaluates `field.show_if` (a
 `{field, operator, value}` `ConditionalDisplay`); a hidden field renders `null`.
+When the trigger field is a multi-option checkbox group its value is a `string[]`
+of selected option values, so the `equals`/`not_equals` operators compare by
+**membership** (does the selected set include `value`), not strict scalar
+identity — a strict `===`/`!==` against an array never matches, which previously
+left checkbox-group-gated dependents permanently hidden/shown
+(bd polyglot-pdf-vq4m). Scalar (radio/select/text) triggers still use strict
+identity.
 A field with `unlock_method === "flip_readonly_bit"` becomes **editable even when
 `read_only`** — the unlock is driven by that flag alone (visibility is a separate
 `show_if` decision), the same flag the PDF filler honors to unlock locked widgets
@@ -125,4 +132,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in schemaFormState.ts / SchemaForm.tsx / FieldRenderer.tsx code comments + console strings (cosmetic, no schema-forms behavior change). Prior: 2026-06-12. See [../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md](../journal/entries/2026-06-09-bd-uov.4-schemaformstate-spec.md) for the spec-test that re-verified this against current code, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for client-side validation of AI-applied values (enum/format/required). bd polyglot-pdf-vmxx added a `resume: boolean` param to `getHandshakePayload`/`getJITHandshakePayload` -- callers pass `resume:true` on any reconnect after the first successful open so the backend can suppress the greeting; fresh connects pass the default `false`.*
+*Last updated: 2026-06-28. See [../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md](../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md) for the `equals`/`not_equals` checkbox-group (array-trigger) membership fix in `shouldShowField`.*
