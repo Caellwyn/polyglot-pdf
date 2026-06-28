@@ -7,11 +7,15 @@ import type {
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
+import { canUngroup } from '../utils/fieldGrouping';
 
 interface FieldEditorProps {
   field: FormField | null;
   schema: FormSchema;
   onUpdateField: (field: FormField) => void;
+  // Un-merge a consolidated options[] field back into separate per-widget fields
+  // (bd polyglot-pdf-s4dp.1). Optional so the editor still renders without it.
+  onUnmergeField?: (fieldId: string) => void;
 }
 
 const FIELD_TYPES: FieldType[] = [
@@ -81,6 +85,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
   onUpdateField,
+  onUnmergeField,
 }) => {
   if (!field) {
     return (
@@ -612,10 +617,30 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           </button>
         </div>
 
+        {/* Un-group: split a consolidated options[] field back into one field
+            per widget (bd polyglot-pdf-s4dp.1). Rendered for ANY consolidated
+            field whose options each carry a pdf_field_name -- including CHECKBOX
+            groups (e.g. I-90 p3_race), not just select/radio, so the control is
+            not half-wired (Codex PR #256). */}
+        {onUnmergeField && canUngroup(field) && (
+          <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+            <span className="text-sm font-semibold text-gray-900">Consolidated group</span>
+            <button
+              className="btn-sm btn-secondary"
+              onClick={() => onUnmergeField(field.id)}
+              title="Split this consolidated field back into separate per-widget fields"
+            >
+              Ungroup
+            </button>
+          </div>
+        )}
+
         {/* Field Options (for select/radio) */}
         {(field.type === 'select' || field.type === 'radio') && (
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900">Options</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-900">Options</h4>
+            </div>
 
             {field.options && field.options.length > 0 ? (
               <div className="space-y-2">

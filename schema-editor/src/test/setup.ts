@@ -14,6 +14,14 @@ import '@testing-library/jest-dom/vitest';
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers);
 
+// jsdom does not implement Element.scrollIntoView; FieldList's auto-scroll
+// effect calls it from a deferred setTimeout when a field is selected, which
+// otherwise throws an uncaught TypeError after the test body completes. Stub it
+// so selection-driven tests run clean.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();

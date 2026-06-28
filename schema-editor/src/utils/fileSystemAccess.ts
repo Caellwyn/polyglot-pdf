@@ -17,6 +17,7 @@
  * minimal slice we use is declared locally rather than pulling in a dependency.
  */
 import type { FormSchema } from '../types/schema';
+import { stripEditorState } from './fieldGrouping';
 
 // --- minimal local typings for the slice of the API we use ----------------- //
 
@@ -116,7 +117,7 @@ export async function writeSchemaToHandle(
   handle: FsFileHandle,
   schema: FormSchema,
 ): Promise<void> {
-  const json = JSON.stringify(schema, null, 2);
+  const json = JSON.stringify(stripEditorState(schema), null, 2);
   const writable = await handle.createWritable();
   try {
     await writable.write(json);

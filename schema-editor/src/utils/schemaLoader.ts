@@ -1,4 +1,5 @@
 import type { FormSchema, FormConfig } from '../types/schema';
+import { stripEditorState } from './fieldGrouping';
 
 // Re-export so consumers (e.g. FormSelector) can import FormConfig from here.
 export type { FormConfig };
@@ -39,7 +40,7 @@ export async function loadSchema(schemaPath: string): Promise<FormSchema> {
  * Save schema to file (downloads as JSON)
  */
 export function saveSchema(schema: FormSchema, filename: string): void {
-  const json = JSON.stringify(schema, null, 2);
+  const json = JSON.stringify(stripEditorState(schema), null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
