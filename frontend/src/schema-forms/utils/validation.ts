@@ -471,9 +471,23 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
 
   switch (field.show_if.operator) {
     case "equals":
+      // A checkbox-group trigger emits a string[] of selected option values, so a
+      // strict scalar compare (array === string) is always false and the gated
+      // dependent never shows (bd polyglot-pdf-vq4m). Treat equals against an
+      // array as membership -- "the selected set includes this option" -- matching
+      // the contains/in branches' String() coercion convention.
+      if (Array.isArray(triggerValue)) {
+        return triggerValue.includes(String(field.show_if.value));
+      }
       return triggerValue === field.show_if.value;
 
     case "not_equals":
+      // Symmetric to equals: for a checkbox-group (array) trigger, "not equals X"
+      // means the selected set does NOT include X. A strict array !== string is
+      // always true, which would always-show the dependent (bd polyglot-pdf-vq4m).
+      if (Array.isArray(triggerValue)) {
+        return !triggerValue.includes(String(field.show_if.value));
+      }
       return triggerValue !== field.show_if.value;
 
     case "contains":

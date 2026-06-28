@@ -7,7 +7,7 @@
  * to the canonical bare-digit form (the PDF comb field stores digits).
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeFieldValue, validateField } from './validation';
+import { normalizeFieldValue, validateField, shouldShowField } from './validation';
 import type { FormField } from '../types/schema';
 
 const aNumberField: FormField = {
@@ -418,5 +418,61 @@ describe('validateField (bare date field, format-only)', () => {
 
   it('treats an empty optional bare date as valid (not a format error)', () => {
     expect(validateField(bareDate, '')).toBeNull();
+  });
+});
+
+// shouldShowField conditional visibility, focused on the checkbox-group trigger
+// bug (bd polyglot-pdf-vq4m): a multi-option checkbox emits a string[] of selected
+// option values, so `equals`/`not_equals` must compare by membership, not strict
+// scalar identity (which is always false/true against an array). The I-90's
+// p5_line1b_language is gated `equals P5_Checkbox1b[0]` on the p5_checkbox1a
+// checkbox group; before the fix it was unreachable in the renderer.
+describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
+  // A dependent gated on a single option of a checkbox-group trigger.
+  const gatedEquals: FormField = {
+    id: 'p5_line1b_language',
+    name: 'Interpreter language',
+    type: 'text',
+    section_id: 'Part 5',
+    show_if: { field: 'p5_checkbox1a', operator: 'equals', value: 'P5_Checkbox1b[0]' },
+  } as FormField;
+
+  const gatedNotEquals: FormField = {
+    ...gatedEquals,
+    id: 'p5_other',
+    show_if: { field: 'p5_checkbox1a', operator: 'not_equals', value: 'P5_Checkbox1b[0]' },
+  } as FormField;
+
+  it('SHOWS an equals-gated dependent when the checkbox group includes the option', () => {
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(true);
+  });
+
+  it('HIDES an equals-gated dependent when the group has a different option selected', () => {
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(false);
+  });
+
+  it('HIDES an equals-gated dependent when the group is empty', () => {
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: [] })).toBe(false);
+  });
+
+  it('SHOWS the option when it is one of several selected in the group', () => {
+    expect(
+      shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]', 'P5_Checkbox1b[0]'] })
+    ).toBe(true);
+  });
+
+  it('still works for a plain SCALAR trigger (radio/select) under equals', () => {
+    const scalarGated = {
+      ...gatedEquals,
+      show_if: { field: 'mode', operator: 'equals', value: 'yes' },
+    } as FormField;
+    expect(shouldShowField(scalarGated, { mode: 'yes' })).toBe(true);
+    expect(shouldShowField(scalarGated, { mode: 'no' })).toBe(false);
+  });
+
+  it('not_equals: HIDES when the group includes the option, SHOWS otherwise', () => {
+    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(false);
+    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(true);
+    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: [] })).toBe(true);
   });
 });
