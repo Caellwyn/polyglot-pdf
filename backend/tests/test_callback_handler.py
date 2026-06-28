@@ -452,8 +452,12 @@ class TestAskSecretaryRouting:
         """A handler that raises must not crash the tool-call path -> fail-open,
         and logs EXACTLY ONE ERROR for the failure (not a doubled error-rate from
         the except block + the empty-answer branch both firing; fresh-eyes
-        finding)."""
-        import structlog.testing
+        finding). Patches the module logger's .error directly rather than using
+        structlog.capture_logs -- the latter is sensitive to global structlog
+        config that other suite tests mutate, making it flaky under full-suite
+        ordering (it captured nothing)."""
+        from unittest.mock import patch as _patch
+        import backend.services.callback_handler as cbh
 
         handler = CallbackHandler(
             websocket=mock_websocket,
@@ -468,14 +472,14 @@ class TestAskSecretaryRouting:
             get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
         )
-        with structlog.testing.capture_logs() as logs:
+        with _patch.object(cbh._log, "error") as mock_error:
             result = await handler.on_tool_call(
                 tool_name="ask_secretary", arguments={"query": "q"}
             )
         assert result["available"] is False
-        # Exactly one ERROR event for the single failure (the handler-error log),
-        # NOT a second ask_secretary_failed for the same event.
-        err_events = [e for e in logs if e.get("log_level") == "error"
-                      and e.get("event", "").startswith("ask_secretary")]
-        assert len(err_events) == 1, err_events
-        assert err_events[0]["event"] == "ask_secretary_handler_error"
+        # Exactly ONE ask_secretary* ERROR for the single failure -- the
+        # handler-error log -- NOT a second ask_secretary_failed for the same event.
+        ask_errors = [c for c in mock_error.call_args_list
+                      if c.args and str(c.args[0]).startswith("ask_secretary")]
+        assert len(ask_errors) == 1, ask_errors
+        assert ask_errors[0].args[0] == "ask_secretary_handler_error"
