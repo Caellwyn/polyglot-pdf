@@ -134,6 +134,22 @@ PROMPT_TUNED = (
 PROMPTS = {"baseline": BASELINE_PROMPT, "tuned": PROMPT_TUNED}
 
 
+def _parse_conflicts(raw: str):
+    """Parse a model response into a conflicts list, or None for a MODEL-FORMAT
+    failure. None covers BOTH non-JSON (decode error) AND valid-JSON-wrong-shape
+    (e.g. a bare `[]` or a string -- `.get` on a non-dict would otherwise raise and
+    be miscounted as a transport error; Codex review on PR #262). A dict with a
+    missing/non-list `conflicts` yields []."""
+    try:
+        verdict = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(verdict, dict):
+        return None
+    conflicts = verdict.get("conflicts", [])
+    return conflicts if isinstance(conflicts, list) else []
+
+
 async def _run_with_prompt(client, model, fields, prompt_template):
     """One checker call using a SPECIFIC prompt template. Mirrors the G1b _run
     (retry + per-call timeout + token capture) but lets us swap the prompt. We
@@ -160,12 +176,12 @@ async def _run_with_prompt(client, model, fields, prompt_template):
             in_tok = getattr(u, "prompt_token_count", None) if u else None
             out_tok = getattr(u, "candidates_token_count", None) if u else None
             raw = resp.text or ""
-            try:
-                verdict = json.loads(raw)
-                conflicts = verdict.get("conflicts", [])
-                if not isinstance(conflicts, list):
-                    conflicts = []
-            except json.JSONDecodeError:
+            conflicts = _parse_conflicts(raw)
+            if conflicts is None:
+                # valid-but-wrong-shape JSON (e.g. "[]") OR non-JSON: a MODEL-FORMAT
+                # failure (empty verdict), NOT a transport error -- scoring it as
+                # transport would exclude it from accuracy and inflate the numbers
+                # (Codex review on PR #262).
                 return {"verdict": {"conflicts": []}, "latency_s": dt,
                         "in_tok": in_tok, "out_tok": out_tok,
                         "error": "json_error", "retries": attempt}
@@ -339,15 +355,23 @@ async def _lever_latency(args):
         prefix = BASELINE_PROMPT.split("FIELDS:")[0]
         try:
             ct = client.models.count_tokens(model=model, contents=prefix).total_tokens
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            # A failed token count is UNKNOWN, not a negative result. This print is
+            # the exit-criterion evidence for rejecting caching, so a failed
+            # measurement must NOT be recorded as "caching cannot engage" -- surface
+            # it loudly instead (Codex review on PR #262).
+            print(f"[cache feasibility] ERROR: count_tokens failed "
+                  f"({type(exc).__name__}: {exc}); cache feasibility UNKNOWN -- "
+                  f"re-run before treating caching as ruled out.", flush=True)
             ct = None
-        p = ct or 0
-        eng25 = "CAN" if p >= _CACHE_MIN_25 else "CANNOT"
-        eng35 = "CAN" if p >= _CACHE_MIN_35 else "CANNOT"
-        print(f"[cache feasibility] cross-call-repeatable prefix (SI+rules) = {ct} "
-              f"tokens (the ONLY cacheable content; the form payload differs per "
-              f"call). Caching: 2.5-flash (min {_CACHE_MIN_25}) {eng25} engage; "
-              f"3.5-flash (min {_CACHE_MIN_35}) {eng35} engage.", flush=True)
+        if ct is not None:
+            eng25 = "CAN" if ct >= _CACHE_MIN_25 else "CANNOT"
+            eng35 = "CAN" if ct >= _CACHE_MIN_35 else "CANNOT"
+            print(f"[cache feasibility] cross-call-repeatable prefix (SI+rules) = "
+                  f"{ct} tokens (the ONLY cacheable content; the form payload differs "
+                  f"per call). Caching: 2.5-flash (min {_CACHE_MIN_25}) {eng25} "
+                  f"engage; 3.5-flash (min {_CACHE_MIN_35}) {eng35} engage.",
+                  flush=True)
 
     sizes = [132]
     sem = asyncio.Semaphore(args.concurrency)
@@ -459,12 +483,8 @@ async def _run_with_prompt_str(client, model, prompt):
             in_tok = getattr(u, "prompt_token_count", None) if u else None
             out_tok = getattr(u, "candidates_token_count", None) if u else None
             raw = resp.text or ""
-            try:
-                verdict = json.loads(raw)
-                conflicts = verdict.get("conflicts", [])
-                if not isinstance(conflicts, list):
-                    conflicts = []
-            except json.JSONDecodeError:
+            conflicts = _parse_conflicts(raw)
+            if conflicts is None:
                 return {"verdict": {"conflicts": []}, "latency_s": dt, "in_tok": in_tok,
                         "out_tok": out_tok, "error": "json_error", "retries": attempt}
             return {"verdict": {"conflicts": conflicts}, "latency_s": dt, "in_tok": in_tok,

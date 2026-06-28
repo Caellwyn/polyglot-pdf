@@ -18,7 +18,7 @@ recommend the config to ship for each tier.
 | Tier | Model | Config to ship | Measured |
 |------|-------|----------------|----------|
 | **Per-section** (each section/page, ~20-40 fields) | **gemini-2.5-flash-lite** | the **tuned anti-hedging + few-shot prompt** (`PROMPT_TUNED`) | precision 0.77->0.96 @20, 0.89->0.97 @40; recall held; ~0.6s |
-| **End-of-form** (the full 132-field sweep, once at submit) | **the native-audio VOICE model** (`gemini-2.5-flash-native-audio`) via a `report_conflicts` tool call | the baseline checker rules | recall 0.96, precision 1.00 @132; **p50 7.4s / p90 9.3s** |
+| **End-of-form** (the full 132-field sweep, once at submit) | **the native-audio VOICE model** (`gemini-2.5-flash-native-audio`) via a `report_conflicts` tool call on a FRESH Live session (not the connected one) | the baseline checker rules | recall 0.96, precision 1.00 @132; **p50 7.4s / p90 9.3s** |
 
 Two premises from G1b were OVERTURNED by re-measuring on the clean corpus:
 1. **"Cheap models miss far-apart contradictions -> need 3.5-flash"** was a
@@ -108,10 +108,12 @@ to read field meaning. Not a usable latency lever.
 
 The native-audio voice model (run `g1b_bakeoff_20260628T092129`) catches the
 far-apart classes the tier exists for (cross_date 3/3, duration_year 2/3),
-flags ZERO false positives @132, runs ~3x faster than 2.5-flash, costs less than
-3.5-flash, and is ALREADY the connected live-session model -- so the end-of-form
-check is a tool call on the existing session, not a new model dependency. Its old
-"far 5/6" weakness (G1b) was a contaminated-corpus artifact.
+flags ZERO false positives @132, runs ~3x faster than 2.5-flash, and costs less
+than 3.5-flash. It is the SAME MODEL FAMILY already used for the live session (so
+no new model to provision/approve), but the check itself MUST run on a SEPARATE,
+FRESH Live session -- never the user's connected form-fill session (see the
+production constraint below; reusing it re-bills the whole voice-turn history). Its
+old "far 5/6" weakness (G1b) was a contaminated-corpus artifact.
 
 ---
 
@@ -121,7 +123,8 @@ check is a tool call on the existing session, not a new model dependency. Its ol
   (anti-hedging + foreign/territory/dual few-shots). ~0.6s, precision ~0.96-0.97 on
   20-40 field windows, recall held.
 - **End-of-form checker:** the **native-audio voice model** via a `report_conflicts`
-  tool call on the live session, with the baseline checker rules. recall 0.96,
+  tool call on a FRESH, isolated Live session (NOT the connected form-fill session
+  -- see the production constraint), with the baseline checker rules. recall 0.96,
   precision 1.00, ~7s p50 / ~9s p90 -- fast enough for a once-at-submit
   "reviewing your form" moment.
 - **Do NOT** pursue context caching (prompt too small) or payload trimming (precision

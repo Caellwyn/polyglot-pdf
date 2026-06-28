@@ -11,12 +11,17 @@ import csv
 import glob
 import os
 import statistics
+import sys
 from collections import defaultdict
 
-_DATA = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "scripts", "spikes", "data",
-)
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the repo root to sys.path so `python backend/scripts/g1c_aggregate.py` works
+# from the repo root WITHOUT a PYTHONPATH=. prefix (the imports below need the
+# `backend` package; Codex review on PR #262).
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+_DATA = os.path.join(_REPO_ROOT, "scripts", "spikes", "data")
 
 
 def _precision():
@@ -24,16 +29,25 @@ def _precision():
     if not files:
         print("no g1c_precision_*.csv runs found")
         return
-    print(f"=== PRECISION LEVER: pooled over {len(files)} run(s) ===")
+    # Pool ONLY rows from the CURRENT corpus version. Each row carries corpus_fp;
+    # rows from a different (older / contaminated / future) corpus must NOT be summed
+    # into the clean-corpus recommendation, even though they share a (prompt, size)
+    # key (Codex review on PR #262 -- the same fingerprint discipline as g1b_merge).
+    from backend.scripts.g1b_corpus import corpus_fingerprint
+    from backend.scripts.g1b_scoring import is_model_format_error
+    current_fp = corpus_fingerprint()
     agg = defaultdict(lambda: {"tp": 0, "fn": 0, "fp": 0, "tn": 0, "runs": set()})
+    dropped_fp = 0
     # Score rows EXACTLY as the probe does (g1b_scoring): a MODEL-FORMAT failure
     # (json_error / no_tool_call) is NOT skipped -- it is an empty verdict, i.e. a
     # MISS on a contradiction (FN) and a clean-pass on a clean case (TN). Only a
     # TRANSPORT failure (timeout / 5xx / connect) is excluded as "no measurement".
     # Skipping json_error would undercount FN and inflate recall (fresh-eyes, 08zv).
-    from backend.scripts.g1b_scoring import is_model_format_error
     for f in files:
         for r in csv.DictReader(open(f, encoding="utf-8")):
+            if (r.get("corpus_fp") or "") != current_fp:
+                dropped_fp += 1
+                continue  # different corpus version -- never pool
             k = (r["prompt"], r["size"])
             c = agg[k]
             c["runs"].add(os.path.basename(f))
@@ -46,6 +60,13 @@ def _precision():
                 c["tp" if r["detected"] == "1" else "fn"] += 1
             else:
                 c["fp" if int(r["n_flagged"]) > 0 else "tn"] += 1
+    if dropped_fp:
+        print(f"(excluded {dropped_fp} row(s) from a different corpus_fp; "
+              f"pooling only corpus_fp={current_fp})")
+    if not agg:
+        print(f"no rows match the current corpus_fp={current_fp}; "
+              f"re-run probe_g1c_tuning.py on this corpus.")
+        return
     hdr = ("prompt", "size", "runs", "recall", "prec", "tp", "fn", "fp")
     print(f"{hdr[0]:<9}{hdr[1]:>5}{hdr[2]:>5}{hdr[3]:>8}{hdr[4]:>7}"
           f"{hdr[5]:>5}{hdr[6]:>4}{hdr[7]:>4}")
