@@ -13,6 +13,7 @@ These pin the parts the plan's verification section calls out:
 Run with the backend venv (the worktree has no venv of its own):
   PYTHONPATH=. backend/.venv/Scripts/python.exe -m pytest tests/test_harness_ledger.py
 """
+import argparse
 import importlib.util
 import json
 import pathlib
@@ -583,3 +584,79 @@ class TestMainCLI:
         assert rc == 0
         out = capsys.readouterr().out
         assert "Phase A done" in out and "Phase A (baseline)" not in out
+
+
+class TestCost:
+    """USD cost computation from token counts (bd polyglot-pdf-cb6i)."""
+
+    def test_known_vectors(self):
+        # 1M output on opus = $25 exactly (output rate 25/MTok).
+        c = ledger.compute_cost(
+            {"orchestrator": {"claude-opus-4-8": {"output_tokens": 1_000_000}}}
+        )
+        assert c["total"] == 25.0
+        assert c["orchestrator_total"] == 25.0
+        assert c["subagent_total"] == 0.0
+
+    def test_cache_read_priced_at_one_tenth_input(self):
+        # 1M cache-read on haiku (input 1/MTok) = 1.0 * 0.1 = $0.10.
+        c = ledger.compute_cost(
+            {"subagent": {"claude-haiku-4-5": {"cache_read_input_tokens": 1_000_000}}}
+        )
+        assert c["total"] == 0.1
+
+    def test_cache_write_priced_at_1_25x_input_5m_ttl(self):
+        # 1M cache-creation on sonnet (input 3/MTok) = 3.0 * 1.25 = $3.75.
+        c = ledger.compute_cost(
+            {"orchestrator": {"claude-sonnet-4-6": {"cache_creation_input_tokens": 1_000_000}}}
+        )
+        assert c["total"] == 3.75
+        assert c["cache_write_ttl_assumed"] == "5m"
+
+    def test_dated_haiku_id_resolves_by_prefix(self):
+        # The real transcript carries the dated id; it must resolve to the family.
+        c = ledger.compute_cost(
+            {"subagent": {"claude-haiku-4-5-20251001": {"input_tokens": 1_000_000}}}
+        )
+        assert c["total"] == 1.0  # haiku input rate 1/MTok
+        assert "claude-haiku-4-5-20251001" in c["subagent"]
+        assert c["unpriced_models"] == []
+
+    def test_combined_all_token_kinds(self):
+        # All four kinds on opus (in 5, out 25): uncached 1M*5 + out 1M*25 +
+        # cache_read 1M*5*0.1 + cache_write 1M*5*1.25 = 5 + 25 + 0.5 + 6.25 = 36.75.
+        c = ledger.compute_cost({"orchestrator": {"claude-opus-4-8": {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+            "cache_read_input_tokens": 1_000_000,
+            "cache_creation_input_tokens": 1_000_000,
+        }}})
+        assert c["total"] == 36.75
+
+    def test_unknown_model_is_zero_and_flagged_not_crash(self):
+        c = ledger.compute_cost(
+            {"orchestrator": {"claude-mystery-9": {"output_tokens": 1_000_000}}}
+        )
+        assert c["total"] == 0.0
+        assert c["orchestrator"]["claude-mystery-9"] == 0.0
+        assert c["unpriced_models"] == ["claude-mystery-9"]
+
+    def test_empty_or_none_models_safe(self):
+        assert ledger.compute_cost(None)["total"] == 0.0
+        assert ledger.compute_cost({})["total"] == 0.0
+
+    def test_build_row_includes_cost_usd_block(self):
+        # build_row must carry a cost_usd block derived from parsed["models"].
+        parsed = {
+            "session_id": "s", "first_ts": None, "last_ts": None,
+            "tokens": {}, "assistant_turns": {},
+            "models": {"orchestrator": {"claude-opus-4-8": {"output_tokens": 1_000_000}}},
+        }
+        args = argparse.Namespace(
+            bead=["polyglot-pdf-cb6i"], arm="A", cost_category="production",
+            phase_tokens=None, copilot_rounds=0, maintainer_touchpoints=0,
+            deferred_nits=0, haiku_escalations=0, errors_shipped=0,
+        )
+        row = ledger.build_row(parsed, args, recorded_at="2026-06-28T00:00:00Z")
+        assert "cost_usd" in row
+        assert row["cost_usd"]["total"] == 25.0
+        assert row["cost_usd"]["by_model"]["claude-opus-4-8"] == 25.0
