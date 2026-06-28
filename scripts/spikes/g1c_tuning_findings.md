@@ -102,7 +102,7 @@ to read field meaning. Not a usable latency lever.
 
 | model | recall | precision | lat_p50 | lat_p90 | in/out $/M | verdict |
 |-------|-------:|----------:|--------:|--------:|-----------|---------|
-| gemini-3.5-flash | 1.000 | ~0.90-0.96 | ~8-23s | ~19-41s | 1.50 / 6.00 | REJECTED -- costly + slow, no accuracy edge |
+| gemini-3.5-flash | 1.000 | 0.90 | p50 8.1s | p90 19.4s | 1.50 / 6.00 | REJECTED -- costliest, no accuracy edge |
 | gemini-2.5-flash | 1.000 | 0.964 | 23.2s | 41.0s | 0.30 / 2.50 | accurate + cheap, but SLOW |
 | **voice (native-audio)** | **0.963** | **1.000** | **7.4s** | **9.3s** | 0.50 / 2.00 | **SHIP** -- ~3x faster, cheaper than 3.5, 0 new deps |
 

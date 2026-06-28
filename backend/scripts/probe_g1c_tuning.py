@@ -27,8 +27,9 @@ residual levers G1b surfaced, each measured on the SAME clean corpus
   loss; and the model recommendation pivoted OFF 3.5-flash to the native-audio
   voice model (recall 0.96 / precision 1.0 / ~7s @132 on the clean corpus, measured
   separately via probe_g1b_model_size_bakeoff). This probe is run with
-  --model-default 3.5-flash purely to document why 3.5-flash is rejected; the
-  shipped end-of-form tier is the voice model. (Run with --lever latency.)
+  on 3.5-flash (hardcoded in _lever_latency) purely to document why 3.5-flash is
+  rejected; the shipped end-of-form tier is the voice model. (Run with
+  --lever latency.)
 
 PROVENANCE: SYNTHETIC clean corpus (g1b_answer_key persona). No real PHI.
 
@@ -52,7 +53,6 @@ import sys
 import time
 from collections import defaultdict
 
-from google import genai
 from google.genai import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -341,13 +341,13 @@ async def _lever_latency(args):
             ct = client.models.count_tokens(model=model, contents=prefix).total_tokens
         except Exception:  # noqa: BLE001
             ct = None
-        engages = (ct or 0) >= _CACHE_MIN_25  # 2048 is the LOWER of the two minimums
+        p = ct or 0
+        eng25 = "CAN" if p >= _CACHE_MIN_25 else "CANNOT"
+        eng35 = "CAN" if p >= _CACHE_MIN_35 else "CANNOT"
         print(f"[cache feasibility] cross-call-repeatable prefix (SI+rules) = {ct} "
-              f"tokens; cache minimums: 2.5-flash {_CACHE_MIN_25}, 3.5-flash "
-              f"{_CACHE_MIN_35}. The repeatable prefix is the ONLY cacheable content "
-              f"(the form payload differs per call). Caching "
-              f"{'CAN' if engages else 'CANNOT'} engage on either model "
-              f"(prefix below both minimums).", flush=True)
+              f"tokens (the ONLY cacheable content; the form payload differs per "
+              f"call). Caching: 2.5-flash (min {_CACHE_MIN_25}) {eng25} engage; "
+              f"3.5-flash (min {_CACHE_MIN_35}) {eng35} engage.", flush=True)
 
     sizes = [132]
     sem = asyncio.Semaphore(args.concurrency)
