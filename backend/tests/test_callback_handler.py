@@ -405,7 +405,8 @@ class TestAskSecretaryRouting:
         self, mock_websocket, mock_coordinator
     ):
         """An empty answer (timeout/error inside the handler) yields the fail-open
-        'ask the user directly' response with available=False."""
+        APOLOGY instruction with available=False -- and explicitly does NOT tell
+        the model to repeat the question back (the knock-knock anti-pattern)."""
         handler = CallbackHandler(
             websocket=mock_websocket,
             request_coordinator=mock_coordinator,
@@ -424,7 +425,12 @@ class TestAskSecretaryRouting:
             tool_name="ask_secretary", arguments={"query": "q"}
         )
         assert result["available"] is False
-        assert "ask the user" in result["answer"].lower()
+        answer = result["answer"].lower()
+        # The instruction must steer toward an apology for an internal error...
+        assert "apolog" in answer
+        assert "internal error" in answer
+        # ...and must NOT tell the model to just repeat the question back.
+        assert "repeat their question" in answer  # the explicit DO-NOT clause
 
     @pytest.mark.asyncio
     async def test_ask_secretary_fail_open_without_handler(

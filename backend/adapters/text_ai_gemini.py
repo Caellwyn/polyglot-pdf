@@ -62,16 +62,24 @@ class TextAIGemini(ITextAI):
     2026-06-25 while gemini-3.1-flash-lite answered fine). _generate() walks an
     ordered fallback chain -- the configured model, then DEFAULT_FALLBACK_MODELS
     -- on a transient AVAILABILITY error (5xx, or 404/429), so a single-model
-    outage degrades to a sibling instead of failing the call. All chain members
-    are Gemini, so the BAA constraint (Gemini-only) holds. Non-transient errors
-    (auth/config 4xx) fail fast and are NOT masked. The model that served the
-    call is logged (model=, is_fallback=).
+    outage degrades to a sibling instead of failing the call. The chain stays
+    WITHIN THE LITE TIER on purpose (cost discipline -- the full gemini-flash
+    model is far pricier and is NOT an acceptable fallback for this cheap path);
+    if the whole lite chain is exhausted the error is LOGGED and re-raised for the
+    caller's fail-open, never escalated to a pricier model (maintainer 2026-06-27).
+    All chain members are Gemini, so the BAA constraint (Gemini-only) holds.
+    Non-transient errors (auth/config 4xx) are logged (PII-free) and fail fast --
+    NOT masked. The model that served the call is logged (model=, is_fallback=).
     """
 
-    # Ordered fallback models tried after the configured one (all Gemini / BAA).
+    # Ordered fallback models tried after the configured one. LITE TIER ONLY (cost
+    # discipline -- never gemini-flash-latest / full Flash). gemini-3.1-flash-lite
+    # is a real, valid model id; gemini-flash-lite-latest was REMOVED (2026-06-27)
+    # -- it is NOT a valid model string (the only `-latest` rolling aliases are
+    # gemini-flash-latest / gemini-pro-latest, neither of which is the lite tier),
+    # so it would 404 if ever reached.
     DEFAULT_FALLBACK_MODELS = (
         "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
     )
 
     def __init__(
@@ -362,8 +370,21 @@ class TextAIGemini(ITextAI):
                     )
                     last_exc = exc
                     continue
-                # Non-transient (auth/config) OR the last model in the chain:
-                # do not mask -- re-raise for the caller's fail-open path.
+                # Non-transient (auth/config 4xx) OR the LITE chain is exhausted.
+                # Log it explicitly (PII-free: type + status code + model only, never
+                # content) so an internal error -- a bad 4xx OR a full lite-tier
+                # outage -- is VISIBLE to us before the caller fail-opens. We do NOT
+                # escalate to a pricier model (cost discipline); we re-raise and the
+                # caller's fail-open path serves the user-facing apology.
+                code = getattr(exc, "code", None)
+                self._log.error(
+                    "text_ai_generate_failed",
+                    model=model_name,
+                    exc_type=type(exc).__name__,
+                    status_code=code,
+                    chain_exhausted=(i == len(self._model_chain) - 1),
+                    transient=self._is_transient_availability(exc),
+                )
                 raise
         # Unreachable (the loop returns or raises), but satisfies type-checkers.
         if last_exc is not None:

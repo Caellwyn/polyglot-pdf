@@ -453,22 +453,35 @@ class CallbackHandler:
         TextAIGemini.ask() under a timeout. The tool response carries the prose
         answer back for the principal to voice.
 
-        Fail-open: if no handler is wired or the lookup yields nothing (timeout /
-        error / empty), tell the principal to ask the user directly rather than
-        leaving it stuck. Never surfaces an exception to the model.
+        Fail-open with an APOLOGY, not a re-ask: if no handler is wired or the
+        lookup yields nothing (timeout / error / empty), the tool returns an
+        instruction telling the principal to APOLOGIZE for an internal error --
+        NOT to repeat the user's question back at them (a bare "ask the user
+        directly" makes the assistant echo "What WAS your previous last name?",
+        which sounds like a knock-knock joke; maintainer 2026-06-27). The failure
+        is also logged at ERROR level (PII-free) so a secretary outage is VISIBLE
+        to us, not silently absorbed. Never surfaces an exception to the model.
 
         PII: log the query LENGTH + answer length only -- never the query text or
         the answer prose (both reach stdout -> Cloud Run logs).
         """
         query = arguments.get("query", "") if isinstance(arguments, dict) else ""
 
+        # The fail-open instruction the principal voices: an apology for an
+        # internal error, explicitly NOT a verbatim re-ask of the user's question.
         fallback = (
-            "The secretary could not look that up right now. Ask the user directly "
-            "for the information you need."
+            "INTERNAL ERROR: the secretary lookup failed. Apologize to the user for "
+            "a technical problem and say you could not retrieve that information "
+            "right now (e.g. 'I'm sorry, due to an internal error I wasn't able to "
+            "look that up'). Do NOT simply repeat their question back to them. You "
+            "may offer to continue, or ask them to provide the information directly "
+            "ONLY after acknowledging the error."
         )
 
         if not self._handle_ask_secretary:
-            _log.warning("ask_secretary_no_handler", session_id=self._session_id)
+            # An outage worth our attention, not a routine miss -> ERROR.
+            _log.error("ask_secretary_unavailable", reason="no_handler",
+                       session_id=self._session_id)
             return {"answer": fallback, "available": False}
 
         try:
@@ -476,7 +489,7 @@ class CallbackHandler:
         except Exception as exc:  # noqa: BLE001
             # The handler is expected to fail-open internally, but guard here too so
             # a bug can never crash the tool-call path / session loop.
-            _log.warning(
+            _log.error(
                 "ask_secretary_handler_error",
                 exc_type=type(exc).__name__,
                 session_id=self._session_id,
@@ -484,6 +497,14 @@ class CallbackHandler:
             answer = ""
 
         if not answer:
+            # A failed/empty lookup is an internal error the user notices (the
+            # apology path) -> log at ERROR so it surfaces for us to investigate,
+            # not a quiet warning buried in the noise.
+            _log.error(
+                "ask_secretary_failed",
+                query_length=len(query or ""),
+                session_id=self._session_id,
+            )
             response = {"answer": fallback, "available": False}
         else:
             response = {"answer": answer, "available": True}
