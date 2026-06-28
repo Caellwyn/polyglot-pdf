@@ -484,27 +484,34 @@ class CallbackHandler:
                        session_id=self._session_id)
             return {"answer": fallback, "available": False}
 
+        already_logged = False
         try:
             answer = await self._handle_ask_secretary(query)
         except Exception as exc:  # noqa: BLE001
             # The handler is expected to fail-open internally, but guard here too so
-            # a bug can never crash the tool-call path / session loop.
+            # a bug can never crash the tool-call path / session loop. This already
+            # logs the failure at ERROR -- set a flag so the empty-answer branch
+            # below does NOT log a SECOND ERROR for the same failure event (which
+            # would double the secretary error rate for the exception case).
             _log.error(
                 "ask_secretary_handler_error",
                 exc_type=type(exc).__name__,
                 session_id=self._session_id,
             )
             answer = ""
+            already_logged = True
 
         if not answer:
             # A failed/empty lookup is an internal error the user notices (the
             # apology path) -> log at ERROR so it surfaces for us to investigate,
-            # not a quiet warning buried in the noise.
-            _log.error(
-                "ask_secretary_failed",
-                query_length=len(query or ""),
-                session_id=self._session_id,
-            )
+            # not a quiet warning buried in the noise. Skip if the except block
+            # above already logged THIS failure (one ERROR per failure event).
+            if not already_logged:
+                _log.error(
+                    "ask_secretary_failed",
+                    query_length=len(query or ""),
+                    session_id=self._session_id,
+                )
             response = {"answer": fallback, "available": False}
         else:
             response = {"answer": answer, "available": True}

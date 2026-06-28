@@ -436,18 +436,25 @@ class TestAskSecretaryRouting:
     async def test_ask_secretary_fail_open_without_handler(
         self, callback_handler
     ):
-        """The default fixture wires NO ask_secretary handler -> fail-open."""
+        """The default fixture wires NO ask_secretary handler -> fail-open with the
+        SAME apology instruction (not a re-ask)."""
         result = await callback_handler.on_tool_call(
             tool_name="ask_secretary", arguments={"query": "q"}
         )
         assert result["available"] is False
-        assert result["answer"]
+        answer = result["answer"].lower()
+        assert "apolog" in answer and "repeat their question" in answer
 
     @pytest.mark.asyncio
     async def test_ask_secretary_swallows_handler_exception(
         self, mock_websocket, mock_coordinator
     ):
-        """A handler that raises must not crash the tool-call path -> fail-open."""
+        """A handler that raises must not crash the tool-call path -> fail-open,
+        and logs EXACTLY ONE ERROR for the failure (not a doubled error-rate from
+        the except block + the empty-answer branch both firing; fresh-eyes
+        finding)."""
+        import structlog.testing
+
         handler = CallbackHandler(
             websocket=mock_websocket,
             request_coordinator=mock_coordinator,
@@ -461,7 +468,14 @@ class TestAskSecretaryRouting:
             get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
         )
-        result = await handler.on_tool_call(
-            tool_name="ask_secretary", arguments={"query": "q"}
-        )
+        with structlog.testing.capture_logs() as logs:
+            result = await handler.on_tool_call(
+                tool_name="ask_secretary", arguments={"query": "q"}
+            )
         assert result["available"] is False
+        # Exactly one ERROR event for the single failure (the handler-error log),
+        # NOT a second ask_secretary_failed for the same event.
+        err_events = [e for e in logs if e.get("log_level") == "error"
+                      and e.get("event", "").startswith("ask_secretary")]
+        assert len(err_events) == 1, err_events
+        assert err_events[0]["event"] == "ask_secretary_handler_error"

@@ -50,7 +50,17 @@ maintainer-requested UX/observability improvements. The invalid-model issue is a
 good reminder that the fallback chain's third entry had never actually been
 exercised (the first two models essentially never both fail), so the 404 hid.
 
-**Pre-PR assess:** rubric all-PASS (see PR body); fresh-eyes <FRESH_EYES_OUTCOME>.
+**Pre-PR assess:** rubric all 3 criteria PASS (see PR body). Fresh-eyes (Sonnet,
+1 round) scored all PASS but found 2 gaps, both adopted: (1) it caught this very
+journal placeholder shipping unfilled -- filled now; (2) a real observability bug
+-- on a handler EXCEPTION the code logged TWO ERROR events for one failure (the
+except block's `ask_secretary_handler_error` plus the empty-answer branch's
+`ask_secretary_failed`), which would double the secretary error rate for the
+exception case. Fixed with an `already_logged` flag so exactly one ERROR fires per
+failure, and added a `capture_logs` test asserting the single-error invariant.
+A low-confidence finding 3 (the no-handler fail-open test didn't assert the
+apology wording) was also adopted -- strengthened that test. Full suite re-run
+green after the fixes.
 
 ## Lessons
 
