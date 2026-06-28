@@ -632,6 +632,17 @@ class TestCost:
         }}})
         assert c["total"] == 36.75
 
+    def test_active_4_5_models_are_priced_not_unpriced(self):
+        # Opus/Sonnet 4.5 are still active; a session on them must be priced, not
+        # dropped to $0 as unpriced (Codex PR #261). Dated ids resolve too.
+        c = ledger.compute_cost({
+            "orchestrator": {"claude-opus-4-5-20251101": {"output_tokens": 1_000_000}},
+            "subagent": {"claude-sonnet-4-5": {"output_tokens": 1_000_000}},
+        })
+        assert c["orchestrator_total"] == 25.0  # opus output 25/MTok
+        assert c["subagent_total"] == 15.0      # sonnet output 15/MTok
+        assert c["unpriced_models"] == []
+
     def test_unknown_model_is_zero_and_flagged_not_crash(self):
         c = ledger.compute_cost(
             {"orchestrator": {"claude-mystery-9": {"output_tokens": 1_000_000}}}

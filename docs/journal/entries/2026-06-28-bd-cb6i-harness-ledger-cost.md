@@ -68,7 +68,23 @@ did NOT touch -- pre-existing staleness from other merges to dev). Nothing to bu
 
 ## Files touched
 
-- `scripts/harness_ledger.py` (price table + compute_cost + cost_usd in build_row)
-- `tests/test_harness_ledger.py` (8 new cost tests)
-- `docs/journal/telemetry/2026-06-28T02-58-15Z-f600dafa.json` (the orphaned j268
-  row that missed PR #260's merge -- lands here)
+- `scripts/harness_ledger.py` (price table incl. 4.5 models + compute_cost +
+  cost_usd in build_row)
+- `tests/test_harness_ledger.py` (cost tests)
+
+## Codex round 2 (telemetry rows dropped from the PR)
+
+Round 1 flagged that a telemetry row this PR added lacked cost_usd -- I backfilled
+it. Round 2 then surfaced deeper problems with shipping session telemetry rows in
+this PR at all: (1) the cb6i row was `cost_category: audit` but still `arm: A`, and
+`derive_experiment_state` counts any arm regardless of category, so it would skew
+baseline_A; (2) two rows shared one long session's start (`f600dafa`), so the
+later row's token/cost totals are CUMULATIVE (include the earlier closeouts), not
+per-closeout -- double-charging arm A. Both are real, and both are properties of
+committing cumulative/mislabeled session rows, not of the cost code. Decision:
+DROP both telemetry rows from this PR -- the deliverable is the cost CODE + tests,
+which is clean on its own; the rows brought orthogonal data-quality issues. Round
+2 also caught a real code gap (Finding 3): the price table omitted the still-active
+Opus/Sonnet 4.5 ids, which would fall through to $0 -- ADOPTED (added 4.5 prefixes
++ a test). The ~167 historical rows that also lack cost_usd are a separate one-time
+migration (bd polyglot-pdf-mvq4).

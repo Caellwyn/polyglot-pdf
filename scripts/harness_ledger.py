@@ -103,7 +103,11 @@ MODEL_PRICES_PER_MTOK = {
     "claude-opus-4-8": {"input": 5.00, "output": 25.00},
     "claude-opus-4-7": {"input": 5.00, "output": 25.00},
     "claude-opus-4-6": {"input": 5.00, "output": 25.00},
+    # Opus/Sonnet 4.5 are still active models; include them so a session still on
+    # those ids is priced, not silently dropped to $0 as unpriced (Codex PR #261).
+    "claude-opus-4-5": {"input": 5.00, "output": 25.00},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
     "claude-fable-5": {"input": 10.00, "output": 50.00},
 }
