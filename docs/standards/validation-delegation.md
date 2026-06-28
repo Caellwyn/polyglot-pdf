@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
 
-*Last updated: 2026-06-26. Added the TextAIGemini model-fallback chain (jnjj.42) to the current-state adapter description; added text_ai_gemini.py to Tracks. See [../journal/entries/2026-06-26-bd-jnjj.42-text-ai-model-fallback.md](../journal/entries/2026-06-26-bd-jnjj.42-text-ai-model-fallback.md) for closeout details.*
+*Last updated: 2026-06-27. The A-pillar secretary `ask()` is now IMPLEMENTED (jnjj.45a/b/c): byte-stable cached catalog prefix + append-only values/query tail, wired as the `ask_secretary` tool. See [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md) for closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -45,9 +45,11 @@ The Live API path (audio + tool-calling) is unchanged:
 
 The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
 
-- Port: `backend/ports/text_ai_port.py::ITextAI` -- two abstract methods:
+- Port: `backend/ports/text_ai_port.py::ITextAI` -- two methods:
   `validate(payload) -> verdict` (B-pillar validator) and `ask(query, context) -> str`
-  (A-pillar secretary stub, raises `NotImplementedError` until the secretary bead).
+  (A-pillar secretary, implemented in jnjj.45: maps a prose form query to a prose
+  answer over the whole-form catalog + current values; fail-open `""` on error so
+  the principal asks the user directly).
 - Adapter: `backend/adapters/text_ai_gemini.py::TextAIGemini` -- mirrors
   `LiveAIGemini`'s three-way client construction (Vertex/AI-Studio/bare). Calls
   `client.aio.models.generate_content`, NOT the Live bidi path. Accepts
@@ -58,7 +60,14 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   3.1-flash-lite, flash-lite-latest) on a transient availability error (5xx, or
   404/429); auth/config 4xx (400/401/403) fail fast. Logs the serving model +
   `is_fallback`. `validate()` fail-open is preserved (fallback just fires it less).
-  Chain is all-Gemini (BAA-safe).
+  Chain is all-Gemini (BAA-safe). **Secretary `ask()` (jnjj.45):** builds the
+  request as a BYTE-STABLE `[SECRETARY_SI + render_static_catalog(schema)]` prefix
+  (the implicit-cache target, never mutated within a session) + an APPEND-ONLY
+  `[render_values_tail(...) + the prose query]` tail, calls `_generate`, and
+  returns the model's `answer` prose. PII-safe logging (ids/counts/lengths only,
+  never the query / values / answer). The renderers live in
+  `backend/services/secretary_context.py` (jnjj.45a). The blocking call is
+  timeout-guarded by `FormFillingService.handle_ask_secretary` (jnjj.45c).
 - Wiring: `backend/dependencies.py::get_text_ai()` constructs a fresh `TextAIGemini`
   reading `settings.MODEL_LABELING` (default `gemini-2.5-flash`; set
   `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).

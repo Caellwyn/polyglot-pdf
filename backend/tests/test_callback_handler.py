@@ -365,3 +365,97 @@ class TestGoAway:
             session_id="test-123",
         )
         await handler.on_go_away("2s")  # must not raise
+
+
+class TestAskSecretaryRouting:
+    """ask_secretary tool routing + fail-open (bd polyglot-pdf-jnjj.45c)."""
+
+    @pytest.mark.asyncio
+    async def test_ask_secretary_routes_to_handler(
+        self, mock_websocket, mock_coordinator
+    ):
+        """on_tool_call routes ask_secretary to the injected handler and returns
+        the secretary's prose answer."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        ask = AsyncMock(return_value="Their first name is Ada.")
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            handle_get_field_value=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            get_next_field_schema_for_jit=MagicMock(),
+            handle_ask_secretary=ask,
+        )
+
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary",
+            arguments={"query": "what is their first name?"},
+        )
+
+        ask.assert_awaited_once_with("what is their first name?")
+        assert result["answer"] == "Their first name is Ada."
+        assert result["available"] is True
+
+    @pytest.mark.asyncio
+    async def test_ask_secretary_fail_open_on_empty_answer(
+        self, mock_websocket, mock_coordinator
+    ):
+        """An empty answer (timeout/error inside the handler) yields the fail-open
+        'ask the user directly' response with available=False."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            handle_get_field_value=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            get_next_field_schema_for_jit=MagicMock(),
+            handle_ask_secretary=AsyncMock(return_value=""),
+        )
+
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary", arguments={"query": "q"}
+        )
+        assert result["available"] is False
+        assert "ask the user" in result["answer"].lower()
+
+    @pytest.mark.asyncio
+    async def test_ask_secretary_fail_open_without_handler(
+        self, callback_handler
+    ):
+        """The default fixture wires NO ask_secretary handler -> fail-open."""
+        result = await callback_handler.on_tool_call(
+            tool_name="ask_secretary", arguments={"query": "q"}
+        )
+        assert result["available"] is False
+        assert result["answer"]
+
+    @pytest.mark.asyncio
+    async def test_ask_secretary_swallows_handler_exception(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A handler that raises must not crash the tool-call path -> fail-open."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            handle_get_field_value=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            get_next_field_schema_for_jit=MagicMock(),
+            handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
+        )
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary", arguments={"query": "q"}
+        )
+        assert result["available"] is False

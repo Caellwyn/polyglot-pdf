@@ -35,10 +35,15 @@ class FormFillingService:
         self,
         live_ai: Optional[ILiveAI] = None,
         settings: Optional[Settings] = None,
+        text_ai: Optional[Any] = None,
     ):
         # AI adapter is optional for unit tests that only exercise form logic
         self._live_ai = live_ai
         self._settings = settings or get_settings()
+        # Cheap text model behind the secretary (bd polyglot-pdf-jnjj.45c). Optional
+        # so unit tests that exercise only form logic need not wire it; the
+        # ask_secretary handler fail-opens when it is None.
+        self._text_ai = text_ai
         self._websocket = None
         self._session_id = None
         # Web session state - schema only (no field caching)
@@ -208,6 +213,7 @@ class FormFillingService:
             request_form_state_from_client=self.request_form_state_from_client,
             get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
             merge_field_schema=self.merge_field_schema,
+            handle_ask_secretary=self.handle_ask_secretary,
         )
 
         # Use web form tool declarations (stateless)
@@ -926,6 +932,81 @@ class FormFillingService:
             return {}
         
         return await self._request_coordinator.request_form_state(field_ids)
+
+    async def handle_ask_secretary(self, query: str) -> str:
+        """Run an ask_secretary lookup (bd polyglot-pdf-jnjj.45c).
+
+        Assembles the secretary's context -- the form catalog (self._schema, the
+        full-form catalog the client supplies at handshake; bd jnjj.45d) plus the
+        client's CURRENT values + applicability (a fresh round-trip) -- and runs the
+        BLOCKING TextAIGemini.ask() under a timeout so a slow lookup cannot hang the
+        conversation. Returns the secretary's prose answer, or "" on any failure
+        (no adapter / no schema / timeout / error) so the caller fail-opens and the
+        principal asks the user directly.
+
+        The timeout here is the INTERIM tail-latency guard (Gate 2 measured
+        occasional multi-second spikes); the graceful "please hold" filler is
+        jnjj.43. Note it bounds ONLY the model call -- the preceding client
+        form-state round-trip has its own ~5s coordinator timeout, so the
+        worst-case total blocking wait is ~SECRETARY_TIMEOUT_S + 5s.
+
+        PII: logs ids/counts/latency/timeout only -- never the query, the values,
+        or the answer (callback_handler PII discipline).
+        """
+        if self._text_ai is None:
+            _log.warning("ask_secretary_no_text_ai", session_id=self._session_id)
+            return ""
+
+        schema = self._schema or {}
+        if not schema.get("fields"):
+            _log.warning("ask_secretary_no_schema", session_id=self._session_id)
+            return ""
+
+        # Fresh full form state from the client (all fields). Shape:
+        # {field_id: {"value": ..., "confirmed": ..., ["shown": bool]}} -- the
+        # renderers read the value out of that wrapper directly; `shown` (added by
+        # jnjj.45d) feeds the shown_map (default True until then).
+        try:
+            form_state = await self.request_form_state_from_client(None)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("ask_secretary_form_state_error",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return ""
+        form_state = form_state or {}
+
+        shown_map = {}
+        for fid, entry in form_state.items():
+            if isinstance(entry, dict) and "shown" in entry:
+                shown_map[fid] = bool(entry.get("shown"))
+
+        context = {
+            "schema": schema,
+            "field_values": form_state,
+            "shown_map": shown_map,
+        }
+
+        timeout_s = getattr(self._settings, "SECRETARY_TIMEOUT_S", 8.0)
+        try:
+            answer = await asyncio.wait_for(
+                self._text_ai.ask(query, context), timeout=timeout_s
+            )
+        except asyncio.TimeoutError:
+            _log.warning("ask_secretary_timeout", timeout_s=timeout_s,
+                         session_id=self._session_id)
+            return ""
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("ask_secretary_ask_error",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return ""
+
+        _log.info(
+            "ask_secretary_complete",
+            field_count=len(form_state),
+            shown_count=len(shown_map),
+            answer_len=len(answer or ""),
+            session_id=self._session_id,
+        )
+        return answer or ""
 
     def handle_form_state_response(self, request_id: str, field_values: Dict[str, Any]) -> None:
         """

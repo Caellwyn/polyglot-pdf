@@ -40,6 +40,7 @@ EXPECTED_TOOL_NAMES = {
     "switch_section",
     "get_field_value",
     "confirm_field",
+    "ask_secretary",
 }
 
 # A representative valid argument set per declared tool -- the REQUIRED params from
@@ -51,6 +52,7 @@ SAMPLE_ARGS = {
     "switch_section": {"section_identifier": "2"},
     "get_field_value": {"spoken_name": "first name"},
     "confirm_field": {"field_id": "p1_first_name", "confirmation_method": "verbal"},
+    "ask_secretary": {"query": "what is their first name?"},
 }
 
 
@@ -66,7 +68,7 @@ def _decl_by_name() -> dict[str, dict]:
 # Part A -- the declarations are internally well-formed
 # --------------------------------------------------------------------------
 def test_declared_tool_names_match_expected_set():
-    """The declared tool names are exactly the 5 the backend supports -- a tool
+    """The declared tool names are exactly the 6 the backend supports -- a tool
     added/removed in config.py without updating this contract fails here."""
     names = {d["name"] for d in _declarations()}
     assert names == EXPECTED_TOOL_NAMES
@@ -126,6 +128,7 @@ def _make_handler() -> CallbackHandler:
         handle_get_field_value=AsyncMock(return_value={"found": True, "value": "x"}),
         request_form_state_from_client=AsyncMock(return_value={}),
         get_next_field_schema_for_jit=MagicMock(return_value=None),
+        handle_ask_secretary=AsyncMock(return_value="a prose answer"),
     )
     # send_form_update touches the websocket; stub it so update routing is isolated.
     handler.send_form_update = AsyncMock()
@@ -157,6 +160,8 @@ async def test_every_declared_tool_is_dispatched_not_dropped(name):
         handler._request_form_state_from_client.assert_awaited_once()
     elif name == "confirm_field":
         handler._request_coordinator.request_confirm_field.assert_awaited_once()
+    elif name == "ask_secretary":
+        handler._handle_ask_secretary.assert_awaited_once()
 
 
 @pytest.mark.asyncio
