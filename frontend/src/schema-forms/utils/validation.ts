@@ -461,7 +461,11 @@ function formatDate(date: Date): string {
  * @param fieldValues - Current form values (may contain FieldValue wrappers)
  * @returns true if field should be shown
  */
-export function shouldShowField(field: FormField, fieldValues: Record<string, any>): boolean {
+export function shouldShowField(
+  field: FormField,
+  fieldValues: Record<string, any>,
+  fields?: FormField[],
+): boolean {
   if (!field.show_if) {
     return !field.hidden; // No conditional logic, use default hidden state
   }
@@ -477,11 +481,24 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
   // equals/not_equals -- a strict scalar compare misses both. Returns the selected
   // option set when the trigger is multi-valued, else null (a plain scalar, for
   // which strict identity is correct). Mirrors validateOptionMembership's parsing.
+  //
+  // The comma-string split is gated on the TRIGGER field actually being a checkbox
+  // group (`group_kind === "checkbox"`), resolved from the optional `fields` list.
+  // Comma presence alone is NOT sufficient: a legitimate scalar value like
+  // "Springfield, IL" must NOT be split (Codex PR #259). When `fields` is not
+  // provided (the trigger field cannot be resolved), only the array shape is
+  // treated as a set -- a comma-string falls through to strict scalar compare.
+  const triggerField = fields?.find((f) => f.id === field.show_if!.field);
+  const triggerIsCheckboxGroup = triggerField?.group_kind === "checkbox";
   const selectedSet = ((): string[] | null => {
     if (Array.isArray(triggerValue)) {
       return triggerValue.map((v) => String(v));
     }
-    if (typeof triggerValue === "string" && triggerValue.includes(",")) {
+    if (
+      triggerIsCheckboxGroup &&
+      typeof triggerValue === "string" &&
+      triggerValue.includes(",")
+    ) {
       return triggerValue.split(",").map((s) => s.trim());
     }
     return null;

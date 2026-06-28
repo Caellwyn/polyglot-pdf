@@ -61,7 +61,7 @@ export function checkFieldAccess(
 
   // Check if field is conditionally hidden
   if (field.show_if) {
-    const isVisible = shouldShowField(field, fieldValues);
+    const isVisible = shouldShowField(field, fieldValues, schema.fields);
 
     if (!isVisible) {
       // Field is hidden - determine what needs to be filled first
@@ -181,7 +181,7 @@ export function evaluateFieldAvailability(
 
   // Check conditional visibility (show_if logic)
   if (field.show_if) {
-    const isVisible = shouldShowField(field, fieldValues);
+    const isVisible = shouldShowField(field, fieldValues, schema.fields);
 
     if (!isVisible) {
       // Field is conditionally hidden - find the blocking field

@@ -591,7 +591,7 @@ export class WebFormConnection {
         const readOnly = isFieldReadOnly(field, this.state.fieldValues);
         const isAvailable =
           !field.hidden &&
-          shouldShowField(field, this.state.fieldValues) &&
+          shouldShowField(field, this.state.fieldValues, this.state.schema.fields) &&
           !readOnly;
 
         if (!isAvailable) {

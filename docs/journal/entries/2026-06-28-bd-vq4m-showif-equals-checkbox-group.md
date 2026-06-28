@@ -67,6 +67,20 @@ comma-string split (mirroring `validateOptionMembership`'s parsing), plain scala
 that set. Added 4 tests for the comma-separated AI path (multi-select present/
 absent, single comma-free string, not_equals). Full frontend suite green (413).
 
+**Codex round 2 caught a regression in THAT fix.** Splitting any comma-bearing
+string would wrongly split a legitimate SCALAR value like `"Springfield, IL"` (a
+text/select trigger), so `equals "Springfield, IL"` never matches and
+`equals "Springfield"` wrongly matches -- comma presence alone can't distinguish
+an AI checkbox-group string from a scalar with a comma, and `shouldShowField`
+didn't receive the trigger field's schema. Fixed by adding an optional
+`fields?: FormField[]` param: the comma-split now fires ONLY when the trigger
+field is a confirmed checkbox group (`group_kind === "checkbox"`, resolved from
+`fields`); without it, a comma-string falls back to strict scalar compare (safe
+default). Threaded `fields` through the AI-path callers (`navigation.ts`,
+`webFormConnection.ts`, `conditionalFieldCheck.ts` x2); `FieldRenderer.tsx` (the
+interactive renderer, array shape) needs no change. Added the comma-scalar
+regression test + a no-fields-fallback test. Full frontend suite green (415).
+
 **Decisions (mine):**
 - **Fixed `not_equals` too**, though the bead names only `equals`. Same root cause,
   symmetric, and leaving the sibling broken (always-shown) would be a known bug.

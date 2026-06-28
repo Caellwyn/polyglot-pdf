@@ -443,6 +443,18 @@ describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
     show_if: { field: 'p5_checkbox1a', operator: 'not_equals', value: 'P5_Checkbox1b[0]' },
   } as FormField;
 
+  // The trigger field, a checkbox GROUP. Passed as the `fields` arg so the
+  // comma-separated AI-fill string can be recognized + split (a comma-string is
+  // only split when the trigger is a known checkbox group -- Codex PR #259).
+  const triggerCheckboxGroup: FormField = {
+    id: 'p5_checkbox1a',
+    name: 'How the form was completed',
+    type: 'checkbox',
+    group_kind: 'checkbox',
+    section_id: 'Part 5',
+  } as FormField;
+  const fields = [gatedEquals, gatedNotEquals, triggerCheckboxGroup];
+
   it('SHOWS an equals-gated dependent when the checkbox group includes the option', () => {
     expect(shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(true);
   });
@@ -482,27 +494,53 @@ describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
   // that shape too, else the AI path stays broken (Codex PR #259).
   it('SHOWS an equals-gated dependent when the AI comma-separated string includes the option', () => {
     expect(
-      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })
+      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' }, fields)
     ).toBe(true);
   });
 
   it('HIDES an equals-gated dependent when the comma-separated string omits the option', () => {
     expect(
-      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' })
+      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' }, fields)
     ).toBe(false);
   });
 
   it('handles a single-selection comma-free string (scalar path, exact match)', () => {
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0]' })).toBe(true);
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0]' })).toBe(false);
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0]' }, fields)).toBe(true);
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0]' }, fields)).toBe(false);
   });
 
   it('not_equals: comma-separated string membership (hidden when present, shown when absent)', () => {
     expect(
-      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })
+      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' }, fields)
     ).toBe(false);
     expect(
-      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' })
+      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' }, fields)
     ).toBe(true);
+  });
+
+  it('does NOT split a comma-bearing SCALAR trigger value (text/select, not a checkbox group)', () => {
+    // A scalar trigger whose value legitimately contains a comma must compare
+    // strictly, not be split into members (Codex PR #259).
+    const cityTrigger: FormField = {
+      id: 'city', name: 'City', type: 'text', section_id: 'Part 5',
+    } as FormField; // no group_kind -> scalar
+    const gatedOnCity = {
+      ...gatedEquals,
+      show_if: { field: 'city', operator: 'equals', value: 'Springfield, IL' },
+    } as FormField;
+    const withCity = [gatedOnCity, cityTrigger];
+    // exact comma-bearing match -> shown; the partial "Springfield" must NOT match.
+    expect(shouldShowField(gatedOnCity, { city: 'Springfield, IL' }, withCity)).toBe(true);
+    const gatedOnPartial = {
+      ...gatedEquals,
+      show_if: { field: 'city', operator: 'equals', value: 'Springfield' },
+    } as FormField;
+    expect(shouldShowField(gatedOnPartial, { city: 'Springfield, IL' }, [gatedOnPartial, cityTrigger])).toBe(false);
+  });
+
+  it('falls back to strict compare for a comma string when the trigger field is unknown (no fields arg)', () => {
+    // Without the fields list we cannot confirm a checkbox group, so a comma
+    // string is NOT split -- safer than guessing.
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })).toBe(false);
   });
 });
