@@ -341,6 +341,21 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   {kit.hasPdf ? ', pdf' : ', no pdf'}
                 </div>
 
+                {/* Form version (bd polyglot-pdf-s4dp.2). Shown for any kit with a
+                    readable schema. "Version: unknown" is explicit (not blank), and
+                    a low-confidence / unknown version carries a "verify" hint. */}
+                {prog?.version && (
+                  <div className="mt-1 text-xs" data-testid="kit-version">
+                    <span className="text-gray-500">Version: </span>
+                    <span className={prog.version.lowConfidence ? 'text-yellow-700' : 'text-gray-700'}>
+                      {prog.version.label}
+                    </span>
+                    {prog.version.lowConfidence && (
+                      <span className="text-yellow-600"> (verify)</span>
+                    )}
+                  </div>
+                )}
+
                 {/* Per-form review progress (% of fields complete). */}
                 {pct !== null && (
                   <div className="mt-2" title={`${completeFields} of ${totalFields} fields complete`}>

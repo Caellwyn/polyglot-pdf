@@ -190,6 +190,17 @@ export const App: React.FC = () => {
     commitSchema(newSchema);
   }, [schema, commitSchema]);
 
+  // Update form-level metadata (version, edition, OMB, expiration -- bd
+  // polyglot-pdf-s4dp.2). Merges the patch into form_metadata so a human can
+  // correct an auto-extracted version (or fill one a version-less form lacked).
+  const handleUpdateMetadata = React.useCallback((patch: Partial<FormSchema['form_metadata']>) => {
+    if (!schema) return;
+    commitSchema({
+      ...schema,
+      form_metadata: { ...schema.form_metadata, ...patch },
+    });
+  }, [schema, commitSchema]);
+
   // Reorder fields within a section
   const handleReorderFields = React.useCallback((sectionId: string, fieldIds: string[]) => {
     if (!schema) return;
@@ -624,6 +635,7 @@ export const App: React.FC = () => {
                 schema={schema}
                 onUpdateField={handleUpdateField}
                 onUnmergeField={handleUnmergeField}
+                onUpdateMetadata={handleUpdateMetadata}
               />
             </div>
           </div>

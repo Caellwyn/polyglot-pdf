@@ -123,6 +123,12 @@ class FormMetadata(BaseModel):
     edition_date: Optional[str] = Field(None, description='e.g., "01/20/25"')
     omb_number: Optional[str] = Field(None, description='e.g., "1615-0067"')
     expiration_date: Optional[str] = Field(None, description='e.g., "2027-09-30"')
+    version_confidence: Optional[float] = Field(
+        None, ge=0, le=1,
+        description="0-1 confidence in the auto-extracted version (bd s4dp.2): "
+                    "high for a specific Edition/Rev pattern, low for a generic "
+                    "year/OMB fallback, 0 when the version is 'unknown'.",
+    )
     page_count: Optional[int] = Field(None, description="Total pages in PDF")
     instructions_url: Optional[str] = Field(None, description="Link to separate instructions PDF")
     agency: Optional[str] = Field(None, description='e.g., "U.S. Citizenship and Immigration Services"')
