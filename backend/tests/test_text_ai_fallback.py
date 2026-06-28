@@ -117,15 +117,51 @@ async def test_400_bad_request_does_NOT_fall_back():
 
 
 @pytest.mark.asyncio
+async def test_4xx_failure_is_logged_at_error_pii_free():
+    """A non-transient 4xx (auth/config) is LOGGED at ERROR before re-raise, with
+    model + status code only -- never content (bd polyglot-pdf-j268 criterion 3)."""
+    a = _adapter({"gemini-2.5-flash-lite": _client_error(403)})
+    with structlog.testing.capture_logs() as logs:
+        with pytest.raises(errors.ClientError):
+            await a._generate(stable_prefix=["SECRET_PREFIX"], fresh_tail=["SECRET_Q"])
+    errs = [e for e in logs if e.get("event") == "text_ai_generate_failed"]
+    assert errs, "expected a text_ai_generate_failed ERROR log"
+    rec = errs[0]
+    assert rec["log_level"] == "error"
+    assert rec["status_code"] == 403
+    assert rec["model"] == "gemini-2.5-flash-lite"
+    # PII-free: no prefix/query content anywhere in the captured logs.
+    blob = repr(logs)
+    assert "SECRET_PREFIX" not in blob and "SECRET_Q" not in blob
+
+
+@pytest.mark.asyncio
+async def test_lite_chain_exhaustion_is_logged_at_error():
+    """When the whole LITE chain 503s, the exhaustion is logged at ERROR (with
+    chain_exhausted=True) before the caller fail-opens (bd polyglot-pdf-j268)."""
+    behavior = {m: _server_error(503) for m in
+                ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]}
+    a = _adapter(behavior)
+    with structlog.testing.capture_logs() as logs:
+        with pytest.raises(errors.ServerError):
+            await a._generate(stable_prefix=["sys"], fresh_tail=["q"])
+    errs = [e for e in logs if e.get("event") == "text_ai_generate_failed"]
+    assert errs and errs[0]["chain_exhausted"] is True
+    assert errs[0]["log_level"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_all_models_unavailable_reraises():
     # Every model 503 -> the last one's error propagates (caller fail-opens).
+    # The default LITE chain is 2 models: gemini-2.5-flash-lite -> 3.1-flash-lite
+    # (bd polyglot-pdf-j268 removed the invalid gemini-flash-lite-latest 3rd entry).
     behavior = {m: _server_error(503) for m in
-                ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite",
-                 "gemini-flash-lite-latest"]}
+                ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]}
     a = _adapter(behavior)
     with pytest.raises(errors.ServerError):
         await a._generate(stable_prefix=["sys"], fresh_tail=["q"])
-    assert len(a._client.aio.models.tried) == 3
+    assert a._client.aio.models.tried == [
+        "gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]
 
 
 @pytest.mark.asyncio
@@ -133,8 +169,7 @@ async def test_validate_fails_open_when_all_models_down():
     # validate() wraps _generate in try/except -> a total outage returns the
     # fail-open empty verdict, not an exception.
     behavior = {m: _server_error(503) for m in
-                ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite",
-                 "gemini-flash-lite-latest"]}
+                ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]}
     a = _adapter(behavior)
     verdict = await a.validate({"stable_prefix": ["sys"], "fresh_tail": ["vals"]})
     assert verdict == {"conflicts": []}

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
 
-*Last updated: 2026-06-27. The A-pillar secretary `ask()` is now IMPLEMENTED (jnjj.45a/b/c): byte-stable cached catalog prefix + append-only values/query tail, wired as the `ask_secretary` tool. See [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md) for closeout details.*
+*Last updated: 2026-06-27. The A-pillar secretary `ask()` is now IMPLEMENTED (jnjj.45a/b/c): byte-stable cached catalog prefix + append-only values/query tail, wired as the `ask_secretary` tool. Hardened in j268: lite-only fallback chain (removed the invalid `gemini-flash-lite-latest`), ERROR-level logging for 4xx + chain exhaustion. See [../journal/entries/2026-06-27-bd-j268-secretary-hardening.md](../journal/entries/2026-06-27-bd-j268-secretary-hardening.md) for closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -55,11 +55,16 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   `client.aio.models.generate_content`, NOT the Live bidi path. Accepts
   `stable_prefix` + `fresh_tail` separately so the leading token sequence is stable
   for implicit caching; logs `cached_content_token_count` on every call (`cache_hit`
-  bool) for observability. **Model-fallback (jnjj.42):** `_generate()` walks an
-  ordered Gemini fallback chain (configured model -> `DEFAULT_FALLBACK_MODELS`:
-  3.1-flash-lite, flash-lite-latest) on a transient availability error (5xx, or
-  404/429); auth/config 4xx (400/401/403) fail fast. Logs the serving model +
-  `is_fallback`. `validate()` fail-open is preserved (fallback just fires it less).
+  bool) for observability. **Model-fallback (jnjj.42, hardened jnjj.45/j268):**
+  `_generate()` walks an ordered LITE-tier Gemini chain (configured model ->
+  `DEFAULT_FALLBACK_MODELS`: just `gemini-3.1-flash-lite`) on a transient
+  availability error (5xx, or 404/429). The chain stays lite-tier ON PURPOSE
+  (cost) -- the full `gemini-flash-latest` is NOT a fallback, and the invalid
+  `gemini-flash-lite-latest` string was removed (j268). Auth/config 4xx
+  (400/401/403) AND lite-chain exhaustion are LOGGED at ERROR (PII-free: type +
+  status code + model) then re-raised for the caller's fail-open -- never masked,
+  never escalated to a pricier model. Logs the serving model + `is_fallback`.
+  `validate()`/`ask()` fail-open is preserved (fallback just fires it less).
   Chain is all-Gemini (BAA-safe). **Secretary `ask()` (jnjj.45):** builds the
   request as a BYTE-STABLE `[SECRETARY_SI + render_static_catalog(schema)]` prefix
   (the implicit-cache target, never mutated within a session) + an APPEND-ONLY

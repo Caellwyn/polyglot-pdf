@@ -405,7 +405,8 @@ class TestAskSecretaryRouting:
         self, mock_websocket, mock_coordinator
     ):
         """An empty answer (timeout/error inside the handler) yields the fail-open
-        'ask the user directly' response with available=False."""
+        APOLOGY instruction with available=False -- and explicitly does NOT tell
+        the model to repeat the question back (the knock-knock anti-pattern)."""
         handler = CallbackHandler(
             websocket=mock_websocket,
             request_coordinator=mock_coordinator,
@@ -424,24 +425,40 @@ class TestAskSecretaryRouting:
             tool_name="ask_secretary", arguments={"query": "q"}
         )
         assert result["available"] is False
-        assert "ask the user" in result["answer"].lower()
+        answer = result["answer"].lower()
+        # The instruction must steer toward an apology for an internal error...
+        assert "apolog" in answer
+        assert "internal error" in answer
+        # ...and must NOT tell the model to just repeat the question back.
+        assert "repeat their question" in answer  # the explicit DO-NOT clause
 
     @pytest.mark.asyncio
     async def test_ask_secretary_fail_open_without_handler(
         self, callback_handler
     ):
-        """The default fixture wires NO ask_secretary handler -> fail-open."""
+        """The default fixture wires NO ask_secretary handler -> fail-open with the
+        SAME apology instruction (not a re-ask)."""
         result = await callback_handler.on_tool_call(
             tool_name="ask_secretary", arguments={"query": "q"}
         )
         assert result["available"] is False
-        assert result["answer"]
+        answer = result["answer"].lower()
+        assert "apolog" in answer and "repeat their question" in answer
 
     @pytest.mark.asyncio
     async def test_ask_secretary_swallows_handler_exception(
         self, mock_websocket, mock_coordinator
     ):
-        """A handler that raises must not crash the tool-call path -> fail-open."""
+        """A handler that raises must not crash the tool-call path -> fail-open,
+        and logs EXACTLY ONE ERROR for the failure (not a doubled error-rate from
+        the except block + the empty-answer branch both firing; fresh-eyes
+        finding). Patches the module logger's .error directly rather than using
+        structlog.capture_logs -- the latter is sensitive to global structlog
+        config that other suite tests mutate, making it flaky under full-suite
+        ordering (it captured nothing)."""
+        from unittest.mock import patch as _patch
+        import backend.services.callback_handler as cbh
+
         handler = CallbackHandler(
             websocket=mock_websocket,
             request_coordinator=mock_coordinator,
@@ -455,7 +472,14 @@ class TestAskSecretaryRouting:
             get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
         )
-        result = await handler.on_tool_call(
-            tool_name="ask_secretary", arguments={"query": "q"}
-        )
+        with _patch.object(cbh._log, "error") as mock_error:
+            result = await handler.on_tool_call(
+                tool_name="ask_secretary", arguments={"query": "q"}
+            )
         assert result["available"] is False
+        # Exactly ONE ask_secretary* ERROR for the single failure -- the
+        # handler-error log -- NOT a second ask_secretary_failed for the same event.
+        ask_errors = [c for c in mock_error.call_args_list
+                      if c.args and str(c.args[0]).startswith("ask_secretary")]
+        assert len(ask_errors) == 1, ask_errors
+        assert ask_errors[0].args[0] == "ask_secretary_handler_error"
