@@ -93,6 +93,108 @@ VALID_COST_CATEGORIES = ("production", "audit")
 
 
 # --------------------------------------------------------------------------- #
+# Cost computation (bd polyglot-pdf-cb6i)
+# --------------------------------------------------------------------------- #
+# Per-million-token base rates (USD), keyed by model-id PREFIX so a dated id like
+# "claude-haiku-4-5-20251001" resolves to the "claude-haiku-4-5" entry. Source:
+# the claude-api skill (shared/models.md), 2026-06-28. Update here if prices
+# drift; re-verify via /claude-api.
+MODEL_PRICES_PER_MTOK = {
+    "claude-opus-4-8": {"input": 5.00, "output": 25.00},
+    "claude-opus-4-7": {"input": 5.00, "output": 25.00},
+    "claude-opus-4-6": {"input": 5.00, "output": 25.00},
+    # Opus/Sonnet 4.5 are still active models; include them so a session still on
+    # those ids is priced, not silently dropped to $0 as unpriced (Codex PR #261).
+    "claude-opus-4-5": {"input": 5.00, "output": 25.00},
+    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    "claude-fable-5": {"input": 10.00, "output": 50.00},
+}
+
+# Prompt-cache multipliers applied to the BASE INPUT rate (shared/prompt-caching.md):
+#   read  -> 0.1x; write -> 1.25x at 5-minute TTL, 2.0x at 1-hour TTL.
+# The ledger rows do NOT record which TTL a cache write used; Claude Code's
+# default cache is the 5-MINUTE TTL, so we price cache_creation at 1.25x and
+# document the assumption rather than over-charging at the 1h rate.
+CACHE_READ_MULTIPLIER = 0.1
+CACHE_WRITE_MULTIPLIER = 1.25  # 5-minute TTL (Claude Code default)
+
+
+def _price_for_model(model_id: str) -> dict | None:
+    """Resolve a model id to its {input, output} per-MTok rate by longest-prefix
+    match (so a dated id resolves to its family). Returns None if unknown."""
+    if not model_id:
+        return None
+    # Longest matching prefix wins (defensive; the keys don't currently overlap).
+    best = None
+    for prefix, rate in MODEL_PRICES_PER_MTOK.items():
+        if model_id.startswith(prefix) and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, rate)
+    return best[1] if best else None
+
+
+def _cost_for_counts(counts: dict, rate: dict) -> float:
+    """USD cost for one model's token counts at the given {input, output} rate.
+
+    counts keys: input_tokens (uncached remainder), output_tokens,
+    cache_read_input_tokens (priced at 0.1x input), cache_creation_input_tokens
+    (priced at 1.25x input, the 5-minute-TTL assumption).
+    """
+    in_rate = rate["input"] / 1_000_000
+    out_rate = rate["output"] / 1_000_000
+    inp = counts.get("input_tokens", 0) or 0
+    out = counts.get("output_tokens", 0) or 0
+    cache_read = counts.get("cache_read_input_tokens", 0) or 0
+    cache_write = counts.get("cache_creation_input_tokens", 0) or 0
+    return (
+        inp * in_rate
+        + out * out_rate
+        + cache_read * in_rate * CACHE_READ_MULTIPLIER
+        + cache_write * in_rate * CACHE_WRITE_MULTIPLIER
+    )
+
+
+def compute_cost(models: dict | None) -> dict:
+    """Turn the per-(actor, model) token breakdown into a USD cost block that
+    mirrors the `tokens`/`models` structure: per-model + per-actor + total, plus
+    a list of any unpriced model ids (warn-only -- an unknown model contributes
+    $0 and is flagged, never crashes).
+
+    `models` shape (from parse_transcript): {actor: {model_id: {<token counts>}}}.
+    """
+    out = {"orchestrator": {}, "subagent": {}, "by_model": {}, "unpriced_models": []}
+    actor_totals = {"orchestrator": 0.0, "subagent": 0.0}
+    by_model: dict = {}
+    unpriced: set = set()
+
+    for actor in ("orchestrator", "subagent"):
+        for model_id, counts in ((models or {}).get(actor) or {}).items():
+            # Defend the warn-only promise against a malformed/None counts dict
+            # (parse_transcript never produces this, but a hand-crafted or
+            # future-schema row might) -- treat it as zero rather than raising.
+            if not isinstance(counts, dict):
+                counts = {}
+            rate = _price_for_model(model_id)
+            if rate is None:
+                unpriced.add(model_id)
+                cost = 0.0
+            else:
+                cost = _cost_for_counts(counts, rate)
+            out[actor][model_id] = round(cost, 6)
+            actor_totals[actor] += cost
+            by_model[model_id] = round(by_model.get(model_id, 0.0) + cost, 6)
+
+    out["by_model"] = by_model
+    out["orchestrator_total"] = round(actor_totals["orchestrator"], 6)
+    out["subagent_total"] = round(actor_totals["subagent"], 6)
+    out["total"] = round(actor_totals["orchestrator"] + actor_totals["subagent"], 6)
+    out["unpriced_models"] = sorted(unpriced)
+    out["cache_write_ttl_assumed"] = "5m"  # see CACHE_WRITE_MULTIPLIER note
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Transcript discovery
 # --------------------------------------------------------------------------- #
 def sanitize_cwd(cwd: str) -> str:
@@ -339,6 +441,8 @@ def build_row(parsed: dict, args: argparse.Namespace, *, recorded_at: str) -> di
         },
         "tokens": parsed.get("tokens"),
         "models": parsed.get("models"),
+        # USD cost derived from the per-model token counts (bd polyglot-pdf-cb6i).
+        "cost_usd": compute_cost(parsed.get("models")),
         "subagent_models": subagent_models(parsed),
         "assistant_turns": parsed.get("assistant_turns"),
         "phase_tokens": phase_tokens,
