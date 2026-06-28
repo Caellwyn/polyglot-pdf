@@ -60,6 +60,26 @@
       }
     }
   },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-opus-4-8": 82.294079
+    },
+    "subagent": {
+      "claude-sonnet-4-6": 4.716387,
+      "claude-haiku-4-5-20251001": 1.014397,
+      "claude-opus-4-8": 3.978078
+    },
+    "by_model": {
+      "claude-opus-4-8": 86.272157,
+      "claude-sonnet-4-6": 4.716387,
+      "claude-haiku-4-5-20251001": 1.014397
+    },
+    "unpriced_models": [],
+    "orchestrator_total": 82.294079,
+    "subagent_total": 9.708862,
+    "total": 92.002941,
+    "cache_write_ttl_assumed": "5m"
+  },
   "subagent_models": [
     "claude-haiku-4-5-20251001",
     "claude-opus-4-8",
