@@ -68,6 +68,10 @@ class CallbackHandler:
         # not a snapshot, so a mid-session change_fill_language is reflected in the
         # next field's guidance without a second source of truth to go stale.
         self._get_fill_language = None
+        # Live getter for the current field id (bd polyglot-pdf-h1bn): so confirm_field
+        # can be coerced onto the current field when the model confirms a hallucinated /
+        # drifted id (mirrors the update_form_fields coercion). Getter, not snapshot.
+        self._get_current_field_id = None
 
     def set_tool_handlers(
         self,
@@ -79,6 +83,7 @@ class CallbackHandler:
         merge_field_schema=None,
         handle_ask_secretary=None,
         get_fill_language=None,
+        get_current_field_id=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -89,6 +94,7 @@ class CallbackHandler:
         self._merge_field_schema = merge_field_schema
         self._handle_ask_secretary = handle_ask_secretary
         self._get_fill_language = get_fill_language
+        self._get_current_field_id = get_current_field_id
     
     async def send_form_update(
         self,
@@ -538,6 +544,21 @@ class CallbackHandler:
         """Handle confirm_field tool call from Gemini."""
         field_id = arguments.get("field_id", "") if isinstance(arguments, dict) else ""
         confirmation_method = arguments.get("confirmation_method", "verbal") if isinstance(arguments, dict) else "verbal"
+
+        # DTI current-field coercion (bd polyglot-pdf-h1bn): the update_form_fields for
+        # this turn was coerced onto the current field if the model used a hallucinated/
+        # drifted id; the confirm MUST follow it onto the same field, or the client
+        # looks up the wrong id, reports not-confirmed, and the field is stranded. A
+        # DTI turn confirms the field it just filled = the current field, so coerce a
+        # mismatched confirm id onto it too. Gated on a known current field; the
+        # matching-id and non-DTI paths are untouched.
+        if self._get_current_field_id is not None:
+            current_field_id = self._get_current_field_id()
+            if current_field_id and field_id and field_id != current_field_id:
+                _log.info("dti_confirm_coerced_to_current_field",
+                         session_id=self._session_id,
+                         sent_field_id=field_id, current_field_id=current_field_id)
+                field_id = current_field_id
 
         # SYNCHRONOUS confirm round-trip (bd polyglot-pdf-wpw.2 / WS-E2). The
         # frontend owns all field state, so it -- not the backend -- is the source

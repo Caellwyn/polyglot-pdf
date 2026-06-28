@@ -242,3 +242,48 @@ async def test_switch_to_section_retains_metadata_for_restart():
     )
 
     assert service._last_section_metadata == metadata
+
+
+@pytest.mark.asyncio
+async def test_restart_fires_initiating_message_in_dti(monkeypatch):
+    """bd polyglot-pdf-h1bn (closing the fu1h-flagged gap): in DTI mode the rebuilt
+    SI is static and carries no field data, so restart MUST fire the initiating
+    message to re-deliver the current field's guidance + metadata after the restart
+    (e.g. a Level-3 farewell reconnect). Otherwise the model has no field-1 id."""
+    from backend.config import Settings
+    service = _make_service_ready_for_restart()
+    # Use a FRESH Settings instance (NOT the lru_cached get_settings() singleton) so
+    # toggling USE_DTI does not leak into other tests.
+    service._settings = Settings()
+    service._settings.USE_DTI = True
+    sent = []
+
+    async def _capture(spoken, hint):
+        sent.append((spoken, hint))
+
+    monkeypatch.setattr(service, "send_initiating_message", _capture)
+
+    await service.restart_gemini_session(next_field_hint="name (field_id: 'name')")
+
+    assert len(sent) == 1, "DTI restart must fire the initiating message"
+    assert sent[0][1] == "name (field_id: 'name')"
+
+
+@pytest.mark.asyncio
+async def test_restart_does_not_fire_initiating_message_in_non_dti(monkeypatch):
+    """Non-DTI (legacy/JIT): the rebuilt SI carries the field catalog, so restart
+    must NOT fire an extra initiating message (no behavior change vs pre-h1bn)."""
+    from backend.config import Settings
+    service = _make_service_ready_for_restart()
+    service._settings = Settings()
+    service._settings.USE_DTI = False
+    sent = []
+
+    async def _capture(spoken, hint):
+        sent.append((spoken, hint))
+
+    monkeypatch.setattr(service, "send_initiating_message", _capture)
+
+    await service.restart_gemini_session(next_field_hint="name (Full Name)")
+
+    assert sent == [], "non-DTI restart must not fire an initiating message"

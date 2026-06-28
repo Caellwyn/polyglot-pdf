@@ -441,3 +441,34 @@ class TestStartSessionThreadsFormIds:
 
         assert service._callback_handler._form_id == "I-90"
         assert service._callback_handler._form_session_id == "fallback-session"
+
+
+class TestConfirmFieldCoercion:
+    """bd polyglot-pdf-h1bn: confirm_field coerces onto the current field when the
+    model confirms a hallucinated/drifted id, so it follows the coerced
+    update_form_fields onto the same field (else the FE looks up the wrong id and
+    the field is stranded)."""
+
+    @pytest.mark.asyncio
+    async def test_confirm_coerced_to_current_field(self, callback_handler, mock_coordinator):
+        callback_handler._get_current_field_id = lambda: "p1_line2_acctidentifier"
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line2_uscis_account", "confirmation_method": "verbal"})
+        # The FE was asked to confirm the CURRENT field, not the hallucinated id.
+        called_field_id = mock_coordinator.request_confirm_field.call_args.args[0]
+        assert called_field_id == "p1_line2_acctidentifier"
+
+    @pytest.mark.asyncio
+    async def test_confirm_matching_id_not_coerced(self, callback_handler, mock_coordinator):
+        callback_handler._get_current_field_id = lambda: "p1_line1_aliennumber"
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line1_aliennumber"
+
+    @pytest.mark.asyncio
+    async def test_confirm_no_coercion_without_current_field(self, callback_handler, mock_coordinator):
+        # No getter wired (or returns None) -> use the model's id as-is.
+        callback_handler._get_current_field_id = lambda: None
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "whatever", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "whatever"
