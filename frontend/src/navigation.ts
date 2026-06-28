@@ -136,7 +136,7 @@ export function computeNextField(
   // This ensures Gemini must confirm fields before moving on
   for (const field of fieldsToCheck) {
     // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
-    if (field.hidden || !shouldShowField(field, state.fieldValues)) {
+    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
     }
 
@@ -160,7 +160,7 @@ export function computeNextField(
   // PRIORITY 2: Find first EMPTY field (skipping confirmed fields)
   for (const field of fieldsToCheck) {
     // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
-    if (field.hidden || !shouldShowField(field, state.fieldValues)) {
+    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
     }
 
