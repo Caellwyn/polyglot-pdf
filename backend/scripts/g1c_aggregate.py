@@ -87,11 +87,26 @@ def _latency():
         print("\n(no g1c_latency_*.csv runs yet)")
         return
     print(f"\n=== LATENCY LEVER: pooled over {len(files)} run(s) ===")
+    # Same current-corpus_fp filter as the precision branch: never blend latency
+    # rows from a different corpus version (different payloads/case mix) into the
+    # pooled p50/p90 (Codex review on PR #262).
+    from backend.scripts.g1b_corpus import corpus_fingerprint
+    current_fp = corpus_fingerprint()
     lat = defaultdict(list)
+    dropped_fp = 0
     for f in files:
         for r in csv.DictReader(open(f, encoding="utf-8")):
+            if (r.get("corpus_fp") or "") != current_fp:
+                dropped_fp += 1
+                continue
             if not r["error"]:
                 lat[r["variant"]].append(float(r["latency_s"]))
+    if dropped_fp:
+        print(f"(excluded {dropped_fp} row(s) from a different corpus_fp; "
+              f"pooling only corpus_fp={current_fp})")
+    if not any(lat.values()):
+        print(f"no latency rows match the current corpus_fp={current_fp}.")
+        return
     print(f"{'variant':<10}{'n':>4}{'p50':>8}{'p90':>8}{'max':>8}")
     for variant in ("baseline", "trim"):
         v = sorted(lat.get(variant, []))

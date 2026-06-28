@@ -49,10 +49,13 @@ Re-measuring on the clean corpus overturned two G1b premises:
    a CONTAMINATED-CORPUS ARTIFACT. On the clean corpus, 2.5-flash gets recall 1.000
    on every class (cross_date 3/3, duration_year 3/3) at 5x lower cost than
    3.5-flash, and the native-audio VOICE model gets recall 0.963 / precision 1.000.
-2. CACHING is structurally inapplicable: the checker prompt is 324 tokens (SI+rules)
-   to 2908 tokens (full 132-field), both below Gemini's cache minimums (3.5-flash
-   4096, 2.5-flash 2048) -- nothing large enough to cache. Payload-trim is a net
-   loss (precision 0.90->0.79; the model needs field names for meaning).
+2. CACHING is inapplicable: caching only helps content that REPEATS byte-identically
+   across calls, and the only such content is the 324-token SI+rules prefix (the
+   form payload is unique per applicant). 324 is below both cache minimums
+   (3.5-flash 4096, 2.5-flash 2048), so the prefix can't cache on either model.
+   (The FULL prompt is ~2908 tokens, which does exceed the 2.5-flash 2048 minimum --
+   but that is irrelevant, since the full prompt never repeats.) Payload-trim is a
+   net loss (precision 0.90->0.79; the model needs field names for meaning).
 
 The end-of-form winner is the **native-audio voice model** (maintainer steer: it is
 cheaper than 3.5-flash and already connected): recall 0.96, precision 1.00,
