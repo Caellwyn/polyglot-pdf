@@ -475,4 +475,34 @@ describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
     expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(true);
     expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: [] })).toBe(true);
   });
+
+  // The voice-AI fill path stores a checkbox group as a COMMA-SEPARATED STRING
+  // ("Multiple checkboxes: comma-separated exact values", backend/config.py),
+  // un-split -- not a string[]. equals/not_equals must compare by membership for
+  // that shape too, else the AI path stays broken (Codex PR #259).
+  it('SHOWS an equals-gated dependent when the AI comma-separated string includes the option', () => {
+    expect(
+      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })
+    ).toBe(true);
+  });
+
+  it('HIDES an equals-gated dependent when the comma-separated string omits the option', () => {
+    expect(
+      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' })
+    ).toBe(false);
+  });
+
+  it('handles a single-selection comma-free string (scalar path, exact match)', () => {
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0]' })).toBe(true);
+    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0]' })).toBe(false);
+  });
+
+  it('not_equals: comma-separated string membership (hidden when present, shown when absent)', () => {
+    expect(
+      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })
+    ).toBe(false);
+    expect(
+      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' })
+    ).toBe(true);
+  });
 });

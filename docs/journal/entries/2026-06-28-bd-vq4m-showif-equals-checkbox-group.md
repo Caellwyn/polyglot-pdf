@@ -49,7 +49,23 @@ option makes its `equals`-gated dependent visible; an unselected option leaves i
 hidden; verified by a validation.test.ts case) -- PASS, via the new
 `shouldShowField (checkbox-group equals/not_equals trigger)` describe block.
 
-**Fresh-eyes assess:** see the merge ping (run pre-PR).
+**Fresh-eyes assess (Sonnet, pre-PR):** NO-GAPS, round 1.
+
+**Codex review (PR #259) caught an incomplete fix.** A checkbox-group value has
+TWO representations in this system, and the first fix only handled one:
+- the interactive `CheckboxField` renderer emits a `string[]` (handled);
+- the **voice-AI fill path** stores a COMMA-SEPARATED STRING
+  (`"P5_Checkbox1b[0], P5_Checkbox2[0]"`) -- `backend/config.py:447` instructs
+  Gemini to send comma-separated exact values, `validateOptionMembership` already
+  splits on `,` for the group, but `SchemaFormStateManager` stores the raw string
+  un-split. For that shape `triggerValue` is a STRING, not an array, so it fell
+  through to strict `===` and the AI path stayed broken for multi-selects.
+
+Fixed by resolving the trigger into a "selected set" before comparing: array as-is,
+comma-string split (mirroring `validateOptionMembership`'s parsing), plain scalar
+-> null (keeps strict identity). `equals`/`not_equals` check membership against
+that set. Added 4 tests for the comma-separated AI path (multi-select present/
+absent, single comma-free string, not_equals). Full frontend suite green (413).
 
 **Decisions (mine):**
 - **Fixed `not_equals` too**, though the bead names only `equals`. Same root cause,

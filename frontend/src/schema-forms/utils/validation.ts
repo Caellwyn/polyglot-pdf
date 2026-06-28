@@ -469,24 +469,34 @@ export function shouldShowField(field: FormField, fieldValues: Record<string, an
   // Bug Fix: Unwrap FieldValue object before comparing
   const triggerValue = unwrapFieldValue(fieldValues[field.show_if.field]);
 
+  // A checkbox-group trigger's selected set arrives in TWO shapes (bd
+  // polyglot-pdf-vq4m): a string[] from the interactive CheckboxField renderer, OR
+  // a comma-separated string from the voice-AI fill path (backend/config.py:
+  // "Multiple checkboxes: comma-separated exact values"; SchemaFormStateManager
+  // stores that raw string un-split). Both must compare by MEMBERSHIP under
+  // equals/not_equals -- a strict scalar compare misses both. Returns the selected
+  // option set when the trigger is multi-valued, else null (a plain scalar, for
+  // which strict identity is correct). Mirrors validateOptionMembership's parsing.
+  const selectedSet = ((): string[] | null => {
+    if (Array.isArray(triggerValue)) {
+      return triggerValue.map((v) => String(v));
+    }
+    if (typeof triggerValue === "string" && triggerValue.includes(",")) {
+      return triggerValue.split(",").map((s) => s.trim());
+    }
+    return null;
+  })();
+
   switch (field.show_if.operator) {
     case "equals":
-      // A checkbox-group trigger emits a string[] of selected option values, so a
-      // strict scalar compare (array === string) is always false and the gated
-      // dependent never shows (bd polyglot-pdf-vq4m). Treat equals against an
-      // array as membership -- "the selected set includes this option" -- matching
-      // the contains/in branches' String() coercion convention.
-      if (Array.isArray(triggerValue)) {
-        return triggerValue.includes(String(field.show_if.value));
+      if (selectedSet) {
+        return selectedSet.includes(String(field.show_if.value));
       }
       return triggerValue === field.show_if.value;
 
     case "not_equals":
-      // Symmetric to equals: for a checkbox-group (array) trigger, "not equals X"
-      // means the selected set does NOT include X. A strict array !== string is
-      // always true, which would always-show the dependent (bd polyglot-pdf-vq4m).
-      if (Array.isArray(triggerValue)) {
-        return !triggerValue.includes(String(field.show_if.value));
+      if (selectedSet) {
+        return !selectedSet.includes(String(field.show_if.value));
       }
       return triggerValue !== field.show_if.value;
 
