@@ -828,8 +828,7 @@
 
     // 1. Seed the recallable past answer (confirmed) so the secretary has
     // something cross-field to recall.
-    var seed = seedFields({});
-    seed = seedFields((function () { var m = {}; m[seedFieldId] = seedValue; return m; })());
+    var seed = seedFields((function () { var m = {}; m[seedFieldId] = seedValue; return m; })());
     report.seeded = seed.seeded.indexOf(seedFieldId) !== -1;
     report.steps.push({ step: 'seed', seeded: seed.seeded, failed: seed.failed });
     if (!report.seeded) {

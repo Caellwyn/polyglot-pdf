@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-28. See [../journal/entries/2026-06-28-bd-p68s-secretary-catalog-handshake.md](../journal/entries/2026-06-28-bd-p68s-secretary-catalog-handshake.md) for closeout details.*
+*Last updated: 2026-06-29. See [../journal/entries/2026-06-29-bd-p68s-secretary-catalog-handshake.md](../journal/entries/2026-06-29-bd-p68s-secretary-catalog-handshake.md) for closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`

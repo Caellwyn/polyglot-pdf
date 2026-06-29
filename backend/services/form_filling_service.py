@@ -163,8 +163,10 @@ class FormFillingService:
             schema: Form schema (stored for context generation, not for state)
             full_schema: Full-form catalog for the secretary (bd polyglot-pdf-p68s);
                 the whole form (all parts/sections/fields), distinct from the
-                per-section `schema`. None on a section-switch restart (which omits
-                it) -- the previously-cached value is then preserved.
+                per-section `schema`. The client sends it on every handshake
+                (including section switches), so it is normally non-None here. When
+                None (an older client, or an internal restart that does not thread
+                it), the previously-cached value is preserved rather than cleared.
             current_values: Pre-filled values (ignored by backend - client is source of truth)
             system_instruction: System instruction to include in initial Gemini config
             form_session_id: Persistent form session ID from frontend (survives reconnects)
@@ -184,10 +186,13 @@ class FormFillingService:
         # Store schema for context generation
         self._schema = schema
         # Cache the full-form catalog for the secretary (bd polyglot-pdf-p68s).
-        # Only overwrite when the caller supplies one: a section-switch restart calls
-        # start_session WITHOUT full_schema (the form is unchanged across sections),
-        # so preserving the existing value keeps the secretary's catalog intact after
-        # a switch. A fresh connect always supplies it (or None for a legacy client).
+        # Only overwrite when the caller supplies one: the INTERNAL section-switch
+        # restart (_switch_to_section_locked -> start_session) does NOT thread
+        # full_schema (the form is unchanged across sections), so preserving the
+        # existing value keeps the secretary's catalog intact across that restart.
+        # A client (re)connect handshake -- including a manual section switch, which
+        # re-handshakes through websocket_routes -- always supplies it (or None for
+        # a legacy client that predates this key).
         if full_schema is not None:
             self._full_schema = full_schema
         # Note: current_values are ignored by backend - client is source of truth
