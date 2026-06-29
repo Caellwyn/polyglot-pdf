@@ -694,3 +694,62 @@ def test_current_field_id_set_by_merge_field_schema():
     svc = FormFillingService(live_ai=None, settings=get_settings())
     svc.merge_field_schema({"id": "p1_next", "name": "Next", "type": "text"})
     assert svc._current_field_id == "p1_next"
+
+
+# ---------------------------------------------------------------------------
+# Codex PR #264 P0 fixes (bd polyglot-pdf-h1bn): coercion must NOT corrupt data on
+# a collapsed multi-field call, must not log raw model ids (PII), and a manual edit
+# must invalidate the current-field pointer.
+# ---------------------------------------------------------------------------
+
+def test_update_multi_field_call_not_coerced():
+    """P0: the callback collapses a multi-field tool call to its FIRST key before the
+    service sees it, so the service can't detect multi-field itself. With
+    multi_field_call=True, coercion must be SKIPPED -- the collapsed first value may
+    belong to a different field; re-pointing it onto the current field corrupts it."""
+    svc = _dti_service_with_current_field("p1_line1_aliennumber")
+    # The callback collapsed {wrongfield: v, ...} -> {wrongfield: v} and flags it.
+    result = svc.handle_update_fields_tool_call(
+        "sess", {"some_other_field": "VALUE"}, multi_field_call=True)
+    # NOT coerced onto p1_line1_aliennumber -> rejected as unknown (the caller's intent).
+    assert result.get("unknown_fields") == ["some_other_field"]
+    assert result["applied_fields"] == []
+
+
+def test_update_coercion_does_not_log_raw_sent_id(monkeypatch):
+    """P0 (no-PII): the coercion log must NOT include sent_id -- it is raw model input
+    and can carry the user's answer. Only the schema-validated current field id is safe."""
+    import backend.services.form_filling_service as ffs_mod
+    calls = []
+
+    class _FakeLog:
+        def info(self, event, **kw): calls.append((event, kw))
+        def __getattr__(self, _n): return lambda *a, **k: None
+    monkeypatch.setattr(ffs_mod, "_log", _FakeLog())
+
+    svc = _dti_service_with_current_field("p1_line2_acctidentifier")
+    # hallucinated id whose text happens to look like a user value
+    svc.handle_update_fields_tool_call("sess", {"my answer is 123-45-6789": "x"})
+    coerce_logs = [(e, kw) for (e, kw) in calls if e == "dti_update_coerced_to_current_field"]
+    assert coerce_logs, "coercion should have logged"
+    blob = repr(coerce_logs)
+    assert "sent_field_id" not in blob
+    assert "123-45-6789" not in blob  # the raw id (potential PII) never logged
+    assert "p1_line2_acctidentifier" in blob  # the safe target id is fine
+
+
+def test_manual_field_update_clears_current_field_pointer():
+    """P0: a manual edit is auto-confirmed by the FE, so the current-field pointer
+    must be invalidated -- else the NEXT spoken answer (for a different, hinted field)
+    is coerced onto the just-edited field, overwriting it."""
+    import asyncio
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import Settings
+    settings = Settings(); settings.USE_DTI = True
+    svc = FormFillingService(live_ai=None, settings=settings)
+    svc._current_field_id = "p1_line3a_familyname"
+    svc._audio_handler = None  # no-op delegate; we only assert the pointer clear
+    asyncio.get_event_loop().run_until_complete(
+        svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
+                                     "next (field_id: 'p1_line3b_givenname')"))
+    assert svc._current_field_id is None

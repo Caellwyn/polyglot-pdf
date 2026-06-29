@@ -115,10 +115,35 @@ gate; section-complete clears too) + a test that the re-merge runs under the inj
 gate. Opus fallback round 2: NO-GAPS (both fixes verified, nothing regressed; one
 non-blocking nit -- a now-unused get_settings import -- removed). The review record
 for this PR is the Opus-4.8 fallback NO-GAPS, because Codex was unavailable (NO-ACK).
-Net: fresh-eyes 1 round + Codex r1 (3 P1s) + Opus fallback 2 rounds (2 gaps) -- the
-layered review caught 5 real coercion bugs before merge, several subtle
-(timeout-path corruption, global-vs-injected desync). Closed by hand (the watcher's
-Codex-only --close-on-clean did not fire on NO-ACK).
+Net so far: fresh-eyes 1 round + Codex r1 (3 P1s) + Opus fallback 2 rounds (2 gaps).
+
+CORRECTION -- the NO-ACK was a FALSE "Codex unavailable": Codex posted a real
+round-2 review ~40 min AFTER the 2-min ack window (on the current head), which the
+watcher missed. I had prematurely closed the beads + pinged merge; on the
+maintainer's "check codex suggestions" I found that review with 3 NEW P0 findings,
+all confirmed real, so I REOPENED h1bn and fixed them:
+- P0 (manual edit): send_manual_field_update left _current_field_id stale; the FE
+  auto-confirms a manual edit, so the next spoken answer (for the hinted NEXT field)
+  was coerced onto the just-edited+confirmed field -> overwrite. Fixed: clear the
+  pointer in send_manual_field_update.
+- P0 (multi-field): the service's len(updates)!=1 guard was DEAD -- the callback
+  collapses a multi-field call to its first key BEFORE the service sees it, so a
+  non-current first field's value was coerced onto the current field. Fixed: the
+  callback passes multi_field_call=bool(rejected_fields); coercion skips then.
+- P0 (PII): the coercion log emitted sent_id (raw model input, may carry the user's
+  answer). Fixed: log only the schema-validated current field id, never sent_id (both
+  update + confirm logs).
+Tests added for all three. Two existing tests pinned the old _handle_update_fields
+call signature; updated for the new multi_field_call kwarg.
+LESSON (bd remember codex-no-ack-can-still-review-late): NO-ACK/ERROR/TIMEOUT is not
+proof Codex won't review -- it can post 30-60 min late. Before treating the Opus
+fallback / a bead-close / a merge ping as final, poll pulls/<pr>/comments+reviews
+for a late Codex review past the trigger floor.
+
+Net: fresh-eyes (1) + Codex r1 (3 P1) + Opus fallback (2 rounds, 2 gaps) + Codex r2
+(3 P0) = 8 real coercion bugs caught before merge, several data-corruption/PII. The
+beads + epic were prematurely closed on the false NO-ACK and REOPENED; they re-close
+only when this PR is genuinely review-clean.
 
 ## Lessons
 

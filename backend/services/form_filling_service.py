@@ -327,6 +327,14 @@ class FormFillingService:
 
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
+        # A manual edit is auto-confirmed by the frontend, so the field the DTI
+        # current-field pointer names is now DONE. Invalidate the pointer (Codex PR
+        # #264 P0): otherwise the next spoken answer -- which is for the field
+        # next_field_hint points at, NOT this manually-edited one -- would be coerced
+        # by update_form_fields onto the just-edited+confirmed field, overwriting it.
+        # The pointer is re-set when the next field's schema is delivered
+        # (merge_field_schema) / a fresh initiating message fires.
+        self._current_field_id = None
         if self._audio_handler:
             # AudioHandler appends next_field_hint to the spoken message, so strip
             # the "(field_id: ...)" parenthetical here too (bd polyglot-pdf-dx7).
@@ -952,11 +960,16 @@ class FormFillingService:
                       error=str(exc))
 
     def handle_update_fields_tool_call(
-        self, session_id: str, updates: Dict[str, Any]
+        self, session_id: str, updates: Dict[str, Any], multi_field_call: bool = False
     ) -> Optional[Dict[str, Any]]:
         """Apply updates from the AI for web sessions (validation only, no persistence).
 
         Delegates to ValidationHandler for field matching and validation.
+
+        multi_field_call: True when the CALLER (CallbackHandler) collapsed a
+        multi-field tool call to its first key before this call -- coercion is then
+        SKIPPED (the collapsed first value may belong to a different field; let it be
+        rejected, don't re-point it onto the current field). Codex PR #264 P0.
         """
         # DTI current-field coercion (bd polyglot-pdf-h1bn): a DTI turn is scoped to
         # ONE field -- the model is answering the guidance for self._current_field_id,
@@ -968,9 +981,9 @@ class FormFillingService:
         # re-point the value at the known current field so the field still fills,
         # rather than rejecting it as unknown / filling the wrong field. The model's
         # field_id is advisory, not authoritative. Gated on DTI + a known current
-        # field + a single-field update (the one-field-per-turn invariant); non-DTI /
-        # multi-field / matching-id paths are untouched.
-        updates = self._coerce_dti_update_to_current_field(updates)
+        # field + a single-field (non-collapsed) update; non-DTI / multi-field /
+        # matching-id paths are untouched.
+        updates = self._coerce_dti_update_to_current_field(updates, multi_field_call=multi_field_call)
 
         # Build field list on-demand from schema for validation
         # Values are not persisted - this is just for acknowledgment
@@ -980,7 +993,9 @@ class FormFillingService:
         validator = ValidationHandler(session_id=session_id)
         return validator.validate_field_updates(fields, updates)
 
-    def _coerce_dti_update_to_current_field(self, updates: Dict[str, Any]) -> Dict[str, Any]:
+    def _coerce_dti_update_to_current_field(
+        self, updates: Dict[str, Any], multi_field_call: bool = False
+    ) -> Dict[str, Any]:
         """Re-point a single DTI update onto the current field when the model's id
         does not match it (bd polyglot-pdf-h1bn). Returns updates unchanged outside
         the gated case. See handle_update_fields_tool_call for the rationale."""
@@ -989,17 +1004,23 @@ class FormFillingService:
         current = self._current_field_id
         if not current:
             return updates
-        # One-field-per-turn invariant: only coerce a single-field update. A
-        # multi-field call is already an error the caller's guard handles; don't
-        # silently merge them onto one field.
-        if len(updates) != 1:
+        # One-field-per-turn invariant. The caller (CallbackHandler) COLLAPSES a
+        # multi-field tool call to its first key BEFORE we see it, so len(updates) is
+        # always 1 here -- we cannot detect "the model sent several fields" ourselves
+        # (Codex PR #264 P0). The caller passes multi_field_call=True in that case; do
+        # NOT coerce then, or the collapsed first value (which may belong to a
+        # different field) would be silently re-pointed onto the current field,
+        # corrupting it. Leave it to be rejected as the caller intended.
+        if multi_field_call or len(updates) != 1:
             return updates
         sent_id, value = next(iter(updates.items()))
         if sent_id == current:
             return updates  # normal path -- model named the right field
+        # Log ONLY the schema-validated target id (current); NEVER sent_id -- it is raw
+        # model input and can carry the user's answer if the model swaps args (Codex
+        # PR #264 P0, no-PII policy). "coerced=True" + the real id is enough signal.
         _log.info("dti_update_coerced_to_current_field",
-                  session_id=self._session_id,
-                  sent_field_id=sent_id, current_field_id=current)
+                  session_id=self._session_id, current_field_id=current)
         return {current: value}
 
     def update_form_state(self, field_updates: List[Dict[str, Any]]) -> Dict[str, Any]:

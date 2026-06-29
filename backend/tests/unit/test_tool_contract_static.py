@@ -179,8 +179,11 @@ async def test_dispatcher_reads_the_declared_required_args():
     await handler.on_tool_call(
         "update_form_fields", {"field_id": "p1_first_name", "value": "Jane"}
     )
+    # multi_field_call=False is passed so the service can skip DTI coercion on a
+    # COLLAPSED multi-field call (a single-field call is not collapsed -- bd
+    # polyglot-pdf-h1bn / Codex PR #264).
     handler._handle_update_fields.assert_called_once_with(
-        handler._session_id, {"p1_first_name": "Jane"}
+        handler._session_id, {"p1_first_name": "Jane"}, multi_field_call=False
     )
 
     await handler.on_tool_call("switch_section", {"section_identifier": "3"})

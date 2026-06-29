@@ -338,8 +338,13 @@ class CallbackHandler:
             rejected_fields = [k for k in normalized_updates.keys() if k != first_field]
             normalized_updates = {first_field: normalized_updates[first_field]}
         
-        # Execute update via service
-        result = self._handle_update_fields(self._session_id, normalized_updates)
+        # Execute update via service. Tell it whether this was a COLLAPSED multi-field
+        # call (rejected_fields non-empty) so DTI coercion is skipped -- the collapsed
+        # first value may belong to a different field and must NOT be re-pointed onto
+        # the current field (Codex PR #264 P0).
+        result = self._handle_update_fields(
+            self._session_id, normalized_updates, multi_field_call=bool(rejected_fields)
+        )
         
         if result is None:
             # No updates applied
