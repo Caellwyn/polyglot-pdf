@@ -103,13 +103,14 @@ maintainer's bead, surfaced to them rather than closed as part of this unrelated
 closeout. The 4 stale beads (`hrn`, `jf6w`, `ue5s`, `jnjj.46`) are not this PR's
 and are left untouched.
 
-## Telemetry gap
+## Telemetry note
 
-`harness_ledger.py` could not locate the session transcript JSONL (the session
-switched worktrees mid-run via EnterWorktree, so the sanitized-cwd lookup points at
-the new worktree path while the transcript lives under the original session dir --
-the known `--transcript after EnterWorktree` issue). Telemetry is warn-only, so the
-row was skipped rather than blocking the closeout; noted here for the record.
+`harness_ledger.py`'s auto-lookup of the session transcript JSONL failed because the
+session switched worktrees mid-run via EnterWorktree (the sanitized-cwd lookup points
+at the new worktree path while the transcript lives under the original session dir).
+Worked around by passing `--transcript <original-session-dir>/<session-id>.jsonl`
+explicitly; the telemetry row was written. (Same `--transcript after EnterWorktree`
+gotcha noted in prior closeouts.)
 
 ## Files touched
 
