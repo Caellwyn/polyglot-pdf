@@ -550,9 +550,11 @@ class CallbackHandler:
         # drifted id; the confirm MUST follow it onto the same field, or the client
         # looks up the wrong id, reports not-confirmed, and the field is stranded. A
         # DTI turn confirms the field it just filled = the current field, so coerce a
-        # mismatched confirm id onto it too. Gated on a known current field; the
-        # matching-id and non-DTI paths are untouched.
-        if self._get_current_field_id is not None:
+        # mismatched confirm id onto it too. Gated on USE_DTI (symmetric with the
+        # update-side coercion in handle_update_fields_tool_call -- _current_field_id is
+        # only DTI-populated today, but the explicit gate keeps the two paths in lockstep
+        # if that ever changes) + a known current field; matching-id paths are untouched.
+        if get_settings().USE_DTI and self._get_current_field_id is not None:
             current_field_id = self._get_current_field_id()
             if current_field_id and field_id and field_id != current_field_id:
                 _log.info("dti_confirm_coerced_to_current_field",

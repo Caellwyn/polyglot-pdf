@@ -66,7 +66,21 @@ coercion the small, invariant-respecting fix.
   fill_language: UI localized, disclaimer "Estoy de Acuerdo", field filled + confirmed
   + advanced).
 
-Fresh-eyes adversarial assess: <FRESH_EYES_PLACEHOLDER -- filled at closeout>.
+Fresh-eyes adversarial assess (Sonnet): NO-GAPS on both exit criteria (mechanism
+sound, suite clean, coercion tests non-tautological). 3 quality findings, all
+addressed:
+- F1 (latent asymmetry, ADOPTED): the confirm coercion lacked the explicit USE_DTI
+  gate the update coercion has. Added `get_settings().USE_DTI and ...` to the confirm
+  path + a "no coercion when DTI off" test, so the two paths are symmetric.
+- F2 (out-of-scope UX, comment FIXED + filed bd polyglot-pdf-bhem): my restart comment
+  wrongly said it uses the RESUME template; on a first-connect Level-3 restart
+  _is_resume_session is False, so the user hears a re-greeting. Corrected the comment;
+  the UX refinement (use the resume template on restart) is bhem.
+- F3 (defensive, ADOPTED): start_session now clears _current_field_id alongside
+  _dti_extra_fields, so the coercion pointer can never point at the previous section's
+  field in the (pre-greeting, practically unreachable) window after a section switch.
+Adopt: 2 inline fixes + 1 comment fix. Reject: 0. Defer: 1 (bhem, UX). Re-spawn not
+needed -- all three are small, self-contained, and test-covered.
 
 ## Lessons
 

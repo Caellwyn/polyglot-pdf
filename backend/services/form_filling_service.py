@@ -193,6 +193,12 @@ class FormFillingService:
         # the validator wrongly accept a stale cross-section field id (fresh-eyes
         # substitute review, Codex PR #229). Parallels the _loaded_field_ids reseed.
         self._dti_extra_fields = {}
+        # Clear the current-field coercion pointer too (bd polyglot-pdf-h1bn): the new
+        # section's field 1 sets it when send_initiating_message fires after this
+        # restart, but clear it now so it can never point at the PREVIOUS section's
+        # field in the (practically-unreachable, pre-greeting) window before that
+        # (fresh-eyes Finding 3 -- defensive, matches the _dti_extra_fields reset).
+        self._current_field_id = None
 
         if accept_connection:
             await self._websocket.accept()
@@ -664,10 +670,13 @@ class FormFillingService:
         # form/section metadata until the next confirm. Fire the initiating message
         # so the current field's guidance + the metadata block reach Gemini, exactly
         # as the section-switch and session-start paths do (bd polyglot-pdf-h1bn,
-        # closing the gap the fu1h audit flagged). send_initiating_message selects the
-        # RESUME template via _is_resume_session and resolves the field from the hint's
-        # id; with no hint it falls back gracefully (renders no guidance block rather
-        # than a wrong field). Non-DTI restarts are unaffected (the block is empty).
+        # closing the gap the fu1h audit flagged). send_initiating_message resolves the
+        # field from the hint's id; with no hint it falls back gracefully (renders no
+        # guidance block rather than a wrong field). It uses whichever template
+        # _is_resume_session selects -- which is the GREETING template on a
+        # first-connect Level-3 restart (the resume flag was set at the original fresh
+        # connect), so the user hears a re-greeting; refining that to the resume
+        # template is bd polyglot-pdf-bhem. Non-DTI restarts are unaffected (block empty).
         if getattr(self._settings, "USE_DTI", False):
             try:
                 await self.send_initiating_message(
