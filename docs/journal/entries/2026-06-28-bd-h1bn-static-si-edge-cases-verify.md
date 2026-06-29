@@ -140,10 +140,23 @@ proof Codex won't review -- it can post 30-60 min late. Before treating the Opus
 fallback / a bead-close / a merge ping as final, poll pulls/<pr>/comments+reviews
 for a late Codex review past the trigger floor.
 
+Codex r3: ERROR (quota) -> Opus fallback (round, on the r2-fix diff). It caught that
+my P0 #3 (no-PII) fix was HALF-DONE: I scrubbed sent_id from the UPDATE coercion log
+but left it in the CONFIRM coercion log (callback_handler) -- and the journal claimed
+"both update + confirm logs," so it was an incomplete fix, not an exception. Fixed
+the confirm log + added a confirm-path PII test. It also noted (non-blocking) that a
+manual edit clears the pointer but doesn't RE-establish it for the next field (no
+hint round-trip fires), so a voice answer right after a manual edit isn't coerced --
+a pre-existing non-regression (no coercion existed there before); filed as
+polyglot-pdf-ezg2, not fixed here.
+
 Net: fresh-eyes (1) + Codex r1 (3 P1) + Opus fallback (2 rounds, 2 gaps) + Codex r2
-(3 P0) = 8 real coercion bugs caught before merge, several data-corruption/PII. The
-beads + epic were prematurely closed on the false NO-ACK and REOPENED; they re-close
-only when this PR is genuinely review-clean.
+(3 P0) + Opus fallback (1 more, the half-done PII fix) = 9 real coercion issues
+caught before merge, several data-corruption/PII. The coercion feature was far
+buggier than it looked; the layered review (and the maintainer's "check codex
+suggestions" catching the false NO-ACK) is what kept the data-corruption + PII paths
+out of a merge. The beads + epic were prematurely closed on the false NO-ACK and
+REOPENED; they re-close only when this PR is genuinely review-clean.
 
 ## Lessons
 

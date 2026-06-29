@@ -465,6 +465,29 @@ class TestConfirmFieldCoercion:
         assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line2_acctidentifier"
 
     @pytest.mark.asyncio
+    async def test_confirm_coercion_does_not_log_raw_id(self, callback_handler, mock_coordinator, monkeypatch):
+        # P0 no-PII (Codex PR #264, Opus fallback): the CONFIRM coercion log must NOT
+        # emit the raw model field_id (it can carry the user's answer) -- only the
+        # schema-validated current field id. Symmetric with the update-side scrub.
+        import backend.services.callback_handler as cbh
+        calls = []
+
+        class _FakeLog:
+            def info(self, event, **kw): calls.append((event, kw))
+            def warning(self, *a, **k): pass
+            def __getattr__(self, _n): return lambda *a, **k: None
+        monkeypatch.setattr(cbh, "_log", _FakeLog())
+        self._wire(callback_handler, current_field_id="p1_line2_acctidentifier")
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "my ssn is 123-45-6789", "confirmation_method": "verbal"})
+        coerce_logs = [(e, kw) for (e, kw) in calls if e == "dti_confirm_coerced_to_current_field"]
+        assert coerce_logs, "confirm coercion should have logged"
+        blob = repr(coerce_logs)
+        assert "sent_field_id" not in blob
+        assert "123-45-6789" not in blob  # raw id (potential PII) never logged
+        assert "p1_line2_acctidentifier" in blob
+
+    @pytest.mark.asyncio
     async def test_confirm_coerced_for_empty_id(self, callback_handler, mock_coordinator):
         # Codex PR #264: an EMPTY confirm id (the tool schema allows '') must also
         # coerce -- symmetric with the update path, which coerces '' too. Otherwise the

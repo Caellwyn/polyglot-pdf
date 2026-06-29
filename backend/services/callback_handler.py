@@ -582,9 +582,13 @@ class CallbackHandler:
         if use_dti and self._get_current_field_id is not None:
             current_field_id = self._get_current_field_id()
             if current_field_id and field_id != current_field_id:
+                # Log ONLY the schema-validated current field id, NEVER the raw model
+                # field_id -- it is raw tool input and can carry the user's answer if
+                # the model swaps args (Codex PR #264 P0, no-PII policy). Symmetric with
+                # the update-side scrub in _coerce_dti_update_to_current_field.
                 _log.info("dti_confirm_coerced_to_current_field",
                          session_id=self._session_id,
-                         sent_field_id=field_id, current_field_id=current_field_id)
+                         current_field_id=current_field_id)
                 field_id = current_field_id
 
         # SYNCHRONOUS confirm round-trip (bd polyglot-pdf-wpw.2 / WS-E2). The
