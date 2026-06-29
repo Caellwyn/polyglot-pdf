@@ -458,6 +458,30 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         disabled={busy || extractingId !== null}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
+                          // Validate it is actually a PDF before storing (Codex
+                          // PR #274): the `accept` filter is advisory, so a user
+                          // can still pick a .txt/.html; the client would then
+                          // store it as the fixed "instructions.pdf", the
+                          // endpoint's .pdf-name guard would pass, and
+                          // _parse_instructions_pdf would silently yield no text --
+                          // a success-reported run that ignored the selection.
+                          const isPdf = (file: File) =>
+                            file.type === 'application/pdf'
+                            || file.name.toLowerCase().endsWith('.pdf');
+                          if (f && !isPdf(f)) {
+                            setError('The instructions file must be a PDF.');
+                            // Drop any prior (valid) selection too, so the UI never
+                            // shows the error alongside a kept "instructions: x.pdf"
+                            // label that would still be threaded (Opus fallback PR #274).
+                            setInstructionsPdfByKit((prev) => {
+                              const next = { ...prev };
+                              delete next[kit.id];
+                              return next;
+                            });
+                            e.target.value = '';
+                            return;
+                          }
+                          setError(null);
                           setInstructionsPdfByKit((prev) => {
                             const next = { ...prev };
                             if (f) next[kit.id] = f; else delete next[kit.id];

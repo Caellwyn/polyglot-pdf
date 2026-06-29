@@ -142,6 +142,37 @@ def test_match_skips_too_short_labels():
     assert ef._match_instruction_for_label("A.", paras) is None
 
 
+def test_match_is_whitespace_normalized(monkeypatch):
+    """PyMuPDF wraps text mid-label, so a label "Family Name (Last Name)" must match
+    a paragraph rendered "Family Name\n(Last Name): ..." -- both sides are collapsed
+    to single spaces before matching (Codex PR #274). The ORIGINAL paragraph (with
+    its line breaks) is returned so appended help keeps its layout."""
+    para_with_breaks = "Family Name\n(Last Name): enter it exactly as on your card."
+    got = ef._match_instruction_for_label("Family Name (Last Name)", [para_with_breaks])
+    assert got == para_with_breaks  # original layout preserved
+
+
+# --- _collapse_ws / _field_match_label -------------------------------------- #
+
+def test_collapse_ws_collapses_newlines_and_runs():
+    assert ef._collapse_ws("Family Name\n (Last  Name) ") == "Family Name (Last Name)"
+    assert ef._collapse_ws("") == ""
+
+
+def test_field_match_label_prefers_name_over_label():
+    """The backend FormField makes `name` the display label; `label` is optional /
+    a verbose breadcrumb. Match on `name` first (Codex PR #274)."""
+    assert ef._field_match_label({"name": "Family Name", "label": "Part 1. ..."}) == "Family Name"
+
+
+def test_field_match_label_falls_back_to_label():
+    assert ef._field_match_label({"label": "Date of Birth"}) == "Date of Birth"
+
+
+def test_field_match_label_empty_when_neither():
+    assert ef._field_match_label({"id": "x"}) == ""
+
+
 # --- _enrich_instructions_from_pdf (via monkeypatched _parse_instructions_pdf) #
 
 def test_enrich_appends_to_tu_baseline(tmp_path, monkeypatch):
@@ -163,6 +194,18 @@ def test_enrich_sets_instructions_when_no_tu_baseline(tmp_path, monkeypatch):
     schema = {"fields": [{"id": "dob", "label": "Date of Birth"}]}
     assert ef._enrich_instructions_from_pdf(schema, "x.pdf") == 1
     assert schema["fields"][0]["help"]["instructions"] == "Date of Birth: use mm/dd/yyyy format."
+
+
+def test_enrich_matches_on_name_when_no_label(tmp_path, monkeypatch):
+    """A contract-minimal field carries only `name` (no `label`). Enrichment must
+    still match on `name` -- the bug Codex PR #274 caught (the loop keyed on
+    `label`, so real extractor output got zero enrichment)."""
+    monkeypatch.setattr(ef, "_parse_instructions_pdf",
+                        lambda _p: "Family Name (Last Name): enter exactly as on your card.")
+    schema = {"fields": [{"id": "fam", "name": "Family Name (Last Name)"}]}  # no label
+    assert ef._enrich_instructions_from_pdf(schema, "x.pdf") == 1
+    assert schema["fields"][0]["help"]["instructions"] == (
+        "Family Name (Last Name): enter exactly as on your card.")
 
 
 def test_enrich_skips_when_passage_already_in_baseline(tmp_path, monkeypatch):

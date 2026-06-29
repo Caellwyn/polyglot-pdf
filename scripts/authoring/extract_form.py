@@ -217,6 +217,24 @@ def _instructions_paragraphs(instructions_text: str) -> list[str]:
     return [p.strip() for p in raw if p.strip()]
 
 
+def _collapse_ws(text: str) -> str:
+    """Collapse every run of whitespace (incl. newlines) to a single space and
+    strip. Used to make instructions-PDF label matching line-break-agnostic
+    (PyMuPDF wraps text mid-label) -- Codex PR #274."""
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _field_match_label(field: dict) -> str:
+    """The text used to match a field against an instructions paragraph: the
+    field's `name` (the backend FormField's required "Display label" -- the
+    concise, specific label like "Family Name (Last Name)"), falling back to
+    `label` (a verbose breadcrumb some drafts also carry) only when `name` is
+    absent. Matching on `name` is BOTH the contract-correct key (a draft may carry
+    only `name`, never `label` -- Codex PR #274) AND the better match (the breadcrumb
+    `label` repeats its "Part N. ..." prefix across every field in the part)."""
+    return field.get("name") or field.get("label") or ""
+
+
 def _match_instruction_for_label(label: str, paragraphs: list[str]) -> str | None:
     """Find the instructions paragraph that best matches a field's label.
 
@@ -226,12 +244,21 @@ def _match_instruction_for_label(label: str, paragraphs: list[str]) -> str | Non
     Number"), preferring the SHORTEST such paragraph (the tightest, most field-
     specific passage rather than a sprawling section header). Returns None when no
     paragraph mentions the label, so /TU (or nothing) stands. Very short labels
-    (< 4 non-space chars) are skipped -- they match too loosely to be reliable."""
-    key = (label or "").strip()
+    (< 4 non-space chars) are skipped -- they match too loosely to be reliable.
+
+    WHITESPACE-NORMALIZED on both sides before matching (Codex PR #274): PyMuPDF
+    wraps extracted text with newlines, so a label like "Family Name (Last Name)"
+    would NOT substring-match a paragraph rendered "Family Name\n(Last Name): ..."
+    -- the common PDF line-break layout. Collapsing all runs of whitespace to a
+    single space on the label AND each paragraph makes the match line-break-agnostic
+    (we return the ORIGINAL paragraph text so the appended help keeps its layout)."""
+    key = _collapse_ws(label or "")
     if len(key.replace(" ", "")) < 4:
         return None
     key_low = key.lower()
-    hits = [p for p in paragraphs if key_low in p.lower()]
+    # Match on a whitespace-collapsed copy of each paragraph, but return the
+    # ORIGINAL (so the appended help text preserves the source layout).
+    hits = [p for p in paragraphs if key_low in _collapse_ws(p).lower()]
     if not hits:
         return None
     return min(hits, key=len)
@@ -240,18 +267,22 @@ def _match_instruction_for_label(label: str, paragraphs: list[str]) -> str | Non
 def _enrich_instructions_from_pdf(schema: dict, instructions_pdf_path: str) -> int:
     """Enrich help.instructions from an optional instructions PDF (bd s4dp.3).
 
-    For each field whose LABEL appears in the instructions text, append the
+    For each field whose name appears in the instructions text, append the
     matched paragraph to help.instructions (after any /TU baseline, separated by a
-    blank line). A field with no label match keeps whatever /TU gave it. Returns
-    the number of fields enriched. A merge, never a clobber: the instructions text
-    is ADDED to the /TU baseline so both sources survive."""
+    blank line). A field with no match keeps whatever /TU gave it. Returns the
+    number of fields enriched. A merge, never a clobber: the instructions text is
+    ADDED to the /TU baseline so both sources survive.
+
+    Matches on the field's `name` (fallback `label`) via _field_match_label -- the
+    backend contract makes `name` the display label and `label` optional, so a
+    contract-minimal draft has only `name` (Codex PR #274)."""
     instructions_text = _parse_instructions_pdf(instructions_pdf_path)
     paragraphs = _instructions_paragraphs(instructions_text)
     if not paragraphs:
         return 0
     enriched = 0
     for field in schema.get("fields", []):
-        passage = _match_instruction_for_label(field.get("label", ""), paragraphs)
+        passage = _match_instruction_for_label(_field_match_label(field), paragraphs)
         if not passage:
             continue
         help_obj = field.get("help") or {}

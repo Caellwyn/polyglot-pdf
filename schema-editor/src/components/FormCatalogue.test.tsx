@@ -595,6 +595,46 @@ describe('FormCatalogue -- run extraction', () => {
     expect(kit.children.has('instructions.pdf')).toBe(true);
   });
 
+  it('rejects a non-PDF instructions selection and does not thread it (Codex PR #274)', async () => {
+    let posted: Record<string, unknown> | null = null;
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: (body) => { posted = body as Record<string, unknown>; return okJson({ ok: true, detail: 'done', schemaFile: 'schema.json' }); },
+    });
+    const kit = pdfOnlyKit();
+    const root = mockRoot([kit]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    // First pick a VALID PDF, so we can prove a later bad pick CLEARS it.
+    const goodPdf = { name: 'good.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(4) } as unknown as File;
+    fireEvent.change(input, { target: { files: [goodPdf] } });
+    await waitFor(() => expect(screen.getByText(/instructions: good\.pdf/)).toBeTruthy());
+
+    // Now pick a non-PDF (text) file: the accept filter is advisory, so this is possible.
+    const txt = { name: 'notes.txt', type: 'text/plain',
+      arrayBuffer: async () => new ArrayBuffer(3) } as unknown as File;
+    fireEvent.change(input, { target: { files: [txt] } });
+    // Surfaced as an error; the bad file is NOT stored AND the prior good pick is
+    // cleared (label returns to the "+ instructions PDF" prompt) -- no contradictory state.
+    await waitFor(() => expect(screen.getByText(/instructions file must be a PDF/i)).toBeTruthy());
+    expect(screen.queryByText(/instructions: notes\.txt/)).toBeNull();
+    expect(screen.queryByText(/instructions: good\.pdf/)).toBeNull();
+
+    // Running extraction now carries NO instructions file (the bad pick was dropped)
+    // and writes nothing extra into the kit dir.
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(screen.getByText(/Extracted "w7"/)).toBeTruthy());
+    expect((posted as unknown as Record<string, unknown>)?.instructionsPdfFile).toBeUndefined();
+    expect(kit.children.has('instructions.pdf')).toBe(false);
+  });
+
   it('omits instructionsPdfFile from the POST when none is selected (/TU-only)', async () => {
     let posted: Record<string, unknown> | null = null;
     global.fetch = fetchMock({
@@ -611,7 +651,7 @@ describe('FormCatalogue -- run extraction', () => {
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(screen.getByText(/Extracted "w7"/)).toBeTruthy());
     // No instructions PDF selected -> the key is absent/undefined (server falls back to /TU).
-    expect((posted as Record<string, unknown>).instructionsPdfFile).toBeUndefined();
+    expect((posted as unknown as Record<string, unknown>)?.instructionsPdfFile).toBeUndefined();
   });
 
   it('surfaces an error notice when extraction fails', async () => {
