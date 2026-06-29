@@ -1606,8 +1606,13 @@ export class WebFormConnection {
       if (!shouldShowField(field, this.state.fieldValues, allFields)) continue;
       const fv = valueFor(field.id);
       const value = fv ? fv.value : undefined;
-      // Skip empty/unfilled values (contract 2: non-empty only).
+      // Skip empty/unfilled values (contract 2: non-empty only). An explicitly-blank
+      // OPTIONAL checkbox group is stored as [] (the confirm handler treats that as a
+      // legitimate empty answer), so an empty array is "no value" too and must NOT
+      // ride to the validator -- it would hand B5 an unfilled field to check
+      // (Codex PR #271 round 2). Treat [] (and an array of only blanks) as empty.
       if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value) && value.every((v) => v === undefined || v === null || v === '')) continue;
       out.push({
         field_id: field.id,
         name: field.spoken_name || field.name || field.id,

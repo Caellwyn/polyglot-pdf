@@ -385,6 +385,42 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
     expect(payloadIds).not.toContain('f_dep') // hidden -> excluded
   })
 
+  it('EXCLUDES an explicitly-blank checkbox group (value []) from the validator payload', async () => {
+    // An optional checkbox group confirmed as blank stores value [] -- a legitimate
+    // "no answer". The non-empty filter must treat [] as empty too, or B5 gets an
+    // unfilled field to check (Codex PR #271 round 2). Drive the manual-edit path so
+    // form_complete fires while f_cb holds [].
+    const schema = {
+      source: 'web',
+      fields: [
+        { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
+          validation: { required: true } },
+        { id: 'f_cb', name: 'cbname', spoken_name: 'Checkboxes', type: 'checkbox',
+          group_kind: 'checkbox' },
+      ],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_cb'] }],
+    } as unknown as FormSchema
+    const ws = await connected(schema)
+
+    // Store an explicitly-blank [] for the checkbox group + a real required value,
+    // both confirmed, then fire the manual-edit completion path.
+    const base = SchemaFormStateManager.load()!
+    let s = SchemaFormStateManager.updateField(base, 'f_cb', [] as any, {
+      confirmed: true, confirmationMethod: 'manual_edit',
+    })
+    s = SchemaFormStateManager.updateField(s, 'f_req', 'present', {
+      confirmed: true, confirmationMethod: 'manual_edit',
+    })
+    SchemaFormStateManager.save(s)
+    conn!.sendManualFieldUpdate('f_req', 'Required', 'present')
+
+    const events = ofType(ws, 'form_complete')
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const ids = events[events.length - 1].fields.map((f: any) => f.field_id)
+    expect(ids).toContain('f_req')
+    expect(ids).not.toContain('f_cb') // [] is empty -> excluded
+  })
+
   it('does NOT emit a second section_complete on a duplicate confirm while the switch is in flight', async () => {
     const ws = await connected(TWO_SECTION_SCHEMA)
     fireFieldUpdate(ws, 'firstname', 'Jane')
