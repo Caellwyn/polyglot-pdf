@@ -500,6 +500,90 @@ describe('Opus fallback review fixes', () => {
     expect(unmerged.fields.some(f => f.id === detail.show_if!.field)).toBe(true);
   });
 
+  // A whole-group "is the group populated" condition must NORMALIZE to an operator
+  // that fires correctly on a standalone boolean checkbox -- preserving the
+  // original `not_equals ''` / `is_not_empty` would be permanently TRUE on an
+  // unchecked checkbox (false !== '' is always true), showing the dependent
+  // forever. Real i-90 case: p1_line6c_aptsteflrnumber's `not_equals ''` on the
+  // consolidated p1_unit_type6c_unit (bd polyglot-pdf-v444, fresh-eyes finding).
+  it("normalizes a whole-group not_equals '' to is_checked on the primary (not permanently-true)", () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: '',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+  });
+
+  it('normalizes a whole-group is_not_empty to is_checked on the primary', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'is_not_empty',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+  });
+
+  it('normalizes a whole-group is_empty to is_empty on the primary', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'is_empty',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_empty' });
+  });
+
+  it('leaves an unmatched non-empty equals as equals on the primary (stays unsatisfiable -> hidden, not spuriously shown)', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'equals', value: 'no_such_option',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // retargeted to a real field, operator preserved; equals a string on a boolean
+    // checkbox is never true -> field stays hidden (correct "no such option").
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'equals', value: 'no_such_option' });
+    expect(unmerged.fields.some(f => f.id === 'p3_race')).toBe(true);
+  });
+
+  // Coverage guard for the de-dup + remap interaction (fresh-eyes finding 2): when
+  // an option value collides with a surviving field id, the dependent must follow
+  // the SUFFIXED reconstructed id, not the bare value.
+  it('remaps a dependent onto the DE-DUPED reconstructed id when the option value collides with a survivor', () => {
+    const schema = w7Schema();
+    schema.fields = [
+      {
+        id: 'p3_race', name: 'Race', type: 'radio', section_id: 'reason',
+        pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+        options: [
+          { value: 'p3_race', label: 'White', pdf_field_name: 'white[0]', source_type: 'checkbox' },
+          { value: 'white', label: 'Asian', pdf_field_name: 'asian[0]', source_type: 'checkbox' },
+        ],
+      },
+      // a surviving field squats on the would-be reconstructed id 'white'
+      {
+        id: 'white', name: 'Squatter', type: 'text', section_id: 'reason',
+        pdf_field_name: 'squat[0]', read_only: false, required: false,
+      },
+      // dependent gated on the colliding 'white' option value
+      {
+        id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        show_if: { field: 'p3_race', operator: 'equals', value: 'white' },
+      },
+    ];
+    schema.sections[0].fields = ['p3_race', 'white', 'detail'];
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // the 'white' option reconstructs to 'white_1' (squatter holds 'white'); the
+    // dependent must point at the suffixed id, and that field must exist.
+    expect(detail.show_if).toEqual({ field: 'white_1', operator: 'is_checked' });
+    expect(unmerged.fields.some(f => f.id === 'white_1')).toBe(true);
+  });
+
   it('expands a dependent controls_fields target list referencing the consolidated id to all split ids', () => {
     const schema = raceSchemaWithDependent();
     schema.fields.find(f => f.id === 'detail')!.show_if = undefined;

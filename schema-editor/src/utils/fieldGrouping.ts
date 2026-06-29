@@ -529,13 +529,46 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
 //     that option is its own field, so this becomes `is_checked` on that field
 //     (the runtime value of a standalone checkbox/radio is truthy when selected).
 //     A whole-group condition (is_checked/is_not_empty on C, no specific option)
-//     or an equals whose value matches no option is retargeted to the primary
-//     reconstructed field so it does not dangle; other operators retarget but keep
-//     their operator (best effort).
+//     or an unmatched value is retargeted to the primary reconstructed field so it
+//     does not dangle, with its operator NORMALIZED (see
+//     normalizeWholeGroupOperator) so it still fires correctly against a standalone
+//     boolean checkbox.
 //   - controls_fields / copy_to target arrays containing C are EXPANDED to all
 //     reconstructed ids (the rule acted on the whole former group), de-duped.
 //
 // Returns the same object reference when nothing referenced fieldId (no-op).
+
+// Map a whole-group / unmatched show_if operator (one that tested the
+// consolidated field's populated-ness, not a specific option) to an operator that
+// evaluates correctly once retargeted to a single standalone BOOLEAN checkbox.
+// Without this, the original operator misfires: a checkbox's value is `false` when
+// unchecked, so `not_equals ''` / `is_not_empty` is permanently TRUE (false is not
+// '' / "" / null), and `equals ''` would never be true. The runtime
+// (shouldShowField) reads `is_checked` as truthy-when-true and `is_empty` as
+// true-when-false/empty, which IS the populated/empty intent. A genuine
+// `equals <non-empty-unmatched>` is left as-is: it stays unsatisfiable (hidden),
+// which is the correct "no such option" outcome rather than a spurious show.
+function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDisplay['operator'] {
+  const emptyValue = cond.value === undefined || cond.value === null || cond.value === '';
+  switch (cond.operator) {
+    case 'is_not_empty':
+    case 'is_checked':
+      return 'is_checked'; // "group populated" -> primary checkbox is checked
+    case 'is_empty':
+      return 'is_empty'; // "group empty" -> primary checkbox is empty/unchecked
+    case 'not_equals':
+      // `not_equals <empty>` means "populated"; `not_equals <non-empty>` against a
+      // boolean checkbox is best expressed as "not that, i.e. unchecked" -> is_empty.
+      return emptyValue ? 'is_checked' : 'is_empty';
+    case 'equals':
+      // `equals <empty>` means "empty"; an unmatched non-empty equals stays as
+      // equals (unsatisfiable -> hidden, the correct "no such option" result).
+      return emptyValue ? 'is_empty' : 'equals';
+    default:
+      return cond.operator; // comparison/contains operators: preserve (best effort)
+  }
+}
+
 function remapFallbackDependent(
   f: FormField,
   fieldId: string,
@@ -550,13 +583,30 @@ function remapFallbackDependent(
     const cond = f.show_if;
     if (SELECTION_OPERATORS.has(cond.operator) && cond.value !== undefined &&
         valueToReconstructedId.has(String(cond.value))) {
+      // A specific option: "consolidated equals <optValue>" -> "that option's
+      // reconstructed standalone field is_checked".
       next.show_if = {
         field: valueToReconstructedId.get(String(cond.value))!,
         operator: 'is_checked',
       };
     } else {
-      // whole-group / unmatched: retarget to the primary so it does not dangle.
-      next.show_if = { ...cond, field: primaryReconstructedId };
+      // Whole-group / unmatched: retarget to the primary so it does not dangle,
+      // and NORMALIZE the operator so it fires correctly against a standalone
+      // BOOLEAN checkbox. Preserving the original operator silently misfires:
+      // `not_equals ''` / `is_not_empty` on an unchecked checkbox (value false)
+      // is `false !== '' ` / `false !== ""` == always TRUE, so the dependent
+      // would show permanently (real i-90 case: p1_line6c_aptsteflrnumber's
+      // `not_equals ''` on the consolidated p1_unit_type6c_unit). Map the intent
+      // to a checkbox-sane operator instead (bd polyglot-pdf-v444, fresh-eyes).
+      const normalizedOp = normalizeWholeGroupOperator(cond);
+      // is_checked / is_empty are value-less operators (shouldShowField ignores
+      // value for them); a value-carrying operator (equals/not_equals/...) keeps
+      // its original value so the comparison is unchanged.
+      const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty' ||
+        normalizedOp === 'is_not_empty';
+      next.show_if = valueLess
+        ? { field: primaryReconstructedId, operator: normalizedOp }
+        : { ...cond, field: primaryReconstructedId, operator: normalizedOp };
     }
     changed = true;
   }
