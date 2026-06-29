@@ -91,12 +91,28 @@ describe('is_checked / is_empty / is_not_empty', () => {
     expect(shouldShowField(notEmpty, { t: 'hi' }, [t])).toBe(true);
     expect(shouldShowField(notEmpty, {}, [t])).toBe(false);
   });
-  it('is_empty / is_not_empty on a checkbox-group array', () => {
+  // is_empty/is_not_empty on a checkbox-group ARRAY: the preview matches the
+  // RUNTIME bug-for-bug (bd polyglot-pdf-rigd) -- the runtime treats an array as a
+  // plain value, so an empty [] is NOT is_empty. The preview shows what production
+  // actually does, not a corrected variant.
+  it('is_empty / is_not_empty on a checkbox-group array (runtime parity: array != empty)', () => {
     const empty = field({ id: 'e', show_if: { field: 'cbg', operator: 'is_empty' } });
     const notEmpty = field({ id: 'n', show_if: { field: 'cbg', operator: 'is_not_empty' } });
-    expect(shouldShowField(empty, { cbg: [] }, fields)).toBe(true);
+    expect(shouldShowField(empty, { cbg: [] }, fields)).toBe(false);     // [] is not null/undefined/''
+    expect(shouldShowField(notEmpty, { cbg: [] }, fields)).toBe(true);
     expect(shouldShowField(empty, { cbg: ['x'] }, fields)).toBe(false);
     expect(shouldShowField(notEmpty, { cbg: ['x'] }, fields)).toBe(true);
+    // unset (undefined) IS empty
+    expect(shouldShowField(empty, {}, fields)).toBe(true);
+  });
+});
+
+describe('unknown operator falls back to !field.hidden (runtime parity)', () => {
+  it('an unknown operator shows a non-hidden field, hides a hidden one', () => {
+    const visible = field({ id: 'v', show_if: { field: 'trigger', operator: 'bogus' as never } });
+    const hiddenF = field({ id: 'h', hidden: true, show_if: { field: 'trigger', operator: 'bogus' as never } });
+    expect(shouldShowField(visible, {}, fields)).toBe(true);
+    expect(shouldShowField(hiddenF, {}, fields)).toBe(false); // NOT unconditionally shown
   });
 });
 

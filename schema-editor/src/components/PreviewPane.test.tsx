@@ -127,6 +127,20 @@ describe('PreviewPane: read-only + reset', () => {
   });
 });
 
+describe('PreviewPane: lone checkbox (single boolean)', () => {
+  it('renders the field label ONCE (no duplicate from the inner control)', () => {
+    const consent = field({ id: 'consent', type: 'checkbox', label: 'I agree' });
+    render(<PreviewPane schema={buildSchema([consent], ['consent'])} />);
+    // the field caption appears once; the inner checkbox affordance is "Yes", not
+    // a second copy of "I agree" (fresh-eyes finding 3).
+    expect(screen.getAllByText('I agree')).toHaveLength(1);
+    const box = screen.getByLabelText('I agree') as HTMLInputElement;
+    expect(box.type).toBe('checkbox');
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
+  });
+});
+
 describe('PreviewPane: section grouping', () => {
   it('renders fields under their section label', () => {
     render(<PreviewPane schema={buildSchema()} />);

@@ -243,8 +243,12 @@ function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOpt
         </div>
       );
     }
+    // The outer PreviewField caption (a <label htmlFor={inputId}>) already names
+    // this field, so the lone checkbox renders just the input + a neutral "Yes"
+    // affordance -- NOT the field label again (which would render it twice;
+    // fresh-eyes finding 3).
     return (
-      <label className="flex items-center gap-2 text-sm text-gray-800">
+      <div className="flex items-center gap-2 text-sm text-gray-800">
         <input
           id={inputId}
           type="checkbox"
@@ -252,8 +256,8 @@ function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOpt
           disabled={disabled}
           onChange={e => onSetValue(e.target.checked)}
         />
-        <span>{field.label || 'Checked'}</span>
-      </label>
+        <span className="text-gray-500">Yes</span>
+      </div>
     );
   }
 

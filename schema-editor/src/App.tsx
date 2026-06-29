@@ -87,6 +87,7 @@ export const App: React.FC = () => {
     setError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
@@ -124,6 +125,7 @@ export const App: React.FC = () => {
     setError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
@@ -682,7 +684,11 @@ export const App: React.FC = () => {
             </div>
             <div className="flex-1 overflow-hidden">
               {viewMode === 'preview' ? (
-                <PreviewPane schema={schema} />
+                // Key by the loaded form so the pane REMOUNTS (clearing its local
+                // preview values) when the form changes -- otherwise stale values
+                // from the prior form leak into the new one's show_if evaluation
+                // (fresh-eyes finding 4).
+                <PreviewPane key={selectedKitId ?? selectedForm.schemaPath} schema={schema} />
               ) : (
                 <FieldEditor
                   field={selectedField}
