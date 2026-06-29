@@ -514,6 +514,12 @@ export class WebFormConnection {
           } else {
             this.clearThinking('agent_processing:false');
           }
+          // TEST-ONLY observability (bd polyglot-pdf-fa4x): let the E2E voice
+          // harness see that the native-VAD START signal fired, without a human
+          // mic. Undefined in production; only the harness sets it.
+          if (window.vffOnAgentProcessing) {
+            window.vffOnAgentProcessing(message.processing === true);
+          }
           break;
 
         case "gemini_session_restarted":

@@ -11,6 +11,11 @@ declare global {
 		vffOnAudioPlaybackEnd?: () => void
 		vffOnAudioPlaybackStart?: () => void  // Called when Gemini starts speaking (pause timer)
 		vffOnSectionChanged?: () => void  // Called when Gemini switches sections
+		// TEST-ONLY (bd polyglot-pdf-fa4x): fired whenever the backend agent_processing
+		// signal arrives, so the voice harness can assert the thinking indicator armed
+		// in native VAD (processing:true at the user's turn end) without a human at the
+		// mic. Undefined in production; only the harness sets it.
+		vffOnAgentProcessing?: (processing: boolean) => void
 		// vffOnTurnComplete removed - now using audio silence detection (100ms threshold)
 		// TEST-ONLY (bd polyglot-pdf-g8w): dev gate + injection handle for the E2E
 		// voice harness. Double-gated install below; never set in production.

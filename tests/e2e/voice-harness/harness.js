@@ -38,6 +38,34 @@
   }
 
   /*
+   * Thinking-indicator observer (bd polyglot-pdf-fa4x). The backend emits the
+   * agent_processing signal on a real user turn (processing:true) and clears it
+   * at the agent's first response audio (processing:false). In NATIVE VAD the
+   * START rides input_transcription -- the gap this whole feature exists to fill.
+   * The app fires window.vffOnAgentProcessing on every agent_processing message
+   * (webFormConnection.ts); we record the sequence so a driver can ASSERT the
+   * native-VAD START fired without a human at the mic. The recorder is installed
+   * once at harness install (below); resetThinkingObserver() clears it per cycle.
+   */
+  var _thinkingEvents = [];
+  function installThinkingObserver() {
+    window.vffOnAgentProcessing = function (processing) {
+      _thinkingEvents.push({ processing: processing === true, t: Date.now() });
+    };
+  }
+  function resetThinkingObserver() { _thinkingEvents = []; }
+  function thinkingObserved() {
+    // Returns a compact summary: did a processing:true (START) ever arrive, did a
+    // matching processing:false (CLEAR) arrive after it, and the raw count.
+    var sawStart = false, sawClearAfterStart = false;
+    for (var i = 0; i < _thinkingEvents.length; i++) {
+      if (_thinkingEvents[i].processing === true) sawStart = true;
+      else if (sawStart) sawClearAfterStart = true;
+    }
+    return { sawStart: sawStart, sawClearAfterStart: sawClearAfterStart, count: _thinkingEvents.length };
+  }
+
+  /*
    * Fetch a WAV fixture and return its raw PCM16 data as an ArrayBuffer.
    * Parses the RIFF/WAVE header (does NOT assume a fixed 44-byte offset -- it
    * walks chunks to find 'fmt ' and 'data'), and HARD-FAILS on a format mismatch
@@ -392,6 +420,13 @@
     clearFieldState(fieldId);
     report.steps.push({ step: 'clear-state', cleared: readField(fieldId).digits === '' });
 
+    // Reset the thinking-indicator observer (bd polyglot-pdf-fa4x) so report.thinking
+    // reflects ONLY this cycle's agent_processing events. report.thinking is read off
+    // _thinkingEvents at the relevant returns below; it is OBSERVATIONAL (the native
+    // START is what fa4x verifies) and never flips the PASS/FAIL/FLAKY verdict -- a
+    // model-timing quirk in the signal must not fail a clean fill/confirm/advance.
+    resetThinkingObserver();
+
     // Let Gemini ask the first question (pacing only; do not gate correctness).
     var q1 = await waitForGeminiQuestion({ timeoutMs: 18000 });
     report.steps.push({ step: 'wait-first-question', sawAudio: q1.sawAudio, timedOut: q1.timedOut });
@@ -401,6 +436,15 @@
     var filled = await waitForFieldValue(fieldId, { timeoutMs: turnTimeoutMs });
     var fillSnap = readField(fieldId);
     report.steps.push({ step: 'fill', met: filled.met, elapsedMs: filled.elapsedMs, raw: fillSnap.domValue, digits: fillSnap.digits });
+
+    // Capture the thinking-indicator observation now (bd polyglot-pdf-fa4x): once the
+    // fill wait has returned, the first user turn has completed -- so its START
+    // (agent_processing:true) and CLEAR (false, at first response audio) have both
+    // had their chance to arrive. In NATIVE VAD sawStart proves input_transcription
+    // -> on_user_activity -> agent_processing fired (the fa4x signal). This single
+    // assignment covers the early returns below (fill/value failures); the PASS
+    // return refreshes it once more to include the confirm turn's events.
+    report.thinking = thinkingObserved();
 
     if (!filled.met) { report.verdict = 'FLAKY'; report.reason = 'field never filled'; return report; }
     if (fillSnap.digits !== expectDigits) { report.verdict = 'FAIL'; report.reason = 'wrong value: got ' + JSON.stringify(fillSnap.domValue); return report; }
@@ -471,6 +515,7 @@
       report.steps.push({ step: 'advance', skipped: true, reason: 'requireAdvance=false (section-cross asserted by scenario)' });
     }
 
+    report.thinking = thinkingObserved();
     report.verdict = 'PASS';
     return report;
   }
@@ -877,8 +922,17 @@
     waitForSectionGreeting: waitForSectionGreeting,
     runMultiSectionScenario: runMultiSectionScenario,
     runSecretaryQuery: runSecretaryQuery,
+    // Thinking-indicator observation (bd polyglot-pdf-fa4x): assert the native-VAD
+    // START signal fired during a cycle (report.thinking.sawStart), or drive it
+    // manually via reset -> inject -> thinkingObserved().
+    resetThinkingObserver: resetThinkingObserver,
+    thinkingObserved: thinkingObserved,
     isNativeVad: function () { return inject().isNativeVad(); }
   };
+
+  // Start recording agent_processing events immediately (bd polyglot-pdf-fa4x), so a
+  // driver that injects audio before calling runCycle still captures the START.
+  installThinkingObserver();
 
   console.log('[VFF Harness] installed window.__VFF_HARNESS');
   return window.__VFF_HARNESS;
