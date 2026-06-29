@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
+import { SchemaFormStateManager } from './schema-forms/state/schemaFormState'
 import type { FormSchema } from './schema-forms/types/schema'
 
 class MockWebSocket {
@@ -186,15 +187,51 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
     ])
   })
 
-  it('skips empty/unfilled fields from the form_complete payload (contract 2: non-empty only)', async () => {
-    // Single-field section so the form completes on one confirm; assert only the
-    // filled field rides. (A second untouched field would be skipped.)
+  it('does NOT emit form_complete while a field is still unconfirmed', async () => {
     const ws = await connected(ONE_SECTION_SCHEMA)
     fireFieldUpdate(ws, 'fielda', 'AA')
     fireConfirm(ws, 'f_a')
-    // Only f_a is filled+confirmed; the form is NOT complete yet (f_b unconfirmed),
-    // so no form_complete should have fired.
+    // f_b is neither filled nor confirmed -> the form is incomplete -> no event.
     expect(ofType(ws, 'form_complete')).toHaveLength(0)
+  })
+
+  it('EXCLUDES an empty (unfilled) field from the fired form_complete payload (contract 2: non-empty only)', async () => {
+    // One REQUIRED field + one OPTIONAL field left empty. isFormComplete keys off the
+    // REQUIRED field only, so once the required field is confirmed the form is
+    // complete -- but computeNextField still returns the unconfirmed optional, so the
+    // CONFIRM-handler branch never reaches form_complete. The manual-edit path
+    // (sendManualFieldUpdate -> maybeEmitFormComplete) keys directly off
+    // isFormComplete, so it DOES fire here -- and the fired payload must omit the
+    // empty optional field. This proves buildValidatorFields' non-empty filter on a
+    // payload that ACTUALLY fires.
+    const schema = {
+      source: 'web',
+      fields: [
+        { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
+          validation: { required: true } },
+        { id: 'f_opt', name: 'optname', spoken_name: 'Optional', type: 'text' },
+      ],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_opt'] }],
+    } as unknown as FormSchema
+    const ws = await connected(schema)
+
+    // Confirm the required field via the manual-edit flow: apply+save to
+    // sessionStorage (as connection.ts onManualEdit does), then call
+    // sendManualFieldUpdate. The optional field stays empty/untouched.
+    const persisted = SchemaFormStateManager.load()!
+    const edited = SchemaFormStateManager.updateField(persisted, 'f_req', 'present', {
+      confirmed: true,
+      confirmationMethod: 'manual_edit',
+    })
+    SchemaFormStateManager.save(edited)
+    conn!.sendManualFieldUpdate('f_req', 'Required', 'present')
+
+    const events = ofType(ws, 'form_complete')
+    expect(events).toHaveLength(1)
+    // Only the filled required field rides; the empty optional is filtered out.
+    expect(events[0].fields).toEqual([
+      { field_id: 'f_req', name: 'Required', value: 'present', steered: false },
+    ])
   })
 
   // --- Once-only guard + dirty re-emit (the edit-after-complete hole) ---
@@ -235,6 +272,42 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
     expect(reEmit).toHaveLength(1)
     const fb = reEmit[0].fields.find((f: any) => f.field_id === 'f_b')
     expect(fb.value).toBe('CC')
+  })
+
+  it('re-emits form_complete after a manual edit lands via the sendManualFieldUpdate path', async () => {
+    // This is the REAL post-completion manual-edit flow (connection.ts onManualEdit):
+    // the edit handler applies the change to its OWN state object and SAVES it to
+    // sessionStorage, then calls connection.sendManualFieldUpdate -- it does NOT
+    // mutate WebFormConnection.this.state. sendManualFieldUpdate must therefore
+    // refresh this.state from the persisted snapshot before the dirty check, or the
+    // guard reads the PRE-edit values and wrongly suppresses the re-emit (fresh-eyes
+    // finding). Drive that exact sequence and assert the re-emit fires with the new
+    // value.
+    const ws = await connected(ONE_SECTION_SCHEMA)
+    fireFieldUpdate(ws, 'fielda', 'AA')
+    fireConfirm(ws, 'f_a')
+    fireFieldUpdate(ws, 'fieldb', 'BB')
+    fireConfirm(ws, 'f_b')
+    expect(ofType(ws, 'form_complete')).toHaveLength(1)
+
+    // Simulate onManualEdit: apply the edit to the persisted state (confirmed via
+    // manual_edit) and save it -- WITHOUT touching this.state -- exactly as the real
+    // edit handler does.
+    ws.send.mockClear()
+    const persisted = SchemaFormStateManager.load()!
+    const edited = SchemaFormStateManager.updateField(persisted, 'f_b', 'ZZ', {
+      confirmed: true,
+      confirmationMethod: 'manual_edit',
+    })
+    SchemaFormStateManager.save(edited)
+
+    // Now the UI calls sendManualFieldUpdate on the SAME connection instance.
+    conn!.sendManualFieldUpdate('f_b', 'Field B', 'ZZ')
+
+    const reEmit = ofType(ws, 'form_complete')
+    expect(reEmit).toHaveLength(1)
+    const fb = reEmit[0].fields.find((f: any) => f.field_id === 'f_b')
+    expect(fb.value).toBe('ZZ')
   })
 
   // --- Criterion 2: no double-fire vs the confirm-ack sub-field ---

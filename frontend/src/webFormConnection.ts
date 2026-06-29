@@ -2100,6 +2100,17 @@ export class WebFormConnection {
     // full-form validator pass and be submittable unchecked. maybeEmitFormComplete
     // is guarded (only re-emits when the form is complete AND a value changed), so
     // a manual edit that does not complete the form is a no-op here.
+    //
+    // CRITICAL: refresh this.state from the persisted snapshot FIRST. The manual-edit
+    // path (connection.ts onManualEdit) applies the edit to a separate state object
+    // and SAVES it to sessionStorage, but does NOT mutate this.state -- so without
+    // this reload the dirty-snapshot would still read the PRE-edit values, match
+    // formCompleteSnapshot, and suppress the re-emit, leaving the edit-after-complete
+    // bypass open (fresh-eyes finding, PR for jnjj.16). load() is the same
+    // source-of-truth sessionStorage read this class uses elsewhere; the edit handler
+    // just wrote the authoritative post-edit state there.
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
     this.maybeEmitFormComplete();
   }
 
