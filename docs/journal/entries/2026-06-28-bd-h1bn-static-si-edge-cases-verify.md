@@ -82,6 +82,27 @@ addressed:
 Adopt: 2 inline fixes + 1 comment fix. Reject: 0. Defer: 1 (bhem, UX). Re-spawn not
 needed -- all three are small, self-contained, and test-covered.
 
+Codex outer review (PR #264, round 1): COMMENTS -- 3 P1 findings, all REAL and all
+ADOPTED (Codex earned its keep -- these were genuine correctness bugs in the
+coercion I introduced, two of them subtle):
+- (callback_handler) empty/missing confirm id skipped coercion (my `field_id and`
+  clause), while the update path coerces ''. Asymmetric -> a `confirm_field('')`
+  strands the just-filled field. Fixed: coerce ANY non-matching id incl. empty.
+- (callback_handler) the confirm gate read the GLOBAL get_settings() singleton, not
+  the service's injected settings -- so a harness with Settings(USE_DTI=True) coerced
+  updates but not confirms. Ironically my own fresh-eyes "symmetric gate" fix used
+  the wrong settings source. Fixed: thread the service's USE_DTI via a get_use_dti
+  getter (matches get_fill_language / get_current_field_id).
+- (form_filling_service) DATA-CORRUPTION path: after a successful confirm whose
+  next-field hint/schema times out, _current_field_id still named the just-confirmed
+  field -- so the user's NEXT value, on any drifted update id, would be coerced onto
+  (overwriting) the confirmed field. Fixed: clear the pointer on every confirm
+  success (_clear_current_field_id, injected); merge_field_schema re-sets it when the
+  new field's schema arrives. Tests added for all three + the pointer-clear.
+This is the value of the outer review beyond fresh-eyes -- the timeout-path
+corruption (#3) was a non-obvious interaction fresh-eyes missed. Codex rounds to
+clean: see merge ping.
+
 ## Lessons
 
 A test caught a shared-singleton mutation in my OWN new test: `get_settings()` is

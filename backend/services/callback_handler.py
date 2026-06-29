@@ -72,6 +72,20 @@ class CallbackHandler:
         # can be coerced onto the current field when the model confirms a hallucinated /
         # drifted id (mirrors the update_form_fields coercion). Getter, not snapshot.
         self._get_current_field_id = None
+        # Live getter for USE_DTI from the SERVICE's settings (bd polyglot-pdf-h1bn,
+        # Codex PR #264): the confirm gate must read the same injected settings the
+        # update-side coercion uses (self._settings.USE_DTI), NOT the global
+        # get_settings() singleton -- a harness/test that builds the service with a
+        # non-global Settings(USE_DTI=True) would otherwise coerce updates but not
+        # confirms, stranding the field.
+        self._get_use_dti = None
+        # Invalidates the service's current-field pointer (bd polyglot-pdf-h1bn, Codex
+        # PR #264): on a successful confirm the current field is DONE, so the pointer is
+        # cleared until fresh next-field guidance is delivered. Otherwise, if the
+        # next-field hint/schema times out, a later update_form_fields would be coerced
+        # onto the JUST-CONFIRMED field, overwriting it. merge_field_schema re-sets the
+        # pointer when the new field's schema arrives.
+        self._clear_current_field = None
 
     def set_tool_handlers(
         self,
@@ -84,6 +98,8 @@ class CallbackHandler:
         handle_ask_secretary=None,
         get_fill_language=None,
         get_current_field_id=None,
+        get_use_dti=None,
+        clear_current_field=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -95,6 +111,8 @@ class CallbackHandler:
         self._handle_ask_secretary = handle_ask_secretary
         self._get_fill_language = get_fill_language
         self._get_current_field_id = get_current_field_id
+        self._get_use_dti = get_use_dti
+        self._clear_current_field = clear_current_field
     
     async def send_form_update(
         self,
@@ -547,16 +565,19 @@ class CallbackHandler:
 
         # DTI current-field coercion (bd polyglot-pdf-h1bn): the update_form_fields for
         # this turn was coerced onto the current field if the model used a hallucinated/
-        # drifted id; the confirm MUST follow it onto the same field, or the client
+        # drifted/EMPTY id; the confirm MUST follow it onto the same field, or the client
         # looks up the wrong id, reports not-confirmed, and the field is stranded. A
-        # DTI turn confirms the field it just filled = the current field, so coerce a
-        # mismatched confirm id onto it too. Gated on USE_DTI (symmetric with the
-        # update-side coercion in handle_update_fields_tool_call -- _current_field_id is
-        # only DTI-populated today, but the explicit gate keeps the two paths in lockstep
-        # if that ever changes) + a known current field; matching-id paths are untouched.
-        if get_settings().USE_DTI and self._get_current_field_id is not None:
+        # DTI turn confirms the field it just filled = the current field, so coerce ANY
+        # non-matching confirm id -- including an empty/missing one (the tool schema does
+        # not enforce minLength, so '' can arrive; the update path coerces '' too, and
+        # the two must stay symmetric -- Codex PR #264) -- onto it. Gate reads the
+        # SERVICE's injected USE_DTI (via _get_use_dti), NOT the global get_settings()
+        # singleton, so a harness with a non-global Settings(USE_DTI=True) coerces
+        # confirms exactly as it coerces updates (Codex PR #264). Matching-id is a no-op.
+        use_dti = self._get_use_dti() if self._get_use_dti else False
+        if use_dti and self._get_current_field_id is not None:
             current_field_id = self._get_current_field_id()
-            if current_field_id and field_id and field_id != current_field_id:
+            if current_field_id and field_id != current_field_id:
                 _log.info("dti_confirm_coerced_to_current_field",
                          session_id=self._session_id,
                          sent_field_id=field_id, current_field_id=current_field_id)
@@ -704,6 +725,15 @@ class CallbackHandler:
             # into next_field_guidance, carrying the live fill_language so fields
             # 2..N also tell the model the value language (bd polyglot-pdf-uogm).
             # Skip on timeout / no hint.
+            # The field just confirmed is DONE -- invalidate the current-field coercion
+            # pointer NOW (bd polyglot-pdf-h1bn, Codex PR #264). If a fresh next-field
+            # schema is delivered below, merge_field_schema re-sets the pointer to that
+            # new field; if the hint/schema times out, the pointer STAYS cleared so a
+            # later update_form_fields can't be coerced onto (and overwrite) the
+            # just-confirmed field. Cleared unconditionally on every confirm success.
+            if self._clear_current_field:
+                self._clear_current_field()
+
             next_field_guidance = None
             if get_settings().USE_DTI and next_hint and self._request_coordinator:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
@@ -715,7 +745,8 @@ class CallbackHandler:
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
                     # 'unknown' (in DTI/JIT mode _schema['fields'] holds only field 1;
-                    # Codex PR #229). Schema only -- no user values.
+                    # Codex PR #229). Schema only -- no user values. (Re-sets the
+                    # current-field pointer cleared just above.)
                     if self._merge_field_schema:
                         self._merge_field_schema(client_next_schema)
 

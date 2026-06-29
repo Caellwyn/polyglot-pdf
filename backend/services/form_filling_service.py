@@ -235,6 +235,14 @@ class FormFillingService:
             # Live getter so confirm_field can coerce onto the current field when the
             # model confirms a hallucinated/drifted id (bd polyglot-pdf-h1bn).
             get_current_field_id=lambda: self._current_field_id,
+            # Gate confirm coercion on the SERVICE's injected USE_DTI (not the global
+            # singleton) so it is symmetric with the update-side coercion even when the
+            # service is built with a non-global Settings (Codex PR #264).
+            get_use_dti=lambda: getattr(self._settings, "USE_DTI", False),
+            # Invalidate the current-field pointer on a successful confirm so a later
+            # update can't be coerced onto the just-confirmed field if next-field
+            # delivery times out (Codex PR #264).
+            clear_current_field=self._clear_current_field_id,
         )
 
         # Use web form tool declarations (stateless)
@@ -1199,6 +1207,17 @@ class FormFillingService:
 
         self._request_coordinator.handle_confirm_field_response(
             request_id, recorded, reason, section_complete)
+
+    def _clear_current_field_id(self) -> None:
+        """Invalidate the current-field coercion pointer (bd polyglot-pdf-h1bn).
+
+        Called on a successful confirm: the field just confirmed is DONE, so the
+        pointer must not keep naming it -- otherwise, if the next-field hint/schema
+        delivery times out, a later update_form_fields would be deterministically
+        coerced onto the just-confirmed field, overwriting it (Codex PR #264).
+        merge_field_schema re-sets the pointer when the next field's schema arrives.
+        """
+        self._current_field_id = None
 
     def merge_field_schema(self, field_schema: Dict[str, Any]) -> None:
         """Record a CLIENT-SUPPLIED field schema for VALIDATION (DTI, bd
