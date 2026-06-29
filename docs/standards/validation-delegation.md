@@ -1,8 +1,8 @@
 # Validation delegation (cheap-model validator) -- frozen contract
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/config.py
+**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-06-27. The A-pillar secretary `ask()` is now IMPLEMENTED (jnjj.45a/b/c): byte-stable cached catalog prefix + append-only values/query tail, wired as the `ask_secretary` tool. Hardened in j268: lite-only fallback chain (removed the invalid `gemini-flash-lite-latest`), ERROR-level logging for 4xx + chain exhaustion. See [../journal/entries/2026-06-27-bd-j268-secretary-hardening.md](../journal/entries/2026-06-27-bd-j268-secretary-hardening.md) for closeout details.*
+*Last updated: 2026-06-29. The B-pillar validator SERVICE is now IMPLEMENTED (jnjj.15, "B3"): `backend/services/validator_service.py::ValidatorService` + `render_validator_payload` render the contract-2 payload, call `ITextAI.validate()`, and return the contract-1 verdict, fail-OPEN. The A-pillar secretary `ask()` was implemented in jnjj.45a/b/c (cached catalog prefix + append-only values/query tail) and hardened in j268 (lite-only fallback chain, ERROR-level logging). See [../journal/entries/2026-06-29-bd-jnjj.15-validator-service.md](../journal/entries/2026-06-29-bd-jnjj.15-validator-service.md) for B3 closeout details.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -80,11 +80,17 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
 `MODEL_LABELING` is no longer orphaned -- `get_text_ai()` is its live consumer. The
 original field-labeling normalizer it was named for is still deprecated (`config.py:55`).
 
-Existing validation is **field-level only**: `backend/utils/field_validator.py`
+Field-level validation is **per-value only**: `backend/utils/field_validator.py`
 checks one value against its own schema constraints; the frontend mirror is
 `frontend/src/schema-forms/utils/validation.ts`. **Neither does cross-field
-contradiction detection** -- that gap is what the B-pillar validator will fill once
-B3 (validator service) is built on top of this adapter.
+contradiction detection** -- that gap is filled by the B-pillar validator service,
+`backend/services/validator_service.py::ValidatorService` (jnjj.15, "B3"). It
+renders the contract-2 client-state payload (`render_validator_payload`) into the
+flash-lite request, calls `ITextAI.validate()`, and returns the contract-1 verdict;
+fail-OPEN on any timeout/error/bad-shape (contract 6). The contradiction prompt
+(`CONTRADICTION_SI`) reproduces the FLASH_LITE_PROMPT the G1 keystone probe
+(jnjj.5) scored GO. The service is standalone -- wiring it to the boundary events
+(contract 4) is B4 (jnjj.16) + B5 (jnjj.17).
 
 ---
 
