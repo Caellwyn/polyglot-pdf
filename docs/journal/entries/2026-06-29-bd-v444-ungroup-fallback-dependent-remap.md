@@ -1,6 +1,7 @@
 ---
 date: 2026-06-29
 bead: polyglot-pdf-v444
+beads: [polyglot-pdf-v444, polyglot-pdf-cjby]
 title: "Ungroup fallback path: remap dependents of a hand-authored consolidated field"
 sprint: 6
 tags: [bug, conventions]
@@ -26,14 +27,30 @@ only ever bit fields that were never merged in-session. Low frequency
 A `remapFallbackDependent()` helper applied to every non-target field in the
 fallback branch -- the inverse of `mergeFields`' `rewriteReferences`:
 
-- **`show_if` `{field: C, operator: equals, value: <optValue>}`** -> the dependent
-  fired when the consolidated radio held that option's value. After the split that
-  option is its own standalone checkbox/radio, so this becomes `is_checked` on the
-  reconstructed field for that value. This is the exact inverse of the forward
-  rewrite (`is_checked on widget` -> `equals <optValue> on C`). A whole-group
-  condition (`is_checked`/`is_not_empty` on `C` with no specific option) or an
-  `equals` whose value matches no option is retargeted to the PRIMARY reconstructed
-  field so it never dangles; other operators retarget but keep their operator.
+- **`show_if` referencing a SPECIFIC matched option** (its value resolves to a
+  reconstructed field) -> the exact single-option inverse, targeting that option's
+  field: `equals <optValue>` -> `is_checked`; `not_equals <optValue>` ->
+  `not_equals true` (shown UNLESS that option is selected). This bead's second half
+  (bd cjby, found by fresh-eyes) is the `not_equals` case: it must be `not_equals
+  true`, NOT `is_empty` -- `shouldShowField`'s `is_empty` is true only for
+  null/undefined/'' , so an EXPLICITLY unchecked checkbox (value `false`) reads as
+  not-empty and the dependent would be permanently hidden once touched. `not_equals
+  true` reads false===checked (hidden), true===unchecked-or-absent (shown).
+- **A whole-group / unmatched `show_if`** (an operator testing the consolidated
+  field's populated-ness, or a value matching no option) -> retargeted to the
+  PRIMARY reconstructed field with its operator NORMALIZED so it still fires on a
+  standalone boolean checkbox (`normalizeWholeGroupOperator`). Preserving the raw
+  operator silently misfired: `not_equals ''` / `is_not_empty` on an unchecked
+  checkbox (`false !== ''`) is always TRUE -> permanent show (real i-90 case:
+  `p1_line6c_aptsteflrnumber`'s `not_equals ''` on the consolidated
+  `p1_unit_type6c_unit`). The map: `is_not_empty`/`is_checked`/`not_equals <empty>`
+  -> `is_checked`; `is_empty`/`equals <empty>` -> `is_empty`; a genuine
+  `equals <non-empty-unmatched>` stays `equals` (unsatisfiable -> hidden, the
+  correct "no such option"); `not_equals <non-empty-unmatched>` stays `not_equals`
+  (always-true on a boolean, replicating the original always-show).
+- **Empty-string option values are excluded** from the option map, so an
+  `equals ''` / `not_equals ''` stays a whole-group check rather than mis-routing
+  to a degenerate ''-valued option (fresh-eyes r3).
 - **`controls_fields` / `copy_to` target arrays containing `C`** are EXPANDED to
   all reconstructed split ids (the rule acted on the whole former group), de-duped.
 
@@ -59,15 +76,55 @@ This is strictly the disk-loaded / hand-authored fallback. No backend or runtime
 change -- purely an editor-side mutation in
 `schema-editor/src/utils/fieldGrouping.ts`.
 
+## Fresh-eyes loop (pre-PR Assess)
+
+This bead took an unusually deep adversarial assess loop -- 4 fresh-eyes rounds
+(Sonnet), each finding a distinct REAL bug in the operator semantics, converging:
+
+1. **r1** -- the whole-group else-branch preserved the raw operator -> `not_equals
+   ''` / `is_not_empty` permanently true on a boolean checkbox. Added
+   `normalizeWholeGroupOperator`.
+2. **r2** -- `not_equals <matched option>` fell to the whole-group branch and
+   mapped to `is_empty` on the PRIMARY (wrong field + wrong operator). Filed as
+   its own bead **cjby**; moved matched `equals`/`not_equals` into the
+   specific-option branch.
+3. **r3** -- the r2 `not_equals <matched> -> is_empty` was still wrong: `is_empty`
+   is false for an explicitly-unchecked (`false`) checkbox, hiding the dependent
+   forever. Fixed to `not_equals true`; excluded ''-valued options from the map;
+   rewrote tests to assert RUNTIME behavior via a local `runtimeShowIf` oracle
+   mirroring `shouldShowField` (the r2 tests pinned shape only, which is why the
+   bug shipped to r3).
+4. **r4** -- confirmation pass: **NO-GAPS**. Verified `not_equals true` against the
+   real evaluator (false===checked, true===unchecked/absent) and the oracle's
+   fidelity line-by-line. The journal test-count fix below is its only finding.
+
+The loop legitimately converged (each round a real, fixed, runtime-verified
+defect; r4 clean), so it terminated at NO-GAPS rather than escalating.
+
 ## Verification
 
-`schema-editor` vitest: `fieldGrouping.test.ts` 39 tests pass (32 prior + 7 new
-covering the exit criterion -- non-primary option remap, primary option remap,
-whole-group fallback-to-primary, `controls_fields` expansion, `copy_to` expansion,
-and the untouched-dependent no-op). Full editor suite green (20 files), `tsc
---noEmit` clean.
+`schema-editor` vitest: `fieldGrouping.test.ts` 48 tests pass (32 prior + 16 new
+across both beads -- option remap for primary/non-primary/de-duped-collision, the
+whole-group operator normalizations, the matched `not_equals -> not_equals true`
+inverse with runtime-oracle checks for checked/unchecked/absent, the ''-option
+exclusion, `controls_fields`/`copy_to` expansion, and the untouched-dependent
+no-op). Full editor suite green (20 files), `tsc --noEmit` clean. The backend
+pytest suite (495 passed) is unaffected -- this change is frontend-only.
 
 Env note: main's `schema-editor/node_modules` was missing transitive deps
 (`@asamuzakjp/css-color`, `@babel/runtime`) so jsdom + testing-library failed to
 load; `npm install` (NOT `npm ci`, which EPERM'd on a locked `esbuild.exe`)
 reconciled them. Worktree runs the suite via the standard node_modules junction.
+Vitest's forks pool intermittently hangs on teardown ("Vite server won't exit")
+AND once flaked with "Timeout starting forks runner" -- tests complete and pass
+regardless; `--pool=threads` avoids both.
+
+## Doc freshness / housekeeping
+
+`check_doc_freshness.py` flagged many STALE tier-2 docs, but ALL track
+`backend/` / `frontend/src/` files this branch did not touch (the diff is
+`schema-editor/` + this journal entry only) -- they were stale before this branch
+and are left as-is. Beads housekeeping surfaced a pre-existing orphan
+(`jnjj.45`, the secretary epic, in-progress in a different workstream) and 4 stale
+in-progress epics (`hrn`, `jf6w`, ...) -- none referenced by this branch's single
+commit-line, all orthogonal to the editor work; left for their owners.
