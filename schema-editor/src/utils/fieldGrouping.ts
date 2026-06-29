@@ -460,6 +460,10 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
   // option, but it does preserve each option's pdf_field_name + source_type.
   const otherIds = new Set(schema.fields.map(f => f.id).filter(id => id !== fieldId));
   const usedIds = new Set<string>();
+  // option.value -> reconstructed field id, so dependents that referenced the
+  // consolidated field can be remapped to the right split field (bd
+  // polyglot-pdf-v444 -- inverse of mergeFields' rewriteReferences).
+  const valueToReconstructedId = new Map<string, string>();
   const rebuilt: FormField[] = field.options.map((opt, idx) => {
     let id: string;
     if (idx === 0) {
@@ -474,6 +478,9 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       id = candidate;
     }
     usedIds.add(id);
+    if (opt.value !== undefined && opt.value !== null) {
+      valueToReconstructedId.set(String(opt.value), id);
+    }
 
     return {
       id,
@@ -488,13 +495,18 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
     };
   });
 
+  const rebuiltIds = rebuilt.map(f => f.id);
+  const primaryReconstructedId = rebuiltIds[0];
+
   const newFields: FormField[] = [];
   for (const f of schema.fields) {
-    if (f.id === fieldId) newFields.push(...rebuilt);
-    else newFields.push(f);
+    if (f.id === fieldId) {
+      newFields.push(...rebuilt);
+    } else {
+      newFields.push(remapFallbackDependent(f, fieldId, valueToReconstructedId, rebuiltIds, primaryReconstructedId));
+    }
   }
 
-  const rebuiltIds = rebuilt.map(f => f.id);
   const newSections = schema.sections.map(section => {
     const pos = section.fields.indexOf(fieldId);
     if (pos === -1) return section;
@@ -504,4 +516,86 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
   });
 
   return { ...schema, fields: newFields, sections: newSections };
+}
+
+// Rewrite ONE dependent field that referenced a now-split consolidated field
+// (fallback ungroup, bd polyglot-pdf-v444). The inverse of mergeFields'
+// rewriteReferences: where merge collapsed N source widgets into option values on
+// one consolidated field and retargeted dependents onto it, ungroup must point
+// dependents back at the specific reconstructed split fields.
+//
+//   - show_if `{field: C, operator: equals, value: <optValue>}` -> the dependent
+//     fired when the consolidated radio held that option's value. After the split
+//     that option is its own field, so this becomes `is_checked` on that field
+//     (the runtime value of a standalone checkbox/radio is truthy when selected).
+//     A whole-group condition (is_checked/is_not_empty on C, no specific option)
+//     or an equals whose value matches no option is retargeted to the primary
+//     reconstructed field so it does not dangle; other operators retarget but keep
+//     their operator (best effort).
+//   - controls_fields / copy_to target arrays containing C are EXPANDED to all
+//     reconstructed ids (the rule acted on the whole former group), de-duped.
+//
+// Returns the same object reference when nothing referenced fieldId (no-op).
+function remapFallbackDependent(
+  f: FormField,
+  fieldId: string,
+  valueToReconstructedId: Map<string, string>,
+  rebuiltIds: string[],
+  primaryReconstructedId: string,
+): FormField {
+  let changed = false;
+  const next: FormField = { ...f };
+
+  if (f.show_if && f.show_if.field === fieldId) {
+    const cond = f.show_if;
+    if (SELECTION_OPERATORS.has(cond.operator) && cond.value !== undefined &&
+        valueToReconstructedId.has(String(cond.value))) {
+      next.show_if = {
+        field: valueToReconstructedId.get(String(cond.value))!,
+        operator: 'is_checked',
+      };
+    } else {
+      // whole-group / unmatched: retarget to the primary so it does not dangle.
+      next.show_if = { ...cond, field: primaryReconstructedId };
+    }
+    changed = true;
+  }
+
+  // copy_to / controls_fields target arrays: a single consolidated id expands to
+  // the full set of split ids (the rule covered the whole former group).
+  const expand = (ids?: string[]): string[] | undefined => {
+    if (!ids || !ids.includes(fieldId)) return ids;
+    const out: string[] = [];
+    for (const id of ids) {
+      const repl = id === fieldId ? rebuiltIds : [id];
+      for (const r of repl) if (!out.includes(r)) out.push(r);
+    }
+    return out;
+  };
+
+  if (f.copy_to && f.copy_to.includes(fieldId)) {
+    next.copy_to = expand(f.copy_to);
+    changed = true;
+  }
+
+  if (f.controls_fields) {
+    let controlsChanged = false;
+    const newControls = f.controls_fields.map(ctrl => {
+      const c = { ...ctrl };
+      for (const key of CONTROL_ACTION_KEYS) {
+        const list = ctrl[key];
+        if (list && list.includes(fieldId)) {
+          c[key] = expand(list);
+          controlsChanged = true;
+        }
+      }
+      return c;
+    });
+    if (controlsChanged) {
+      next.controls_fields = newControls;
+      changed = true;
+    }
+  }
+
+  return changed ? next : f;
 }
