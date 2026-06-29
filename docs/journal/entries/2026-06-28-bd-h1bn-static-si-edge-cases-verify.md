@@ -100,8 +100,25 @@ coercion I introduced, two of them subtle):
   success (_clear_current_field_id, injected); merge_field_schema re-sets it when the
   new field's schema arrives. Tests added for all three + the pointer-clear.
 This is the value of the outer review beyond fresh-eyes -- the timeout-path
-corruption (#3) was a non-obvious interaction fresh-eyes missed. Codex rounds to
-clean: see merge ping.
+corruption (#3) was a non-obvious interaction fresh-eyes missed.
+
+Codex round 2 (re-review of the r1 fixes): NO-ACK -- Codex never reacted to the
+trigger within the 2-min ack window. Per doctrine NO-ACK routes to the Opus-4.8
+fallback reviewer (Step 7.5), not a maintainer stop or auto-clear. Opus fallback
+round 1 found 2 MORE gaps from my own r1 fixes -- both real: (a) I switched the
+coercion gate + pointer-clear to the injected USE_DTI but left the next-field
+re-merge block still on the GLOBAL get_settings(), so in a non-global
+Settings(USE_DTI=True) harness the clear fires but the re-merge skips -> pointer
+stranded at None -> coercion no-ops (the bug returns); (b) the section-complete
+confirm branch didn't clear the pointer. Fixed both (re-merge now reads the injected
+gate; section-complete clears too) + a test that the re-merge runs under the injected
+gate. Opus fallback round 2: NO-GAPS (both fixes verified, nothing regressed; one
+non-blocking nit -- a now-unused get_settings import -- removed). The review record
+for this PR is the Opus-4.8 fallback NO-GAPS, because Codex was unavailable (NO-ACK).
+Net: fresh-eyes 1 round + Codex r1 (3 P1s) + Opus fallback 2 rounds (2 gaps) -- the
+layered review caught 5 real coercion bugs before merge, several subtle
+(timeout-path corruption, global-vs-injected desync). Closed by hand (the watcher's
+Codex-only --close-on-clean did not fire on NO-ACK).
 
 ## Lessons
 
