@@ -859,12 +859,29 @@ class FormFillingService:
                 await self._switch_task
             except (asyncio.CancelledError, Exception):
                 pass
-        # Cancel any in-flight async secretary-deliver tasks (bd polyglot-pdf-jnjj.43)
-        # so a late lookup never pushes a turn into a session being torn down. Cancel
-        # the LOOKUP first and drain it HERE (this coroutine has no pending cancel, so
-        # the await actually unwinds the inner wait_for task -- doing it inside the
-        # cancelled deliver task does not), then cancel + drain the deliver. Snapshot
-        # the set first: the deliver done-callback mutates it.
+        await self._cancel_secretary_deliver_tasks()
+        if self._live_ai is not None:
+            await self._live_ai.finalize()
+        self._websocket = None
+        self._session_id = None
+
+    async def _cancel_secretary_deliver_tasks(self) -> None:
+        """Cancel + drain all in-flight async secretary-deliver tasks (bd
+        polyglot-pdf-jnjj.43).
+
+        Called before ANY session teardown/swap that finalizes the live model --
+        end_session (disconnect) AND _switch_to_section_locked (section switch) --
+        so a late secretary answer from the OUTGOING session can never push a turn
+        into a torn-down or freshly-swapped session. Without this on the switch
+        path, a slow section-N lookup could deliver into section N+1
+        (cross-section PHI contamination, fresh-eyes finding).
+
+        Cancel the LOOKUP first and drain it HERE: this coroutine has no pending
+        cancel of its own, so the await actually unwinds the inner wait_for task --
+        doing it inside the (cancelled) deliver task does not, which would leak
+        "Task was destroyed but it is pending". Then cancel + drain the deliver.
+        Snapshot the set first: the deliver done-callback mutates it.
+        """
         for deliver, lookup in list(self._secretary_deliver_tasks):
             if not lookup.done():
                 lookup.cancel()
@@ -878,10 +895,6 @@ class FormFillingService:
                     await deliver
                 except (asyncio.CancelledError, Exception):
                     pass
-        if self._live_ai is not None:
-            await self._live_ai.finalize()
-        self._websocket = None
-        self._session_id = None
 
     async def switch_to_section(
         self,
@@ -943,7 +956,14 @@ class FormFillingService:
                  session_id=self._session_id,
                  section_number=section_number,
                  total_sections=total_sections)
-        
+
+        # 0. Kill any in-flight secretary-deliver task from the OUTGOING section
+        # (bd polyglot-pdf-jnjj.43, fresh-eyes): a slow section-N lookup must not
+        # deliver its (section-N PHI) answer into the section-N+1 session we are
+        # about to start -- send_client_content would queue it and fire it into the
+        # new section once it is ready. Cancel BEFORE finalize, same as end_session.
+        await self._cancel_secretary_deliver_tasks()
+
         # 1. Close current Gemini session (flushes context)
         try:
             await self._live_ai.finalize()
@@ -1226,7 +1246,9 @@ class FormFillingService:
                 answer_len=len(answer or ""),
                 session_id=self._session_id,
             )
-            if not answer:
+            # Treat an all-whitespace answer as empty (the model occasionally returns
+            # blanks) so the dispatch fail-opens instead of voicing whitespace.
+            if not (answer or "").strip():
                 return {"status": "failed", "answer": ""}
             return {"status": "ok", "answer": answer}
 
@@ -1282,7 +1304,7 @@ class FormFillingService:
                          exc_type=type(exc).__name__, session_id=self._session_id)
             return
 
-        if not answer:
+        if not (answer or "").strip():
             _log.info("ask_secretary_async_empty", session_id=self._session_id)
             return
 

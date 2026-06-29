@@ -284,8 +284,63 @@ async def test_end_session_cancels_inflight_secretary_deliver():
     assert out == {"status": "pending", "answer": ""}
     await started.wait()
     assert len(svc._secretary_deliver_tasks) == 1
+    # Grab the actual task objects so we can prove end_session CANCELLED them
+    # (the len==0 check alone is satisfied by the done-callback firing on any
+    # completion path -- assert the cancel explicitly, fresh-eyes finding).
+    deliver, lookup = next(iter(svc._secretary_deliver_tasks))
 
     await svc.end_session()
-    # The deliver task was cancelled + drained; nothing pushed.
+    # The deliver + lookup were cancelled + drained; nothing pushed.
+    assert deliver.cancelled()
+    assert lookup.cancelled()
     assert len(svc._secretary_deliver_tasks) == 0
     live.send_client_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_section_switch_cancels_inflight_secretary_deliver():
+    """A section switch while a secretary lookup is in-flight cancels the deliver, so
+    a slow section-N answer cannot be pushed into the section-N+1 session
+    (cross-section PHI contamination, fresh-eyes finding on jnjj.43)."""
+    started = asyncio.Event()
+
+    async def _slow(query, context):
+        started.set()
+        await asyncio.sleep(5)  # still running when the switch fires
+        return "section-1 answer that must NOT leak into section 2"
+
+    live = _live_ai_active()
+    live.finalize = AsyncMock()
+    # set_callbacks/set_session_context are sync no-ops on the stub.
+    live.set_callbacks = MagicMock()
+    live.set_session_context = MagicMock()
+    text_ai = MagicMock()
+    text_ai.ask = _slow
+    svc = _service(text_ai, deadline_s=0.05, timeout_s=10.0, live_ai=live)
+    svc._websocket = AsyncMock()
+    svc._send_transcript = False
+
+    out = await svc.handle_ask_secretary("q")
+    assert out == {"status": "pending", "answer": ""}
+    await started.wait()
+    deliver, lookup = next(iter(svc._secretary_deliver_tasks))
+
+    # Switch sections -- this must cancel the in-flight deliver before the new
+    # session is brought up.
+    await svc._switch_to_section_locked(
+        section_schema=_SCHEMA,
+        section_values={},
+        section_metadata={"section_number": 2, "total_sections": 2,
+                          "section_label": "Two", "section_id": "s2"},
+        initial_field_hint=None,
+    )
+
+    assert deliver.cancelled()
+    assert lookup.cancelled()
+    # The section switch legitimately sends its own greeting via send_client_content,
+    # so we cannot assert it was never called -- assert the SECTION-1 ANSWER was never
+    # among what was pushed (the contamination this guard prevents).
+    pushed = " ".join(
+        str(c.args[0]) for c in live.send_client_content.await_args_list if c.args
+    )
+    assert "must NOT leak" not in pushed
