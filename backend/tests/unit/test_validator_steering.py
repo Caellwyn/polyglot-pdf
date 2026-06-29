@@ -94,8 +94,11 @@ async def test_already_steered_field_suppresses_resteer():
 
     returned = await svc.handle_validation_boundary(fields)
 
-    # Full verdict still returned (the client still learns of it), but NO steer fires.
-    assert returned == verdict
+    # A SUPPRESSED conflict must read as CLEAN to the client ({conflicts: []}), NOT
+    # the full pre-suppression verdict: the client gates the section switch on this,
+    # so returning a suppressed conflict would hold the switch forever with no steer
+    # voiced -- trapping a user who already overrode it (fresh-eyes finding). No steer.
+    assert returned == {"conflicts": []}
     live_ai.send_client_content.assert_not_awaited()
 
 
@@ -112,8 +115,30 @@ async def test_per_field_suppression_covers_a_new_conflict_on_a_steered_field():
         {"field_ids": ["addr_state", "country"], "reason": "state not in country"},
     ]}
     svc, live_ai, _ = _service(verdict)
-    await svc.handle_validation_boundary(fields)
+    returned = await svc.handle_validation_boundary(fields)
     live_ai.send_client_content.assert_not_awaited()
+    # Suppressed -> reads as clean so the switch is not trapped.
+    assert returned == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_override_does_not_trap_the_user_switch_gate():
+    """Criterion 2 (the override escape hatch) end-to-end: a user who confirmed a
+    flagged conflict (both fields now steered:true) must be able to ADVANCE. Once
+    suppressed, the boundary returns CLEAN so the client resumes the section switch
+    -- not a held conflict with no steer. Regression for the user-stranding bug."""
+    fields = [
+        {"field_id": "addr_state", "name": "State", "value": "WV", "steered": True},
+        {"field_id": "addr_zip", "name": "ZIP code", "value": "50301", "steered": True},
+    ]
+    verdict = {"conflicts": [
+        {"field_ids": ["addr_state", "addr_zip"], "reason": "still looks off"},
+    ]}
+    svc, live_ai, _ = _service(verdict)
+    returned = await svc.handle_validation_boundary(fields)
+    # No steer (already adjudicated) AND clean to the client (switch proceeds).
+    live_ai.send_client_content.assert_not_awaited()
+    assert returned == {"conflicts": []}
 
 
 @pytest.mark.asyncio

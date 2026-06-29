@@ -95,6 +95,9 @@ async def test_form_complete_is_acked():
         })},
     ])
     assert {"type": "form_complete_ack"} in sent
+    # B5 (jnjj.17): the form_complete arm ALSO runs the validator and pushes a
+    # validation_result (clean here) -- every boundary gets one (contract 1).
+    assert {"type": "validation_result", "conflicts": []} in sent
 
 
 @pytest.mark.asyncio

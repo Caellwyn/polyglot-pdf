@@ -1427,7 +1427,16 @@ class FormFillingService:
         if surviving:
             await self._inject_validator_steer(surviving, safe_fields)
 
-        return {"conflicts": conflicts}
+        # Return only the SURVIVING conflicts -- NOT the full pre-suppression list.
+        # The client gates the section switch on this: a conflict holds the switch
+        # in-section. If we returned a SUPPRESSED conflict (one whose field the user
+        # already adjudicated -- no steer fired for it), the client would hold the
+        # switch forever with no voiced guidance, trapping a user who exercised the
+        # override escape hatch (fresh-eyes finding; criteria 1+2). A suppressed
+        # conflict means "already handled" -> it must read as clean to the client so
+        # the switch proceeds. The fields involved are already steered:true client-
+        # side, so nothing is lost by omitting them here.
+        return {"conflicts": surviving}
 
     @staticmethod
     def _suppress_already_steered(conflicts: list, fields: list) -> list:

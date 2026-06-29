@@ -191,16 +191,16 @@ export class WebFormConnection {
   // backstops a validation_result that never arrives (socket drop). A CONFLICT
   // verdict cancels the switch (clears both without switching) so the user stays in
   // the section to resolve it; the switch happens on a later clean boundary.
+  // `cancelled` rides the gate object (not a shared instance flag) so a conflict /
+  // teardown / eviction marks THE SPECIFIC parked gate -- a stale gate evicted by a
+  // newer boundary can never make the newer switch fire (each invocation reads its
+  // OWN object's flag after the await).
   private pendingSectionSwitch: {
     sectionId: string;
     resolve: () => void;
     timer: ReturnType<typeof setTimeout>;
+    cancelled: boolean;
   } | null = null;
-  // Set by cancelPendingSectionSwitch (conflict verdict) and read once by
-  // proceedSectionSwitch after the gate resolves, to SKIP the switch and stay in
-  // the current section. Distinct from the resolve()-runs-the-switch (clean/timeout)
-  // path.
-  private sectionSwitchCancelled = false;
   // Fail-OPEN bound (contract 4): advance unchecked if no verdict in this window.
   private static readonly VALIDATOR_GATE_TIMEOUT_MS = 6000;
 
@@ -389,7 +389,7 @@ export class WebFormConnection {
       clearTimeout(this.pendingSectionSwitch.timer);
       const pending = this.pendingSectionSwitch;
       this.pendingSectionSwitch = null;
-      this.sectionSwitchCancelled = true;
+      pending.cancelled = true;
       pending.resolve();
     }
 
@@ -1656,37 +1656,46 @@ export class WebFormConnection {
     // B5 (bd polyglot-pdf-jnjj.17): gate the switch on the validator round-trip
     // (contract 4 ordering). Park the switch and wait for a validation_result:
     //   - clean verdict   -> resolvePendingSectionSwitch -> switch runs;
-    //   - conflict verdict -> cancelPendingSectionSwitch sets sectionSwitchCancelled,
+    //   - conflict verdict -> cancelPendingSectionSwitch sets the gate's cancelled flag,
     //                         resolves the gate WITHOUT switching (stay in-section so
     //                         the live model can steer; the switch happens on a later
     //                         clean boundary);
     //   - no verdict in VALIDATOR_GATE_TIMEOUT_MS -> fail-OPEN: switch runs unchecked
     //     (a validator/socket outage must never strand the user mid-form).
-    this.sectionSwitchCancelled = false;
+    // Each invocation owns its gate object; `gate` is captured here and its
+    // `cancelled` flag is read after the await, so a stale gate evicted by a newer
+    // boundary cannot make THIS switch fire (and vice versa).
+    const gate: NonNullable<typeof this.pendingSectionSwitch> = {
+      sectionId,
+      resolve: () => {},
+      timer: undefined as unknown as ReturnType<typeof setTimeout>,
+      cancelled: false,
+    };
     await new Promise<void>((resolve) => {
-      // Defensive: if a previous gate is somehow still parked, fail it OPEN now so we
-      // never leak two pending switches (the newer boundary wins).
+      gate.resolve = resolve;
+      // Defensive: if a previous gate is somehow still parked, evict it -- mark it
+      // CANCELLED (so its own awaiter skips its switch) and resolve it. The newer
+      // boundary wins; two switches can never both fire.
       if (this.pendingSectionSwitch) {
         clearTimeout(this.pendingSectionSwitch.timer);
         const stale = this.pendingSectionSwitch;
         this.pendingSectionSwitch = null;
+        stale.cancelled = true;
         stale.resolve();
       }
-      const timer = setTimeout(() => {
-        if (this.pendingSectionSwitch && this.pendingSectionSwitch.timer === timer) {
+      gate.timer = setTimeout(() => {
+        if (this.pendingSectionSwitch === gate) {
           console.warn('[WebFormConnection] [validator] gate timed out -- failing OPEN, advancing unchecked');
-          const pending = this.pendingSectionSwitch;
           this.pendingSectionSwitch = null;
-          pending.resolve();
+          gate.resolve();
         }
       }, WebFormConnection.VALIDATOR_GATE_TIMEOUT_MS);
-      this.pendingSectionSwitch = { sectionId, resolve, timer };
+      this.pendingSectionSwitch = gate;
     });
 
-    // A CONFLICT verdict cancelled the switch -> stay in the current section.
-    if (this.sectionSwitchCancelled) {
-      this.sectionSwitchCancelled = false;
-      console.log('[WebFormConnection] [validator] conflict found -- holding in section for the steer; switch deferred.');
+    // A CONFLICT verdict (or teardown/eviction) cancelled THIS gate -> do not switch.
+    if (gate.cancelled) {
+      console.log('[WebFormConnection] [validator] switch deferred -- conflict/teardown held this boundary in section.');
       return;
     }
     // Resolved clean or failed OPEN -> run the switch.
@@ -1752,16 +1761,17 @@ export class WebFormConnection {
 
   /**
    * B5: cancel a parked section switch on a CONFLICT verdict. The gate promise still
-   * resolves (so proceedSectionSwitch's await does not hang), but sectionSwitchCancelled
-   * tells proceedSectionSwitch to SKIP doSectionSwitch -- the client stays in the
-   * current section so the live model can voice the steer the backend just injected.
+   * resolves (so proceedSectionSwitch's await does not hang), but the gate's own
+   * `cancelled` flag tells proceedSectionSwitch to SKIP doSectionSwitch -- the client
+   * stays in the current section so the live model can voice the steer the backend
+   * just injected.
    */
   private cancelPendingSectionSwitch(): void {
     if (!this.pendingSectionSwitch) return;
     clearTimeout(this.pendingSectionSwitch.timer);
     const pending = this.pendingSectionSwitch;
     this.pendingSectionSwitch = null;
-    this.sectionSwitchCancelled = true;
+    pending.cancelled = true;
     pending.resolve();
   }
 
