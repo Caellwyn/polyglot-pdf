@@ -33,10 +33,12 @@ the G1 keystone probe (backend/scripts/probe_g1_contradiction_recall.py
 FLASH_LITE_PROMPT) so the deployed validator matches what the gate measured.
 
 PII (contract 6): this service handles full form PII/PHI (names, addresses, DOBs)
-but logs ONLY field ids / counts / lengths / latency -- NEVER the payload, the
-field values, or the verdict reason text. The verdict `reason` may quote values;
-it rides the in-band steering message to the Live model (bead B5), which is NOT a
-log sink. Mirrors the callback_handler logging discipline.
+but logs ONLY counts (field_count / conflict_count / dropped_malformed) and
+exception types -- NEVER the payload, the field values, the field ids, or the
+verdict reason text. The verdict `reason` may quote values; it rides the in-band
+steering message to the Live model (bead B5), which is NOT a log sink. The wider
+"ids / counts / lengths" allowance is the callback_handler discipline this mirrors
+(contract 6); this service simply emits a strict subset of it.
 
 ASCII only (CLAUDE.md scar #6).
 """
