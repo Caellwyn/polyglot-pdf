@@ -57,6 +57,16 @@ export type ConnectionStatus =
 
 export interface ConnectionCallbacks {
   onStatusChange?: (status: ConnectionStatus) => void;
+  // "Thinking" indicator (bd polyglot-pdf-wpw.5): true from the moment the user's
+  // turn ends (activity_end / VAD turn-end) until the agent's first response audio
+  // of that turn arrives -- the processing gap during which the app would otherwise
+  // look frozen (esp. on a slow secretary lookup). Orthogonal to ConnectionStatus
+  // (the connection stays "connected" throughout), so it is a SEPARATE boolean
+  // signal, not a status value -- folding it into status would collide with the
+  // many `status === "connected"` gates. The UI shows a calm animated indicator
+  // while true. Guaranteed to clear (first-audio / turn_complete / error /
+  // disconnect / section-switch / max-duration safety) so it can never stick on.
+  onThinkingChange?: (thinking: boolean) => void;
   onSessionReady?: (sessionId: string) => void;
   onSessionRestarted?: () => void;
   onSectionChanged?: () => void;
@@ -82,11 +92,28 @@ export interface ConnectionCallbacks {
   onFormComplete?: () => void;
 }
 
+// Max-duration safety for the "thinking" indicator (bd polyglot-pdf-wpw.5): if no
+// response audio arrives within this window after the user's turn ends, clear the
+// indicator anyway so it can never stick on. Generous enough to cover a slow
+// secretary lookup's tail (Gate 2 saw up to ~20s) plus headroom.
+const THINKING_MAX_MS = 30000;
+
 export class WebFormConnection {
   private ws: WebSocket | null = null;
   private state: SchemaFormState;
   private callbacks: ConnectionCallbacks;
   private status: ConnectionStatus = "disconnected";
+  // "Thinking" indicator state (bd polyglot-pdf-wpw.5). `thinking` is the current
+  // value (mirrored to onThinkingChange via setThinking). `thinkingTurnActive`
+  // gates the first-audio CLEAR: audioChunkCount is session-cumulative (never
+  // reset), so it cannot mark "first audio of THIS turn" -- instead we arm this
+  // flag when the user's turn ends and clear thinking on the first audio frame
+  // seen WHILE it is armed. `thinkingTimer` is the max-duration safety: thinking
+  // auto-clears after THINKING_MAX_MS so a turn that never produces audio (a
+  // dropped/empty reply) can't leave the indicator stuck on.
+  private thinking = false;
+  private thinkingTurnActive = false;
+  private thinkingTimer: number | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
@@ -472,6 +499,20 @@ export class WebFormConnection {
           // Gemini finished speaking (transcript received) - signal to activity watchdog
           if (window.vffOnTurnComplete) {
             window.vffOnTurnComplete();
+          }
+          // Safety clear for the thinking indicator (bd polyglot-pdf-wpw.5): the
+          // agent's turn is over, so it can't still be "processing."
+          this.clearThinking('turn_complete');
+          break;
+
+        case "agent_processing":
+          // Backend-driven thinking-indicator signal (bd polyglot-pdf-wpw.5):
+          // processing:true on a real user turn (BOTH VAD modes), false at the
+          // agent's first response audio / turn end. Drive the indicator from it.
+          if (message.processing === true) {
+            this.startThinking();
+          } else {
+            this.clearThinking('agent_processing:false');
           }
           break;
 
@@ -1884,6 +1925,14 @@ export class WebFormConnection {
       console.log(`[WebFormConnection] [recv] Audio chunk #${this.audioChunkCount}`);
     }
 
+    // Belt-and-suspenders clear for the thinking indicator (bd polyglot-pdf-wpw.5):
+    // the backend's agent_processing:false (sent at its first response audio) is the
+    // primary clear, but if it is delayed/lost, response audio ARRIVING here also
+    // means the agent has started replying -- so clear on any audio while thinking.
+    if (this.thinkingTurnActive) {
+      this.clearThinking('audio-frame');
+    }
+
     // Queue audio for processing
     this.audioQueue.push(arrayBuffer);
 
@@ -1921,6 +1970,18 @@ export class WebFormConnection {
       message: message.message,
       fullMessage: message
     });
+    // Clear the thinking indicator on a server error (bd polyglot-pdf-wpw.5, Codex
+    // PR #273): a JSON {type:"error"} arriving mid-processing does NOT necessarily
+    // change status (only a section-switch error does), so the setStatus-based clear
+    // would miss it and the indicator would hang until the 30s timer. Clear directly,
+    // and -- for symmetry with the max-duration path -- resync the backend so a
+    // non-session-ending error cannot strand _processing_active=True and dedup the
+    // next turn (Opus fallback review). Fire-and-forget; safe to skip if the socket
+    // is gone.
+    this.clearThinking('server_error');
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ type: 'clear_thinking' });
+    }
     // Build error message from available fields
     const errorText = message.message || message.reason || message.code || "Server error";
 
@@ -2178,6 +2239,11 @@ export class WebFormConnection {
     }
 
     console.log('[WebFormConnection] [send] Sending activity_start message to backend')
+    // The user is starting a NEW turn (incl. a barge-in over a still-"thinking"
+    // window): the prior turn's thinking indicator is now obsolete -- clear it so a
+    // barge-in can never leave it stuck (bd polyglot-pdf-wpw.5, fresh-eyes). The new
+    // turn re-arms thinking via the backend agent_processing signal on its own end.
+    this.clearThinking('activity_start');
     this.send({
       type: 'vad_activity_start',
       timestamp: Date.now(),
@@ -2375,6 +2441,16 @@ export class WebFormConnection {
 
     this.status = status;
 
+    // Safety clear for the thinking indicator (bd polyglot-pdf-wpw.5): any move OFF
+    // "connected" (disconnect, error, reconnecting, section switch, idle_timeout,
+    // reconnect_failed) means there is no live turn in flight, so the indicator must
+    // not persist across it. Clearing here covers every terminal/transitional path
+    // in one place. (A fresh "connected" does not set thinking; only agent_processing
+    // does.)
+    if (status !== "connected") {
+      this.clearThinking('status:' + status);
+    }
+
     if (this.callbacks.onStatusChange) {
       this.callbacks.onStatusChange(status);
     }
@@ -2385,6 +2461,66 @@ export class WebFormConnection {
    */
   getStatus(): ConnectionStatus {
     return this.status;
+  }
+
+  /** Whether the "thinking" indicator is currently active (bd polyglot-pdf-wpw.5). */
+  getThinking(): boolean {
+    return this.thinking;
+  }
+
+  /**
+   * Set the "thinking" flag and notify (bd polyglot-pdf-wpw.5). Mirrors setStatus:
+   * dedups same-value calls and fires onThinkingChange. The boolean is the single
+   * source of truth the UI subscribes to.
+   */
+  private setThinking(thinking: boolean): void {
+    if (this.thinking === thinking) return;
+    this.thinking = thinking;
+    if (this.callbacks.onThinkingChange) {
+      this.callbacks.onThinkingChange(thinking);
+    }
+  }
+
+  /**
+   * Begin the "thinking" window: the user's turn just ended and we are waiting on
+   * the agent's reply (bd polyglot-pdf-wpw.5). Arms thinkingTurnActive so the next
+   * audio frame clears it, and starts the max-duration safety timer so a reply that
+   * never produces audio cannot strand the indicator on.
+   */
+  private startThinking(): void {
+    this.thinkingTurnActive = true;
+    this.setThinking(true);
+    if (this.thinkingTimer !== null) {
+      clearTimeout(this.thinkingTimer);
+    }
+    this.thinkingTimer = setTimeout(() => {
+      this.thinkingTimer = null;
+      // Safety net: the reply never arrived (dropped/empty turn). Clear so the
+      // indicator can never stick on -- a stuck "thinking" is worse than none.
+      this.clearThinking('max-duration');
+      // Also reset the BACKEND processing state (bd polyglot-pdf-wpw.5, Codex
+      // PR #273): a frontend-only clear leaves backend _processing_active stuck
+      // True, which would dedup the NEXT turn's processing:true. Fire-and-forget;
+      // safe to skip if the socket is gone (the next connect resets state anyway).
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.send({ type: 'clear_thinking' });
+      }
+    }, THINKING_MAX_MS) as unknown as number;
+  }
+
+  /**
+   * End the "thinking" window (bd polyglot-pdf-wpw.5). Called on the FIRST response
+   * audio of the turn and on every safety boundary (turn_complete / error /
+   * disconnect / section-switch / idle_timeout) so the indicator never sticks on.
+   * Idempotent: harmless when not thinking.
+   */
+  private clearThinking(_reason = ''): void {
+    this.thinkingTurnActive = false;
+    if (this.thinkingTimer !== null) {
+      clearTimeout(this.thinkingTimer);
+      this.thinkingTimer = null;
+    }
+    this.setThinking(false);
   }
 
   /**

@@ -50,6 +50,14 @@ class CallbackHandler:
         self._request_coordinator = request_coordinator
         self._send_transcript = send_transcript
         self._ws_audio_chunk_count = 0
+        # "Agent processing" (thinking-indicator) signal state (bd polyglot-pdf-wpw.5).
+        # True from a real user turn (on_user_activity, which fires in BOTH native and
+        # manual VAD on input transcription) until the agent's FIRST response audio of
+        # that turn -- the processing gap the frontend shows a calm indicator for.
+        # Backend-driven so it works in native-VAD mode too, where the client has no
+        # turn-end signal of its own. _ws_audio_chunk_count is session-cumulative, so
+        # this flag (not the count) marks "first audio AFTER a start" as the clear edge.
+        self._processing_active = False
         self._form_id = form_id  # For confirmation logging
         self._form_session_id = form_session_id  # For confirmation logging
         
@@ -63,6 +71,11 @@ class CallbackHandler:
         # Secretary (bd polyglot-pdf-jnjj.45c): async handler that runs the
         # ask_secretary lookup. Injected by FormFillingService; None until then.
         self._handle_ask_secretary = None
+        # Liveness callback chained from on_user_activity (bd polyglot-pdf-wpw.5):
+        # on_user_activity now ALSO emits the processing-start signal, so it owns the
+        # adapter's user-activity hook and calls this inner callback (the WS-route
+        # idle-watchdog bump) through. None until injected.
+        self._on_user_activity_inner = None
         # Live getter for the current fill language (bd polyglot-pdf-uogm): a getter,
         # not a snapshot, so a mid-session change_fill_language is reflected in the
         # next field's guidance without a second source of truth to go stale.
@@ -182,7 +195,78 @@ class CallbackHandler:
                 await self._websocket.send_json({"type": "turn_complete"})
             except Exception as e:
                 _log.warning("failed_to_send_turn_complete", error=str(e), session_id=self._session_id)
-    
+
+        # turn_complete is a safety CLEAR for the processing indicator (bd
+        # polyglot-pdf-wpw.5): the transcript arrives after all audio, so the agent
+        # has finished -- if first-audio somehow did not clear it (e.g. a text-only
+        # turn with no audio), clear it here so it can never stick on.
+        await self._set_processing(False)
+
+    def set_user_activity_inner(self, callback) -> None:
+        """Inject the inner liveness callback that on_user_activity chains to (bd
+        polyglot-pdf-wpw.5). The adapter's on_user_activity hook points at THIS
+        handler's on_user_activity (which emits the processing-start signal); that
+        method then calls this inner callback (the WS-route idle-watchdog bump)."""
+        self._on_user_activity_inner = callback
+
+    async def _set_processing(self, active: bool) -> None:
+        """Emit the agent_processing signal to the client when it changes (bd
+        polyglot-pdf-wpw.5). Dedups same-value calls. The client shows/hides a calm
+        'thinking' indicator. PII-free: a bare boolean, no transcript/values."""
+        if self._processing_active == active:
+            return
+        self._processing_active = active
+        # `is not None`, not truthiness: a Starlette WebSocket (and a
+        # MagicMock(spec=WebSocket)) is Mapping-like, so `if self._websocket:` is
+        # False for an empty one (same trap as on_go_away).
+        if self._websocket is not None:
+            try:
+                await self._websocket.send_json(
+                    {"type": "agent_processing", "processing": active}
+                )
+            except Exception as e:
+                _log.warning("failed_to_send_agent_processing",
+                             error=str(e), active=active, session_id=self._session_id)
+
+    async def on_processing_done(self) -> None:
+        """The agent's turn ended (interrupt OR a real server turn_complete) -- clear
+        the thinking indicator (bd polyglot-pdf-wpw.5). The fast clear is on_audio
+        (first response chunk); this covers the no-audio turn-end cases that would
+        otherwise leave _processing_active stuck True -- which also deduped the NEXT
+        turn's processing:true (Codex PR #273). Idempotent (dedup), so calling it
+        alongside on_audio on a normal turn is harmless."""
+        await self._set_processing(False)
+
+    async def signal_processing_start(self) -> None:
+        """Emit processing-start WITHOUT the liveness chain (bd polyglot-pdf-wpw.5).
+        Used by the manual/PTT path (send_activity_end), where the turn-end signal is
+        the client's vad_activity_end and liveness is handled separately on that path.
+        on_user_activity (native VAD) is the variant that ALSO bumps liveness."""
+        await self._set_processing(True)
+
+    async def on_user_activity(self) -> None:
+        """A real user turn occurred (input transcription) -- the agent is now
+        processing (bd polyglot-pdf-wpw.5). Emit processing-start, then chain to the
+        injected liveness callback (the idle-watchdog bump). PII-free: no text crosses
+        here (the adapter passes none).
+
+        SCOPE (bd polyglot-pdf-fa4x): this fires on Gemini input_transcription, the
+        native-VAD turn-start signal. In practice the gemini-live native-audio model
+        emits NO input_transcription on Vertex, so in native VAD this currently does
+        not fire and the indicator only works in manual/PTT mode (driven by
+        signal_processing_start via send_activity_end). The native-VAD START signal is
+        the fa4x follow-up. The CLEAR path (first response audio / turn_complete)
+        already works in both modes."""
+        await self._set_processing(True)
+        if self._on_user_activity_inner is not None:
+            try:
+                res = self._on_user_activity_inner()
+                if res is not None and hasattr(res, "__await__"):
+                    await res
+            except Exception:
+                # Liveness must never crash the receive loop.
+                _log.warning("on_user_activity_inner_error", session_id=self._session_id)
+
     async def on_audio(self, data: bytes) -> None:
         """
         Handle audio callback from Gemini.
@@ -193,15 +277,22 @@ class CallbackHandler:
         Args:
             data: Raw PCM audio bytes from Gemini
         """
+        # First response audio of the turn -> the agent has started replying, so the
+        # processing window is over (bd polyglot-pdf-wpw.5). _processing_active is the
+        # per-turn edge (it was set True by on_user_activity and is cleared here on the
+        # first chunk that follows); _set_processing dedups, so later chunks are no-ops.
+        if self._processing_active:
+            await self._set_processing(False)
+
         if self._websocket:
             try:
                 # Track audio chunks being sent to client
                 self._ws_audio_chunk_count += 1
-                
+
                 if self._ws_audio_chunk_count == 1:
-                    _log.info("[audio] [WebSocket Audio] Sending first audio chunk to client", 
+                    _log.info("[audio] [WebSocket Audio] Sending first audio chunk to client",
                              session_id=self._session_id, bytes=len(data))
-                
+
                 await self._websocket.send_bytes(data)
             except Exception as e:
                 # Swallow errors to avoid crashing the session loop

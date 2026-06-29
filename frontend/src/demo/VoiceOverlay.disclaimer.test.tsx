@@ -95,6 +95,7 @@ function makeMockManager(calls: string[]) {
     __forceStale: () => { connected = false },
     // tracked for the ordering assertion:
     getStatus: vi.fn(() => (connected ? 'connected' : 'disconnected')),
+    getThinking: vi.fn(() => false),  // bd polyglot-pdf-wpw.5
     isSendingMicAudio: vi.fn(() => connected),
     sendActivityStart: vi.fn(() => calls.push('sendActivityStart')),
     sendActivityEnd: vi.fn(async () => { calls.push('sendActivityEnd') }),

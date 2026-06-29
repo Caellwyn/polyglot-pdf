@@ -516,3 +516,160 @@ class TestAskSecretaryRouting:
                       if c.args and str(c.args[0]).startswith("ask_secretary")]
         assert len(ask_errors) == 1, ask_errors
         assert ask_errors[0].args[0] == "ask_secretary_handler_error"
+
+
+def _processing_sends(ws):
+    """All agent_processing messages sent on a mock websocket, in order."""
+    return [
+        c.args[0] for c in ws.send_json.await_args_list
+        if c.args and isinstance(c.args[0], dict)
+        and c.args[0].get("type") == "agent_processing"
+    ]
+
+
+class TestThinkingIndicator:
+    """agent_processing signal for the thinking indicator (bd polyglot-pdf-wpw.5)."""
+
+    @pytest.mark.asyncio
+    async def test_on_user_activity_emits_processing_true_and_chains_inner(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A user turn (on_user_activity) emits agent_processing:true AND calls the
+        injected liveness inner callback (the idle-watchdog bump)."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        bumped = []
+        handler.set_user_activity_inner(lambda: bumped.append(1))
+
+        await handler.on_user_activity()
+
+        assert _processing_sends(mock_websocket) == [
+            {"type": "agent_processing", "processing": True}
+        ]
+        assert bumped == [1]  # inner liveness callback chained through
+
+    @pytest.mark.asyncio
+    async def test_signal_processing_start_emits_without_liveness_chain(
+        self, mock_websocket, mock_coordinator
+    ):
+        """The manual/PTT path (signal_processing_start) emits processing:true but
+        does NOT call the liveness inner callback (that path handles liveness
+        separately) -- bd polyglot-pdf-wpw.5."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        bumped = []
+        handler.set_user_activity_inner(lambda: bumped.append(1))
+
+        await handler.signal_processing_start()
+
+        assert _processing_sends(mock_websocket) == [
+            {"type": "agent_processing", "processing": True}
+        ]
+        assert bumped == []  # liveness NOT chained on this path
+
+    @pytest.mark.asyncio
+    async def test_on_processing_done_clears_processing(
+        self, mock_websocket, mock_coordinator
+    ):
+        """on_processing_done (fired on a barge-in OR a real server turn_complete --
+        NOT tied to output transcripts, which are off in prod) clears the processing
+        state, and a NEXT turn's processing:true is sent again, not deduped to nothing
+        (bd polyglot-pdf-wpw.5, Codex PR #273)."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        await handler.signal_processing_start()   # processing -> True
+        await handler.on_processing_done()        # turn-end -> processing False
+        await handler.signal_processing_start()   # next turn -> True again (not deduped)
+
+        assert _processing_sends(mock_websocket) == [
+            {"type": "agent_processing", "processing": True},
+            {"type": "agent_processing", "processing": False},
+            {"type": "agent_processing", "processing": True},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_on_user_activity_awaits_async_inner(
+        self, mock_websocket, mock_coordinator
+    ):
+        """An ASYNC inner liveness callback (the real WS-route one is async) is awaited."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        bumped = []
+        async def _inner():
+            bumped.append(1)
+        handler.set_user_activity_inner(_inner)
+
+        await handler.on_user_activity()
+        assert bumped == [1]
+
+    @pytest.mark.asyncio
+    async def test_first_audio_clears_processing(
+        self, mock_websocket, mock_coordinator
+    ):
+        """The first response audio after a user turn emits agent_processing:false;
+        subsequent chunks do NOT re-emit (dedup)."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        await handler.on_user_activity()          # processing -> True
+        await handler.on_audio(b"\x00\x01")       # first chunk -> processing False
+        await handler.on_audio(b"\x02\x03")       # later chunk -> no re-emit
+
+        assert _processing_sends(mock_websocket) == [
+            {"type": "agent_processing", "processing": True},
+            {"type": "agent_processing", "processing": False},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_turn_complete_clears_processing_when_no_audio(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A text-only turn (no audio) still clears processing on turn_complete
+        (on_transcript), so the indicator can never stick on."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        await handler.on_user_activity()   # processing -> True
+        await handler.on_transcript("done")  # turn_complete -> processing False
+
+        sends = _processing_sends(mock_websocket)
+        assert {"type": "agent_processing", "processing": False} in sends
+        assert sends[-1] == {"type": "agent_processing", "processing": False}
+
+    @pytest.mark.asyncio
+    async def test_audio_without_active_processing_does_not_emit(
+        self, mock_websocket, mock_coordinator
+    ):
+        """Audio with no preceding user turn (processing not active) emits nothing --
+        no spurious agent_processing:false."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        await handler.on_audio(b"\x00\x01")
+        assert _processing_sends(mock_websocket) == []
+
+    @pytest.mark.asyncio
+    async def test_no_inner_callback_is_safe(
+        self, mock_websocket, mock_coordinator
+    ):
+        """on_user_activity with no inner liveness callback wired still emits the
+        signal and does not crash."""
+        handler = CallbackHandler(
+            websocket=mock_websocket, request_coordinator=mock_coordinator,
+            session_id="t",
+        )
+        await handler.on_user_activity()  # no set_user_activity_inner
+        assert _processing_sends(mock_websocket) == [
+            {"type": "agent_processing", "processing": True}
+        ]

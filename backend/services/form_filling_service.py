@@ -306,6 +306,11 @@ class FormFillingService:
             # Register callbacks with Gemini Live AI
             # System instruction is passed from caller and included in the initial
             # Gemini connection config.
+            # on_user_activity now routes through the callback handler so a real user
+            # turn ALSO emits the agent_processing (thinking-indicator) signal (bd
+            # polyglot-pdf-wpw.5); the WS-route liveness bump is chained as the inner
+            # callback.
+            self._callback_handler.set_user_activity_inner(self._on_user_activity)
             try:
                 self._live_ai.set_callbacks(
                     on_form_update=self._callback_handler.on_form_update,
@@ -313,7 +318,8 @@ class FormFillingService:
                     on_audio=self._callback_handler.on_audio,
                     on_tool_call=self._callback_handler.on_tool_call,
                     on_go_away=self._callback_handler.on_go_away,
-                    on_user_activity=self._on_user_activity,
+                    on_user_activity=self._callback_handler.on_user_activity,
+                    on_processing_done=self._callback_handler.on_processing_done,
                     system_instruction=system_instruction,
                     tool_declarations=tool_declarations,
                     enable_transcripts=bool(send_transcript),
@@ -385,9 +391,34 @@ class FormFillingService:
             await self._audio_handler.send_activity_start()
 
     async def send_activity_end(self):
-        """Send activity_end signal. Delegates to AudioHandler."""
+        """Send activity_end signal. Delegates to AudioHandler.
+
+        Also emits the thinking-indicator processing-start (bd polyglot-pdf-wpw.5):
+        in manual / push-to-talk VAD the client sends vad_activity_end when the user
+        stops, which is the RELIABLE turn-end boundary in that mode (native VAD instead
+        rides on_user_activity / input_transcription). The first response audio clears
+        it. Guarded so a missing handler is a no-op.
+
+        ORDER MATTERS (Codex PR #273): emit processing-start BEFORE awaiting the
+        activity_end send. That await yields to the receive loop, so on a fast reply
+        the first audio could run on_audio's clear while _processing_active is still
+        False (clear skipped) and THEN this would set it True after the reply already
+        began -- leaving the indicator stuck on. Setting it first makes the
+        start-then-first-audio-clear ordering correct regardless of reply speed.
+        """
+        if self._callback_handler is not None:
+            await self._callback_handler.signal_processing_start()
         if self._audio_handler:
             await self._audio_handler.send_activity_end()
+
+    async def clear_processing_state(self) -> None:
+        """Reset the thinking-indicator processing state (bd polyglot-pdf-wpw.5).
+        Called when the client's max-duration safety timer fires (the reply never
+        arrived): keeps backend and client in sync so the next turn's
+        processing:true is not deduped against a stale True. No-op without a handler.
+        """
+        if self._callback_handler is not None:
+            await self._callback_handler.on_processing_done()
 
     async def send_disclaimer_message(self, spoken_language: str, disclaimer_text: str):
         """
@@ -698,14 +729,18 @@ class FormFillingService:
         # Re-register the same callbacks used at session creation
         # (form_filling_service.py:155). set_callbacks is synchronous -- do not
         # await it. on_transcript is always passed; whether transcripts are
-        # actually emitted is gated by enable_transcripts.
+        # actually emitted is gated by enable_transcripts. on_user_activity routes
+        # through the callback handler so the agent_processing signal (bd
+        # polyglot-pdf-wpw.5) survives a session restart too.
+        self._callback_handler.set_user_activity_inner(self._on_user_activity)
         self._live_ai.set_callbacks(
             on_form_update=self._callback_handler.on_form_update,
             on_transcript=self._callback_handler.on_transcript,
             on_audio=self._callback_handler.on_audio,
             on_tool_call=self._callback_handler.on_tool_call,
             on_go_away=self._callback_handler.on_go_away,
-            on_user_activity=self._on_user_activity,
+            on_user_activity=self._callback_handler.on_user_activity,
+            on_processing_done=self._callback_handler.on_processing_done,
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
             enable_transcripts=bool(self._send_transcript),

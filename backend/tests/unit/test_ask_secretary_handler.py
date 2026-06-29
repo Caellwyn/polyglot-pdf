@@ -182,6 +182,32 @@ async def test_start_session_caches_full_schema_and_preserves_across_switch():
     assert svc._full_schema is _FULL_SCHEMA
 
 
+# --- Thinking indicator manual-VAD start trigger (bd polyglot-pdf-wpw.5) ---------
+
+
+@pytest.mark.asyncio
+async def test_send_activity_end_emits_processing_start_BEFORE_the_send():
+    """In manual/PTT VAD, send_activity_end emits the thinking processing-start AND
+    does so BEFORE awaiting the (yielding) audio send (bd polyglot-pdf-wpw.5, Codex
+    PR #273 fix #4). Order matters: emitting after the await lets a fast first-audio
+    clear before the start sets it True, stranding the indicator on. A shared parent
+    mock records call order so a revert of the ordering is caught."""
+    from unittest.mock import AsyncMock as _AM, call as _call
+    svc = FormFillingService(live_ai=None, settings=Settings(), text_ai=None)
+    order = MagicMock()  # parent records the relative order of attached child calls
+    svc._audio_handler = MagicMock()
+    svc._audio_handler.send_activity_end = _AM(side_effect=lambda: order.send_audio())
+    svc._callback_handler = MagicMock()
+    svc._callback_handler.signal_processing_start = _AM(side_effect=lambda: order.start())
+
+    await svc.send_activity_end()
+
+    svc._audio_handler.send_activity_end.assert_awaited_once()
+    svc._callback_handler.signal_processing_start.assert_awaited_once()
+    # processing-start MUST be recorded before the audio send.
+    assert order.mock_calls == [_call.start(), _call.send_audio()]
+
+
 # --- Tail-latency guard: deadline + async-deliver (bd polyglot-pdf-jnjj.43) -----
 
 

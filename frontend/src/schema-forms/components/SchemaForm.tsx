@@ -56,6 +56,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const connectionManagerRef = useRef<ConnectionManager | null>(null);
   const [status, setStatus] = useState<string>('Ready');
+  // Thinking indicator (bd polyglot-pdf-wpw.5): SchemaForm owns the ConnectionManager
+  // (it is the shared manager the overlays use), so it must wire onThinkingChange and
+  // pass `thinking` down -- the overlays skip their own manager when a shared one
+  // exists, so wiring it only in the overlays (as first done) made it a no-op here
+  // (fresh-eyes finding).
+  const [thinking, setThinking] = useState<boolean>(false);
   const [sharedStream, setSharedStream] = useState<MediaStream | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamReady, setStreamReady] = useState(false);
@@ -203,7 +209,8 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         'English',
         sharedStream || undefined,
         handleNextField,
-        getToken
+        getToken,
+        (isThinking: boolean) => setThinking(isThinking) // bd polyglot-pdf-wpw.5
       );
       connectionManagerRef.current = manager;
       setConnectionManager(manager);
@@ -600,6 +607,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             sharedStream={sharedStream}
             streamError={streamError}
             status={status}
+            thinking={thinking}
             initialLanguage={initialLanguage}
           />
         ) : (
@@ -607,6 +615,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             schema={state.schema}
             connectionManager={connectionManager}
             status={status}
+            thinking={thinking}
             sharedStream={sharedStream}
             streamError={streamError}
             initialLanguage={initialLanguage}
