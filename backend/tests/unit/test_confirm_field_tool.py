@@ -511,3 +511,20 @@ class TestConfirmFieldCoercion:
         await callback_handler._handle_confirm_field_tool(
             {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
         assert cleared["n"] == 1, "confirm success must clear the current-field pointer"
+
+    @pytest.mark.asyncio
+    async def test_confirm_next_field_block_uses_injected_dti_not_global(self, callback_handler, mock_coordinator):
+        # Opus fallback PR #264: the next-field re-merge must read the SAME injected
+        # USE_DTI as the pointer-clear, not the global singleton. With injected DTI on
+        # (global irrelevant here), a delivered next-field schema must be consumed +
+        # merged (so the pointer is re-set), proving the block ran under the injected gate.
+        self._wire(callback_handler, current_field_id="p1_line1_aliennumber", use_dti=True)
+        merged = []
+        callback_handler._merge_field_schema = lambda s: merged.append(s)
+        callback_handler._clear_current_field = lambda: None
+        next_schema = {"id": "p1_line2_acctidentifier", "name": "acct", "type": "text"}
+        mock_coordinator.consume_pending_next_field_schema = lambda: next_schema
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
+        # The next-field schema was consumed + merged -> the block ran under injected DTI.
+        assert merged == [next_schema], "next-field re-merge must run under the injected USE_DTI gate"

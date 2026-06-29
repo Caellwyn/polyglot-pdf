@@ -678,6 +678,13 @@ class CallbackHandler:
                 field_id=field_id,
                 session_id=self._session_id,
             )
+            # Clear the current-field coercion pointer here too (Opus fallback, PR #264):
+            # the field is confirmed and the section is ending, so the old pointer must
+            # not linger. start_session resets it on the section switch, but clearing now
+            # closes the brief window before that where an update could coerce onto the
+            # old section's last field. Symmetric with the else-branch clear below.
+            if self._clear_current_field:
+                self._clear_current_field()
             next_hint = None
             next_field_schema = None
             next_field_guidance = None
@@ -734,8 +741,16 @@ class CallbackHandler:
             if self._clear_current_field:
                 self._clear_current_field()
 
+            # Read the SERVICE's injected USE_DTI (via _get_use_dti), the SAME source as
+            # the coercion gate + pointer-clear above -- NOT the global get_settings()
+            # singleton. Otherwise, in a non-global Settings(USE_DTI=True) harness, the
+            # clear (ungated) would fire but this re-merge (global False) would skip, so
+            # the pointer strands at None and the next update's coercion no-ops --
+            # reintroducing the unknown_fields bug the coercion fixes (Opus fallback,
+            # PR #264). The clear and the re-set MUST read the same settings source.
             next_field_guidance = None
-            if get_settings().USE_DTI and next_hint and self._request_coordinator:
+            use_dti_next = self._get_use_dti() if self._get_use_dti else False
+            if use_dti_next and next_hint and self._request_coordinator:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
                 if client_next_schema:
                     fill_language = self._get_fill_language() if self._get_fill_language else None
