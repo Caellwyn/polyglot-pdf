@@ -1077,4 +1077,58 @@ describe('SchemaFormStateManager', () => {
       expect(loaded!.jitModeEnabled).toBe(true)
     })
   })
+
+  // ============================================================================
+  // B5 (bd polyglot-pdf-jnjj.17): the `steered` marker (Codex PR #275 fixes)
+  // ============================================================================
+  describe('markFieldsSteered + steered preservation', () => {
+    it('marks a field steered and persists it', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
+      // Persisted to sessionStorage -> survives a reload.
+      const loaded = SchemaFormStateManager.load()!
+      expect((loaded.fieldValues['field-1'] as FieldValue).steered).toBe(true)
+    })
+
+    it('marks via the [] alias when the value is stored under the bracketed key', () => {
+      // The verdict echoes the schema id (field-1), but the value lives under
+      // field-1[] -- markFieldsSteered must follow the same []-fallback as reads, or
+      // the marker lands nowhere and the field re-steers forever.
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
+    })
+
+    it('PRESERVES the steered marker across a manual edit (raw value)', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      // User edits the field -> updateField replaces the FieldValue; steered must survive.
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
+      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
+    })
+
+    it('PRESERVES the steered marker when a FieldValue object replaces the value', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      state = SchemaFormStateManager.updateField(state, 'field-1', { value: 'v2', confirmed: true } as any)
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
+    })
+
+    it('skips a field with no entry (no spurious empty entry)', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+      const after = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      expect(after.fieldValues['field-1']).toBeUndefined()
+    })
+  })
 })

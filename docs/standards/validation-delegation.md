@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-06-29. The B-pillar validator SERVICE is now IMPLEMENTED (jnjj.15, "B3"): `backend/services/validator_service.py::ValidatorService` + `render_validator_payload` render the contract-2 payload, call `ITextAI.validate()`, and return the contract-1 verdict, fail-OPEN. The A-pillar secretary `ask()` was implemented in jnjj.45a/b/c (cached catalog prefix + append-only values/query tail) and hardened in j268 (lite-only fallback chain, ERROR-level logging). See [../journal/entries/2026-06-29-bd-jnjj.15-validator-service.md](../journal/entries/2026-06-29-bd-jnjj.15-validator-service.md) for B3 closeout details.*
+*Last updated: 2026-06-29. Pillar B is now FULLY WIRED. B3 (jnjj.15): `ValidatorService` renders the contract-2 payload, calls `ITextAI.validate()`, returns the contract-1 verdict, fail-OPEN. B4 (jnjj.16): the client emits the proactive `section_complete` / `form_complete` events (contract 4) and the backend receives them. B5 (jnjj.17): `FormFillingService.handle_validation_boundary` runs the validator at each boundary, pushes the `validation_result` envelope to the client for EVERY boundary (contract 1), and on a SURVIVING conflict injects the steering directive into the Live session (contract 3 -- names both fields + the override escape hatch); the frontend gates the section switch on the verdict (contract 4 ordering: clean -> resume, conflict -> hold in-section, fail-OPEN timeout -> advance unchecked) and owns the per-field `steered` marker (contract 2/3 max-resteer bound). See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for B5 closeout details. The A-pillar secretary `ask()` was implemented in jnjj.45a/b/c and hardened in j268.*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -252,8 +252,13 @@ Two invariants this shape MUST preserve:
    and the override semantics stand; never re-pester about a field the user
    already adjudicated.) See contract 2 for the flag's home.
 
-The steering mechanism is owned by **bead B5 (polyglot-pdf-jnjj.17)**; this doc
-freezes its payload + the two invariants it must honor.
+The steering mechanism is **IMPLEMENTED** in bead B5 (polyglot-pdf-jnjj.17):
+`FormFillingService._compose_validator_steer` builds the directive (names the
+fields + the override escape hatch) and `_inject_validator_steer` sends it via
+`LiveAIGemini.send_client_content` into a live session;
+`_suppress_already_steered` enforces the per-field max-resteer bound on the
+incoming payload's `steered` flags. This doc freezes its payload + the two
+invariants it honors.
 
 ---
 

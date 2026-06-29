@@ -23,6 +23,7 @@ from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
 from .manifest_service import get_next_field_schema, should_include_schema_in_response
+from .validator_service import ValidatorService
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
@@ -1390,6 +1391,160 @@ class FormFillingService:
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_async_deliver_failed",
                          exc_type=type(exc).__name__, session_id=self._session_id)
+
+    async def handle_validation_boundary(self, fields: list) -> dict:
+        """B5 (bd polyglot-pdf-jnjj.17): run the cheap-model contradiction validator
+        at a section/form boundary (the B4 events carry the contract-2 `fields`
+        payload), and -- on a SURVIVING conflict -- inject a steering directive into
+        the Live session so the voice model sends the user back to verify.
+
+        Returns the SURVIVING contract-1 verdict ({"conflicts": [...]}, POST-
+        suppression). The caller pushes it to the client as the `validation_result`
+        envelope; the client gates the section switch on it (a conflict holds the
+        section, an empty list resumes) and sets per-field `steered` markers from the
+        conflicts it receives (the marker is client-owned -- the backend is stateless,
+        contract 2). A SUPPRESSED conflict is omitted (returned as clean): no steer
+        fires for it AND the switch must proceed -- its fields are already steered
+        client-side, so nothing is lost, and returning it would trap a user who used
+        the override escape hatch (the inline note at the return below has the full
+        rationale).
+
+        Max-resteer bound (contract 3, invariant 2): a conflict referencing an
+        already-`steered: true` field (PER-FIELD: any of its field_ids steered) is
+        dropped from the STEER -- the user already adjudicated that field once. The
+        marker rides IN the payload from the client, so the stateless backend reads
+        it rather than remembering.
+
+        Fail-OPEN (contract 6): ValidatorService.validate is fail-open; a dead Live
+        session drops the steer. Never blocks the boundary. PII: logs counts only --
+        never values / reasons (the reason rides the in-band steer, which is NOT a
+        log sink).
+        """
+        if self._text_ai is None:
+            # No validator wired (unit/form-only paths) -- all-clear, no steer.
+            return {"conflicts": []}
+
+        safe_fields = fields if isinstance(fields, list) else []
+        try:
+            # Backend-side fail-OPEN timeout (Codex PR #275): the await below runs
+            # INLINE in the WS receive loop, so a validator that hangs would block the
+            # loop and prevent the client's own fail-OPEN manual_section_switch from
+            # being processed -- the FE timer alone cannot rescue the user. Bound the
+            # call here so a hang returns clean (no conflict, no steer) and the loop is
+            # freed well within the client's gate window.
+            verdict = await asyncio.wait_for(
+                ValidatorService(self._text_ai).validate(safe_fields),
+                timeout=self._settings.VALIDATOR_TIMEOUT_SEC,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001 -- fail-OPEN
+            _log.warning("validator_boundary_fail_open",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return {"conflicts": []}
+        conflicts = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+
+        surviving = self._suppress_already_steered(conflicts, safe_fields)
+        # Only return conflicts whose STEER ACTUALLY REACHED the Live session. If the
+        # steer is dropped (dead session) or fails to deliver, returning the conflict
+        # would make the client hold the section with NO voiced guidance -- the same
+        # trap as a suppressed conflict (Codex PR #275). A steered conflict holds the
+        # section (the model will voice it); an un-delivered one reads as clean so the
+        # switch proceeds unchecked (fail-OPEN). Suppressed conflicts (already
+        # adjudicated) are never in `surviving`, so they too read as clean.
+        delivered = await self._inject_validator_steer(surviving, safe_fields) if surviving else []
+        return {"conflicts": delivered}
+
+    @staticmethod
+    def _suppress_already_steered(conflicts: list, fields: list) -> list:
+        """Drop any conflict that (a) references an already-steered field (contract 3,
+        invariant 2 -- PER-FIELD suppression) OR (b) references a field NOT present in
+        this boundary's payload (a hallucinated / misspelled id the client cannot mark
+        steered, which would trap the user with no suppressible marker -- Codex PR
+        #275). The `steered` flag rides in each contract-2 field entry; the client owns
+        + persists it."""
+        known_ids = {
+            f.get("field_id")
+            for f in fields
+            if isinstance(f, dict) and f.get("field_id")
+        }
+        steered_ids = {
+            f.get("field_id")
+            for f in fields
+            if isinstance(f, dict) and f.get("steered")
+        }
+        surviving = []
+        for c in conflicts:
+            ids = c.get("field_ids", []) if isinstance(c, dict) else []
+            if not ids:
+                continue  # malformed -> fail-open (drop)
+            if any(fid not in known_ids for fid in ids):
+                continue  # references a field not in this payload -> unsuppressible
+            if any(fid in steered_ids for fid in ids):
+                continue  # at least one field already adjudicated -> suppress
+            surviving.append(c)
+        return surviving
+
+    async def _inject_validator_steer(self, conflicts: list, fields: list) -> list:
+        """Compose + inject the steering directive for the surviving conflicts into
+        the Live session as a text turn (contract 3). Only into a LIVE session --
+        mirrors the secretary async-deliver guard. Returns the conflicts whose steer
+        ACTUALLY DELIVERED (so the caller holds the section only when the model was
+        told to voice the correction -- Codex PR #275); returns [] if the session is
+        dead or the send failed. The reason MAY quote values; it is an in-band model
+        instruction, never logged (contract 6)."""
+        if self._live_ai is None or not self._live_ai.is_session_active():
+            _log.info("validator_steer_dropped_session_inactive",
+                      session_id=self._session_id)
+            return []
+
+        message = self._compose_validator_steer(conflicts, fields)
+        try:
+            # send_client_content returns True only if the turn actually reached the
+            # live session (False if queued / no session / send raised). The adapter
+            # SWALLOWS its own send exceptions (Opus PR #275), so the bool -- not a
+            # raise -- is the real delivery signal. A steer that did not actually reach
+            # the model must NOT hold the section (the user would be stuck with nothing
+            # voiced), so treat not-delivered as no surviving conflict.
+            delivered = await self._live_ai.send_client_content(message)
+            if delivered:
+                _log.info("validator_steer_delivered",
+                          conflict_count=len(conflicts), session_id=self._session_id)
+                return conflicts
+            _log.info("validator_steer_not_delivered_fail_open",
+                      conflict_count=len(conflicts), session_id=self._session_id)
+            return []
+        except Exception as exc:  # noqa: BLE001 -- a steer failure must never block
+            _log.warning("validator_steer_deliver_failed",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return []
+
+    @staticmethod
+    def _compose_validator_steer(conflicts: list, fields: list) -> str:
+        """Build the in-band steering instruction (contract 3). NAMES the fields
+        (criterion 1) and carries the user-override escape hatch verbatim from the
+        legacy in-SI ADDRESS CONSISTENCY prose (criterion 2) so B is never stricter
+        than the prose it supplements -- a possible conflict, not a block."""
+        name_by_id = {
+            f.get("field_id"): f.get("name")
+            for f in fields
+            if isinstance(f, dict)
+        }
+        lines = [
+            "VALIDATOR FINDING (second-pass check): a possible conflict was found "
+            "between fields the user already gave. This is NOT a block -- it is a "
+            "prompt to double-check.",
+        ]
+        for c in conflicts:
+            ids = c.get("field_ids", []) if isinstance(c, dict) else []
+            names = [str(name_by_id.get(i) or i) for i in ids]
+            reason = str(c.get("reason", "")) if isinstance(c, dict) else ""
+            named = " and ".join(names) if names else "the fields involved"
+            lines.append(f"- Fields: {named}. {reason}")
+        lines.append(
+            "Name the field(s) involved and ask the user to verify which is correct. "
+            "Accept the user's answer if they confirm both are intentional -- do not "
+            "insist or re-ask once they confirm."
+        )
+        return "\n".join(lines)
 
     def handle_form_state_response(self, request_id: str, field_values: Dict[str, Any]) -> None:
         """

@@ -211,15 +211,23 @@ export class SchemaFormStateManager {
     // already-canonical values (e.g. AI fills, which the backend pre-normalizes).
     const field = state.schema.fields.find((f) => f.id === fieldId);
 
+    // Carry forward the B5 `steered` marker (bd polyglot-pdf-jnjj.17, Codex PR #275):
+    // the normal edit/fill path REPLACES the FieldValue object, which would silently
+    // drop `steered` -- so a user editing (or the model rewriting) an
+    // already-adjudicated field would emit steered:false on the next validator
+    // payload and the backend could re-steer it, breaking the max-resteer invariant.
+    // Preserve it unless the incoming FieldValue explicitly sets its own.
+    const priorSteered = state.fieldValues[fieldId]?.steered;
+
     // If value is already a FieldValue, use it directly (normalize its .value)
     // Otherwise, wrap it
     let fieldValue: FieldValue;
     if (value && typeof value === 'object' && 'value' in value) {
       // Already a FieldValue object
       const fv = value as FieldValue;
-      fieldValue = field
-        ? { ...fv, value: normalizeFieldValue(field, fv.value) }
-        : fv;
+      const merged = field ? { ...fv, value: normalizeFieldValue(field, fv.value) } : { ...fv };
+      if (merged.steered === undefined && priorSteered !== undefined) merged.steered = priorSteered;
+      fieldValue = merged;
     } else {
       // Wrap raw value in FieldValue
       fieldValue = {
@@ -227,7 +235,8 @@ export class SchemaFormStateManager {
         confirmed: options?.confirmed,
         confirmedAt: options?.confirmed ? new Date().toISOString() : undefined,
         confirmationMethod: options?.confirmationMethod,
-        lastModified: Date.now()
+        lastModified: Date.now(),
+        ...(priorSteered !== undefined ? { steered: priorSteered } : {}),
       };
     }
 
@@ -861,6 +870,42 @@ export class SchemaFormStateManager {
       lastUpdated: Date.now()
     };
 
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * B5 (bd polyglot-pdf-jnjj.17): mark fields as already-steered by the cheap-model
+   * validator. Sets `steered: true` on each field's FieldValue and persists to
+   * sessionStorage so the marker survives the section switch / reconnect and rides
+   * the NEXT contract-2 payload -- the client-owned half of the max-resteer bound
+   * (the stateless backend cannot remember it; validation-delegation.md contracts
+   * 2 + 3). A field with no FieldValue entry is skipped (nothing to mark).
+   */
+  static markFieldsSteered(
+    state: SchemaFormState,
+    fieldIds: string[]
+  ): SchemaFormState {
+    if (!fieldIds || fieldIds.length === 0) return state;
+    const fieldValues = { ...state.fieldValues };
+    let changed = false;
+    for (const fieldId of fieldIds) {
+      // The verdict echoes the schema field.id, but the value may be stored under the
+      // `[]` alias (Gemini drops/adds the bracket) -- mirror the same fallback
+      // buildValidatorFields uses for reads, or the marker lands on a non-existent
+      // key and the next payload still sends steered:false -> infinite re-steer
+      // (Codex PR #275).
+      let key = fieldId;
+      if (!fieldValues[key] && !key.endsWith('[]') && fieldValues[key + '[]']) key = key + '[]';
+      if (!fieldValues[key] && key.endsWith('[]') && fieldValues[key.slice(0, -2)]) key = key.slice(0, -2);
+      const fv = fieldValues[key];
+      if (!fv) continue; // no entry to mark under either variant
+      if (fv.steered === true) continue; // already marked
+      fieldValues[key] = { ...fv, steered: true };
+      changed = true;
+    }
+    if (!changed) return state;
+    const newState = { ...state, fieldValues, lastUpdated: Date.now() };
     this.save(newState);
     return newState;
   }

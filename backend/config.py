@@ -130,6 +130,12 @@ class Settings(BaseModel):
 	WS_CHUNK_MS: int = 20
 	WS_PING_INTERVAL_SEC: int = 15
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
+	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN bound for the boundary
+	# validator. The validate() call runs INLINE in the WS receive loop, so a hang
+	# would block the loop and starve the client's own fail-OPEN. Kept comfortably
+	# UNDER the frontend's VALIDATOR_GATE_TIMEOUT_MS (6s) so the backend frees the loop
+	# and returns clean before the client's gate gives up.
+	VALIDATOR_TIMEOUT_SEC: float = 4.0
 	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
