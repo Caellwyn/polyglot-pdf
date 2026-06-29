@@ -441,3 +441,113 @@ class TestStartSessionThreadsFormIds:
 
         assert service._callback_handler._form_id == "I-90"
         assert service._callback_handler._form_session_id == "fallback-session"
+
+
+class TestConfirmFieldCoercion:
+    """bd polyglot-pdf-h1bn: confirm_field coerces onto the current field when the
+    model confirms a hallucinated/drifted/empty id, so it follows the coerced
+    update_form_fields onto the same field (else the FE looks up the wrong id and
+    the field is stranded). Gated on the SERVICE's injected USE_DTI (via _get_use_dti),
+    NOT the global singleton (Codex PR #264) -- so tests just wire the getters,
+    fully isolated, no module patching."""
+
+    @staticmethod
+    def _wire(handler, *, current_field_id, use_dti=True):
+        handler._get_use_dti = lambda: use_dti
+        handler._get_current_field_id = lambda: current_field_id
+
+    @pytest.mark.asyncio
+    async def test_confirm_coerced_to_current_field(self, callback_handler, mock_coordinator):
+        self._wire(callback_handler, current_field_id="p1_line2_acctidentifier")
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line2_uscis_account", "confirmation_method": "verbal"})
+        # The FE was asked to confirm the CURRENT field, not the hallucinated id.
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line2_acctidentifier"
+
+    @pytest.mark.asyncio
+    async def test_confirm_coercion_does_not_log_raw_id(self, callback_handler, mock_coordinator, monkeypatch):
+        # P0 no-PII (Codex PR #264, Opus fallback): the CONFIRM coercion log must NOT
+        # emit the raw model field_id (it can carry the user's answer) -- only the
+        # schema-validated current field id. Symmetric with the update-side scrub.
+        import backend.services.callback_handler as cbh
+        calls = []
+
+        class _FakeLog:
+            def info(self, event, **kw): calls.append((event, kw))
+            def warning(self, *a, **k): pass
+            def __getattr__(self, _n): return lambda *a, **k: None
+        monkeypatch.setattr(cbh, "_log", _FakeLog())
+        self._wire(callback_handler, current_field_id="p1_line2_acctidentifier")
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "my ssn is 123-45-6789", "confirmation_method": "verbal"})
+        coerce_logs = [(e, kw) for (e, kw) in calls if e == "dti_confirm_coerced_to_current_field"]
+        assert coerce_logs, "confirm coercion should have logged"
+        blob = repr(coerce_logs)
+        assert "sent_field_id" not in blob
+        assert "123-45-6789" not in blob  # raw id (potential PII) never logged
+        assert "p1_line2_acctidentifier" in blob
+
+    @pytest.mark.asyncio
+    async def test_confirm_coerced_for_empty_id(self, callback_handler, mock_coordinator):
+        # Codex PR #264: an EMPTY confirm id (the tool schema allows '') must also
+        # coerce -- symmetric with the update path, which coerces '' too. Otherwise the
+        # FE gets confirm_field('') and the just-filled current field is stranded.
+        self._wire(callback_handler, current_field_id="p1_line2_acctidentifier")
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line2_acctidentifier"
+
+    @pytest.mark.asyncio
+    async def test_confirm_matching_id_not_coerced(self, callback_handler, mock_coordinator):
+        self._wire(callback_handler, current_field_id="p1_line1_aliennumber")
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line1_aliennumber"
+
+    @pytest.mark.asyncio
+    async def test_confirm_no_coercion_without_current_field(self, callback_handler, mock_coordinator):
+        # current field unknown -> use the model's id as-is.
+        self._wire(callback_handler, current_field_id=None)
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "whatever", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "whatever"
+
+    @pytest.mark.asyncio
+    async def test_confirm_no_coercion_when_dti_off(self, callback_handler, mock_coordinator):
+        # USE_DTI off (the SERVICE's injected value) -> model id authoritative, no coercion.
+        self._wire(callback_handler, current_field_id="p1_line2_acctidentifier", use_dti=False)
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line2_uscis_account", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line2_uscis_account"
+
+    @pytest.mark.asyncio
+    async def test_confirm_success_clears_current_field_pointer(self, callback_handler, mock_coordinator):
+        # Codex PR #264: on a successful confirm the current field is DONE; the pointer
+        # must be invalidated so a later update can't be coerced onto the just-confirmed
+        # field if next-field delivery times out. The handler calls _clear_current_field.
+        cleared = {"n": 0}
+        callback_handler._clear_current_field = lambda: cleared.__setitem__("n", cleared["n"] + 1)
+        self._wire(callback_handler, current_field_id="p1_line1_aliennumber")
+        # next-field hint times out (default mock returns a hint; force timeout)
+        from backend.services.request_coordinator import HINT_REQUEST_TIMEOUT
+        mock_coordinator.request_next_field_hint = AsyncMock(return_value=HINT_REQUEST_TIMEOUT)
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
+        assert cleared["n"] == 1, "confirm success must clear the current-field pointer"
+
+    @pytest.mark.asyncio
+    async def test_confirm_next_field_block_uses_injected_dti_not_global(self, callback_handler, mock_coordinator):
+        # Opus fallback PR #264: the next-field re-merge must read the SAME injected
+        # USE_DTI as the pointer-clear, not the global singleton. With injected DTI on
+        # (global irrelevant here), a delivered next-field schema must be consumed +
+        # merged (so the pointer is re-set), proving the block ran under the injected gate.
+        self._wire(callback_handler, current_field_id="p1_line1_aliennumber", use_dti=True)
+        merged = []
+        callback_handler._merge_field_schema = lambda s: merged.append(s)
+        callback_handler._clear_current_field = lambda: None
+        next_schema = {"id": "p1_line2_acctidentifier", "name": "acct", "type": "text"}
+        mock_coordinator.consume_pending_next_field_schema = lambda: next_schema
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line1_aliennumber", "confirmation_method": "verbal"})
+        # The next-field schema was consumed + merged -> the block ran under injected DTI.
+        assert merged == [next_schema], "next-field re-merge must run under the injected USE_DTI gate"

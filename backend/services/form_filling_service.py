@@ -75,6 +75,15 @@ class FormFillingService:
         # branch's "fields[0] is the current field" assumption is never disturbed by
         # accumulated fields (Codex PR #229). Schema only, no values.
         self._dti_extra_fields: Dict[str, Dict[str, Any]] = {}
+        # DTI current-field routing pointer (bd polyglot-pdf-h1bn): the id of the
+        # field the model is currently on -- set from the field-1 hint at session/
+        # section start and from each delivered next-field schema on confirm. Used to
+        # COERCE update_form_fields onto the current field when the model sends a
+        # hallucinated / drifted id (the value is right, only the target id is wrong;
+        # cross-field intent goes to the secretary, never update_form_fields). A
+        # single transient id, overwritten each turn, no user values -- per-turn
+        # routing metadata, not persisted field state (stateless invariant holds).
+        self._current_field_id: Optional[str] = None
         # Store callbacks for reuse during section switching
         self._on_form_update = None
         self._on_transcript = None
@@ -211,6 +220,12 @@ class FormFillingService:
         # the validator wrongly accept a stale cross-section field id (fresh-eyes
         # substitute review, Codex PR #229). Parallels the _loaded_field_ids reseed.
         self._dti_extra_fields = {}
+        # Clear the current-field coercion pointer too (bd polyglot-pdf-h1bn): the new
+        # section's field 1 sets it when send_initiating_message fires after this
+        # restart, but clear it now so it can never point at the PREVIOUS section's
+        # field in the (practically-unreachable, pre-greeting) window before that
+        # (fresh-eyes Finding 3 -- defensive, matches the _dti_extra_fields reset).
+        self._current_field_id = None
 
         if accept_connection:
             await self._websocket.accept()
@@ -244,6 +259,17 @@ class FormFillingService:
             # Live getter so fields 2..N's guidance carries the CURRENT fill language
             # even after a mid-session change_fill_language (bd polyglot-pdf-uogm).
             get_fill_language=lambda: self._fill_language,
+            # Live getter so confirm_field can coerce onto the current field when the
+            # model confirms a hallucinated/drifted id (bd polyglot-pdf-h1bn).
+            get_current_field_id=lambda: self._current_field_id,
+            # Gate confirm coercion on the SERVICE's injected USE_DTI (not the global
+            # singleton) so it is symmetric with the update-side coercion even when the
+            # service is built with a non-global Settings (Codex PR #264).
+            get_use_dti=lambda: getattr(self._settings, "USE_DTI", False),
+            # Invalidate the current-field pointer on a successful confirm so a later
+            # update can't be coerced onto the just-confirmed field if next-field
+            # delivery times out (Codex PR #264).
+            clear_current_field=self._clear_current_field_id,
         )
 
         # Use web form tool declarations (stateless)
@@ -328,6 +354,14 @@ class FormFillingService:
 
     async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
+        # A manual edit is auto-confirmed by the frontend, so the field the DTI
+        # current-field pointer names is now DONE. Invalidate the pointer (Codex PR
+        # #264 P0): otherwise the next spoken answer -- which is for the field
+        # next_field_hint points at, NOT this manually-edited one -- would be coerced
+        # by update_form_fields onto the just-edited+confirmed field, overwriting it.
+        # The pointer is re-set when the next field's schema is delivered
+        # (merge_field_schema) / a fresh initiating message fires.
+        self._current_field_id = None
         if self._audio_handler:
             # AudioHandler appends next_field_hint to the spoken message, so strip
             # the "(field_id: ...)" parenthetical here too (bd polyglot-pdf-dx7).
@@ -437,6 +471,12 @@ class FormFillingService:
         if getattr(self._settings, "USE_DTI", False):
             field = self._resolve_hint_field_schema(next_field_hint)
             if field:
+                # Track the current field for update_form_fields coercion (bd
+                # polyglot-pdf-h1bn): this opener fires at session/section start
+                # (field 1) and on a spoken-language change (field N); in every case
+                # `field` is the field the model is about to fill.
+                if field.get("id"):
+                    self._current_field_id = field["id"]
                 # fill_language rides the field render (bd polyglot-pdf-uogm) so the
                 # model writes VALUES in the configured language; the static SI no
                 # longer carries it.
@@ -666,6 +706,29 @@ class FormFillingService:
         _log.info("gemini_session_restarted",
                  session_id=self._session_id,
                  session_active_after=is_active_after)
+
+        # DTI: the rebuilt SI is fully static (epic polyglot-pdf-13w7), so unlike the
+        # legacy/JIT SI it carries NO field data -- after a restart (e.g. Level-3
+        # farewell reconnect) the model would have no current-field guidance and no
+        # form/section metadata until the next confirm. Fire the initiating message
+        # so the current field's guidance + the metadata block reach Gemini, exactly
+        # as the section-switch and session-start paths do (bd polyglot-pdf-h1bn,
+        # closing the gap the fu1h audit flagged). send_initiating_message resolves the
+        # field from the hint's id; with no hint it falls back gracefully (renders no
+        # guidance block rather than a wrong field). It uses whichever template
+        # _is_resume_session selects -- which is the GREETING template on a
+        # first-connect Level-3 restart (the resume flag was set at the original fresh
+        # connect), so the user hears a re-greeting; refining that to the resume
+        # template is bd polyglot-pdf-bhem. Non-DTI restarts are unaffected (block empty).
+        if getattr(self._settings, "USE_DTI", False):
+            try:
+                await self.send_initiating_message(
+                    self._spoken_language,
+                    next_field_hint or "the first unfilled field",
+                )
+            except Exception as exc:
+                _log.error("restart_gemini_session_initiating_message_failed",
+                          session_id=self._session_id, error=str(exc))
 
     async def change_fill_language(self, new_language: str):
         """
@@ -924,12 +987,31 @@ class FormFillingService:
                       error=str(exc))
 
     def handle_update_fields_tool_call(
-        self, session_id: str, updates: Dict[str, Any]
+        self, session_id: str, updates: Dict[str, Any], multi_field_call: bool = False
     ) -> Optional[Dict[str, Any]]:
         """Apply updates from the AI for web sessions (validation only, no persistence).
 
         Delegates to ValidationHandler for field matching and validation.
+
+        multi_field_call: True when the CALLER (CallbackHandler) collapsed a
+        multi-field tool call to its first key before this call -- coercion is then
+        SKIPPED (the collapsed first value may belong to a different field; let it be
+        rejected, don't re-point it onto the current field). Codex PR #264 P0.
         """
+        # DTI current-field coercion (bd polyglot-pdf-h1bn): a DTI turn is scoped to
+        # ONE field -- the model is answering the guidance for self._current_field_id,
+        # and cross-field intent goes to the secretary, never update_form_fields. So
+        # when the model targets a DIFFERENT id than the current field -- a
+        # hallucinated id (e.g. 'p1_line2_uscis_account' for 'p1_line2_acctidentifier',
+        # the residual jnjj.46 model-disobedience) OR a valid-but-wrong id (the 8vy3
+        # ordering drift) -- the VALUE is right but the TARGET is wrong. Deterministically
+        # re-point the value at the known current field so the field still fills,
+        # rather than rejecting it as unknown / filling the wrong field. The model's
+        # field_id is advisory, not authoritative. Gated on DTI + a known current
+        # field + a single-field (non-collapsed) update; non-DTI / multi-field /
+        # matching-id paths are untouched.
+        updates = self._coerce_dti_update_to_current_field(updates, multi_field_call=multi_field_call)
+
         # Build field list on-demand from schema for validation
         # Values are not persisted - this is just for acknowledgment
         fields = self._build_fields_from_schema()
@@ -937,6 +1019,36 @@ class FormFillingService:
         # Use ValidationHandler to match and validate fields
         validator = ValidationHandler(session_id=session_id)
         return validator.validate_field_updates(fields, updates)
+
+    def _coerce_dti_update_to_current_field(
+        self, updates: Dict[str, Any], multi_field_call: bool = False
+    ) -> Dict[str, Any]:
+        """Re-point a single DTI update onto the current field when the model's id
+        does not match it (bd polyglot-pdf-h1bn). Returns updates unchanged outside
+        the gated case. See handle_update_fields_tool_call for the rationale."""
+        if not getattr(self._settings, "USE_DTI", False):
+            return updates
+        current = self._current_field_id
+        if not current:
+            return updates
+        # One-field-per-turn invariant. The caller (CallbackHandler) COLLAPSES a
+        # multi-field tool call to its first key BEFORE we see it, so len(updates) is
+        # always 1 here -- we cannot detect "the model sent several fields" ourselves
+        # (Codex PR #264 P0). The caller passes multi_field_call=True in that case; do
+        # NOT coerce then, or the collapsed first value (which may belong to a
+        # different field) would be silently re-pointed onto the current field,
+        # corrupting it. Leave it to be rejected as the caller intended.
+        if multi_field_call or len(updates) != 1:
+            return updates
+        sent_id, value = next(iter(updates.items()))
+        if sent_id == current:
+            return updates  # normal path -- model named the right field
+        # Log ONLY the schema-validated target id (current); NEVER sent_id -- it is raw
+        # model input and can carry the user's answer if the model swaps args (Codex
+        # PR #264 P0, no-PII policy). "coerced=True" + the real id is enough signal.
+        _log.info("dti_update_coerced_to_current_field",
+                  session_id=self._session_id, current_field_id=current)
+        return {current: value}
 
     def update_form_state(self, field_updates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -1150,6 +1262,17 @@ class FormFillingService:
         self._request_coordinator.handle_confirm_field_response(
             request_id, recorded, reason, section_complete)
 
+    def _clear_current_field_id(self) -> None:
+        """Invalidate the current-field coercion pointer (bd polyglot-pdf-h1bn).
+
+        Called on a successful confirm: the field just confirmed is DONE, so the
+        pointer must not keep naming it -- otherwise, if the next-field hint/schema
+        delivery times out, a later update_form_fields would be deterministically
+        coerced onto the just-confirmed field, overwriting it (Codex PR #264).
+        merge_field_schema re-sets the pointer when the next field's schema arrives.
+        """
+        self._current_field_id = None
+
     def merge_field_schema(self, field_schema: Dict[str, Any]) -> None:
         """Record a CLIENT-SUPPLIED field schema for VALIDATION (DTI, bd
         polyglot-pdf-jnjj.22; Codex PR #229).
@@ -1176,6 +1299,13 @@ class FormFillingService:
             self._dti_extra_fields[fid] = field_schema
             _log.debug("dti_recorded_field_for_validation", field_id=fid,
                        total_extra=len(self._dti_extra_fields))
+        # Track the CURRENT field (bd polyglot-pdf-h1bn): each next-field schema the
+        # client delivers (on confirm of the prior field) IS the field the model is
+        # about to fill, so record its id as the current-field routing pointer for
+        # update_form_fields coercion. Transient per-turn metadata (a single id,
+        # overwritten each turn, no user values, re-established by the client on
+        # reconnect) -- NOT persisted field state, so the stateless invariant holds.
+        self._current_field_id = fid
 
     def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
         """

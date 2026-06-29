@@ -95,7 +95,10 @@ async def test_update_form_fields_dict_options_invalid_does_not_raise_typeerror(
          "options": DICT_OPTIONS},
     ]
 
-    def handle_update_fields(session_id, updates):
+    def handle_update_fields(session_id, updates, multi_field_call=False):
+        # multi_field_call accepted (bd polyglot-pdf-h1bn / Codex PR #264): the
+        # callback now passes it so the service can skip DTI coercion on a collapsed
+        # multi-field call. This stub ignores it (not under test here).
         return validate_updates(schema_fields, updates)
 
     handler.set_tool_handlers(
