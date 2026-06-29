@@ -112,3 +112,31 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
     expect(screen.getByText(/span multiple sections/i)).toBeInTheDocument();
   });
 });
+
+describe('App form-metadata reachability (bd polyglot-pdf-s4dp.2, Codex PR #263)', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('shows the metadata panel by default (no field selected), then again via "Form metadata" after a field is picked', async () => {
+    await openForm();
+    // No field selected -> metadata panel is shown.
+    expect(screen.getByText('Form metadata')).toBeInTheDocument(); // panel heading
+
+    // Select a field (click its row in the FieldList) -> Field Properties shows.
+    // The row renders the id as text inside the selectable button.
+    const idCell = screen.getAllByText('reason_a').find(el => el.closest('button'));
+    fireEvent.click(idCell!.closest('button')!);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Field Properties' })).toBeInTheDocument()
+    );
+
+    // The "Form metadata" deselect button is the way back; click it.
+    fireEvent.click(screen.getByRole('button', { name: 'Form metadata' }));
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Form Metadata' })).toBeInTheDocument()
+    );
+    // The editable version input is reachable again.
+    expect(screen.getByLabelText('Version / Revision')).toBeInTheDocument();
+  });
+});

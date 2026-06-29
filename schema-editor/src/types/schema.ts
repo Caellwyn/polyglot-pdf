@@ -19,6 +19,15 @@ export interface FormMetadata {
   language: string;
   extraction_date?: string;
   extraction_method?: string;
+  // Version metadata recovered at extraction (bd polyglot-pdf-s4dp.2). Mirrors the
+  // backend FormMetadata fields; kept on the editor type so a load -> edit -> save
+  // round-trip does not strip them.
+  omb_number?: string;
+  expiration_date?: string;
+  agency?: string;
+  // 0-1 confidence in the auto-extracted version (high for a specific Edition/Rev
+  // pattern, low for a generic year/OMB fallback, 0 when version is "unknown").
+  version_confidence?: number;
 }
 
 export interface FormPart {

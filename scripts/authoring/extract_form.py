@@ -29,14 +29,25 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
+
+import fitz  # PyMuPDF -- page-1 text + doc.metadata for version extraction.
 
 # Reuse the bakeoff machinery (the bead: "reuse the validated scripts/bakeoff/").
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
 import acroform_dump  # noqa: E402
 import arm_llm_native  # noqa: E402
+
+# Confidence tiers for the version determination (bd polyglot-pdf-s4dp.2). A
+# specific Edition/Rev pattern is HIGH; a generic bare-year/loose-OMB fallback is
+# LOW; no recoverable version is NONE. Mirrors ExtractionInfo.extraction_confidence
+# (backend/models/form_models.py) -- a single 0-1 float scoped to the version.
+_CONF_HIGH = 0.9
+_CONF_LOW = 0.4
+_CONF_NONE = 0.0
 
 # The B1 bake-off default (set from the recorded I-90 winner). plain=True means
 # the claude-hybrid prompt (raw AcroForm list); plain=False the enriched bundle.
@@ -110,6 +121,121 @@ def _backfill_positions(schema: dict, dump_path: str) -> int:
     return filled
 
 
+# Month names for the IRS "(Rev. December 2024)" form-revision style.
+_MONTHS = (
+    "January February March April May June July August September October "
+    "November December"
+).split()
+_MONTH_RE = "|".join(_MONTHS)
+
+
+def extract_version_metadata(page1_text: str, doc_title: str = "") -> dict:
+    """Deterministically recover a form's version metadata from its page-1 text +
+    PDF title (bd polyglot-pdf-s4dp.2). No LLM. Pure (text in, dict out) so it is
+    trivially unit-testable; `_extract_version_metadata_from_doc` wraps a PyMuPDF
+    doc.
+
+    Real forms carry version info in several shapes -- USCIS "Edition MM/DD/YY",
+    IRS "(Rev. Month Year)", IRS year-only "2025" -- and some carry none. We match
+    in DESCENDING specificity (first hit wins per field) and attach a single
+    `version_confidence` (0-1): HIGH for a specific Edition/Rev pattern, LOW for a
+    generic bare-year/loose-OMB fallback, NONE when nothing is recoverable (the
+    version then degrades to the sentinel "unknown", never "draft"/blank).
+
+    Only keys that were actually found are returned (so a caller can merge without
+    clobbering), EXCEPT `version` + `version_confidence`, which are always present
+    (version may be "unknown"). Absent fields (e.g. a form with no expiration) are
+    simply omitted.
+    """
+    text = page1_text or ""
+    title = doc_title or ""
+    out: dict = {}
+
+    # --- form_number: "Form I-90" / "Form W-7" / "Form 1040" (title-first) ------
+    # Generalizes the old (I-\d+)-only regex to any USCIS/IRS form id.
+    fn = re.search(r"Form\s+([A-Z]{0,3}-?\d{1,4}[A-Z]?)", title) \
+        or re.search(r"Form\s+([A-Z]{0,3}-?\d{1,4}[A-Z]?)", text)
+    if fn:
+        out["form_number"] = fn.group(1).strip()
+
+    # --- edition_date: USCIS "Edition MM/DD/YY" (canonical MM/DD/YY string) ------
+    edition = re.search(r"Edition\s+(\d{2})/(\d{2})/(\d{2,4})", text)
+    edition_str = None
+    if edition:
+        mm, dd, yy = edition.groups()
+        yy = yy[-2:]  # canonical 2-digit year, matching the model's "01/20/25"
+        edition_str = f"{mm}/{dd}/{yy}"
+        out["edition_date"] = edition_str
+
+    # --- version (human-facing revision label) + confidence ---------------------
+    # Specificity order: Edition value -> "Rev. Month Year" -> a year in a FORM-
+    # VERSION context -> unknown. The bare-year fallback is SCOPED (Codex PR #263):
+    # an UNSCOPED `\b20\d{2}\b` over all page-1 text would grab an expiration or
+    # other stray date (e.g. "Expires 02/28/2027" -> version "2027"), making a
+    # version-less form look versioned and misleading the outdated-revision check.
+    # A year is only a version when it sits in the TITLE (e.g. "2025 Form 1040") or
+    # immediately adjacent to "Form <id>" on page 1 -- the IRS year-only header
+    # convention -- never an arbitrary date elsewhere on the page.
+    rev = re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", text) \
+        or re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", title)
+    # A bare year is a version ONLY when adjacent to "Form <id>" -- in the title
+    # ("2025 Form 1040" or "Form 1040 2025") or on page 1. An UNSCOPED year (in
+    # either title or text) would promote an expiration/effective year (Codex
+    # PR #263 r1+r2). `_FORM_ID` is the form-number token used in several patterns.
+    _FORM_ID = r"[A-Z]{0,3}-?\d{1,4}[A-Z]?"
+    year_ctx = (
+        re.search(rf"(20\d{{2}})\s+Form\s+{_FORM_ID}", title)
+        or re.search(rf"Form\s+{_FORM_ID}\s+(20\d{{2}})", title)
+        or re.search(rf"Form\s+{_FORM_ID}\s*\n?\s*(20\d{{2}})\b", text)
+    )
+    if edition_str:
+        out["version"] = edition_str
+        out["version_confidence"] = _CONF_HIGH
+    elif rev:
+        out["version"] = rev.group(1).strip()
+        out["version_confidence"] = _CONF_HIGH
+    elif year_ctx:
+        out["version"] = year_ctx.group(1)
+        out["version_confidence"] = _CONF_LOW  # generic but form-version-scoped
+    else:
+        out["version"] = "unknown"
+        out["version_confidence"] = _CONF_NONE
+
+    # --- omb_number: "OMB No. NNNN-NNNN" (specific) -> loose NNNN-NNNN (fallback)
+    omb = re.search(r"OMB\s+No\.?\s*(\d{4}-\d{4})", text)
+    if omb:
+        out["omb_number"] = omb.group(1)
+    else:
+        loose = re.search(r"\b(\d{4}-\d{4})\b", text)
+        if loose:
+            out["omb_number"] = loose.group(1)
+            # A loose OMB shouldn't UPGRADE confidence, but if the version was the
+            # weakest tier (unknown), a found OMB is at least some provenance.
+            if out.get("version_confidence", 0.0) == _CONF_NONE:
+                out["version_confidence"] = _CONF_LOW
+
+    # --- expiration_date: "Expires MM/DD/YYYY" (no fallback -- wrong is worse) ---
+    exp = re.search(r"Expires\s+(\d{2})/(\d{2})/(\d{4})", text)
+    if exp:
+        mm, dd, yyyy = exp.groups()
+        out["expiration_date"] = f"{mm}/{dd}/{yyyy}"
+
+    # --- agency (USCIS / IRS string presence) -----------------------------------
+    if ("U.S. Citizenship and Immigration Services" in text) or ("USCIS" in text):
+        out["agency"] = "U.S. Citizenship and Immigration Services"
+    elif ("Internal Revenue Service" in text) or ("IRS" in text):
+        out["agency"] = "Internal Revenue Service"
+
+    return out
+
+
+def _extract_version_metadata_from_doc(doc: "fitz.Document") -> dict:
+    """Thin PyMuPDF wrapper over extract_version_metadata: page-1 text + title."""
+    page1 = doc[0].get_text() if doc.page_count else ""
+    title = (doc.metadata or {}).get("title", "") or ""
+    return extract_version_metadata(page1, title)
+
+
 def _normalize_for_schema(schema: dict) -> dict:
     """Fill required-but-missing FormSchema fields with draft placeholders so a
     fresh extraction is schema-format-valid out of the box (the human refines
@@ -119,7 +245,10 @@ def _normalize_for_schema(schema: dict) -> dict:
     schema.setdefault("source", "pdf")
     meta = schema.setdefault("form_metadata", {})
     meta.setdefault("title", "Untitled form (draft)")
-    meta.setdefault("version", "draft")          # required str; human sets the real one
+    # "unknown" (not "draft") is the no-version sentinel: extract_version_metadata
+    # already populated a real version (or "unknown") before normalize runs; this
+    # only covers the path where version metadata was never attempted (bd s4dp.2).
+    meta.setdefault("version", "unknown")
     meta.setdefault("language", "en")
     schema.setdefault("sections", [])
     schema.setdefault("fields", [])
@@ -174,6 +303,24 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     finally:
         if not keep_dump and os.path.exists(dump_path):
             os.remove(dump_path)
+
+    # 3b. Deterministically recover real version metadata (edition/rev, OMB,
+    #     expiration) from the PDF and merge it in BEFORE normalize, so real values
+    #     win and normalize only fills genuinely-absent scalars (bd s4dp.2).
+    doc = fitz.open(pdf_path)
+    try:
+        version_meta = _extract_version_metadata_from_doc(doc)
+    finally:
+        doc.close()
+    meta = schema.setdefault("form_metadata", {})
+    # Do NOT let the "unknown" no-match sentinel overwrite a real version the LLM
+    # pass already placed (a valid-but-unsupported revision format) -- only the
+    # deterministic recovery should win, never the absence of one (Codex PR #263
+    # r2). Same guard for version_confidence (paired with version).
+    if version_meta.get("version") == "unknown" and meta.get("version") not in (None, "", "draft", "unknown"):
+        version_meta = {k: v for k, v in version_meta.items()
+                        if k not in ("version", "version_confidence")}
+    meta.update(version_meta)
 
     # 4. Normalize required-but-missing scalars to draft defaults, then validate.
     _normalize_for_schema(schema)

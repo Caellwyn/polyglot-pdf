@@ -16,7 +16,88 @@ interface FieldEditorProps {
   // Un-merge a consolidated options[] field back into separate per-widget fields
   // (bd polyglot-pdf-s4dp.1). Optional so the editor still renders without it.
   onUnmergeField?: (fieldId: string) => void;
+  // Update form-level metadata (version/edition/OMB/expiration -- bd
+  // polyglot-pdf-s4dp.2). Optional; when absent the metadata panel is read-only.
+  onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
 }
+
+// The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
+// is selected, so a human can correct an auto-extracted version -- or fill one a
+// version-less form lacked (version defaults to "unknown", never blank). Each
+// input commits a single-key patch through onUpdateMetadata.
+const FormMetadataEditor: React.FC<{
+  schema: FormSchema;
+  onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
+}> = ({ schema, onUpdateMetadata }) => {
+  const meta = schema.form_metadata;
+  const set = (key: keyof FormSchema['form_metadata']) => (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const raw = e.target.value;
+    // `version` is REQUIRED on the schema: clearing it must degrade to the
+    // "unknown" sentinel, never undefined -- a save serializes with JSON.stringify
+    // which drops undefined keys, which would strip the required field and fail
+    // backend validation (Codex PR #263). Optional fields clear to undefined.
+    const value = key === 'version' ? (raw || 'unknown') : (raw || undefined);
+    const patch = { [key]: value } as Partial<FormSchema['form_metadata']>;
+    // A MANUAL version edit makes the stale auto-extracted version_confidence
+    // meaningless -- leaving the old 0/0.4 would keep the "(verify)" hint with no
+    // way to clear it. Clear it on any non-empty version edit (a human-entered
+    // version is authoritative); a cleared-to-"unknown" version keeps low
+    // confidence via the "unknown" branch of the lowConfidence check (Codex r2).
+    if (key === 'version') {
+      patch.version_confidence = raw ? undefined : 0;
+    }
+    onUpdateMetadata?.(patch);
+  };
+  const lowConfidence =
+    meta?.version === 'unknown' ||
+    (typeof meta?.version_confidence === 'number' && meta.version_confidence <= 0.5);
+
+  const rows: { key: keyof FormSchema['form_metadata']; label: string; placeholder: string }[] = [
+    { key: 'version', label: 'Version / Revision', placeholder: 'e.g., December 2024 or 01/20/25' },
+    { key: 'edition_date', label: 'Edition date', placeholder: 'e.g., 01/20/25' },
+    { key: 'omb_number', label: 'OMB number', placeholder: 'e.g., 1615-0082' },
+    { key: 'expiration_date', label: 'Expiration date', placeholder: 'e.g., 02/28/2027' },
+  ];
+
+  return (
+    <div className="h-full overflow-auto custom-scrollbar">
+      <div className="p-4 space-y-4">
+        <div className="border-b border-gray-200 pb-3">
+          <h3 className="text-lg font-semibold text-gray-900">Form metadata</h3>
+          <p className="text-sm text-gray-500">{meta?.form_number || meta?.title || 'Form'}</p>
+        </div>
+
+        {lowConfidence && (
+          <div className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+            The form version could not be confidently detected -- please verify and
+            correct it below.
+          </div>
+        )}
+
+        {rows.map(({ key, label, placeholder }) => (
+          <div key={key}>
+            <label className="label">{label}</label>
+            <input
+              type="text"
+              className="input"
+              aria-label={label}
+              value={(meta?.[key] as string) ?? ''}
+              onChange={set(key)}
+              placeholder={placeholder}
+              disabled={!onUpdateMetadata}
+            />
+          </div>
+        ))}
+
+        <p className="text-xs text-gray-400">
+          Select a field on the left to edit its properties.
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const FIELD_TYPES: FieldType[] = [
   'text',
@@ -86,28 +167,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   schema,
   onUpdateField,
   onUnmergeField,
+  onUpdateMetadata,
 }) => {
   if (!field) {
-    return (
-      <div className="h-full flex items-center justify-center text-gray-400">
-        <div className="text-center">
-          <svg
-            className="w-16 h-16 mx-auto mb-4 text-gray-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          <p>Select a field to edit</p>
-        </div>
-      </div>
-    );
+    // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
+    // version/edition/OMB/expiration are reachable without picking a field.
+    return <FormMetadataEditor schema={schema} onUpdateMetadata={onUpdateMetadata} />;
   }
 
   const updateField = (updates: Partial<FormField>) => {

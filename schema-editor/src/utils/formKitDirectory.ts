@@ -160,6 +160,18 @@ export async function setKitStatus(
 // and the in-editor % can never disagree.
 
 /** A catalogue entry plus its computed review progress (null if no schema). */
+/**
+ * Displayable version summary for a kit's catalogue card (bd polyglot-pdf-s4dp.2).
+ * `label` is the human-facing version string (edition_date or version, e.g.
+ * "01/20/25" or "December 2024"); "unknown" when no version was recovered.
+ * `lowConfidence` is true when version_confidence indicates a generic fallback,
+ * so the card can append a "verify" hint.
+ */
+export interface KitVersionInfo {
+  label: string;
+  lowConfidence: boolean;
+}
+
 export interface KitProgress {
   entry: CatalogueEntry;
   /** % of fields complete (0-100), or null when there is no measurable schema. */
@@ -173,6 +185,24 @@ export interface KitProgress {
    * reviewPercent null.
    */
   schemaError: boolean;
+  /** Version summary for the card, or null when the kit has no readable schema. */
+  version: KitVersionInfo | null;
+}
+
+// A version_confidence at/below this is treated as a generic fallback (the card
+// shows a "verify" hint). The extractor emits 0.4 for a bare-year/loose-OMB
+// fallback and 0.9 for a specific Edition/Rev match (bd s4dp.2).
+const LOW_CONFIDENCE_MAX = 0.5;
+
+/** Build a card version summary from a schema's form_metadata (bd s4dp.2). */
+export function versionInfoFromSchema(schema: FormSchema): KitVersionInfo {
+  const meta = (schema.form_metadata ?? {}) as FormSchema['form_metadata'];
+  const label = meta?.edition_date || meta?.version || 'unknown';
+  const conf = meta?.version_confidence;
+  // Low-confidence when the score is explicitly low, OR the version is unknown.
+  const lowConfidence =
+    label === 'unknown' || (typeof conf === 'number' && conf <= LOW_CONFIDENCE_MAX);
+  return { label, lowConfidence };
 }
 
 /**
@@ -184,13 +214,13 @@ export async function readKitProgress(
   entry: CatalogueEntry,
 ): Promise<KitProgress> {
   if (!entry.hasSchema) {
-    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: false };
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: false, version: null };
   }
   const schema = await loadKitSchema(entry);
   if (!schema) {
     // Has a schema file but it is absent/unparseable -> a present-but-broken
     // schema, not a pre-extraction kit.
-    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
   // Validate the shape BEFORE measuring: a schema can parse as JSON yet be
   // structurally wrong in ways that don't throw -- e.g. `fields: "abc"` is
@@ -202,7 +232,7 @@ export async function readKitProgress(
     Array.isArray(schema.fields) &&
     schema.fields.every(f => f !== null && typeof f === 'object' && !Array.isArray(f));
   if (!fieldsOk) {
-    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
   try {
     // Belt-and-suspenders: any remaining failure inside getCompletionStats is a
@@ -215,9 +245,10 @@ export async function readKitProgress(
       completeFields: stats.complete,
       totalFields: stats.total,
       schemaError: false,
+      version: versionInfoFromSchema(schema),
     };
   } catch {
-    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true };
+    return { entry, reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null };
   }
 }
 
