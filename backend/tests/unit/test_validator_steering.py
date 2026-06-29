@@ -144,13 +144,16 @@ async def test_override_does_not_trap_the_user_switch_gate():
 
 
 @pytest.mark.asyncio
-async def test_steer_dropped_when_session_inactive():
+async def test_steer_dropped_when_session_inactive_returns_clean():
+    # A conflict whose STEER did not reach the Live session (dead session) must read
+    # as CLEAN to the client (Codex PR #275): returning it would hold the section with
+    # no voiced guidance (the model never got the steer) -- the same trap as a
+    # suppressed conflict. Fail-OPEN: advance unchecked.
     verdict = {"conflicts": [{"field_ids": ["addr_state"], "reason": "x"}]}
     svc, live_ai, _ = _service(verdict)
     live_ai.is_session_active = MagicMock(return_value=False)
-    # No raise; the steer is simply dropped (mirrors the secretary async-deliver).
     returned = await svc.handle_validation_boundary(_FIELDS)
-    assert returned == verdict
+    assert returned == {"conflicts": []}
     live_ai.send_client_content.assert_not_awaited()
 
 
@@ -169,6 +172,54 @@ async def test_validator_failure_fails_open_no_steer():
     live_ai.is_session_active = MagicMock(return_value=True)
     live_ai.send_client_content = AsyncMock()
     svc = FormFillingService(live_ai=live_ai, text_ai=text_ai)
+
+    returned = await svc.handle_validation_boundary(_FIELDS)
+    assert returned == {"conflicts": []}
+    live_ai.send_client_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_steer_delivery_failure_returns_clean():
+    # The steer was attempted but send_client_content RAISED -> the model never got
+    # it, so the conflict must read as clean (no trap). Codex PR #275.
+    verdict = {"conflicts": [{"field_ids": ["addr_state", "addr_zip"], "reason": "x"}]}
+    svc, live_ai, _ = _service(verdict)
+    live_ai.send_client_content = AsyncMock(side_effect=RuntimeError("send failed"))
+    returned = await svc.handle_validation_boundary(_FIELDS)
+    assert returned == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_conflict_on_unknown_field_is_dropped():
+    # A validator conflict naming a field NOT in the boundary payload (hallucinated /
+    # misspelled id) cannot be marked steered client-side -> it would trap the user
+    # forever. Drop it (clean), no steer. Codex PR #275.
+    verdict = {"conflicts": [
+        {"field_ids": ["addr_state", "ghost_field"], "reason": "phantom"},
+    ]}
+    svc, live_ai, _ = _service(verdict)
+    returned = await svc.handle_validation_boundary(_FIELDS)
+    assert returned == {"conflicts": []}
+    live_ai.send_client_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_validator_timeout_fails_open(monkeypatch):
+    # A validator that HANGS past the backend timeout must fail-OPEN (clean, no steer)
+    # so the inline await does not block the WS receive loop past the client gate.
+    # Codex PR #275.
+    import asyncio as _asyncio
+
+    async def _hang(_payload):
+        await _asyncio.sleep(10)
+
+    text_ai = MagicMock()
+    text_ai.validate = AsyncMock(side_effect=_hang)
+    live_ai = MagicMock()
+    live_ai.is_session_active = MagicMock(return_value=True)
+    live_ai.send_client_content = AsyncMock()
+    svc = FormFillingService(live_ai=live_ai, text_ai=text_ai)
+    monkeypatch.setattr(svc._settings, "VALIDATOR_TIMEOUT_SEC", 0.05)
 
     returned = await svc.handle_validation_boundary(_FIELDS)
     assert returned == {"conflicts": []}

@@ -98,6 +98,16 @@ export interface ConnectionCallbacks {
 // secretary lookup's tail (Gate 2 saw up to ~20s) plus headroom.
 const THINKING_MAX_MS = 30000;
 
+// B5 (bd polyglot-pdf-jnjj.17): the parked validator switch-gate (see
+// proceedSectionSwitch). Named so the local `gate` object's type does not collapse to
+// `never` after an early-return narrows the instance field to null (Codex PR #275).
+interface PendingSectionSwitch {
+  sectionId: string;
+  resolve: () => void;
+  timer: ReturnType<typeof setTimeout>;
+  cancelled: boolean;
+}
+
 export class WebFormConnection {
   private ws: WebSocket | null = null;
   private state: SchemaFormState;
@@ -195,12 +205,7 @@ export class WebFormConnection {
   // teardown / eviction marks THE SPECIFIC parked gate -- a stale gate evicted by a
   // newer boundary can never make the newer switch fire (each invocation reads its
   // OWN object's flag after the await).
-  private pendingSectionSwitch: {
-    sectionId: string;
-    resolve: () => void;
-    timer: ReturnType<typeof setTimeout>;
-    cancelled: boolean;
-  } | null = null;
+  private pendingSectionSwitch: PendingSectionSwitch | null = null;
   // Fail-OPEN bound (contract 4): advance unchecked if no verdict in this window.
   private static readonly VALIDATOR_GATE_TIMEOUT_MS = 6000;
 
@@ -1662,10 +1667,22 @@ export class WebFormConnection {
     //                         clean boundary);
     //   - no verdict in VALIDATOR_GATE_TIMEOUT_MS -> fail-OPEN: switch runs unchecked
     //     (a validator/socket outage must never strand the user mid-form).
+    // A DUPLICATE confirm of the same last field, arriving while the first boundary's
+    // gate is still parked, must NOT re-park (Codex PR #275): re-parking would reset
+    // the fail-OPEN timer (delaying the documented advance indefinitely under repeated
+    // duplicates) and the second confirm emitted NO new validation_result to resolve
+    // it. The original gate owns the boundary; this call no-ops. (The section_complete
+    // emit was already suppressed for this duplicate by the pendingSectionSwitch guard
+    // in the confirm handler.)
+    if (this.pendingSectionSwitch) {
+      console.log('[WebFormConnection] [validator] switch gate already parked for this boundary; ignoring duplicate.');
+      return;
+    }
+
     // Each invocation owns its gate object; `gate` is captured here and its
-    // `cancelled` flag is read after the await, so a stale gate evicted by a newer
-    // boundary cannot make THIS switch fire (and vice versa).
-    const gate: NonNullable<typeof this.pendingSectionSwitch> = {
+    // `cancelled` flag is read after the await, so a teardown/cancel of THIS gate
+    // cannot make a later switch fire (and vice versa).
+    const gate: PendingSectionSwitch = {
       sectionId,
       resolve: () => {},
       timer: undefined as unknown as ReturnType<typeof setTimeout>,
@@ -1673,16 +1690,6 @@ export class WebFormConnection {
     };
     await new Promise<void>((resolve) => {
       gate.resolve = resolve;
-      // Defensive: if a previous gate is somehow still parked, evict it -- mark it
-      // CANCELLED (so its own awaiter skips its switch) and resolve it. The newer
-      // boundary wins; two switches can never both fire.
-      if (this.pendingSectionSwitch) {
-        clearTimeout(this.pendingSectionSwitch.timer);
-        const stale = this.pendingSectionSwitch;
-        this.pendingSectionSwitch = null;
-        stale.cancelled = true;
-        stale.resolve();
-      }
       gate.timer = setTimeout(() => {
         if (this.pendingSectionSwitch === gate) {
           console.warn('[WebFormConnection] [validator] gate timed out -- failing OPEN, advancing unchecked');

@@ -196,4 +196,32 @@ describe('WebFormConnection validator steering + switch-gate (bd polyglot-pdf-jn
     // Fail-OPEN: the switch proceeded unchecked.
     expect(conn!.getStatus()).toBe('switching_section')
   })
+
+  it('a DUPLICATE confirm while the gate is parked does NOT reset the fail-OPEN timer', async () => {
+    // Codex PR #275: a duplicate confirm must not re-park the gate (which would reset
+    // the 6s timer and let repeated duplicates delay the advance forever). The
+    // original gate owns the boundary; the duplicate is a no-op. So the fail-OPEN
+    // still fires ~6s after the FIRST confirm, regardless of a duplicate at +4s.
+    vi.useFakeTimers()
+    conn = new WebFormConnection(TWO_SECTION_SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    await vi.advanceTimersByTimeAsync(1)
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    fireFieldUpdate(ws, 'firstname', 'Jane')
+    fireConfirm(ws, 'f_s1')
+    await vi.advanceTimersByTimeAsync(1)
+
+    // A duplicate confirm arrives partway through the window.
+    await vi.advanceTimersByTimeAsync(4000)
+    fireConfirm(ws, 'f_s1')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(conn!.getStatus()).not.toBe('switching_section') // still gated
+
+    // Advance to just past the ORIGINAL 6s window (total ~6.5s from the first
+    // confirm). If the duplicate had reset the timer, this would still be gated.
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(conn!.getStatus()).toBe('switching_section')
+  })
 })
