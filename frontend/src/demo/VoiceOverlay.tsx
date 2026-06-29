@@ -47,6 +47,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
+	// Thinking indicator (bd polyglot-pdf-wpw.5): true while the agent is processing
+	// a turn (user-turn-end -> first response audio), driven by the backend
+	// agent_processing signal. Shows a calm animated indicator so the app never looks
+	// frozen during a slow turn / secretary lookup.
+	const [thinking, setThinking] = useState<boolean>(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
 	const [currentSectionId, setCurrentSectionId] = useState<string>('')
 	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
@@ -565,7 +570,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				setError(null)
 			},
 			'English', // Default to English
-			sharedStream || undefined // Pass shared stream from parent
+			sharedStream || undefined, // Pass shared stream from parent
+			undefined, // onNextField (unused here)
+			undefined, // getToken (unused here)
+			(isThinking) => setThinking(isThinking) // bd polyglot-pdf-wpw.5: thinking indicator
 		)
 
 		connectionManagerRef.current = manager
@@ -1389,6 +1397,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								<span className="vff-vad-label">Listening</span>
 							</span>
 						)}
+						{/* Thinking indicator (bd polyglot-pdf-wpw.5): calm animated dots
+						    while the agent processes a turn, so the app never looks frozen
+						    during a slow turn / secretary lookup. Language-neutral (no word
+						    to translate across the 18 spoken languages). */}
+						{thinking && isConnected && (
+							<span className="vff-thinking-indicator" title="Working..." aria-label="Working" role="status">
+								<span className="vff-thinking-dot"></span>
+								<span className="vff-thinking-dot"></span>
+								<span className="vff-thinking-dot"></span>
+							</span>
+						)}
 						{/* Live mic-energy meter (bd polyglot-pdf-s3zv): shows the mic is
 						    alive and whether audio is actually reaching the backend. */}
 						{isConnected && (
@@ -1729,6 +1748,33 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						opacity: 0.6;
 						box-shadow: 0 0 12px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
 					}
+				}
+
+				/* Thinking indicator (bd polyglot-pdf-wpw.5): three calm pulsing dots
+				   shown while the agent processes a turn. Deliberately neutral/quiet
+				   (slate, slow pulse) -- it shows on every turn, so it must not alarm. */
+				.vff-thinking-indicator {
+					display: inline-flex;
+					align-items: center;
+					gap: 4px;
+					padding: 4px 10px;
+				}
+
+				.vff-thinking-dot {
+					display: inline-block;
+					width: 6px;
+					height: 6px;
+					border-radius: 50%;
+					background: #94a3b8;
+					animation: vff-thinking-pulse 1.4s ease-in-out infinite;
+				}
+
+				.vff-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+				.vff-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+				@keyframes vff-thinking-pulse {
+					0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+					40% { opacity: 1; transform: scale(1); }
 				}
 
 				/* Live mic-energy meter (bd polyglot-pdf-s3zv) */

@@ -37,6 +37,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
+	// Thinking indicator (bd polyglot-pdf-wpw.5): agent processing a turn.
+	const [thinking, setThinking] = useState<boolean>(false)
 	const [error, setError] = useState<string | null>(null)
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
@@ -527,7 +529,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			setError(null)
 		},
 		'English',
-		sharedStream || undefined // Pass shared stream from parent
+		sharedStream || undefined, // Pass shared stream from parent
+		undefined, // onNextField (unused here)
+		undefined, // getToken (unused here)
+		(isThinking) => setThinking(isThinking) // bd polyglot-pdf-wpw.5: thinking indicator
 	)
 	
 	connectionManagerRef.current = manager
@@ -1179,6 +1184,15 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 							<span className="vff-status-text">
 								{status === 'idle_timeout' ? 'Idle timeout' : status}
 							</span>
+							{/* Thinking indicator (bd polyglot-pdf-wpw.5): calm animated dots
+							    while the agent processes a turn. Language-neutral. */}
+							{thinking && isConnected && (
+								<span className="vff-thinking-indicator" title="Working..." aria-label="Working" role="status">
+									<span className="vff-thinking-dot"></span>
+									<span className="vff-thinking-dot"></span>
+									<span className="vff-thinking-dot"></span>
+								</span>
+							)}
 							{/* Live mic-energy meter (bd polyglot-pdf-s3zv) */}
 							{isConnected && (
 								<span
@@ -1365,6 +1379,32 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						transform: scale(1.2);
 						box-shadow: 0 0 8px #10b981;
 					}
+				}
+
+				/* Thinking indicator (bd polyglot-pdf-wpw.5): calm pulsing dots while
+				   the agent processes a turn. Neutral/quiet -- shows on every turn. */
+				.vff-thinking-indicator {
+					display: inline-flex;
+					align-items: center;
+					gap: 4px;
+					padding: 2px 8px;
+				}
+
+				.vff-thinking-dot {
+					display: inline-block;
+					width: 6px;
+					height: 6px;
+					border-radius: 50%;
+					background: #94a3b8;
+					animation: vff-thinking-pulse 1.4s ease-in-out infinite;
+				}
+
+				.vff-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+				.vff-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+				@keyframes vff-thinking-pulse {
+					0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+					40% { opacity: 1; transform: scale(1); }
 				}
 
 				/* Horizontal Panel - Bottom 1/3 of screen */

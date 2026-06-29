@@ -69,6 +69,7 @@ export interface ConnectionManager {
 	resume: () => Promise<void>  // Resume from pause
 	disconnect: () => void  // True disconnect (cleanup everything)
 	getStatus: () => ConnectionStatus
+	getThinking: () => boolean  // bd polyglot-pdf-wpw.5: is the agent currently processing a turn?
 	isSendingMicAudio: () => boolean  // bd polyglot-pdf-s3zv: would a mic chunk be forwarded to the backend right now (the real shouldSendMicChunk gate, incl. socket state)? Drives the energy meter's green "sending" state.
 	sendAudio: (audioData: ArrayBuffer) => void
 	sendActivityStart: () => void  // Send activity_start signal (user started speaking)
@@ -237,7 +238,11 @@ export function createConnectionManager(
 	initialFillLanguage: string = 'English',
 	sharedStream?: MediaStream,
 	onNextField?: (fieldId: string | null) => void,
-	getToken?: () => Promise<string | undefined>
+	getToken?: () => Promise<string | undefined>,
+	// Thinking-indicator signal (bd polyglot-pdf-wpw.5): true while the agent is
+	// processing a turn (user-turn-end -> first response audio). Optional so existing
+	// callers are unaffected; the overlays pass it to drive a calm "thinking" UI.
+	onThinkingChange?: (thinking: boolean) => void
 ): ConnectionManager {
 	// Get production backend URL from environment or default
 	const wsUrl = getBackendUrl()
@@ -343,6 +348,10 @@ export function createConnectionManager(
 				}
 			}
 			onStatusChange(status)
+		},
+		onThinkingChange: (thinking) => {
+			// Forward the backend-driven thinking signal to the UI (bd polyglot-pdf-wpw.5).
+			if (onThinkingChange) onThinkingChange(thinking)
 		},
 		onSessionReady: (sessionId) => {
 			onStatusChange('connected')
@@ -628,6 +637,10 @@ export function createConnectionManager(
 
 		getStatus() {
 			return connection?.getStatus() ?? 'disconnected'
+		},
+
+		getThinking() {
+			return connection?.getThinking() ?? false
 		},
 
 		// Whether a mic chunk would actually be forwarded to the backend RIGHT NOW --

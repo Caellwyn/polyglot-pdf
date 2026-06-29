@@ -182,6 +182,27 @@ async def test_start_session_caches_full_schema_and_preserves_across_switch():
     assert svc._full_schema is _FULL_SCHEMA
 
 
+# --- Thinking indicator manual-VAD start trigger (bd polyglot-pdf-wpw.5) ---------
+
+
+@pytest.mark.asyncio
+async def test_send_activity_end_emits_processing_start():
+    """In manual/PTT VAD, the client's vad_activity_end (-> service.send_activity_end)
+    is the reliable turn-end boundary, so it emits the thinking-indicator
+    processing-start via the callback handler (bd polyglot-pdf-wpw.5)."""
+    from unittest.mock import AsyncMock as _AM
+    svc = FormFillingService(live_ai=None, settings=Settings(), text_ai=None)
+    svc._audio_handler = MagicMock()
+    svc._audio_handler.send_activity_end = _AM()
+    svc._callback_handler = MagicMock()
+    svc._callback_handler.signal_processing_start = _AM()
+
+    await svc.send_activity_end()
+
+    svc._audio_handler.send_activity_end.assert_awaited_once()
+    svc._callback_handler.signal_processing_start.assert_awaited_once()
+
+
 # --- Tail-latency guard: deadline + async-deliver (bd polyglot-pdf-jnjj.43) -----
 
 
