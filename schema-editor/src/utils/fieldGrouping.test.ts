@@ -12,7 +12,26 @@ import {
   mergeBlockReason,
   stripEditorState,
 } from './fieldGrouping';
-import type { FormSchema, FormField } from '../types/schema';
+import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
+
+// A faithful local mirror of the runtime's frontend shouldShowField scalar-trigger
+// semantics (frontend/src/schema-forms/utils/validation.ts), so these tests pin
+// RUNTIME behavior -- whether a remapped condition actually fires -- not just the
+// emitted shape. Cross-package import of the real evaluator is avoided (it lives in
+// the separate `frontend` package); this covers only the boolean-checkbox operators
+// the ungroup remap produces (fresh-eyes r3). An unchecked checkbox is `false`; a
+// never-touched one is absent (undefined).
+function runtimeShowIf(cond: ConditionalDisplay, values: Record<string, unknown>): boolean {
+  const v = values[cond.field];
+  switch (cond.operator) {
+    case 'is_checked': return v === true;
+    case 'is_empty': return v === null || v === undefined || v === '';
+    case 'is_not_empty': return v !== null && v !== undefined && v !== '';
+    case 'equals': return v === cond.value;
+    case 'not_equals': return v !== cond.value;
+    default: return true;
+  }
+}
 
 // A separate per-widget checkbox field, the shape extraction emits for a
 // "check one box" radio group before consolidation.
@@ -440,6 +459,242 @@ describe('Opus fallback review fixes', () => {
   it('stripEditorState is a no-op (same reference) when no stash is present', () => {
     const schema = w7Schema();
     expect(stripEditorState(schema)).toBe(schema);
+  });
+
+  // bd polyglot-pdf-v444: the fallback (no-stash) ungroup must remap dependents of
+  // the consolidated field onto the reconstructed split fields, else they dangle.
+  function raceSchemaWithDependent(): FormSchema {
+    const schema = w7Schema();
+    schema.fields = [
+      {
+        id: 'p3_race', name: 'Race', type: 'radio', section_id: 'reason',
+        pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+        options: [
+          { value: 'p3_race', label: 'White', pdf_field_name: 'white[0]', source_type: 'checkbox' },
+          { value: 'asian', label: 'Asian', pdf_field_name: 'asian[0]', source_type: 'checkbox' },
+        ],
+      },
+      // a dependent that should show only when the (non-primary) 'asian' option is set
+      {
+        id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        show_if: { field: 'p3_race', operator: 'equals', value: 'asian' },
+      },
+    ];
+    schema.sections[0].fields = ['p3_race', 'detail'];
+    return schema;
+  }
+
+  it('remaps a dependent show_if onto the reconstructed NON-PRIMARY option field (is_checked)', () => {
+    const schema = raceSchemaWithDependent();
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // the 'asian' option reconstructs to a field with id 'asian'; the dependent
+    // now tests that standalone field is checked, not the gone consolidated id.
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_checked' });
+    // and the target field actually exists post-split (resolvable, not dangling)
+    expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
+  });
+
+  it('remaps a dependent show_if onto the reconstructed PRIMARY option field (is_checked)', () => {
+    const schema = raceSchemaWithDependent();
+    // point the dependent at the primary option value instead
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'equals', value: 'p3_race',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // primary option reconstructs to id == fieldId ('p3_race')
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+  });
+
+  it('retargets a whole-group show_if (is_checked, no specific option) to the primary so it never dangles', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'is_checked',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+    expect(unmerged.fields.some(f => f.id === detail.show_if!.field)).toBe(true);
+  });
+
+  // A whole-group "is the group populated" condition must NORMALIZE to an operator
+  // that fires correctly on a standalone boolean checkbox -- preserving the
+  // original `not_equals ''` / `is_not_empty` would be permanently TRUE on an
+  // unchecked checkbox (false !== '' is always true), showing the dependent
+  // forever. Real i-90 case: p1_line6c_aptsteflrnumber's `not_equals ''` on the
+  // consolidated p1_unit_type6c_unit (bd polyglot-pdf-v444, fresh-eyes finding).
+  it("normalizes a whole-group not_equals '' to is_checked on the primary (not permanently-true)", () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: '',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+  });
+
+  it('normalizes a whole-group is_not_empty to is_checked on the primary', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'is_not_empty',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
+  });
+
+  it('maps not_equals <matched option> to `not_equals true` on THAT option field (show unless that option set)', () => {
+    const schema = raceSchemaWithDependent();
+    // 'asian' is a real option of p3_race; "show unless asian selected"
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: 'asian',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // exact single-option inverse: not_equals true on the reconstructed 'asian'
+    // field. NOT is_empty -- is_empty is false for an explicitly-unchecked (false)
+    // checkbox, hiding the dependent forever (fresh-eyes r3, bd cjby).
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'not_equals', value: true });
+    expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
+    // runtime oracle: shown UNLESS asian is checked.
+    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(false);  // selected -> hidden
+    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(true);  // unchecked -> shown
+    expect(runtimeShowIf(detail.show_if!, {})).toBe(true);                // untouched -> shown
+  });
+
+  it('runtime: equals <matched option> -> is_checked shows iff that option is checked', () => {
+    const schema = raceSchemaWithDependent(); // detail show_if = equals 'asian'
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_checked' });
+    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(true);
+    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(false);
+  });
+
+  it("excludes an empty-string option value from the option map: not_equals '' stays a whole-group check", () => {
+    const schema = w7Schema();
+    schema.fields = [
+      {
+        id: 'grp', name: 'Grp', type: 'radio', section_id: 'reason',
+        pdf_field_name: 'grp[0]', read_only: false, required: false,
+        options: [
+          { value: '', label: 'None', pdf_field_name: 'none[0]', source_type: 'checkbox' },
+          { value: 'x', label: 'X', pdf_field_name: 'x[0]', source_type: 'checkbox' },
+        ],
+      },
+      {
+        id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        show_if: { field: 'grp', operator: 'not_equals', value: '' },
+      },
+    ];
+    schema.sections[0].fields = ['grp', 'detail'];
+    const unmerged = ungroupField(schema, 'grp');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // '' did NOT match a specific option -> whole-group "populated" -> is_checked
+    // on the primary, NOT is_empty on the ''-valued option's field.
+    expect(detail.show_if).toEqual({ field: 'grp', operator: 'is_checked' });
+  });
+
+  it('preserves not_equals <non-empty-unmatched> on the primary (replicates the original always-show)', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: 'no_such_option',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // originally always true (consolidated never holds a non-option value); a bare
+    // not_equals <X> on a boolean checkbox is likewise always true -> preserved.
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'not_equals', value: 'no_such_option' });
+  });
+
+  it('normalizes a whole-group is_empty to is_empty on the primary', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'is_empty',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_empty' });
+  });
+
+  it('leaves an unmatched non-empty equals as equals on the primary (stays unsatisfiable -> hidden, not spuriously shown)', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'equals', value: 'no_such_option',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // retargeted to a real field, operator preserved; equals a string on a boolean
+    // checkbox is never true -> field stays hidden (correct "no such option").
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'equals', value: 'no_such_option' });
+    expect(unmerged.fields.some(f => f.id === 'p3_race')).toBe(true);
+  });
+
+  // Coverage guard for the de-dup + remap interaction (fresh-eyes finding 2): when
+  // an option value collides with a surviving field id, the dependent must follow
+  // the SUFFIXED reconstructed id, not the bare value.
+  it('remaps a dependent onto the DE-DUPED reconstructed id when the option value collides with a survivor', () => {
+    const schema = w7Schema();
+    schema.fields = [
+      {
+        id: 'p3_race', name: 'Race', type: 'radio', section_id: 'reason',
+        pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+        options: [
+          { value: 'p3_race', label: 'White', pdf_field_name: 'white[0]', source_type: 'checkbox' },
+          { value: 'white', label: 'Asian', pdf_field_name: 'asian[0]', source_type: 'checkbox' },
+        ],
+      },
+      // a surviving field squats on the would-be reconstructed id 'white'
+      {
+        id: 'white', name: 'Squatter', type: 'text', section_id: 'reason',
+        pdf_field_name: 'squat[0]', read_only: false, required: false,
+      },
+      // dependent gated on the colliding 'white' option value
+      {
+        id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        show_if: { field: 'p3_race', operator: 'equals', value: 'white' },
+      },
+    ];
+    schema.sections[0].fields = ['p3_race', 'white', 'detail'];
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // the 'white' option reconstructs to 'white_1' (squatter holds 'white'); the
+    // dependent must point at the suffixed id, and that field must exist.
+    expect(detail.show_if).toEqual({ field: 'white_1', operator: 'is_checked' });
+    expect(unmerged.fields.some(f => f.id === 'white_1')).toBe(true);
+  });
+
+  it('expands a dependent controls_fields target list referencing the consolidated id to all split ids', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = undefined;
+    schema.fields.find(f => f.id === 'detail')!.controls_fields = [
+      { operator: 'is_checked', value: true, shows: ['p3_race'] },
+    ];
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.controls_fields![0].shows).toEqual(['p3_race', 'asian']);
+  });
+
+  it('expands a dependent copy_to referencing the consolidated id to all split ids (de-duped)', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = undefined;
+    schema.fields.find(f => f.id === 'detail')!.copy_to = ['p3_race', 'detail'];
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.copy_to).toEqual(['p3_race', 'asian', 'detail']);
+  });
+
+  it('leaves a dependent that did NOT reference the consolidated field untouched (same reference)', () => {
+    const schema = raceSchemaWithDependent();
+    const detailBefore = schema.fields.find(f => f.id === 'detail')!;
+    detailBefore.show_if = { field: 'some_other', operator: 'equals', value: 'x' };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detailAfter = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detailAfter).toBe(detailBefore);
   });
 
   it("re-keys the PRIMARY's own selection-operator control to equals its option value (round 2)", () => {

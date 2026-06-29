@@ -460,6 +460,10 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
   // option, but it does preserve each option's pdf_field_name + source_type.
   const otherIds = new Set(schema.fields.map(f => f.id).filter(id => id !== fieldId));
   const usedIds = new Set<string>();
+  // option.value -> reconstructed field id, so dependents that referenced the
+  // consolidated field can be remapped to the right split field (bd
+  // polyglot-pdf-v444 -- inverse of mergeFields' rewriteReferences).
+  const valueToReconstructedId = new Map<string, string>();
   const rebuilt: FormField[] = field.options.map((opt, idx) => {
     let id: string;
     if (idx === 0) {
@@ -474,6 +478,14 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       id = candidate;
     }
     usedIds.add(id);
+    // Exclude an empty-string option value: a dependent's `equals ''` / `not_equals
+    // ''` is a whole-group populated/empty check (handled by
+    // normalizeWholeGroupOperator), NOT a reference to a degenerate ''-valued
+    // option. Admitting '' here would mis-route it to the specific-option branch
+    // (fresh-eyes r3). Empty/null option values never identify a real option.
+    if (opt.value !== undefined && opt.value !== null && opt.value !== '') {
+      valueToReconstructedId.set(String(opt.value), id);
+    }
 
     return {
       id,
@@ -488,13 +500,18 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
     };
   });
 
+  const rebuiltIds = rebuilt.map(f => f.id);
+  const primaryReconstructedId = rebuiltIds[0];
+
   const newFields: FormField[] = [];
   for (const f of schema.fields) {
-    if (f.id === fieldId) newFields.push(...rebuilt);
-    else newFields.push(f);
+    if (f.id === fieldId) {
+      newFields.push(...rebuilt);
+    } else {
+      newFields.push(remapFallbackDependent(f, fieldId, valueToReconstructedId, rebuiltIds, primaryReconstructedId));
+    }
   }
 
-  const rebuiltIds = rebuilt.map(f => f.id);
   const newSections = schema.sections.map(section => {
     const pos = section.fields.indexOf(fieldId);
     if (pos === -1) return section;
@@ -504,4 +521,149 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
   });
 
   return { ...schema, fields: newFields, sections: newSections };
+}
+
+// Rewrite ONE dependent field that referenced a now-split consolidated field
+// (fallback ungroup, bd polyglot-pdf-v444). The inverse of mergeFields'
+// rewriteReferences: where merge collapsed N source widgets into option values on
+// one consolidated field and retargeted dependents onto it, ungroup must point
+// dependents back at the specific reconstructed split fields.
+//
+//   - show_if `{field: C, operator: equals, value: <optValue>}` -> the dependent
+//     fired when the consolidated radio held that option's value. After the split
+//     that option is its own field, so this becomes `is_checked` on that field
+//     (the runtime value of a standalone checkbox/radio is truthy when selected).
+//     A whole-group condition (is_checked/is_not_empty on C, no specific option)
+//     or an unmatched value is retargeted to the primary reconstructed field so it
+//     does not dangle, with its operator NORMALIZED (see
+//     normalizeWholeGroupOperator) so it still fires correctly against a standalone
+//     boolean checkbox.
+//   - controls_fields / copy_to target arrays containing C are EXPANDED to all
+//     reconstructed ids (the rule acted on the whole former group), de-duped.
+//
+// Returns the same object reference when nothing referenced fieldId (no-op).
+
+// Map a whole-group / unmatched show_if operator (one that tested the
+// consolidated field's populated-ness, not a specific option) to an operator that
+// evaluates correctly once retargeted to a single standalone BOOLEAN checkbox.
+// Without this, the original operator misfires: a checkbox's value is `false` when
+// unchecked, so `not_equals ''` / `is_not_empty` is permanently TRUE (false is not
+// '' / "" / null), and `equals ''` would never be true. The runtime
+// (shouldShowField) reads `is_checked` as truthy-when-true and `is_empty` as
+// true-when-false/empty, which IS the populated/empty intent. A genuine
+// `equals <non-empty-unmatched>` is left as-is: it stays unsatisfiable (hidden),
+// which is the correct "no such option" outcome rather than a spurious show.
+function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDisplay['operator'] {
+  const emptyValue = cond.value === undefined || cond.value === null || cond.value === '';
+  switch (cond.operator) {
+    case 'is_not_empty':
+    case 'is_checked':
+      return 'is_checked'; // "group populated" -> primary checkbox is checked
+    case 'is_empty':
+      return 'is_empty'; // "group empty" -> primary checkbox is empty/unchecked
+    case 'not_equals':
+      // Only UNMATCHED values reach here (a value matching an option is handled
+      // exactly in remapFallbackDependent's IF branch). `not_equals <empty>` means
+      // "populated" -> is_checked. `not_equals <non-empty-unmatched>` was always
+      // true originally (the consolidated never holds a non-option value), and a
+      // bare `not_equals <X>` on a boolean checkbox is likewise always true
+      // (false !== X, true !== X) -> preserve it to replicate "always show".
+      return emptyValue ? 'is_checked' : 'not_equals';
+    case 'equals':
+      // Only UNMATCHED values reach here. `equals <empty>` means "empty" ->
+      // is_empty; an unmatched non-empty equals stays equals (unsatisfiable ->
+      // hidden, the correct "no such option" result).
+      return emptyValue ? 'is_empty' : 'equals';
+    default:
+      return cond.operator; // comparison/contains operators: preserve (best effort)
+  }
+}
+
+function remapFallbackDependent(
+  f: FormField,
+  fieldId: string,
+  valueToReconstructedId: Map<string, string>,
+  rebuiltIds: string[],
+  primaryReconstructedId: string,
+): FormField {
+  let changed = false;
+  const next: FormField = { ...f };
+
+  if (f.show_if && f.show_if.field === fieldId) {
+    const cond = f.show_if;
+    const matchedOptionId = cond.value !== undefined && cond.value !== null
+      ? valueToReconstructedId.get(String(cond.value))
+      : undefined;
+    if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
+      // A SPECIFIC option: the inverse for a single option is exact, targeting that
+      // option's reconstructed checkbox.
+      //   equals <optValue>     -> is_checked        (shown when that option is set)
+      //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
+      // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
+      // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
+      // checkbox stores `false`, which is_empty reads as false, so the dependent
+      // would be permanently hidden once the box is touched. `not_equals true`
+      // reads false===checked, true===unchecked-or-absent -- the correct inverse
+      // (bd polyglot-pdf-cjby, fresh-eyes r3).
+      next.show_if = cond.operator === 'equals'
+        ? { field: matchedOptionId, operator: 'is_checked' }
+        : { field: matchedOptionId, operator: 'not_equals', value: true };
+    } else {
+      // Whole-group / unmatched: retarget to the primary so it does not dangle,
+      // and NORMALIZE the operator so it fires correctly against a standalone
+      // BOOLEAN checkbox. Preserving the original operator silently misfires:
+      // `not_equals ''` / `is_not_empty` on an unchecked checkbox (value false)
+      // is `false !== '' ` / `false !== ""` == always TRUE, so the dependent
+      // would show permanently (real i-90 case: p1_line6c_aptsteflrnumber's
+      // `not_equals ''` on the consolidated p1_unit_type6c_unit). Map the intent
+      // to a checkbox-sane operator instead (bd polyglot-pdf-v444, fresh-eyes).
+      const normalizedOp = normalizeWholeGroupOperator(cond);
+      // is_checked / is_empty are value-less operators (shouldShowField ignores
+      // value for them); a value-carrying operator (equals/not_equals/...) keeps
+      // its original value so the comparison is unchanged.
+      const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty';
+      next.show_if = valueLess
+        ? { field: primaryReconstructedId, operator: normalizedOp }
+        : { ...cond, field: primaryReconstructedId, operator: normalizedOp };
+    }
+    changed = true;
+  }
+
+  // copy_to / controls_fields target arrays: a single consolidated id expands to
+  // the full set of split ids (the rule covered the whole former group).
+  const expand = (ids?: string[]): string[] | undefined => {
+    if (!ids || !ids.includes(fieldId)) return ids;
+    const out: string[] = [];
+    for (const id of ids) {
+      const repl = id === fieldId ? rebuiltIds : [id];
+      for (const r of repl) if (!out.includes(r)) out.push(r);
+    }
+    return out;
+  };
+
+  if (f.copy_to && f.copy_to.includes(fieldId)) {
+    next.copy_to = expand(f.copy_to);
+    changed = true;
+  }
+
+  if (f.controls_fields) {
+    let controlsChanged = false;
+    const newControls = f.controls_fields.map(ctrl => {
+      const c = { ...ctrl };
+      for (const key of CONTROL_ACTION_KEYS) {
+        const list = ctrl[key];
+        if (list && list.includes(fieldId)) {
+          c[key] = expand(list);
+          controlsChanged = true;
+        }
+      }
+      return c;
+    });
+    if (controlsChanged) {
+      next.controls_fields = newControls;
+      changed = true;
+    }
+  }
+
+  return changed ? next : f;
 }
