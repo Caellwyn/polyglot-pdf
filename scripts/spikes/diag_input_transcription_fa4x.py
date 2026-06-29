@@ -244,6 +244,13 @@ def main() -> int:
     ap.add_argument("--vertex", action="store_true",
                     help="use the Vertex deployed model id (needs ADC/project env)")
     args = ap.parse_args()
+    if args.vertex and os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() != "true":
+        # genai.Client() only routes to Vertex when GOOGLE_GENAI_USE_VERTEXAI=true;
+        # otherwise --vertex would send the Vertex-only model id to AI Studio and
+        # 1008. Fail loudly with the fix rather than a cryptic close (fresh-eyes nit).
+        print("ERROR: --vertex needs GOOGLE_GENAI_USE_VERTEXAI=true (plus "
+              "GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION). See the module docstring.")
+        return 2
     model = MODEL_VERTEX if args.vertex else MODEL_AISTUDIO
     return asyncio.run(_run(model, args.turns))
 
