@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-29. The proactive `section_complete` / `form_complete` events (Pillar B, B4) are now LIVE -- the frontend emits them at section/form boundaries and the backend acks them (`section_complete_ack` / `form_complete_ack`); the validator round-trip on top is B5. See [../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md](../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md) for B4 closeout details.*
+*Last updated: 2026-06-29. Pillar B's wire surface is now COMPLETE: the proactive `section_complete` / `form_complete` events (B4) are LIVE, and B5 (jnjj.17) added the `validation_result` envelope -- pushed backend->frontend at every validated boundary (clean `{conflicts:[]}` or with conflicts) as the FE's clean->resume signal for the gated section switch. The STEER itself is NOT a wire message (it is a backend->Gemini Live text turn -- see the callout below). See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for B5 closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -114,6 +114,7 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `section_completed_ack` | websocket_routes.py:560 | Ack of a client `section_completed` (legacy reactive). |
 | `section_complete_ack` | websocket_routes.py (section_complete arm) | B / jnjj.16 (B4). Ack of the proactive `section_complete` event. |
 | `form_complete_ack` | websocket_routes.py (form_complete arm) | B / jnjj.16 (B4). Ack of the proactive `form_complete` event. |
+| `validation_result` | websocket_routes.py (section_complete / form_complete arms) | B / jnjj.17 (B5). The validator verdict for the just-emitted boundary: `{type, conflicts}` (conflicts spread at top level; clean = `[]`). Sent for EVERY validated boundary -- the FE's deterministic clean->resume signal for the gated section switch. Payload shape -> [validation-delegation.md](validation-delegation.md) (F3, contract 1). |
 | `disclaimer_read_initiated` | websocket_routes.py:392 | Disclaimer read started; carries `language`. |
 | `language_changed` | websocket_routes.py:449 | Fill language changed. |
 | `spoken_language_changed` | websocket_routes.py:464 | Spoken language changed. |
@@ -168,7 +169,7 @@ events have LANDED (B4); the validator verdict is still reserved (B5):
 |------|-----------|---------------|-------|
 | `section_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | SHIPPED. Proactive section-complete event. Now LIVE in the frontend->backend table above (emitted by the confirm handler; backend acks `section_complete_ack`). |
 | `form_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | SHIPPED. Proactive form-complete event. Now LIVE in the frontend->backend table above (acks `form_complete_ack`). |
-| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | RESERVED. Cheap-model validator verdict pushed to the client (for UI surfacing). Full envelope (`{type, conflicts}`) -> [validation-delegation.md](validation-delegation.md) (F3). |
+| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | SHIPPED. Now LIVE in the backend->frontend table above (pushed by the section_complete / form_complete arms every boundary; the FE gates the section switch on it). Full envelope (`{type, conflicts}`) -> [validation-delegation.md](validation-delegation.md) (F3). |
 
 > **The validator STEER is NOT a WS message type.** When a conflict is found, the
 > correction directive is injected **backend -> Gemini Live session** as a text turn
