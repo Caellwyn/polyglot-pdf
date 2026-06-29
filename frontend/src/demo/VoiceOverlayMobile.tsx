@@ -1239,8 +1239,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</div>
 					)}
 
-					{/* Action Buttons - Resume/Pause/Reconnect */}
-					{status === 'idle_timeout' ? (
+					{/* Action Buttons - Resume/Pause/Reconnect. Reconnect covers both the
+					    idle timeout AND a generic "disconnected" drop, which sets the
+					    "please click Reconnect" error and so needs a button to click
+					    (bd polyglot-pdf-b2yj). */}
+					{status === 'idle_timeout' || status === 'disconnected' ? (
 						<button className="vff-action-btn vff-reconnect-btn" onClick={handleConnect}>
 							🔄 Reconnect
 						</button>

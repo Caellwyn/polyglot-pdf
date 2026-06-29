@@ -1529,8 +1529,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 					{/* Controls */}
 					<div className="vff-controls">
-						{/* Connection is automatic after language selection - no connect button needed */}
-						{status === 'idle_timeout' ? (
+						{/* Connection is automatic after language selection - no connect button needed.
+						    The Reconnect button covers both the idle timeout AND a generic
+						    "disconnected" drop: the latter sets the "please click Reconnect"
+						    error, so it must offer a button to click (bd polyglot-pdf-b2yj). */}
+						{status === 'idle_timeout' || status === 'disconnected' ? (
 							<button
 								className="vff-button vff-reconnect"
 								onClick={handleConnect}
