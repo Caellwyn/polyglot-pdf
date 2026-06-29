@@ -105,8 +105,8 @@ describe('WebFormConnection validator steering + switch-gate (bd polyglot-pdf-jn
     vi.useRealTimers()
   })
 
-  async function connected(schema: FormSchema): Promise<MockWebSocket> {
-    conn = new WebFormConnection(schema)
+  async function connected(schema: FormSchema, callbacks: any = {}): Promise<MockWebSocket> {
+    conn = new WebFormConnection(schema, callbacks)
     await conn.connect('wss://example/ws/fill')
     const ws = lastWs()
     ws.send.mockClear()
@@ -157,6 +157,32 @@ describe('WebFormConnection validator steering + switch-gate (bd polyglot-pdf-jn
     // f_s1 is now marked steered in sessionStorage.
     const state = SchemaFormStateManager.load()!
     expect(state.fieldValues['f_s1'].steered).toBe(true)
+  })
+
+  it('keeps the mic LIVE on a conflict-hold, and stops it only when the switch proceeds', async () => {
+    // Opus PR #275 deadlock: the audio teardown must NOT run before the gate resolves.
+    // On a conflict-hold the user must be able to SPEAK to resolve it, so onStopCapture
+    // must not fire; it fires only when the switch actually proceeds (clean/fail-OPEN).
+    const onStopCapture = vi.fn()
+    const ws = await connected(TWO_SECTION_SCHEMA, { onStopCapture })
+    fireFieldUpdate(ws, 'firstname', 'Jane')
+    fireConfirm(ws, 'f_s1')
+    await flush()
+
+    // Conflict -> hold in-section -> mic must still be live.
+    deliverValidationResult(ws, [{ field_ids: ['f_s1'], reason: 'verify this' }])
+    await flush()
+    expect(conn!.getStatus()).not.toBe('switching_section')
+    expect(onStopCapture).not.toHaveBeenCalled()
+
+    // Now the user re-confirms and the verdict is clean -> the switch proceeds and the
+    // mic stops as part of the switch.
+    fireConfirm(ws, 'f_s1')
+    await flush()
+    deliverValidationResult(ws, [])
+    await flush()
+    expect(conn!.getStatus()).toBe('switching_section')
+    expect(onStopCapture).toHaveBeenCalled()
   })
 
   it('a steered field rides the NEXT validator payload as steered:true', async () => {

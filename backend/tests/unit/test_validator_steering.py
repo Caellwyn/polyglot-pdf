@@ -27,7 +27,9 @@ def _service(verdict):
     text_ai.validate = AsyncMock(return_value=verdict)
     live_ai = MagicMock(name="live_ai")
     live_ai.is_session_active = MagicMock(return_value=True)
-    live_ai.send_client_content = AsyncMock()
+    # send_client_content returns True = delivered (the real adapter's contract, Opus
+    # PR #275). Tests that exercise a non-delivery override this per-case.
+    live_ai.send_client_content = AsyncMock(return_value=True)
     svc = FormFillingService(live_ai=live_ai, text_ai=text_ai)
     return svc, live_ai, text_ai
 
@@ -187,6 +189,20 @@ async def test_steer_delivery_failure_returns_clean():
     live_ai.send_client_content = AsyncMock(side_effect=RuntimeError("send failed"))
     returned = await svc.handle_validation_boundary(_FIELDS)
     assert returned == {"conflicts": []}
+
+
+@pytest.mark.asyncio
+async def test_steer_not_delivered_returns_clean():
+    # The adapter SWALLOWS send failures and returns False (queued / no session / send
+    # error) rather than raising (Opus PR #275). A False return means the model never
+    # actually got the steer, so the conflict must read as clean -- else the client
+    # holds the section with nothing voiced.
+    verdict = {"conflicts": [{"field_ids": ["addr_state", "addr_zip"], "reason": "x"}]}
+    svc, live_ai, _ = _service(verdict)
+    live_ai.send_client_content = AsyncMock(return_value=False)
+    returned = await svc.handle_validation_boundary(_FIELDS)
+    assert returned == {"conflicts": []}
+    live_ai.send_client_content.assert_awaited_once()  # it WAS attempted
 
 
 @pytest.mark.asyncio

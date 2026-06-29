@@ -1610,25 +1610,21 @@ export class WebFormConnection {
         // switch is already advancing this boundary.
         console.log('[WebFormConnection] [skip] Section switch already in flight; ignoring duplicate boundary confirm.');
       } else if (nextSection) {
-        console.log('[WebFormConnection] [OK] Section complete! Auto-switching to:', nextSection.id);
-
-        // CRITICAL: Stop all audio processing immediately to prevent overlap with new session
-        console.log('[WebFormConnection] [stop] Stopping audio queue before section switch');
-        this.audioQueue = []; // Clear any queued audio from old session
-        this.isProcessingAudio = false; // Stop processing loop
-
-        // Stop capturing user audio (will restart after section switch)
-        if (this.callbacks.onStopCapture) {
-          this.callbacks.onStopCapture();
-        }
+        console.log('[WebFormConnection] [OK] Section complete! Gating switch on the validator:', nextSection.id);
 
         // Trigger automatic section switch (uses backend-side reconnect).
         // B4 (bd polyglot-pdf-jnjj.16): routed through proceedSectionSwitch() -- a
-        // single interceptable seam. In B4 it runs immediately (behavior unchanged).
-        // B5 (jnjj.17) gates this call on the validator round-trip (clean verdict or
-        // fail-OPEN timeout) so the verdict cannot arrive after Gemini has already
-        // restarted into the next section (contract 4's ordering rule). Keeping the
-        // switch behind one method means B5 changes only the gate, not this handler.
+        // single interceptable seam. B5 (jnjj.17) gates this call on the validator
+        // round-trip (clean verdict or fail-OPEN timeout) so the verdict cannot arrive
+        // after Gemini has restarted into the next section (contract 4's ordering).
+        //
+        // CRITICAL (Opus PR #275): the audio teardown (clear queue, stop mic capture)
+        // moved INTO doSectionSwitch -- it must run ONLY when the switch actually
+        // proceeds, NOT here. Stopping the mic before the gate resolved meant a
+        // CONFLICT verdict (which HOLDS the section so the model can voice the steer)
+        // left the user with a dead mic and no way to answer -- a deadlock. Now the
+        // mic stays live while the steer plays out, and the teardown happens just
+        // before the real switch.
         await this.proceedSectionSwitch(nextSection.id);
       } else {
         console.log('[WebFormConnection] [done] Form complete!');
@@ -1715,6 +1711,16 @@ export class WebFormConnection {
    * gate logic in proceedSectionSwitch reads cleanly.
    */
   private async doSectionSwitch(sectionId: string): Promise<void> {
+    // Audio teardown happens HERE -- only when the switch actually proceeds (clean
+    // verdict or fail-OPEN), never on a conflict-hold (Opus PR #275). Stop overlapping
+    // playback from the old session and stop mic capture; the new session restarts
+    // capture after the reconnect.
+    console.log('[WebFormConnection] [stop] Stopping audio queue + capture before section switch');
+    this.audioQueue = [];
+    this.isProcessingAudio = false;
+    if (this.callbacks.onStopCapture) {
+      this.callbacks.onStopCapture();
+    }
     await this.switchToSection(sectionId, '');
   }
 

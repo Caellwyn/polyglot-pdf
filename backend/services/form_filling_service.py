@@ -1498,13 +1498,20 @@ class FormFillingService:
 
         message = self._compose_validator_steer(conflicts, fields)
         try:
-            await self._live_ai.send_client_content(message)
-            _log.info(
-                "validator_steer_delivered",
-                conflict_count=len(conflicts),
-                session_id=self._session_id,
-            )
-            return conflicts
+            # send_client_content returns True only if the turn actually reached the
+            # live session (False if queued / no session / send raised). The adapter
+            # SWALLOWS its own send exceptions (Opus PR #275), so the bool -- not a
+            # raise -- is the real delivery signal. A steer that did not actually reach
+            # the model must NOT hold the section (the user would be stuck with nothing
+            # voiced), so treat not-delivered as no surviving conflict.
+            delivered = await self._live_ai.send_client_content(message)
+            if delivered:
+                _log.info("validator_steer_delivered",
+                          conflict_count=len(conflicts), session_id=self._session_id)
+                return conflicts
+            _log.info("validator_steer_not_delivered_fail_open",
+                      conflict_count=len(conflicts), session_id=self._session_id)
+            return []
         except Exception as exc:  # noqa: BLE001 -- a steer failure must never block
             _log.warning("validator_steer_deliver_failed",
                          exc_type=type(exc).__name__, session_id=self._session_id)

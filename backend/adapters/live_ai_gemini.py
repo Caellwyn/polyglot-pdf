@@ -744,17 +744,24 @@ class LiveAIGemini(ILiveAI):
         Args:
             text: Message to send to Gemini (e.g., language change instruction)
         """
+        # Returns True iff the turn was actually handed to the live session this call,
+        # False if it was queued (session not ready), dropped (no session), or the send
+        # raised. Callers that ignore the return are unaffected (back-compat); the B5
+        # validator steer (bd polyglot-pdf-jnjj.17) uses it to decide whether to HOLD
+        # the section -- a steer that was not actually voiced must not trap the user
+        # (Codex/Opus PR #275).
+        #
         # Check if session is ready - if not, queue the message
         if not self._session_ready:
             self._log.info("[config] CLIENT_CONTENT_QUEUED (session not ready yet)",
                           message_length=len(text),  # never log message text (may carry field content) -- bd hjo
                           queue_size=len(self._pending_client_content) + 1)
             self._pending_client_content.append(text)
-            return
+            return False
 
         if self._current_session is None:
             self._log.warning("[warn] SEND_CLIENT_CONTENT_NO_SESSION")
-            return
+            return False
 
         try:
             self._log.info("SEND_CLIENT_CONTENT", message_length=len(text))  # never log message text -- bd hjo
@@ -779,8 +786,10 @@ class LiveAIGemini(ILiveAI):
                     self._log.warn("failed_to_append_debug_file", error=str(e))
 
             await self._send_text_turn(self._current_session, text)
+            return True
         except Exception as exc:
             self._log.error("send_client_content_failed", error=str(exc), message_length=len(text))  # never log message text -- bd hjo
+            return False
 
     async def send_activity_start(self):
         """Send activity_start signal to Gemini (user started speaking).
