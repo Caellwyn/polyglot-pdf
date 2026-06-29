@@ -1296,8 +1296,9 @@ class FormFillingService:
             _log.warning("ask_secretary_async_timeout", session_id=self._session_id)
             return
         except asyncio.CancelledError:
-            # end_session cancelled us during teardown. It also cancels + drains the
-            # underlying lookup directly (see end_session), so we just propagate.
+            # A teardown/swap cancelled us via _cancel_secretary_deliver_tasks (called
+            # from BOTH end_session and _switch_to_section_locked). That helper also
+            # cancels + drains the underlying lookup directly, so we just propagate.
             raise
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_async_error",
