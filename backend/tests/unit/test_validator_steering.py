@@ -48,7 +48,9 @@ async def test_conflict_injects_steer_naming_both_fields():
 
     returned = await svc.handle_validation_boundary(_FIELDS)
 
-    # The full verdict is returned to the caller (for the client envelope).
+    # No field is already steered here, so every conflict SURVIVES suppression -- the
+    # returned (post-suppression) verdict equals the input. (A suppressed conflict
+    # would be omitted; see test_already_steered_field_suppresses_resteer.)
     assert returned == verdict
     # The steer reached the Live session exactly once...
     live_ai.send_client_content.assert_awaited_once()

@@ -1398,11 +1398,16 @@ class FormFillingService:
         payload), and -- on a SURVIVING conflict -- inject a steering directive into
         the Live session so the voice model sends the user back to verify.
 
-        Returns the FULL contract-1 verdict ({"conflicts": [...]}, pre-suppression);
-        the caller pushes it to the client as the `validation_result` envelope so the
-        CLIENT can set its per-field `steered` markers (the marker is client-owned --
-        the backend is stateless, contract 2). Suppression governs only whether the
-        STEER fires this pass, not what the client is told.
+        Returns the SURVIVING contract-1 verdict ({"conflicts": [...]}, POST-
+        suppression). The caller pushes it to the client as the `validation_result`
+        envelope; the client gates the section switch on it (a conflict holds the
+        section, an empty list resumes) and sets per-field `steered` markers from the
+        conflicts it receives (the marker is client-owned -- the backend is stateless,
+        contract 2). A SUPPRESSED conflict is omitted (returned as clean): no steer
+        fires for it AND the switch must proceed -- its fields are already steered
+        client-side, so nothing is lost, and returning it would trap a user who used
+        the override escape hatch (the inline note at the return below has the full
+        rationale).
 
         Max-resteer bound (contract 3, invariant 2): a conflict referencing an
         already-`steered: true` field (PER-FIELD: any of its field_ids steered) is
