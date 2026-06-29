@@ -478,7 +478,12 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       id = candidate;
     }
     usedIds.add(id);
-    if (opt.value !== undefined && opt.value !== null) {
+    // Exclude an empty-string option value: a dependent's `equals ''` / `not_equals
+    // ''` is a whole-group populated/empty check (handled by
+    // normalizeWholeGroupOperator), NOT a reference to a degenerate ''-valued
+    // option. Admitting '' here would mis-route it to the specific-option branch
+    // (fresh-eyes r3). Empty/null option values never identify a real option.
+    if (opt.value !== undefined && opt.value !== null && opt.value !== '') {
       valueToReconstructedId.set(String(opt.value), id);
     }
 
@@ -590,15 +595,19 @@ function remapFallbackDependent(
       ? valueToReconstructedId.get(String(cond.value))
       : undefined;
     if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
-      // A SPECIFIC option: the inverse for a single option is exact. "consolidated
-      // equals <optValue>" -> "that option's reconstructed checkbox is_checked";
-      // "consolidated not_equals <optValue>" -> "that checkbox is_empty" (shown
-      // unless that option is selected). Both target the specific option field and
-      // carry NO value (is_checked/is_empty are value-less in shouldShowField).
-      next.show_if = {
-        field: matchedOptionId,
-        operator: cond.operator === 'equals' ? 'is_checked' : 'is_empty',
-      };
+      // A SPECIFIC option: the inverse for a single option is exact, targeting that
+      // option's reconstructed checkbox.
+      //   equals <optValue>     -> is_checked        (shown when that option is set)
+      //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
+      // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
+      // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
+      // checkbox stores `false`, which is_empty reads as false, so the dependent
+      // would be permanently hidden once the box is touched. `not_equals true`
+      // reads false===checked, true===unchecked-or-absent -- the correct inverse
+      // (bd polyglot-pdf-cjby, fresh-eyes r3).
+      next.show_if = cond.operator === 'equals'
+        ? { field: matchedOptionId, operator: 'is_checked' }
+        : { field: matchedOptionId, operator: 'not_equals', value: true };
     } else {
       // Whole-group / unmatched: retarget to the primary so it does not dangle,
       // and NORMALIZE the operator so it fires correctly against a standalone

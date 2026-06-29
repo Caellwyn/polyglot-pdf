@@ -12,7 +12,26 @@ import {
   mergeBlockReason,
   stripEditorState,
 } from './fieldGrouping';
-import type { FormSchema, FormField } from '../types/schema';
+import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
+
+// A faithful local mirror of the runtime's frontend shouldShowField scalar-trigger
+// semantics (frontend/src/schema-forms/utils/validation.ts), so these tests pin
+// RUNTIME behavior -- whether a remapped condition actually fires -- not just the
+// emitted shape. Cross-package import of the real evaluator is avoided (it lives in
+// the separate `frontend` package); this covers only the boolean-checkbox operators
+// the ungroup remap produces (fresh-eyes r3). An unchecked checkbox is `false`; a
+// never-touched one is absent (undefined).
+function runtimeShowIf(cond: ConditionalDisplay, values: Record<string, unknown>): boolean {
+  const v = values[cond.field];
+  switch (cond.operator) {
+    case 'is_checked': return v === true;
+    case 'is_empty': return v === null || v === undefined || v === '';
+    case 'is_not_empty': return v !== null && v !== undefined && v !== '';
+    case 'equals': return v === cond.value;
+    case 'not_equals': return v !== cond.value;
+    default: return true;
+  }
+}
 
 // A separate per-widget checkbox field, the shape extraction emits for a
 // "check one box" radio group before consolidation.
@@ -526,7 +545,7 @@ describe('Opus fallback review fixes', () => {
     expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
   });
 
-  it('maps not_equals <matched option> to is_empty on THAT option field (show unless that option set)', () => {
+  it('maps not_equals <matched option> to `not_equals true` on THAT option field (show unless that option set)', () => {
     const schema = raceSchemaWithDependent();
     // 'asian' is a real option of p3_race; "show unless asian selected"
     schema.fields.find(f => f.id === 'detail')!.show_if = {
@@ -534,10 +553,49 @@ describe('Opus fallback review fixes', () => {
     };
     const unmerged = ungroupField(schema, 'p3_race');
     const detail = unmerged.fields.find(f => f.id === 'detail')!;
-    // exact single-option inverse: is_empty on the reconstructed 'asian' field
-    // (shown when that checkbox is NOT checked), not is_empty on the primary.
-    expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_empty' });
+    // exact single-option inverse: not_equals true on the reconstructed 'asian'
+    // field. NOT is_empty -- is_empty is false for an explicitly-unchecked (false)
+    // checkbox, hiding the dependent forever (fresh-eyes r3, bd cjby).
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'not_equals', value: true });
     expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
+    // runtime oracle: shown UNLESS asian is checked.
+    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(false);  // selected -> hidden
+    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(true);  // unchecked -> shown
+    expect(runtimeShowIf(detail.show_if!, {})).toBe(true);                // untouched -> shown
+  });
+
+  it('runtime: equals <matched option> -> is_checked shows iff that option is checked', () => {
+    const schema = raceSchemaWithDependent(); // detail show_if = equals 'asian'
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_checked' });
+    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(true);
+    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(false);
+  });
+
+  it("excludes an empty-string option value from the option map: not_equals '' stays a whole-group check", () => {
+    const schema = w7Schema();
+    schema.fields = [
+      {
+        id: 'grp', name: 'Grp', type: 'radio', section_id: 'reason',
+        pdf_field_name: 'grp[0]', read_only: false, required: false,
+        options: [
+          { value: '', label: 'None', pdf_field_name: 'none[0]', source_type: 'checkbox' },
+          { value: 'x', label: 'X', pdf_field_name: 'x[0]', source_type: 'checkbox' },
+        ],
+      },
+      {
+        id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        show_if: { field: 'grp', operator: 'not_equals', value: '' },
+      },
+    ];
+    schema.sections[0].fields = ['grp', 'detail'];
+    const unmerged = ungroupField(schema, 'grp');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // '' did NOT match a specific option -> whole-group "populated" -> is_checked
+    // on the primary, NOT is_empty on the ''-valued option's field.
+    expect(detail.show_if).toEqual({ field: 'grp', operator: 'is_checked' });
   });
 
   it('preserves not_equals <non-empty-unmatched> on the primary (replicates the original always-show)', () => {
