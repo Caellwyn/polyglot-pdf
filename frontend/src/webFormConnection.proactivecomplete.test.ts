@@ -324,4 +324,103 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
     const acks = ofType(ws, 'confirm_field_response').filter(m => m.section_complete === true)
     expect(acks).toHaveLength(1)
   })
+
+  // --- Codex PR #271 round-1 findings ---
+
+  it('emits form_complete when all REQUIRED fields are confirmed but an OPTIONAL field is still unconfirmed (voice path)', async () => {
+    // isFormComplete keys off required fields, so the form is complete once f_req is
+    // confirmed -- but computeNextField returns the unconfirmed optional f_opt, so the
+    // confirm handler never reaches the last-section form-complete branch. The
+    // unconditional maybeEmitFormComplete() must still fire form_complete here, or the
+    // voice/AI completion path skips the B5 validator entirely (Codex finding 2).
+    const schema = {
+      source: 'web',
+      fields: [
+        { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
+          validation: { required: true } },
+        { id: 'f_opt', name: 'optname', spoken_name: 'Optional', type: 'text' },
+      ],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_opt'] }],
+    } as unknown as FormSchema
+    const ws = await connected(schema)
+    fireFieldUpdate(ws, 'reqname', 'present')
+    fireConfirm(ws, 'f_req')
+
+    const events = ofType(ws, 'form_complete')
+    expect(events).toHaveLength(1)
+    expect(events[0].fields).toEqual([
+      { field_id: 'f_req', name: 'Required', value: 'present', steered: false },
+    ])
+  })
+
+  it('EXCLUDES a now-hidden conditional field (stale value) from the validator payload', async () => {
+    // f_dep is shown only when f_trigger === 'yes'. Fill f_dep, then flip the trigger
+    // to 'no' so f_dep is hidden -- its stale value lingers in sessionStorage.
+    // buildValidatorFields must apply shouldShowField and drop it, or the validator
+    // gets a stale answer for a field no longer in the active form (Codex finding 3).
+    const schema = {
+      source: 'web',
+      fields: [
+        { id: 'f_trigger', name: 'trigger', spoken_name: 'Trigger', type: 'text',
+          validation: { required: true } },
+        { id: 'f_dep', name: 'dependent', spoken_name: 'Dependent', type: 'text',
+          show_if: { field: 'f_trigger', operator: 'equals', value: 'yes' } },
+      ],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_trigger', 'f_dep'] }],
+    } as unknown as FormSchema
+    const ws = await connected(schema)
+    // Trigger = yes -> f_dep shown; fill + confirm f_dep, then confirm f_trigger=yes.
+    fireFieldUpdate(ws, 'trigger', 'yes')
+    fireFieldUpdate(ws, 'dependent', 'stale-value')
+    fireConfirm(ws, 'f_dep')
+    // Now flip the trigger to 'no' so f_dep becomes hidden, then confirm the trigger.
+    fireFieldUpdate(ws, 'trigger', 'no')
+    ws.send.mockClear()
+    fireConfirm(ws, 'f_trigger')
+
+    const events = ofType(ws, 'form_complete')
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const payloadIds = events[events.length - 1].fields.map((f: any) => f.field_id)
+    expect(payloadIds).toContain('f_trigger')
+    expect(payloadIds).not.toContain('f_dep') // hidden -> excluded
+  })
+
+  it('does NOT emit a second section_complete on a duplicate confirm while the switch is in flight', async () => {
+    const ws = await connected(TWO_SECTION_SCHEMA)
+    fireFieldUpdate(ws, 'firstname', 'Jane')
+    fireConfirm(ws, 'f_s1')
+    // First confirm emitted section_complete and started the switch (switchInFlight).
+    expect(ofType(ws, 'section_complete')).toHaveLength(1)
+
+    // A duplicate confirm for the SAME last field arrives before the switch resolves.
+    // switchToSection rejects it on switchInFlight, but the section_complete emit must
+    // ALSO be suppressed -- exactly one event per boundary (Codex finding 4).
+    fireConfirm(ws, 'f_s1')
+    expect(ofType(ws, 'section_complete')).toHaveLength(1)
+  })
+
+  it('emits form_complete on reconnect into an already-complete form (closed-socket edit bypass)', async () => {
+    // Complete the form, then simulate: socket closes, the form stays complete in
+    // sessionStorage, and on reconnect handleOpen clears formCompleteSnapshot. The
+    // session_ready handler must re-emit form_complete so the dirty completed form is
+    // not silently submitted past the B5 validator (Codex finding 1).
+    const ws = await connected(ONE_SECTION_SCHEMA)
+    fireFieldUpdate(ws, 'fielda', 'AA')
+    fireConfirm(ws, 'f_a')
+    fireFieldUpdate(ws, 'fieldb', 'BB')
+    fireConfirm(ws, 'f_b')
+    expect(ofType(ws, 'form_complete')).toHaveLength(1)
+
+    // Simulate a fresh (re)connect on the SAME connection: handleOpen runs (resets
+    // the snapshot to null), then a session_ready arrives. The form is still complete
+    // in sessionStorage -> form_complete must re-emit exactly once.
+    ws.send.mockClear()
+    ws.onopen?.() // re-run handleOpen: resets formCompleteSnapshot to null
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'session_ready', session_id: 'web_reco', ephemeral: true }),
+    })
+
+    const reEmit = ofType(ws, 'form_complete')
+    expect(reEmit).toHaveLength(1)
+  })
 })

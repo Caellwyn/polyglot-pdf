@@ -577,6 +577,20 @@ export class WebFormConnection {
       this.callbacks.onSessionReady(session_id);
     }
 
+    // B4 (bd polyglot-pdf-jnjj.16): emit form_complete if we reconnected INTO an
+    // already-complete (and dirty) form (Codex PR #271). A field edited while the
+    // socket was closed (e.g. after an idle timeout) takes the early return in
+    // sendManualFieldUpdate (WS not OPEN), so no form_complete fires at edit time;
+    // handleOpen then clears formCompleteSnapshot to null on reconnect. Without this
+    // call the guard is cleared but the emitter is never invoked, so the dirty
+    // completed form would bypass the B5 validator. The socket is OPEN here
+    // (session_ready arrived), so the send succeeds; refresh this.state from the
+    // persisted snapshot first so a closed-socket edit saved to sessionStorage is
+    // reflected. maybeEmitFormComplete is guarded -> no-op for an incomplete form.
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+    this.maybeEmitFormComplete();
+
     // No need to send initial hint - backend will request it as part of initial message
   }
 
@@ -1438,10 +1452,17 @@ export class WebFormConnection {
     // validation-delegation.md contract 4). This is a SEPARATE top-level event from
     // the section_complete SUB-FIELD on the confirm ack above (that sub-field just
     // suppresses the backend's racing next-field-hint, bd njvh); both ride the same
-    // `sectionComplete` boolean by design and each fires exactly once per boundary.
+    // `sectionComplete` boolean by design.
     // Fire-and-forget: the validator round-trip is async and must not block the user
     // (criterion 3); B5 (jnjj.17) consumes the verdict and gates the switch.
-    if (sectionComplete) {
+    //
+    // `!this.switchInFlight` keeps it to EXACTLY ONE event per boundary (Codex PR
+    // #271): a duplicate confirm_field for the same last field, arriving while the
+    // first auto-switch is still draining/awaiting session_ready, would otherwise
+    // re-run this block and emit a second section_complete before switchToSection
+    // rejects the duplicate on switchInFlight. The guard is set synchronously in
+    // switchToSection (before its first await), so the second confirm sees it.
+    if (sectionComplete && !this.switchInFlight) {
       this.send({
         type: 'section_complete',
         section_id: this.state.currentSectionId,
@@ -1450,6 +1471,17 @@ export class WebFormConnection {
         ),
       });
     }
+
+    // B4 (bd polyglot-pdf-jnjj.16): check whole-form completeness on EVERY confirm,
+    // not only in the last-section/no-next-field branch below (Codex PR #271). When
+    // a form has required fields plus still-unconfirmed OPTIONAL fields,
+    // isFormComplete() is already true once the required ones are confirmed -- but
+    // computeNextField(skipConfirmed) still returns an optional field, so execution
+    // never reaches the `!nextField` form-complete branch and the voice/AI path would
+    // skip form_complete (and the B5 validator) entirely. maybeEmitFormComplete is
+    // guarded (fires only when isFormComplete AND the snapshot changed), so calling
+    // it here is a no-op for an incomplete form and idempotent vs. the branch below.
+    this.maybeEmitFormComplete();
 
     // Confirm took -- clear pending unconfirmable tracking. A successful confirm of
     // the stuck field is genuine progress, so it restores the session-wide re-prompt
@@ -1478,7 +1510,13 @@ export class WebFormConnection {
         nextSectionLabel: nextSection?.label || 'N/A'
       });
 
-      if (nextSection) {
+      if (nextSection && this.switchInFlight) {
+        // A switch is already running (e.g. a DUPLICATE confirm of the same last
+        // field arrived before the first auto-switch resolved). Re-attempting it
+        // would throw in switchToSection (Codex PR #271); skip cleanly -- the first
+        // switch is already advancing this boundary.
+        console.log('[WebFormConnection] [skip] Section switch already in flight; ignoring duplicate boundary confirm.');
+      } else if (nextSection) {
         console.log('[WebFormConnection] [OK] Section complete! Auto-switching to:', nextSection.id);
 
         // CRITICAL: Stop all audio processing immediately to prevent overlap with new session
@@ -1501,11 +1539,9 @@ export class WebFormConnection {
         await this.proceedSectionSwitch(nextSection.id);
       } else {
         console.log('[WebFormConnection] [done] Form complete!');
-        // B4: the whole form is done -- emit the proactive form_complete event for
-        // the full-form validator pass. Guarded once-only + dirty re-emit (contract
-        // 4); fire-and-forget, does not block onFormComplete.
-        this.maybeEmitFormComplete();
-        // Notify UI that entire form is complete
+        // B4: form_complete for this last-section completion was already emitted by
+        // the unconditional maybeEmitFormComplete() above (it covers every confirm,
+        // Codex PR #271). Just notify the UI here.
         if (this.callbacks.onFormComplete) {
           this.callbacks.onFormComplete();
         }
@@ -1557,8 +1593,17 @@ export class WebFormConnection {
       if (!fv && fieldId.endsWith('[]')) fv = this.state.fieldValues[fieldId.slice(0, -2)];
       return fv;
     };
+    const allFields = this.state.schema?.fields ?? [];
     const out: Array<{ field_id: string; name: string; value: any; steered: boolean }> = [];
     for (const field of sectionFields) {
+      // Skip fields hidden by conditional logic (Codex PR #271). A field whose
+      // show_if trigger has since flipped is no longer part of the active form, but
+      // its old value can linger in sessionStorage; navigation hides it via
+      // shouldShowField. Without this filter a stale hidden answer would ride into
+      // the validator payload (with no `shown` flag) and the validator could flag or
+      // steer the user to a field that is no longer applicable. Use the SAME
+      // visibility predicate navigation uses, against the FULL value map.
+      if (!shouldShowField(field, this.state.fieldValues, allFields)) continue;
       const fv = valueFor(field.id);
       const value = fv ? fv.value : undefined;
       // Skip empty/unfilled values (contract 2: non-empty only).
