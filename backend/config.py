@@ -79,15 +79,25 @@ class Settings(BaseModel):
 	USE_PREMIUM_MODEL: bool = os.getenv("USE_PREMIUM_MODEL", "false").lower() == "true"
 	MODEL_NATIVE: str = os.getenv("MODEL_NATIVE", "")  # resolved in _resolve_model if unset
 	MODEL_LABELING: str = os.getenv("MODEL_LABELING", "gemini-2.5-flash")
-	# Secretary (bd polyglot-pdf-jnjj.45) interim tail-latency guard: the
-	# ask_secretary call is BLOCKING (the principal waits mid-conversation), and
-	# Gate 2 (jnjj.27) measured occasional multi-second spikes. This caps ONLY the
-	# model call (TextAIGemini.ask); the preceding client form-state round-trip has
-	# its own ~5s coordinator timeout, so the worst-case total blocking wait is
-	# ~SECRETARY_TIMEOUT_S + 5s, not SECRETARY_TIMEOUT_S alone. On timeout the
-	# handler fail-opens (tells the principal to ask the user directly). This is the
-	# STOPGAP; the graceful "please hold" filler is jnjj.43. Generous default so a
-	# normal ~1s lookup is never cut off.
+	# Secretary tail-latency guard (bd polyglot-pdf-jnjj.43). The ask_secretary call
+	# is BLOCKING (the live "principal" model waits on the tool result mid-turn);
+	# Gate 2 (jnjj.27) measured a heavy tail (median ~1s but spikes to 8.5s / 20s).
+	# Two bounds:
+	#
+	# SECRETARY_DEADLINE_S -- how long the SYNCHRONOUS tool call waits before it stops
+	#   blocking and returns a "pending" tool result so the principal's turn is not
+	#   held open for the tail. The still-running lookup is detached; when it lands the
+	#   answer is DELIVERED on a follow-up turn (send_client_content) and the principal
+	#   voices it. The "I'm working" UX is the gap-based thinking indicator (bd wpw.5),
+	#   which spans user-turn-end -> first-response-audio and so covers this wait for
+	#   free -- NO spoken live-model filler turn is spent here (cost lever, maintainer
+	#   2026-06-29). Tune against live UX; ~2.5s keeps the median (~1s) lookup on the
+	#   fast synchronous path while bounding how long the principal's turn blocks.
+	# SECRETARY_TIMEOUT_S -- the HARD CAP on the model call itself (both the sync wait
+	#   and the detached background lookup are bounded by it), so a 20s spike or a
+	#   stalled call never runs unbounded. The preceding client form-state round-trip
+	#   has its own ~5s coordinator timeout (separate from these).
+	SECRETARY_DEADLINE_S: float = float(os.getenv("SECRETARY_DEADLINE_S", "2.5"))
 	SECRETARY_TIMEOUT_S: float = float(os.getenv("SECRETARY_TIMEOUT_S", "8.0"))
 	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
 	# True (DEFAULT) -> Vertex via service-account ADC + GOOGLE_CLOUD_PROJECT

@@ -381,7 +381,8 @@ class TestAskSecretaryRouting:
             request_coordinator=mock_coordinator,
             session_id="test-123",
         )
-        ask = AsyncMock(return_value="Their first name is Ada.")
+        # The handler returns a status dict (bd jnjj.43): ok / pending / failed.
+        ask = AsyncMock(return_value={"status": "ok", "answer": "Their first name is Ada."})
         handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
@@ -401,6 +402,38 @@ class TestAskSecretaryRouting:
         assert result["available"] is True
 
     @pytest.mark.asyncio
+    async def test_ask_secretary_pending_returns_wait_instruction(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A pending status (lookup blew the deadline; answer delivered async, bd
+        jnjj.43) yields a WAIT instruction with available=True -- NOT an apology and
+        NOT a re-ask. The model is told the answer is coming as a follow-up."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            handle_get_field_value=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            get_next_field_schema_for_jit=MagicMock(),
+            handle_ask_secretary=AsyncMock(return_value={"status": "pending", "answer": ""}),
+        )
+
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary", arguments={"query": "q"}
+        )
+        # Pending is NOT a failure: available stays True (no apology).
+        assert result["available"] is True
+        answer = result["answer"].lower()
+        assert "apolog" not in answer  # NOT the failure path
+        # Must steer the model to wait for the follow-up, not answer or re-ask now.
+        assert "do not answer the question yet" in answer
+        assert "do not repeat" in answer
+
+    @pytest.mark.asyncio
     async def test_ask_secretary_fail_open_on_empty_answer(
         self, mock_websocket, mock_coordinator
     ):
@@ -418,7 +451,7 @@ class TestAskSecretaryRouting:
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
             get_next_field_schema_for_jit=MagicMock(),
-            handle_ask_secretary=AsyncMock(return_value=""),
+            handle_ask_secretary=AsyncMock(return_value={"status": "failed", "answer": ""}),
         )
 
         result = await handler.on_tool_call(
