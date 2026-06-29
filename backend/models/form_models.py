@@ -127,7 +127,9 @@ class FormMetadata(BaseModel):
         None, ge=0, le=1,
         description="0-1 confidence in the auto-extracted version (bd s4dp.2): "
                     "high for a specific Edition/Rev pattern, low for a generic "
-                    "year/OMB fallback, 0 when the version is 'unknown'.",
+                    "year/loose-OMB fallback, 0 when nothing is recoverable. Note "
+                    "version may be 'unknown' yet carry LOW (not 0) confidence when "
+                    "a loose OMB number gives some provenance.",
     )
     page_count: Optional[int] = Field(None, description="Total pages in PDF")
     instructions_url: Optional[str] = Field(None, description="Link to separate instructions PDF")
