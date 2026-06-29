@@ -26,10 +26,9 @@ residual levers G1b surfaced, each measured on the SAME clean corpus
   below the 2.5-flash 2048 / 3.5-flash 4096 minimums); trim is a net precision
   loss; and the model recommendation pivoted OFF 3.5-flash to the native-audio
   voice model (recall 0.96 / precision 1.0 / ~7s @132 on the clean corpus, measured
-  separately via probe_g1b_model_size_bakeoff). This probe is run with
-  on 3.5-flash (hardcoded in _lever_latency) purely to document why 3.5-flash is
-  rejected; the shipped end-of-form tier is the voice model. (Run with
-  --lever latency.)
+  separately via probe_g1b_model_size_bakeoff). This probe runs on 3.5-flash
+  (hardcoded in _lever_latency) purely to document why 3.5-flash is rejected; the
+  shipped end-of-form tier is the voice model. (Run with --lever latency.)
 
 PROVENANCE: SYNTHETIC clean corpus (g1b_answer_key persona). No real PHI.
 

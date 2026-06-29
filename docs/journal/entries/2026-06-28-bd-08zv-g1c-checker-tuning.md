@@ -37,7 +37,8 @@ production wiring):
 ### The findings (two premises overturned)
 
 **Per-section tier -- prompt win (exit criterion 2).** Pooled over 3 runs on
-2.5-flash-lite, `PROMPT_TUNED` cuts false positives ~7x with recall held:
+2.5-flash-lite, `PROMPT_TUNED` cuts false positives ~7x (recall improves at size
+40, flat at size 20 aside from one json_error format glitch -- no content miss):
 precision 0.77->0.96 at section size (20), 0.89->0.97 at page size (40). The lite
 model's FPs concentrated exactly in the three coherent-but-unusual buckets the
 clean corpus exposed (foreign addresses, US territories, dual addresses); the

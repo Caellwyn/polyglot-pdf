@@ -17,7 +17,7 @@ recommend the config to ship for each tier.
 
 | Tier | Model | Config to ship | Measured |
 |------|-------|----------------|----------|
-| **Per-section** (each section/page, ~20-40 fields) | **gemini-2.5-flash-lite** | the **tuned anti-hedging + few-shot prompt** (`PROMPT_TUNED`) | precision 0.77->0.96 @20, 0.89->0.97 @40; recall held; ~0.6s |
+| **Per-section** (each section/page, ~20-40 fields) | **gemini-2.5-flash-lite** | the **tuned anti-hedging + few-shot prompt** (`PROMPT_TUNED`) | precision 0.77->0.96 @20, 0.89->0.97 @40; recall: +0.03 @40, flat @20 (one json_error format glitch, no content miss); ~0.6s |
 | **End-of-form** (the full 132-field sweep, once at submit) | **the standard native-audio VOICE model** (config's `MODEL_NATIVE` / `_resolve_model`, NOT a hardcoded id -- it is backend-aware: `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio, `gemini-live-2.5-flash-native-audio` on Vertex) via a `report_conflicts` tool call on a FRESH Live session (not the connected one) | the baseline checker rules | recall 0.96, precision 1.00 @132; **p50 7.4s / p90 9.3s** |
 
 Two premises from G1b were OVERTURNED by re-measuring on the clean corpus:
@@ -130,7 +130,8 @@ old "far 5/6" weakness (G1b) was a contaminated-corpus artifact.
 
 - **Per-section checker:** `gemini-2.5-flash-lite` (HTTP) with `PROMPT_TUNED`
   (anti-hedging + foreign/territory/dual few-shots). ~0.6s, precision ~0.96-0.97 on
-  20-40 field windows, recall held.
+  20-40 field windows; recall improves at size 40 and is flat at size 20 (aside
+  from one json_error format glitch -- no content miss).
 - **End-of-form checker:** the **native-audio voice model** via a `report_conflicts`
   tool call on a FRESH, isolated Live session (NOT the connected form-fill session
   -- see the production constraint), with the baseline checker rules. recall 0.96,
