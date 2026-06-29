@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-15. bd njvh: `confirm_field_response` gains an optional `section_complete: true` sub-field (backend skips the racing next-field-hint at a section boundary) -- documented in the message table; note it is a sub-field of the confirm reply, NOT the SI-epic's planned top-level `section_complete` event. Also 2026-06-15: A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
+*Last updated: 2026-06-28. bd polyglot-pdf-p68s (jnjj.45d): the handshake gains a `full_schema` key (the whole-form secretary catalog, both modes) and `form_state_response` entries gain a `shown` applicability sub-field -- both documented in the tables below. Earlier: 2026-06-15. bd njvh: `confirm_field_response` gains an optional `section_complete: true` sub-field (backend skips the racing next-field-hint at a section boundary) -- documented in the message table; note it is a sub-field of the confirm reply, NOT the SI-epic's planned top-level `section_complete` event. Also 2026-06-15: A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -36,6 +36,7 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 | `type` | `"handshake"` \| `"handshake_jit"` | both | Selects mode. `handshake_jit` -> JIT mode (line 648). Anything else (incl. missing) -> legacy. |
 | `form_session_id` | string | both | Persistent, frontend-managed ID; survives reconnects. Logging/metrics correlation only -- never used for server-side state (line 651). |
 | `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (line 683). |
+| `full_schema` | object (`{source, fields, sections, parts, ...}`) \| absent | both | The WHOLE form schema (all parts/sections/fields), for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d). Distinct from `schema`/`manifest`, which carry only the CURRENT section. The backend caches it in-session in `FormFillingService._full_schema` and `handle_ask_secretary` renders the secretary's static catalog from it; preserved across same-form section switches. Schema only -- no PII; rebuilt from this on every (re)connect (stateless invariant). Optional: an older client that omits it makes the secretary fall back to the per-section `schema`. |
 | `fill_language` | string | both | Language the AI fills/speaks in; defaults to `"English"` (line 684). |
 | `section_number` | int (1-indexed) | both | Current section order (line 688). |
 | `section_label` | string | both | Display label for the current section (line 689). |
@@ -127,7 +128,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 |------|-----------|---------|
 | `handshake` / `handshake_jit` | schemaFormState.ts:604 / :636 | Initial + section-switch handshake (see above). |
 | `form_state` | webFormConnection.ts:2018 | Push current form state; backend replies `form_state_ack`. |
-| `form_state_response` | webFormConnection.ts:812 | Reply to backend `get_form_state`. |
+| `form_state_response` | webFormConnection.ts:812 | Reply to backend `get_form_state`. Each `field_values[id]` entry carries `{value, confirmed, shown}`. `shown` (bd polyglot-pdf-p68s / jnjj.45d) is the field's current applicability, computed client-side via `shouldShowField` (the backend is stateless and cannot derive it); it feeds the secretary's `shown_map` so a value-bearing-but-now-hidden field is distinguishable from a visible one. An older client that omits `shown` leaves the field out of `shown_map` (renderer default = shown). |
 | `next_field_hint` | websocket_routes.py:300 | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). |
 | `next_field_hint_response` | webFormConnection.ts:835 | Reply to backend `get_next_field_hint`. |
 | `read_disclaimer` | websocket_routes.py:377 (sent connection.ts:844) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. |
@@ -234,7 +235,7 @@ verifying:
 
 4. **No other drift.** All other keys the backend reads (`type`,
    `form_session_id`, `manifest`, `first_field_schema`, `loaded_field_ids`,
-   `schema`, `current_values`, `fill_language`, `section_number`,
+   `schema`, `full_schema`, `current_values`, `fill_language`, `section_number`,
    `section_label`, `total_sections`, `resume`) are produced verbatim by the
    frontend builders, and every backend->frontend type in the table above has a
    matching backend `send_json`.

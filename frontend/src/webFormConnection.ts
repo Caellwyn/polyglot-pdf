@@ -779,12 +779,34 @@ export class WebFormConnection {
     // Build field values response
     const fieldValues: Record<string, any> = {};
 
+    // Applicability (`shown`) rides each entry for the secretary's values tail
+    // (bd polyglot-pdf-p68s / jnjj.45d): the backend cannot derive it (stateless),
+    // so the client -- which owns conditional UI -- computes it via shouldShowField.
+    // It is computed against the FULL fieldValues map (so a trigger field outside
+    // the requested set still resolves) and passes schema.fields for checkbox-group
+    // trigger disambiguation. A field absent from the schema (defensive) is treated
+    // as shown=true, matching the backend renderer's shown_map default.
+    const fields = this.state.schema?.fields ?? [];
+    const shownFor = (fieldId: string): boolean => {
+      let field = fields.find((f) => f.id === fieldId);
+      // Mirror the [] bracket fallbacks used for value lookup below.
+      if (!field && !fieldId.endsWith('[]')) {
+        field = fields.find((f) => f.id === fieldId + '[]');
+      }
+      if (!field && fieldId.endsWith('[]')) {
+        field = fields.find((f) => f.id === fieldId.slice(0, -2));
+      }
+      if (!field) return true;
+      return shouldShowField(field, this.state.fieldValues, fields);
+    };
+
     if (requestedFieldIds.length === 0) {
       // No specific fields requested - return all
       for (const [fieldId, fieldValue] of Object.entries(this.state.fieldValues)) {
         fieldValues[fieldId] = {
           value: fieldValue.value,
           confirmed: fieldValue.confirmed,
+          shown: shownFor(fieldId),
         };
       }
     } else {
@@ -806,12 +828,14 @@ export class WebFormConnection {
           fieldValues[fieldId] = {
             value: fieldValue.value,
             confirmed: fieldValue.confirmed,
+            shown: shownFor(fieldId),
           };
         } else {
           // Field not yet filled
           fieldValues[fieldId] = {
             value: null,
             confirmed: false,
+            shown: shownFor(fieldId),
           };
         }
       }
@@ -2294,6 +2318,11 @@ export class WebFormConnection {
       this.send({
         type: "handshake",
         schema: sectionSchema,
+        // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
+        // jnjj.45d). Re-sent on the section-switch handshake so the backend's
+        // in-session cache survives the reconnect (stateless invariant); schema
+        // only, no PII. It is the whole form, unchanged across sections.
+        full_schema: currentState.schema,
         current_values: sectionValues,
         fill_language: this.fillLanguage,
         // Section metadata

@@ -608,6 +608,12 @@ export class SchemaFormStateManager {
       type: 'handshake',
       form_session_id: state.formSessionId, // Persistent ID for logging/metrics
       schema: sectionSchema,
+      // FULL form schema (all parts/sections/fields) for the secretary catalog
+      // (bd polyglot-pdf-p68s / jnjj.45d). The per-section `schema` above drives
+      // the live-model SI; the secretary needs the whole form. Schema only, no
+      // PII -- the backend caches it in-session and rebuilds it from this on every
+      // (re)connect, so the stateless invariant holds.
+      full_schema: state.schema,
       current_values: state.fieldValues, // Already in FieldValue format
       section_number: currentSection?.order ?? 1, // Use order as section_number
       section_label: currentSection?.label ?? '',
@@ -658,6 +664,11 @@ export class SchemaFormStateManager {
       form_session_id: state.formSessionId, // Persistent ID for logging/metrics
       manifest: manifest,
       first_field_schema: firstFieldSchema,
+      // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
+      // jnjj.45d). JIT/DTI sends only the manifest + first field's schema for the
+      // live model; the secretary needs the whole form. Schema only, no PII; cached
+      // in-session and rebuilt from this on every (re)connect (stateless invariant).
+      full_schema: state.schema,
       loaded_field_ids: Array.from(state.loadedFieldIds),
       current_values: state.fieldValues,
       resume,
