@@ -158,6 +158,30 @@ the only trustworthy signals; `waitForGeminiQuestion` is kept for pacing only.
 PASS if it is a DIFFERENT, expected field id (not `FIELD`). Corroborate with
 `preview_network` (a `next_field_hint` message should have gone out).
 
+### 6a. Assert the thinking indicator armed (bd polyglot-pdf-fa4x)
+
+`runCycle` records the backend `agent_processing` (thinking-indicator) signal it
+observed during the cycle in `report.thinking`. In NATIVE VAD this proves the START
+signal -- `input_transcription` -> `on_user_activity` -> `agent_processing:true` ->
+the frontend dots -- fired without a human at the mic (the wpw.5 gap fa4x closed).
+The observer is installed at harness install and auto-resets each `runCycle`.
+
+- `report.thinking.sawStart` -- a `processing:true` arrived (the START fired). In
+  native VAD this is the fa4x assertion.
+- `report.thinking.sawClearAfterStart` -- a matching `processing:false` followed (the
+  CLEAR, at the agent's first response audio).
+- `report.thinking.count` -- raw event count (expect ~2 per turn: true then false).
+
+It is OBSERVATIONAL -- it never flips the PASS/FAIL/FLAKY verdict (a signal-timing
+quirk must not fail a clean fill/confirm/advance). To drive it standalone:
+`__VFF_HARNESS.resetThinkingObserver()` -> inject an utterance -> read
+`__VFF_HARNESS.thinkingObserved()`. The app fires `window.vffOnAgentProcessing` on
+every `agent_processing` message (a dev-only hook; undefined in production).
+
+A live native-VAD run (2.5 native-audio, START=HIGH) showed
+`{sawStart:true, sawClearAfterStart:true, count:4}` across two turns -- the indicator
+arms and clears in native VAD.
+
 ### 6b. Run the MULTI-SECTION scenario (the demo rehearsal -- bd polyglot-pdf-8k8)
 
 The single-field cycle (step 6) proves one field round-trips. The **demo** the epic

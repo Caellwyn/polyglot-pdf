@@ -151,6 +151,22 @@ describe('WebFormConnection thinking indicator (bd polyglot-pdf-wpw.5)', () => {
     expect(onThinkingChange).toHaveBeenLastCalledWith(false)
   })
 
+  it('fires window.vffOnAgentProcessing on each agent_processing message (bd polyglot-pdf-fa4x)', async () => {
+    const observed: boolean[] = []
+    // jsdom provides a real `window`; set the harness hook on it.
+    ;(window as any).vffOnAgentProcessing = (p: boolean) => { observed.push(p) }
+    try {
+      const ws = await connect()
+      fire(ws, { type: 'agent_processing', processing: true })
+      fire(ws, { type: 'agent_processing', processing: false })
+      // The native-VAD START (true) and its CLEAR (false) both reach the harness
+      // observer, so the E2E harness can assert the indicator armed without a mic.
+      expect(observed).toEqual([true, false])
+    } finally {
+      delete (window as any).vffOnAgentProcessing
+    }
+  })
+
   it('getThinking() reflects the current state', async () => {
     const conn = new WebFormConnection(SCHEMA, { onThinkingChange })
     await conn.connect('wss://example/ws/fill')
