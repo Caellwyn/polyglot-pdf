@@ -14,7 +14,6 @@ from .request_coordinator import (
     HINT_REQUEST_TIMEOUT,
     RequestCoordinator,
 )
-from backend.config import get_settings
 from backend.services.ai_context import render_field_guidance
 from backend.utils.dev_file_logger import get_dev_logger
 from backend.utils.confirmation_logger import log_field_confirmation
