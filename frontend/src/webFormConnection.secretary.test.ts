@@ -189,6 +189,37 @@ describe('WebFormConnection form_state_response carries shown (bd polyglot-pdf-p
     expect(resp.field_values.spouse_name.shown).toBe(true)
   })
 
+  it('all-fields response includes UNTOUCHED conditional fields with shown=false (Codex PR #266)', async () => {
+    // Regression for the Codex P1: the all-fields branch must iterate the SCHEMA,
+    // not just touched fieldValues. An untouched field hidden by an unmet show_if
+    // (spouse_name, with marital_status='single' and never filled) must appear in
+    // the response with shown=false -- otherwise it is omitted, the backend leaves
+    // it out of shown_map, and render_values_tail defaults it to shown=true,
+    // wrongly telling the secretary a hidden empty field is applicable.
+    const conn = new WebFormConnection(SCHEMA)
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+
+    // Only marital_status is touched; spouse_name is never filled AND is hidden
+    // (show_if wants 'married').
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'field_update', updates: { maritalStatus: 'single' } }),
+    })
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'get_form_state', request_id: 'req-untouched', field_ids: [] }),
+    })
+
+    const resp = formStateResponse(ws)
+    // The untouched, hidden field is PRESENT (not omitted) and reports shown=false.
+    expect(resp.field_values.spouse_name).toBeDefined()
+    expect(resp.field_values.spouse_name.value).toBeNull()
+    expect(resp.field_values.spouse_name.shown).toBe(false)
+    // The untouched VISIBLE field (first_name, no show_if) is present too, shown=true.
+    expect(resp.field_values.first_name).toBeDefined()
+    expect(resp.field_values.first_name.shown).toBe(true)
+  })
+
   it('shown rides a requested-field response too (not just the all-fields branch)', async () => {
     const conn = new WebFormConnection(SCHEMA)
     await conn.connect('wss://example/ws/fill')

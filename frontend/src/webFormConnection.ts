@@ -800,9 +800,46 @@ export class WebFormConnection {
       return shouldShowField(field, this.state.fieldValues, fields);
     };
 
+    // Look up a stored value for a field id, mirroring the [] bracket fallbacks
+    // used in the requested-field branch (Gemini sometimes drops/adds the []).
+    const valueFor = (fieldId: string): any => {
+      let fv = this.state.fieldValues[fieldId];
+      if (!fv && !fieldId.endsWith('[]')) fv = this.state.fieldValues[fieldId + '[]'];
+      if (!fv && fieldId.endsWith('[]')) fv = this.state.fieldValues[fieldId.slice(0, -2)];
+      return fv;
+    };
+
     if (requestedFieldIds.length === 0) {
-      // No specific fields requested - return all
+      // No specific fields requested - return ALL fields. Iterate the SCHEMA, not
+      // just state.fieldValues: the secretary's get_form_state(field_ids=[]) needs
+      // every field's `shown` represented, including UNTOUCHED conditional fields.
+      // If we emitted only touched fields, an untouched field hidden by show_if would
+      // be omitted -> left out of the backend shown_map -> defaulted to shown=true,
+      // wrongly telling the secretary a hidden empty field is applicable (Codex
+      // PR #266). Untouched fields ride with value:null/confirmed:false; the one
+      // value-bearing consumer (get_form_status) skips null values, so this is safe.
+      const emitted = new Set<string>();
+      for (const field of fields) {
+        const fieldId = field.id;
+        const fv = valueFor(fieldId);
+        fieldValues[fieldId] = {
+          value: fv ? fv.value : null,
+          confirmed: fv ? fv.confirmed : false,
+          shown: shownFor(fieldId),
+        };
+        emitted.add(fieldId);
+        // Mark the resolved storage-key variant emitted too, so the sweep below
+        // does not re-add the SAME value under its [] variant key.
+        if (fv) {
+          if (this.state.fieldValues[fieldId]) emitted.add(fieldId);
+          if (!fieldId.endsWith('[]') && this.state.fieldValues[fieldId + '[]']) emitted.add(fieldId + '[]');
+          if (fieldId.endsWith('[]') && this.state.fieldValues[fieldId.slice(0, -2)]) emitted.add(fieldId.slice(0, -2));
+        }
+      }
+      // Defensive: include any stored value whose key is NOT in the schema (so a
+      // stray/legacy value is never silently dropped from the all-fields response).
       for (const [fieldId, fieldValue] of Object.entries(this.state.fieldValues)) {
+        if (emitted.has(fieldId)) continue;
         fieldValues[fieldId] = {
           value: fieldValue.value,
           confirmed: fieldValue.confirmed,
