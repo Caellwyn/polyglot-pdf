@@ -52,6 +52,27 @@ _DIGIT_PRESETS = frozenset({"a_number", "uscis_account"})
 _DIGIT_PUNCT_RE = re.compile(r"[\s,.$-]")
 
 
+def _resolve_format_preset(field: Dict[str, Any]) -> Optional[str]:
+    """Resolve a field's format_preset from the CANONICAL nested location
+    (validation.format_preset) with a legacy TOP-LEVEL fallback.
+
+    The schema (form-kits/*/schema.json) and the FormField model nest it under
+    `validation`; only some callers (validation_handler) pre-flatten it to the top
+    level. Reading one location alone misses the other (bd polyglot-pdf-cn0e).
+    `validation` may be a dict or a Pydantic model, so read it tolerantly.
+    """
+    validation = field.get("validation")
+    if isinstance(validation, dict):
+        nested = validation.get("format_preset")
+        if nested is not None:
+            return nested
+    elif validation is not None:
+        nested = getattr(validation, "format_preset", None)
+        if nested is not None:
+            return nested
+    return field.get("format_preset")
+
+
 def normalize_value(field: Dict[str, Any], value: Any) -> Any:
     """Normalize a raw input value to the field's canonical stored form.
 
@@ -67,8 +88,14 @@ def normalize_value(field: Dict[str, Any], value: Any) -> Any:
     so a wrong value like "ABC123456789012" stays invalid rather than being coerced
     to digits (Codex PR #249). Non-digit-preset fields and non-string values pass
     through unchanged (bd polyglot-pdf-0zr).
+
+    format_preset is resolved from validation.format_preset (the CANONICAL location
+    in the schema and the FormField model) with a TOP-LEVEL fallback for callers
+    that pre-flatten it (e.g. validation_handler). Reading only the top level missed
+    the nested location and silently no-op'd normalization, so a real "A12345678"
+    A-Number failed the digits-only (7-9 digit) pattern (bd polyglot-pdf-cn0e).
     """
-    preset = field.get("format_preset")
+    preset = _resolve_format_preset(field)
     if preset in _DIGIT_PRESETS and isinstance(value, str):
         stripped = value.strip()
         # Drop a single leading A/a -- the A-Number prefix. ONLY for a_number:

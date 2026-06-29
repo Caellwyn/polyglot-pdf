@@ -366,6 +366,66 @@ class TestANumberNormalization:
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
+class TestANumberNestedFormatPreset:
+    """Regression for bd polyglot-pdf-cn0e: normalize_value must resolve
+    format_preset from the CANONICAL nested location (validation.format_preset),
+    not only the top level.
+
+    The pre-cn0e tests (TestANumberNormalization) only used a TOP-LEVEL
+    format_preset -- the already-working flattened shape produced by
+    validation_handler -- so they never caught that a field shaped like the real
+    schema (format_preset nested under `validation`) had normalization silently
+    no-op, making a genuine "A12345678" A-Number fail the digits-only pattern. These
+    tests exercise the SCHEMA shape directly.
+    """
+
+    # Field shaped exactly like form-kits/i-90/schema.json: format_preset lives
+    # under `validation`, with NO top-level format_preset.
+    SCHEMA_SHAPED_FIELD = {
+        "id": "p1_line1_aliennumber",
+        "name": "Alien Registration Number",
+        "type": "text",
+        "validation": {"pattern": r"^\d{7,9}$", "format_preset": "a_number"},
+        "maxLength": 9,
+    }
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("A12345678", "12345678"),     # the maintainer-reported live failure
+        ("a12345678", "12345678"),     # lowercase prefix
+        ("A-12345678", "12345678"),    # dashed
+        ("123456789", "123456789"),    # already canonical
+    ])
+    def test_nested_preset_normalizes_and_accepts(self, raw, expected):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.SCHEMA_SHAPED_FIELD],
+                                  {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" in result["valid_fields"], \
+            f"{raw!r} should be accepted with a nested format_preset"
+        assert result["form_state"]["p1_line1_aliennumber"] == expected
+        assert result["validation_errors"] == []
+
+    def test_real_i90_schema_field_normalizes_a_number(self):
+        """Load the ACTUAL i-90 schema field and prove A12345678 now validates."""
+        import json
+        import os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..",
+            "form-kits", "i-90", "schema.json")
+        with open(schema_path, encoding="utf-8") as f:
+            schema = json.load(f)
+        anum = next(fld for fld in schema["fields"]
+                    if fld["id"] == "p1_line1_aliennumber")
+        # Sanity: confirm the schema really nests it (guards the test's premise).
+        assert anum.get("format_preset") is None
+        assert anum["validation"]["format_preset"] == "a_number"
+
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([anum], {"p1_line1_aliennumber": "A12345678"})
+        assert "p1_line1_aliennumber" in result["valid_fields"]
+        assert result["form_state"]["p1_line1_aliennumber"] == "12345678"
+        assert result["validation_errors"] == []
+
+
 class TestUSCISAccountNormalization:
     """uscis_account format_preset strips punctuation before the length check
     (bd polyglot-pdf-jnjj.40).
