@@ -183,6 +183,27 @@ export class WebFormConnection {
   // re-validates once.
   private formCompleteSnapshot: string | null = null;
 
+  // B5 (bd polyglot-pdf-jnjj.17): the validator switch-gate. When the section-
+  // complete boundary fires, proceedSectionSwitch PAUSES the auto-advance and parks
+  // the pending switch here until a validation_result arrives (clean -> resume) or
+  // the fail-OPEN timer elapses (validation-delegation.md contract 4: never block on
+  // a validator outage). `resolve` runs the parked switch exactly once; `timer`
+  // backstops a validation_result that never arrives (socket drop). A CONFLICT
+  // verdict cancels the switch (clears both without switching) so the user stays in
+  // the section to resolve it; the switch happens on a later clean boundary.
+  private pendingSectionSwitch: {
+    sectionId: string;
+    resolve: () => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  // Set by cancelPendingSectionSwitch (conflict verdict) and read once by
+  // proceedSectionSwitch after the gate resolves, to SKIP the switch and stay in
+  // the current section. Distinct from the resolve()-runs-the-switch (clean/timeout)
+  // path.
+  private sectionSwitchCancelled = false;
+  // Fail-OPEN bound (contract 4): advance unchecked if no verdict in this window.
+  private static readonly VALIDATOR_GATE_TIMEOUT_MS = 6000;
+
   // Loop-breaker for AI-applied values that FAIL client-side validation
   // (bd polyglot-pdf-wpw.3). When the model fills a field with a value that violates
   // its schema (a non-existent enum option, a malformed SSN/A-Number, a too-long
@@ -357,6 +378,19 @@ export class WebFormConnection {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // B5 (bd polyglot-pdf-jnjj.17): release any parked validator switch-gate on an
+    // intentional disconnect. We RESOLVE the gate promise (so proceedSectionSwitch's
+    // awaiter does not hang forever) but set the cancel flag so it SKIPS the switch
+    // -- teardown owns the section state now, and the fail-OPEN timer must not later
+    // fire a switch into a torn-down connection.
+    if (this.pendingSectionSwitch) {
+      clearTimeout(this.pendingSectionSwitch.timer);
+      const pending = this.pendingSectionSwitch;
+      this.pendingSectionSwitch = null;
+      this.sectionSwitchCancelled = true;
+      pending.resolve();
     }
 
     // An INTENTIONAL disconnect (UI unmount / stop-session) cancels any in-flight
@@ -545,6 +579,16 @@ export class WebFormConnection {
           if (this.callbacks.onGoAway) {
             this.callbacks.onGoAway(message.time_left ?? null);
           }
+          break;
+
+        case "validation_result":
+          // B5 (bd polyglot-pdf-jnjj.17): the cheap-model validator's verdict for the
+          // just-emitted section/form boundary (validation-delegation.md contract 1).
+          // Sent for EVERY boundary: clean ({conflicts:[]}) resumes the paused section
+          // switch; a conflict marks the named fields steered (so the backend
+          // suppresses re-steering them) and holds in-section while the live model --
+          // already handed the steer by the backend -- voices the correction.
+          this.handleValidationResult(message);
           break;
 
         default:
@@ -1497,13 +1541,16 @@ export class WebFormConnection {
     // Fire-and-forget: the validator round-trip is async and must not block the user
     // (criterion 3); B5 (jnjj.17) consumes the verdict and gates the switch.
     //
-    // `!this.switchInFlight` keeps it to EXACTLY ONE event per boundary (Codex PR
-    // #271): a duplicate confirm_field for the same last field, arriving while the
-    // first auto-switch is still draining/awaiting session_ready, would otherwise
-    // re-run this block and emit a second section_complete before switchToSection
-    // rejects the duplicate on switchInFlight. The guard is set synchronously in
-    // switchToSection (before its first await), so the second confirm sees it.
-    if (sectionComplete && !this.switchInFlight) {
+    // EXACTLY ONE event per boundary (Codex PR #271): a duplicate confirm_field for
+    // the same last field, arriving while the first boundary is still resolving,
+    // would otherwise re-run this block and emit a second section_complete. Two
+    // states cover the whole window: `switchInFlight` (the switch is actually
+    // running) and, since B5 (jnjj.17) gates the switch on the validator round-trip,
+    // `pendingSectionSwitch` (the switch is PARKED waiting for the verdict -- a window
+    // where switchInFlight is not yet set). Guard on both so the duplicate confirm is
+    // suppressed whether the first boundary is parked at the validator or already
+    // switching.
+    if (sectionComplete && !this.switchInFlight && !this.pendingSectionSwitch) {
       this.send({
         type: 'section_complete',
         section_id: this.state.currentSectionId,
@@ -1606,7 +1653,116 @@ export class WebFormConnection {
    * switch itself, so the gate B5 adds wraps one call.
    */
   private async proceedSectionSwitch(sectionId: string): Promise<void> {
+    // B5 (bd polyglot-pdf-jnjj.17): gate the switch on the validator round-trip
+    // (contract 4 ordering). Park the switch and wait for a validation_result:
+    //   - clean verdict   -> resolvePendingSectionSwitch -> switch runs;
+    //   - conflict verdict -> cancelPendingSectionSwitch sets sectionSwitchCancelled,
+    //                         resolves the gate WITHOUT switching (stay in-section so
+    //                         the live model can steer; the switch happens on a later
+    //                         clean boundary);
+    //   - no verdict in VALIDATOR_GATE_TIMEOUT_MS -> fail-OPEN: switch runs unchecked
+    //     (a validator/socket outage must never strand the user mid-form).
+    this.sectionSwitchCancelled = false;
+    await new Promise<void>((resolve) => {
+      // Defensive: if a previous gate is somehow still parked, fail it OPEN now so we
+      // never leak two pending switches (the newer boundary wins).
+      if (this.pendingSectionSwitch) {
+        clearTimeout(this.pendingSectionSwitch.timer);
+        const stale = this.pendingSectionSwitch;
+        this.pendingSectionSwitch = null;
+        stale.resolve();
+      }
+      const timer = setTimeout(() => {
+        if (this.pendingSectionSwitch && this.pendingSectionSwitch.timer === timer) {
+          console.warn('[WebFormConnection] [validator] gate timed out -- failing OPEN, advancing unchecked');
+          const pending = this.pendingSectionSwitch;
+          this.pendingSectionSwitch = null;
+          pending.resolve();
+        }
+      }, WebFormConnection.VALIDATOR_GATE_TIMEOUT_MS);
+      this.pendingSectionSwitch = { sectionId, resolve, timer };
+    });
+
+    // A CONFLICT verdict cancelled the switch -> stay in the current section.
+    if (this.sectionSwitchCancelled) {
+      this.sectionSwitchCancelled = false;
+      console.log('[WebFormConnection] [validator] conflict found -- holding in section for the steer; switch deferred.');
+      return;
+    }
+    // Resolved clean or failed OPEN -> run the switch.
+    await this.doSectionSwitch(sectionId);
+  }
+
+  /**
+   * B5 (bd polyglot-pdf-jnjj.17): the one place the parked section switch actually
+   * runs (after the validator gate resolved clean or failed OPEN). Separated so the
+   * gate logic in proceedSectionSwitch reads cleanly.
+   */
+  private async doSectionSwitch(sectionId: string): Promise<void> {
     await this.switchToSection(sectionId, '');
+  }
+
+  /**
+   * B5 (bd polyglot-pdf-jnjj.17): handle the validator verdict pushed from the
+   * backend (validation_result envelope, contract 1). Sent for EVERY validated
+   * boundary -- clean ({conflicts: []}) or with conflicts:
+   *   - CLEAN  -> resolve the parked section-switch gate (resume the auto-advance).
+   *   - CONFLICT -> (a) persist steered:true on every field the conflicts name, so
+   *     the NEXT payload carries it and the backend suppresses re-steering
+   *     (max-resteer, contract 2/3); (b) CANCEL the parked switch (stay in-section so
+   *     the live model -- already handed the steer by the backend -- can voice it and
+   *     the user can resolve/override). The switch resumes on a later clean boundary.
+   * The form_complete boundary has no parked switch (last boundary); the handler then
+   * only updates the steered markers.
+   */
+  private handleValidationResult(message: any): void {
+    const conflicts = Array.isArray(message?.conflicts) ? message.conflicts : [];
+    if (conflicts.length === 0) {
+      // Clean -> resume any parked section switch.
+      this.resolvePendingSectionSwitch();
+      return;
+    }
+
+    // Conflict -> mark every named field steered (client-owned marker), so the
+    // backend suppresses re-steering it next time (the loop bound).
+    const steeredIds: string[] = [];
+    for (const c of conflicts) {
+      const ids = c && Array.isArray(c.field_ids) ? c.field_ids : [];
+      for (const id of ids) if (typeof id === 'string') steeredIds.push(id);
+    }
+    if (steeredIds.length > 0) {
+      this.state = SchemaFormStateManager.markFieldsSteered(this.state, steeredIds);
+    }
+
+    // Cancel the parked switch (if any): stay in-section to let the steer play out.
+    this.cancelPendingSectionSwitch();
+  }
+
+  /**
+   * B5: resume a parked section switch (clean verdict / fail-OPEN). Clears the timer
+   * and resolves the gate promise so proceedSectionSwitch runs doSectionSwitch.
+   */
+  private resolvePendingSectionSwitch(): void {
+    if (!this.pendingSectionSwitch) return;
+    clearTimeout(this.pendingSectionSwitch.timer);
+    const pending = this.pendingSectionSwitch;
+    this.pendingSectionSwitch = null;
+    pending.resolve();
+  }
+
+  /**
+   * B5: cancel a parked section switch on a CONFLICT verdict. The gate promise still
+   * resolves (so proceedSectionSwitch's await does not hang), but sectionSwitchCancelled
+   * tells proceedSectionSwitch to SKIP doSectionSwitch -- the client stays in the
+   * current section so the live model can voice the steer the backend just injected.
+   */
+  private cancelPendingSectionSwitch(): void {
+    if (!this.pendingSectionSwitch) return;
+    clearTimeout(this.pendingSectionSwitch.timer);
+    const pending = this.pendingSectionSwitch;
+    this.pendingSectionSwitch = null;
+    this.sectionSwitchCancelled = true;
+    pending.resolve();
   }
 
   /**
@@ -1658,7 +1814,11 @@ export class WebFormConnection {
         field_id: field.id,
         name: field.spoken_name || field.name || field.id,
         value,
-        steered: false,
+        // B5 (bd polyglot-pdf-jnjj.17): the client-owned per-field "already steered
+        // once" marker. The backend reads it to suppress re-steering an
+        // already-adjudicated field (max-resteer bound). B4 hardcoded false; B5 reads
+        // the real marker that markFieldsSteered persisted on the last conflict.
+        steered: !!(fv && fv.steered),
       });
     }
     return out;

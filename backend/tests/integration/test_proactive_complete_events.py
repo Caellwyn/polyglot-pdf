@@ -25,14 +25,16 @@ from fastapi import WebSocket
 from backend.routes.websocket_routes import _handle_fill_session
 
 
-def _mock_service():
+def _mock_service(verdict=None):
     """A FormFillingService double: every awaited method is a no-op AsyncMock so
-    start_session / end_session / stream_audio do nothing. We assert NONE of the
-    validator/steer-bearing methods are touched by the B4 receive arms."""
+    start_session / end_session / stream_audio do nothing. Since B5 (jnjj.17) the
+    receive arms call handle_validation_boundary -- stub it to return a clean verdict
+    by default (override via `verdict`)."""
     svc = MagicMock(name="form_filling_service")
     svc.start_session = AsyncMock()
     svc.end_session = AsyncMock()
     svc.stream_audio = AsyncMock()
+    svc.handle_validation_boundary = AsyncMock(return_value=verdict or {"conflicts": []})
     return svc
 
 
@@ -76,10 +78,10 @@ async def test_section_complete_is_acked():
         })},
     ])
     assert {"type": "section_complete_ack"} in sent
-    # B4 must NOT run the validator or inject a steer -- that is B5.
-    assert not svc.method_calls or all(
-        "validate" not in str(c) and "steer" not in str(c) for c in svc.method_calls
-    )
+    # B5 (jnjj.17): the arm runs the validator and pushes a validation_result (clean
+    # here) BEFORE the ack -- the deterministic clean->resume signal.
+    svc.handle_validation_boundary.assert_awaited_once()
+    assert {"type": "validation_result", "conflicts": []} in sent
 
 
 @pytest.mark.asyncio

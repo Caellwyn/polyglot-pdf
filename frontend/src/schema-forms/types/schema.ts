@@ -359,4 +359,12 @@ export interface FieldValue {
   // Field state (Nov 22, 2025 - Dependency tracking)
   availability?: FieldAvailability;  // Whether field is available, locked, or hidden
   lockedReason?: string;  // Human-readable reason if locked (e.g., "Complete 'name changed' field first")
+
+  // B5 (bd polyglot-pdf-jnjj.17): the cheap-model validator has already steered the
+  // user back about this field once. CLIENT-OWNED (the backend is stateless and
+  // cannot remember it -- validation-delegation.md contract 2); it rides the
+  // contract-2 payload so the backend suppresses re-steering an already-adjudicated
+  // field (max-resteer bound, contract 3 invariant 2). Set by markFieldsSteered when
+  // a validation_result conflict names the field.
+  steered?: boolean;
 }

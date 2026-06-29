@@ -23,6 +23,7 @@ from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
 from .manifest_service import get_next_field_schema, should_include_schema_in_response
+from .validator_service import ValidatorService
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
@@ -1390,6 +1391,112 @@ class FormFillingService:
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_async_deliver_failed",
                          exc_type=type(exc).__name__, session_id=self._session_id)
+
+    async def handle_validation_boundary(self, fields: list) -> dict:
+        """B5 (bd polyglot-pdf-jnjj.17): run the cheap-model contradiction validator
+        at a section/form boundary (the B4 events carry the contract-2 `fields`
+        payload), and -- on a SURVIVING conflict -- inject a steering directive into
+        the Live session so the voice model sends the user back to verify.
+
+        Returns the FULL contract-1 verdict ({"conflicts": [...]}, pre-suppression);
+        the caller pushes it to the client as the `validation_result` envelope so the
+        CLIENT can set its per-field `steered` markers (the marker is client-owned --
+        the backend is stateless, contract 2). Suppression governs only whether the
+        STEER fires this pass, not what the client is told.
+
+        Max-resteer bound (contract 3, invariant 2): a conflict referencing an
+        already-`steered: true` field (PER-FIELD: any of its field_ids steered) is
+        dropped from the STEER -- the user already adjudicated that field once. The
+        marker rides IN the payload from the client, so the stateless backend reads
+        it rather than remembering.
+
+        Fail-OPEN (contract 6): ValidatorService.validate is fail-open; a dead Live
+        session drops the steer. Never blocks the boundary. PII: logs counts only --
+        never values / reasons (the reason rides the in-band steer, which is NOT a
+        log sink).
+        """
+        if self._text_ai is None:
+            # No validator wired (unit/form-only paths) -- all-clear, no steer.
+            return {"conflicts": []}
+
+        safe_fields = fields if isinstance(fields, list) else []
+        verdict = await ValidatorService(self._text_ai).validate(safe_fields)
+        conflicts = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+
+        surviving = self._suppress_already_steered(conflicts, safe_fields)
+        if surviving:
+            await self._inject_validator_steer(surviving, safe_fields)
+
+        return {"conflicts": conflicts}
+
+    @staticmethod
+    def _suppress_already_steered(conflicts: list, fields: list) -> list:
+        """Drop any conflict that references an already-steered field (contract 3,
+        invariant 2 -- PER-FIELD suppression, not all-fields). The `steered` flag
+        rides in each contract-2 field entry; the client owns + persists it."""
+        steered_ids = {
+            f.get("field_id")
+            for f in fields
+            if isinstance(f, dict) and f.get("steered")
+        }
+        surviving = []
+        for c in conflicts:
+            ids = c.get("field_ids", []) if isinstance(c, dict) else []
+            if any(fid in steered_ids for fid in ids):
+                continue  # at least one field already adjudicated -> suppress
+            surviving.append(c)
+        return surviving
+
+    async def _inject_validator_steer(self, conflicts: list, fields: list) -> None:
+        """Compose + inject the steering directive for the surviving conflicts into
+        the Live session as a text turn (contract 3). Only into a LIVE session --
+        mirrors the secretary async-deliver guard. The reason MAY quote values; it is
+        an in-band model instruction, never logged (contract 6)."""
+        if self._live_ai is None or not self._live_ai.is_session_active():
+            _log.info("validator_steer_dropped_session_inactive",
+                      session_id=self._session_id)
+            return
+
+        message = self._compose_validator_steer(conflicts, fields)
+        try:
+            await self._live_ai.send_client_content(message)
+            _log.info(
+                "validator_steer_delivered",
+                conflict_count=len(conflicts),
+                session_id=self._session_id,
+            )
+        except Exception as exc:  # noqa: BLE001 -- a steer failure must never block
+            _log.warning("validator_steer_deliver_failed",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+
+    @staticmethod
+    def _compose_validator_steer(conflicts: list, fields: list) -> str:
+        """Build the in-band steering instruction (contract 3). NAMES the fields
+        (criterion 1) and carries the user-override escape hatch verbatim from the
+        legacy in-SI ADDRESS CONSISTENCY prose (criterion 2) so B is never stricter
+        than the prose it supplements -- a possible conflict, not a block."""
+        name_by_id = {
+            f.get("field_id"): f.get("name")
+            for f in fields
+            if isinstance(f, dict)
+        }
+        lines = [
+            "VALIDATOR FINDING (second-pass check): a possible conflict was found "
+            "between fields the user already gave. This is NOT a block -- it is a "
+            "prompt to double-check.",
+        ]
+        for c in conflicts:
+            ids = c.get("field_ids", []) if isinstance(c, dict) else []
+            names = [str(name_by_id.get(i) or i) for i in ids]
+            reason = str(c.get("reason", "")) if isinstance(c, dict) else ""
+            named = " and ".join(names) if names else "the fields involved"
+            lines.append(f"- Fields: {named}. {reason}")
+        lines.append(
+            "Name the field(s) involved and ask the user to verify which is correct. "
+            "Accept the user's answer if they confirm both are intentional -- do not "
+            "insist or re-ask once they confirm."
+        )
+        return "\n".join(lines)
 
     def handle_form_state_response(self, request_id: str, field_values: Dict[str, Any]) -> None:
         """

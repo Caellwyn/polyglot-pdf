@@ -866,6 +866,34 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * B5 (bd polyglot-pdf-jnjj.17): mark fields as already-steered by the cheap-model
+   * validator. Sets `steered: true` on each field's FieldValue and persists to
+   * sessionStorage so the marker survives the section switch / reconnect and rides
+   * the NEXT contract-2 payload -- the client-owned half of the max-resteer bound
+   * (the stateless backend cannot remember it; validation-delegation.md contracts
+   * 2 + 3). A field with no FieldValue entry is skipped (nothing to mark).
+   */
+  static markFieldsSteered(
+    state: SchemaFormState,
+    fieldIds: string[]
+  ): SchemaFormState {
+    if (!fieldIds || fieldIds.length === 0) return state;
+    const fieldValues = { ...state.fieldValues };
+    let changed = false;
+    for (const fieldId of fieldIds) {
+      const fv = fieldValues[fieldId];
+      if (!fv) continue; // no entry to mark
+      if (fv.steered === true) continue; // already marked
+      fieldValues[fieldId] = { ...fv, steered: true };
+      changed = true;
+    }
+    if (!changed) return state;
+    const newState = { ...state, fieldValues, lastUpdated: Date.now() };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
    * Get list of field IDs that are filled but not confirmed
    * These are the priority for next field hint
    */

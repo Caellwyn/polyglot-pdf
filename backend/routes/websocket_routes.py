@@ -636,40 +636,49 @@ async def _handle_fill_session(
 					await websocket.send_json({"type": "section_completed_ack"})
 					continue
 				elif mtype == "section_complete":
-					# B4 (bd polyglot-pdf-jnjj.16): proactive section-complete event --
-					# the frontend emits it the moment the last field of the current
-					# section is confirmed. It carries section_id + the minimal
-					# client-state payload (validation-delegation.md contract 2) for
-					# the cheap-model validator to check at this boundary. B4 RECEIVES
-					# and acks only (exit criterion 1); feeding `fields` to the
-					# ValidatorService + the verdict/steer is B5 (jnjj.17). This is a
-					# DISTINCT event from `section_completed` above (the legacy reactive
-					# ack) -- do not conflate.
+					# B4 (bd polyglot-pdf-jnjj.16) emits this when the last field of the
+					# current section is confirmed; it carries section_id + the contract-2
+					# `fields` payload (validation-delegation.md). B5 (jnjj.17) runs the
+					# cheap-model validator over `fields`, injects a steer into the Live
+					# session on a surviving conflict, and pushes a `validation_result`
+					# envelope to the client for EVERY boundary (incl. clean) -- the
+					# deterministic clean->resume signal the FE switch-gate needs
+					# (contract 1). Distinct from the legacy reactive `section_completed`.
 					proactive_section_id = obj.get("section_id")
 					proactive_fields = obj.get("fields", [])
-					# PII (contract 6): log the count only -- NEVER `fields`/values.
+					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(
 						"section_complete_received",
 						section_id=proactive_section_id,
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
+					verdict = await service.handle_validation_boundary(proactive_fields)
+					await websocket.send_json({
+						"type": "validation_result",
+						"conflicts": verdict.get("conflicts", []),
+					})
 					await websocket.send_json({"type": "section_complete_ack"})
 					continue
 				elif mtype == "form_complete":
-					# B4 (bd polyglot-pdf-jnjj.16): proactive form-complete event --
-					# emitted once when the whole form is confirmed (and re-emitted
-					# after a post-completion edit; the once-only + dirty guard is
-					# client-side). Carries the WHOLE-form contract-2 payload for the
-					# full-form validator pass. RECEIVE + ack only in B4; B5 (jnjj.17)
-					# runs the validator and surfaces any verdict.
+					# B4 (bd polyglot-pdf-jnjj.16) emits this once when the whole form is
+					# confirmed (re-emitted after a post-completion edit). Carries the
+					# WHOLE-form contract-2 payload. B5 (jnjj.17) runs the full-form
+					# validator pass + pushes the `validation_result` envelope (there is
+					# no section switch to gate on the last boundary; the client still
+					# uses the result to set its per-field `steered` markers).
 					proactive_fields = obj.get("fields", [])
-					# PII (contract 6): log the count only -- NEVER `fields`/values.
+					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(
 						"form_complete_received",
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
+					verdict = await service.handle_validation_boundary(proactive_fields)
+					await websocket.send_json({
+						"type": "validation_result",
+						"conflicts": verdict.get("conflicts", []),
+					})
 					await websocket.send_json({"type": "form_complete_ack"})
 					continue
 				else:
