@@ -59,11 +59,22 @@ describe('FieldEditor form-metadata panel (no field selected)', () => {
 
   it('clearing the REQUIRED version degrades to "unknown", never undefined (Codex PR #263)', () => {
     // version is a required schema field; undefined would be dropped by
-    // JSON.stringify on save and fail backend validation.
+    // JSON.stringify on save and fail backend validation. Clearing also resets
+    // confidence to 0 (the now-empty version is unverified).
     const onUpdateMetadata = vi.fn();
     const schema = schemaWith({ version: 'December 2024' });
     render(<FieldEditor field={null} schema={schema} onUpdateField={vi.fn()} onUpdateMetadata={onUpdateMetadata} />);
     fireEvent.change(screen.getByLabelText('Version / Revision'), { target: { value: '' } });
-    expect(onUpdateMetadata).toHaveBeenCalledWith({ version: 'unknown' });
+    expect(onUpdateMetadata).toHaveBeenCalledWith({ version: 'unknown', version_confidence: 0 });
+  });
+
+  it('a MANUAL version edit clears stale auto-confidence so the verify hint goes away (Codex PR #263 r2)', () => {
+    // A low-confidence auto-extraction corrected by hand must not keep showing
+    // "(verify)" -- the manual value is authoritative, so confidence is cleared.
+    const onUpdateMetadata = vi.fn();
+    const schema = schemaWith({ version: '2025', version_confidence: 0.4 });
+    render(<FieldEditor field={null} schema={schema} onUpdateField={vi.fn()} onUpdateMetadata={onUpdateMetadata} />);
+    fireEvent.change(screen.getByLabelText('Version / Revision'), { target: { value: 'December 2024' } });
+    expect(onUpdateMetadata).toHaveBeenCalledWith({ version: 'December 2024', version_confidence: undefined });
   });
 });

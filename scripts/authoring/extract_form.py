@@ -178,9 +178,15 @@ def extract_version_metadata(page1_text: str, doc_title: str = "") -> dict:
     # convention -- never an arbitrary date elsewhere on the page.
     rev = re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", text) \
         or re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", title)
+    # A bare year is a version ONLY when adjacent to "Form <id>" -- in the title
+    # ("2025 Form 1040" or "Form 1040 2025") or on page 1. An UNSCOPED year (in
+    # either title or text) would promote an expiration/effective year (Codex
+    # PR #263 r1+r2). `_FORM_ID` is the form-number token used in several patterns.
+    _FORM_ID = r"[A-Z]{0,3}-?\d{1,4}[A-Z]?"
     year_ctx = (
-        re.search(r"\b(20\d{2})\b", title)
-        or re.search(r"Form\s+[A-Z]{0,3}-?\d{1,4}[A-Z]?\s*\n?\s*(20\d{2})\b", text)
+        re.search(rf"(20\d{{2}})\s+Form\s+{_FORM_ID}", title)
+        or re.search(rf"Form\s+{_FORM_ID}\s+(20\d{{2}})", title)
+        or re.search(rf"Form\s+{_FORM_ID}\s*\n?\s*(20\d{{2}})\b", text)
     )
     if edition_str:
         out["version"] = edition_str
@@ -306,7 +312,15 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         version_meta = _extract_version_metadata_from_doc(doc)
     finally:
         doc.close()
-    schema.setdefault("form_metadata", {}).update(version_meta)
+    meta = schema.setdefault("form_metadata", {})
+    # Do NOT let the "unknown" no-match sentinel overwrite a real version the LLM
+    # pass already placed (a valid-but-unsupported revision format) -- only the
+    # deterministic recovery should win, never the absence of one (Codex PR #263
+    # r2). Same guard for version_confidence (paired with version).
+    if version_meta.get("version") == "unknown" and meta.get("version") not in (None, "", "draft", "unknown"):
+        version_meta = {k: v for k, v in version_meta.items()
+                        if k not in ("version", "version_confidence")}
+    meta.update(version_meta)
 
     # 4. Normalize required-but-missing scalars to draft defaults, then validate.
     _normalize_for_schema(schema)

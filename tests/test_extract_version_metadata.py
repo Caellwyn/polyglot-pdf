@@ -105,6 +105,13 @@ class TestExtractVersionMetadataSynthetic:
         assert out["version"] == "2025"
         assert out["version_confidence"] == ef._CONF_LOW
 
+    def test_title_year_must_be_adjacent_to_form_id(self):
+        # "2025 Form 1040" -> version 2025 (IRS year-only header convention).
+        assert ef.extract_version_metadata("", "2025 Form 1040")["version"] == "2025"
+        # A non-version year in the title (e.g. an expiration) must NOT be promoted
+        # (Codex PR #263 r2 -- the title fallback must be Form-adjacent too).
+        assert ef.extract_version_metadata("Application\nName:\n", "Form X-9 (expires 2027)")["version"] == "unknown"
+
     def test_loose_omb_bumps_unknown_to_low(self):
         # No version pattern, but a stray NNNN-NNNN -> at least low confidence.
         text = "Some Form\nReference 1234-5678 on file\n"

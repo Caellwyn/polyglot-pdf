@@ -39,7 +39,16 @@ const FormMetadataEditor: React.FC<{
     // which drops undefined keys, which would strip the required field and fail
     // backend validation (Codex PR #263). Optional fields clear to undefined.
     const value = key === 'version' ? (raw || 'unknown') : (raw || undefined);
-    onUpdateMetadata?.({ [key]: value } as Partial<FormSchema['form_metadata']>);
+    const patch = { [key]: value } as Partial<FormSchema['form_metadata']>;
+    // A MANUAL version edit makes the stale auto-extracted version_confidence
+    // meaningless -- leaving the old 0/0.4 would keep the "(verify)" hint with no
+    // way to clear it. Clear it on any non-empty version edit (a human-entered
+    // version is authoritative); a cleared-to-"unknown" version keeps low
+    // confidence via the "unknown" branch of the lowConfidence check (Codex r2).
+    if (key === 'version') {
+      patch.version_confidence = raw ? undefined : 0;
+    }
+    onUpdateMetadata?.(patch);
   };
   const lowConfidence =
     meta?.version === 'unknown' ||
