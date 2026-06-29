@@ -48,6 +48,16 @@ class FormFillingService:
         self._session_id = None
         # Web session state - schema only (no field caching)
         self._schema: Optional[Dict[str, Any]] = None  # Schema for context only
+        # Full-form catalog for the secretary (bd polyglot-pdf-p68s / jnjj.45d).
+        # self._schema is the per-section schema that drives the live-model SI; the
+        # secretary's render_static_catalog needs the WHOLE form (all
+        # parts/sections/fields). Kept SEPARATE so the per-section SI path is never
+        # disturbed. Schema only, no PII; rebuilt from the handshake on every
+        # (re)connect, so the stateless invariant holds. None until the first
+        # handshake supplies it (older clients omit it -> secretary falls back to
+        # self._schema). Survives section switches (preserved unless a switch's
+        # start_session supplies a fresh full_schema).
+        self._full_schema: Optional[Dict[str, Any]] = None
         # Last section metadata seen via switch_to_section. Navigation state (NOT
         # field values/PII), retained for the connection lifetime so a mid-session
         # restart (restart_gemini_session, e.g. after a Level-3 farewell) can rebuild
@@ -134,6 +144,7 @@ class FormFillingService:
         *,
         accept_connection: bool = True,
         schema: Optional[Dict[str, Any]] = None,
+        full_schema: Optional[Dict[str, Any]] = None,
         current_values: Optional[Dict[str, Any]] = None,
         system_instruction: Optional[str] = None,
         form_session_id: Optional[str] = None,
@@ -150,6 +161,12 @@ class FormFillingService:
             send_transcript: Whether to send transcript events
             accept_connection: Whether to accept the WebSocket connection
             schema: Form schema (stored for context generation, not for state)
+            full_schema: Full-form catalog for the secretary (bd polyglot-pdf-p68s);
+                the whole form (all parts/sections/fields), distinct from the
+                per-section `schema`. The client sends it on every handshake
+                (including section switches), so it is normally non-None here. When
+                None (an older client, or an internal restart that does not thread
+                it), the previously-cached value is preserved rather than cleared.
             current_values: Pre-filled values (ignored by backend - client is source of truth)
             system_instruction: System instruction to include in initial Gemini config
             form_session_id: Persistent form session ID from frontend (survives reconnects)
@@ -168,6 +185,16 @@ class FormFillingService:
         
         # Store schema for context generation
         self._schema = schema
+        # Cache the full-form catalog for the secretary (bd polyglot-pdf-p68s).
+        # Only overwrite when the caller supplies one: the INTERNAL section-switch
+        # restart (_switch_to_section_locked -> start_session) does NOT thread
+        # full_schema (the form is unchanged across sections), so preserving the
+        # existing value keeps the secretary's catalog intact across that restart.
+        # A client (re)connect handshake -- including a manual section switch, which
+        # re-handshakes through websocket_routes -- always supplies it (or None for
+        # a legacy client that predates this key).
+        if full_schema is not None:
+            self._full_schema = full_schema
         # Note: current_values are ignored by backend - client is source of truth
 
         # Seed the JIT schema de-dup set from the handshake's loaded_field_ids --
@@ -967,9 +994,10 @@ class FormFillingService:
     async def handle_ask_secretary(self, query: str) -> str:
         """Run an ask_secretary lookup (bd polyglot-pdf-jnjj.45c).
 
-        Assembles the secretary's context -- the form catalog (self._schema, the
-        full-form catalog the client supplies at handshake; bd jnjj.45d) plus the
-        client's CURRENT values + applicability (a fresh round-trip) -- and runs the
+        Assembles the secretary's context -- the form catalog (self._full_schema,
+        the full-form catalog the client supplies at handshake; bd polyglot-pdf-p68s
+        / jnjj.45d) plus the client's CURRENT values + applicability (a fresh
+        round-trip) -- and runs the
         BLOCKING TextAIGemini.ask() under a timeout so a slow lookup cannot hang the
         conversation. Returns the secretary's prose answer, or "" on any failure
         (no adapter / no schema / timeout / error) so the caller fail-opens and the
@@ -988,7 +1016,12 @@ class FormFillingService:
             _log.warning("ask_secretary_no_text_ai", session_id=self._session_id)
             return ""
 
-        schema = self._schema or {}
+        # Prefer the full-form catalog the client supplies at handshake (bd
+        # polyglot-pdf-p68s): the secretary must see the WHOLE form, not just the
+        # current section. Fall back to the per-section self._schema for a legacy
+        # client that did not send full_schema, so the handler still answers about
+        # the visible section rather than failing outright.
+        schema = self._full_schema or self._schema or {}
         if not schema.get("fields"):
             _log.warning("ask_secretary_no_schema", session_id=self._session_id)
             return ""

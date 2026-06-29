@@ -1,0 +1,81 @@
+{
+  "recorded_at": "2026-06-29T01:32:46Z",
+  "session_id": "6f53ca14-aa79-4b8a-a45e-7fdfb5763c81",
+  "beads": [
+    "polyglot-pdf-p68s"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-06-28T17:49:50.933Z",
+    "last_ts": "2026-06-29T01:32:21.150Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 51063,
+      "output_tokens": 186670,
+      "cache_read_input_tokens": 98099602,
+      "cache_creation_input_tokens": 1813123
+    },
+    "subagent": {
+      "input_tokens": 163,
+      "output_tokens": 32170,
+      "cache_read_input_tokens": 9406854,
+      "cache_creation_input_tokens": 330282
+    },
+    "total": {
+      "input_tokens": 51226,
+      "output_tokens": 218840,
+      "cache_read_input_tokens": 107506456,
+      "cache_creation_input_tokens": 2143405
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 51063,
+        "output_tokens": 186670,
+        "cache_read_input_tokens": 98099602,
+        "cache_creation_input_tokens": 1813123
+      }
+    },
+    "subagent": {
+      "claude-sonnet-4-6": {
+        "input_tokens": 163,
+        "output_tokens": 32170,
+        "cache_read_input_tokens": 9406854,
+        "cache_creation_input_tokens": 330282
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-opus-4-8": 65.303885
+    },
+    "subagent": {
+      "claude-sonnet-4-6": 4.543653
+    },
+    "by_model": {
+      "claude-opus-4-8": 65.303885,
+      "claude-sonnet-4-6": 4.543653
+    },
+    "unpriced_models": [],
+    "orchestrator_total": 65.303885,
+    "subagent_total": 4.543653,
+    "total": 69.847537,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-sonnet-4-6"
+  ],
+  "assistant_turns": {
+    "orchestrator": 418,
+    "subagent": 155
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 2,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

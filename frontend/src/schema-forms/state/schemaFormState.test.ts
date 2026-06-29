@@ -543,6 +543,39 @@ describe('SchemaFormStateManager', () => {
       const payload = SchemaFormStateManager.getHandshakePayload(state, 'English', true)
       expect((payload as any).resume).toBe(true)
     })
+
+    // === bd polyglot-pdf-p68s (jnjj.45d): full_schema = the WHOLE form ===
+    // The legacy `schema` is the current section only (2 fields); full_schema
+    // must carry every field across every section for the secretary catalog.
+    it('legacy payload carries full_schema = the whole form (all sections/fields)', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema) // seeded on section-1a (2 fields)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state) as any
+
+      // The section schema is just section-1a's two fields...
+      expect(payload.schema.fields.map((f: any) => f.id)).toEqual(['field-1', 'field-2'])
+      // ...but full_schema is the WHOLE form (7 fields, 4 sections).
+      expect(payload.full_schema).toBeDefined()
+      expect(payload.full_schema.fields.length).toBe(7)
+      expect(payload.full_schema.sections.length).toBe(4)
+    })
+
+    it('JIT payload carries full_schema = the whole form (the production/DTI path)', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      // The JIT handshake is the production DTI path; it sends only a manifest +
+      // first_field_schema for the live model, so full_schema is the secretary's
+      // ONLY view of the whole form here.
+      state = SchemaFormStateManager.setJitMode(state, true)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state) as any
+
+      expect(payload.type).toBe('handshake_jit')
+      expect(payload.full_schema).toBeDefined()
+      expect(payload.full_schema.fields.length).toBe(7)
+      expect(payload.full_schema.sections.length).toBe(4)
+    })
   })
 
   // ============================================================================

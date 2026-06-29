@@ -236,9 +236,14 @@ def test_no_value_or_transcript_in_logs(rel):
 
 # Directories/name-prefixes under backend/ that are NOT production logging sites:
 # tests assert on PII deliberately, and one-off probe/dev scripts are never on the
-# Cloud Run request path (they run locally, by hand). Everything else in backend/
-# CAN reach production stdout -> Cloud Logging, so it must be guarded.
-_SWEEP_SKIP_DIR_PARTS = ("tests", "scripts", "__pycache__")
+# Cloud Run request path (they run locally, by hand). The virtualenv
+# (backend/.venv, holding third-party site-packages) is vendored dependency code,
+# not this project's source -- its print()s are not our logging sites and must not
+# be swept. Everything else in backend/ CAN reach production stdout -> Cloud
+# Logging, so it must be guarded.
+_SWEEP_SKIP_DIR_PARTS = (
+    "tests", "scripts", "__pycache__", ".venv", "venv", "site-packages",
+)
 _SWEEP_SKIP_NAME_PREFIXES = ("test_", "probe_")
 
 

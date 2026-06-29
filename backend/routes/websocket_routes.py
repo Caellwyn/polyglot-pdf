@@ -162,6 +162,7 @@ async def _handle_fill_session(
 	*,
 	accept_connection: bool,
 	schema: dict | None = None,  # For web forms
+	full_schema: dict | None = None,  # Full-form catalog for the secretary (bd polyglot-pdf-p68s)
 	current_values: dict | None = None,  # For reconnect
 	fill_language: str = "English",  # Language for AI to use
 	section_id: str | None = None,  # Current section ID (for token-log context, bd polyglot-pdf-tb7)
@@ -248,6 +249,7 @@ async def _handle_fill_session(
 			send_transcript=send_transcript,
 			accept_connection=accept_connection,
 			schema=schema,  # Form schema for AI context
+			full_schema=full_schema,  # Full-form catalog for the secretary (bd polyglot-pdf-p68s)
 			current_values=current_values,  # Pre-filled values for reconnect
 			system_instruction=system_instruction,  # Include in initial Gemini config
 			form_session_id=form_session_id,  # Persistent ID from frontend
@@ -764,6 +766,17 @@ async def fill_form_from_schema(
 	current_values = handshake.get("current_values") or {}
 	fill_language = handshake.get("fill_language", "English")  # Default to English
 
+	# Full-form schema for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d).
+	# `schema` above is the per-section schema that drives the live-model SI; the
+	# secretary needs the WHOLE form (all parts/sections/fields). The client sends
+	# it on every (re)connect handshake; the backend caches it in-session (schema
+	# only, no PII -- the stateless invariant holds, it is rebuilt from the
+	# handshake on reconnect). Optional: a legacy/older client that omits it leaves
+	# the secretary falling back to the per-section schema.
+	full_schema = handshake.get("full_schema")
+	if not isinstance(full_schema, dict):
+		full_schema = None
+
 	# Extract section metadata (schema-agnostic)
 	section_id = handshake.get("section_id")  # Section ID from schema (e.g., "part_1_2_addresses")
 	section_number = handshake.get("section_number")  # Section order number (1-indexed)
@@ -841,6 +854,7 @@ async def fill_form_from_schema(
 		send_transcript,
 		accept_connection=False,
 		schema=schema,  # Form schema for AI context
+		full_schema=full_schema,  # Full-form catalog for the secretary (bd polyglot-pdf-p68s)
 		current_values=current_values,  # Pre-filled values for reconnect
 		fill_language=fill_language,  # Language for AI to use
 		section_id=section_id,  # Current section ID for token-log context (bd polyglot-pdf-tb7)

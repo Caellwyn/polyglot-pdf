@@ -103,8 +103,9 @@ async def test_handle_ask_secretary_no_schema_fail_open():
 
 @pytest.mark.asyncio
 async def test_handle_ask_secretary_shown_defaults_true_without_shown_key():
-    """Until jnjj.45d ships `shown`, a form_state entry without it leaves the field
-    out of shown_map (renderers default shown=True), not crashing."""
+    """A form_state entry without `shown` leaves the field out of shown_map (the
+    renderers default shown=True), not crashing -- covers an older client that omits
+    applicability (bd polyglot-pdf-p68s fallback)."""
     text_ai = MagicMock()
     text_ai.ask = AsyncMock(return_value="ok")
     svc = _service(text_ai, form_state={
@@ -114,3 +115,59 @@ async def test_handle_ask_secretary_shown_defaults_true_without_shown_key():
     assert out == "ok"
     ctx = text_ai.ask.call_args.args[1]
     assert ctx["shown_map"] == {}  # no explicit shown -> renderer defaults True
+
+
+# --- Full-form catalog wiring (bd polyglot-pdf-p68s / jnjj.45d) -----------------
+
+# A whole-form schema with TWO sections; the per-section schema would carry only
+# one section's fields. The secretary must see BOTH.
+_FULL_SCHEMA = {
+    "fields": [
+        {"id": "f_first", "spoken_name": "first name", "type": "text"},
+        {"id": "f_last", "spoken_name": "last name", "type": "text"},
+        {"id": "f_phone", "spoken_name": "phone", "type": "text"},
+    ],
+    "sections": [
+        {"id": "s1", "label": "Names", "fields": ["f_first", "f_last"]},
+        {"id": "s2", "label": "Contact", "fields": ["f_phone"]},
+    ],
+    "parts": [{"id": "p1", "label": "Part 1", "section_ids": ["s1", "s2"]}],
+}
+
+
+@pytest.mark.asyncio
+async def test_handle_ask_secretary_prefers_full_schema_over_section_schema():
+    """When the client supplied the full-form catalog at handshake, the handler
+    passes the WHOLE form to the secretary, not the current section's schema."""
+    text_ai = MagicMock()
+    text_ai.ask = AsyncMock(return_value="ok")
+    svc = _service(text_ai, schema=_SCHEMA)  # _schema = section-only (2 fields)
+    svc._full_schema = _FULL_SCHEMA          # full catalog (3 fields, 2 sections)
+
+    out = await svc.handle_ask_secretary("q")
+    assert out == "ok"
+    ctx = text_ai.ask.call_args.args[1]
+    assert ctx["schema"] is _FULL_SCHEMA
+
+
+@pytest.mark.asyncio
+async def test_start_session_caches_full_schema_and_preserves_across_switch():
+    """start_session(full_schema=...) caches the catalog; a later start_session
+    WITHOUT full_schema (the section-switch restart path) preserves it."""
+    svc = FormFillingService(live_ai=None, settings=Settings(), text_ai=None)
+    ws = AsyncMock()
+
+    # Fresh connect supplies the full catalog.
+    await svc.start_session(
+        ws, "sess-1", accept_connection=False,
+        schema=_SCHEMA, full_schema=_FULL_SCHEMA,
+    )
+    assert svc._full_schema is _FULL_SCHEMA
+
+    # Section-switch restart calls start_session WITHOUT full_schema -- the cached
+    # catalog must survive (the form is unchanged across sections).
+    await svc.start_session(
+        ws, "sess-1", accept_connection=False,
+        schema=_SCHEMA, full_schema=None,
+    )
+    assert svc._full_schema is _FULL_SCHEMA
