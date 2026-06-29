@@ -49,11 +49,21 @@ describe('FieldEditor form-metadata panel (no field selected)', () => {
     expect(screen.queryByText(/could not be confidently detected/i)).not.toBeInTheDocument();
   });
 
-  it('clears a field to undefined when emptied', () => {
+  it('clears an OPTIONAL field to undefined when emptied', () => {
     const onUpdateMetadata = vi.fn();
     const schema = schemaWith({ omb_number: '1545-0074' });
     render(<FieldEditor field={null} schema={schema} onUpdateField={vi.fn()} onUpdateMetadata={onUpdateMetadata} />);
     fireEvent.change(screen.getByLabelText('OMB number'), { target: { value: '' } });
     expect(onUpdateMetadata).toHaveBeenCalledWith({ omb_number: undefined });
+  });
+
+  it('clearing the REQUIRED version degrades to "unknown", never undefined (Codex PR #263)', () => {
+    // version is a required schema field; undefined would be dropped by
+    // JSON.stringify on save and fail backend validation.
+    const onUpdateMetadata = vi.fn();
+    const schema = schemaWith({ version: 'December 2024' });
+    render(<FieldEditor field={null} schema={schema} onUpdateField={vi.fn()} onUpdateMetadata={onUpdateMetadata} />);
+    fireEvent.change(screen.getByLabelText('Version / Revision'), { target: { value: '' } });
+    expect(onUpdateMetadata).toHaveBeenCalledWith({ version: 'unknown' });
   });
 });

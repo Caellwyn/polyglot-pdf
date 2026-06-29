@@ -90,6 +90,21 @@ class TestExtractVersionMetadataSynthetic:
         assert "expiration_date" not in out
         assert "omb_number" not in out
 
+    def test_expiration_year_is_not_mistaken_for_version(self):
+        # A version-less form whose only 20xx date is an EXPIRATION must NOT have
+        # that year promoted to version -- it stays "unknown" (Codex PR #263). An
+        # unscoped bare-year fallback would have made version "2027" here.
+        text = "Some Application Form\nExpires 02/28/2027\nName:\nSignature:\n"
+        out = ef.extract_version_metadata(text, "")
+        assert out["version"] == "unknown"
+        assert out["expiration_date"] == "02/28/2027"  # still captured as expiration
+
+    def test_year_only_version_requires_a_form_context(self):
+        # A bare year adjacent to "Form 1040" on page 1 IS a version (IRS header).
+        out = ef.extract_version_metadata("Form 1040\n2025\nIncome Tax Return\n", "")
+        assert out["version"] == "2025"
+        assert out["version_confidence"] == ef._CONF_LOW
+
     def test_loose_omb_bumps_unknown_to_low(self):
         # No version pattern, but a stray NNNN-NNNN -> at least low confidence.
         text = "Some Form\nReference 1234-5678 on file\n"

@@ -15,7 +15,7 @@ import {
   writeSchemaToHandle,
   type FsFileHandle,
 } from './utils/fileSystemAccess';
-import { loadKitSchema, type CatalogueEntry } from './utils/formKitDirectory';
+import { loadKitSchema, versionInfoFromSchema, type CatalogueEntry, type KitVersionInfo } from './utils/formKitDirectory';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField } from './utils/fieldGrouping';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -23,9 +23,17 @@ import type { FormField, FormConfig, FormSchema } from './types/schema';
 
 // Live review stats for the open kit's catalogue bar (percent + the matching
 // complete/total counts, so the bar AND its hover detail both track edits).
-function liveStats(schema: FormSchema): { percent: number; complete: number; total: number } {
+// Also carries the live version summary so an in-session metadata edit refreshes
+// the card's version line instead of showing the stale disk-scan value (Codex
+// PR #263).
+function liveStats(
+  schema: FormSchema,
+): { percent: number; complete: number; total: number; version: KitVersionInfo } {
   const s = getCompletionStats(schema);
-  return { percent: s.percentage, complete: s.complete, total: s.total };
+  return {
+    percent: s.percentage, complete: s.complete, total: s.total,
+    version: versionInfoFromSchema(schema),
+  };
 }
 
 export const App: React.FC = () => {
@@ -626,8 +634,22 @@ export const App: React.FC = () => {
 
           {/* Right: Field Editor */}
           <div className="w-2/5 flex flex-col">
-            <div className="p-3 bg-white border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">Field Properties</h3>
+            <div className="p-3 bg-white border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">
+                {selectedFieldId ? 'Field Properties' : 'Form Metadata'}
+              </h3>
+              {/* When a field is selected the metadata panel is otherwise
+                  unreachable (it shows only with no selection); this clears the
+                  selection to get back to it (Codex PR #263). */}
+              {selectedFieldId && (
+                <button
+                  className="btn-sm btn-secondary"
+                  onClick={() => setSelectedFieldId(null)}
+                  title="Edit form-level metadata (version, OMB, expiration)"
+                >
+                  Form metadata
+                </button>
+              )}
             </div>
             <div className="flex-1 overflow-hidden">
               <FieldEditor

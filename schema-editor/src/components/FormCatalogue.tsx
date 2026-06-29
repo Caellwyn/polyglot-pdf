@@ -5,7 +5,7 @@ import {
 } from '../utils/fileSystemAccess';
 import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitStatus,
-  type CatalogueEntry, type KitProgress, type KitStatus,
+  type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
 import { isExtractionAvailable, runExtraction } from '../utils/extractionClient';
 
@@ -31,7 +31,13 @@ interface FormCatalogueProps {
    * detail track unsaved edits instead of the stale disk-scan value. Null when no
    * kit is open.
    */
-  liveProgress?: { kitId: string; saved: boolean; percent: number; complete: number; total: number } | null;
+  liveProgress?: {
+    kitId: string; saved: boolean; percent: number; complete: number; total: number;
+    // Live version summary so a metadata edit refreshes the card (Codex PR #263).
+    // Optional: a caller that only tracks review % may omit it (card falls back
+    // to the disk-scan version then).
+    version?: KitVersionInfo;
+  } | null;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -111,18 +117,19 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   // would otherwise revert A's card to its stale scan % until a manual Refresh;
   // because liveProgress reflects in-memory edits, this also covers post-save.
   const [editedProgress, setEditedProgress] =
-    React.useState<Record<string, { percent: number; complete: number; total: number }>>({});
+    React.useState<Record<string, { percent: number; complete: number; total: number; version?: KitVersionInfo }>>({});
   React.useEffect(() => {
     if (!liveProgress) return;
-    const { kitId, saved, percent, complete, total } = liveProgress;
+    const { kitId, saved, percent, complete, total, version } = liveProgress;
     // Only remember SAVED values. An unsaved edit still shows live on the open
     // card (the `live` override below), but caching it would leave phantom
     // progress after the user discards the edit and switches kits (Codex PR #224).
     if (!saved) return;
     setEditedProgress(prev => {
       const e = prev[kitId];
-      if (e && e.percent === percent && e.complete === complete && e.total === total) return prev;
-      return { ...prev, [kitId]: { percent, complete, total } };
+      if (e && e.percent === percent && e.complete === complete && e.total === total
+          && e.version?.label === version?.label && e.version?.lowConfidence === version?.lowConfidence) return prev;
+      return { ...prev, [kitId]: { percent, complete, total, version } };
     });
   }, [liveProgress]);
 
@@ -316,6 +323,9 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // a broken schema isn't mistaken for a pre-extraction kit. A live/edited
             // override always has measurable stats, so suppress it then.
             const showSchemaError = !source && prog?.schemaError && pct === null;
+            // Version line: prefer the live/edited summary (tracks an in-session
+            // metadata edit) over the stale disk-scan value (Codex PR #263).
+            const cardVersion = source?.version ?? prog?.version ?? null;
             return (
             <li key={kit.id}>
               <button
@@ -344,13 +354,13 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                 {/* Form version (bd polyglot-pdf-s4dp.2). Shown for any kit with a
                     readable schema. "Version: unknown" is explicit (not blank), and
                     a low-confidence / unknown version carries a "verify" hint. */}
-                {prog?.version && (
+                {cardVersion && (
                   <div className="mt-1 text-xs" data-testid="kit-version">
                     <span className="text-gray-500">Version: </span>
-                    <span className={prog.version.lowConfidence ? 'text-yellow-700' : 'text-gray-700'}>
-                      {prog.version.label}
+                    <span className={cardVersion.lowConfidence ? 'text-yellow-700' : 'text-gray-700'}>
+                      {cardVersion.label}
                     </span>
-                    {prog.version.lowConfidence && (
+                    {cardVersion.lowConfidence && (
                       <span className="text-yellow-600"> (verify)</span>
                     )}
                   </div>

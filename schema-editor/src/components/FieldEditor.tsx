@@ -32,7 +32,15 @@ const FormMetadataEditor: React.FC<{
   const meta = schema.form_metadata;
   const set = (key: keyof FormSchema['form_metadata']) => (
     e: React.ChangeEvent<HTMLInputElement>,
-  ) => onUpdateMetadata?.({ [key]: e.target.value || undefined } as Partial<FormSchema['form_metadata']>);
+  ) => {
+    const raw = e.target.value;
+    // `version` is REQUIRED on the schema: clearing it must degrade to the
+    // "unknown" sentinel, never undefined -- a save serializes with JSON.stringify
+    // which drops undefined keys, which would strip the required field and fail
+    // backend validation (Codex PR #263). Optional fields clear to undefined.
+    const value = key === 'version' ? (raw || 'unknown') : (raw || undefined);
+    onUpdateMetadata?.({ [key]: value } as Partial<FormSchema['form_metadata']>);
+  };
   const lowConfidence =
     meta?.version === 'unknown' ||
     (typeof meta?.version_confidence === 'number' && meta.version_confidence <= 0.5);

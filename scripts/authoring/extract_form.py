@@ -168,23 +168,32 @@ def extract_version_metadata(page1_text: str, doc_title: str = "") -> dict:
         out["edition_date"] = edition_str
 
     # --- version (human-facing revision label) + confidence ---------------------
-    # Specificity order: Edition value -> "Rev. Month Year" -> bare year -> unknown.
+    # Specificity order: Edition value -> "Rev. Month Year" -> a year in a FORM-
+    # VERSION context -> unknown. The bare-year fallback is SCOPED (Codex PR #263):
+    # an UNSCOPED `\b20\d{2}\b` over all page-1 text would grab an expiration or
+    # other stray date (e.g. "Expires 02/28/2027" -> version "2027"), making a
+    # version-less form look versioned and misleading the outdated-revision check.
+    # A year is only a version when it sits in the TITLE (e.g. "2025 Form 1040") or
+    # immediately adjacent to "Form <id>" on page 1 -- the IRS year-only header
+    # convention -- never an arbitrary date elsewhere on the page.
     rev = re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", text) \
         or re.search(rf"Rev\.?\s+((?:{_MONTH_RE})\s+\d{{4}})", title)
+    year_ctx = (
+        re.search(r"\b(20\d{2})\b", title)
+        or re.search(r"Form\s+[A-Z]{0,3}-?\d{1,4}[A-Z]?\s*\n?\s*(20\d{2})\b", text)
+    )
     if edition_str:
         out["version"] = edition_str
         out["version_confidence"] = _CONF_HIGH
     elif rev:
         out["version"] = rev.group(1).strip()
         out["version_confidence"] = _CONF_HIGH
+    elif year_ctx:
+        out["version"] = year_ctx.group(1)
+        out["version_confidence"] = _CONF_LOW  # generic but form-version-scoped
     else:
-        year = re.search(r"\b(20\d{2})\b", text)
-        if year:
-            out["version"] = year.group(1)
-            out["version_confidence"] = _CONF_LOW  # generic fallback
-        else:
-            out["version"] = "unknown"
-            out["version_confidence"] = _CONF_NONE
+        out["version"] = "unknown"
+        out["version_confidence"] = _CONF_NONE
 
     # --- omb_number: "OMB No. NNNN-NNNN" (specific) -> loose NNNN-NNNN (fallback)
     omb = re.search(r"OMB\s+No\.?\s*(\d{4}-\d{4})", text)
