@@ -67,6 +67,21 @@ assumption.
 - Validation test file: 34 passed (5 new).
 - No SyntaxWarning (reworded a docstring that contained a bare `\d`); ASCII-clean.
 
+## Fresh-eyes review
+
+Pre-PR adversarial fresh-eyes (Sonnet) returned NO-GAPS on all three exit criteria.
+It surfaced a real ADJACENT bug of the same class -- `_validate_text` (and
+`_validate_date` / `_validate_number`) read `pattern` / `minLength` / `maxLength`
+from the TOP LEVEL only, so a raw schema dict (nested under `validation`) silently
+skips pattern/length validation. Production is masked by validation_handler's
+flattening (same as the format_preset bug was), so it is a latent gap for
+direct/test callers, not a live production failure. It is a distinct, larger surface
+(3 functions, ~7 keys) with its own exit criteria, and cn0e is specifically scoped
+to format_preset -- so it was kept SEPARATE (filed as bd polyglot-pdf-0mv2) rather
+than folded in, to keep this fix clean and reviewable. My new test asserts the
+normalized `form_state` value (proving normalization ran), so it is unaffected by
+the 0mv2 pattern-skip gap.
+
 ## Doc freshness
 
 `docs/standards/validation-delegation.md` tracks `field_validator.py`. The fix is a
