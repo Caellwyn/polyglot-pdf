@@ -506,6 +506,14 @@ async def _handle_fill_session(
 					await service.send_activity_end()
 					# No acknowledgment needed - fire-and-forget signal
 					continue
+				elif mtype == "clear_thinking":
+					# Frontend's thinking-indicator max-duration safety timer fired (bd
+					# polyglot-pdf-wpw.5, Codex PR #273): the reply never arrived, so the
+					# client cleared its own UI. Reset the backend processing state too,
+					# or it would stay stuck True and DEDUP the next turn's
+					# processing:true (the two-sided desync Codex flagged). Fire-and-forget.
+					await service.clear_processing_state()
+					continue
 				elif mtype == "change_fill_language":
 					# Frontend requests to change the language used for filling form fields
 					new_language = obj.get("language")

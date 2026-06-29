@@ -572,19 +572,19 @@ class TestThinkingIndicator:
         assert bumped == []  # liveness NOT chained on this path
 
     @pytest.mark.asyncio
-    async def test_on_interrupted_clears_processing(
+    async def test_on_processing_done_clears_processing(
         self, mock_websocket, mock_coordinator
     ):
-        """A barge-in (on_interrupted) clears the processing state -- the interrupted
-        turn yields no first-audio/turn_complete to clear it (bd polyglot-pdf-wpw.5,
-        fresh-eyes finding). And after clearing, a NEXT turn's processing:true is sent
-        again (not deduped to nothing)."""
+        """on_processing_done (fired on a barge-in OR a real server turn_complete --
+        NOT tied to output transcripts, which are off in prod) clears the processing
+        state, and a NEXT turn's processing:true is sent again, not deduped to nothing
+        (bd polyglot-pdf-wpw.5, Codex PR #273)."""
         handler = CallbackHandler(
             websocket=mock_websocket, request_coordinator=mock_coordinator,
             session_id="t",
         )
         await handler.signal_processing_start()   # processing -> True
-        await handler.on_interrupted()            # barge-in -> processing False
+        await handler.on_processing_done()        # turn-end -> processing False
         await handler.signal_processing_start()   # next turn -> True again (not deduped)
 
         assert _processing_sends(mock_websocket) == [

@@ -228,12 +228,13 @@ class CallbackHandler:
                 _log.warning("failed_to_send_agent_processing",
                              error=str(e), active=active, session_id=self._session_id)
 
-    async def on_interrupted(self) -> None:
-        """A barge-in/interruption cancelled the agent's turn (bd polyglot-pdf-wpw.5).
-        Clear the thinking indicator: the interrupted turn yields no first-audio /
-        turn_complete to clear it normally, so without this it would hang until the
-        client's max-duration timer (and the stale _processing_active would dedup the
-        NEXT turn's processing:true)."""
+    async def on_processing_done(self) -> None:
+        """The agent's turn ended (interrupt OR a real server turn_complete) -- clear
+        the thinking indicator (bd polyglot-pdf-wpw.5). The fast clear is on_audio
+        (first response chunk); this covers the no-audio turn-end cases that would
+        otherwise leave _processing_active stuck True -- which also deduped the NEXT
+        turn's processing:true (Codex PR #273). Idempotent (dedup), so calling it
+        alongside on_audio on a normal turn is harmless."""
         await self._set_processing(False)
 
     async def signal_processing_start(self) -> None:

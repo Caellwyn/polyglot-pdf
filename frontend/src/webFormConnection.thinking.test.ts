@@ -138,6 +138,19 @@ describe('WebFormConnection thinking indicator (bd polyglot-pdf-wpw.5)', () => {
     expect(onThinkingChange).toHaveBeenLastCalledWith(false)
   })
 
+  it('a server {type:error} message clears a pending thinking indicator (Codex PR #273)', async () => {
+    const conn = new WebFormConnection(SCHEMA, { onThinkingChange })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    fire(ws, { type: 'session_ready', session_id: 's', ephemeral: true })
+    fire(ws, { type: 'agent_processing', processing: true })
+    onThinkingChange.mockClear()
+
+    // A server error that does NOT change status (no section switch in flight).
+    fire(ws, { type: 'error', code: 'some_error', message: 'boom' })
+    expect(onThinkingChange).toHaveBeenLastCalledWith(false)
+  })
+
   it('getThinking() reflects the current state', async () => {
     const conn = new WebFormConnection(SCHEMA, { onThinkingChange })
     await conn.connect('wss://example/ws/fill')

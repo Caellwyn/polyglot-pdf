@@ -320,10 +320,14 @@ class LiveAIGemini(ILiveAI):
         # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
         # the stateless reconnect path), so no server-side session state is added.
         self._on_go_away = None
-        # Fired on a barge-in/interruption (bd polyglot-pdf-wpw.5) so the thinking
-        # indicator's processing state clears -- the interrupted turn yields no
-        # audio/transcript that would otherwise clear it.
-        self._on_interrupted = None
+        # Fired when the agent's turn is DONE so the thinking indicator's processing
+        # state clears (bd polyglot-pdf-wpw.5). Covers the turn-end cases the
+        # first-audio clear misses: a barge-in/interruption, AND a server
+        # turn_complete/generation_complete with no output audio (e.g. a silent /
+        # text-only turn, or the ask_secretary pending instruction where the principal
+        # may say nothing). Critically NOT tied to output transcripts, which are off
+        # on the default production path (Codex PR #273).
+        self._on_processing_done = None
         # Fired when Gemini's native VAD produces an INPUT transcription -- i.e. it
         # heard a real user utterance (bd polyglot-pdf-l3a.4). This is the only
         # reliable "user is present / actually spoke" signal: continuous silence and
@@ -558,7 +562,7 @@ class LiveAIGemini(ILiveAI):
         on_tool_call=None,
         on_go_away=None,
         on_user_activity=None,
-        on_interrupted=None,
+        on_processing_done=None,
         system_instruction: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
@@ -580,11 +584,11 @@ class LiveAIGemini(ILiveAI):
         self._on_tool_call = on_tool_call
         self._on_go_away = on_go_away
         self._on_user_activity = on_user_activity
-        # bd polyglot-pdf-wpw.5: fired on a barge-in/interruption so the thinking
-        # indicator's processing state is cleared (the interrupted turn produces no
-        # audio/transcript, the normal clear paths). Optional.
-        if on_interrupted is not None:
-            self._on_interrupted = on_interrupted
+        # bd polyglot-pdf-wpw.5: fired when the agent turn is done (interrupt or
+        # turn_complete) so the thinking indicator clears even with no output audio.
+        # Optional.
+        if on_processing_done is not None:
+            self._on_processing_done = on_processing_done
         self._system_instruction = system_instruction
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
         # Honor explicit enable_transcripts flag from the caller (UI/service).
@@ -1687,11 +1691,11 @@ class LiveAIGemini(ILiveAI):
                                             # an interrupted turn produces no audio/transcript, the
                                             # normal clear edges, so signal it here or it would stay
                                             # set until the max-duration timer.
-                                            if self._on_interrupted is not None:
+                                            if self._on_processing_done is not None:
                                                 try:
-                                                    await self._on_interrupted()
+                                                    await self._on_processing_done()
                                                 except Exception:
-                                                    self._log.warning("on_interrupted_callback_error")
+                                                    self._log.warning("on_processing_done_callback_error")
 
                                             # Skip further processing of this event
                                             continue
@@ -1699,7 +1703,25 @@ class LiveAIGemini(ILiveAI):
                                         # ========================================
                                         # Normal processing (no interruption)
                                         # ========================================
-                                        
+
+                                        # Clear the thinking indicator on a REAL turn end (bd
+                                        # polyglot-pdf-wpw.5, Codex PR #273): the agent's turn is
+                                        # complete, so processing is over. This fires on the actual
+                                        # server_content.turn_complete / generation_complete flag --
+                                        # NOT on output_transcription, which is OFF on the default
+                                        # production path (send_transcript=False), so a silent/
+                                        # audio-less completion would otherwise never clear and would
+                                        # dedup the next turn's processing:true. (on_audio remains the
+                                        # fast clear for the common audio-reply case; this is the
+                                        # backstop for the no-audio case.)
+                                        if (getattr(server_content, "turn_complete", False)
+                                                or getattr(server_content, "generation_complete", False)):
+                                            if self._on_processing_done is not None:
+                                                try:
+                                                    await self._on_processing_done()
+                                                except Exception:
+                                                    self._log.warning("on_processing_done_callback_error")
+
                                         # Handle input transcription (what Gemini heard from user)
                                         input_transcription = getattr(server_content, "input_transcription", None)
                                         # A non-empty input transcription means native VAD detected a REAL
