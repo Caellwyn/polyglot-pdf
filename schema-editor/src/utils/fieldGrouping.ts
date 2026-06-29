@@ -557,12 +557,17 @@ function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDispl
     case 'is_empty':
       return 'is_empty'; // "group empty" -> primary checkbox is empty/unchecked
     case 'not_equals':
-      // `not_equals <empty>` means "populated"; `not_equals <non-empty>` against a
-      // boolean checkbox is best expressed as "not that, i.e. unchecked" -> is_empty.
-      return emptyValue ? 'is_checked' : 'is_empty';
+      // Only UNMATCHED values reach here (a value matching an option is handled
+      // exactly in remapFallbackDependent's IF branch). `not_equals <empty>` means
+      // "populated" -> is_checked. `not_equals <non-empty-unmatched>` was always
+      // true originally (the consolidated never holds a non-option value), and a
+      // bare `not_equals <X>` on a boolean checkbox is likewise always true
+      // (false !== X, true !== X) -> preserve it to replicate "always show".
+      return emptyValue ? 'is_checked' : 'not_equals';
     case 'equals':
-      // `equals <empty>` means "empty"; an unmatched non-empty equals stays as
-      // equals (unsatisfiable -> hidden, the correct "no such option" result).
+      // Only UNMATCHED values reach here. `equals <empty>` means "empty" ->
+      // is_empty; an unmatched non-empty equals stays equals (unsatisfiable ->
+      // hidden, the correct "no such option" result).
       return emptyValue ? 'is_empty' : 'equals';
     default:
       return cond.operator; // comparison/contains operators: preserve (best effort)
@@ -581,13 +586,18 @@ function remapFallbackDependent(
 
   if (f.show_if && f.show_if.field === fieldId) {
     const cond = f.show_if;
-    if (SELECTION_OPERATORS.has(cond.operator) && cond.value !== undefined &&
-        valueToReconstructedId.has(String(cond.value))) {
-      // A specific option: "consolidated equals <optValue>" -> "that option's
-      // reconstructed standalone field is_checked".
+    const matchedOptionId = cond.value !== undefined && cond.value !== null
+      ? valueToReconstructedId.get(String(cond.value))
+      : undefined;
+    if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
+      // A SPECIFIC option: the inverse for a single option is exact. "consolidated
+      // equals <optValue>" -> "that option's reconstructed checkbox is_checked";
+      // "consolidated not_equals <optValue>" -> "that checkbox is_empty" (shown
+      // unless that option is selected). Both target the specific option field and
+      // carry NO value (is_checked/is_empty are value-less in shouldShowField).
       next.show_if = {
-        field: valueToReconstructedId.get(String(cond.value))!,
-        operator: 'is_checked',
+        field: matchedOptionId,
+        operator: cond.operator === 'equals' ? 'is_checked' : 'is_empty',
       };
     } else {
       // Whole-group / unmatched: retarget to the primary so it does not dangle,
@@ -602,8 +612,7 @@ function remapFallbackDependent(
       // is_checked / is_empty are value-less operators (shouldShowField ignores
       // value for them); a value-carrying operator (equals/not_equals/...) keeps
       // its original value so the comparison is unchanged.
-      const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty' ||
-        normalizedOp === 'is_not_empty';
+      const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty';
       next.show_if = valueLess
         ? { field: primaryReconstructedId, operator: normalizedOp }
         : { ...cond, field: primaryReconstructedId, operator: normalizedOp };

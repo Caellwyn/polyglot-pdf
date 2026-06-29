@@ -526,6 +526,32 @@ describe('Opus fallback review fixes', () => {
     expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
   });
 
+  it('maps not_equals <matched option> to is_empty on THAT option field (show unless that option set)', () => {
+    const schema = raceSchemaWithDependent();
+    // 'asian' is a real option of p3_race; "show unless asian selected"
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: 'asian',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // exact single-option inverse: is_empty on the reconstructed 'asian' field
+    // (shown when that checkbox is NOT checked), not is_empty on the primary.
+    expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_empty' });
+    expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
+  });
+
+  it('preserves not_equals <non-empty-unmatched> on the primary (replicates the original always-show)', () => {
+    const schema = raceSchemaWithDependent();
+    schema.fields.find(f => f.id === 'detail')!.show_if = {
+      field: 'p3_race', operator: 'not_equals', value: 'no_such_option',
+    };
+    const unmerged = ungroupField(schema, 'p3_race');
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    // originally always true (consolidated never holds a non-option value); a bare
+    // not_equals <X> on a boolean checkbox is likewise always true -> preserved.
+    expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'not_equals', value: 'no_such_option' });
+  });
+
   it('normalizes a whole-group is_empty to is_empty on the primary', () => {
     const schema = raceSchemaWithDependent();
     schema.fields.find(f => f.id === 'detail')!.show_if = {
