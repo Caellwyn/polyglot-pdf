@@ -4,6 +4,7 @@ import { FormCatalogue } from './components/FormCatalogue';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
+import PreviewPane from './components/PreviewPane';
 import { ValidationPanel } from './components/ValidationPanel';
 import { loadSchema, saveSchema } from './utils/schemaLoader';
 import {
@@ -46,6 +47,11 @@ export const App: React.FC = () => {
     undo, redo,
   } = useSchemaHistory();
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
+  // Right-pane view mode (bd polyglot-pdf-s4dp.4): 'edit' shows the FieldEditor,
+  // 'preview' swaps in the standalone interactive PreviewPane so the author can
+  // TEST the form's logic (radio exclusivity, checkbox multi-select, show_if
+  // visibility). PDF + field list stay visible in both modes.
+  const [viewMode, setViewMode] = React.useState<'edit' | 'preview'>('edit');
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -81,6 +87,7 @@ export const App: React.FC = () => {
     setError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
@@ -118,6 +125,7 @@ export const App: React.FC = () => {
     setError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
+    setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
     try {
       const loaded = await loadKitSchema(entry);
       if (!loaded) {
@@ -632,33 +640,64 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Right: Field Editor */}
+          {/* Right: Field Editor OR interactive Preview (bd s4dp.4) */}
           <div className="w-2/5 flex flex-col">
-            <div className="p-3 bg-white border-b border-gray-200 flex items-center justify-between">
+            <div className="p-3 bg-white border-b border-gray-200 flex items-center justify-between gap-2">
               <h3 className="font-semibold text-gray-900">
-                {selectedFieldId ? 'Field Properties' : 'Form Metadata'}
+                {viewMode === 'preview'
+                  ? 'Preview'
+                  : selectedFieldId ? 'Field Properties' : 'Form Metadata'}
               </h3>
-              {/* When a field is selected the metadata panel is otherwise
-                  unreachable (it shows only with no selection); this clears the
-                  selection to get back to it (Codex PR #263). */}
-              {selectedFieldId && (
-                <button
-                  className="btn-sm btn-secondary"
-                  onClick={() => setSelectedFieldId(null)}
-                  title="Edit form-level metadata (version, OMB, expiration)"
-                >
-                  Form metadata
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* When a field is selected the metadata panel is otherwise
+                    unreachable (it shows only with no selection); this clears the
+                    selection to get back to it (Codex PR #263). */}
+                {viewMode === 'edit' && selectedFieldId && (
+                  <button
+                    className="btn-sm btn-secondary"
+                    onClick={() => setSelectedFieldId(null)}
+                    title="Edit form-level metadata (version, OMB, expiration)"
+                  >
+                    Form metadata
+                  </button>
+                )}
+                {/* Edit / Preview view toggle. Preview is a standalone interactive
+                    render of the form's logic (no voice app), letting the author
+                    test radio exclusivity, checkbox multi-select, and show_if. */}
+                <div className="flex rounded-md overflow-hidden border border-gray-300">
+                  <button
+                    className={`btn-sm ${viewMode === 'edit' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setViewMode('edit')}
+                    title="Edit field properties"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className={`btn-sm ${viewMode === 'preview' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setViewMode('preview')}
+                    title="Interactively preview the form's logic"
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="flex-1 overflow-hidden">
-              <FieldEditor
-                field={selectedField}
-                schema={schema}
-                onUpdateField={handleUpdateField}
-                onUnmergeField={handleUnmergeField}
-                onUpdateMetadata={handleUpdateMetadata}
-              />
+              {viewMode === 'preview' ? (
+                // Key by the loaded form so the pane REMOUNTS (clearing its local
+                // preview values) when the form changes -- otherwise stale values
+                // from the prior form leak into the new one's show_if evaluation
+                // (fresh-eyes finding 4).
+                <PreviewPane key={selectedKitId ?? selectedForm.schemaPath} schema={schema} />
+              ) : (
+                <FieldEditor
+                  field={selectedField}
+                  schema={schema}
+                  onUpdateField={handleUpdateField}
+                  onUnmergeField={handleUnmergeField}
+                  onUpdateMetadata={handleUpdateMetadata}
+                />
+              )}
             </div>
           </div>
         </div>
