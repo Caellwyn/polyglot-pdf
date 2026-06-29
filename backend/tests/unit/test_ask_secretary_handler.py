@@ -245,6 +245,38 @@ async def test_async_deliver_drops_when_session_inactive():
 
 
 @pytest.mark.asyncio
+async def test_handle_ask_secretary_cancelled_during_sync_wait_cancels_lookup():
+    """If the handler is cancelled DURING the synchronous deadline wait (e.g. a WS
+    disconnect in that window), the underlying lookup must be cancelled too -- not
+    orphaned to run past teardown (Opus fallback review, PR #269). asyncio.wait does
+    not cancel its futures when the waiter is cancelled, so the handler must."""
+    lookup_started = asyncio.Event()
+    lookup_cancelled = asyncio.Event()
+
+    async def _slow(query, context):
+        lookup_started.set()
+        try:
+            await asyncio.sleep(10)  # still running when we cancel the handler
+            return "should never arrive"
+        except asyncio.CancelledError:
+            lookup_cancelled.set()
+            raise
+
+    text_ai = MagicMock()
+    text_ai.ask = _slow
+    # Long deadline so the handler is parked in the sync wait when we cancel it.
+    svc = _service(text_ai, deadline_s=5.0, timeout_s=10.0)
+
+    task = asyncio.ensure_future(svc.handle_ask_secretary("q"))
+    await lookup_started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    # The underlying lookup was cancelled (drained), not left running.
+    await asyncio.wait_for(lookup_cancelled.wait(), timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_async_deliver_drops_empty_answer():
     """A late lookup that returns empty is dropped silently (no apology turn out of
     nowhere -- the user has already moved on)."""

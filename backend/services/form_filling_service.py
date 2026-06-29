@@ -1225,7 +1225,23 @@ class FormFillingService:
         lookup = asyncio.ensure_future(
             asyncio.wait_for(self._text_ai.ask(query, context), timeout=timeout_s)
         )
-        done, _pending = await asyncio.wait({lookup}, timeout=deadline_s)
+        # If THIS handler is cancelled during the sync wait (e.g. a WS disconnect in
+        # the ~2.5s window -> end_session -> finalize -> receive-task cancel), the
+        # lookup is not yet tracked in _secretary_deliver_tasks (that only happens in
+        # the deadline-blown branch below). asyncio.wait does NOT cancel its futures
+        # when the waiter is cancelled, so without this the lookup would orphan -- a
+        # billable model call running past teardown + a "Task was destroyed" leak
+        # (Opus fallback review, PR #269). Cancel + drain it, then propagate.
+        try:
+            done, _pending = await asyncio.wait({lookup}, timeout=deadline_s)
+        except asyncio.CancelledError:
+            if not lookup.done():
+                lookup.cancel()
+                try:
+                    await lookup
+                except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                    pass
+            raise
 
         if lookup in done:
             # Resolved within the deadline -- the common path.
