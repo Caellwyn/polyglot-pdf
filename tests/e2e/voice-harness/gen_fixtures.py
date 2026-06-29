@@ -40,6 +40,13 @@ UTTERANCES = [
     # a 5-digit ZIP that fits p1_line6f_zipcode (max_length 5). Expected filled
     # value "12345".
     ("digits_12345.wav", "one two three four five"),
+    # Secretary cross-field query for the ask_secretary E2E (bd polyglot-pdf-p68s
+    # / jnjj.45d): a plain-language question about a PAST answer in a DIFFERENT
+    # field. The principal cannot answer from its own (thin) context, so it must
+    # call ask_secretary, which holds the WHOLE form catalog (full_schema) + the
+    # current values. Phrasing matches the tool description's example shape.
+    ("secretary_query_alien.wav",
+     "what alien registration number did I give earlier?"),
 ]
 
 TARGET_SR = 16000  # Gemini Live input rate (audio/pcm;rate=16000).

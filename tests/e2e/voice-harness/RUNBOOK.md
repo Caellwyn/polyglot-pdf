@@ -211,6 +211,46 @@ asserting the switch_section response is sent before the receive task is
 cancelled); until that lands the AI-initiated switch is ungated. Do not drive an
 AI-initiated `switch_section` in this browser scenario and expect green.
 
+### 6c. Run the SECRETARY cross-field query (bd polyglot-pdf-p68s / jnjj.45d)
+
+This proves the secretary's two client-owned inputs round-trip end to end: the
+full-form catalog sent at handshake (`full_schema`) and per-field `shown`. It asks
+the live model a plain-language question about a PAST answer in a DIFFERENT field,
+which the thin principal must route to the `ask_secretary` tool.
+
+Pre-load the query fixture alongside the others (step 4):
+```js
+window.__VFF_HARNESS.loadFixture('/test-fixtures/secretary_query_alien.wav')
+  .then(b => { window.__vffSecretaryQ = b; });
+```
+Then launch the scenario (async-poll, like the others):
+```js
+window.__vffSecReport = null;
+window.__VFF_HARNESS.runSecretaryQuery({
+  seedFieldId: 'p1_line1_aliennumber', seedValue: '1234567',
+  queryBuf: window.__vffSecretaryQ
+}).then(r => { window.__vffSecReport = r; });
+```
+Poll `window.__vffSecReport` until non-null. It seeds the alien number confirmed
+(the recallable answer), waits for Gemini's field question, injects "what alien
+registration number did I give earlier?", and waits out the model turn. A
+`verdict: 'DRIVEN'` means the query audio went out after a clean seed.
+
+**Authoritative assertion = the BACKEND LOG, not the browser.** The secretary
+answer rides Gemini's audio/transcript (not on the webFormConnection message path
+the harness observes), and the tool dispatch + answer are backend-side. Confirm in
+the backend stdout:
+- an `ask_secretary_complete` line with `field_count` > 0, `shown_count` >= 0, and
+  `answer_len` > 0 -- the tool ran with the WHOLE-form catalog + a real shown_map
+  and returned a non-empty prose answer. (`field_count` reflects the full form's
+  field values, not just the current section -- the p68s point.)
+- NO `ask_secretary_no_schema` / `ask_secretary_no_text_ai` / `ask_secretary_timeout`
+  fail-open lines for that turn.
+
+The live model is non-deterministic about WHEN it calls a tool; if no
+`ask_secretary_complete` appears, re-run (the model may have answered from context
+or asked a clarifying question first) -- treat it like the PASS/FLAKY policy below.
+
 ### 7. Report
 
 Read back `window.__vffReport`. Summarize its `verdict` + `steps`, and on any

@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-28. bd polyglot-pdf-p68s (jnjj.45d): the handshake gains a `full_schema` key (the whole-form secretary catalog, both modes) and `form_state_response` entries gain a `shown` applicability sub-field -- both documented in the tables below. Earlier: 2026-06-15. bd njvh: `confirm_field_response` gains an optional `section_complete: true` sub-field (backend skips the racing next-field-hint at a section boundary) -- documented in the message table; note it is a sub-field of the confirm reply, NOT the SI-epic's planned top-level `section_complete` event. Also 2026-06-15: A2 (bd polyglot-pdf-jnjj.9) closed the JIT-handshake drift: the JIT builder now sends `form_title` / `previous_spoken_names` / `initial_field_hint` and the backend consumes `manifest.current_section` / `previous_sections`; see [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md). Created as the F2 foundation contract (bd polyglot-pdf-jnjj.3); see [../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md](../journal/entries/2026-06-14-bd-jnjj.2-si-reduction-foundation-contracts.md) (the bundled F1/F2/F3 entry).*
+*Last updated: 2026-06-28. See [../journal/entries/2026-06-28-bd-p68s-secretary-catalog-handshake.md](../journal/entries/2026-06-28-bd-p68s-secretary-catalog-handshake.md) for closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`

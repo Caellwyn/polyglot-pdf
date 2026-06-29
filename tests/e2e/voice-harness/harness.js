@@ -783,6 +783,80 @@
     return result;
   }
 
+  /*
+   * Drive an ask_secretary cross-field query (bd polyglot-pdf-p68s / jnjj.45d).
+   *
+   * The secretary's two client-owned inputs (the full-form catalog at handshake +
+   * per-field `shown`) are exercised by asking the live model a plain-language
+   * question about a PAST answer in a DIFFERENT field than the current one. The
+   * thin principal cannot answer from its own context, so it must call the
+   * ask_secretary tool, whose handler now renders the WHOLE form (full_schema) +
+   * the current values/shown_map. This proves the inputs round-trip end to end.
+   *
+   * What this drives (the harness half):
+   *   1. seed `seedFieldId` = `seedValue` confirmed (the recallable past answer),
+   *      via the same SchemaFormStateManager write path a real confirm uses;
+   *   2. wait for Gemini to ask its current field (pacing);
+   *   3. inject the secretary-query utterance (queryBuf);
+   *   4. wait out the model turn so the backend processes any tool call.
+   *
+   * What this CANNOT assert in-browser: whether ask_secretary actually fired and
+   * what prose it returned. The secretary answer rides Gemini's AUDIO/transcript,
+   * which is not on the webFormConnection message path the harness observes, and
+   * the tool dispatch + answer are backend-side. So the AUTHORITATIVE assertion is
+   * the BACKEND LOG: an `ask_secretary_complete` line (field_count / shown_count /
+   * answer_len) confirms the tool ran with the full catalog + a real shown_map and
+   * returned a non-empty answer. The driver reads backend stdout for it (runbook
+   * step 7). This function returns { verdict:'DRIVEN'|'FLAKY', seeded, steps }:
+   * 'DRIVEN' means the query audio was injected after a clean seed -- go read the
+   * backend log for the ask_secretary_complete confirmation.
+   *
+   * Pre-load queryBuf via loadFixture('/test-fixtures/secretary_query_alien.wav').
+   */
+  async function runSecretaryQuery(opts) {
+    opts = opts || {};
+    var seedFieldId = opts.seedFieldId || 'p1_line1_aliennumber';
+    var seedValue = opts.seedValue || '1234567';
+    var queryBuf = opts.queryBuf;
+    var turnTimeoutMs = opts.turnTimeoutMs || 20000;
+    var report = { verdict: 'FLAKY', seeded: false, steps: [] };
+
+    if (!queryBuf) {
+      report.reason = 'no queryBuf (load secretary_query_alien.wav first)';
+      return report;
+    }
+
+    // 1. Seed the recallable past answer (confirmed) so the secretary has
+    // something cross-field to recall.
+    var seed = seedFields({});
+    seed = seedFields((function () { var m = {}; m[seedFieldId] = seedValue; return m; })());
+    report.seeded = seed.seeded.indexOf(seedFieldId) !== -1;
+    report.steps.push({ step: 'seed', seeded: seed.seeded, failed: seed.failed });
+    if (!report.seeded) {
+      report.reason = 'seed of ' + seedFieldId + ' did not confirm';
+      return report;
+    }
+
+    // 2. Pacing: let Gemini ask its current field before we speak.
+    var q = await waitForGeminiQuestion({ timeoutMs: 18000 });
+    report.steps.push({ step: 'await-question', timedOut: q.timedOut });
+
+    // 3. Inject the cross-field secretary query.
+    await injectUtterance(queryBuf);
+    report.steps.push({ step: 'inject-query', injected: true });
+
+    // 4. Wait out the model turn so the backend processes the (expected) tool
+    // call. There is no in-browser outcome to gate on (the answer is audio +
+    // backend-side), so we pace a fixed turn window, then hand off to the
+    // backend-log assertion.
+    await sleep(turnTimeoutMs);
+    report.steps.push({ step: 'turn-wait', waitedMs: turnTimeoutMs });
+
+    report.verdict = 'DRIVEN';
+    report.note = 'query injected; verify ask_secretary_complete in backend stdout';
+    return report;
+  }
+
   window.__VFF_HARNESS = {
     SAMPLE_RATE: SAMPLE_RATE,
     loadFixture: loadFixture,
@@ -803,6 +877,7 @@
     waitForSection: waitForSection,
     waitForSectionGreeting: waitForSectionGreeting,
     runMultiSectionScenario: runMultiSectionScenario,
+    runSecretaryQuery: runSecretaryQuery,
     isNativeVad: function () { return inject().isNativeVad(); }
   };
 
