@@ -1,0 +1,23 @@
+{
+  "bead": "polyglot-pdf-08zv",
+  "lever": "latency",
+  "stamp": "20260627T194907",
+  "corpus_fp": "a47d2bf07a1f",
+  "today_for_date_checks": "2026-06-17",
+  "summary": {
+    "baseline": {
+      "lat_p50": 8.107227206230164,
+      "lat_p90": 19.37561273574829,
+      "cost_mean": 0.004790642857142857,
+      "recall": 1.0,
+      "precision": 0.9
+    },
+    "trim": {
+      "lat_p50": 7.570641279220581,
+      "lat_p90": 19.999160289764404,
+      "cost_mean": 0.003765071428571429,
+      "recall": 1.0,
+      "precision": 0.7941176470588235
+    }
+  }
+}
