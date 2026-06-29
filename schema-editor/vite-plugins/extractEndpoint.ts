@@ -71,6 +71,11 @@ interface ExtractRequest {
   pdfFile?: string;    // metadata.pdf override; default form.pdf
   schemaFile?: string; // metadata.schema override; default schema.json
   force?: boolean;     // re-extract over an EXISTING schema (default: refuse)
+  // OPTIONAL instructions PDF filename inside the SAME kit dir (bd s4dp.3). The
+  // browser writes the uploaded instructions PDF into the kit folder (like the
+  // form PDF) and passes its filename here; the server resolves it inside kitDir
+  // and passes --instructions-pdf to the extractor. Absent -> /TU-only extraction.
+  instructionsPdfFile?: string;
 }
 
 interface ExtractResponse {
@@ -300,8 +305,9 @@ export async function handleExtract(
     return;
   }
   if ((body.pdfFile != null && typeof body.pdfFile !== 'string')
-      || (body.schemaFile != null && typeof body.schemaFile !== 'string')) {
-    sendJson(res, 400, { ok: false, detail: 'pdfFile/schemaFile must be strings' });
+      || (body.schemaFile != null && typeof body.schemaFile !== 'string')
+      || (body.instructionsPdfFile != null && typeof body.instructionsPdfFile !== 'string')) {
+    sendJson(res, 400, { ok: false, detail: 'pdfFile/schemaFile/instructionsPdfFile must be strings' });
     return;
   }
   // pdf/schema filenames are optional metadata overrides; require the expected
@@ -316,6 +322,14 @@ export async function handleExtract(
     ext.test(name) && isSafeFilename(name);
   if (!validName(pdfFile, /\.pdf$/i) || !validName(schemaFile, /\.json$/i)) {
     sendJson(res, 400, { ok: false, detail: 'invalid pdf/schema filename (need a safe *.pdf / *.json name)' });
+    return;
+  }
+  // Optional instructions PDF: same safe-*.pdf-name + in-kit-dir rule as the form
+  // PDF (bd s4dp.3). Absent -> /TU-only extraction; the script handles a missing
+  // --instructions-pdf gracefully.
+  const instructionsPdfFile = body.instructionsPdfFile ?? undefined;
+  if (instructionsPdfFile != null && !validName(instructionsPdfFile, /\.pdf$/i)) {
+    sendJson(res, 400, { ok: false, detail: 'invalid instructionsPdfFile (need a safe *.pdf name)' });
     return;
   }
 
@@ -339,6 +353,18 @@ export async function handleExtract(
   if (!fs.existsSync(pdfPath)) {
     sendJson(res, 404, { ok: false, detail: `no ${pdfFile} in kit "${id}"` });
     return;
+  }
+  // Resolve the optional instructions PDF inside the kit dir. If named but
+  // missing on disk, refuse (the caller asked for enrichment from a file that is
+  // not there) rather than silently degrading to /TU-only -- the browser writes
+  // it before POSTing, so absence means something went wrong (bd s4dp.3).
+  let instructionsPdfPath: string | undefined;
+  if (instructionsPdfFile) {
+    instructionsPdfPath = path.join(kitDir, instructionsPdfFile);
+    if (!fs.existsSync(instructionsPdfPath)) {
+      sendJson(res, 404, { ok: false, detail: `no ${instructionsPdfFile} in kit "${id}"` });
+      return;
+    }
   }
 
   const outPath = path.join(kitDir, schemaFile);
@@ -373,6 +399,7 @@ export async function handleExtract(
   const py = resolvePythonExe(ctx.repoRoot);
   const args = [ctx.extractScript, '--pdf', pdfPath, '--out', tmpOut];
   if (ctx.model) args.push('--model', ctx.model);
+  if (instructionsPdfPath) args.push('--instructions-pdf', instructionsPdfPath);
 
   const cleanupTmp = () => { try { if (fs.existsSync(tmpOut)) fs.rmSync(tmpOut); } catch { /* best effort */ } };
 

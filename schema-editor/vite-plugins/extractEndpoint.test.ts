@@ -132,6 +132,32 @@ describe('handleExtract -- request validation (no spawn)', () => {
     expect(res.body.detail).toMatch(/no Form W-7\.pdf/);
   });
 
+  it('rejects a non-string instructionsPdfFile (coercion guard)', async () => {
+    const res = await run({ id: 'w7', instructionsPdfFile: 123 });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.detail).toMatch(/instructionsPdfFile must be strings/i);
+  });
+
+  it('rejects an instructionsPdfFile with a path separator (traversal)', async () => {
+    const res = await run({ id: 'w7', instructionsPdfFile: '../escape.pdf' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.detail).toMatch(/instructionsPdfFile/i);
+  });
+
+  it('rejects a bad instructions PDF extension', async () => {
+    const res = await run({ id: 'w7', instructionsPdfFile: 'instructions.exe' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.detail).toMatch(/instructionsPdfFile.*\.pdf/i);
+  });
+
+  it('404s when the named instructions PDF is missing from the kit dir', async () => {
+    // The form.pdf exists, so we get past its check; the named instructions PDF
+    // does not, so the endpoint refuses rather than silently degrading to /TU-only.
+    const res = await run({ id: 'w7', instructionsPdfFile: 'instructions.pdf' });
+    expect(res.statusCode).toBe(404);
+    expect(res.body.detail).toMatch(/no instructions\.pdf/);
+  });
+
   it('refuses to overwrite an existing schema without force', async () => {
     fs.writeFileSync(path.join(root, 'w7', 'schema.json'), '{}');
     const res = await run({ id: 'w7' });

@@ -43,11 +43,13 @@ export async function isExtractionAvailable(): Promise<boolean> {
  * own form-kits root (the browser's directory handle is opaque to the host), so
  * this works when the editor's open folder is the server's form-kits root -- the
  * normal local-dev case. pdfFile/schemaFile carry the kit's metadata overrides
- * so a non-default layout still resolves.
+ * so a non-default layout still resolves. instructionsPdfFile (optional, bd
+ * s4dp.3) names an instructions PDF already written into the kit dir; when set the
+ * server enriches help.instructions from it, otherwise extraction is /TU-only.
  */
 export async function runExtraction(
   id: string,
-  opts: { pdfFile?: string; schemaFile?: string } = {},
+  opts: { pdfFile?: string; schemaFile?: string; instructionsPdfFile?: string } = {},
 ): Promise<ExtractionResult> {
   let res: Response;
   try {

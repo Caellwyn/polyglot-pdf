@@ -332,6 +332,22 @@ export async function onboardPdf(
   return { id, entry: await readKitEntry(id, kitDir) };
 }
 
+/**
+ * Write an optional instructions PDF into an existing kit dir (bd s4dp.3) and
+ * return the filename written. The extractor reads it from the kit dir by name
+ * (the browser's directory handle is opaque to the host, exactly as the form PDF
+ * flows). We use a FIXED name ("instructions.pdf") so a re-run overwrites rather
+ * than accumulating; the safe-filename guard on the endpoint accepts it.
+ */
+export async function writeInstructionsPdf(
+  kitDir: FsDirectoryHandle, file: File,
+): Promise<string> {
+  const name = 'instructions.pdf';
+  const bytes = await file.arrayBuffer();
+  await writeFile(kitDir, name, bytes);
+  return name;
+}
+
 async function tryGetDir(
   root: FsDirectoryHandle, name: string,
 ): Promise<FsDirectoryHandle | null> {

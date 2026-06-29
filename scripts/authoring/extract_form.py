@@ -121,6 +121,157 @@ def _backfill_positions(schema: dict, dump_path: str) -> int:
     return filled
 
 
+def _build_name_to_tu(dump_path: str) -> dict[str, str]:
+    """Map each AcroForm widget NAME -> its /TU tooltip text from the dump.
+
+    The dump groups widgets by field name and records the /TU (the long
+    human-readable label embedded in the form) as widget["tu"] when present
+    (acroform_dump.py). We key by field name -- the same join key the draft uses
+    for `pdf_field_name` -- so the caller can attach a field's tooltip to its
+    help.instructions for free (bd polyglot-pdf-s4dp.3). First /TU seen per name
+    wins; names without any /TU are simply absent."""
+    try:
+        with open(dump_path, encoding="utf-8") as fh:
+            dump = json.load(fh)
+    except OSError:
+        return {}
+    name_to_tu: dict[str, str] = {}
+    for f in dump.get("fields", []):
+        name = f.get("name")
+        if not name or name in name_to_tu:
+            continue
+        for w in f.get("widgets", []):
+            tu = (w.get("tu") or "").strip()
+            if tu:
+                name_to_tu[name] = tu
+                break
+    return name_to_tu
+
+
+def _field_pdf_name(field: dict) -> str | None:
+    """The PDF widget name backing a field: its own pdf_field_name, else the first
+    option's (a consolidated options[] field carries the name per option, exactly
+    as _backfill_positions resolves a field's rect)."""
+    pfn = field.get("pdf_field_name")
+    if pfn:
+        return pfn
+    for o in (field.get("options") or []):
+        if o.get("pdf_field_name"):
+            return o["pdf_field_name"]
+    return None
+
+
+def _extract_instructions_from_dump(schema: dict, dump_path: str) -> int:
+    """Populate each field's help.instructions from its /TU tooltip (bd s4dp.3).
+
+    Deterministic and free: extraction otherwise leaves help.instructions blank,
+    yet the AcroForm /TU text is already captured in the dump. For each field we
+    join on pdf_field_name and, when a /TU exists, set help.instructions to it.
+
+    We do NOT clobber an existing help.instructions the LLM pass may have written
+    -- a real value already there wins; /TU only fills a genuine blank. Returns the
+    number of fields filled."""
+    name_to_tu = _build_name_to_tu(dump_path)
+    if not name_to_tu:
+        return 0
+    filled = 0
+    for field in schema.get("fields", []):
+        help_obj = field.get("help") or {}
+        if (help_obj.get("instructions") or "").strip():
+            continue  # a real value already present -- do not overwrite
+        pfn = _field_pdf_name(field)
+        tu = name_to_tu.get(pfn) if pfn else None
+        if tu:
+            help_obj["instructions"] = tu
+            field["help"] = help_obj
+            filled += 1
+    return filled
+
+
+def _parse_instructions_pdf(path: str) -> str:
+    """Extract the full text of an optional instructions PDF (bd s4dp.3).
+
+    A straightforward whole-document text pass (no LLM, no structured ingestion --
+    deep mapping is explicitly out of scope for this bead). Returns the joined
+    page text, or "" if the file is unreadable. Pages are joined with form-feeds
+    so the per-field matcher can keep page boundaries if it wants them."""
+    try:
+        doc = fitz.open(path)
+    except Exception:  # bad/missing/corrupt file -> no enrichment (never a crash)
+        return ""
+    try:
+        return "\n\f\n".join(doc[i].get_text() for i in range(doc.page_count))
+    finally:
+        doc.close()
+
+
+# A field's label often starts with an item/line marker the instructions PDF
+# reuses verbatim ("Item Number 1.", "Line 6a", "Part 2."). We match a field to
+# its instructions paragraph by locating the field's LABEL text in the PDF; the
+# label is the most reliable shared key (the bead scopes this to a straightforward
+# text merge, not structured ingestion).
+def _instructions_paragraphs(instructions_text: str) -> list[str]:
+    """Split the instructions PDF text into trimmed, non-empty paragraphs (blank-
+    line delimited). Form-feeds (page breaks) count as paragraph breaks too."""
+    raw = re.split(r"\n\s*\n|\f", instructions_text or "")
+    return [p.strip() for p in raw if p.strip()]
+
+
+def _match_instruction_for_label(label: str, paragraphs: list[str]) -> str | None:
+    """Find the instructions paragraph that best matches a field's label.
+
+    A straightforward, deterministic text merge (bd s4dp.3): we look for a
+    paragraph that CONTAINS the field's label as a case-insensitive substring
+    (labels are short and specific -- "Family Name (Last Name)", "Alien Registration
+    Number"), preferring the SHORTEST such paragraph (the tightest, most field-
+    specific passage rather than a sprawling section header). Returns None when no
+    paragraph mentions the label, so /TU (or nothing) stands. Very short labels
+    (< 4 non-space chars) are skipped -- they match too loosely to be reliable."""
+    key = (label or "").strip()
+    if len(key.replace(" ", "")) < 4:
+        return None
+    key_low = key.lower()
+    hits = [p for p in paragraphs if key_low in p.lower()]
+    if not hits:
+        return None
+    return min(hits, key=len)
+
+
+def _enrich_instructions_from_pdf(schema: dict, instructions_pdf_path: str) -> int:
+    """Enrich help.instructions from an optional instructions PDF (bd s4dp.3).
+
+    For each field whose LABEL appears in the instructions text, append the
+    matched paragraph to help.instructions (after any /TU baseline, separated by a
+    blank line). A field with no label match keeps whatever /TU gave it. Returns
+    the number of fields enriched. A merge, never a clobber: the instructions text
+    is ADDED to the /TU baseline so both sources survive."""
+    instructions_text = _parse_instructions_pdf(instructions_pdf_path)
+    paragraphs = _instructions_paragraphs(instructions_text)
+    if not paragraphs:
+        return 0
+    enriched = 0
+    for field in schema.get("fields", []):
+        passage = _match_instruction_for_label(field.get("label", ""), paragraphs)
+        if not passage:
+            continue
+        help_obj = field.get("help") or {}
+        existing = (help_obj.get("instructions") or "").strip()
+        # Skip only when the passage is ALREADY captured by the existing text
+        # (passage in existing) -- a real form sometimes uses the instructions
+        # sentence verbatim as its /TU. Do NOT skip the reverse case (existing in
+        # passage): when the /TU baseline is just a SUBSTRING of the richer
+        # instructions paragraph, that paragraph is exactly the enrichment we want
+        # to append (bd s4dp.3 fresh-eyes -- the old `existing in passage` arm
+        # silently dropped richer help, contradicting the "enriches when provided"
+        # exit criterion).
+        if existing and passage in existing:
+            continue
+        help_obj["instructions"] = f"{existing}\n\n{passage}" if existing else passage
+        field["help"] = help_obj
+        enriched += 1
+    return enriched
+
+
 # Month names for the IRS "(Rev. December 2024)" form-revision style.
 _MONTHS = (
     "January February March April May June July August September October "
@@ -280,9 +431,14 @@ def _validate_schema(schema: dict) -> tuple[bool, str]:
 
 
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
-            model: str = "claude-opus-4-8", keep_dump: bool = False) -> dict:
+            model: str = "claude-opus-4-8", keep_dump: bool = False,
+            instructions_pdf: str | None = None) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
-    draft dict (with a `_bakeoff` provenance block)."""
+    draft dict (with a `_bakeoff` provenance block).
+
+    instructions_pdf: optional path to the form's official instructions PDF. When
+    given, its text enriches each field's help.instructions on top of the /TU
+    baseline (bd polyglot-pdf-s4dp.3); when absent, help.instructions is /TU-only."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     if keep_dump:
@@ -300,6 +456,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         # 3. Deterministically back-fill pdf_position from the dump (the LLM is
         #    flaky at coordinates; the dump has them keyed by exact widget name).
         positions_filled = _backfill_positions(schema, dump_path)
+
+        # 3a. Deterministically populate help.instructions from each field's /TU
+        #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
+        #     while the dump still exists (it is removed in the finally below).
+        instructions_filled = _extract_instructions_from_dump(schema, dump_path)
     finally:
         if not keep_dump and os.path.exists(dump_path):
             os.remove(dump_path)
@@ -322,12 +483,21 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
                         if k not in ("version", "version_confidence")}
     meta.update(version_meta)
 
+    # 3c. Optional instructions-PDF enrichment: when an instructions PDF is
+    #     provided, append its per-field text to help.instructions on top of the
+    #     /TU baseline (bd s4dp.3). Absent -> /TU-only, no error.
+    instructions_enriched = 0
+    if instructions_pdf:
+        instructions_enriched = _enrich_instructions_from_pdf(schema, instructions_pdf)
+
     # 4. Normalize required-but-missing scalars to draft defaults, then validate.
     _normalize_for_schema(schema)
     ok, detail = _validate_schema(schema)
     schema.setdefault("_bakeoff", {})["authoring"] = {
         "tool": "extract_form.py", "prompt": "plain" if plain else "enriched",
         "positions_filled": positions_filled,
+        "instructions_filled": instructions_filled,
+        "instructions_enriched": instructions_enriched,
         "schema_valid": ok, "validation": detail,
     }
 
@@ -336,8 +506,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
     nf = len(schema.get("fields", []))
     status = "OK" if ok else "INVALID"
+    instr_note = f", help.instructions: {instructions_filled} from /TU"
+    if instructions_pdf:
+        instr_note += f" + {instructions_enriched} from instructions PDF"
     print(f"[{status}] wrote {out_path} -- {nf} fields, prompt="
-          f"{'plain' if plain else 'enriched'}; {detail}")
+          f"{'plain' if plain else 'enriched'}{instr_note}; {detail}")
     if not ok:
         print("WARNING: the draft did not validate; inspect before editing.",
               file=sys.stderr)
@@ -358,11 +531,15 @@ def main(argv: list[str] | None = None) -> int:
                      help="force the enriched-bundle prompt")
     ap.add_argument("--keep-dump", action="store_true",
                     help="keep the intermediate AcroForm dump (<out>_acroform.json)")
+    ap.add_argument("--instructions-pdf", default=None,
+                    help="OPTIONAL official instructions PDF; its text enriches "
+                         "help.instructions on top of the /TU baseline (bd s4dp.3)")
     args = ap.parse_args(argv)
 
     plain = DEFAULT_PLAIN if args.plain is None else args.plain
     schema = extract(args.pdf, args.out, plain=plain, model=args.model,
-                     keep_dump=args.keep_dump)
+                     keep_dump=args.keep_dump,
+                     instructions_pdf=args.instructions_pdf)
     return 0 if schema.get("_bakeoff", {}).get("authoring", {}).get("schema_valid") else 1
 
 
