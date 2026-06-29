@@ -320,6 +320,10 @@ class LiveAIGemini(ILiveAI):
         # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
         # the stateless reconnect path), so no server-side session state is added.
         self._on_go_away = None
+        # Fired on a barge-in/interruption (bd polyglot-pdf-wpw.5) so the thinking
+        # indicator's processing state clears -- the interrupted turn yields no
+        # audio/transcript that would otherwise clear it.
+        self._on_interrupted = None
         # Fired when Gemini's native VAD produces an INPUT transcription -- i.e. it
         # heard a real user utterance (bd polyglot-pdf-l3a.4). This is the only
         # reliable "user is present / actually spoke" signal: continuous silence and
@@ -554,6 +558,7 @@ class LiveAIGemini(ILiveAI):
         on_tool_call=None,
         on_go_away=None,
         on_user_activity=None,
+        on_interrupted=None,
         system_instruction: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
@@ -575,6 +580,11 @@ class LiveAIGemini(ILiveAI):
         self._on_tool_call = on_tool_call
         self._on_go_away = on_go_away
         self._on_user_activity = on_user_activity
+        # bd polyglot-pdf-wpw.5: fired on a barge-in/interruption so the thinking
+        # indicator's processing state is cleared (the interrupted turn produces no
+        # audio/transcript, the normal clear paths). Optional.
+        if on_interrupted is not None:
+            self._on_interrupted = on_interrupted
         self._system_instruction = system_instruction
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
         # Honor explicit enable_transcripts flag from the caller (UI/service).
@@ -1672,7 +1682,17 @@ class LiveAIGemini(ILiveAI):
                                             # Reset audio tracking since generation was interrupted
                                             self._audio_chunk_count = 0
                                             self._first_audio_time = None
-                                            
+
+                                            # Clear the thinking indicator (bd polyglot-pdf-wpw.5):
+                                            # an interrupted turn produces no audio/transcript, the
+                                            # normal clear edges, so signal it here or it would stay
+                                            # set until the max-duration timer.
+                                            if self._on_interrupted is not None:
+                                                try:
+                                                    await self._on_interrupted()
+                                                except Exception:
+                                                    self._log.warning("on_interrupted_callback_error")
+
                                             # Skip further processing of this event
                                             continue
                                         

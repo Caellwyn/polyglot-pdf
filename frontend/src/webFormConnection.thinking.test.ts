@@ -125,6 +125,19 @@ describe('WebFormConnection thinking indicator (bd polyglot-pdf-wpw.5)', () => {
     expect(onThinkingChange).toHaveBeenLastCalledWith(false)
   })
 
+  it('sendActivityStart (barge-in / new turn) clears a pending thinking indicator', async () => {
+    const conn = new WebFormConnection(SCHEMA, { onThinkingChange })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    fire(ws, { type: 'session_ready', session_id: 's', ephemeral: true })
+    fire(ws, { type: 'agent_processing', processing: true })
+    onThinkingChange.mockClear()
+
+    // User starts a new turn (barge-in over the still-"thinking" window).
+    conn.sendActivityStart()
+    expect(onThinkingChange).toHaveBeenLastCalledWith(false)
+  })
+
   it('getThinking() reflects the current state', async () => {
     const conn = new WebFormConnection(SCHEMA, { onThinkingChange })
     await conn.connect('wss://example/ws/fill')

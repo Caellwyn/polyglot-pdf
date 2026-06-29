@@ -2227,6 +2227,11 @@ export class WebFormConnection {
     }
 
     console.log('[WebFormConnection] [send] Sending activity_start message to backend')
+    // The user is starting a NEW turn (incl. a barge-in over a still-"thinking"
+    // window): the prior turn's thinking indicator is now obsolete -- clear it so a
+    // barge-in can never leave it stuck (bd polyglot-pdf-wpw.5, fresh-eyes). The new
+    // turn re-arms thinking via the backend agent_processing signal on its own end.
+    this.clearThinking('activity_start');
     this.send({
       type: 'vad_activity_start',
       timestamp: Date.now(),

@@ -34,6 +34,10 @@ interface VoiceOverlayProps {
 	onClose?: () => void
 	connectionManager?: ConnectionManager
 	status?: string
+	// Thinking indicator from the parent (bd polyglot-pdf-wpw.5): when SchemaForm owns
+	// the shared ConnectionManager it wires onThinkingChange and passes the value down
+	// here (mirrors `status`), since this overlay skips its own manager in that case.
+	thinking?: boolean
 	// FIX #1: Shared audio stream passed from parent (prevents race conditions)
 	sharedStream?: MediaStream | null
 	// FIX #4: Stream error from parent (for error visibility)
@@ -42,7 +46,7 @@ interface VoiceOverlayProps {
 	initialLanguage?: string
 }
 
-export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError, initialLanguage }: VoiceOverlayProps) {
+export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, thinking: sharedThinking, sharedStream, streamError, initialLanguage }: VoiceOverlayProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -596,6 +600,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			setStatus(sharedStatus)
 		}
 	}, [sharedStatus])
+	// Sync thinking from shared prop (bd polyglot-pdf-wpw.5): when the parent owns the
+	// ConnectionManager it drives the indicator; mirror it into local state.
+	useEffect(() => {
+		if (sharedThinking !== undefined) {
+			setThinking(sharedThinking)
+		}
+	}, [sharedThinking])
 
 	// Check if user has already accepted disclaimer (returning user)
 	useEffect(() => {

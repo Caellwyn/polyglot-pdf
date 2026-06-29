@@ -25,6 +25,9 @@ interface VoiceOverlayMobileProps {
 	wsUrl?: string
 	connectionManager?: ConnectionManager
 	status?: string
+	// Thinking indicator from the parent (bd polyglot-pdf-wpw.5): mirrors `status`;
+	// SchemaForm (which owns the shared manager) drives it.
+	thinking?: boolean
 	// FIX #1: Shared audio stream passed from parent (prevents race conditions)
 	sharedStream?: MediaStream | null
 	// FIX #4: Stream error from parent (for error visibility)
@@ -33,7 +36,7 @@ interface VoiceOverlayMobileProps {
 	initialLanguage?: string
 }
 
-export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, sharedStream, streamError, initialLanguage }: VoiceOverlayMobileProps) {
+export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedConnectionManager, status: sharedStatus, thinking: sharedThinking, sharedStream, streamError, initialLanguage }: VoiceOverlayMobileProps) {
 	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
 	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
@@ -554,6 +557,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			setStatus(sharedStatus)
 		}
 	}, [sharedStatus])
+	// Sync thinking from shared prop (bd polyglot-pdf-wpw.5).
+	useEffect(() => {
+		if (sharedThinking !== undefined) {
+			setThinking(sharedThinking)
+		}
+	}, [sharedThinking])
 
 	// Check for returning users (on mount)
 	useEffect(() => {

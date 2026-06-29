@@ -90,6 +90,7 @@ function makeResizeFlipMock(): ConnectionManager & {
     pause: vi.fn(),
     resume: vi.fn(async () => {}),
     getStatus: vi.fn(() => 'connected' as const),
+    getThinking: vi.fn(() => false),  // bd polyglot-pdf-wpw.5
     isSendingMicAudio: vi.fn(() => true),
     sendAudio: vi.fn(),
     sendActivityStart: vi.fn(),
