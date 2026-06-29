@@ -117,6 +117,16 @@ class FormFillingService:
         # spawned by handle_switch_section, so it isn't garbage-collected mid-swap.
         self._switch_lock = asyncio.Lock()
         self._switch_task: Optional[asyncio.Task] = None
+        # Strong refs to in-flight async secretary-deliver tasks (bd
+        # polyglot-pdf-jnjj.43). When an ask_secretary lookup blows SECRETARY_DEADLINE_S,
+        # the tool returns a "pending" result (no spoken filler -- the gap-based wpw.5
+        # thinking indicator covers the wait) and the still-running lookup is detached
+        # here so the answer can be delivered on a LATER turn (send_client_content)
+        # when it lands. A set (not a single slot) because the user could trigger a
+        # second lookup while the first is still resolving; tasks self-remove on
+        # completion. Cancelled in end_session so a disconnect never leaves an orphaned
+        # deliver pushing into a dead session.
+        self._secretary_deliver_tasks: set = set()
         # Rate-limit stamp for the switch-window audio-drop log (stream_audio).
         self._last_switch_drop_log: float = 0.0
 
@@ -849,10 +859,42 @@ class FormFillingService:
                 await self._switch_task
             except (asyncio.CancelledError, Exception):
                 pass
+        await self._cancel_secretary_deliver_tasks()
         if self._live_ai is not None:
             await self._live_ai.finalize()
         self._websocket = None
         self._session_id = None
+
+    async def _cancel_secretary_deliver_tasks(self) -> None:
+        """Cancel + drain all in-flight async secretary-deliver tasks (bd
+        polyglot-pdf-jnjj.43).
+
+        Called before ANY session teardown/swap that finalizes the live model --
+        end_session (disconnect) AND _switch_to_section_locked (section switch) --
+        so a late secretary answer from the OUTGOING session can never push a turn
+        into a torn-down or freshly-swapped session. Without this on the switch
+        path, a slow section-N lookup could deliver into section N+1
+        (cross-section PHI contamination, fresh-eyes finding).
+
+        Cancel the LOOKUP first and drain it HERE: this coroutine has no pending
+        cancel of its own, so the await actually unwinds the inner wait_for task --
+        doing it inside the (cancelled) deliver task does not, which would leak
+        "Task was destroyed but it is pending". Then cancel + drain the deliver.
+        Snapshot the set first: the deliver done-callback mutates it.
+        """
+        for deliver, lookup in list(self._secretary_deliver_tasks):
+            if not lookup.done():
+                lookup.cancel()
+                try:
+                    await lookup
+                except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                    pass
+            if not deliver.done():
+                deliver.cancel()
+                try:
+                    await deliver
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     async def switch_to_section(
         self,
@@ -914,7 +956,14 @@ class FormFillingService:
                  session_id=self._session_id,
                  section_number=section_number,
                  total_sections=total_sections)
-        
+
+        # 0. Kill any in-flight secretary-deliver task from the OUTGOING section
+        # (bd polyglot-pdf-jnjj.43, fresh-eyes): a slow section-N lookup must not
+        # deliver its (section-N PHI) answer into the section-N+1 session we are
+        # about to start -- send_client_content would queue it and fire it into the
+        # new section once it is ready. Cancel BEFORE finalize, same as end_session.
+        await self._cancel_secretary_deliver_tasks()
+
         # 1. Close current Gemini session (flushes context)
         try:
             await self._live_ai.finalize()
@@ -1103,30 +1152,37 @@ class FormFillingService:
         
         return await self._request_coordinator.request_form_state(field_ids)
 
-    async def handle_ask_secretary(self, query: str) -> str:
-        """Run an ask_secretary lookup (bd polyglot-pdf-jnjj.45c).
+    async def handle_ask_secretary(self, query: str) -> Dict[str, Any]:
+        """Run an ask_secretary lookup (bd polyglot-pdf-jnjj.45c, tail guard jnjj.43).
 
         Assembles the secretary's context -- the form catalog (self._full_schema,
         the full-form catalog the client supplies at handshake; bd polyglot-pdf-p68s
         / jnjj.45d) plus the client's CURRENT values + applicability (a fresh
-        round-trip) -- and runs the
-        BLOCKING TextAIGemini.ask() under a timeout so a slow lookup cannot hang the
-        conversation. Returns the secretary's prose answer, or "" on any failure
-        (no adapter / no schema / timeout / error) so the caller fail-opens and the
-        principal asks the user directly.
+        round-trip) -- and runs the BLOCKING TextAIGemini.ask().
 
-        The timeout here is the INTERIM tail-latency guard (Gate 2 measured
-        occasional multi-second spikes); the graceful "please hold" filler is
-        jnjj.43. Note it bounds ONLY the model call -- the preceding client
-        form-state round-trip has its own ~5s coordinator timeout, so the
-        worst-case total blocking wait is ~SECRETARY_TIMEOUT_S + 5s.
+        Returns a status dict the dispatch maps to a tool response:
+          {"status": "ok",      "answer": <prose>}  -- answered within the deadline.
+          {"status": "pending", "answer": ""}       -- the lookup blew
+              SECRETARY_DEADLINE_S; it has been DETACHED to deliver its answer on a
+              later turn (see _deliver_secretary_answer_later). The principal must NOT
+              keep its turn open waiting; the gap-based thinking indicator (bd wpw.5)
+              covers the wait visually -- no spoken filler turn is spent.
+          {"status": "failed",  "answer": ""}       -- no adapter / no schema / the
+              client form-state round-trip errored; fail-open (the dispatch voices an
+              apology).
 
-        PII: logs ids/counts/latency/timeout only -- never the query, the values,
-        or the answer (callback_handler PII discipline).
+        Tail-latency design (jnjj.43): Gate 2 (jnjj.27) measured median ~1s but spikes
+        to 8.5s / 20s. The synchronous tool call only waits SECRETARY_DEADLINE_S
+        (~2.5s); past that the model's turn is freed and the answer is delivered
+        asynchronously. SECRETARY_TIMEOUT_S is the HARD CAP on the model call itself
+        (sync wait + detached lookup both bounded by it).
+
+        PII: logs ids/counts/latency/status only -- never the query, the values, or
+        the answer (callback_handler PII discipline).
         """
         if self._text_ai is None:
             _log.warning("ask_secretary_no_text_ai", session_id=self._session_id)
-            return ""
+            return {"status": "failed", "answer": ""}
 
         # Prefer the full-form catalog the client supplies at handshake (bd
         # polyglot-pdf-p68s): the secretary must see the WHOLE form, not just the
@@ -1136,7 +1192,7 @@ class FormFillingService:
         schema = self._full_schema or self._schema or {}
         if not schema.get("fields"):
             _log.warning("ask_secretary_no_schema", session_id=self._session_id)
-            return ""
+            return {"status": "failed", "answer": ""}
 
         # Fresh full form state from the client (all fields). Shape:
         # {field_id: {"value": ..., "confirmed": ..., ["shown": bool]}} -- the
@@ -1147,7 +1203,7 @@ class FormFillingService:
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_form_state_error",
                          exc_type=type(exc).__name__, session_id=self._session_id)
-            return ""
+            return {"status": "failed", "answer": ""}
         form_state = form_state or {}
 
         shown_map = {}
@@ -1161,28 +1217,144 @@ class FormFillingService:
             "shown_map": shown_map,
         }
 
+        deadline_s = getattr(self._settings, "SECRETARY_DEADLINE_S", 2.5)
         timeout_s = getattr(self._settings, "SECRETARY_TIMEOUT_S", 8.0)
-        try:
-            answer = await asyncio.wait_for(
-                self._text_ai.ask(query, context), timeout=timeout_s
-            )
-        except asyncio.TimeoutError:
-            _log.warning("ask_secretary_timeout", timeout_s=timeout_s,
-                         session_id=self._session_id)
-            return ""
-        except Exception as exc:  # noqa: BLE001
-            _log.warning("ask_secretary_ask_error",
-                         exc_type=type(exc).__name__, session_id=self._session_id)
-            return ""
-
-        _log.info(
-            "ask_secretary_complete",
-            field_count=len(form_state),
-            shown_count=len(shown_map),
-            answer_len=len(answer or ""),
-            session_id=self._session_id,
+        # The lookup runs as ONE task bounded by the HARD cap; we race it against the
+        # shorter sync deadline. If the deadline wins, we DETACH the same task (no
+        # second call -- never double-bill the model) to deliver the answer later.
+        lookup = asyncio.ensure_future(
+            asyncio.wait_for(self._text_ai.ask(query, context), timeout=timeout_s)
         )
-        return answer or ""
+        # If THIS handler is cancelled during the sync wait (e.g. a WS disconnect in
+        # the ~2.5s window -> end_session -> finalize -> receive-task cancel), the
+        # lookup is not yet tracked in _secretary_deliver_tasks (that only happens in
+        # the deadline-blown branch below). asyncio.wait does NOT cancel its futures
+        # when the waiter is cancelled, so without this the lookup would orphan -- a
+        # billable model call running past teardown + a "Task was destroyed" leak
+        # (Opus fallback review, PR #269). Cancel + drain it, then propagate.
+        try:
+            done, _pending = await asyncio.wait({lookup}, timeout=deadline_s)
+        except asyncio.CancelledError:
+            if not lookup.done():
+                lookup.cancel()
+                try:
+                    await lookup
+                except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                    pass
+            raise
+
+        if lookup in done:
+            # Resolved within the deadline -- the common path.
+            try:
+                answer = lookup.result()
+            except asyncio.TimeoutError:
+                _log.warning("ask_secretary_timeout", timeout_s=timeout_s,
+                             session_id=self._session_id)
+                return {"status": "failed", "answer": ""}
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("ask_secretary_ask_error",
+                             exc_type=type(exc).__name__, session_id=self._session_id)
+                return {"status": "failed", "answer": ""}
+            _log.info(
+                "ask_secretary_complete",
+                field_count=len(form_state),
+                shown_count=len(shown_map),
+                answer_len=len(answer or ""),
+                session_id=self._session_id,
+            )
+            # Treat an all-whitespace answer as empty (the model occasionally returns
+            # blanks) so the dispatch fail-opens instead of voicing whitespace.
+            if not (answer or "").strip():
+                return {"status": "failed", "answer": ""}
+            return {"status": "ok", "answer": answer}
+
+        # Deadline blown: free the principal's turn and DETACH the still-running
+        # lookup to deliver its answer asynchronously (jnjj.43). Track a strong ref
+        # so it isn't GC'd mid-flight; the deliver coroutine self-removes on finish.
+        _log.info("ask_secretary_pending_async_deliver",
+                  deadline_s=deadline_s, field_count=len(form_state),
+                  session_id=self._session_id)
+        deliver = asyncio.ensure_future(
+            self._deliver_secretary_answer_later(lookup, len(form_state), len(shown_map))
+        )
+        # Track the (deliver, lookup) PAIR: end_session cancels BOTH, and cancels the
+        # lookup directly (not via the deliver) so the lookup task is drained from a
+        # context with no pending cancellation of its own -- cancelling a task that is
+        # itself awaiting another does not reliably drain the inner task ("Task was
+        # destroyed but it is pending"). The deliver self-removes the pair on finish.
+        entry = (deliver, lookup)
+        self._secretary_deliver_tasks.add(entry)
+        deliver.add_done_callback(lambda _t: self._secretary_deliver_tasks.discard(entry))
+        return {"status": "pending", "answer": ""}
+
+    async def _deliver_secretary_answer_later(
+        self, lookup: "asyncio.Future", field_count: int, shown_count: int
+    ) -> None:
+        """Await a detached secretary lookup and DELIVER its answer on a follow-up
+        turn (bd polyglot-pdf-jnjj.43).
+
+        The synchronous ask_secretary tool returned "pending" because the lookup
+        blew SECRETARY_DEADLINE_S. The lookup task is still running (bounded by the
+        SECRETARY_TIMEOUT_S hard cap inside it). When it lands, push the answer to
+        the live model via send_client_content so the principal voices it -- the
+        delayed answer arrives as its own turn. The gap-based wpw.5 thinking
+        indicator is shown until that turn's first audio arrives.
+
+        Drop silently (no push) when: the lookup errors / times out / returns empty,
+        or the live session is no longer active (the user disconnected or moved on).
+        A failed late lookup does NOT get an apology turn -- the user has already
+        been waiting; injecting "sorry I couldn't" out of nowhere is worse than
+        letting it go. PII: never log the answer text; counts/status only.
+        """
+        try:
+            answer = await lookup
+        except asyncio.TimeoutError:
+            _log.warning("ask_secretary_async_timeout", session_id=self._session_id)
+            return
+        except asyncio.CancelledError:
+            # A teardown/swap cancelled us via _cancel_secretary_deliver_tasks (called
+            # from BOTH end_session and _switch_to_section_locked). That helper also
+            # cancels + drains the underlying lookup directly, so we just propagate.
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("ask_secretary_async_error",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return
+
+        if not (answer or "").strip():
+            _log.info("ask_secretary_async_empty", session_id=self._session_id)
+            return
+
+        # Only deliver into a LIVE session. If the model session is gone (disconnect,
+        # section-switch teardown, farewell), pushing would error or leak into a dead
+        # loop -- drop it.
+        if self._live_ai is None or not self._live_ai.is_session_active():
+            _log.info("ask_secretary_async_dropped_session_inactive",
+                     session_id=self._session_id)
+            return
+
+        # The delivery instruction the principal acts on. The answer is the
+        # secretary's prose (PHI inside the Gemini trust boundary, like every turn);
+        # NEVER logged. Tell the model this is the now-ready answer to the user's
+        # earlier question so it voices it naturally rather than treating it as a new
+        # user utterance.
+        message = (
+            "SECRETARY RESULT (now ready): the answer to the user's earlier question "
+            "is: " + str(answer) + " -- share this with the user naturally now, as a "
+            "follow-up to what they asked a moment ago."
+        )
+        try:
+            await self._live_ai.send_client_content(message)
+            _log.info(
+                "ask_secretary_async_delivered",
+                field_count=field_count,
+                shown_count=shown_count,
+                answer_len=len(answer or ""),
+                session_id=self._session_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("ask_secretary_async_deliver_failed",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
 
     def handle_form_state_response(self, request_id: str, field_values: Dict[str, Any]) -> None:
         """

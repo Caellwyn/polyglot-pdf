@@ -506,34 +506,61 @@ class CallbackHandler:
             "ONLY after acknowledging the error."
         )
 
+        # The PENDING instruction when the lookup blew the deadline (bd jnjj.43): the
+        # answer is being retrieved and WILL be delivered as a follow-up turn. Tell
+        # the principal to acknowledge briefly WITHOUT answering or re-asking, then
+        # wait -- the delayed answer arrives via send_client_content. No spoken
+        # "one moment" filler is required (the wpw.5 thinking indicator covers the
+        # wait visually); a terse natural acknowledgement is fine, silence is fine.
+        pending = (
+            "The secretary is still looking that up; the answer will arrive in a "
+            "moment as a follow-up. Do NOT answer the question yet and do NOT repeat "
+            "it back to the user. Either say nothing or give a brief natural "
+            "acknowledgement (e.g. 'one sec'), then continue -- the answer will be "
+            "delivered to you shortly."
+        )
+
         if not self._handle_ask_secretary:
             # An outage worth our attention, not a routine miss -> ERROR.
             _log.error("ask_secretary_unavailable", reason="no_handler",
                        session_id=self._session_id)
             return {"answer": fallback, "available": False}
 
+        # The handler returns a status dict (bd jnjj.43): ok / pending / failed.
+        # Default to a failed-shaped result so any unexpected return fail-opens.
+        result: Dict[str, Any] = {"status": "failed", "answer": ""}
         already_logged = False
         try:
-            answer = await self._handle_ask_secretary(query)
+            handler_result = await self._handle_ask_secretary(query)
+            if isinstance(handler_result, dict):
+                result = handler_result
         except Exception as exc:  # noqa: BLE001
             # The handler is expected to fail-open internally, but guard here too so
             # a bug can never crash the tool-call path / session loop. This already
-            # logs the failure at ERROR -- set a flag so the empty-answer branch
-            # below does NOT log a SECOND ERROR for the same failure event (which
-            # would double the secretary error rate for the exception case).
+            # logs the failure at ERROR -- set a flag so the failed branch below does
+            # NOT log a SECOND ERROR for the same failure event (which would double
+            # the secretary error rate for the exception case).
             _log.error(
                 "ask_secretary_handler_error",
                 exc_type=type(exc).__name__,
                 session_id=self._session_id,
             )
-            answer = ""
             already_logged = True
 
-        if not answer:
-            # A failed/empty lookup is an internal error the user notices (the
-            # apology path) -> log at ERROR so it surfaces for us to investigate,
-            # not a quiet warning buried in the noise. Skip if the except block
-            # above already logged THIS failure (one ERROR per failure event).
+        status = result.get("status", "failed")
+        answer = result.get("answer", "") or ""
+
+        if status == "ok" and answer:
+            response = {"answer": answer, "available": True}
+        elif status == "pending":
+            # Not a failure -- the answer is coming asynchronously. available stays
+            # True (the model is NOT told to apologize); INFO, not ERROR.
+            _log.info("ask_secretary_pending",
+                     query_length=len(query or ""), session_id=self._session_id)
+            response = {"answer": pending, "available": True}
+        else:
+            # failed (or ok-but-empty): the apology path -> ERROR so it surfaces for
+            # us to investigate. Skip if the except block above already logged it.
             if not already_logged:
                 _log.error(
                     "ask_secretary_failed",
@@ -541,8 +568,6 @@ class CallbackHandler:
                     session_id=self._session_id,
                 )
             response = {"answer": fallback, "available": False}
-        else:
-            response = {"answer": answer, "available": True}
 
         _log.info("-" * 80)
         _log.info(
@@ -550,6 +575,7 @@ class CallbackHandler:
             query_length=len(query or ""),
             answer_length=len(response["answer"]),
             available=response["available"],
+            status=status,
         )
         _log.info("-" * 80)
         # Dev logging (gated, may include content): mirrors the other tools.
