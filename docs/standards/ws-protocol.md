@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-29. Pillar B's wire surface is now COMPLETE: the proactive `section_complete` / `form_complete` events (B4) are LIVE, and B5 (jnjj.17) added the `validation_result` envelope -- pushed backend->frontend at every validated boundary (clean `{conflicts:[]}` or with conflicts) as the FE's clean->resume signal for the gated section switch. The STEER itself is NOT a wire message (it is a backend->Gemini Live text turn -- see the callout below). See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for B5 closeout details.*
+*Last updated: 2026-06-29. Pillar B's wire surface is now COMPLETE: the proactive `section_complete` / `form_complete` events (B4) are LIVE, and B5 (jnjj.17) added the `validation_result` envelope -- pushed backend->frontend at every validated boundary (clean `{conflicts:[]}` or with conflicts) as the FE's clean->resume signal for the gated section switch. The STEER itself is NOT a wire message (it is a backend->Gemini Live text turn -- see the callout below). See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for B5 closeout details. Also 2026-06-29 (bd polyglot-pdf-fa4x): registered the thinking-indicator wire types `agent_processing` (backend -> frontend) and `clear_thinking` (frontend -> backend); the native START rides `input_transcription`, which fires on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the production default), so the indicator works in both VAD modes. See [../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md](../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md) for B4 closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -96,7 +96,8 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `session_ready` | websocket_routes.py:740 | Handshake ack (see above). |
 | `form_updated` | callback_handler.py:106 | A field value changed; carries `data` payload. |
 | `transcript` | callback_handler.py:136 | AI/user transcript text. |
-| `turn_complete` | callback_handler.py:143 | Gemini finished speaking; feeds the activity watchdog. |
+| `turn_complete` | callback_handler.py:143 | Gemini finished speaking; feeds the activity watchdog. Also a safety CLEAR for the thinking indicator. |
+| `agent_processing` | callback_handler.py (`_set_processing`) | Thinking-indicator signal (bd polyglot-pdf-wpw.5 / fa4x): carries `processing` (bool). `true` on a real user turn (BOTH VAD modes -- manual rides `send_activity_end`, native rides `input_transcription` -> `on_user_activity`, verified firing on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`); `false` at the agent's first response audio / turn end. The client shows a calm "thinking" indicator for the gap. PII-free (a bare boolean). |
 | `go_away` | callback_handler.py:189 | Gemini Live server will terminate soon; carries `time_left` (bd polyglot-pdf-c5t). Reconnect is wanted. |
 | `idle_timeout` | websocket_routes.py:241 | Backend closing for inactivity; client must NOT auto-reconnect. |
 | `section_switched` | form_filling_service.py:738 | Same-socket section switch completed. |
@@ -149,6 +150,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `change_fill_language` | webFormConnection.ts:1950 | Change the AI fill language. |
 | `change_spoken_language` | webFormConnection.ts:540 | Change the disclaimer/spoken language. |
 | `vad_activity_start` / `vad_activity_end` | webFormConnection.ts:1851 / :1878 | Manual activity signals (non-native-VAD mode). |
+| `clear_thinking` | webFormConnection.ts:1989 / :2512 | Thinking-indicator desync guard (bd polyglot-pdf-wpw.5, Codex PR #273): sent when the client's max-duration safety timer fires or on a server error, so the backend resets its `_processing_active` state too (else it stays stuck True and dedups the next turn's `agent_processing:true`). Backend handler `clear_processing_state` (websocket_routes.py:509); fire-and-forget, no ack. |
 | `end_gemini_session` | webFormConnection.ts:1933 | Ask the backend to end the Gemini session. |
 | `ping` | -- | Liveness; backend replies `pong` (echoing `ts`). |
 | `stats` | -- | Stats/health probe; backend replies `stats` (`{message: "ok"}`). |

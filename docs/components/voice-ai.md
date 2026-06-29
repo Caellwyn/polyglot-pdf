@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-15 (bd polyglot-pdf-daa: 2.5 native-audio 1011 = incomplete tool declaration x tool solicitation, wire-verified; corrected the scar-tissue note. bd s3zv: audioManager gains setEnergyCallback -- forwards the worklet's existing RMS energy (already posted per frame, previously dropped) to an opt-in UI subscriber, tagged with whether the frame passed the send gate. No change to audio routing / adapter behavior; the demo overlays render it as a mic-energy meter). bd np64: non-ASCII -> ASCII in connection.ts / audioManager.ts code comments + console strings (cosmetic, no adapter behavior change). bd rwjy+vfb2: CallbackHandler gains form_id/form_session_id (confirmation audit); send_form_update adds request_hint opt-in (no behavior change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager. bd b6k4: createMicDropWarn extracted/exported from connection.ts. No adapter behavior change. Prior: bd polyglot-pdf-c5t (on_go_away callback: GoAway detection in the receive loop). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-06-29 (bd polyglot-pdf-fa4x: corrected the Response-config section -- `input_audio_transcription` is enabled when `on_user_activity` is registered OR transcripts are on, and it DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`, so the thinking-indicator native-VAD START works with no new heuristic. The wpw.5 "native audio emits no input_transcription" finding was under the old START=LOW config). Prior: 2026-06-15 (bd polyglot-pdf-daa: 2.5 native-audio 1011 = incomplete tool declaration x tool solicitation, wire-verified; corrected the scar-tissue note. bd s3zv: audioManager gains setEnergyCallback -- forwards the worklet's existing RMS energy (already posted per frame, previously dropped) to an opt-in UI subscriber, tagged with whether the frame passed the send gate. No change to audio routing / adapter behavior; the demo overlays render it as a mic-energy meter). bd np64: non-ASCII -> ASCII in connection.ts / audioManager.ts code comments + console strings (cosmetic, no adapter behavior change). bd rwjy+vfb2: CallbackHandler gains form_id/form_session_id (confirmation audit); send_form_update adds request_hint opt-in (no behavior change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager. bd b6k4: createMicDropWarn extracted/exported from connection.ts. No adapter behavior change. Prior: bd polyglot-pdf-c5t (on_go_away callback: GoAway detection in the receive loop). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -143,9 +143,17 @@ set) written to `token_usage.jsonl`. Details + the re-billing cost concern in
 ## Response config
 
 `_run_session_loop` builds the connect config with `response_modalities = ["AUDIO"]`
-(audio-out only; native audio-to-audio). Input/output transcription
-(`input_audio_transcription` / `output_audio_transcription`) is enabled **only** when
-`enable_transcripts` is set. VAD config (`realtime_input_config`) is covered in
+(audio-out only; native audio-to-audio). **Output** transcription
+(`output_audio_transcription`) is enabled only when `enable_transcripts` is set.
+**Input** transcription (`input_audio_transcription`) is enabled when EITHER
+`enable_transcripts` is set OR an `on_user_activity` callback is registered (bd
+polyglot-pdf-l3a.4): it is the native-VAD turn-start signal -- a non-empty
+`server_content.input_transcription` fires `on_user_activity`, which drives both the
+idle watchdog and the thinking-indicator START (bd polyglot-pdf-wpw.5 / fa4x). It
+DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the
+production default; verified on the deployed Vertex model). Requesting it never
+forwards the text to the client (PHI stays server-side, bd hjo). VAD config
+(`realtime_input_config`) is covered in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
 ## Scar tissue
