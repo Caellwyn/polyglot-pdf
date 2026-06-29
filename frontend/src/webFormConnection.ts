@@ -145,6 +145,17 @@ export class WebFormConnection {
   private static readonly UNCONFIRMABLE_REPROMPT_CAP = 3;
   private static readonly UNCONFIRMABLE_SESSION_CAP = 6;
 
+  // B4 (bd polyglot-pdf-jnjj.16): once-only guard for the proactive form_complete
+  // event. Holds a serialization of the whole-form confirmed values at the last
+  // form_complete emit. The guard is on the COMPLETED STATE + a dirty-since-last-
+  // emit check (validation-delegation.md contract 4), NOT a fire-once latch: a
+  // post-completion manual edit changes this snapshot, so the form re-validates
+  // once on the complete -> edit -> complete cycle, while a static complete form
+  // never re-fires. null = "no form_complete emitted yet this (re)connect"; reset
+  // to null on (re)connect / section switch so a reconnect into a complete form
+  // re-validates once.
+  private formCompleteSnapshot: string | null = null;
+
   // Loop-breaker for AI-applied values that FAIL client-side validation
   // (bd polyglot-pdf-wpw.3). When the model fills a field with a value that violates
   // its schema (a non-existent enum option, a malformed SSN/A-Number, a too-long
@@ -359,6 +370,13 @@ export class WebFormConnection {
     this.resetUnconfirmableTracking();
     // Likewise reset the AI-value validation-reject loop-breaker (bd polyglot-pdf-wpw.3).
     this.resetValidationRejectTracking();
+    // B4 (bd polyglot-pdf-jnjj.16): clear the form_complete dirty-snapshot on every
+    // (re)connect so reconnecting into an already-complete form re-emits form_complete
+    // once (the validator gets a fresh full-form pass). Without this, a reconnect
+    // would inherit no snapshot anyway (fresh instance) -- but a same-instance
+    // section-switch reconnect keeps the object, so resetting here is what makes the
+    // post-reconnect re-validation deterministic (validation-delegation.md contract 4).
+    this.formCompleteSnapshot = null;
 
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
@@ -558,6 +576,20 @@ export class WebFormConnection {
     if (this.callbacks.onSessionReady) {
       this.callbacks.onSessionReady(session_id);
     }
+
+    // B4 (bd polyglot-pdf-jnjj.16): emit form_complete if we reconnected INTO an
+    // already-complete (and dirty) form (Codex PR #271). A field edited while the
+    // socket was closed (e.g. after an idle timeout) takes the early return in
+    // sendManualFieldUpdate (WS not OPEN), so no form_complete fires at edit time;
+    // handleOpen then clears formCompleteSnapshot to null on reconnect. Without this
+    // call the guard is cleared but the emitter is never invoked, so the dirty
+    // completed form would bypass the B5 validator. The socket is OPEN here
+    // (session_ready arrived), so the send succeeds; refresh this.state from the
+    // persisted snapshot first so a closed-socket edit saved to sessionStorage is
+    // reflected. maybeEmitFormComplete is guarded -> no-op for an incomplete form.
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+    this.maybeEmitFormComplete();
 
     // No need to send initial hint - backend will request it as part of initial message
   }
@@ -1414,6 +1446,43 @@ export class WebFormConnection {
     // boundary (bd polyglot-pdf-njvh).
     this.sendConfirmFieldResponse(request_id, true, undefined, sectionComplete);
 
+    // B4 (bd polyglot-pdf-jnjj.16): proactively emit section_complete the moment the
+    // last field of the current section is confirmed and a next section exists --
+    // the boundary where the cheap-model validator should run (a SECOND-PASS net,
+    // validation-delegation.md contract 4). This is a SEPARATE top-level event from
+    // the section_complete SUB-FIELD on the confirm ack above (that sub-field just
+    // suppresses the backend's racing next-field-hint, bd njvh); both ride the same
+    // `sectionComplete` boolean by design.
+    // Fire-and-forget: the validator round-trip is async and must not block the user
+    // (criterion 3); B5 (jnjj.17) consumes the verdict and gates the switch.
+    //
+    // `!this.switchInFlight` keeps it to EXACTLY ONE event per boundary (Codex PR
+    // #271): a duplicate confirm_field for the same last field, arriving while the
+    // first auto-switch is still draining/awaiting session_ready, would otherwise
+    // re-run this block and emit a second section_complete before switchToSection
+    // rejects the duplicate on switchInFlight. The guard is set synchronously in
+    // switchToSection (before its first await), so the second confirm sees it.
+    if (sectionComplete && !this.switchInFlight) {
+      this.send({
+        type: 'section_complete',
+        section_id: this.state.currentSectionId,
+        fields: this.buildValidatorFields(
+          SchemaFormStateManager.getCurrentSectionFields(this.state)
+        ),
+      });
+    }
+
+    // B4 (bd polyglot-pdf-jnjj.16): check whole-form completeness on EVERY confirm,
+    // not only in the last-section/no-next-field branch below (Codex PR #271). When
+    // a form has required fields plus still-unconfirmed OPTIONAL fields,
+    // isFormComplete() is already true once the required ones are confirmed -- but
+    // computeNextField(skipConfirmed) still returns an optional field, so execution
+    // never reaches the `!nextField` form-complete branch and the voice/AI path would
+    // skip form_complete (and the B5 validator) entirely. maybeEmitFormComplete is
+    // guarded (fires only when isFormComplete AND the snapshot changed), so calling
+    // it here is a no-op for an incomplete form and idempotent vs. the branch below.
+    this.maybeEmitFormComplete();
+
     // Confirm took -- clear pending unconfirmable tracking. A successful confirm of
     // the stuck field is genuine progress, so it restores the session-wide re-prompt
     // budget too (bd polyglot-pdf-r2hy; mirrors the wpw.3 "stuck field validated ->
@@ -1441,7 +1510,13 @@ export class WebFormConnection {
         nextSectionLabel: nextSection?.label || 'N/A'
       });
 
-      if (nextSection) {
+      if (nextSection && this.switchInFlight) {
+        // A switch is already running (e.g. a DUPLICATE confirm of the same last
+        // field arrived before the first auto-switch resolved). Re-attempting it
+        // would throw in switchToSection (Codex PR #271); skip cleanly -- the first
+        // switch is already advancing this boundary.
+        console.log('[WebFormConnection] [skip] Section switch already in flight; ignoring duplicate boundary confirm.');
+      } else if (nextSection) {
         console.log('[WebFormConnection] [OK] Section complete! Auto-switching to:', nextSection.id);
 
         // CRITICAL: Stop all audio processing immediately to prevent overlap with new session
@@ -1454,12 +1529,19 @@ export class WebFormConnection {
           this.callbacks.onStopCapture();
         }
 
-        // Trigger automatic section switch (uses backend-side reconnect)
-        // Note: wsUrl parameter not used (kept for API compatibility)
-        await this.switchToSection(nextSection.id, '');
+        // Trigger automatic section switch (uses backend-side reconnect).
+        // B4 (bd polyglot-pdf-jnjj.16): routed through proceedSectionSwitch() -- a
+        // single interceptable seam. In B4 it runs immediately (behavior unchanged).
+        // B5 (jnjj.17) gates this call on the validator round-trip (clean verdict or
+        // fail-OPEN timeout) so the verdict cannot arrive after Gemini has already
+        // restarted into the next section (contract 4's ordering rule). Keeping the
+        // switch behind one method means B5 changes only the gate, not this handler.
+        await this.proceedSectionSwitch(nextSection.id);
       } else {
         console.log('[WebFormConnection] [done] Form complete!');
-        // Notify UI that entire form is complete
+        // B4: form_complete for this last-section completion was already emitted by
+        // the unconditional maybeEmitFormComplete() above (it covers every confirm,
+        // Codex PR #271). Just notify the UI here.
         if (this.callbacks.onFormComplete) {
           this.callbacks.onFormComplete();
         }
@@ -1469,6 +1551,115 @@ export class WebFormConnection {
     // The success ack was already sent above, right after the confirm was
     // recorded (bd polyglot-pdf-wpw.2) -- the backend uses it to complete the
     // synchronous confirm_field round-trip.
+  }
+
+  /**
+   * B4 (bd polyglot-pdf-jnjj.16): the section auto-switch seam. Extracted from the
+   * confirm handler so the switch is INTERCEPTABLE without touching that handler.
+   * In B4 it runs the switch immediately (behavior identical to the prior inline
+   * call). B5 (jnjj.17) overrides WHEN this fires -- holding it until the validator
+   * verdict returns (clean) or the fail-OPEN timeout elapses -- so the verdict
+   * cannot land after Gemini has already restarted into the next section (the
+   * ordering rule, validation-delegation.md contract 4). Keep all switch side
+   * effects (audio teardown above) at the call site; this method owns only the
+   * switch itself, so the gate B5 adds wraps one call.
+   */
+  private async proceedSectionSwitch(sectionId: string): Promise<void> {
+    await this.switchToSection(sectionId, '');
+  }
+
+  /**
+   * B4 (bd polyglot-pdf-jnjj.16): project the client's current field state into the
+   * minimal validator payload (validation-delegation.md contract 2): a list of
+   * { field_id, name, value, steered }. ONLY fields with a non-empty value are
+   * included (empty fields give the validator nothing to check and only cost
+   * tokens). `name` is the spoken/label name so the validator can name a conflict
+   * naturally. `steered` is always false in B4 -- the per-field "already steered
+   * about this once" marker is owned by B5 (jnjj.17), which adds the client-side
+   * store; until then every field is un-steered.
+   *
+   * PII note: this builds the request body sent to the SAME Gemini trust boundary
+   * the live model already uses (contract 6 sign-off). It must never be LOGGED --
+   * callers send it, they do not print it.
+   */
+  private buildValidatorFields(
+    sectionFields: FormField[]
+  ): Array<{ field_id: string; name: string; value: any; steered: boolean }> {
+    // Mirror the [] bracket fallbacks used elsewhere for value lookup (Gemini
+    // sometimes drops/adds the trailing []).
+    const valueFor = (fieldId: string): any => {
+      let fv = this.state.fieldValues[fieldId];
+      if (!fv && !fieldId.endsWith('[]')) fv = this.state.fieldValues[fieldId + '[]'];
+      if (!fv && fieldId.endsWith('[]')) fv = this.state.fieldValues[fieldId.slice(0, -2)];
+      return fv;
+    };
+    const allFields = this.state.schema?.fields ?? [];
+    const out: Array<{ field_id: string; name: string; value: any; steered: boolean }> = [];
+    for (const field of sectionFields) {
+      // Skip fields hidden by conditional logic (Codex PR #271). A field whose
+      // show_if trigger has since flipped is no longer part of the active form, but
+      // its old value can linger in sessionStorage; navigation hides it via
+      // shouldShowField. Without this filter a stale hidden answer would ride into
+      // the validator payload (with no `shown` flag) and the validator could flag or
+      // steer the user to a field that is no longer applicable. Use the SAME
+      // visibility predicate navigation uses, against the FULL value map.
+      if (!shouldShowField(field, this.state.fieldValues, allFields)) continue;
+      const fv = valueFor(field.id);
+      const value = fv ? fv.value : undefined;
+      // Skip empty/unfilled values (contract 2: non-empty only). An explicitly-blank
+      // OPTIONAL checkbox group is stored as [] (the confirm handler treats that as a
+      // legitimate empty answer), so an empty array is "no value" too and must NOT
+      // ride to the validator -- it would hand B5 an unfilled field to check
+      // (Codex PR #271 round 2). Treat [] (and an array of only blanks) as empty.
+      if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value) && value.every((v) => v === undefined || v === null || v === '')) continue;
+      out.push({
+        field_id: field.id,
+        name: field.spoken_name || field.name || field.id,
+        value,
+        steered: false,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * B4 (bd polyglot-pdf-jnjj.16): a stable serialization of the whole form's
+   * confirmed values, used as the form_complete dirty-check snapshot. Sorted by
+   * field id so key ordering can never spuriously change the snapshot. Confirmed
+   * values only: an unconfirmed edit does not make the form complete, so it should
+   * not count as a change that re-triggers the full-form pass.
+   */
+  private serializeFormValues(): string {
+    const entries: Array<[string, any]> = [];
+    for (const [fieldId, fv] of Object.entries(this.state.fieldValues)) {
+      if (fv && fv.confirmed) entries.push([fieldId, fv.value]);
+    }
+    entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    return JSON.stringify(entries);
+  }
+
+  /**
+   * B4 (bd polyglot-pdf-jnjj.16): emit the proactive form_complete event for the
+   * full-form validator pass, IF the form is complete AND its values changed since
+   * the last emit. Guard on the COMPLETED STATE + a dirty-since-last-validation
+   * snapshot (validation-delegation.md contract 4), NOT a fire-once latch: that
+   * closes the edit-after-complete bypass (a user changing a value after the
+   * full-form pass and submitting it unchecked) while preserving the no-pester
+   * property (a static complete form never re-fires). Called from BOTH the confirm
+   * handler's form-complete branch and the manual-edit path, so a post-completion
+   * manual edit re-validates. Fire-and-forget (criterion 3): the validator pass is
+   * async and never blocks the user.
+   */
+  private maybeEmitFormComplete(): void {
+    if (!isFormComplete(this.state)) return;
+    const snapshot = this.serializeFormValues();
+    if (snapshot === this.formCompleteSnapshot) return; // unchanged -> no re-pester
+    this.send({
+      type: 'form_complete',
+      fields: this.buildValidatorFields(this.state.schema.fields),
+    });
+    this.formCompleteSnapshot = snapshot;
   }
 
   /**
@@ -1952,6 +2143,25 @@ export class WebFormConnection {
       value: value,
       next_field_hint: nextFieldHint,  // Include next field guidance
     });
+
+    // B4 (bd polyglot-pdf-jnjj.16): a manual edit can land on an ALREADY-complete
+    // form (the UI allows editing a completed form). The confirm handler does not
+    // run for a manual edit, so without this the edited value would bypass the
+    // full-form validator pass and be submittable unchecked. maybeEmitFormComplete
+    // is guarded (only re-emits when the form is complete AND a value changed), so
+    // a manual edit that does not complete the form is a no-op here.
+    //
+    // CRITICAL: refresh this.state from the persisted snapshot FIRST. The manual-edit
+    // path (connection.ts onManualEdit) applies the edit to a separate state object
+    // and SAVES it to sessionStorage, but does NOT mutate this.state -- so without
+    // this reload the dirty-snapshot would still read the PRE-edit values, match
+    // formCompleteSnapshot, and suppress the re-emit, leaving the edit-after-complete
+    // bypass open (fresh-eyes finding, PR for jnjj.16). load() is the same
+    // source-of-truth sessionStorage read this class uses elsewhere; the edit handler
+    // just wrote the authoritative post-edit state there.
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+    this.maybeEmitFormComplete();
   }
 
 

@@ -627,6 +627,43 @@ async def _handle_fill_session(
 					# Acknowledge receipt (optional - frontend doesn't wait for this)
 					await websocket.send_json({"type": "section_completed_ack"})
 					continue
+				elif mtype == "section_complete":
+					# B4 (bd polyglot-pdf-jnjj.16): proactive section-complete event --
+					# the frontend emits it the moment the last field of the current
+					# section is confirmed. It carries section_id + the minimal
+					# client-state payload (validation-delegation.md contract 2) for
+					# the cheap-model validator to check at this boundary. B4 RECEIVES
+					# and acks only (exit criterion 1); feeding `fields` to the
+					# ValidatorService + the verdict/steer is B5 (jnjj.17). This is a
+					# DISTINCT event from `section_completed` above (the legacy reactive
+					# ack) -- do not conflate.
+					proactive_section_id = obj.get("section_id")
+					proactive_fields = obj.get("fields", [])
+					# PII (contract 6): log the count only -- NEVER `fields`/values.
+					_log.info(
+						"section_complete_received",
+						section_id=proactive_section_id,
+						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
+						session_id=session_id,
+					)
+					await websocket.send_json({"type": "section_complete_ack"})
+					continue
+				elif mtype == "form_complete":
+					# B4 (bd polyglot-pdf-jnjj.16): proactive form-complete event --
+					# emitted once when the whole form is confirmed (and re-emitted
+					# after a post-completion edit; the once-only + dirty guard is
+					# client-side). Carries the WHOLE-form contract-2 payload for the
+					# full-form validator pass. RECEIVE + ack only in B4; B5 (jnjj.17)
+					# runs the validator and surfaces any verdict.
+					proactive_fields = obj.get("fields", [])
+					# PII (contract 6): log the count only -- NEVER `fields`/values.
+					_log.info(
+						"form_complete_received",
+						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
+						session_id=session_id,
+					)
+					await websocket.send_json({"type": "form_complete_ack"})
+					continue
 				else:
 					# Log unknown message type for debugging
 					_log.warning("unknown_control_message_type", 
