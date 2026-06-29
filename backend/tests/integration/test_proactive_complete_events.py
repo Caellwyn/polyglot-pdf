@@ -123,34 +123,48 @@ async def test_section_complete_does_not_collide_with_legacy_section_completed()
 
 
 @pytest.mark.asyncio
-async def test_no_pii_in_proactive_complete_logs():
-    """The receive arms log field_count + section_id only -- never field values."""
-    import structlog.testing
+async def test_no_pii_in_proactive_complete_logs(monkeypatch):
+    """The receive arms log field_count + section_id only -- never field values.
 
-    with structlog.testing.capture_logs() as logs:
-        await _run([
-            {"text": json.dumps({
-                "type": "section_complete",
-                "section_id": "addr_section",
-                "fields": [
-                    {"field_id": "addr_state", "name": "State", "value": "SECRET_VALUE_WV",
-                     "steered": False},
-                ],
-            })},
-            {"text": json.dumps({
-                "type": "form_complete",
-                "fields": [
-                    {"field_id": "ssn", "name": "SSN", "value": "SECRET_SSN_123",
-                     "steered": False},
-                ],
-            })},
-        ])
+    Patches the module logger's `.info` directly (structlog.testing.capture_logs is
+    unreliable here: a prior full-suite test can leave structlog reconfigured so the
+    capture's LogCapture is bypassed -- the get-settings-singleton-style ordering
+    trap, structlog edition). Recording the call args is deterministic regardless of
+    the global structlog processor chain."""
+    import backend.routes.websocket_routes as wr
 
-    events = [e for e in logs if e.get("event") in
-              ("section_complete_received", "form_complete_received")]
+    calls: list[tuple] = []
+    real_info = wr._log.info
+
+    def _record_info(event, *args, **kwargs):
+        calls.append((event, kwargs))
+        return real_info(event, *args, **kwargs)
+
+    monkeypatch.setattr(wr._log, "info", _record_info)
+
+    await _run([
+        {"text": json.dumps({
+            "type": "section_complete",
+            "section_id": "addr_section",
+            "fields": [
+                {"field_id": "addr_state", "name": "State", "value": "SECRET_VALUE_WV",
+                 "steered": False},
+            ],
+        })},
+        {"text": json.dumps({
+            "type": "form_complete",
+            "fields": [
+                {"field_id": "ssn", "name": "SSN", "value": "SECRET_SSN_123",
+                 "steered": False},
+            ],
+        })},
+    ])
+
+    events = [(event, kwargs) for (event, kwargs) in calls
+              if event in ("section_complete_received", "form_complete_received")]
     assert events, "expected the new log events to fire"
-    for e in events:
-        blob = json.dumps(e, default=str)
+    for event, kwargs in events:
+        blob = json.dumps({"event": event, **kwargs}, default=str)
         assert "SECRET_VALUE_WV" not in blob
         assert "SECRET_SSN_123" not in blob
-        assert "field_count" in e
+        assert "field_count" in kwargs
