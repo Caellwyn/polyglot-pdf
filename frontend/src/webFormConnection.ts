@@ -1973,8 +1973,15 @@ export class WebFormConnection {
     // Clear the thinking indicator on a server error (bd polyglot-pdf-wpw.5, Codex
     // PR #273): a JSON {type:"error"} arriving mid-processing does NOT necessarily
     // change status (only a section-switch error does), so the setStatus-based clear
-    // would miss it and the indicator would hang until the 30s timer. Clear directly.
+    // would miss it and the indicator would hang until the 30s timer. Clear directly,
+    // and -- for symmetry with the max-duration path -- resync the backend so a
+    // non-session-ending error cannot strand _processing_active=True and dedup the
+    // next turn (Opus fallback review). Fire-and-forget; safe to skip if the socket
+    // is gone.
     this.clearThinking('server_error');
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ type: 'clear_thinking' });
+    }
     // Build error message from available fields
     const errorText = message.message || message.reason || message.code || "Server error";
 
