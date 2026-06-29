@@ -5,6 +5,7 @@ import {
 } from '../utils/fileSystemAccess';
 import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitStatus,
+  writeInstructionsPdf,
   type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
 import { isExtractionAvailable, runExtraction } from '../utils/extractionClient';
@@ -70,6 +71,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const [extractionAvailable, setExtractionAvailable] = React.useState(false);
   // id of the kit currently extracting (one at a time), for the spinner/disable.
   const [extractingId, setExtractingId] = React.useState<string | null>(null);
+  // Optional instructions PDF selected (but not yet uploaded) per schemaless kit,
+  // keyed by kit id (bd s4dp.3). Cleared after a run. When set, handleRunExtraction
+  // writes it into the kit dir and asks the extractor to enrich help from it.
+  const [instructionsPdfByKit, setInstructionsPdfByKit] =
+    React.useState<Record<string, File>>({});
   // Monotonic token: each refresh bumps it so a slow progress load from a prior
   // folder cannot overwrite the current folder's progress (stale-folder race).
   const refreshSeq = React.useRef(0);
@@ -238,12 +244,26 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setExtractingId(kit.id);
     const extractionRoot = root;
     try {
+      // Optional instructions PDF (bd s4dp.3): write it into the kit dir first so
+      // the host extractor can read it by filename, then pass that filename. None
+      // selected -> /TU-only extraction (no error).
+      let instructionsPdfFile: string | undefined;
+      const instructionsPdf = instructionsPdfByKit[kit.id];
+      if (instructionsPdf) {
+        instructionsPdfFile = await writeInstructionsPdf(kit.dirHandle, instructionsPdf);
+      }
       const result = await runExtraction(kit.id, {
-        pdfFile: kit.pdfFile, schemaFile: kit.schemaFile,
+        pdfFile: kit.pdfFile, schemaFile: kit.schemaFile, instructionsPdfFile,
       });
       if (result.ok) {
         await refresh(extractionRoot);
         setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+        // Clear the consumed selection so a later re-run is /TU-only unless re-picked.
+        setInstructionsPdfByKit((prev) => {
+          const next = { ...prev };
+          delete next[kit.id];
+          return next;
+        });
       } else {
         setError(`Extraction failed for "${kit.id}": ${result.detail}`);
       }
@@ -252,7 +272,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     } finally {
       setExtractingId(null);
     }
-  }, [root, refresh, extractingId]);
+  }, [root, refresh, extractingId, instructionsPdfByKit]);
 
   if (!supported) {
     return (
@@ -424,7 +444,58 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   hint instead of a button that can't work. */}
               {!kit.hasSchema && kit.hasPdf && (
                 extractionAvailable ? (
-                  <div className="mt-1 flex items-center justify-end px-1">
+                  <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                    {/* OPTIONAL instructions PDF (bd s4dp.3): when picked, its text
+                        enriches help.instructions on top of the /TU baseline. */}
+                    <label
+                      className="text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+                      title="Optional: attach the form's official instructions PDF to enrich each field's help text"
+                    >
+                      <input
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        className="hidden"
+                        disabled={busy || extractingId !== null}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          // Validate it is actually a PDF before storing (Codex
+                          // PR #274): the `accept` filter is advisory, so a user
+                          // can still pick a .txt/.html; the client would then
+                          // store it as the fixed "instructions.pdf", the
+                          // endpoint's .pdf-name guard would pass, and
+                          // _parse_instructions_pdf would silently yield no text --
+                          // a success-reported run that ignored the selection.
+                          const isPdf = (file: File) =>
+                            file.type === 'application/pdf'
+                            || file.name.toLowerCase().endsWith('.pdf');
+                          if (f && !isPdf(f)) {
+                            setError('The instructions file must be a PDF.');
+                            // Drop any prior (valid) selection too, so the UI never
+                            // shows the error alongside a kept "instructions: x.pdf"
+                            // label that would still be threaded (Opus fallback PR #274).
+                            setInstructionsPdfByKit((prev) => {
+                              const next = { ...prev };
+                              delete next[kit.id];
+                              return next;
+                            });
+                            e.target.value = '';
+                            return;
+                          }
+                          setError(null);
+                          setInstructionsPdfByKit((prev) => {
+                            const next = { ...prev };
+                            if (f) next[kit.id] = f; else delete next[kit.id];
+                            return next;
+                          });
+                          // Allow re-picking the same file later (onChange won't
+                          // fire on an identical path otherwise).
+                          e.target.value = '';
+                        }}
+                      />
+                      {instructionsPdfByKit[kit.id]
+                        ? `instructions: ${instructionsPdfByKit[kit.id].name}`
+                        : '+ instructions PDF'}
+                    </label>
                     <button
                       className="btn-sm btn-primary text-xs"
                       onClick={() => void handleRunExtraction(kit)}
