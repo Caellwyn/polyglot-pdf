@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-29. See [../journal/entries/2026-06-29-bd-p68s-secretary-catalog-handshake.md](../journal/entries/2026-06-29-bd-p68s-secretary-catalog-handshake.md) for closeout details.*
+*Last updated: 2026-06-29. The proactive `section_complete` / `form_complete` events (Pillar B, B4) are now LIVE -- the frontend emits them at section/form boundaries and the backend acks them (`section_complete_ack` / `form_complete_ack`); the validator round-trip on top is B5. See [../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md](../journal/entries/2026-06-29-bd-jnjj.16-proactive-complete-events.md) for B4 closeout details.*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -111,7 +111,9 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `hint_ack` | websocket_routes.py:309 | Ack of a client `next_field_hint`. |
 | `completion_ack` | websocket_routes.py:408 | Ack of a client `completion_message`. |
 | `recovery_prompt_ack` | websocket_routes.py:422 | Ack of a client `recovery_prompt`. |
-| `section_completed_ack` | websocket_routes.py:560 | Ack of a client `section_completed`. |
+| `section_completed_ack` | websocket_routes.py:560 | Ack of a client `section_completed` (legacy reactive). |
+| `section_complete_ack` | websocket_routes.py (section_complete arm) | B / jnjj.16 (B4). Ack of the proactive `section_complete` event. |
+| `form_complete_ack` | websocket_routes.py (form_complete arm) | B / jnjj.16 (B4). Ack of the proactive `form_complete` event. |
 | `disclaimer_read_initiated` | websocket_routes.py:392 | Disclaimer read started; carries `language`. |
 | `language_changed` | websocket_routes.py:449 | Fill language changed. |
 | `spoken_language_changed` | websocket_routes.py:464 | Spoken language changed. |
@@ -133,7 +135,9 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `next_field_hint_response` | webFormConnection.ts:835 | Reply to backend `get_next_field_hint`. |
 | `read_disclaimer` | websocket_routes.py:377 (sent connection.ts:844) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. |
 | `restart_gemini_session` | websocket_routes.py:480 (sent connection.ts:464) | Client asks the backend to restart the Gemini session; backend replies `gemini_session_restarted`. |
-| `section_completed` | websocket_routes.py:551 | Client signals a section completed (the CURRENT reactive ack path); backend replies `section_completed_ack`. NOT the new proactive `section_complete` event B introduces -- see the reserved extension points below. |
+| `section_completed` | websocket_routes.py:619 | LEGACY reactive section-complete signal; backend replies `section_completed_ack`. No live FE sender today (the FE drives section completion via the confirm handler) -- the arm is retained for back-compat. DISTINCT from the proactive `section_complete` below -- do not conflate. |
+| `section_complete` | webFormConnection.ts (confirm handler) | B / jnjj.16 (B4). Proactive section-complete event: emitted the moment the last field of the current section is confirmed (a next section exists). Carries `section_id` + the contract-2 `fields` payload; backend replies `section_complete_ack`. Payload shape: [validation-delegation.md](validation-delegation.md) contract 4. |
+| `form_complete` | webFormConnection.ts (confirm handler + manual-edit path) | B / jnjj.16 (B4). Proactive form-complete event: emitted once when the whole form is confirmed, re-emitted after a post-completion edit (client-side once-only + dirty guard). Carries the whole-form contract-2 `fields`; backend replies `form_complete_ack`. Payload shape: [validation-delegation.md](validation-delegation.md) contract 4. |
 | `section_info_response` | webFormConnection.ts:907 (+others) | Reply with section metadata. |
 | `field_value_response` | webFormConnection.ts:1147 | Reply to backend `get_field_value`. |
 | `confirm_field_response` | webFormConnection.ts:1536 | Reply to backend `confirm_field`. Carries `recorded` (+ optional `reason`), and -- when this confirm completed a section that has a NEXT section to advance to -- an optional `section_complete: true` flag so the backend skips the next-field-hint round-trip that would race the FE's `switchToSection` teardown (bd polyglot-pdf-njvh). This is a SUB-FIELD of the confirm reply, distinct from the SI-reduction epic's planned top-level `section_complete` event (see `section_completed` above + the reserved extension points). |
@@ -157,15 +161,14 @@ in the cited beads/docs, not here.
 
 ### Pillar B -- cheap-model validator
 
-Today completion is reactive only: the frontend polls `isFormComplete` and the
-backend learns completion indirectly. Pillar B makes completion PROACTIVE and
-adds a validator round-trip. Reserved message types:
+Pillar B makes completion PROACTIVE and adds a validator round-trip. The proactive
+events have LANDED (B4); the validator verdict is still reserved (B5):
 
 | Type | Direction | Pillar / bead | Notes |
 |------|-----------|---------------|-------|
-| `section_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive section-complete event (replaces reactive `isFormComplete` polling). |
-| `form_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | Proactive form-complete event. |
-| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | Cheap-model validator verdict pushed to the client (for UI surfacing). Full envelope (`{type, conflicts}`) -> [validation-delegation.md](validation-delegation.md) (F3). |
+| `section_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | SHIPPED. Proactive section-complete event. Now LIVE in the frontend->backend table above (emitted by the confirm handler; backend acks `section_complete_ack`). |
+| `form_complete` | frontend -> backend | B / bd polyglot-pdf-jnjj.16 (B4) | SHIPPED. Proactive form-complete event. Now LIVE in the frontend->backend table above (acks `form_complete_ack`). |
+| `validation_result` | backend -> frontend | B / bd polyglot-pdf-jnjj.17 (B5) | RESERVED. Cheap-model validator verdict pushed to the client (for UI surfacing). Full envelope (`{type, conflicts}`) -> [validation-delegation.md](validation-delegation.md) (F3). |
 
 > **The validator STEER is NOT a WS message type.** When a conflict is found, the
 > correction directive is injected **backend -> Gemini Live session** as a text turn
@@ -176,13 +179,14 @@ adds a validator round-trip. Reserved message types:
 > would silently drop such a message, so a steer routed to the client would never be
 > voiced. Only `validation_result` (above) is a real wire message in B.
 
-These three are RESERVED NAMES only. Their payload shapes are designed in F3
-([validation-delegation.md](validation-delegation.md)); do not invent shapes
-here. (`section_complete`/`form_complete` are NOT the existing
-`section_completed`/`completion_message` control messages -- those are the
-current reactive acks; the new pair are the proactive events B introduces.) The
-validator STEER is deliberately absent from this registry -- it is a
-backend->Gemini Live injection, not a wire message (see the callout above).
+Payload shapes are designed in F3
+([validation-delegation.md](validation-delegation.md)), not here.
+(`section_complete`/`form_complete` are NOT the existing
+`section_completed`/`completion_message` control messages -- those are the legacy
+reactive acks; the proactive pair B4 shipped are the entries in the
+frontend->backend table above.) The validator STEER is deliberately absent from
+this registry -- it is a backend->Gemini Live injection, not a wire message (see
+the callout above).
 
 ### Pillar C -- restart cadence
 
