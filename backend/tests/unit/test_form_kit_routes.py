@@ -94,6 +94,17 @@ def test_missing_paths_fall_back_to_convention(monkeypatch):
     assert form.pdf_path == "/form-kits/n400/form.pdf"
 
 
+def test_manifest_route_skips_non_dict_entries(monkeypatch):
+    # A corrupt manifest with a non-dict entry must not 500 the public list route;
+    # the bad entry is skipped (same guard as the single-kit resolver).
+    manifest = {"forms": [None, {"id": "i90", "label": "I-90"}, "oops"]}
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _FakeStore(manifest=manifest))
+
+    resp = _run(fkr.list_form_kits())
+
+    assert [f.id for f in resp.forms] == ["i90"]
+
+
 def test_manifest_not_found_returns_empty(monkeypatch):
     class _NotFoundStore:
         async def load_manifest(self, manifest_file: str = "index.json") -> dict:
@@ -359,12 +370,21 @@ def test_traversal_filename_in_metadata_degrades_to_default(monkeypatch):
     assert store.requested_schema_file == "schema.json"
 
 
-def test_safe_filename_helper_rejects_separators_and_traversal():
-    assert fkr._safe_filename("custom.json", "schema.json") == "custom.json"
-    assert fkr._safe_filename("../x.json", "schema.json") == "schema.json"
-    assert fkr._safe_filename("a/b.json", "schema.json") == "schema.json"
-    assert fkr._safe_filename("a\\b.json", "schema.json") == "schema.json"
-    assert fkr._safe_filename("", "schema.json") == "schema.json"
+def test_safe_filename_helper_rejects_separators_traversal_and_non_str():
+    from backend.services.form_kits import safe_filename
+
+    # Valid bare filename passes through.
+    assert safe_filename("custom.json", "schema.json") == "custom.json"
+    # Separators / traversal / empty -> default.
+    assert safe_filename("../x.json", "schema.json") == "schema.json"
+    assert safe_filename("a/b.json", "schema.json") == "schema.json"
+    assert safe_filename("a\\b.json", "schema.json") == "schema.json"
+    assert safe_filename("", "schema.json") == "schema.json"
+    # Non-string values (Codex P1, round 4) -> default, never a TypeError.
+    assert safe_filename(123, "schema.json") == "schema.json"
+    assert safe_filename([], "schema.json") == "schema.json"
+    assert safe_filename(None, "schema.json") == "schema.json"
+    assert safe_filename({"x": 1}, "schema.json") == "schema.json"
 
 
 def test_non_dict_local_metadata_is_ignored(tmp_path, monkeypatch):
@@ -404,3 +424,95 @@ def test_non_utf8_schema_maps_to_502(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         _run(fkr.get_form_kit_schema("i-90"))
     assert exc.value.status_code == 502
+
+
+# --- round-4 untrusted-value hardening (Codex P1) --------------------------
+
+
+def test_non_string_local_metadata_filename_does_not_crash(tmp_path, monkeypatch):
+    # metadata.json with a non-string `schema` (a number) must NOT raise TypeError
+    # building a path; it degrades to schema.json and the kit still reads.
+    from backend.services.form_kits import LocalFormKitStore
+
+    schema = {"title": "Numbery"}
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "metadata.json").write_text(
+        json.dumps({"schema": 123, "pdf": []}), encoding="utf-8"
+    )
+    (kit_dir / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    (kit_dir / "form.pdf").write_bytes(b"%PDF")
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    # Manifest generation must not raise on the non-string fields.
+    manifest = _run(store.load_manifest())
+    assert any(f["id"] == "i-90" for f in manifest["forms"])
+
+    schema_resp = _run(fkr.get_form_kit_schema("i-90"))
+    assert json.loads(schema_resp.body) == schema
+
+
+def test_traversal_in_local_metadata_does_not_escape(tmp_path, monkeypatch):
+    # A traversal `schema` in local metadata.json must be sanitized AT MANIFEST
+    # GENERATION (before the route resolver), so the generator never reads outside
+    # the kit dir and never advertises a traversal path (Codex P1, round 4).
+    from backend.services.form_kits import LocalFormKitStore
+
+    # A secret outside the kit dir that a traversal would point at.
+    (tmp_path / "secret.json").write_text(json.dumps({"secret": True}), encoding="utf-8")
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "metadata.json").write_text(
+        json.dumps({"schema": "../secret.json"}), encoding="utf-8"
+    )
+    (kit_dir / "schema.json").write_text(json.dumps({"title": "Safe"}), encoding="utf-8")
+
+    store = LocalFormKitStore(tmp_path)
+    manifest = _run(store.load_manifest())
+    entry = next(f for f in manifest["forms"] if f["id"] == "i-90")
+    # The advertised schema path is the conventional one, NOT the traversal.
+    assert entry["schemaFile"] == "schema.json"
+    assert ".." not in entry["schemaPath"]
+
+
+def test_non_dict_forms_entry_is_skipped(monkeypatch):
+    # A corrupt manifest with a non-dict entry in forms (e.g. [null, {...}]) must
+    # not AttributeError -> 500; the bad entry is skipped and the good kit resolves.
+    manifest = {"forms": [None, {"id": "i90", "schemaFile": "custom.json"}]}
+    store = _FakeStore(manifest=manifest, schema={"ok": True})
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    _run(fkr.get_form_kit_schema("i90"))
+    assert store.requested_schema_file == "custom.json"
+
+
+def test_forms_not_a_list_fails_closed_502(monkeypatch):
+    # A manifest whose "forms" is not a list is corrupt -> 502 fail-closed.
+    store = _FakeStore(manifest={"forms": "oops"}, schema={"ok": True})
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("i90"))
+    assert exc.value.status_code == 502
+
+
+def test_gcs_non_utf8_manifest_maps_to_502(monkeypatch):
+    # GCSFormKitStore.load_manifest on a non-UTF-8 index.json must raise
+    # FormKitStoreError (not UnicodeDecodeError), so the route fails closed 502.
+    import asyncio as _asyncio
+    from backend.services.form_kits import GCSFormKitStore, FormKitStoreError as _FKSE
+
+    # Build a GCS store without touching the network: bypass __init__.
+    store = GCSFormKitStore.__new__(GCSFormKitStore)
+    store.bucket_name = "b"
+    store.prefix = "form-kits"
+
+    async def _fake_fetch(blob_path):
+        return b"\xff\xfe not utf8"
+
+    store._fetch_bytes = _fake_fetch  # type: ignore[assignment]
+
+    with pytest.raises(_FKSE):
+        _asyncio.get_event_loop().run_until_complete(store.load_manifest())

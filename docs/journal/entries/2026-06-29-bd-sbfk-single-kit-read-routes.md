@@ -82,17 +82,33 @@ the manifest with `AttributeError`; a non-UTF-8 schema now maps to 502
 generation); and the route-table doc no longer calls the manifest "complete-only"
 unconditionally (local mode is ungated).
 
+Round-4 STRUCTURAL fix (Codex P1 x5, after the maintainer ran a 4th review): all
+five findings were the SAME bug class -- an untrusted manifest/metadata value
+(non-string, traversal, or a non-dict container) reaching a path-join or `.get()`
+at a layer that hadn't been guarded. Rounds 3 and 4 recurred because the earlier
+fixes were POINTWISE (patch each value Codex named) instead of central. The fix:
+a single `safe_filename(value, default)` in `form_kits.py` that coerces ANY
+unsafe value (non-str, separator, `..`, bad charset) to the conventional name,
+applied at BOTH the local manifest generator AND the route resolver; type-safe
+iteration of `forms` (skip non-dict entries; a non-list `forms` -> 502) in BOTH
+the resolver and the public `list_form_kits`; and `GCSFormKitStore.load_manifest`
+now wraps `UnicodeDecodeError` like the schema loader. After applying it I AUDITED
+every untrusted-value-to-path / `.get()` site (grep of `kit_dir /`, `.get(`) and
+hardened the one the findings hadn't named yet (`list_form_kits`'s non-dict entry)
+to avoid a round 5.
+
 Pre-PR assess: exit-criteria rubric all PASS; fresh-eyes loop NO-GAPS (1 gap found
-+ fixed: added the LocalFormKitStore-backed test). Codex outer review: 3 rounds
-(3 + 5 + 5 P1). Adopted every code finding -- custom-filename resolution, the
-local/GCS 502 mappings (malformed JSON, OSError, UnicodeDecodeError), the
-manifest-allowlist 404 + fail-closed-on-corrupt, the metadata filename
-sanitization, the non-dict-metadata guard, the trailing-newline `fullmatch` fix,
-and the doc corrections. Deferred only the recurring "wire the browser to these
-/api routes" finding to Bead 3 (it would change the voice app's manifest contract,
-out of scope for this read slice). Closeout hit the MAX_REVIEW_ROUNDS=2 iteration
-cap; per doctrine the post-round-3 state was escalated to the maintainer rather
-than auto-looping a 4th round. No out-of-scope beads filed.
++ fixed: added the LocalFormKitStore-backed test). Codex outer review: 4 rounds
+(3 + 5 + 5 + 5 P1). Adopted every code finding -- custom-filename resolution; the
+local/GCS 502 mappings (malformed JSON, OSError, UnicodeDecodeError for both
+schema AND manifest); the manifest-allowlist 404 + fail-closed-on-corrupt; the
+central `safe_filename` value sanitization (non-string + traversal) at both
+layers; the non-dict-metadata and non-dict-forms-entry guards; the trailing-
+newline `fullmatch` fix; and the doc corrections. Deferred only the recurring
+"wire the browser to these /api routes" finding to Bead 3 (it would change the
+voice app's manifest contract, out of scope for this read slice). Lesson recorded
+below: a recurring same-class finding is the signal to stop patching pointwise
+and fix the trust boundary once, then audit the class. No out-of-scope beads filed.
 
 ## Lessons
 
@@ -106,7 +122,18 @@ A read route that hangs off a gated manifest must treat that manifest as an
 ALLOWLIST, not just a filename hint: falling back to a conventional path on a
 manifest miss re-exposes exactly the draft/unlisted objects the gate exists to
 hide. "Resolve the filename" and "is this kit allowed to be served" are the same
-lookup -- a miss is a 404, not a default.
+lookup -- a miss is a 404, not a default. A corrupt (unreadable) manifest must
+fail CLOSED (502), only a truly-missing one may fall back.
+
+When a reviewer keeps returning the SAME finding class round after round (here:
+"untrusted kit-controlled value reaches a path/`.get()` unguarded"), stop patching
+the specific value/site it names and fix the trust boundary ONCE -- one coercion
+helper for every unsafe variant (non-string, separator, traversal, bad charset),
+applied at every layer that consumes the value -- then grep the whole class and
+harden the sites the reviewer hasn't reached yet. Pointwise patches to
+adversarial review spawn the next round; a central guard + a class audit ends it.
+Validate untrusted JSON for TYPE (`isinstance(dict/list/str)`) before `.get()` or
+a path-join: valid JSON can still be a list/number where you expect an object.
 
 ## Doc freshness
 
@@ -122,10 +149,17 @@ lookup -- a miss is a 404, not a default.
 ## Files touched
 
 - `backend/routes/form_kit_routes.py` -- `_safe_kit_id` guard (fullmatch),
-  `_resolve_kit_filenames` (manifest allowlist + custom names), the two read routes.
-- `backend/services/form_kits.py` -- `LocalFormKitStore.load_manifest` reads
-  `metadata.json` for custom filenames/label; `load_schema`/`load_pdf_bytes` wrap
-  read failures as `FormKitStoreError` (502 parity with GCS).
-- `backend/tests/unit/test_form_kit_routes.py` -- +17 tests for the read routes,
-  guard, filename resolution, allowlist 404, and the 502 mapping.
+  `_resolve_kit_filenames` (manifest allowlist + sanitized custom names +
+  type-safe forms iteration + fail-closed-on-corrupt), the two read routes, and a
+  non-dict-entry skip in `list_form_kits`.
+- `backend/services/form_kits.py` -- the shared `safe_filename` sanitizer (the
+  trust-boundary guard); `LocalFormKitStore.load_manifest` reads + sanitizes
+  `metadata.json` filenames/label and tolerates non-dict metadata;
+  `load_schema`/`load_pdf_bytes` and both `load_manifest`s wrap read/decode
+  failures (`JSONDecodeError`/`OSError`/`UnicodeDecodeError`) as
+  `FormKitStoreError` (502 parity, local + GCS).
+- `backend/tests/unit/test_form_kit_routes.py` -- ~30 tests for the read routes,
+  guard, filename resolution + sanitization, allowlist 404, fail-closed 502, and
+  the untrusted-value (non-string / traversal / non-dict) guards.
+- `docs/technical_guide.md` -- API route table + the GCS-vs-local manifest note.
 - `docs/technical_guide.md` -- API route table + Last-updated bump.

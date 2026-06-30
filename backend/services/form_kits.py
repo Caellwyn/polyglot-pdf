@@ -3,9 +3,10 @@ from __future__ import annotations
 """Form kit storage helpers for loading schemas/PDFs in dev and prod."""
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import anyio
 import structlog
@@ -13,6 +14,31 @@ import structlog
 from backend.config import get_settings
 
 _log = structlog.get_logger().bind(module="form_kit_store")
+
+# A schema/pdf filename is kit-CONTROLLED (it comes from metadata.json or
+# index.json), so it is untrusted at every layer that turns it into a path: the
+# local manifest generator AND the route resolver. Centralize the rule here so
+# both call the SAME guard (Codex P1, rounds 3-4 on bd polyglot-pdf-sbfk -- the
+# pointwise patches kept missing a variant: a non-string value, or a layer where
+# the guard had not been applied yet). A safe filename is a bare single-segment
+# name: a str, no separator, no traversal, conservative charset.
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def safe_filename(name: Any, default: str) -> str:
+	"""Coerce an untrusted filename to a safe bare filename, else `default`.
+
+	Handles ALL the ways a kit-controlled value can be unsafe in one place: a
+	non-string value (123, [], None), a path separator, a `..` traversal, or a
+	value outside the conservative charset. Degrades to `default` (the
+	conventional name) rather than raising, so one malformed kit neither crashes
+	manifest generation nor escapes its own directory.
+	"""
+	if not isinstance(name, str):
+		return default
+	if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
+		return default
+	return name
 
 
 class FormKitStoreError(Exception):
@@ -111,7 +137,11 @@ class LocalFormKitStore(FormKitStore):
 				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					meta = {}
 
-			schema_file = meta.get("schema") or "schema.json"
+			# The schema/pdf names from metadata are kit-controlled -> sanitize
+			# HERE too (not only at the route resolver), or this generator would
+			# read outside the kit dir while probing existence / the label and
+			# advertise a traversal schemaPath (Codex P1, round 4).
+			schema_file = safe_filename(meta.get("schema") or "schema.json", "schema.json")
 			schema_path = kit_dir / schema_file
 			if not schema_path.exists():
 				continue
@@ -128,8 +158,9 @@ class LocalFormKitStore(FormKitStore):
 				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					label = kit_id
 
-			# PDF file: metadata override, else form.pdf, else the first *.pdf.
-			pdf_file = meta.get("pdf") or "form.pdf"
+			# PDF file: metadata override (sanitized), else form.pdf, else the
+			# first *.pdf.
+			pdf_file = safe_filename(meta.get("pdf") or "form.pdf", "form.pdf")
 			if not (kit_dir / pdf_file).exists():
 				pdf_files = list(kit_dir.glob("*.pdf"))
 				if pdf_files:
@@ -209,8 +240,10 @@ class GCSFormKitStore(FormKitStore):
 		data = await self._fetch_bytes(blob_path)
 		try:
 			return json.loads(data.decode("utf-8"))
-		except json.JSONDecodeError as exc:
-			raise FormKitStoreError(f"Invalid manifest JSON at gs://{self.bucket_name}/{blob_path}: {exc}") from exc
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+			# UnicodeDecodeError too (non-UTF-8 index.json): without it the resolver
+			# leaks an uncaught 500 instead of the fail-closed 502 (Codex P1, r4).
+			raise FormKitStoreError(f"Invalid manifest at gs://{self.bucket_name}/{blob_path}: {exc}") from exc
 
 
 @lru_cache(maxsize=1)

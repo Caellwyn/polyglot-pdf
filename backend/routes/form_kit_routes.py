@@ -20,6 +20,7 @@ from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
     get_form_kit_store,
+    safe_filename,
 )
 
 _log = structlog.get_logger().bind(module="form_kit_routes")
@@ -43,26 +44,6 @@ def _safe_kit_id(kit_id: str) -> str:
     if ".." in kit_id or not _KIT_ID_RE.fullmatch(kit_id):
         raise HTTPException(status_code=400, detail="Invalid kit id")
     return kit_id
-
-
-# A schema/pdf filename comes from kit-controlled metadata (metadata.json /
-# index.json), so it is untrusted: it must be a bare filename within the kit dir,
-# never a path separator or traversal. Without this, a listed kit's metadata
-# saying "../other/schema.json" would read outside its own dir despite the
-# kit-id guard (Codex P1 on bd polyglot-pdf-sbfk).
-_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-
-
-def _safe_filename(name: str, default: str) -> str:
-    """Return name if it is a safe bare filename, else fall back to default.
-
-    Falls back (rather than 400) so a malformed metadata filename degrades to the
-    conventional name instead of failing a kit the manifest does list; a default
-    that is itself unsafe would be a programmer error, not user input.
-    """
-    if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
-        return default
-    return name
 
 
 async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
@@ -89,8 +70,8 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
       draft/unlisted objects the allowlist exists to hide (Codex P1, round 3).
 
     Filenames from the manifest are kit-controlled, so they are run through
-    `_safe_filename` before use -- a traversal value degrades to the conventional
-    name rather than escaping the kit dir.
+    `safe_filename` before use -- a non-string/traversal value degrades to the
+    conventional name rather than escaping the kit dir.
     """
     schema_file, pdf_file = "schema.json", "form.pdf"
     try:
@@ -101,11 +82,21 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     # A FormKitStoreError (corrupt/unreadable manifest) is NOT caught here: it must
     # propagate so the route fails closed with 502 rather than silently bypassing
     # the allowlist.
-    for form in manifest.get("forms", []):
+    forms = manifest.get("forms", [])
+    if not isinstance(forms, list):
+        # A corrupt manifest whose "forms" is not a list is unreadable -> fail
+        # closed (502), not a silent allowlist bypass (Codex P1, round 4).
+        raise FormKitStoreError(f"Manifest 'forms' is not a list for kit {kit_id}")
+    for form in forms:
+        # A non-dict entry (e.g. [null, {...}]) must be skipped, not .get()'d into
+        # an AttributeError/500 -- a single bad entry can't break the lookup
+        # (Codex P1, round 4). safe_filename then handles non-string filenames.
+        if not isinstance(form, dict):
+            continue
         if form.get("id") == kit_id:
             return (
-                _safe_filename(form.get("schemaFile") or schema_file, schema_file),
-                _safe_filename(form.get("pdfFile") or pdf_file, pdf_file),
+                safe_filename(form.get("schemaFile") or schema_file, schema_file),
+                safe_filename(form.get("pdfFile") or pdf_file, pdf_file),
             )
     # Manifest loaded but this kit is not in it -> not served (404, not fallback).
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
@@ -154,6 +145,11 @@ async def list_form_kits() -> FormKitManifestResponse:
         # conventional paths when the manifest entry omits them (older manifests).
         forms = []
         for form in manifest.get("forms", []):
+            # Skip a non-dict entry (e.g. a hand-corrupted index.json with [null,
+            # {...}]) rather than AttributeError -> 500, matching the single-kit
+            # resolver's guard (the same bug class -- bd polyglot-pdf-sbfk).
+            if not isinstance(form, dict):
+                continue
             kit_id = form.get("id", "")
             forms.append(FormKitInfo(
                 id=kit_id,
