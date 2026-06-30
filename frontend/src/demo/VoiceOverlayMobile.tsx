@@ -1202,18 +1202,28 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 									<span className="vff-thinking-dot"></span>
 								</span>
 							)}
-							{/* Live mic-energy meter (bd polyglot-pdf-s3zv) */}
+							{/* Listening indicator (bd polyglot-pdf-1dvp): ear glyph + live
+							    mic-energy meter, shown ONLY while connected (i.e. actually
+							    listening). Language-neutral -- the ear glyph replaces the
+							    English word so it reads the same across all 18 spoken
+							    languages. The meter distinguishes mic-alive-but-gated (grey)
+							    from audio-reaching-the-backend (green, --sending). */}
 							{isConnected && (
 								<span
-									className={`vff-mic-meter${micSending ? ' vff-mic-meter--sending' : ''}`}
+									className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
 									title={micSending
-										? `Sending audio (energy ${micEnergy.toFixed(0)})`
-										: `Mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+										? `Listening -- sending audio (energy ${micEnergy.toFixed(0)})`
+										: `Listening -- mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+									aria-label="Listening"
+									role="status"
 								>
-									<span
-										className="vff-mic-meter-bar"
-										style={{ width: `${Math.min(100, micEnergy)}%` }}
-									></span>
+									<span className="vff-listening-ear" aria-hidden="true">👂</span>
+									<span className="vff-mic-meter">
+										<span
+											className="vff-mic-meter-bar"
+											style={{ width: `${Math.min(100, micEnergy)}%` }}
+										></span>
+									</span>
 								</span>
 							)}
 						</div>
@@ -1530,6 +1540,35 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				.vff-mic-meter--sending .vff-mic-meter-bar {
 					background: #10b981;
 					box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
+				}
+
+				/* Listening indicator (bd polyglot-pdf-1dvp): ear glyph + live
+				   mic-energy meter, shown only while connected. Language-neutral. */
+				.vff-listening {
+					display: inline-flex;
+					align-items: center;
+					gap: 5px;
+					padding: 3px 8px;
+					background: #f3f4f6;
+					border-radius: 10px;
+					border: 1px solid #d1d5db;
+					flex-shrink: 0;
+					transition: background 120ms ease, border-color 120ms ease;
+				}
+
+				.vff-listening--sending {
+					background: #d1fae5;
+					border-color: #10b981;
+				}
+
+				.vff-listening--sending .vff-mic-meter-bar {
+					background: #10b981;
+					box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
+				}
+
+				.vff-listening-ear {
+					font-size: 13px;
+					line-height: 1;
 				}
 
 				.vff-language-selector-mobile {

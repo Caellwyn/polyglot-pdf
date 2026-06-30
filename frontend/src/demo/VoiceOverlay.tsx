@@ -1401,13 +1401,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						<span className="vff-status-text">
 							{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
 						</span>
-						{/* VAD speech detection indicator */}
-						{vad.userSpeaking && !pushToTalkMode && !nativeVad && (
-							<span className="vff-vad-indicator" title="Voice detected">
-								<span className="vff-vad-light"></span>
-								<span className="vff-vad-label">Listening</span>
-							</span>
-						)}
 						{/* Thinking indicator (bd polyglot-pdf-wpw.5): calm animated dots
 						    while the agent processes a turn, so the app never looks frozen
 						    during a slow turn / secretary lookup. Language-neutral (no word
@@ -1419,19 +1412,30 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								<span className="vff-thinking-dot"></span>
 							</span>
 						)}
-						{/* Live mic-energy meter (bd polyglot-pdf-s3zv): shows the mic is
-						    alive and whether audio is actually reaching the backend. */}
+						{/* Listening indicator (bd polyglot-pdf-1dvp): an ear glyph paired
+						    with the live mic-energy meter. Shown ONLY while connected (i.e.
+						    actually listening) -- hidden when paused/disconnected, which
+						    fixes the old reversed badge that lit "Listening" precisely when
+						    it was NOT. Language-neutral: the ear glyph replaces the English
+						    word so it reads the same across all 18 spoken languages. The
+						    meter still distinguishes mic-alive-but-gated (grey bar) from
+						    audio-reaching-the-backend (green, --sending). */}
 						{isConnected && (
 							<span
-								className={`vff-mic-meter${micSending ? ' vff-mic-meter--sending' : ''}`}
+								className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
 								title={micSending
-									? `Sending audio (energy ${micEnergy.toFixed(0)})`
-									: `Mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+									? `Listening -- sending audio (energy ${micEnergy.toFixed(0)})`
+									: `Listening -- mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+								aria-label="Listening"
+								role="status"
 							>
-								<span
-									className="vff-mic-meter-bar"
-									style={{ width: `${Math.min(100, micEnergy)}%` }}
-								></span>
+								<span className="vff-listening-ear" aria-hidden="true">👂</span>
+								<span className="vff-mic-meter">
+									<span
+										className="vff-mic-meter-bar"
+										style={{ width: `${Math.min(100, micEnergy)}%` }}
+									></span>
+								</span>
 							</span>
 						)}
 					</div>
@@ -1722,43 +1726,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				}
 
 				/* VAD Speech Detection Indicator */
-				.vff-vad-indicator {
-					display: flex;
+				/* Listening indicator (bd polyglot-pdf-1dvp): ear glyph + live
+				   mic-energy meter, shown only while connected. Language-neutral. */
+				.vff-listening {
+					display: inline-flex;
 					align-items: center;
 					gap: 6px;
-					padding: 4px 12px;
-					background: #d1fae5;
+					padding: 4px 10px;
+					background: #f3f4f6;
 					border-radius: 12px;
-					border: 1px solid #10b981;
+					border: 1px solid #d1d5db;
+					transition: background 120ms ease, border-color 120ms ease;
 				}
 
-				.vff-vad-label {
-					font-size: 12px;
-					color: #059669;
-					font-weight: 600;
-					text-transform: uppercase;
-					letter-spacing: 0.5px;
+				.vff-listening--sending {
+					background: #d1fae5;
+					border-color: #10b981;
 				}
 
-				.vff-vad-light {
-					display: inline-block;
-					width: 10px;
-					height: 10px;
-					border-radius: 50%;
-					background: #10b981;
-					animation: vff-vad-pulse 1s ease-in-out infinite;
-					box-shadow: 0 0 4px #10b981;
-				}
-
-				@keyframes vff-vad-pulse {
-					0%, 100% {
-						opacity: 1;
-						box-shadow: 0 0 4px #10b981;
-					}
-					50% {
-						opacity: 0.6;
-						box-shadow: 0 0 12px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
-					}
+				.vff-listening-ear {
+					font-size: 14px;
+					line-height: 1;
 				}
 
 				/* Thinking indicator (bd polyglot-pdf-wpw.5): three calm pulsing dots
@@ -1811,7 +1799,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					transition: width 80ms linear, background 120ms ease;
 				}
 
-				.vff-mic-meter--sending .vff-mic-meter-bar {
+				.vff-listening--sending .vff-mic-meter-bar {
 					background: #10b981;
 					box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 				}
