@@ -28,16 +28,24 @@ class _FakeStore:
         self._manifest = manifest
         self._schema = schema
         self._pdf = pdf
+        # Records the filename the route asked for, so a test can assert the
+        # route honored a custom manifest filename (bd polyglot-pdf-sbfk).
+        self.requested_schema_file = None
+        self.requested_pdf_file = None
 
     async def load_manifest(self, manifest_file: str = "index.json") -> dict:
+        if self._manifest is None:
+            raise FormKitNotFound("no manifest")
         return self._manifest
 
     async def load_schema(self, kit_id: str, schema_file: str = "schema.json") -> dict:
+        self.requested_schema_file = schema_file
         if self._schema is None:
             raise FormKitNotFound(f"no schema for {kit_id}")
         return self._schema
 
     async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
+        self.requested_pdf_file = pdf_filename
         if self._pdf is None:
             raise FormKitNotFound(f"no pdf for {kit_id}")
         return self._pdf
@@ -204,3 +212,50 @@ def test_read_routes_against_real_local_store(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         _run(fkr.get_form_kit_schema("absent"))
     assert exc.value.status_code == 404
+
+
+def test_routes_honor_custom_manifest_filenames(monkeypatch):
+    # A kit declaring custom schemaFile/pdfFile (bd snpi) must be read with THOSE
+    # names, not the hardcoded defaults (Codex P1 on sbfk).
+    manifest = {
+        "forms": [
+            {"id": "i90", "schemaFile": "custom.json", "pdfFile": "i90.pdf"}
+        ]
+    }
+    store = _FakeStore(manifest=manifest, schema={"ok": True}, pdf=b"%PDF")
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    _run(fkr.get_form_kit_schema("i90"))
+    assert store.requested_schema_file == "custom.json"
+
+    _run(fkr.get_form_kit_pdf("i90"))
+    assert store.requested_pdf_file == "i90.pdf"
+
+
+def test_routes_fall_back_to_convention_without_manifest(monkeypatch):
+    # No manifest -> conventional schema.json / form.pdf, not a 500.
+    store = _FakeStore(manifest=None, schema={"ok": True}, pdf=b"%PDF")
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    _run(fkr.get_form_kit_schema("i90"))
+    assert store.requested_schema_file == "schema.json"
+
+    _run(fkr.get_form_kit_pdf("i90"))
+    assert store.requested_pdf_file == "form.pdf"
+
+
+def test_local_store_malformed_schema_maps_to_502(tmp_path, monkeypatch):
+    # A present-but-unparseable schema in local mode is a STORE error -> 502,
+    # not an uncaught 500 (Codex P1 on sbfk).
+    from backend.services.form_kits import LocalFormKitStore
+
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "schema.json").write_text("{ not valid json", encoding="utf-8")
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("i-90"))
+    assert exc.value.status_code == 502

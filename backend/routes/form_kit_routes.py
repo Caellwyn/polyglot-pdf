@@ -40,6 +40,32 @@ def _safe_kit_id(kit_id: str) -> str:
     return kit_id
 
 
+async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
+    """Return (schema_file, pdf_file) for a kit, honoring custom manifest names.
+
+    A kit may declare a custom schema/pdf filename (bd polyglot-pdf-snpi, surfaced
+    in the manifest as schemaFile/pdfFile); the single-kit read routes must use
+    those, not the hardcoded defaults, or a custom-filename kit listed in
+    /api/form-kits 404s here (Codex P1 on bd polyglot-pdf-sbfk). Fall back to the
+    conventional schema.json / form.pdf when the manifest omits them or can't be
+    read -- a missing manifest must not break a conventional-layout kit.
+    """
+    schema_file, pdf_file = "schema.json", "form.pdf"
+    try:
+        manifest = await store.load_manifest()
+    except (FormKitNotFound, FormKitStoreError):
+        # No manifest (or unreadable) -> fall back to conventional names; a
+        # conventional-layout kit must still load without a manifest present.
+        return schema_file, pdf_file
+    for form in manifest.get("forms", []):
+        if form.get("id") == kit_id:
+            return (
+                form.get("schemaFile") or schema_file,
+                form.get("pdfFile") or pdf_file,
+            )
+    return schema_file, pdf_file
+
+
 class FormKitInfo(BaseModel):
     """Public metadata about a form kit (no schema content).
 
@@ -110,14 +136,15 @@ async def get_form_kit_schema(kit_id: str) -> JSONResponse:
 
     Works in both local and gcs mode. `Cache-Control: no-store` so a re-pull
     after the contractor (or maintainer) saves a new version is never stale.
-    The schema filename defaults to the conventional `schema.json`; custom
-    filenames are resolved by the manifest path on the public list route, and
-    will be wired here once the store exposes metadata (bd polyglot-pdf, Bead 2).
+    The schema filename is resolved from the manifest (custom filenames per
+    bd polyglot-pdf-snpi are honored), falling back to the conventional
+    `schema.json`.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
+    schema_file, _ = await _resolve_kit_filenames(store, kit_id)
     try:
-        schema = await store.load_schema(kit_id)
+        schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
     except FormKitStoreError as exc:
@@ -131,13 +158,14 @@ async def get_form_kit_schema(kit_id: str) -> JSONResponse:
 async def get_form_kit_pdf(kit_id: str) -> Response:
     """Return a single kit's PDF bytes, streamed from the store.
 
-    Works in both local and gcs mode. The PDF filename defaults to the
-    conventional `form.pdf`.
+    Works in both local and gcs mode. The PDF filename is resolved from the
+    manifest (custom filenames are honored), falling back to `form.pdf`.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
+    _, pdf_file = await _resolve_kit_filenames(store, kit_id)
     try:
-        data = await store.load_pdf_bytes(kit_id, "form.pdf")
+        data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc
     except FormKitStoreError as exc:

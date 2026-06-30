@@ -50,9 +50,18 @@ class LocalFormKitStore(FormKitStore):
 		if not path.exists():
 			raise FormKitNotFound(f"Schema not found for {kit_id}: {schema_file}")
 
-		return await anyio.to_thread.run_sync(
-			lambda: json.loads(path.read_text(encoding="utf-8"))
-		)
+		# A present-but-unreadable schema (malformed JSON, an OSError mid-read) is a
+		# STORE error, not a missing kit -- wrap it as FormKitStoreError so callers
+		# map it to 502, matching GCSFormKitStore.load_schema (bd polyglot-pdf-sbfk
+		# / Codex P1: local mode previously leaked these as an uncaught 500).
+		try:
+			return await anyio.to_thread.run_sync(
+				lambda: json.loads(path.read_text(encoding="utf-8"))
+			)
+		except (json.JSONDecodeError, OSError) as exc:
+			raise FormKitStoreError(
+				f"Invalid or unreadable schema for {kit_id}/{schema_file}: {exc}"
+			) from exc
 
 	async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:
 		kit_dir = self._kit_dir(kit_id)
@@ -60,7 +69,12 @@ class LocalFormKitStore(FormKitStore):
 		if not path.exists():
 			raise FormKitNotFound(f"PDF not found for {kit_id}: {pdf_filename}")
 
-		return await anyio.to_thread.run_sync(path.read_bytes)
+		try:
+			return await anyio.to_thread.run_sync(path.read_bytes)
+		except OSError as exc:
+			raise FormKitStoreError(
+				f"Unreadable PDF for {kit_id}/{pdf_filename}: {exc}"
+			) from exc
 
 	async def load_manifest(self, manifest_file: str = "index.json") -> dict:
 		"""Load manifest from local form-kits directory.
