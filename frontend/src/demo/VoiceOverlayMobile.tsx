@@ -1130,6 +1130,13 @@ useEffect(() => {
 }, [currentSectionId, completedSections])
 
 const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio can
+// actually reach the backend -- the send-capable states from shouldSendMicChunk
+// (`connected` / `switching_section`), NOT `reconnecting` (the mic gate drops
+// reconnecting audio, so a "listening" cue there would be misleading -- Codex
+// PR #278). The broader isConnected/meter divergence on mobile is bd
+// polyglot-pdf-bxng.
+const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section'
 const isPausedState = status.toLowerCase() === 'paused'
 const isWarming = status.toLowerCase().includes('warming')
 const isReady = status.toLowerCase() === 'ready'
@@ -1207,8 +1214,10 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 							    listening). Language-neutral -- the ear glyph replaces the
 							    English word so it reads the same across all 18 spoken
 							    languages. The meter distinguishes mic-alive-but-gated (grey)
-							    from audio-reaching-the-backend (green, --sending). */}
-							{isConnected && (
+							    from audio-reaching-the-backend (green, --sending). Gated on
+							    `isListening` (send-capable states) not `isConnected`, so it
+							    stays hidden while reconnecting. */}
+							{isListening && (
 								<span
 									className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
 									title={micSending

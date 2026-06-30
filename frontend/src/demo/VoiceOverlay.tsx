@@ -1367,6 +1367,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}, [])
 
 	const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section' || status.toLowerCase().startsWith('reconnecting')
+	// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio can
+	// actually reach the backend -- the same send-capable states as
+	// shouldSendMicChunk (`connected` / `switching_section`), NOT `reconnecting`.
+	// `isConnected` is broader (it keeps the green status dot lit through a
+	// reconnect), but during `reconnecting` the mic gate drops all audio, so a
+	// "listening" cue there would be misleading (Codex PR #278).
+	const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section'
 	const isPausedState = status.toLowerCase() === 'paused'
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'
@@ -1419,8 +1426,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						    it was NOT. Language-neutral: the ear glyph replaces the English
 						    word so it reads the same across all 18 spoken languages. The
 						    meter still distinguishes mic-alive-but-gated (grey bar) from
-						    audio-reaching-the-backend (green, --sending). */}
-						{isConnected && (
+						    audio-reaching-the-backend (green, --sending). Gated on
+						    `isListening` (send-capable states) not `isConnected`, so it
+						    stays hidden while reconnecting. */}
+						{isListening && (
 							<span
 								className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
 								title={micSending

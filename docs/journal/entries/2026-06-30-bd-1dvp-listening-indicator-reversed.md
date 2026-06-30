@@ -42,16 +42,32 @@ Applied to BOTH overlays: `VoiceOverlay.tsx` (desktop) and
 `.vff-vad-indicator` / `.vff-vad-label` / `.vff-vad-light` CSS and its
 `@keyframes vff-vad-pulse` were removed from the desktop overlay; the mobile
 `vff-vad-pulse` keyframe was kept because it still drives the FAB speech-dot
-(`.vff-fab-vad-dot`), a distinct and correctly-gated cue that was intentionally
-left unchanged (it is not the reversed badge).
+(`.vff-fab-vad-dot`). That FAB speech-dot was left unchanged here because it is a
+SEPARATE element outside this bead's status-row scope -- but note it carries the
+SAME reversed/dead gate (`vad.userSpeaking && !pushToTalkMode && !nativeVad`) that
+this bead fixed in the status row, so in native-VAD mode it is permanently dark.
+That is filed as out-of-scope follow-up bead `polyglot-pdf-8v53`, not "correctly
+gated."
+
+The indicator is gated on a dedicated `isListening` flag (the send-capable states
+`connected` / `switching_section`, matching `shouldSendMicChunk`), NOT the broader
+`isConnected` -- so it stays hidden while `reconnecting`, where `isConnected` is
+still true but the mic gate drops all audio (Codex finding, PR #278).
 
 Verified live via Chrome MCP against the local stack (Form I-90, English):
 connected -> indicator present (ear + meter nested inside); paused -> indicator
 hidden; old badge absent in every state. TypeScript clean; 12/12 demo overlay
 tests pass.
 
-Fresh-eyes assess: see the closeout merge ping for the round count and
-breakdown. No out-of-scope beads filed.
+Fresh-eyes assess (Sonnet, 2 rounds -> NO-GAPS): round 1 found one dead-CSS gap
+(a `.vff-mic-meter--sending` rule left in the mobile overlay), fixed before the
+PR. Two genuinely out-of-scope, pre-existing bugs were filed as separate beads:
+`polyglot-pdf-8v53` (the mobile FAB speech-dot has the same reversed gate) and
+`polyglot-pdf-bxng` (mobile `isConnected` is narrower than desktop, excluding
+`switching_section`/`reconnecting`). Codex outer review (PR #278) then flagged the
+`reconnecting` gap fixed above, the two journal-accuracy corrections in this entry,
+and a test-coverage gap (a focused render test for the new `isListening` gate was
+added).
 
 ## Lessons
 
