@@ -169,3 +169,38 @@ def test_valid_kit_id_passes_guard():
     # Sanity: a conventional id is accepted by the guard helper unchanged.
     assert fkr._safe_kit_id("i-90") == "i-90"
     assert fkr._safe_kit_id("form_589") == "form_589"
+
+
+def test_read_routes_against_real_local_store(tmp_path, monkeypatch):
+    """End-to-end against a real LocalFormKitStore over a tmp kit dir.
+
+    The _FakeStore tests above stub the store; this one exercises the actual
+    LocalFormKitStore path interpolation + filesystem read (anyio thread) the
+    routes use in dev, satisfying the rubric's "verified against a
+    LocalFormKitStore" wording (fresh-eyes gap, bd polyglot-pdf-sbfk).
+    """
+    from backend.services.form_kits import LocalFormKitStore
+
+    schema = {"title": "Form I-90", "fields": [{"id": "a"}]}
+    pdf_bytes = b"%PDF-1.7 local"
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    (kit_dir / "form.pdf").write_bytes(pdf_bytes)
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    schema_resp = _run(fkr.get_form_kit_schema("i-90"))
+    assert schema_resp.media_type == "application/json"
+    assert schema_resp.headers["Cache-Control"] == "no-store"
+    assert json.loads(schema_resp.body) == schema
+
+    pdf_resp = _run(fkr.get_form_kit_pdf("i-90"))
+    assert pdf_resp.media_type == "application/pdf"
+    assert pdf_resp.body == pdf_bytes
+
+    # A kit that does not exist on disk -> the store raises FormKitNotFound -> 404.
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("absent"))
+    assert exc.value.status_code == 404
