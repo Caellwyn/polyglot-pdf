@@ -244,6 +244,66 @@ def test_routes_fall_back_to_convention_without_manifest(monkeypatch):
     assert store.requested_pdf_file == "form.pdf"
 
 
+def test_manifest_loaded_but_kit_absent_is_404(monkeypatch):
+    # The manifest loads but does not list this kit -> 404, NOT a fallback read.
+    # In gcs mode the deploy gate keeps drafts/unmarked kits out of the manifest,
+    # so a guessed id must not be served (Codex P1 on sbfk). The store would
+    # serve bytes if reached, proving the 404 comes from the allowlist check.
+    manifest = {"forms": [{"id": "listed"}]}
+    store = _FakeStore(manifest=manifest, schema={"ok": True}, pdf=b"%PDF")
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("unlisted"))
+    assert exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as exc2:
+        _run(fkr.get_form_kit_pdf("unlisted"))
+    assert exc2.value.status_code == 404
+
+
+def test_local_store_reads_custom_filename_from_metadata(tmp_path, monkeypatch):
+    # A local kit with metadata.json declaring a custom schema/pdf filename must
+    # be readable via the routes (Codex P1 on sbfk: local custom-filename kits).
+    from backend.services.form_kits import LocalFormKitStore
+
+    schema = {"title": "Custom Kit"}
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "metadata.json").write_text(
+        json.dumps({"schema": "custom.json", "pdf": "doc.pdf"}), encoding="utf-8"
+    )
+    (kit_dir / "custom.json").write_text(json.dumps(schema), encoding="utf-8")
+    (kit_dir / "doc.pdf").write_bytes(b"%PDF-1.7 custom")
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    schema_resp = _run(fkr.get_form_kit_schema("i-90"))
+    assert json.loads(schema_resp.body) == schema
+
+    pdf_resp = _run(fkr.get_form_kit_pdf("i-90"))
+    assert pdf_resp.body == b"%PDF-1.7 custom"
+
+
+@pytest.mark.parametrize("bad_id", ["i-90\n", "i-90\r", "i-90\n\n"])
+def test_trailing_newline_kit_id_rejected_400(bad_id, monkeypatch):
+    # re.match lets `$` match before a trailing newline; fullmatch must reject it
+    # (Codex P1 on sbfk). Store would raise if reached, so the 400 is the guard's.
+    class _Boom:
+        async def load_manifest(self, *a, **k):
+            raise AssertionError("store reached for an unsafe kit id")
+
+        async def load_schema(self, *a, **k):
+            raise AssertionError("store reached for an unsafe kit id")
+
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _Boom())
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema(bad_id))
+    assert exc.value.status_code == 400
+
+
 def test_local_store_malformed_schema_maps_to_502(tmp_path, monkeypatch):
     # A present-but-unparseable schema in local mode is a STORE error -> 502,
     # not an uncaught 500 (Codex P1 on sbfk).

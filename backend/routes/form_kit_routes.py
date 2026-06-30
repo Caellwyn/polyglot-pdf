@@ -34,8 +34,13 @@ _KIT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 
 def _safe_kit_id(kit_id: str) -> str:
-    """Return kit_id if it is a safe single path segment, else raise HTTP 400."""
-    if ".." in kit_id or not _KIT_ID_RE.match(kit_id):
+    """Return kit_id if it is a safe single path segment, else raise HTTP 400.
+
+    Uses fullmatch (not match): with `match` the `$` anchor matches just before a
+    trailing newline, so `i-90\n` would pass and reach the store -- fullmatch
+    anchors both ends and rejects it (Codex P1 on bd polyglot-pdf-sbfk).
+    """
+    if ".." in kit_id or not _KIT_ID_RE.fullmatch(kit_id):
         raise HTTPException(status_code=400, detail="Invalid kit id")
     return kit_id
 
@@ -43,19 +48,26 @@ def _safe_kit_id(kit_id: str) -> str:
 async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     """Return (schema_file, pdf_file) for a kit, honoring custom manifest names.
 
-    A kit may declare a custom schema/pdf filename (bd polyglot-pdf-snpi, surfaced
-    in the manifest as schemaFile/pdfFile); the single-kit read routes must use
-    those, not the hardcoded defaults, or a custom-filename kit listed in
-    /api/form-kits 404s here (Codex P1 on bd polyglot-pdf-sbfk). Fall back to the
-    conventional schema.json / form.pdf when the manifest omits them or can't be
-    read -- a missing manifest must not break a conventional-layout kit.
+    The manifest is the ALLOWLIST. A kit may declare a custom schema/pdf filename
+    (bd polyglot-pdf-snpi, surfaced in the manifest as schemaFile/pdfFile -- the
+    local store reads metadata.json for these), and these routes must use those,
+    not the hardcoded defaults (Codex P1 on bd polyglot-pdf-sbfk). Two rules:
+
+    - **Manifest loads but does NOT list kit_id -> raise FormKitNotFound (404).**
+      The GCS deploy gate deliberately keeps draft/unmarked kits out of the
+      manifest (deploy-all.sh: only status:complete reaches it), so falling back
+      to convention here would let a guessed id fetch an unlisted/draft object the
+      public list never advertised (info leak). Draft access for the contractor
+      editor is a separate, token-gated route (epic polyglot-pdf-92qe, Bead 2).
+    - **No manifest at all (GCS with no index.json) -> fall back to convention.**
+      There is no allowlist to enforce, and convention is the only way to read;
+      this preserves the read-gap fix's purpose. (Local mode always synthesizes a
+      manifest by scanning the dir, so it never takes this branch.)
     """
     schema_file, pdf_file = "schema.json", "form.pdf"
     try:
         manifest = await store.load_manifest()
     except (FormKitNotFound, FormKitStoreError):
-        # No manifest (or unreadable) -> fall back to conventional names; a
-        # conventional-layout kit must still load without a manifest present.
         return schema_file, pdf_file
     for form in manifest.get("forms", []):
         if form.get("id") == kit_id:
@@ -63,7 +75,8 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
                 form.get("schemaFile") or schema_file,
                 form.get("pdfFile") or pdf_file,
             )
-    return schema_file, pdf_file
+    # Manifest loaded but this kit is not in it -> not served (404, not fallback).
+    raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
 
 
 class FormKitInfo(BaseModel):
@@ -142,8 +155,8 @@ async def get_form_kit_schema(kit_id: str) -> JSONResponse:
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
-    schema_file, _ = await _resolve_kit_filenames(store, kit_id)
     try:
+        schema_file, _ = await _resolve_kit_filenames(store, kit_id)
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
@@ -163,8 +176,8 @@ async def get_form_kit_pdf(kit_id: str) -> Response:
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
-    _, pdf_file = await _resolve_kit_filenames(store, kit_id)
     try:
+        _, pdf_file = await _resolve_kit_filenames(store, kit_id)
         data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc

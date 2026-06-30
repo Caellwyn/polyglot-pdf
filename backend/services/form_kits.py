@@ -92,21 +92,37 @@ class LocalFormKitStore(FormKitStore):
 				continue
 
 			kit_id = kit_dir.name
-			schema_path = kit_dir / "schema.json"
 
+			# A kit may declare custom schema/pdf filenames + a label via
+			# metadata.json (the same keys deploy-all.sh and the editor use:
+			# bd polyglot-pdf-snpi). Read it first so a custom-filename kit is
+			# listed with its REAL names -- otherwise the single-kit read routes
+			# resolve to schema.json/form.pdf and 404 (Codex P1 on sbfk).
+			meta = {}
+			meta_path = kit_dir / "metadata.json"
+			if meta_path.exists():
+				try:
+					meta = json.loads(meta_path.read_text(encoding="utf-8"))
+				except (json.JSONDecodeError, IOError):
+					meta = {}
+
+			schema_file = meta.get("schema") or "schema.json"
+			schema_path = kit_dir / schema_file
 			if not schema_path.exists():
 				continue
 
-			# Extract label from schema
-			try:
-				schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
-				label = schema_data.get("title", kit_id)
-			except (json.JSONDecodeError, IOError):
-				label = kit_id
+			# Label: prefer metadata, else the schema title, else the id.
+			label = meta.get("label")
+			if not label:
+				try:
+					schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
+					label = schema_data.get("title", kit_id)
+				except (json.JSONDecodeError, IOError):
+					label = kit_id
 
-			# Find PDF file
-			pdf_file = "form.pdf"
-			if not (kit_dir / "form.pdf").exists():
+			# PDF file: metadata override, else form.pdf, else the first *.pdf.
+			pdf_file = meta.get("pdf") or "form.pdf"
+			if not (kit_dir / pdf_file).exists():
 				pdf_files = list(kit_dir.glob("*.pdf"))
 				if pdf_files:
 					pdf_file = pdf_files[0].name
@@ -114,8 +130,9 @@ class LocalFormKitStore(FormKitStore):
 			forms.append({
 				"id": kit_id,
 				"label": label,
-				"schemaFile": "schema.json",
-				"schemaPath": f"/form-kits/{kit_id}/schema.json",
+				"description": meta.get("description"),
+				"schemaFile": schema_file,
+				"schemaPath": f"/form-kits/{kit_id}/{schema_file}",
 				"pdfFile": pdf_file,
 				"pdfPath": f"/form-kits/{kit_id}/{pdf_file}",
 			})
