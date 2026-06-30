@@ -1537,11 +1537,6 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					transition: width 80ms linear, background 120ms ease;
 				}
 
-				.vff-mic-meter--sending .vff-mic-meter-bar {
-					background: #10b981;
-					box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
-				}
-
 				/* Listening indicator (bd polyglot-pdf-1dvp): ear glyph + live
 				   mic-energy meter, shown only while connected. Language-neutral. */
 				.vff-listening {
