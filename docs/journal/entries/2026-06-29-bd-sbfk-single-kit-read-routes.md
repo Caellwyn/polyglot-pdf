@@ -97,9 +97,29 @@ every untrusted-value-to-path / `.get()` site (grep of `kit_dir /`, `.get(`) and
 hardened the one the findings hadn't named yet (`list_form_kits`'s non-dict entry)
 to avoid a round 5.
 
+Round-5 ROOT-CAUSE fix (Codex P1 x4 + a maintainer decision to do the real
+structural fix): rounds 3-4 had patched the untrusted-value bug class POINTWISE in
+the consumers, and round 5 surfaced four more variants the consumers still missed
+(a non-object top-level manifest, a non-string `label`, a non-dict custom
+`schema_data`, plus a security gap: a MISSING GCS `index.json` fell back to
+convention and reopened unlisted/draft blobs). The fix moves validation to the
+TRUST BOUNDARY: a single `normalize_manifest(raw)` in `form_kits.py` validates the
+shape ONCE (non-object or non-list `forms` -> `FormKitStoreError` -> 502) and
+coerces every entry (skip non-dicts, drop id-less rows, `_safe_str` the label,
+`safe_filename` the filenames). BOTH stores' `load_manifest` now return through it,
+so every consumer (`list_form_kits`, the single-kit resolver) receives a
+guaranteed-clean shape and its scattered per-field guards were DELETED (the route
+now plain-subscripts `manifest["forms"]` / `form["id"]`). The fail-closed security
+gap is fixed with a store capability flag `allow_convention_fallback` (False for
+GCS, True for local): the resolver only falls back to convention on a MISSING
+manifest when the store allows it, so GCS fails closed on a missing index.json.
+After applying it I re-AUDITED every `.get()`/path-join/`json.loads` site in both
+files (documented in the closeout) and confirmed each is now behind the boundary
+or an explicit `isinstance` -- the audit that round 4's "structural" claim skipped.
+
 Pre-PR assess: exit-criteria rubric all PASS; fresh-eyes loop NO-GAPS (1 gap found
-+ fixed: added the LocalFormKitStore-backed test). Codex outer review: 4 rounds
-(3 + 5 + 5 + 5 P1). Adopted every code finding -- custom-filename resolution; the
++ fixed: added the LocalFormKitStore-backed test). Codex outer review: 5 rounds
+(3 + 5 + 5 + 5 + 4 P1). Adopted every code finding -- custom-filename resolution; the
 local/GCS 502 mappings (malformed JSON, OSError, UnicodeDecodeError for both
 schema AND manifest); the manifest-allowlist 404 + fail-closed-on-corrupt; the
 central `safe_filename` value sanitization (non-string + traversal) at both
@@ -127,13 +147,18 @@ fail CLOSED (502), only a truly-missing one may fall back.
 
 When a reviewer keeps returning the SAME finding class round after round (here:
 "untrusted kit-controlled value reaches a path/`.get()` unguarded"), stop patching
-the specific value/site it names and fix the trust boundary ONCE -- one coercion
-helper for every unsafe variant (non-string, separator, traversal, bad charset),
-applied at every layer that consumes the value -- then grep the whole class and
-harden the sites the reviewer hasn't reached yet. Pointwise patches to
-adversarial review spawn the next round; a central guard + a class audit ends it.
-Validate untrusted JSON for TYPE (`isinstance(dict/list/str)`) before `.get()` or
-a path-join: valid JSON can still be a list/number where you expect an object.
+the specific value/site it names and fix the trust boundary ONCE. But be precise
+about WHERE the boundary is: round 4 "centralized" a `safe_filename` helper yet
+still called it from each CONSUMER, so round 5 found the consumers it hadn't been
+added to. The real boundary is the PARSE point -- normalize the untrusted JSON into
+a guaranteed-clean, fully-typed shape inside `load_manifest` (the one function that
+turns bytes into the structure), and every downstream consumer can then plain-
+subscript it with NO guards. "Validate where it's consumed" scales with the number
+of consumers (and misses new ones); "normalize where it's parsed" is O(1) and
+makes a missed consumer impossible. A capability flag on the producer
+(`allow_convention_fallback`) is the same idea for behavior that must differ by
+backend (GCS fails closed on a missing manifest; local falls back) -- encode it on
+the store, not as a mode-check in the consumer.
 
 ## Doc freshness
 

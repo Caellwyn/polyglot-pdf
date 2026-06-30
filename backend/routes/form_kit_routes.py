@@ -20,7 +20,6 @@ from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
     get_form_kit_store,
-    safe_filename,
 )
 
 _log = structlog.get_logger().bind(module="form_kit_routes")
@@ -49,55 +48,39 @@ def _safe_kit_id(kit_id: str) -> str:
 async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     """Return (schema_file, pdf_file) for a kit, honoring custom manifest names.
 
-    The manifest is the ALLOWLIST. A kit may declare a custom schema/pdf filename
-    (bd polyglot-pdf-snpi, surfaced in the manifest as schemaFile/pdfFile -- the
-    local store reads metadata.json for these), and these routes must use those,
-    not the hardcoded defaults (Codex P1 on bd polyglot-pdf-sbfk). Two rules:
+    The manifest is the ALLOWLIST. `store.load_manifest()` returns a NORMALIZED
+    shape (validated + sanitized at the store boundary by `normalize_manifest`),
+    so this resolver trusts it: `forms` is a list of dicts whose `id`/`schemaFile`/
+    `pdfFile` are safe strings. A kit may declare a custom schema/pdf filename
+    (bd polyglot-pdf-snpi); these routes use the manifest's name. Three cases:
 
-    - **Manifest loads but does NOT list kit_id -> raise FormKitNotFound (404).**
-      The GCS deploy gate deliberately keeps draft/unmarked kits out of the
-      manifest (deploy-all.sh: only status:complete reaches it), so falling back
-      to convention here would let a guessed id fetch an unlisted/draft object the
-      public list never advertised (info leak). Draft access for the contractor
-      editor is a separate, token-gated route (epic polyglot-pdf-92qe, Bead 2).
-    - **No manifest at all (GCS with no index.json -> FormKitNotFound) -> fall back
-      to convention.** There is no allowlist to enforce, and convention is the only
-      way to read; this preserves the read-gap fix's purpose. (Local mode always
-      synthesizes a manifest by scanning the dir, so it never takes this branch.)
-    - **Manifest present but UNREADABLE (FormKitStoreError, e.g. a corrupt
-      index.json) -> propagate (502), do NOT fall back.** Falling back here would
-      bypass the allowlist whenever the manifest is malformed, re-exposing the
-      draft/unlisted objects the allowlist exists to hide (Codex P1, round 3).
-
-    Filenames from the manifest are kit-controlled, so they are run through
-    `safe_filename` before use -- a non-string/traversal value degrades to the
-    conventional name rather than escaping the kit dir.
+    - **Manifest loads but does NOT list kit_id -> FormKitNotFound (404).** The GCS
+      deploy gate keeps draft/unmarked kits out of the manifest, so serving a
+      guessed id would leak an object the public list never advertised. Draft
+      access for the contractor editor is a separate token-gated route (Bead 2).
+    - **Manifest MISSING (FormKitNotFound from load_manifest) -> fall back to
+      convention ONLY if `store.allow_convention_fallback`.** Local mode (True)
+      synthesizes its manifest from disk, so "missing" just means an empty root.
+      GCS (False) FAILS CLOSED: a missing index.json (partial deploy/deletion)
+      must not reopen convention reads of unlisted/draft blobs (Codex P1, round 5).
+    - **Manifest present but UNREADABLE/corrupt (FormKitStoreError) -> propagate
+      (502).** `normalize_manifest` raises this for a non-object manifest or a
+      non-list `forms`; not caught here, so the route fails closed.
     """
     schema_file, pdf_file = "schema.json", "form.pdf"
     try:
         manifest = await store.load_manifest()
     except FormKitNotFound:
-        # No manifest at all -> no allowlist to enforce; convention is the only read.
-        return schema_file, pdf_file
-    # A FormKitStoreError (corrupt/unreadable manifest) is NOT caught here: it must
-    # propagate so the route fails closed with 502 rather than silently bypassing
-    # the allowlist.
-    forms = manifest.get("forms", [])
-    if not isinstance(forms, list):
-        # A corrupt manifest whose "forms" is not a list is unreadable -> fail
-        # closed (502), not a silent allowlist bypass (Codex P1, round 4).
-        raise FormKitStoreError(f"Manifest 'forms' is not a list for kit {kit_id}")
-    for form in forms:
-        # A non-dict entry (e.g. [null, {...}]) must be skipped, not .get()'d into
-        # an AttributeError/500 -- a single bad entry can't break the lookup
-        # (Codex P1, round 4). safe_filename then handles non-string filenames.
-        if not isinstance(form, dict):
-            continue
-        if form.get("id") == kit_id:
-            return (
-                safe_filename(form.get("schemaFile") or schema_file, schema_file),
-                safe_filename(form.get("pdfFile") or pdf_file, pdf_file),
-            )
+        if getattr(store, "allow_convention_fallback", True):
+            return schema_file, pdf_file
+        # GCS with no index.json: fail closed rather than allow a guessed read.
+        raise
+    # A FormKitStoreError (corrupt/unreadable manifest) is NOT caught here: it
+    # propagates so the route fails closed with 502. The shape below is guaranteed
+    # by normalize_manifest, so no per-entry type guards are needed.
+    for form in manifest["forms"]:
+        if form["id"] == kit_id:
+            return form["schemaFile"], form["pdfFile"]
     # Manifest loaded but this kit is not in it -> not served (404, not fallback).
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
 
@@ -138,26 +121,20 @@ async def list_form_kits() -> FormKitManifestResponse:
     try:
         manifest = await store.load_manifest()
 
-        # Extract public metadata: id, label, description, and the storage PATHS
-        # (not the schema CONTENT). The paths are needed so a kit with a custom
-        # schema filename loads (bd polyglot-pdf-snpi); reconstructing
-        # `/<id>/schema.json` client-side 404s for such a kit. Fall back to the
-        # conventional paths when the manifest entry omits them (older manifests).
-        forms = []
-        for form in manifest.get("forms", []):
-            # Skip a non-dict entry (e.g. a hand-corrupted index.json with [null,
-            # {...}]) rather than AttributeError -> 500, matching the single-kit
-            # resolver's guard (the same bug class -- bd polyglot-pdf-sbfk).
-            if not isinstance(form, dict):
-                continue
-            kit_id = form.get("id", "")
-            forms.append(FormKitInfo(
-                id=kit_id,
-                label=form.get("label", form.get("id", "Unknown")),
-                description=form.get("description"),
-                schema_path=form.get("schemaPath") or f"/form-kits/{kit_id}/schema.json",
-                pdf_path=form.get("pdfPath") or f"/form-kits/{kit_id}/form.pdf",
-            ))
+        # `manifest` is NORMALIZED by the store (normalize_manifest): forms is a
+        # list of dicts whose id/label/schemaPath/pdfPath are safe strings, so this
+        # route needs no per-entry type guards. Each carries the kit's REAL storage
+        # paths (a custom schema filename loads -- bd polyglot-pdf-snpi).
+        forms = [
+            FormKitInfo(
+                id=form["id"],
+                label=form["label"],
+                description=form["description"],
+                schema_path=form["schemaPath"],
+                pdf_path=form["pdfPath"],
+            )
+            for form in manifest["forms"]
+        ]
 
         _log.info("form_kits_list_success", count=len(forms))
         return FormKitManifestResponse(forms=forms)

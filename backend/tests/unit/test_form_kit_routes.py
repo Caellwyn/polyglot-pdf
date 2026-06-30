@@ -20,14 +20,23 @@ import pytest
 from fastapi import HTTPException
 
 import backend.routes.form_kit_routes as fkr
-from backend.services.form_kits import FormKitNotFound, FormKitStoreError
+from backend.services.form_kits import (
+    FormKitNotFound,
+    FormKitStoreError,
+    normalize_manifest,
+)
 
 
 class _FakeStore:
-    def __init__(self, manifest=None, schema=None, pdf=None):
+    # Mirror a real store: a missing manifest may fall back to convention (local
+    # default). A test can flip this to False to exercise GCS fail-closed.
+    allow_convention_fallback = True
+
+    def __init__(self, manifest=None, schema=None, pdf=None, allow_convention_fallback=True):
         self._manifest = manifest
         self._schema = schema
         self._pdf = pdf
+        self.allow_convention_fallback = allow_convention_fallback
         # Records the filename the route asked for, so a test can assert the
         # route honored a custom manifest filename (bd polyglot-pdf-sbfk).
         self.requested_schema_file = None
@@ -36,7 +45,9 @@ class _FakeStore:
     async def load_manifest(self, manifest_file: str = "index.json") -> dict:
         if self._manifest is None:
             raise FormKitNotFound("no manifest")
-        return self._manifest
+        # Real stores normalize at the boundary; mirror that so the route sees the
+        # guaranteed-clean shape (a malformed manifest raises here, as in prod).
+        return normalize_manifest(self._manifest)
 
     async def load_schema(self, kit_id: str, schema_file: str = "schema.json") -> dict:
         self.requested_schema_file = schema_file
@@ -516,3 +527,95 @@ def test_gcs_non_utf8_manifest_maps_to_502(monkeypatch):
 
     with pytest.raises(_FKSE):
         _asyncio.get_event_loop().run_until_complete(store.load_manifest())
+
+
+# --- round-5: normalize at the store boundary + GCS fail-closed (Codex P1) --
+
+
+def test_normalize_manifest_rejects_non_object_and_non_list_forms():
+    # The trust boundary: a structurally-corrupt manifest is unreadable -> raise
+    # FormKitStoreError (the route maps it to 502), not an AttributeError 500.
+    for bad in ([], "a string", 123, None):
+        with pytest.raises(FormKitStoreError):
+            normalize_manifest(bad)
+    with pytest.raises(FormKitStoreError):
+        normalize_manifest({"forms": "not-a-list"})
+
+
+def test_normalize_manifest_coerces_and_skips_entries():
+    raw = {
+        "forms": [
+            None,                                   # non-dict entry -> skipped
+            {"no": "id"},                           # no usable id -> skipped
+            {"id": "ok", "label": ["not", "str"]},  # non-string label -> id
+            {"id": "ok2", "schemaFile": "../x.json"},  # traversal -> default
+        ]
+    }
+    out = normalize_manifest(raw)
+    by_id = {f["id"]: f for f in out["forms"]}
+    assert set(by_id) == {"ok", "ok2"}
+    assert by_id["ok"]["label"] == "ok"                 # coerced to id
+    assert by_id["ok2"]["schemaFile"] == "schema.json"  # traversal degraded
+    assert by_id["ok2"]["schemaPath"] == "/form-kits/ok2/schema.json"
+
+
+def test_non_object_manifest_route_fails_closed_502(monkeypatch):
+    # A manifest that is valid JSON but the wrong top-level shape (a list) must
+    # 502 via the route, not AttributeError 500 (Codex P1, round 5).
+    store = _FakeStore(manifest=[], schema={"ok": True})
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("i90"))
+    assert exc.value.status_code == 502
+
+
+def test_non_string_label_does_not_500_the_list_route(monkeypatch):
+    # A non-string label must not break /api/form-kits via Pydantic (Codex P1, r5).
+    manifest = {"forms": [{"id": "i90", "label": ["bad"]}]}
+    store = _FakeStore(manifest=manifest)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    resp = _run(fkr.list_form_kits())
+    assert resp.forms[0].id == "i90"
+    assert resp.forms[0].label == "i90"  # coerced to the id
+
+
+def test_non_dict_schema_does_not_crash_local_label(tmp_path, monkeypatch):
+    # A custom schema file that is valid JSON but a list ([]) must not crash
+    # manifest GENERATION on .get("title") -- label falls back to the id (r5).
+    from backend.services.form_kits import LocalFormKitStore
+
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "schema.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+
+    store = LocalFormKitStore(tmp_path)
+    manifest = _run(store.load_manifest())
+    entry = next(f for f in manifest["forms"] if f["id"] == "i-90")
+    assert entry["label"] == "i-90"
+
+
+def test_gcs_missing_manifest_fails_closed(monkeypatch):
+    # GCS mode (allow_convention_fallback=False): a MISSING manifest must NOT fall
+    # back to convention reads of guessed/unlisted blobs -- it fails closed (the
+    # FormKitNotFound propagates -> 404), not a 200 of a draft object (Codex P1 r5).
+    store = _FakeStore(manifest=None, schema={"secret": True}, allow_convention_fallback=False)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("guessed"))
+    assert exc.value.status_code == 404
+    # The store's schema read must never have been reached.
+    assert store.requested_schema_file is None
+
+
+def test_local_missing_manifest_still_falls_back(monkeypatch):
+    # Local mode (allow_convention_fallback=True): a missing manifest still falls
+    # back to convention so a conventional kit reads without an index.json.
+    store = _FakeStore(manifest=None, schema={"ok": True}, allow_convention_fallback=True)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    resp = _run(fkr.get_form_kit_schema("i90"))
+    assert json.loads(resp.body) == {"ok": True}
+    assert store.requested_schema_file == "schema.json"

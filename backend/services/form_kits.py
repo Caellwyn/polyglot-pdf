@@ -49,8 +49,67 @@ class FormKitNotFound(FormKitStoreError):
 	"""Raised when a kit or requested file cannot be located."""
 
 
+def _safe_str(value: Any, default: str) -> str:
+	"""Return `value` if it is a non-empty string, else `default`.
+
+	For untrusted display fields (label) that a downstream typed model requires to
+	be a string -- a non-string would otherwise raise a Pydantic/`TypeError` 500.
+	"""
+	return value if isinstance(value, str) and value else default
+
+
+def normalize_manifest(raw: Any) -> dict:
+	"""Validate + normalize an untrusted manifest into a guaranteed-clean shape.
+
+	THE trust boundary for manifest JSON (bd polyglot-pdf-sbfk). `index.json` (GCS)
+	and the synthesized local manifest are both kit-controlled, so every consumer
+	(`list_form_kits`, the single-kit resolver) would otherwise have to re-validate
+	the shape -- and a missed spot is an uncaught 500. Normalizing ONCE here means
+	downstream code can trust the result: a dict with `forms` = list[dict], each
+	form's `id`/`label`/`schemaFile`/`pdfFile`/paths a safe string, with
+	`schemaFile`/`pdfFile` run through `safe_filename`.
+
+	A structurally-corrupt manifest (top-level not a dict, or `forms` not a list)
+	is unreadable -> `FormKitStoreError` (the caller fails closed with 502). A
+	non-dict ENTRY inside `forms` is skipped (one bad row can't drop the rest).
+	"""
+	if not isinstance(raw, dict):
+		raise FormKitStoreError(f"Manifest is not an object: {type(raw).__name__}")
+	raw_forms = raw.get("forms", [])
+	if not isinstance(raw_forms, list):
+		raise FormKitStoreError(f"Manifest 'forms' is not a list: {type(raw_forms).__name__}")
+
+	forms = []
+	for entry in raw_forms:
+		if not isinstance(entry, dict):
+			continue  # skip a corrupt non-dict row, don't fail the whole manifest
+		kit_id = _safe_str(entry.get("id"), "")
+		if not kit_id:
+			continue  # an entry with no usable id is unaddressable -> drop it
+		schema_file = safe_filename(entry.get("schemaFile") or "schema.json", "schema.json")
+		pdf_file = safe_filename(entry.get("pdfFile") or "form.pdf", "form.pdf")
+		forms.append({
+			"id": kit_id,
+			"label": _safe_str(entry.get("label"), kit_id),
+			"description": entry.get("description") if isinstance(entry.get("description"), str) else None,
+			"schemaFile": schema_file,
+			"schemaPath": _safe_str(entry.get("schemaPath"), f"/form-kits/{kit_id}/{schema_file}"),
+			"pdfFile": pdf_file,
+			"pdfPath": _safe_str(entry.get("pdfPath"), f"/form-kits/{kit_id}/{pdf_file}"),
+		})
+	return {"forms": forms}
+
+
 class FormKitStore:
 	"""Minimal async interface for loading kit assets."""
+
+	# Whether a MISSING manifest (FormKitNotFound from load_manifest) may fall back
+	# to convention-named reads. True for local (the manifest is synthesized from
+	# disk, so "missing" just means an empty/absent root -- nothing to leak). False
+	# for GCS: a missing index.json (partial deploy, deletion, wrong prefix) must
+	# NOT reopen convention reads of unlisted/draft blobs the manifest gate hides
+	# (Codex P1, round 5 -- fail closed). Subclasses override.
+	allow_convention_fallback: bool = True
 
 	async def load_schema(self, kit_id: str, schema_file: str = "schema.json") -> dict:
 		raise NotImplementedError
@@ -111,7 +170,7 @@ class LocalFormKitStore(FormKitStore):
 		forms = []
 		if not self.root.exists():
 			_log.warning("form_kits.local_root_missing_for_manifest", root=str(self.root))
-			return {"forms": forms}
+			return normalize_manifest({"forms": forms})
 
 		for kit_dir in self.root.iterdir():
 			if not kit_dir.is_dir():
@@ -121,45 +180,40 @@ class LocalFormKitStore(FormKitStore):
 
 			# A kit may declare custom schema/pdf filenames + a label via
 			# metadata.json (the same keys deploy-all.sh and the editor use:
-			# bd polyglot-pdf-snpi). Read it first so a custom-filename kit is
-			# listed with its REAL names -- otherwise the single-kit read routes
-			# resolve to schema.json/form.pdf and 404 (Codex P1 on sbfk).
+			# bd polyglot-pdf-snpi). normalize_manifest (below) does the type +
+			# filename coercion; here we only need a dict to read fields from, so a
+			# non-dict metadata.json is treated as absent.
 			meta = {}
 			meta_path = kit_dir / "metadata.json"
 			if meta_path.exists():
 				try:
 					loaded = json.loads(meta_path.read_text(encoding="utf-8"))
-					# metadata.json is user-managed; valid JSON can still be a
-					# list/str/number. Only a dict has the fields we read -- treat
-					# anything else as absent so one malformed kit doesn't break the
-					# whole manifest with an AttributeError (Codex P1, round 3).
 					meta = loaded if isinstance(loaded, dict) else {}
 				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					meta = {}
 
-			# The schema/pdf names from metadata are kit-controlled -> sanitize
-			# HERE too (not only at the route resolver), or this generator would
-			# read outside the kit dir while probing existence / the label and
-			# advertise a traversal schemaPath (Codex P1, round 4).
+			# Sanitize the schema name HERE for the on-disk existence probe (the
+			# generator reads from disk, so a traversal name must not escape the
+			# kit dir even before normalize_manifest re-sanitizes the emitted value).
 			schema_file = safe_filename(meta.get("schema") or "schema.json", "schema.json")
 			schema_path = kit_dir / schema_file
 			if not schema_path.exists():
 				continue
 
-			# Label: prefer metadata, else the schema title, else the id. A kit
-			# whose schema is malformed/unreadable must not break manifest
-			# GENERATION (its single-kit read route will surface the 502); fall
-			# back to the id for the label here.
+			# Label: prefer metadata, else the schema title, else the id. Guard the
+			# parsed schema: valid JSON can be a non-dict ([]), and a malformed or
+			# unreadable schema must not break GENERATION (its read route surfaces
+			# the 502) -- fall back to the id (Codex P1, rounds 4-5).
 			label = meta.get("label")
 			if not label:
+				label = kit_id
 				try:
 					schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
-					label = schema_data.get("title", kit_id)
+					if isinstance(schema_data, dict):
+						label = schema_data.get("title", kit_id)
 				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					label = kit_id
 
-			# PDF file: metadata override (sanitized), else form.pdf, else the
-			# first *.pdf.
 			pdf_file = safe_filename(meta.get("pdf") or "form.pdf", "form.pdf")
 			if not (kit_dir / pdf_file).exists():
 				pdf_files = list(kit_dir.glob("*.pdf"))
@@ -177,11 +231,19 @@ class LocalFormKitStore(FormKitStore):
 			})
 
 		_log.info("form_kits.local_manifest_generated", count=len(forms))
-		return {"forms": forms}
+		# Normalize for shape parity with GCS (and so a future on-disk index.json
+		# path would get the same guarantees); the generated rows are already clean.
+		return normalize_manifest({"forms": forms})
 
 
 class GCSFormKitStore(FormKitStore):
 	"""Form kit store using authenticated Google Cloud Storage client."""
+
+	# A missing index.json in GCS must NOT fall back to convention reads -- that
+	# would reopen unlisted/draft blobs the complete-only manifest gate hides
+	# (Codex P1, round 5). Local mode synthesizes its manifest, so it keeps the
+	# base default (True).
+	allow_convention_fallback: bool = False
 
 	def __init__(self, bucket_name: str, prefix: Optional[str] = None):
 		from google.cloud import storage
@@ -239,11 +301,15 @@ class GCSFormKitStore(FormKitStore):
 
 		data = await self._fetch_bytes(blob_path)
 		try:
-			return json.loads(data.decode("utf-8"))
+			raw = json.loads(data.decode("utf-8"))
 		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
 			# UnicodeDecodeError too (non-UTF-8 index.json): without it the resolver
 			# leaks an uncaught 500 instead of the fail-closed 502 (Codex P1, r4).
 			raise FormKitStoreError(f"Invalid manifest at gs://{self.bucket_name}/{blob_path}: {exc}") from exc
+		# normalize_manifest validates the SHAPE (a non-object or non-list 'forms'
+		# raises FormKitStoreError) so the resolver/list route never see a malformed
+		# manifest (Codex P1, round 5).
+		return normalize_manifest(raw)
 
 
 @lru_cache(maxsize=1)
