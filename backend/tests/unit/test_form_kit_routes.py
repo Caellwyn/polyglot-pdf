@@ -20,7 +20,7 @@ import pytest
 from fastapi import HTTPException
 
 import backend.routes.form_kit_routes as fkr
-from backend.services.form_kits import FormKitNotFound
+from backend.services.form_kits import FormKitNotFound, FormKitStoreError
 
 
 class _FakeStore:
@@ -312,6 +312,91 @@ def test_local_store_malformed_schema_maps_to_502(tmp_path, monkeypatch):
     kit_dir = tmp_path / "i-90"
     kit_dir.mkdir()
     (kit_dir / "schema.json").write_text("{ not valid json", encoding="utf-8")
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("i-90"))
+    assert exc.value.status_code == 502
+
+
+# --- round-3 fail-closed / validation hardening (Codex P1) ------------------
+
+
+def test_corrupt_manifest_fails_closed_502(monkeypatch):
+    # A manifest that loads-but-can't-be-parsed (FormKitStoreError) must NOT fall
+    # back to convention -- that would bypass the allowlist. It maps to 502.
+    class _CorruptManifestStore:
+        async def load_manifest(self, manifest_file: str = "index.json") -> dict:
+            raise FormKitStoreError("corrupt index.json")
+
+        async def load_schema(self, *a, **k):
+            raise AssertionError("store schema read reached despite corrupt manifest")
+
+        async def load_pdf_bytes(self, *a, **k):
+            raise AssertionError("store pdf read reached despite corrupt manifest")
+
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: _CorruptManifestStore())
+
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("i-90"))
+    assert exc.value.status_code == 502
+
+    with pytest.raises(HTTPException) as exc2:
+        _run(fkr.get_form_kit_pdf("i-90"))
+    assert exc2.value.status_code == 502
+
+
+def test_traversal_filename_in_metadata_degrades_to_default(monkeypatch):
+    # A listed kit whose manifest carries a traversal schemaFile must NOT escape
+    # the kit dir -- _safe_filename degrades it to the conventional schema.json.
+    manifest = {"forms": [{"id": "i90", "schemaFile": "../other/schema.json"}]}
+    store = _FakeStore(manifest=manifest, schema={"ok": True})
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    _run(fkr.get_form_kit_schema("i90"))
+    assert store.requested_schema_file == "schema.json"
+
+
+def test_safe_filename_helper_rejects_separators_and_traversal():
+    assert fkr._safe_filename("custom.json", "schema.json") == "custom.json"
+    assert fkr._safe_filename("../x.json", "schema.json") == "schema.json"
+    assert fkr._safe_filename("a/b.json", "schema.json") == "schema.json"
+    assert fkr._safe_filename("a\\b.json", "schema.json") == "schema.json"
+    assert fkr._safe_filename("", "schema.json") == "schema.json"
+
+
+def test_non_dict_local_metadata_is_ignored(tmp_path, monkeypatch):
+    # metadata.json that is valid JSON but a LIST must not crash the manifest /
+    # routes -- it is treated as absent, and the kit reads conventionally.
+    from backend.services.form_kits import LocalFormKitStore
+
+    schema = {"title": "Listy"}
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "metadata.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+    (kit_dir / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    (kit_dir / "form.pdf").write_bytes(b"%PDF")
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+
+    # Manifest generation must not raise on the non-dict metadata.
+    manifest = _run(store.load_manifest())
+    assert any(f["id"] == "i-90" for f in manifest["forms"])
+
+    schema_resp = _run(fkr.get_form_kit_schema("i-90"))
+    assert json.loads(schema_resp.body) == schema
+
+
+def test_non_utf8_schema_maps_to_502(tmp_path, monkeypatch):
+    # A present schema whose bytes are not valid UTF-8 -> 502, not an uncaught 500.
+    from backend.services.form_kits import LocalFormKitStore
+
+    kit_dir = tmp_path / "i-90"
+    kit_dir.mkdir()
+    (kit_dir / "schema.json").write_bytes(b"\xff\xfe not utf8")
 
     store = LocalFormKitStore(tmp_path)
     monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)

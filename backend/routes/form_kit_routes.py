@@ -45,6 +45,26 @@ def _safe_kit_id(kit_id: str) -> str:
     return kit_id
 
 
+# A schema/pdf filename comes from kit-controlled metadata (metadata.json /
+# index.json), so it is untrusted: it must be a bare filename within the kit dir,
+# never a path separator or traversal. Without this, a listed kit's metadata
+# saying "../other/schema.json" would read outside its own dir despite the
+# kit-id guard (Codex P1 on bd polyglot-pdf-sbfk).
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _safe_filename(name: str, default: str) -> str:
+    """Return name if it is a safe bare filename, else fall back to default.
+
+    Falls back (rather than 400) so a malformed metadata filename degrades to the
+    conventional name instead of failing a kit the manifest does list; a default
+    that is itself unsafe would be a programmer error, not user input.
+    """
+    if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
+        return default
+    return name
+
+
 async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     """Return (schema_file, pdf_file) for a kit, honoring custom manifest names.
 
@@ -59,21 +79,33 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
       to convention here would let a guessed id fetch an unlisted/draft object the
       public list never advertised (info leak). Draft access for the contractor
       editor is a separate, token-gated route (epic polyglot-pdf-92qe, Bead 2).
-    - **No manifest at all (GCS with no index.json) -> fall back to convention.**
-      There is no allowlist to enforce, and convention is the only way to read;
-      this preserves the read-gap fix's purpose. (Local mode always synthesizes a
-      manifest by scanning the dir, so it never takes this branch.)
+    - **No manifest at all (GCS with no index.json -> FormKitNotFound) -> fall back
+      to convention.** There is no allowlist to enforce, and convention is the only
+      way to read; this preserves the read-gap fix's purpose. (Local mode always
+      synthesizes a manifest by scanning the dir, so it never takes this branch.)
+    - **Manifest present but UNREADABLE (FormKitStoreError, e.g. a corrupt
+      index.json) -> propagate (502), do NOT fall back.** Falling back here would
+      bypass the allowlist whenever the manifest is malformed, re-exposing the
+      draft/unlisted objects the allowlist exists to hide (Codex P1, round 3).
+
+    Filenames from the manifest are kit-controlled, so they are run through
+    `_safe_filename` before use -- a traversal value degrades to the conventional
+    name rather than escaping the kit dir.
     """
     schema_file, pdf_file = "schema.json", "form.pdf"
     try:
         manifest = await store.load_manifest()
-    except (FormKitNotFound, FormKitStoreError):
+    except FormKitNotFound:
+        # No manifest at all -> no allowlist to enforce; convention is the only read.
         return schema_file, pdf_file
+    # A FormKitStoreError (corrupt/unreadable manifest) is NOT caught here: it must
+    # propagate so the route fails closed with 502 rather than silently bypassing
+    # the allowlist.
     for form in manifest.get("forms", []):
         if form.get("id") == kit_id:
             return (
-                form.get("schemaFile") or schema_file,
-                form.get("pdfFile") or pdf_file,
+                _safe_filename(form.get("schemaFile") or schema_file, schema_file),
+                _safe_filename(form.get("pdfFile") or pdf_file, pdf_file),
             )
     # Manifest loaded but this kit is not in it -> not served (404, not fallback).
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")

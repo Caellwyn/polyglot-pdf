@@ -58,7 +58,7 @@ class LocalFormKitStore(FormKitStore):
 			return await anyio.to_thread.run_sync(
 				lambda: json.loads(path.read_text(encoding="utf-8"))
 			)
-		except (json.JSONDecodeError, OSError) as exc:
+		except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
 			raise FormKitStoreError(
 				f"Invalid or unreadable schema for {kit_id}/{schema_file}: {exc}"
 			) from exc
@@ -102,8 +102,13 @@ class LocalFormKitStore(FormKitStore):
 			meta_path = kit_dir / "metadata.json"
 			if meta_path.exists():
 				try:
-					meta = json.loads(meta_path.read_text(encoding="utf-8"))
-				except (json.JSONDecodeError, IOError):
+					loaded = json.loads(meta_path.read_text(encoding="utf-8"))
+					# metadata.json is user-managed; valid JSON can still be a
+					# list/str/number. Only a dict has the fields we read -- treat
+					# anything else as absent so one malformed kit doesn't break the
+					# whole manifest with an AttributeError (Codex P1, round 3).
+					meta = loaded if isinstance(loaded, dict) else {}
+				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					meta = {}
 
 			schema_file = meta.get("schema") or "schema.json"
@@ -111,13 +116,16 @@ class LocalFormKitStore(FormKitStore):
 			if not schema_path.exists():
 				continue
 
-			# Label: prefer metadata, else the schema title, else the id.
+			# Label: prefer metadata, else the schema title, else the id. A kit
+			# whose schema is malformed/unreadable must not break manifest
+			# GENERATION (its single-kit read route will surface the 502); fall
+			# back to the id for the label here.
 			label = meta.get("label")
 			if not label:
 				try:
 					schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
 					label = schema_data.get("title", kit_id)
-				except (json.JSONDecodeError, IOError):
+				except (json.JSONDecodeError, OSError, UnicodeDecodeError):
 					label = kit_id
 
 			# PDF file: metadata override, else form.pdf, else the first *.pdf.
@@ -184,9 +192,9 @@ class GCSFormKitStore(FormKitStore):
 		data = await self._fetch_bytes(blob_path)
 		try:
 			return json.loads(data.decode("utf-8"))
-		except json.JSONDecodeError as exc:
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
 			raise FormKitStoreError(
-				f"Invalid schema JSON for {kit_id}/{schema_file}: {exc}"
+				f"Invalid schema for {kit_id}/{schema_file}: {exc}"
 			) from exc
 
 	async def load_pdf_bytes(self, kit_id: str, pdf_filename: str) -> bytes:

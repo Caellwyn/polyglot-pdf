@@ -64,7 +64,7 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
 | WS | `/ws/vad-config` | VAD config socket (declared on `app` directly in `main.py`). `standards/voice-and-vad.md` |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized). `standards/confirmation-and-audit.md` |
-| GET | `/api/form-kits` | Form-kit manifest (metadata only, complete-only). `components/pdf-filling.md` |
+| GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). `components/pdf-filling.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). |
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |

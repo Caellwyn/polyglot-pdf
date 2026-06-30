@@ -69,12 +69,30 @@ trailing-newline ids (`i-90\n`, `\r`), each asserting the store is never reached
 custom-filename resolution (manifest + local `metadata.json`); no-manifest
 fallback; manifest-loaded-but-kit-absent -> 404; and local malformed-JSON -> 502.
 
+Round-3 hardening (Codex P1, after the round-2 metadata/allowlist work surfaced
+adjacent edges): a corrupt/unreadable manifest (`FormKitStoreError`) now FAILS
+CLOSED with 502 instead of falling back to convention (only a truly missing
+manifest falls back) -- a malformed manifest must not bypass the allowlist;
+manifest-supplied `schemaFile`/`pdfFile` are run through `_safe_filename`
+(separator/`..` reject -> degrade to the conventional name) so a traversal value
+in kit-controlled metadata can't escape the kit dir; non-dict local `metadata.json`
+(valid JSON that is a list/str/number) is treated as absent rather than crashing
+the manifest with `AttributeError`; a non-UTF-8 schema now maps to 502
+(`UnicodeDecodeError` is wrapped in both stores and tolerated in local manifest
+generation); and the route-table doc no longer calls the manifest "complete-only"
+unconditionally (local mode is ungated).
+
 Pre-PR assess: exit-criteria rubric all PASS; fresh-eyes loop NO-GAPS (1 gap found
-+ fixed: added the LocalFormKitStore-backed test). Codex outer review: 2 rounds.
-Round 1 (3 P1) + round 2 (5 P1) -- adopted the custom-filename resolution, the
-local-502 mapping, the manifest-allowlist 404, the trailing-newline `fullmatch`
-fix, and this doc correction; deferred only the "wire the browser" finding to
-Bead 3. No out-of-scope beads filed.
++ fixed: added the LocalFormKitStore-backed test). Codex outer review: 3 rounds
+(3 + 5 + 5 P1). Adopted every code finding -- custom-filename resolution, the
+local/GCS 502 mappings (malformed JSON, OSError, UnicodeDecodeError), the
+manifest-allowlist 404 + fail-closed-on-corrupt, the metadata filename
+sanitization, the non-dict-metadata guard, the trailing-newline `fullmatch` fix,
+and the doc corrections. Deferred only the recurring "wire the browser to these
+/api routes" finding to Bead 3 (it would change the voice app's manifest contract,
+out of scope for this read slice). Closeout hit the MAX_REVIEW_ROUNDS=2 iteration
+cap; per doctrine the post-round-3 state was escalated to the maintainer rather
+than auto-looping a 4th round. No out-of-scope beads filed.
 
 ## Lessons
 
