@@ -403,6 +403,18 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('Escape closes the guide and persists the dismissal', async () => {
+    await passGate();
+    expect(
+      screen.getByRole('dialog', { name: 'Getting started guide' }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(
+      screen.queryByRole('dialog', { name: 'Getting started guide' }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem('schema-editor.guideSeen')).toBe('1');
+  });
+
   it('Help reopens the dismissed guide', async () => {
     await passGate();
     fireEvent.click(screen.getByText('Got it'));

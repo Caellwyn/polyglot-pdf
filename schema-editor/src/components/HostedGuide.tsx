@@ -56,6 +56,19 @@ export const HostedGuide: React.FC<HostedGuideProps> = ({ onClose }) => {
     markGuideSeen();
     onClose();
   };
+  // Escape closes the overlay (modal convention). Capture phase + a consumed
+  // default so FieldList's window listener doesn't ALSO deselect the field
+  // behind the modal (it honors e.defaultPrevented; Opus review, PR #284).
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      close();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
