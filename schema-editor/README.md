@@ -56,6 +56,24 @@ npm run dev
 - 🟡 **Yellow** - Needs review (missing help text or spoken name)
 - 🔴 **Red** - Error (missing required properties)
 
+## Hosted mode (contractors)
+
+The editor has a second delivery mode for contractors (bd polyglot-pdf-92qe.2):
+built with `npm run build:hosted` (`VITE_DELIVERY_MODE=hosted`, config in
+`.env.hosted`), it lists/edits kits from the backend's token-gated
+`/api/editor/*` routes (the shared GCS store) instead of a local folder.
+
+- Open the hosted URL, enter the **access code** you were given (remembered per
+  browser). The code maps to a tier: **editor** (polish provided forms) or
+  **author** (also onboard PDFs + run extraction -- UI lands with bd 92qe.3).
+- The catalogue shows every kit in the shared workspace, drafts included.
+- Cmd/Ctrl+S saves back to the shared store; **Mark complete** flips the kit's
+  status (the server validates the schema first -- a broken schema is refused
+  with the reason). Completed kits ship with the maintainer's next deploy.
+- Save As / Reload-from-file / the folder picker don't exist in hosted mode.
+
+Local dev (`npm run dev`) is unchanged -- the flag defaults off.
+
 ## Adding New Forms
 
 The editor is a stand-alone PDF -> schema tool when run locally:
