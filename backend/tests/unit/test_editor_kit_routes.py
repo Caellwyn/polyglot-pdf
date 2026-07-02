@@ -159,6 +159,26 @@ def test_require_author_role_rejects_editor():
     assert _run(ekr.require_author_role("author")) == "author"
 
 
+def test_non_ascii_access_code_is_401_not_500(client, monkeypatch):
+    # hmac.compare_digest on str raises TypeError for non-ASCII (a pasted smart
+    # quote); the compare must run over bytes so a malformed wrong code stays a
+    # clean 401 (Codex P1, PR #279). Exercised at the dependency level (HTTP
+    # headers are latin-1 on the wire; the failure mode is the decoded str).
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
+    )
+    with pytest.raises(HTTPException) as exc:
+        # \u2019 = a right single "smart" quote; the escape keeps the
+        # SOURCE ASCII (repo rule) while the runtime string is non-ASCII.
+        _run(ekr.require_editor_role(x_editor_token="sm\u2019art-quote"))
+    assert exc.value.status_code == 401
+    # And a correct code containing non-ASCII still matches (bytes both sides).
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="caf\u00e9-tok")
+    )
+    assert _run(ekr.require_editor_role(x_editor_token="caf\u00e9-tok")) == "editor"
+
+
 # --- store write methods: LocalFormKitStore round-trips ---------------------
 
 
@@ -312,6 +332,152 @@ def test_gcs_upload_failure_maps_to_store_error():
     store._not_found_exc = _FakeNotFound
     with pytest.raises(FormKitStoreError):
         _run(store.put_schema("i-90", {"fields": []}))
+
+
+def test_gcs_metadata_download_failure_maps_to_store_error():
+    # A NON-NotFound storage failure (transient service error, permissions) on
+    # the metadata read must surface as FormKitStoreError like every other GCS
+    # method -- callers only catch that, so a raw google exception would become
+    # an uncaught 500 (Codex P1, PR #279).
+    class _BoomBlob:
+        def download_as_bytes(self):
+            raise RuntimeError("503 backend error")
+
+    class _BoomBucket:
+        def blob(self, name):
+            return _BoomBlob()
+
+    store = GCSFormKitStore.__new__(GCSFormKitStore)
+    store.bucket_name = "bucket"
+    store.prefix = "form-kits"
+    store._bucket = _BoomBucket()
+    store._not_found_exc = _FakeNotFound
+    with pytest.raises(FormKitStoreError):
+        _run(store.load_metadata("i-90"))
+
+
+# --- the publish gate: WIP must never leak to the public surface ------------
+# (Codex P1, PR #279: a lenient draft save over a manifest-listed kit's schema
+# would stream to voice users immediately. Three-part fix under test here:
+# the save-guard on complete kits, the public read gate honoring LIVE status
+# on enforcing stores, and the public list filtering reverted kits.)
+
+
+class _PublishedStore:
+    """GCS-shaped fake: manifest lists the kit; live metadata is mutable."""
+
+    allow_convention_fallback = False
+    enforce_complete_on_public_reads = True
+
+    def __init__(self, status="complete"):
+        self.status = status
+        self.saved = None
+
+    async def load_manifest(self, manifest_file="index.json"):
+        return {"forms": [{"id": "live-kit", "label": "Live",
+                           "description": None,
+                           "schemaFile": "schema.json",
+                           "schemaPath": "/form-kits/live-kit/schema.json",
+                           "pdfFile": "form.pdf",
+                           "pdfPath": "/form-kits/live-kit/form.pdf"}]}
+
+    async def list_kit_files(self):
+        return {"live-kit": ["form.pdf", "metadata.json", "schema.json"]}
+
+    async def load_metadata(self, kit_id):
+        if self.status is None:
+            return None
+        return {"status": self.status, "label": "Live"}
+
+    async def load_schema(self, kit_id, schema_file="schema.json"):
+        return {"fields": []}
+
+    async def load_pdf_bytes(self, kit_id, pdf_file="form.pdf"):
+        return b"%PDF"
+
+    async def put_schema(self, kit_id, schema, schema_file="schema.json"):
+        self.saved = (kit_id, schema, schema_file)
+
+
+def test_put_schema_refuses_published_kit(client, monkeypatch):
+    # Saving over a COMPLETE kit would go live instantly -- refuse with the
+    # revert-first message; the store write must never be reached.
+    c, _store, _root = client
+    store = _PublishedStore(status="complete")
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+    r = c.put(
+        "/api/editor/kits/live-kit/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": []},
+    )
+    assert r.status_code == 409
+    assert "Revert it to draft" in r.json()["detail"]
+    assert store.saved is None
+    # After the revert, the same save lands.
+    store.status = "draft"
+    r2 = c.put(
+        "/api/editor/kits/live-kit/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": []},
+    )
+    assert r2.status_code == 200
+    assert store.saved is not None
+
+
+def test_public_reads_honor_live_status_on_enforcing_store(monkeypatch):
+    # GCS-shaped store: a kit reverted to draft unpublishes IMMEDIATELY --
+    # the public schema/pdf reads 404 even though the manifest still lists it.
+    store = _PublishedStore(status="draft")
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("live-kit"))
+    assert exc.value.status_code == 404
+    with pytest.raises(HTTPException) as exc2:
+        _run(fkr.get_form_kit_pdf("live-kit"))
+    assert exc2.value.status_code == 404
+    # Complete -> served.
+    store.status = "complete"
+    assert json.loads(_run(fkr.get_form_kit_schema("live-kit")).body) == {"fields": []}
+    # MISSING metadata on an enforcing store fails closed too (every
+    # legitimately deployed/onboarded kit carries metadata.json).
+    store.status = None
+    with pytest.raises(HTTPException) as exc3:
+        _run(fkr.get_form_kit_schema("live-kit"))
+    assert exc3.value.status_code == 404
+
+
+def test_public_read_metadata_store_error_fails_closed_502(monkeypatch):
+    store = _PublishedStore(status="complete")
+
+    async def _boom(kit_id):
+        raise FormKitStoreError("metadata read failed")
+
+    store.load_metadata = _boom
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+    with pytest.raises(HTTPException) as exc:
+        _run(fkr.get_form_kit_schema("live-kit"))
+    assert exc.value.status_code == 502
+
+
+def test_public_list_filters_reverted_kits_on_enforcing_store(monkeypatch):
+    store = _PublishedStore(status="draft")
+    monkeypatch.setattr(fkr, "get_form_kit_store", lambda: store)
+    assert _run(fkr.list_form_kits()).forms == []
+    store.status = "complete"
+    assert [f.id for f in _run(fkr.list_form_kits()).forms] == ["live-kit"]
+
+
+def test_local_store_public_reads_stay_ungated(client):
+    # Local mode is ungated by design: a draft kit's schema stays publicly
+    # readable (dev serves drafts on purpose). The flag, not the status, gates.
+    _c, store, root = client
+    _make_kit(root, "draft-kit", status="draft", schema={"fields": []})
+    import backend.routes.form_kit_routes as _fkr
+    import pytest as _pytest
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_fkr, "get_form_kit_store", lambda: store)
+        resp = _run(_fkr.get_form_kit_schema("draft-kit"))
+        assert json.loads(resp.body) == {"fields": []}
 
 
 # --- the editor list: drafts included (the manifest-bypass linchpin) --------

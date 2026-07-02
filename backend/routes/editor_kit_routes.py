@@ -57,6 +57,16 @@ ROLE_EDITOR = "editor"
 ROLE_AUTHOR = "author"
 
 
+def _token_matches(supplied: str, expected: str) -> bool:
+    """Constant-time token compare over UTF-8 BYTES.
+
+    hmac.compare_digest on str raises TypeError for non-ASCII input, so a
+    pasted smart-quote in a wrong access code would turn an auth miss into a
+    500 instead of the documented 401 (Codex P1, PR #279). Bytes never raise.
+    """
+    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
 async def require_editor_role(
     x_editor_token: Annotated[Optional[str], Header()] = None,
 ) -> str:
@@ -64,8 +74,8 @@ async def require_editor_role(
 
     Returns "author" or "editor". Fail-closed: with NEITHER token configured the
     surface is disabled (503, not open); a missing/wrong token is 401. Tokens are
-    compared with hmac.compare_digest (constant-time). The author token implies
-    every editor capability, so routes that need only editor accept both.
+    compared constant-time over bytes (see _token_matches). The author token
+    implies every editor capability, so routes that need only editor accept both.
     """
     settings = get_settings()
     editor_token = settings.SCHEMA_EDITOR_TOKEN
@@ -76,9 +86,9 @@ async def require_editor_role(
             detail="The editor surface is not configured on this server",
         )
     supplied = x_editor_token or ""
-    if author_token and hmac.compare_digest(supplied, author_token):
+    if author_token and _token_matches(supplied, author_token):
         return ROLE_AUTHOR
-    if editor_token and hmac.compare_digest(supplied, editor_token):
+    if editor_token and _token_matches(supplied, editor_token):
         return ROLE_EDITOR
     raise HTTPException(status_code=401, detail="Invalid or missing access code")
 
@@ -286,6 +296,19 @@ async def save_editor_kit_schema(
         )
     store = get_form_kit_store()
     meta, _ = await _load_meta_or_404(store, kit_id)
+    # A PUBLISHED (complete) kit's schema blob is exactly what the public read
+    # routes stream to voice users, so a lenient draft save over it would go
+    # live instantly, bypassing the promote-time validation gate (Codex P1,
+    # PR #279). Require the explicit revert-to-draft first -- which unpublishes
+    # the kit immediately (the public routes honor live status on the shared
+    # store), so work-in-progress never reaches users.
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft first, then edit -- otherwise work-in-progress would "
+                   "go live to users immediately.",
+        )
     schema_file, _pdf = _resolve_meta_names(meta)
     try:
         await store.put_schema(kit_id, schema, schema_file)

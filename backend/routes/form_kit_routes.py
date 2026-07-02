@@ -9,6 +9,7 @@ GCS mode nothing else serves those bytes to the browser (the manifest returns
 storage PATHS, but no host route backs them -- bd polyglot-pdf-sbfk).
 """
 
+import asyncio
 import re
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Response
@@ -85,6 +86,30 @@ async def _resolve_kit_filenames(store, kit_id: str) -> tuple[str, str]:
     raise FormKitNotFound(f"Kit not in manifest: {kit_id}")
 
 
+async def _require_published(store, kit_id: str) -> None:
+    """Refuse to serve a kit whose LIVE metadata status is not "complete", on
+    stores that enforce it (GCS -- the editor-writable shared store).
+
+    The deploy-time manifest gate stopped being sufficient when the store
+    became WRITABLE (bd 92qe.1): a contractor reverting a published kit to
+    draft (to polish it) must unpublish it IMMEDIATELY, otherwise their
+    work-in-progress saves would keep streaming to voice users through the
+    still-listed manifest entry (Codex P1, PR #279). Local mode is ungated by
+    design (the flag is False), and legacy test doubles without load_metadata
+    are treated as ungated. Under the flag, MISSING metadata fails closed
+    (every legitimately deployed/onboarded kit carries metadata.json), and an
+    unreadable metadata store error propagates (502) rather than serving.
+    """
+    if not getattr(store, "enforce_complete_on_public_reads", False):
+        return
+    loader = getattr(store, "load_metadata", None)
+    if loader is None:
+        return
+    meta = await loader(kit_id)  # FormKitStoreError propagates -> 502 fail-closed
+    if not isinstance(meta, dict) or meta.get("status") != "complete":
+        raise FormKitNotFound(f"Kit not published: {kit_id}")
+
+
 class FormKitInfo(BaseModel):
     """Public metadata about a form kit (no schema content).
 
@@ -125,6 +150,22 @@ async def list_form_kits() -> FormKitManifestResponse:
         # list of dicts whose id/label/schemaPath/pdfPath are safe strings, so this
         # route needs no per-entry type guards. Each carries the kit's REAL storage
         # paths (a custom schema filename loads -- bd polyglot-pdf-snpi).
+        entries = manifest["forms"]
+
+        # On stores enforcing live-status reads (GCS), drop entries whose kit is
+        # no longer complete -- a contractor reverting a published kit to draft
+        # must ALSO vanish from this list, or the voice app would offer a form
+        # whose schema read now 404s (the single-kit gate below). One concurrent
+        # metadata read per listed kit; fine at catalogue scale.
+        if getattr(store, "enforce_complete_on_public_reads", False):
+            metas = await asyncio.gather(
+                *(store.load_metadata(form["id"]) for form in entries)
+            )
+            entries = [
+                form for form, meta in zip(entries, metas)
+                if isinstance(meta, dict) and meta.get("status") == "complete"
+            ]
+
         forms = [
             FormKitInfo(
                 id=form["id"],
@@ -133,7 +174,7 @@ async def list_form_kits() -> FormKitManifestResponse:
                 schema_path=form["schemaPath"],
                 pdf_path=form["pdfPath"],
             )
-            for form in manifest["forms"]
+            for form in entries
         ]
 
         _log.info("form_kits_list_success", count=len(forms))
@@ -162,6 +203,7 @@ async def get_form_kit_schema(kit_id: str) -> JSONResponse:
     store = get_form_kit_store()
     try:
         schema_file, _ = await _resolve_kit_filenames(store, kit_id)
+        await _require_published(store, kit_id)
         schema = await store.load_schema(kit_id, schema_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"Schema not found for kit {kit_id}") from exc
@@ -183,6 +225,7 @@ async def get_form_kit_pdf(kit_id: str) -> Response:
     store = get_form_kit_store()
     try:
         _, pdf_file = await _resolve_kit_filenames(store, kit_id)
+        await _require_published(store, kit_id)
         data = await store.load_pdf_bytes(kit_id, pdf_file)
     except FormKitNotFound as exc:
         raise HTTPException(status_code=404, detail=f"PDF not found for kit {kit_id}") from exc

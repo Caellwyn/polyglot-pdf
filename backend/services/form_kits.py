@@ -112,6 +112,16 @@ class FormKitStore:
 	# (Codex P1, round 5 -- fail closed). Subclasses override.
 	allow_convention_fallback: bool = True
 
+	# Whether the PUBLIC read routes must additionally require the kit's LIVE
+	# metadata status to be "complete" before serving (Codex P1, PR #279). The
+	# deploy-time manifest gate alone is not enough once the store is WRITABLE:
+	# a contractor reverting a published kit to draft (to polish it) must
+	# unpublish it IMMEDIATELY, else their work-in-progress saves would stream
+	# to voice users through the still-listed manifest entry. True for GCS (the
+	# shared, editor-writable store). False for local: local mode is ungated by
+	# design (drafts are intentionally servable in dev).
+	enforce_complete_on_public_reads: bool = False
+
 	async def load_schema(self, kit_id: str, schema_file: str = "schema.json") -> dict:
 		raise NotImplementedError
 
@@ -350,6 +360,11 @@ class GCSFormKitStore(FormKitStore):
 	# base default (True).
 	allow_convention_fallback: bool = False
 
+	# The shared GCS store is editor-writable (bd 92qe.1), so public reads must
+	# honor the LIVE metadata status -- a kit reverted to draft unpublishes
+	# immediately instead of serving work-in-progress saves (Codex P1, PR #279).
+	enforce_complete_on_public_reads: bool = True
+
 	def __init__(self, bucket_name: str, prefix: Optional[str] = None):
 		from google.cloud import storage
 		from google.cloud.exceptions import NotFound
@@ -428,7 +443,16 @@ class GCSFormKitStore(FormKitStore):
 			except self._not_found_exc:
 				return None
 
-		data = await anyio.to_thread.run_sync(_download)
+		# Wrap NON-NotFound storage failures (transient service errors,
+		# permission problems) as FormKitStoreError like every other GCS method:
+		# callers catch only FormKitStoreError, so a raw google exception here
+		# would surface as an uncaught 500 (Codex P1, PR #279).
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
 		if data is None:
 			return None
 		try:
