@@ -98,7 +98,8 @@ someone sets the off-convention value and two subsystems disagree.
   GeminiProvider.run(), gated on VERTEXAI with the config-matching parse.
 - backend/routes/editor_kit_routes.py -- the extraction config gate now accepts
   Vertex OR key (was key-only), so the route reaches the Vertex path on Cloud
-  Run instead of 503ing first.
+  Run instead of 503ing first; and the extractor subprocess env pins VERTEXAI
+  from settings.VERTEXAI so the child provider resolves the same auth mode.
 - backend/tests/unit/test_editor_kit_routes.py -- _settings gains VERTEXAI=False
   default; test_extract_unconfigured_is_503 tightened (no key AND no Vertex);
   new test_extract_vertex_without_key_passes_the_config_gate.
