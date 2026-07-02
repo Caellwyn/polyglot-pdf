@@ -7,6 +7,8 @@ interface FieldListProps {
   schema: FormSchema;
   selectedFieldId: string | null;
   onSelectField: (fieldId: string) => void;
+  // Escape-to-deselect (bd 92qe.5). Optional: the list works without it.
+  onDeselect?: () => void;
   onReorderFields?: (sectionId: string, fieldIds: string[]) => void;
   onMoveOption?: (sourceFieldId: string, optionIndex: number, targetFieldId: string) => void;
   // Merge/group selection (bd polyglot-pdf-s4dp.1). groupSelection is the ordered
@@ -22,6 +24,7 @@ export const FieldList: React.FC<FieldListProps> = ({
   schema,
   selectedFieldId,
   onSelectField,
+  onDeselect,
   onReorderFields,
   onMoveOption,
   groupSelection = [],
@@ -246,6 +249,95 @@ export const FieldList: React.FC<FieldListProps> = ({
     return schema.sections.filter(s => (sectionedFields.get(s.id) || []).length > 0).length;
   }, [normalizedQuery, schema.sections, sectionedFields]);
 
+  // The visible fields in reading order: sections as listed, then orphans --
+  // exactly what the list renders (search filter applied). Drives the
+  // next-needs-review jump and arrow-key navigation (bd 92qe.5).
+  const visibleOrderedFields = React.useMemo(() => {
+    const ordered: FormField[] = [];
+    for (const section of schema.sections) {
+      ordered.push(...(sectionedFields.get(section.id) || []));
+    }
+    ordered.push(...(sectionedFields.get('_orphan') || []));
+    return ordered;
+  }, [schema.sections, sectionedFields]);
+
+  // Option rows select as "<fieldId>:option:<n>" -- resolve to the base field
+  // so navigation starts from the right position.
+  const selectedBaseId = selectedFieldId ? selectedFieldId.split(':option:')[0] : null;
+
+  // Anything left to review? Drives the button's disabled state so a finished
+  // form reads as DONE instead of a silently dead button (fresh-eyes note).
+  const hasReviewTarget = React.useMemo(
+    () => visibleOrderedFields.some(f => getFieldStatus(f) !== 'complete'),
+    // getFieldStatus is a pure per-field check; the memo keys on the fields.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleOrderedFields]
+  );
+
+  const jumpToNextReview = React.useCallback(() => {
+    const fields = visibleOrderedFields;
+    if (fields.length === 0) return;
+    const current = selectedBaseId
+      ? fields.findIndex(f => f.id === selectedBaseId)
+      : -1;
+    for (let step = 1; step <= fields.length; step++) {
+      const candidate = fields[(current + step) % fields.length];
+      if (getFieldStatus(candidate) !== 'complete') {
+        onSelectField(candidate.id);
+        return;
+      }
+    }
+    // Everything visible is complete -> nothing to jump to.
+  }, [visibleOrderedFields, selectedBaseId, onSelectField]);
+
+  const moveSelection = React.useCallback(
+    (delta: 1 | -1) => {
+      const fields = visibleOrderedFields;
+      if (fields.length === 0) return;
+      const current = selectedBaseId
+        ? fields.findIndex(f => f.id === selectedBaseId)
+        : -1;
+      let next: number;
+      if (current === -1) {
+        next = delta === 1 ? 0 : fields.length - 1;
+      } else {
+        next = Math.min(fields.length - 1, Math.max(0, current + delta));
+      }
+      if (next !== current) onSelectField(fields[next].id);
+    },
+    [visibleOrderedFields, selectedBaseId, onSelectField]
+  );
+
+  // Keyboard navigation: N = next needing review, arrows move selection,
+  // Escape deselects. Never fires while typing in an editable control.
+  React.useEffect(() => {
+    const isEditable = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      return (
+        tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isEditable(e.target)) return;
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        jumpToNextReview();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveSelection(1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection(-1);
+      } else if (e.key === 'Escape' && onDeselect) {
+        onDeselect();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [jumpToNextReview, moveSelection, onDeselect]);
+
   // Auto-scroll to selected field when selection changes
   React.useEffect(() => {
     if (!selectedFieldId) return;
@@ -278,9 +370,9 @@ export const FieldList: React.FC<FieldListProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* Search / filter box */}
-      <div className="p-2 border-b border-gray-200 bg-gray-50">
-        <div className="relative">
+      {/* Search / filter box + review navigation */}
+      <div className="p-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+        <div className="relative flex-1">
           <svg
             className="w-4 h-4 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
             fill="none"
@@ -319,6 +411,17 @@ export const FieldList: React.FC<FieldListProps> = ({
             </button>
           )}
         </div>
+        <button
+          type="button"
+          onClick={jumpToNextReview}
+          disabled={!hasReviewTarget}
+          title={hasReviewTarget
+            ? 'Jump to the next field needing attention (N). Arrow keys move; Esc deselects.'
+            : 'Every visible field is complete -- nothing left to review.'}
+          className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-default"
+        >
+          Next to review
+        </button>
       </div>
 
       {/* Merge action bar (bd polyglot-pdf-s4dp.1): appears once 2+ groupable

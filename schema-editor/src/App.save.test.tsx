@@ -84,6 +84,32 @@ describe('App one-step save (File System Access)', () => {
     expect(picker).toHaveBeenCalledTimes(1); // still once
   });
 
+  it('a failed local write shows the dismissible banner, not the full-screen error (bd 92qe.5)', async () => {
+    const writable = makeWritable();
+    writable.write.mockRejectedValue(new Error('disk full'));
+    const handle = { name: 'a_edited.json', createWritable: vi.fn(async () => writable),
+                     getFile: vi.fn() };
+    (window as unknown as Record<string, unknown>).showSaveFilePicker = vi.fn(async () => handle);
+
+    render(<App />);
+    fireEvent.click(screen.getByText('pick-A'));
+    await waitFor(() => expect(loader.loadSchema).toHaveBeenCalled());
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    // The failure lands as a role=alert banner over the LIVE editor -- the
+    // schema (and the three panes) must stay mounted, and the full-screen
+    // error state (whose Dismiss drops the schema) must not render.
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('disk full');
+    expect(screen.getByTestId('list')).toBeInTheDocument();
+    expect(screen.getByTestId('pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Error' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Dismiss save error'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('list')).toBeInTheDocument();
+  });
+
   it('clears the handle on form switch (does not save form B over form A)', async () => {
     const writable = makeWritable();
     const handle = { name: 'a_edited.json', createWritable: vi.fn(async () => writable),

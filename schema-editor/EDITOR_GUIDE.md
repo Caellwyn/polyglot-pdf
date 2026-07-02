@@ -87,6 +87,55 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
 
 Opens at http://localhost:3001
 
+### Hosted mode (the contractor workspace)
+
+A hosted build (`npm run build:hosted`, `VITE_DELIVERY_MODE=hosted` from
+`.env.hosted`) swaps the local-folder front door for the backend's token-gated
+`/api/editor/*` routes over the shared form-kits store (bd polyglot-pdf-92qe.2):
+
+1. Open the hosted URL and enter your **access code** (asked once per browser).
+   The code determines your tier: *editor* (review/polish the provided forms)
+   or *author* (additionally: **Add a form (PDF)** uploads a blank AcroForm PDF
+   into the shared workspace, and **Run extraction** on a schemaless card runs
+   the PDF -> schema pipeline on the server -- takes a few minutes, with an
+   elapsed counter; optionally attach the form's official instructions PDF
+   first to enrich the per-field help text).
+2. The catalogue lists every kit in the shared workspace -- drafts included
+   (drafts ARE the work list). Open a card, edit exactly as in local mode.
+3. **Cmd/Ctrl+S** saves back to the shared store (watch for the `Saving...` ->
+   `Saved` header state). **Mark complete** promotes the kit; the server
+   validates the schema against the form contract first and refuses with the
+   reason if it's broken. Completed kits reach the voice app on the
+   maintainer's next deploy.
+4. If your code stops working (rotated), the editor drops back to the code
+   screen -- enter the new one. Your unsaved edits survive the round trip.
+
+Maintainer note on codes: hand codes out via the entry prompt, never by baking
+`VITE_EDITOR_TOKEN` into a build -- any baked value (from `.env.hosted` or the
+shell env) is compiled in plaintext into the served JS bundle, readable by
+anyone who opens the site. Rotate a code by updating the backend secret; every
+open session drops to the code screen on its next request.
+
+Maintainer runbook (sharing + publishing, bd 92qe.4):
+
+1. **Deploy the editor site**: `./deploy-editor.sh` (one-time setup -- site
+   create, target mapping, the two token secrets, the bucket write grant -- is
+   documented in that script's header). The voice-app deploy never touches the
+   editor site (`deploy-all.sh` is pinned to `hosting:app`).
+2. **Share access**: send a contractor the editor URL plus ONE code --
+   the *editor* code for polish-only work, the *author* code to also upload
+   PDFs and run extraction. Codes live in Secret Manager
+   (`schema-editor-token` / `schema-author-token`); rotate by updating the
+   secret and redeploying the backend.
+3. **Publish contractor work**: `./scripts/pull-form-kits.sh` syncs the shared
+   bucket DOWN into your local `form-kits/` (local-only kits are preserved);
+   review the diff in git, then run the normal deploy -- only
+   `status: complete` kits ship to the voice app. Without the pull, a kit that
+   exists only in the bucket drops off the served list on your next deploy.
+
+Local mode (everything below) is unchanged; the two modes never mix in one
+build.
+
 ### Open a Form (the catalogue)
 
 The front door is the **form catalogue** -- it reads your local `form-kits/`
@@ -143,6 +192,22 @@ separate, future work.
 - **Help Text** - Instructions for users
 - **Validation** - Patterns, formats, constraints
 - **Conditional Logic** - `show_if` (reactive) and `controls_fields` (trigger-side)
+
+### Move Through the Fields Fast
+
+The review loop has its own navigation (works in local and hosted mode):
+
+- **Next to review** (button above the field list) or **N** -- jump to the
+  next field whose icon is yellow/red, wrapping past the end; a search filter
+  narrows what it cycles through.
+- **Arrow Up / Arrow Down** -- step through the visible field list.
+- **Esc** -- deselect (shows the form-level metadata panel).
+- None of these fire while you are typing in a text box.
+
+A save/reload failure shows as a red banner above the editor -- your work and
+the open form stay untouched; fix the issue (or dismiss) and save again.
+Hosted sessions also get a one-time 3-step guide; reopen it any time with the
+header's **Help** button.
 
 ### Save Your Work
 

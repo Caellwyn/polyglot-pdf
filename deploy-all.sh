@@ -167,7 +167,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    cd "$BACKEND_DIR"
+    # Build from the REPO ROOT (bd 92qe.3): the Dockerfile moved from backend/
+    # to the root so the image can copy scripts/authoring + scripts/bakeoff --
+    # the PDF->schema pipeline the hosted extraction route spawns. .gcloudignore
+    # keeps the Cloud Build upload lean (no PDFs/node_modules/docs).
+    cd "$SCRIPT_DIR"
 
     # No local-dependency self-heal here (unlike the frontend): the backend image
     # is built fresh by Cloud Build on every deploy, and the Dockerfile runs
@@ -182,11 +186,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         aiplatform.googleapis.com \
         storage.googleapis.com \
         --project "$POLYGLOT_PROJECT_NAME"
-    
+
     # Build the image using Cloud Build
     IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
-    log_info "Building container image: $IMAGE_URL..."
-    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME"
+    log_info "Building container image: $IMAGE_URL (repo-root context)..."
+    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME" "$SCRIPT_DIR"
     
     # Deploy to Cloud Run
     log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
@@ -216,12 +220,18 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
     # lifetime is bounded by Gemini Live session limits (GoAway handling)
     # instead of the HTTP layer.
+    # --memory: 1Gi headroom for hosted extraction (bd 92qe.4, Opus review of
+    # PR #282): a run holds the form PDF (up to EXTRACTOR_MAX_PDF_MB) plus an
+    # optional instructions PDF in route memory AND as tmpfs copies (/tmp is
+    # memory-backed on Cloud Run) while the pipeline child runs -- the 512Mi
+    # default risks an opaque OOM kill mid-extraction.
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
         --platform managed \
         --allow-unauthenticated \
         --timeout=3600 \
+        --memory=1Gi \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV" \
         "${SA_FLAG[@]}"
@@ -367,7 +377,11 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     
     # Deploy to Firebase Hosting
     log_info "🌐 Deploying to Firebase Hosting..."
-    firebase deploy --only hosting --project "$POLYGLOT_PROJECT_NAME"
+    # Pinned to the APP target (bd 92qe.4): hosting is now an array of named
+    # targets (app = the voice app, editor = the hosted schema editor), and a
+    # bare "--only hosting" would deploy BOTH -- including whatever stale build
+    # sits in schema-editor/dist. The editor ships via deploy-editor.sh only.
+    firebase deploy --only hosting:app --project "$POLYGLOT_PROJECT_NAME"
     
     log_success "✅ Frontend deployed successfully!"
     echo "   URL: https://$POLYGLOT_PROJECT_NAME.web.app"

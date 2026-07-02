@@ -37,8 +37,8 @@
 		"parse": "tsx scripts/parse-form.ts",
 		"gen:form-manifest": "tsx scripts/generate-form-manifest.ts",
 		"postinstall": "npm run form-kits:prepare",
-		"deploy": "npm run build:schema && firebase deploy --project polyglot-forms-919f2",
-		"deploy:demo": "npm run build:schema:demo && firebase deploy --only hosting --project polyglot-demo-aa709"
+		"deploy": "npm run build:schema && firebase deploy --only firestore:rules,hosting:app --project polyglot-forms-919f2",
+		"deploy:demo": "npm run build:schema:demo && firebase deploy --only hosting:app --project polyglot-demo-aa709"
 	},
 	"dependencies": {
 		"@ricky0123/vad-react": "^0.0.34",

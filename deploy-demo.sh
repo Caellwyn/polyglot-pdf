@@ -86,7 +86,7 @@ if [ "$DEPLOY_GCP" = true ]; then
     # serve a Vertex revision under the wrong identity or strand the demo if it
     # failed (bd polyglot-pdf-ignt). deploy-all.sh adds --service-account only when
     # this is non-empty, so other channels/bare runs are unchanged.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false" \
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

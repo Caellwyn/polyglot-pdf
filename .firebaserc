@@ -3,5 +3,18 @@
     "default": "polyglot-forms-919f2",
     "prod": "polyglot-forms-919f2",
     "demo": "polyglot-demo-aa709"
+  },
+  "targets": {
+    "polyglot-demo-aa709": {
+      "hosting": {
+        "app": ["polyglot-demo-aa709"],
+        "editor": ["polyglot-editor-demo"]
+      }
+    },
+    "polyglot-forms-919f2": {
+      "hosting": {
+        "app": ["polyglot-forms-919f2"]
+      }
+    }
   }
 }

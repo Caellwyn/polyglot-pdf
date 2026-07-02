@@ -1,0 +1,83 @@
+{
+  "recorded_at": "2026-07-02T04:56:37Z",
+  "session_id": "5b52387f-90be-4058-8d4e-856faf6894ed",
+  "beads": [
+    "polyglot-pdf-92qe.1"
+  ],
+  "arm": "BC",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-02T03:56:44.428Z",
+    "last_ts": "2026-07-02T04:56:23.764Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 127792,
+      "output_tokens": 509253,
+      "cache_read_input_tokens": 114655854,
+      "cache_creation_input_tokens": 1673577
+    },
+    "subagent": {
+      "input_tokens": 9530,
+      "output_tokens": 21486,
+      "cache_read_input_tokens": 7117298,
+      "cache_creation_input_tokens": 260224
+    },
+    "total": {
+      "input_tokens": 137322,
+      "output_tokens": 530739,
+      "cache_read_input_tokens": 121773152,
+      "cache_creation_input_tokens": 1933801
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-fable-5": {
+        "input_tokens": 127792,
+        "output_tokens": 509253,
+        "cache_read_input_tokens": 114655854,
+        "cache_creation_input_tokens": 1673577
+      }
+    },
+    "subagent": {
+      "claude-sonnet-5": {
+        "input_tokens": 9530,
+        "output_tokens": 21486,
+        "cache_read_input_tokens": 7117298,
+        "cache_creation_input_tokens": 260224
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-fable-5": 162.316136
+    },
+    "subagent": {
+      "claude-sonnet-5": 0.0
+    },
+    "by_model": {
+      "claude-fable-5": 162.316136,
+      "claude-sonnet-5": 0.0
+    },
+    "unpriced_models": [
+      "claude-sonnet-5"
+    ],
+    "orchestrator_total": 162.316136,
+    "subagent_total": 0.0,
+    "total": 162.316136,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 355,
+    "subagent": 94
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 2,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

@@ -31,10 +31,13 @@ fi
 echo "🛠️  Ensuring Cloud Run and Build APIs are enabled..."
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project $POLYGLOT_PROJECT_NAME
 
-# Build and push container
-echo "📦 Building container image..."
+# Build and push container -- from the REPO ROOT (bd 92qe.3): the Dockerfile
+# lives at the root so the image includes scripts/authoring + scripts/bakeoff
+# (the hosted extraction pipeline). .gcloudignore keeps the upload lean.
+echo "📦 Building container image (repo-root context)..."
 IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$SERVICE_NAME"
-gcloud builds submit --tag $IMAGE_URL --project $POLYGLOT_PROJECT_NAME .
+REPO_ROOT="$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
+gcloud builds submit --tag $IMAGE_URL --project $POLYGLOT_PROJECT_NAME "$REPO_ROOT"
 
 # Deploy to Cloud Run
 echo "🌐 Deploying to Cloud Run service: $SERVICE_NAME..."

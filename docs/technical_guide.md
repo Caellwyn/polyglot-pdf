@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-06-29. Added the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`) to the route table (bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row now records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-01. Added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1). Prior: added the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`) to the route table (bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row now records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -67,6 +67,13 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). `components/pdf-filling.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). |
 | GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. |
+| GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Token-gated (`X-Editor-Token`); the whole `/api/editor/*` surface is 503 when no token is configured. `components/pdf-filling.md` |
+| GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
+| GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |
+| PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/status` | Flip draft/complete; promotion validates against the Pydantic `FormSchema` (the publish gate). Token-gated. |
+| POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
+| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
 

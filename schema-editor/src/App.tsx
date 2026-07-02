@@ -1,6 +1,9 @@
 import React from 'react';
 import { FormSelector } from './components/FormSelector';
 import { FormCatalogue } from './components/FormCatalogue';
+import { RemoteCatalogue } from './components/RemoteCatalogue';
+import { AccessCodeGate } from './components/AccessCodeGate';
+import { HostedGuide, hasSeenGuide } from './components/HostedGuide';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
@@ -17,6 +20,15 @@ import {
   type FsFileHandle,
 } from './utils/fileSystemAccess';
 import { loadKitSchema, versionInfoFromSchema, type CatalogueEntry, type KitVersionInfo } from './utils/formKitDirectory';
+import {
+  AuthError,
+  isHostedMode,
+  loadRemotePdfBlobUrl,
+  loadRemoteSchema,
+  saveRemoteSchema,
+  type EditorRole,
+  type RemoteKitEntry,
+} from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField } from './utils/fieldGrouping';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -38,6 +50,14 @@ function liveStats(
 }
 
 export const App: React.FC = () => {
+  // Hosted delivery mode (bd polyglot-pdf-92qe.2): kits come from the backend's
+  // token-gated /api/editor routes (the shared store) instead of a local
+  // folder. `role` is null until the access code validates (the gate screen);
+  // author-only affordances (onboard/extract, bd 92qe.3) key off it later.
+  const hosted = React.useMemo(isHostedMode, []);
+  const [role, setRole] = React.useState<EditorRole | null>(null);
+  // Remote saves have real latency (a GCS write) -- surface a Saving... state.
+  const [saving, setSaving] = React.useState(false);
   const [selectedForm, setSelectedForm] = React.useState<FormConfig | null>(null);
   // Schema + undo/redo history (bd v3y8). `commit` is a user edit, `load` a
   // fresh load, `markSaved` clears the dirty flag, `clear` drops the schema.
@@ -46,6 +66,12 @@ export const App: React.FC = () => {
     commit: commitSchema, load: loadSchemaState, markSaved, clear: clearSchema,
     undo, redo,
   } = useSchemaHistory();
+  // The LATEST schema, readable after an await: a remote save's completion
+  // handler must compare against what the schema IS then, not the closure's
+  // stale capture, or edits made while the PUT was in flight would be marked
+  // clean and silently lost on unload (Codex P1, PR #280).
+  const schemaRef = React.useRef(schema);
+  React.useEffect(() => { schemaRef.current = schema; }, [schema]);
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
   // Right-pane view mode (bd polyglot-pdf-s4dp.4): 'edit' shows the FieldEditor,
   // 'preview' swaps in the standalone interactive PreviewPane so the author can
@@ -59,6 +85,13 @@ export const App: React.FC = () => {
   const [groupSelection, setGroupSelection] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Save/reload failures are NON-blocking: they render as a dismissible banner
+  // over the live editor instead of the full-screen error state, whose Dismiss
+  // drops the schema -- a failed save must never cost the work being saved
+  // (bd 92qe.5).
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  // First-run guide (hosted): shown once per browser, reopenable via Help.
+  const [guideOpen, setGuideOpen] = React.useState(false);
   // The File System Access handle the human picked: once set, saves write
   // straight to that file with no re-prompt (bd s1e2). Cleared on form switch.
   const fileHandleRef = React.useRef<FsFileHandle | null>(null);
@@ -85,6 +118,7 @@ export const App: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    setSaveError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
@@ -123,6 +157,7 @@ export const App: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    setSaveError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
@@ -160,6 +195,91 @@ export const App: React.FC = () => {
       setLoading(false);
     }
   }, [hasUnsavedChanges, loadSchemaState]);
+
+  // A remote call answered 401 mid-session (rotated/revoked code): drop back to
+  // the access gate. The gate re-probes the stored code, finds it dead, clears
+  // it, and shows the entry form -- so the contractor lands on "enter your code"
+  // rather than a dead editor.
+  //
+  // DELIBERATE: this does NOT tear down the open kit or dirty edits. A code
+  // rotation mid-polish must not destroy a contractor's unsaved work -- after
+  // re-entering a valid code they resume exactly where they were and can save.
+  // Nothing stale is trusted: every subsequent request re-authenticates with
+  // the NEW code server-side; the in-memory schema/PDF are display state only.
+  // (Fresh-eyes flagged the asymmetry vs the kit-switch teardowns; keeping the
+  // work is the chosen behavior, locked by a test in App.hosted.test.tsx.)
+  const handleAuthExpired = React.useCallback(() => {
+    setRole(null);
+  }, []);
+
+  // Open a kit from the REMOTE catalogue (hosted mode, bd 92qe.2): pull its
+  // schema + PDF through the token-gated routes and drive the same schema +
+  // PDFViewer flow the local kit path uses. The save target is the kit id
+  // (saveRemoteSchema), not a file handle.
+  // Monotonic open token: remote opens take real network time and the cards
+  // stay clickable, so kit A's SLOW response must never apply after kit B was
+  // opened -- the stale open would overwrite B's schema/kit id and leave the
+  // editor on the wrong kit (Codex P1, PR #280). Each open bumps the token;
+  // any await that resumes under a newer token abandons silently.
+  const openSeqRef = React.useRef(0);
+
+  const handleOpenRemoteKit = React.useCallback(async (entry: RemoteKitEntry) => {
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to switch forms?'
+      );
+      if (!confirmed) return;
+    }
+    const seq = ++openSeqRef.current;
+    setLoading(true);
+    setError(null);
+    setSaveError(null);
+    setSelectedFieldId(null);
+    setGroupSelection([]);
+    setViewMode('edit');
+    fileHandleRef.current = null; // hosted mode never saves via a file handle
+    try {
+      const loaded = await loadRemoteSchema(entry.id);
+      if (seq !== openSeqRef.current) return; // superseded by a newer open
+      if (!loaded) {
+        throw new Error(`${entry.label} has no schema yet.`);
+      }
+      let pdfUrl = '';
+      if (entry.hasPdf) {
+        pdfUrl = (await loadRemotePdfBlobUrl(entry.id)) ?? '';
+      }
+      if (seq !== openSeqRef.current) {
+        // A newer open won while our PDF was in flight: discard OUR blob URL
+        // (nobody will ever render it) and touch nothing else.
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        return;
+      }
+      // Swap the blob URL only now that BOTH fetches succeeded. Revoking the
+      // prior kit's URL BEFORE the fetches (the old order) meant any mid-open
+      // failure -- especially a 401, whose auth-drop path deliberately
+      // preserves the open kit -- left the still-displayed prior kit pointing
+      // at a dead URL: a silently broken PDF viewer after re-auth
+      // (fresh-eyes r2).
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = pdfUrl || null;
+
+      loadSchemaState(loaded); // fresh baseline -> history cleared
+      setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
+      setSelectedKitId(entry.id);
+      setSavedFileName(null); // nothing saved back yet this session
+      setSavingToKit(true); // saves target the kit's own remote schema
+    } catch (err) {
+      if (seq !== openSeqRef.current) return; // a stale open's failure is moot
+      if (err instanceof AuthError) {
+        handleAuthExpired();
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to open form');
+      console.error('Failed to open remote kit:', err);
+    } finally {
+      if (seq === openSeqRef.current) setLoading(false);
+    }
+  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
 
   // Guard a folder switch: returns false to ABORT when the user declines to
   // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
@@ -320,15 +440,47 @@ export const App: React.FC = () => {
   // destination, every subsequent save writes straight to that same file (the
   // one-step re-save, bd s1e2). Without it: fall back to the download path.
   // `forcePicker` (Save As) always re-prompts for a new destination.
+  // Hosted mode short-circuits both: the save is a PUT to the kit's remote
+  // schema (bd 92qe.2), with a visible Saving... state for the round trip.
   const handleSave = React.useCallback(async (forcePicker = false) => {
     if (!schema || !selectedForm) return;
+
+    if (hosted) {
+      if (!selectedKitId || saving) return;
+      setSaving(true);
+      // Snapshot what this save actually sends: the editor stays editable
+      // while the PUT is in flight, so completion must only mark the state
+      // clean if the schema is STILL the snapshot -- otherwise edits made
+      // during the round trip would be flagged saved and lost on unload
+      // (Codex P1, PR #280). The still-dirty flag then simply prompts the
+      // contractor to save again, which sends the newer payload.
+      const snapshot = schema;
+      try {
+        await saveRemoteSchema(selectedKitId, snapshot);
+        if (schemaRef.current === snapshot) {
+          setSavedFileName('the shared workspace');
+          markSaved();
+        }
+        setSaveError(null);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          handleAuthExpired();
+          return;
+        }
+        setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
+        console.error('Failed to save schema remotely:', err);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     if (!fsAccess) {
       // Fallback: browsers without the API get the original download behavior.
       const name = suggestedFileName();
       saveSchema(schema, name);
       markSaved();
-      setError(null);
+      setSaveError(null);
       return;
     }
 
@@ -344,13 +496,14 @@ export const App: React.FC = () => {
       await writeSchemaToHandle(handle, schema);
       setSavedFileName(handle.name);
       markSaved();
-      setError(null);
+      setSaveError(null);
     } catch (err) {
       if (isUserAbort(err)) return; // human cancelled the picker -- no-op
-      setError(err instanceof Error ? err.message : 'Failed to save schema');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
       console.error('Failed to save schema:', err);
     }
-  }, [schema, selectedForm, fsAccess, suggestedFileName, markSaved]);
+  }, [schema, selectedForm, fsAccess, suggestedFileName, markSaved,
+      hosted, selectedKitId, saving, handleAuthExpired]);
 
   // Reload the schema FROM the saved file handle (verifies the round-trip: the
   // edit just saved is read back, satisfying criterion 1's "reloads cleanly with
@@ -367,9 +520,9 @@ export const App: React.FC = () => {
     try {
       const reloaded = await readSchemaFromHandle(handle);
       loadSchemaState(reloaded); // fresh baseline -> history cleared
-      setError(null);
+      setSaveError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reload schema');
+      setSaveError(err instanceof Error ? err.message : 'Failed to reload schema');
       console.error('Failed to reload schema from file:', err);
     }
   }, [hasUnsavedChanges, loadSchemaState]);
@@ -411,6 +564,12 @@ export const App: React.FC = () => {
     if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
   }, []);
 
+  // First-run guide: hosted contractors get the 3-step overlay once per
+  // browser, after the access code validates (bd 92qe.5).
+  React.useEffect(() => {
+    if (hosted && role && !hasSeenGuide()) setGuideOpen(true);
+  }, [hosted, role]);
+
   // Warn on page unload if unsaved changes
   React.useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -424,6 +583,12 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  // Hosted mode's front gate: no catalogue traffic until the access code
+  // validates (bd 92qe.2). onReady carries the role (editor vs author).
+  if (hosted && !role) {
+    return <AccessCodeGate onReady={setRole} />;
+  }
+
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
@@ -433,7 +598,11 @@ export const App: React.FC = () => {
             <h1 className="text-xl font-bold text-gray-900">
               📄 PDF Schema Editor
             </h1>
-            {hasUnsavedChanges ? (
+            {saving ? (
+              <span className="text-sm text-blue-600 font-medium">
+                Saving...
+              </span>
+            ) : hasUnsavedChanges ? (
               <span className="text-sm text-yellow-600 font-medium">
                 • Unsaved changes
               </span>
@@ -444,6 +613,15 @@ export const App: React.FC = () => {
             ) : null}
           </div>
           <div className="flex gap-2">
+            {hosted && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setGuideOpen(true)}
+                title="Reopen the getting-started guide"
+              >
+                Help
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               onClick={undo}
@@ -467,7 +645,7 @@ export const App: React.FC = () => {
             >
               Reset
             </button>
-            {fsAccess && savedFileName && (
+            {!hosted && fsAccess && savedFileName && (
               <button
                 className="btn btn-secondary"
                 onClick={() => void handleReloadFromFile()}
@@ -477,7 +655,7 @@ export const App: React.FC = () => {
                 Reload from file
               </button>
             )}
-            {fsAccess && (
+            {!hosted && fsAccess && (
               <button
                 className="btn btn-secondary"
                 onClick={() => void handleSave(true)}
@@ -490,42 +668,99 @@ export const App: React.FC = () => {
             <button
               className="btn btn-primary"
               onClick={() => void handleSave(false)}
-              disabled={!schema || !hasUnsavedChanges}
-              title={fsAccess
-                ? (fileHandleRef.current
-                    ? 'Save to the chosen file (Cmd+S)'
-                    : 'Choose a destination and save (Cmd+S)')
-                : 'Download edited schema (Cmd+S)'}
+              disabled={!schema || !hasUnsavedChanges || saving}
+              title={hosted
+                ? 'Save back to the shared workspace (Cmd+S)'
+                : fsAccess
+                  ? (fileHandleRef.current
+                      ? 'Save to the chosen file (Cmd+S)'
+                      : 'Choose a destination and save (Cmd+S)')
+                  : 'Download edited schema (Cmd+S)'}
             >
-              {fsAccess ? 'Save (Cmd+S)' : 'Download (Cmd+S)'}
+              {saving ? 'Saving...' : hosted || fsAccess ? 'Save (Cmd+S)' : 'Download (Cmd+S)'}
             </button>
           </div>
         </div>
 
-        {/* The catalogue (directory-based) is the front door (bd b0pe); the
-            hardcoded FormSelector remains as a fallback for browsers without the
-            directory API (where the catalogue shows its unsupported message). */}
-        <FormCatalogue
-          onOpenKit={handleOpenKit}
-          confirmFolderChange={confirmFolderChange}
-          clearOpenKit={clearOpenKit}
-          selectedKitId={selectedKitId}
-          liveProgress={
-            // Keep the open kit's catalogue bar in sync with in-editor edits:
-            // the disk-scanned % is stale after an edit/save, so feed the live
-            // in-memory stats (same getCompletionStats the ValidationPanel uses).
-            // `saved` lets the catalogue cache only persisted values: an UNSAVED
-            // edit still shows live on the open card, but is not remembered after
-            // the kit closes (else a discarded edit would leave phantom progress).
-            selectedKitId && schema
-              ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
-              : null
-          }
-        />
-        {!dirAccess && (
+        {/* The front door. Hosted mode (bd 92qe.2): the remote catalogue over
+            the token-gated editor routes. Local mode: the directory-based
+            catalogue (bd b0pe), with the hardcoded FormSelector as a fallback
+            for browsers without the directory API. */}
+        {hosted && role ? (
+          <RemoteCatalogue
+            onOpenKit={(entry) => void handleOpenRemoteKit(entry)}
+            selectedKitId={selectedKitId}
+            role={role}
+            onAuthError={handleAuthExpired}
+            liveProgress={
+              selectedKitId && schema
+                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
+                : null
+            }
+          />
+        ) : (
+          <FormCatalogue
+            onOpenKit={handleOpenKit}
+            confirmFolderChange={confirmFolderChange}
+            clearOpenKit={clearOpenKit}
+            selectedKitId={selectedKitId}
+            liveProgress={
+              // Keep the open kit's catalogue bar in sync with in-editor edits:
+              // the disk-scanned % is stale after an edit/save, so feed the live
+              // in-memory stats (same getCompletionStats the ValidationPanel uses).
+              // `saved` lets the catalogue cache only persisted values: an UNSAVED
+              // edit still shows live on the open card, but is not remembered after
+              // the kit closes (else a discarded edit would leave phantom progress).
+              selectedKitId && schema
+                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
+                : null
+            }
+          />
+        )}
+        {!hosted && !dirAccess && (
           <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
         )}
       </header>
+
+      {/* Non-blocking save/reload failure banner: the editor (and the unsaved
+          work) stays fully alive underneath (bd 92qe.5). */}
+      {saveError && (
+        <div
+          role="alert"
+          className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center gap-3"
+        >
+          <svg
+            className="w-4 h-4 text-red-600 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span className="text-sm text-red-800 flex-1">{saveError}</span>
+          <button
+            type="button"
+            onClick={() => setSaveError(null)}
+            aria-label="Dismiss save error"
+            className="text-red-400 hover:text-red-600 shrink-0"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {guideOpen && <HostedGuide onClose={() => setGuideOpen(false)} />}
 
       {/* Main Content */}
       {loading && (
@@ -588,17 +823,31 @@ export const App: React.FC = () => {
               Welcome to PDF Schema Editor
             </h2>
             <p className="text-gray-600 mb-6">
-              Open your form-kits folder above to see the catalogue, or drop an
-              AcroForm PDF to add a new form -- then pick a form to start editing.
+              {hosted
+                ? 'Pick a form from the shared catalogue above to start reviewing.'
+                : 'Open your form-kits folder above to see the catalogue, or drop an ' +
+                  'AcroForm PDF to add a new form -- then pick a form to start editing.'}
             </p>
             <div className="text-left bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Quick Guide:</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>- Open your form-kits/ folder, or drop a PDF to onboard a new form</li>
-                <li>- Pick a form from the catalogue to load it</li>
-                <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
-                <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z</li>
-                <li>- Press Cmd+S to save (Cmd+Shift+S to save to a new file)</li>
+                {hosted ? (
+                  <>
+                    <li>- Pick a form from the catalogue to load it</li>
+                    <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
+                    <li>- Yellow/red fields need attention; green fields are done</li>
+                    <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z; Cmd+S saves back to the workspace</li>
+                    <li>- When every field looks right, click Mark complete on its card</li>
+                  </>
+                ) : (
+                  <>
+                    <li>- Open your form-kits/ folder, or drop a PDF to onboard a new form</li>
+                    <li>- Pick a form from the catalogue to load it</li>
+                    <li>- Click fields in the list or PDF viewer; edit in the right panel</li>
+                    <li>- Undo/redo with Cmd+Z / Cmd+Shift+Z</li>
+                    <li>- Press Cmd+S to save (Cmd+Shift+S to save to a new file)</li>
+                  </>
+                )}
               </ul>
             </div>
           </div>
@@ -630,6 +879,7 @@ export const App: React.FC = () => {
                 schema={schema}
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
+                onDeselect={() => setSelectedFieldId(null)}
                 onReorderFields={handleReorderFields}
                 onMoveOption={handleMoveOption}
                 groupSelection={groupSelection}

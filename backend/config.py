@@ -403,6 +403,32 @@ class Settings(BaseModel):
 		}
 	]
 
+	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
+	# tiers checked by the /api/editor/* routes: EDITOR (polish provided kits:
+	# list/read drafts, save schemas, flip status) and AUTHOR (editor + onboard
+	# PDFs + run hosted extraction). Unset -> the editor surface is disabled
+	# (routes fail closed with 503). On Cloud Run these arrive via Secret
+	# Manager (--set-secrets), never plaintext env.
+	SCHEMA_EDITOR_TOKEN: str | None = os.getenv("SCHEMA_EDITOR_TOKEN")
+	SCHEMA_AUTHOR_TOKEN: str | None = os.getenv("SCHEMA_AUTHOR_TOKEN")
+	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.
+	# The editor calls Cloud Run directly (not via the Hosting /api rewrite,
+	# whose 60s cap would kill minutes-long extraction), so its origin must be
+	# allowed here.
+	CORS_EXTRA_ORIGINS: str = os.getenv("CORS_EXTRA_ORIGINS", "")
+	# Hosted PDF->schema extraction (bd polyglot-pdf-92qe.3, author tier).
+	# EXTRACTOR_MODEL must be a gemini-* model on Cloud Run: the extraction
+	# script's default (the local `claude` CLI) does not exist in the container.
+	# gemini-2.5-pro over flash on purpose: authoring is a ONE-OFF per form, so
+	# quality beats per-call cost (the runtime token economy does not apply --
+	# bd 7a9 doctrine). Swap by env without a redeploy of code.
+	EXTRACTOR_MODEL: str = os.getenv("EXTRACTOR_MODEL", "gemini-2.5-pro")
+	# Wall-clock cap for one extraction subprocess. Well under Cloud Run's
+	# --timeout=3600 so the HTTP request outlives the subprocess kill.
+	EXTRACTOR_TIMEOUT_SEC: float = float(os.getenv("EXTRACTOR_TIMEOUT_SEC", "1500"))
+	# Upload cap for the onboarding PDF (MB). Government form PDFs run 1-15 MB.
+	EXTRACTOR_MAX_PDF_MB: float = float(os.getenv("EXTRACTOR_MAX_PDF_MB", "25"))
+
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")
 	FORM_KITS_LOCAL_ROOT: str = os.getenv(
@@ -697,6 +723,20 @@ def get_settings() -> Settings:
 	In later phases we can load .env via python-dotenv and add validation.
 	"""
 	return Settings()
+
+
+def parse_extra_origins(raw: str | None) -> list[str]:
+	"""Split CORS_EXTRA_ORIGINS ("https://a.web.app, https://a.firebaseapp.com")
+	into a clean origin list. Empty/None -> [] (no extra origins). Used by
+	main.py to extend the hardcoded localhost CORS list with the hosted
+	schema-editor's origin(s) without a code change per deploy
+	(bd polyglot-pdf-92qe.1).
+
+	Accepts SEMICOLONS as well as commas (bd 92qe.4): the value reaches Cloud
+	Run inside `gcloud run deploy --set-env-vars=A=1,B=2,...`, where commas are
+	the PAIR separator -- a multi-origin value must therefore use semicolons in
+	the deploy scripts ("https://a.web.app;https://a.firebaseapp.com")."""
+	return [o.strip() for o in re.split(r"[,;]", raw or "") if o.strip()]
 
 
 # ============================================================================

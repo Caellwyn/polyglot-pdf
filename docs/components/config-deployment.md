@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
+*Last updated: 2026-07-02. Added the hosted-editor deploy section (two Hosting targets, deploy-editor.sh, pull-form-kits.sh, 1Gi memory, semicolon CORS origins -- bd 92qe.4) and the hosted-extraction knobs (EXTRACTOR_MODEL/TIMEOUT/MAX_PDF_MB) + the repo-root image build (bd 92qe.3), and the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -30,7 +30,9 @@ which bypasses the cache).
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
   `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `SECRETARY_TIMEOUT_S`, `FORM_KITS_MODE`,
   `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
-  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`.
+  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`,
+  `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`,
+  `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`, `EXTRACTOR_MAX_PDF_MB`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): `PROACTIVE_AUDIO`, the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -86,6 +88,29 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Auth canon lives in the
   planned `auth.md` (bd `polyglot-pdf-y3l`).
+- **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
+  for the token-gated `/api/editor/*` surface the hosted schema editor uses
+  (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:
+  *editor* = polish provided kits (list/read drafts, save schemas, flip status);
+  *author* = editor + PDF onboarding/hosted extraction (bd 92qe.3). Neither set →
+  the surface is disabled (503 fail-closed). On Cloud Run inject via Secret
+  Manager (`--set-secrets`), never plaintext env.
+- **`CORS_EXTRA_ORIGINS`** — comma-separated extra CORS origins appended to the
+  hardcoded localhost list in `backend/main.py` (e.g. the hosted schema-editor
+  site, which calls Cloud Run directly rather than through the Hosting `/api`
+  rewrite — the rewrite's 60s cap would kill minutes-long extraction requests).
+  List explicit origins only; do NOT set `*` — the app runs
+  `allow_credentials=True`, and browsers reject the wildcard+credentials
+  combination, so `*` silently breaks CORS instead of opening it.
+- **`EXTRACTOR_MODEL` / `EXTRACTOR_TIMEOUT_SEC` / `EXTRACTOR_MAX_PDF_MB`** — the
+  hosted PDF->schema extraction knobs (bd `polyglot-pdf-92qe.3`, author tier).
+  `EXTRACTOR_MODEL` defaults to `gemini-2.5-pro` and MUST be a `gemini-*` model
+  on Cloud Run (the container has no `claude` CLI; authoring is one-off per form
+  so quality beats per-call cost). Extraction runs
+  `scripts/authoring/extract_form.py` as a subprocess — the image is built from
+  the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
+  `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
+  Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
 - **`GENAI_WEBSOCKET_BASE`** — optional override of the genai SDK's Live WebSocket
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.
@@ -131,7 +156,7 @@ stages):
   gated, so a draft is absent from GCS *and* the served manifest.
 - **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
   `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
-  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting`. The
+  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting:app`. The
   bare `npm run build` is NOT used: it loads `.env.production` under the default
   Vite config, whose Firebase keys differ per channel — a demo built that way dies
   with `auth/invalid-api-key`.
@@ -142,6 +167,32 @@ stages):
   frontend never goes live against stale rules. A project left on default-deny
   breaks email signup (the unauth `authorized_emails` read) and the `users/{uid}`
   profile sync -- see [auth.md](auth.md).
+
+### Hosted schema editor (second Hosting site)
+
+`firebase.json` `hosting` is an ARRAY of two named targets (bd `92qe.4`):
+`app` (the voice app, `frontend/dist`, keeps its `/api` rewrite) and `editor`
+(`schema-editor/dist`, SPA catch-all, **no** `/api` rewrite -- the editor calls
+Cloud Run directly via `VITE_API_BASE_URL`; the Hosting rewrite's 60s cap would
+kill minutes-long extraction). `.firebaserc` maps `editor` ->
+`polyglot-editor-demo` on the demo project. **Because targets are named, a bare
+`firebase deploy --only hosting` deploys BOTH sites** -- `deploy-all.sh` is
+pinned to `--only hosting:app`, the `frontend/package.json` `deploy` /
+`deploy:demo` shortcuts are pinned too (the unscoped prod one would
+otherwise THROW -- prod maps no `editor` target -- and the demo one would
+silently ship a stale editor build), and the editor ships only via
+**`deploy-editor.sh`** (`npm run build:hosted` + `--only hosting:editor`; its
+header is the one-time runbook: site create, `target:apply`, the two
+access-code secrets attached once to Cloud Run with `--set-secrets`, and the
+bucket `roles/storage.objectAdmin` grant the editor's writes need).
+`deploy-demo.sh` carries `EXTRACTOR_MODEL` + `CORS_EXTRA_ORIGINS`
+(SEMICOLON-separated origins -- commas are `--set-env-vars`' pair separator)
+via `BACKEND_EXTRA_ENV`; the backend deploy runs `--memory=1Gi` (extraction
+holds PDFs in memory + tmpfs). **Contractor round trip:**
+`scripts/pull-form-kits.sh` rsyncs bucket kits DOWN into `form-kits/`
+(index.json excluded; local-only kits preserved) so contractor work is
+git-reviewable before the normal deploy republishes -- without it, a
+bucket-only kit silently drops from the manifest on the next deploy.
 
 ### Frontend → backend wiring
 
