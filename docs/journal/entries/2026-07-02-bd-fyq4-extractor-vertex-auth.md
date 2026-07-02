@@ -31,8 +31,8 @@ ADC / service-account auth, no key), mirroring the live voice adapter
 (`backend/adapters/live_ai_gemini.py:292-298`) which already runs on Vertex in
 production. The AI-Studio `api_key` path is preserved for local dev and the
 offline bakeoff harness. The parse is
-`os.getenv("VERTEXAI","").strip().lower() == "true"` -- deliberately identical
-to how `backend/config.py` reads VERTEXAI (and every other bool flag: `.lower()
+`os.getenv("VERTEXAI","").lower() == "true"` -- byte-identical to how
+`backend/config.py` reads VERTEXAI (and every other bool flag: `.lower()
 == "true"`), so the backend's notion of "am I on Vertex" and the extractor's can
 never diverge. (The first draft accepted `1`/`yes` too; fresh-eyes prep flagged
 that as a latent split, tightened to match config; fresh-eyes r2 then flagged a leftover `.strip()` the config parse lacks -- dropped, so the truthy test is now byte-identical, the only intended difference being the unset default noted below.)
