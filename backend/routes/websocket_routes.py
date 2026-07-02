@@ -7,6 +7,7 @@ import os
 import time
 from ..config import get_settings
 from ..dependencies import get_form_filling_service
+from ..utils.dev_file_logger import DEV_LOGGING_ENABLED
 import structlog
 
 # Structured logger for websocket routes
@@ -22,6 +23,11 @@ async def ws_echo(
 	ping_interval: int | None = Query(default=None),
 	idle_timeout: int | None = Query(default=None),
 ):
+	if not DEV_LOGGING_ENABLED:
+		# Dev-only debug socket: reject the handshake in production, same
+		# backend/.env.DEV marker gate as the dev console-log route.
+		await ws.close(code=1008)
+		return
 	await ws.accept()
 	ping_iv = ping_interval or settings.WS_PING_INTERVAL_SEC
 	idle_to = idle_timeout or settings.WS_IDLE_TIMEOUT_SEC
@@ -86,6 +92,11 @@ async def ws_echo(
 
 @router.websocket("/audio")
 async def ws_audio(ws: WebSocket, idle_timeout: int | None = Query(default=None)):
+	if not DEV_LOGGING_ENABLED:
+		# Dev-only debug socket: reject the handshake in production, same
+		# backend/.env.DEV marker gate as the dev console-log route.
+		await ws.close(code=1008)
+		return
 	await ws.accept()
 	idle_to = idle_timeout or settings.WS_IDLE_TIMEOUT_SEC
 	last_rx = time.monotonic()
