@@ -65,10 +65,12 @@ uses git commit times (git log -1 --format=%ct), not fs mtimes; the o0pc
 
 - Bumped + edited: docs/standards/ws-protocol.md (dti_mode_enabled row +
   contract-tests note), docs/technical_guide.md (dev-only socket rows,
-  prod-build-ships-index-only gotcha).
+  prod-build-ships-index-only gotcha), docs/components/websocket-routing.md
+  (fresh-eyes round-1 catch: its endpoint table still called the two sockets
+  plain test/diagnostic routes; now marked dev-only).
 - Other docs flagged STALE by the checker track files this branch touched
-  only via the gate edit (websocket_routes.py) -- reviewed and left; no claim
-  in them is affected by a dev-only handshake rejection.
+  only via the gate edit (websocket_routes.py) -- reviewed and left; their
+  claims describe /ws/fill behavior, which is unchanged.
 
 ## Files touched
 
