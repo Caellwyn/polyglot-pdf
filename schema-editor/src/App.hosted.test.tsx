@@ -14,7 +14,7 @@
  * what runs.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import type { FormSchema } from './types/schema';
 
 // The mock renders pdfPath so tests can assert WHICH blob URL the viewer got
@@ -337,5 +337,99 @@ describe('App hosted mode Codex r1 fixes (PR #280)', () => {
     resolveA(JSON.parse(JSON.stringify(SCHEMA)) as FormSchema);
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.getByTestId('pdf')).toHaveTextContent('blob:second-kit');
+  });
+});
+
+describe('App hosted UX pass (bd 92qe.5)', () => {
+  /** Open the draft kit and dirty it (enables Save). Dismisses the guide. */
+  async function openAndDirtyKit() {
+    await passGate();
+    fireEvent.click(screen.getByText('Got it')); // clear the first-run guide
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field'));
+  }
+
+  it('a failed remote save shows a dismissible banner and keeps the editor alive', async () => {
+    vi.mocked(saveRemoteSchema).mockRejectedValue(
+      new Error('Kit is complete -- revert to draft before saving'),
+    );
+    await openAndDirtyKit();
+    fireEvent.click(screen.getByText('Save (Cmd+S)'));
+
+    // The failure renders as a banner, NOT the full-screen error state...
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('revert to draft');
+    // ...so the editor (and the unsaved work) is still fully mounted.
+    expect(screen.getByTestId('list')).toBeInTheDocument();
+    expect(screen.getByTestId('edit-field')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Error' })).not.toBeInTheDocument();
+
+    // Dismissing clears the banner without touching the schema.
+    fireEvent.click(screen.getByLabelText('Dismiss save error'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('list')).toBeInTheDocument();
+  });
+
+  it('a later successful save clears a lingering failure banner', async () => {
+    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('network blip'));
+    await openAndDirtyKit();
+    fireEvent.click(screen.getByText('Save (Cmd+S)'));
+    await screen.findByRole('alert');
+
+    fireEvent.click(screen.getByText('Save (Cmd+S)')); // mock now resolves
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('the first-run guide shows once and its dismissal persists per browser', async () => {
+    await passGate();
+    // First visit: the 3-step overlay is up.
+    const dialog = screen.getByRole('dialog', { name: 'Getting started guide' });
+    expect(dialog).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Got it'));
+    expect(
+      screen.queryByRole('dialog', { name: 'Getting started guide' }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem('schema-editor.guideSeen')).toBe('1');
+
+    // A fresh mount in the same browser: no guide (the flag persisted).
+    cleanup();
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByTestId('remote-catalogue')).toBeInTheDocument());
+    expect(
+      screen.queryByRole('dialog', { name: 'Getting started guide' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Escape closes the guide and persists the dismissal', async () => {
+    await passGate();
+    expect(
+      screen.getByRole('dialog', { name: 'Getting started guide' }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(
+      screen.queryByRole('dialog', { name: 'Getting started guide' }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem('schema-editor.guideSeen')).toBe('1');
+  });
+
+  it('Help reopens the dismissed guide', async () => {
+    await passGate();
+    fireEvent.click(screen.getByText('Got it'));
+    fireEvent.click(screen.getByText('Help'));
+    expect(
+      screen.getByRole('dialog', { name: 'Getting started guide' }),
+    ).toBeInTheDocument();
+  });
+
+  it('local (non-hosted) mode gets neither the guide nor the Help button', async () => {
+    vi.mocked(isHostedMode).mockReturnValue(false);
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByText(/Welcome to PDF Schema Editor/)).toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Help')).not.toBeInTheDocument();
   });
 });
