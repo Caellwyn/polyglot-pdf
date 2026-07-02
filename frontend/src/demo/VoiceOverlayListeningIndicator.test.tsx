@@ -6,10 +6,10 @@
 // `vad.userSpeaking && !pushToTalkMode && !nativeVad`, which in native-VAD mode
 // (the deployed default) lit when paused/disconnected and never when actually
 // listening. It was replaced with `.vff-listening` (ear glyph + mic-energy
-// meter), gated on a dedicated `isListening` flag = the send-capable states
-// (`connected` / `switching_section`), NOT the broader `isConnected` (which
-// stays true through `reconnecting`, where the mic gate drops all audio --
-// Codex PR #278).
+// meter), gated on a dedicated `isListening` flag = a steady `connected` session
+// ONLY, NOT the broader `isConnected` (which stays true through `reconnecting`)
+// and NOT the transient `switching_section` / `reconnecting` windows where the
+// mic send gate can drop audio (Codex PR #278).
 //
 // This pins the gate so a revert to the old VAD-based condition fails CI:
 //   - connected            -> indicator SHOWN
