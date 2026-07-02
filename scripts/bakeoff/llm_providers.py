@@ -175,10 +175,15 @@ class GeminiProvider:
         # (local dev / the offline bakeoff harness) fall back to the AI Studio
         # key. The gemini-2.5 model ids resolve identically on Vertex (verified
         # against the demo project's ADC), so no model-name remap is needed.
-        # Mirrors the live voice adapter's Vertex client construction, and the
-        # `== "true"` parse matches how backend/config.py reads VERTEXAI (so the
-        # backend and the extractor never disagree on the auth mode).
-        if os.getenv("VERTEXAI", "").strip().lower() == "true":
+        # Mirrors the live voice adapter's Vertex client construction. The
+        # truthy test (`.lower() == "true"`) is the same one backend/config.py
+        # uses; the only intentional difference is the default when VERTEXAI is
+        # UNSET -- config defaults it True (a deployed backend is Vertex), this
+        # defaults to the key path (a bare local/bakeoff run uses the key). The
+        # hosted route pins VERTEXAI into this subprocess's env from
+        # settings.VERTEXAI, so that default-polarity gap can never surface on
+        # the path that matters (bd polyglot-pdf-fyq4).
+        if os.getenv("VERTEXAI", "").lower() == "true":
             client = genai.Client(
                 vertexai=True,
                 project=os.getenv("GOOGLE_CLOUD_PROJECT"),

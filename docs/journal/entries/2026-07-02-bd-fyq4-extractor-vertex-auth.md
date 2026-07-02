@@ -35,7 +35,7 @@ offline bakeoff harness. The parse is
 to how `backend/config.py` reads VERTEXAI (and every other bool flag: `.lower()
 == "true"`), so the backend's notion of "am I on Vertex" and the extractor's can
 never diverge. (The first draft accepted `1`/`yes` too; fresh-eyes prep flagged
-that as a latent backend-vs-extractor split, tightened to match config.)
+that as a latent split, tightened to match config; fresh-eyes r2 then flagged a leftover `.strip()` the config parse lacks -- dropped, so the truthy test is now byte-identical, the only intended difference being the unset default noted below.)
 
 **Subprocess auth pinning (`backend/routes/editor_kit_routes.py`).** The route
 also pins `VERTEXAI` in the extractor subprocess env from its own
@@ -103,3 +103,8 @@ someone sets the off-convention value and two subsystems disagree.
 - backend/tests/unit/test_editor_kit_routes.py -- _settings gains VERTEXAI=False
   default; test_extract_unconfigured_is_503 tightened (no key AND no Vertex);
   new test_extract_vertex_without_key_passes_the_config_gate.
+- backend/tests/unit/test_extractor_provider_auth.py (new) -- provider-level
+  unit coverage: GeminiProvider.run() picks the Vertex client on VERTEXAI=true
+  with no key, the api_key client when VERTEXAI is unset, KeyErrors on the key
+  path with no key, and rejects a non-gemini model before touching the SDK
+  (loads llm_providers.py by file path + stubs google.genai; fresh-eyes r2 note).
