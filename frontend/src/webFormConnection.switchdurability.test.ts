@@ -274,6 +274,75 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     expect((conn as any).switchInFlight).toBe(true)
   })
 
+  it('AI-initiated switch SUPERSEDES a client switch parked on the validator gate (bd polyglot-pdf-6job)', async () => {
+    // The session-killing race: at a section boundary the client auto-advance parks
+    // on the B5 validator gate (pendingSectionSwitch set, switchInFlight NOT yet set).
+    // While parked, Gemini calls switch_section -> backend prepare_section_switch ->
+    // handlePrepareSectionSwitchRequest claims switchInFlight for the SAME boundary
+    // (same socket, authoritative). When the gate later resolves clean, the client
+    // path must NOT run switchToSection (it would tear down audio and THROW "a section
+    // switch is already in progress", killing the session). It must skip cleanly.
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA, { onError: (e) => errors.push(e) })
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+
+    // 1) Client auto-advance parks on the validator gate (does not throw, does not
+    //    set switchInFlight yet -- it is waiting for validation_result).
+    const parked = (conn as any).proceedSectionSwitch('s2') as Promise<void>
+    expect((conn as any).pendingSectionSwitch).not.toBeNull()
+    expect((conn as any).switchInFlight).toBe(false)
+
+    // 2) AI-initiated switch for the SAME boundary arrives while parked. It claims the
+    //    guard AND cancels the parked client switch.
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 2 })
+    expect((conn as any).switchInFlight).toBe(true)
+    expect((conn as any).pendingSectionSwitch).toBeNull()
+
+    // 3) The parked client switch resolves WITHOUT throwing and WITHOUT firing a
+    //    second (reconnect-based) manual_section_switch.
+    await expect(parked).resolves.toBeUndefined()
+    const manualSwitchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(manualSwitchSends).toBe(0)
+    expect(errors.length).toBe(0)
+
+    // The AI path's section_switched still completes the (one) switch cleanly.
+    ;(conn as any).handleSectionSwitched({ section_number: 2 })
+    expect((conn as any).switchInFlight).toBe(false)
+    expect(conn.getStatus()).toBe('connected')
+  })
+
+  it('parked client switch skips cleanly if the guard is claimed after the gate resolves (defense-in-depth, bd polyglot-pdf-6job)', async () => {
+    // Ordering variant: the validator verdict resolves the gate FIRST (clean), then an
+    // AI-initiated switch claims switchInFlight before proceedSectionSwitch reaches
+    // doSectionSwitch. The post-await switchInFlight re-check must catch this and skip
+    // the reconnect switch rather than letting switchToSection throw.
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA, { onError: (e) => errors.push(e) })
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+
+    const parked = (conn as any).proceedSectionSwitch('s2') as Promise<void>
+    expect((conn as any).pendingSectionSwitch).not.toBeNull()
+
+    // Clean verdict resolves the gate (NOT a cancel) -- proceedSectionSwitch's await
+    // unblocks with gate.cancelled === false.
+    ;(conn as any).resolvePendingSectionSwitch()
+    // Before the microtask that runs doSectionSwitch, simulate the AI path having
+    // claimed the boundary on the same tick.
+    ;(conn as any).switchInFlight = true
+
+    // The post-await re-check skips the switch: no throw, no manual_section_switch.
+    await expect(parked).resolves.toBeUndefined()
+    const manualSwitchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(manualSwitchSends).toBe(0)
+    expect(errors.length).toBe(0)
+  })
+
   it('startSection releases the guard on session_ready, not merely on handshake send', async () => {
     // Codex/fresh-eyes PR #137: a stall after the handshake but before session_ready
     // must still be watchdog-covered, so the guard must survive until session_ready.
