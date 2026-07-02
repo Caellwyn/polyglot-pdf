@@ -916,6 +916,59 @@ def test_onboard_rejects_non_pdf_and_oversize(client, monkeypatch):
     assert list(root.iterdir()) == []
 
 
+def test_concurrent_onboards_of_same_filename_both_persist(tmp_path, monkeypatch):
+    # TOCTOU (fresh-eyes, reproduced): two concurrent uploads deriving the SAME
+    # kit id must NOT silently collapse onto one kit -- both PDFs persist under
+    # DISTINCT ids (the onboard lock serializes the list->derive->write window).
+    # Direct async calls on ONE loop (asyncio.gather): the TestClient runs each
+    # request on its own portal loop, which cannot exercise a shared lock.
+    import io
+    from starlette.datastructures import UploadFile as StarletteUploadFile
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
+    )
+
+    def _upload_file(payload: bytes) -> StarletteUploadFile:
+        return StarletteUploadFile(
+            file=io.BytesIO(payload), filename="Form I-90.pdf"
+        )
+
+    async def _both():
+        return await asyncio.gather(
+            ekr.onboard_editor_kit(
+                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-A"), label=None
+            ),
+            ekr.onboard_editor_kit(
+                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-B"), label=None
+            ),
+        )
+
+    results = asyncio.new_event_loop().run_until_complete(_both())
+    ids = sorted(r.id for r in results)
+    assert ids == ["form-i-90", "form-i-90-2"]
+    stored = sorted((tmp_path / kid / "form.pdf").read_bytes() for kid in ids)
+    assert stored == [b"%PDF-1.7 AUTHOR-A", b"%PDF-1.7 AUTHOR-B"]
+
+
+def test_onboard_long_filename_truncates_instead_of_400(client):
+    # A realistic long download name must onboard (truncated slug), never 400
+    # with a baffling "Invalid kit id" (fresh-eyes, reproduced live).
+    c, _store, root = client
+    long_name = (
+        "USCIS Form I-90 Application to Replace Permanent Resident Card "
+        "(Green Card) - Official 2026 Edition Downloaded From Immigration "
+        "Website.pdf"
+    )
+    r = _upload(c, "auth-tok", filename=long_name)
+    assert r.status_code == 200, r.text
+    kit_id = r.json()["id"]
+    assert len(kit_id) <= 64
+    assert (root / kit_id / "form.pdf").exists()
+
+
 def _fake_extractor(schema_payload, exit_code=0, write_out=True):
     """A subprocess.run stand-in that mimics extract_form.py: writes --out."""
 

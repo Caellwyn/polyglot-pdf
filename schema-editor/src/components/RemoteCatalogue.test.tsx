@@ -291,3 +291,32 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       expect(screen.getByText(/model refused/)).toBeInTheDocument());
   });
 });
+
+describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => {
+  it('shows the elapsed ticker and disables controls while extracting', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let resolveExtract: (r: { ok: boolean; detail: string }) => void = () => {};
+    vi.mocked(extractRemoteKit).mockImplementation(
+      () => new Promise((res) => { resolveExtract = res; }),
+    );
+    try {
+      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+      await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Run extraction'));
+      // Mid-flight: the button shows the elapsed ticker...
+      await waitFor(() =>
+        expect(screen.getByText(/Extracting\.\.\. \d+s/)).toBeInTheDocument());
+      // ...and the header controls are disabled while it runs.
+      expect(screen.getByText('Refresh')).toBeDisabled();
+      expect(screen.getByText('Add a form (PDF)')).toBeDisabled();
+
+      resolveExtract({ ok: true, detail: '[OK] wrote schema.json -- 7 fields' });
+      await waitFor(() =>
+        expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+      expect(screen.queryByText(/Extracting\.\.\./)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import weakref
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 
@@ -425,10 +426,19 @@ async def set_editor_kit_status(
 # which the polish-only editor tier may do.
 
 # Mirror of the editor's deriveFormId (formKitDirectory.ts): a URL-safe kit id
-# from an uploaded filename ("Form I-90 (1).pdf" -> "form-i-90-1").
+# from an uploaded filename ("Form I-90 (1).pdf" -> "form-i-90-1"). CAPPED well
+# under _KIT_ID_RE's 128-char limit: a realistic long download name ("USCIS
+# Form I-90 Application to Replace ... Downloaded From ....pdf") would
+# otherwise derive a >128-char slug and 400 with a baffling "Invalid kit id"
+# (fresh-eyes, reproduced live). 64 chars leaves ample room for the -2/-3
+# uniquifier suffixes.
+_KIT_ID_MAX_DERIVED = 64
+
+
 def _derive_kit_id(filename: str) -> str:
     base = re.sub(r"\.pdf$", "", filename or "", flags=re.IGNORECASE)
     slug = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    slug = slug[:_KIT_ID_MAX_DERIVED].rstrip("-")
     return slug or "form"
 
 
@@ -443,6 +453,32 @@ def _friendly_label(kit_id: str) -> str:
 # --timeout=3600 covers it).
 _extract_semaphore = asyncio.Semaphore(1)
 
+# Serialize the onboard list->derive->write window (fresh-eyes, reproduced):
+# two concurrent uploads deriving the SAME kit id both read the listing
+# snapshot, both uniquify to the same id, and one author's PDF silently
+# vanishes behind a false 200. Per-instance serialization closes the reachable
+# race (one Cloud Run instance handles a small contractor pool's uploads);
+# a cross-instance collision remains theoretically possible and is accepted --
+# same-second same-filename uploads from two authors on two instances.
+#
+# The lock is PER EVENT LOOP (lazy, keyed weakly by the running loop): an
+# asyncio.Lock binds to whichever loop first acquires it and raises on any
+# other -- fine under uvicorn (one loop for the process), but the TestClient
+# spins a loop per client, so a module-level Lock would poison every test
+# after the first. In production exactly one entry ever exists.
+_onboard_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _get_onboard_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _onboard_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _onboard_locks[loop] = lock
+    return lock
+
 
 def _repo_root() -> Path:
     """The checkout/container root: backend/routes/x.py -> two parents up.
@@ -454,13 +490,28 @@ def _repo_root() -> Path:
 
 
 async def _read_upload_pdf(pdf: UploadFile, max_mb: float) -> bytes:
-    """Read + sanity-check an uploaded PDF (size cap, %PDF magic)."""
-    data = await pdf.read()
-    if len(data) > max_mb * 1024 * 1024:
-        raise HTTPException(
-            status_code=413,
-            detail=f"PDF is larger than the {max_mb:g} MB upload limit",
-        )
+    """Read + sanity-check an uploaded PDF (size cap, %PDF magic).
+
+    STREAMED in chunks with the cap enforced as bytes arrive (fresh-eyes): a
+    single `await pdf.read()` would materialize an oversized body fully in
+    memory before rejecting it. Cloud Run's ~32 MB request ceiling bounds the
+    worst case, but check-as-you-read is the right shape regardless.
+    """
+    limit = int(max_mb * 1024 * 1024)
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        chunk = await pdf.read(1024 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"PDF is larger than the {max_mb:g} MB upload limit",
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
     # Magic-byte check: the `accept` filter client-side is advisory; a renamed
     # HTML page must not land in the store as form.pdf.
     if not data.startswith(b"%PDF-"):
@@ -485,27 +536,31 @@ async def onboard_editor_kit(
     data = await _read_upload_pdf(pdf, settings.EXTRACTOR_MAX_PDF_MB)
 
     store = get_form_kit_store()
-    try:
-        existing = await store.list_kit_files()
-    except FormKitStoreError as exc:
-        raise HTTPException(status_code=502, detail="Unable to list kits") from exc
+    # The list->derive->write window runs under the onboard lock: without it,
+    # two concurrent uploads deriving the same id both pass the uniquifier and
+    # one PDF silently loses (fresh-eyes, reproduced live).
+    async with _get_onboard_lock():
+        try:
+            existing = await store.list_kit_files()
+        except FormKitStoreError as exc:
+            raise HTTPException(status_code=502, detail="Unable to list kits") from exc
 
-    base = _derive_kit_id(pdf.filename or "form")
-    kit_id = base
-    n = 2
-    while kit_id in existing:
-        kit_id = f"{base}-{n}"
-        n += 1
-    # The derived id must survive the same guard every later route applies.
-    kit_id = _safe_kit_id(kit_id)
+        base = _derive_kit_id(pdf.filename or "form")
+        kit_id = base
+        n = 2
+        while kit_id in existing:
+            kit_id = f"{base}-{n}"
+            n += 1
+        # The derived id must survive the same guard every later route applies.
+        kit_id = _safe_kit_id(kit_id)
 
-    kit_label = label.strip() if isinstance(label, str) and label.strip() else _friendly_label(kit_id)
-    try:
-        await store.put_pdf_bytes(kit_id, data, "form.pdf")
-        await store.put_metadata(kit_id, {"label": kit_label, "status": "draft"})
-    except FormKitStoreError as exc:
-        _log.error("editor_onboard_failed", kit_id=kit_id, error=str(exc))
-        raise HTTPException(status_code=502, detail="Unable to store the PDF") from exc
+        kit_label = label.strip() if isinstance(label, str) and label.strip() else _friendly_label(kit_id)
+        try:
+            await store.put_pdf_bytes(kit_id, data, "form.pdf")
+            await store.put_metadata(kit_id, {"label": kit_label, "status": "draft"})
+        except FormKitStoreError as exc:
+            _log.error("editor_onboard_failed", kit_id=kit_id, error=str(exc))
+            raise HTTPException(status_code=502, detail="Unable to store the PDF") from exc
 
     _log.info("editor_kit_onboarded", kit_id=kit_id, size_bytes=len(data), role=role)
     return EditorKitInfo(
