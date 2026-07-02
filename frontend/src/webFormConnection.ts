@@ -1210,6 +1210,19 @@ export class WebFormConnection {
       this.setStatus('switching_section', "handlePrepareSectionSwitch");
       this.armSectionSwitchWatchdog();
 
+      // If the client auto-advance is PARKED on the validator gate for this same
+      // boundary (bd polyglot-pdf-6job), the AI-initiated switch we are now running is
+      // authoritative -- it keeps this socket open and advances in place. Cancel the
+      // parked client switch so that when its gate later resolves, proceedSectionSwitch
+      // returns instead of running a redundant reconnect-based switchToSection (which
+      // would tear down audio and THROW "a section switch is already in progress",
+      // killing the session). cancelPendingSectionSwitch resolves the gate's promise
+      // with cancelled=true, so proceedSectionSwitch's await unblocks and skips cleanly.
+      if (this.pendingSectionSwitch) {
+        console.log('[WebFormConnection] [validator] AI-initiated switch superseding a parked client switch for this boundary; cancelling the parked switch.');
+        this.cancelPendingSectionSwitch();
+      }
+
       // Switch to target section in local state (no disconnect!)
       console.log('[WebFormConnection] Switching to section', targetSectionId);
       const updatedState = SchemaFormStateManager.switchToSection(currentState, targetSectionId);
@@ -1705,6 +1718,20 @@ export class WebFormConnection {
     // A CONFLICT verdict (or teardown/eviction) cancelled THIS gate -> do not switch.
     if (gate.cancelled) {
       console.log('[WebFormConnection] [validator] switch deferred -- conflict/teardown held this boundary in section.');
+      return;
+    }
+    // An AI-INITIATED switch (Gemini's switch_section -> prepare_section_switch ->
+    // handlePrepareSectionSwitchRequest) may have claimed this same boundary WHILE we
+    // were parked on the validator gate (bd polyglot-pdf-6job). That path keeps the
+    // SAME socket open and is authoritative; running our reconnect-based switch now
+    // would tear down audio/mic and then THROW in switchToSection ("a section switch
+    // is already in progress"), killing the session. The switchInFlight check at the
+    // confirm-handler call site (line ~1612) ran BEFORE the park, so it could not see
+    // a guard claimed during the await -- re-check it here, after the await, and skip
+    // cleanly. (handlePrepareSectionSwitchRequest also cancels this gate when it finds
+    // one parked; this is defense-in-depth for the gate-already-resolved ordering.)
+    if (this.switchInFlight) {
+      console.log('[WebFormConnection] [skip] AI-initiated switch claimed this boundary while parked; skipping client auto-advance.');
       return;
     }
     // Resolved clean or failed OPEN -> run the switch.
