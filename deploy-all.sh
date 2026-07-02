@@ -220,12 +220,18 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # 5 minutes (bd polyglot-pdf-9w5k); 3600s is the Cloud Run maximum, so WS
     # lifetime is bounded by Gemini Live session limits (GoAway handling)
     # instead of the HTTP layer.
+    # --memory: 1Gi headroom for hosted extraction (bd 92qe.4, Opus review of
+    # PR #282): a run holds the form PDF (up to EXTRACTOR_MAX_PDF_MB) plus an
+    # optional instructions PDF in route memory AND as tmpfs copies (/tmp is
+    # memory-backed on Cloud Run) while the pipeline child runs -- the 512Mi
+    # default risks an opaque OOM kill mid-extraction.
     gcloud run deploy "$BACKEND_SERVICE_NAME" \
         --image "$IMAGE_URL" \
         --region "$REGION" \
         --platform managed \
         --allow-unauthenticated \
         --timeout=3600 \
+        --memory=1Gi \
         --project "$POLYGLOT_PROJECT_NAME" \
         --set-env-vars="$BACKEND_ENV" \
         "${SA_FLAG[@]}"
@@ -371,7 +377,11 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     
     # Deploy to Firebase Hosting
     log_info "🌐 Deploying to Firebase Hosting..."
-    firebase deploy --only hosting --project "$POLYGLOT_PROJECT_NAME"
+    # Pinned to the APP target (bd 92qe.4): hosting is now an array of named
+    # targets (app = the voice app, editor = the hosted schema editor), and a
+    # bare "--only hosting" would deploy BOTH -- including whatever stale build
+    # sits in schema-editor/dist. The editor ships via deploy-editor.sh only.
+    firebase deploy --only hosting:app --project "$POLYGLOT_PROJECT_NAME"
     
     log_success "✅ Frontend deployed successfully!"
     echo "   URL: https://$POLYGLOT_PROJECT_NAME.web.app"

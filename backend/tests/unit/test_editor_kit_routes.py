@@ -189,6 +189,20 @@ def test_non_ascii_access_code_is_401_not_500(client, monkeypatch):
     assert _run(ekr.require_editor_role(x_editor_token="caf\u00e9-tok")) == "editor"
 
 
+def test_parse_extra_origins_accepts_semicolons_and_commas():
+    # The value rides `gcloud run deploy --set-env-vars=A=1,B=2` where commas
+    # separate PAIRS, so multi-origin values use semicolons in the deploy
+    # scripts (bd 92qe.4); commas keep working for hand-set local env.
+    from backend.config import parse_extra_origins
+
+    assert parse_extra_origins(
+        "https://a.web.app;https://a.firebaseapp.com"
+    ) == ["https://a.web.app", "https://a.firebaseapp.com"]
+    assert parse_extra_origins("https://a, https://b") == ["https://a", "https://b"]
+    assert parse_extra_origins(None) == []
+    assert parse_extra_origins(" ; , ") == []
+
+
 # --- store write methods: LocalFormKitStore round-trips ---------------------
 
 
