@@ -25,9 +25,14 @@
 #      CORS_EXTRA_ORIGINS + EXTRACTOR_MODEL ride the normal backend deploy env
 #      (deploy-demo.sh exports them via BACKEND_EXTRA_ENV).
 #   4. Bucket WRITE access for the editor surface (reads work today; saves 403
-#      until granted):
+#      until granted). Resolve the service's RUNTIME identity first (on the
+#      demo it is polyglot-backend-sa@...; a project that never set
+#      BACKEND_SERVICE_ACCOUNT runs on the default compute SA,
+#      <PROJECT_NUMBER>-compute@developer.gserviceaccount.com):
+#        SA=$(gcloud run services describe polyglot-backend --region us-central1 \
+#          --project "$PROJECT" --format='value(spec.template.spec.serviceAccountName)')
 #        gcloud storage buckets add-iam-policy-binding "gs://$FORM_KITS_BUCKET" \
-#          --member="serviceAccount:<cloud-run-runtime-sa>" \
+#          --member="serviceAccount:$SA" \
 #          --role=roles/storage.objectAdmin --project "$PROJECT"
 #
 # Usage:

@@ -177,7 +177,10 @@ Cloud Run directly via `VITE_API_BASE_URL`; the Hosting rewrite's 60s cap would
 kill minutes-long extraction). `.firebaserc` maps `editor` ->
 `polyglot-editor-demo` on the demo project. **Because targets are named, a bare
 `firebase deploy --only hosting` deploys BOTH sites** -- `deploy-all.sh` is
-pinned to `--only hosting:app`, and the editor ships only via
+pinned to `--only hosting:app`, the `frontend/package.json` `deploy` /
+`deploy:demo` shortcuts are pinned too (the unscoped prod one would
+otherwise THROW -- prod maps no `editor` target -- and the demo one would
+silently ship a stale editor build), and the editor ships only via
 **`deploy-editor.sh`** (`npm run build:hosted` + `--only hosting:editor`; its
 header is the one-time runbook: site create, `target:apply`, the two
 access-code secrets attached once to Cloud Run with `--set-secrets`, and the
