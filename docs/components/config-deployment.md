@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-06-16. The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
+*Last updated: 2026-07-01. Added the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -30,7 +30,8 @@ which bypasses the cache).
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
   `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `SECRETARY_TIMEOUT_S`, `FORM_KITS_MODE`,
   `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
-  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`.
+  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`,
+  `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): `PROACTIVE_AUDIO`, the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -86,6 +87,17 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
   (`backend/services/auth.py`); returns a stub `dev_user`. Auth canon lives in the
   planned `auth.md` (bd `polyglot-pdf-y3l`).
+- **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
+  for the token-gated `/api/editor/*` surface the hosted schema editor uses
+  (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:
+  *editor* = polish provided kits (list/read drafts, save schemas, flip status);
+  *author* = editor + PDF onboarding/hosted extraction (bd 92qe.3). Neither set →
+  the surface is disabled (503 fail-closed). On Cloud Run inject via Secret
+  Manager (`--set-secrets`), never plaintext env.
+- **`CORS_EXTRA_ORIGINS`** — comma-separated extra CORS origins appended to the
+  hardcoded localhost list in `backend/main.py` (e.g. the hosted schema-editor
+  site, which calls Cloud Run directly rather than through the Hosting `/api`
+  rewrite — the rewrite's 60s cap would kill minutes-long extraction requests).
 - **`GENAI_WEBSOCKET_BASE`** — optional override of the genai SDK's Live WebSocket
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.

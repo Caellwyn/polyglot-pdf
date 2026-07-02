@@ -403,6 +403,20 @@ class Settings(BaseModel):
 		}
 	]
 
+	# Hosted schema-editor access (bd polyglot-pdf-92qe.1). Two shared-secret
+	# tiers checked by the /api/editor/* routes: EDITOR (polish provided kits:
+	# list/read drafts, save schemas, flip status) and AUTHOR (editor + onboard
+	# PDFs + run hosted extraction). Unset -> the editor surface is disabled
+	# (routes fail closed with 503). On Cloud Run these arrive via Secret
+	# Manager (--set-secrets), never plaintext env.
+	SCHEMA_EDITOR_TOKEN: str | None = os.getenv("SCHEMA_EDITOR_TOKEN")
+	SCHEMA_AUTHOR_TOKEN: str | None = os.getenv("SCHEMA_AUTHOR_TOKEN")
+	# Extra CORS origins (comma-separated), e.g. the hosted schema-editor site.
+	# The editor calls Cloud Run directly (not via the Hosting /api rewrite,
+	# whose 60s cap would kill minutes-long extraction), so its origin must be
+	# allowed here.
+	CORS_EXTRA_ORIGINS: str = os.getenv("CORS_EXTRA_ORIGINS", "")
+
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")
 	FORM_KITS_LOCAL_ROOT: str = os.getenv(
@@ -697,6 +711,15 @@ def get_settings() -> Settings:
 	In later phases we can load .env via python-dotenv and add validation.
 	"""
 	return Settings()
+
+
+def parse_extra_origins(raw: str | None) -> list[str]:
+	"""Split CORS_EXTRA_ORIGINS ("https://a.web.app, https://a.firebaseapp.com")
+	into a clean origin list. Empty/None -> [] (no extra origins). Used by
+	main.py to extend the hardcoded localhost CORS list with the hosted
+	schema-editor's origin(s) without a code change per deploy
+	(bd polyglot-pdf-92qe.1)."""
+	return [o.strip() for o in (raw or "").split(",") if o.strip()]
 
 
 # ============================================================================
