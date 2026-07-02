@@ -759,6 +759,93 @@ def test_mark_complete_validates_against_form_contract(client):
     assert r2.status_code == 200
 
 
+def test_write_paths_fail_closed_on_metadata_store_error(client, monkeypatch):
+    # metadata.status is the GUARD input for the publish gate -- a failed read
+    # must be a 502, never degrade to None and let a save land on a possibly-
+    # published kit (Codex P1 r2, PR #279).
+    c, _store, _root = client
+
+    class _MetaBoomStore:
+        async def list_kit_files(self):
+            return {"live-kit": ["form.pdf", "metadata.json", "schema.json"]}
+
+        async def load_metadata(self, kit_id):
+            raise FormKitStoreError("transient GCS failure")
+
+        async def put_schema(self, *a, **k):
+            raise AssertionError("write reached despite unreadable metadata")
+
+        async def put_metadata(self, *a, **k):
+            raise AssertionError("write reached despite unreadable metadata")
+
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: _MetaBoomStore())
+    r = c.put(
+        "/api/editor/kits/live-kit/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"fields": []},
+    )
+    assert r.status_code == 502
+    r2 = c.post(
+        "/api/editor/kits/live-kit/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "draft"},
+    )
+    assert r2.status_code == 502
+
+
+def test_mark_complete_requires_a_pdf(client):
+    # A complete kit ships to the voice app, which serves its PDF -- promoting
+    # a PDF-less kit would deploy a form whose PDF read 404s (Codex P1 r2).
+    c, _store, root = client
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "metadata.json").write_text(json.dumps({"status": "draft"}), encoding="utf-8")
+    (kit / "schema.json").write_text(json.dumps(VALID_SCHEMA), encoding="utf-8")
+    r = c.post(
+        "/api/editor/kits/no-pdf/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 409
+    assert "PDF" in r.json()["detail"]
+
+
+def test_mark_complete_requires_extraction_info_for_pdf_schema(client):
+    # Pydantic v2 skips field validators for omitted defaults, so the model's
+    # "extraction_info required for PDF forms" rule never fires on an ABSENT
+    # value -- the publish gate enforces it explicitly (Codex P1 r2).
+    c, _store, root = client
+    schema = {k: v for k, v in VALID_SCHEMA.items() if k != "extraction_info"}
+    _make_kit(root, "no-provenance", schema=schema)
+    r = c.post(
+        "/api/editor/kits/no-provenance/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 422
+    assert "extraction_info" in r.json()["detail"]
+
+
+def test_local_concurrent_writes_to_same_file_both_succeed(tmp_path):
+    # Two overlapping saves of the SAME file must not collide on a shared temp
+    # path (pid-only temp names did; per-write nonce fixes it -- Codex P1 r2).
+    store = LocalFormKitStore(tmp_path)
+    (tmp_path / "i-90").mkdir()
+
+    async def _both():
+        await asyncio.gather(
+            store.put_schema("i-90", {"fields": [{"id": "a"}]}),
+            store.put_schema("i-90", {"fields": [{"id": "b"}]}),
+        )
+
+    _run(_both())
+    # One of the two payloads won (last-write-wins is fine); the file must be
+    # intact valid JSON and no temp litter may remain.
+    final = _run(store.load_schema("i-90"))
+    assert final["fields"][0]["id"] in ("a", "b")
+    assert [p.name for p in (tmp_path / "i-90").iterdir()] == ["schema.json"]
+
+
 def test_status_rejects_unknown_values(client):
     c, _store, root = client
     _make_kit(root, "i-90", schema=VALID_SCHEMA)

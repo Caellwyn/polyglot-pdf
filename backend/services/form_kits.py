@@ -8,6 +8,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 import anyio
 import structlog
@@ -316,7 +317,12 @@ class LocalFormKitStore(FormKitStore):
 
 		def _write() -> None:
 			path.parent.mkdir(parents=True, exist_ok=True)
-			tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+			# Per-WRITE unique temp name: the pid alone is constant for the
+			# process, so two concurrent saves of the same file would collide on
+			# one temp path (one thread clobbers the other's temp; the loser's
+			# os.replace then FileNotFoundErrors) -- same lesson as the dev
+			# extraction endpoint's request counter (Codex P1 r2, PR #279).
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
 			try:
 				tmp.write_text(
 					json.dumps(data, indent=2, ensure_ascii=False) + "\n",

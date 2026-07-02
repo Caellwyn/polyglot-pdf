@@ -39,7 +39,7 @@ from pydantic import BaseModel, ValidationError
 import structlog
 
 from backend.config import get_settings
-from backend.models.form_models import FormSchema
+from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.form_kits import (
     FormKitNotFound,
@@ -210,6 +210,13 @@ async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str
 
     Existence = presence in the storage listing (a kit is its folder), NOT
     presence in the manifest: drafts are exactly the kits the editor works on.
+
+    A FAILED metadata read (FormKitStoreError) propagates as 502 -- it must NOT
+    degrade to None: metadata.status is the GUARD input for the write paths
+    (the publish gate refuses saves on complete kits), so suppressing a
+    transient read failure would let a save land on a possibly-published kit
+    (Codex P1 r2, PR #279). Only the LIST route tolerates unreadable metadata
+    (one bad kit must not hide the rest), and it does so with its own catch.
     """
     try:
         files_by_kit = await store.list_kit_files()
@@ -219,8 +226,10 @@ async def _load_meta_or_404(store, kit_id: str) -> tuple[Optional[dict], set[str
         raise HTTPException(status_code=404, detail=f"Unknown kit: {kit_id}")
     try:
         meta = await store.load_metadata(kit_id)
-    except FormKitStoreError:
-        meta = None
+    except FormKitStoreError as exc:
+        raise HTTPException(
+            status_code=502, detail="Unable to read kit metadata"
+        ) from exc
     return meta, set(files_by_kit[kit_id])
 
 
@@ -336,10 +345,20 @@ async def set_editor_kit_status(
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
-    meta, _files = await _load_meta_or_404(store, kit_id)
-    schema_file, _pdf = _resolve_meta_names(meta)
+    meta, files = await _load_meta_or_404(store, kit_id)
+    schema_file, pdf_file = _resolve_meta_names(meta)
 
     if body.status == "complete":
+        # The voice app serves BOTH the schema and the PDF of a complete kit;
+        # the deploy manifest falls back to a conventional pdf name when none
+        # exists, so promoting a PDF-less kit would ship a form whose PDF read
+        # 404s in the voice app (Codex P1 r2, PR #279).
+        if pdf_file not in files:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Kit has no {pdf_file} -- a complete kit needs its "
+                       "form PDF (the voice app serves it)",
+            )
         try:
             schema = await store.load_schema(kit_id, schema_file)
         except FormKitNotFound as exc:
@@ -353,13 +372,25 @@ async def set_editor_kit_status(
                 status_code=502, detail="Unable to load schema"
             ) from exc
         try:
-            FormSchema.model_validate(schema)
+            parsed = FormSchema.model_validate(schema)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422,
                 detail=f"Schema does not validate against the form contract, so "
                        f"it cannot be marked complete: {str(exc)[:400]}",
             ) from exc
+        # Pydantic v2 does not run field validators for an OMITTED default, so
+        # the model's "extraction_info required for PDF forms" rule never fires
+        # on an absent value -- a PDF schema with no extraction metadata would
+        # validate. Enforce the documented contract explicitly at the publish
+        # gate (Codex P1 r2, PR #279); the extraction pipeline emits it, so a
+        # legitimate kit is unaffected.
+        if parsed.source == FormSource.PDF and parsed.extraction_info is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Schema is missing extraction_info (required for PDF "
+                       "forms), so it cannot be marked complete",
+            )
 
     next_meta = {**(meta or {}), "status": body.status}
     try:
