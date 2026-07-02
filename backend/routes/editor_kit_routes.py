@@ -30,10 +30,24 @@ FormSchema -- a contractor cannot promote a structurally-broken schema. Draft
 saves stay lenient (work-in-progress is allowed to be incomplete).
 """
 
+import asyncio
 import hmac
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Response
+import anyio
+
+from fastapi import (
+    APIRouter, Body, Depends, File, Form, Header, HTTPException, Response,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 import structlog
@@ -400,3 +414,261 @@ async def set_editor_kit_status(
         raise HTTPException(status_code=502, detail="Unable to update status") from exc
     _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role)
     return {"ok": True, "status": body.status}
+
+
+# --- author tier: PDF onboarding + hosted extraction (bd polyglot-pdf-92qe.3) --
+#
+# The (a)-tier contractor permission from the 2026-07-01 goal: collect (upload a
+# blank AcroForm PDF into the shared store), extract (run the PDF->schema
+# authoring pass server-side), review. Both routes require the AUTHOR role --
+# extraction spends paid model tokens and onboarding creates kits, neither of
+# which the polish-only editor tier may do.
+
+# Mirror of the editor's deriveFormId (formKitDirectory.ts): a URL-safe kit id
+# from an uploaded filename ("Form I-90 (1).pdf" -> "form-i-90-1").
+def _derive_kit_id(filename: str) -> str:
+    base = re.sub(r"\.pdf$", "", filename or "", flags=re.IGNORECASE)
+    slug = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    return slug or "form"
+
+
+def _friendly_label(kit_id: str) -> str:
+    return re.sub(r"\b\w", lambda m: m.group(0).upper(), kit_id.replace("-", " ").replace("_", " "))
+
+
+# ONE extraction subprocess per instance at a time: each run holds a PDF +
+# schema in memory and spawns a Python child; serializing keeps the container's
+# memory bounded and makes concurrent-write races on one kit impossible. A
+# second author's request queues (the HTTP request waits; Cloud Run's
+# --timeout=3600 covers it).
+_extract_semaphore = asyncio.Semaphore(1)
+
+
+def _repo_root() -> Path:
+    """The checkout/container root: backend/routes/x.py -> two parents up.
+
+    Locally this is the repo root; in the Cloud Run image it is /app (the image
+    copies backend/ AND scripts/ under /app -- see backend/Dockerfile).
+    """
+    return Path(__file__).resolve().parents[2]
+
+
+async def _read_upload_pdf(pdf: UploadFile, max_mb: float) -> bytes:
+    """Read + sanity-check an uploaded PDF (size cap, %PDF magic)."""
+    data = await pdf.read()
+    if len(data) > max_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"PDF is larger than the {max_mb:g} MB upload limit",
+        )
+    # Magic-byte check: the `accept` filter client-side is advisory; a renamed
+    # HTML page must not land in the store as form.pdf.
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status_code=422, detail="The file is not a PDF")
+    return data
+
+
+@router.post("/kits", response_model=EditorKitInfo)
+async def onboard_editor_kit(
+    role: Annotated[str, Depends(require_author_role)],
+    pdf: Annotated[UploadFile, File(description="The blank AcroForm PDF")],
+    label: Annotated[Optional[str], Form()] = None,
+) -> EditorKitInfo:
+    """Create a new kit in the shared store from an uploaded form PDF.
+
+    The hosted counterpart of the local catalogue's drag-drop onboarding
+    (formKitDirectory.onboardPdf): derive a URL-safe kit id from the filename
+    (uniquified with -2/-3... if taken), write form.pdf + metadata.json
+    (status draft). No schema yet -- extraction is the separate step.
+    """
+    settings = get_settings()
+    data = await _read_upload_pdf(pdf, settings.EXTRACTOR_MAX_PDF_MB)
+
+    store = get_form_kit_store()
+    try:
+        existing = await store.list_kit_files()
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to list kits") from exc
+
+    base = _derive_kit_id(pdf.filename or "form")
+    kit_id = base
+    n = 2
+    while kit_id in existing:
+        kit_id = f"{base}-{n}"
+        n += 1
+    # The derived id must survive the same guard every later route applies.
+    kit_id = _safe_kit_id(kit_id)
+
+    kit_label = label.strip() if isinstance(label, str) and label.strip() else _friendly_label(kit_id)
+    try:
+        await store.put_pdf_bytes(kit_id, data, "form.pdf")
+        await store.put_metadata(kit_id, {"label": kit_label, "status": "draft"})
+    except FormKitStoreError as exc:
+        _log.error("editor_onboard_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to store the PDF") from exc
+
+    _log.info("editor_kit_onboarded", kit_id=kit_id, size_bytes=len(data), role=role)
+    return EditorKitInfo(
+        id=kit_id, label=kit_label, description=None, status="draft",
+        hasSchema=False, hasPdf=True, schemaFile="schema.json", pdfFile="form.pdf",
+    )
+
+
+class ExtractResponse(BaseModel):
+    ok: bool
+    detail: str
+    schemaFile: Optional[str] = None
+    fieldCount: Optional[int] = None
+
+
+@router.post("/kits/{kit_id}/extract", response_model=ExtractResponse)
+async def extract_editor_kit(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+    force: Annotated[bool, Form()] = False,
+    instructions_pdf: Annotated[Optional[UploadFile], File(
+        description="OPTIONAL official instructions PDF; enriches help text"
+    )] = None,
+) -> ExtractResponse:
+    """Run the PDF -> draft-schema authoring pass for a kit, server-side.
+
+    The hosted counterpart of the Vite dev server's /api/extract (which spawns
+    the extractor on the maintainer's machine): stream the kit's PDF from the
+    store to a temp dir, run scripts/authoring/extract_form.py as a subprocess
+    (model = EXTRACTOR_MODEL, a gemini-* model -- the local `claude` CLI does
+    not exist in the container), and on a validated success write the draft
+    schema back to the store. Synchronous by design: Cloud Run's
+    --timeout=3600 covers a minutes-long run, and the editor shows elapsed
+    progress. Refuses to clobber an existing schema unless force=true (the
+    same no-overwrite contract as the dev endpoint).
+    """
+    kit_id = _safe_kit_id(kit_id)
+    settings = get_settings()
+    if not (settings.EXTRACTOR_MODEL or "").lower().startswith("gemini"):
+        raise HTTPException(
+            status_code=503,
+            detail="Hosted extraction needs a gemini-* EXTRACTOR_MODEL "
+                   "(the local claude CLI is not available on the server)",
+        )
+    if not (settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
+        raise HTTPException(
+            status_code=503,
+            detail="Hosted extraction is not configured (no GEMINI_API_KEY)",
+        )
+
+    store = get_form_kit_store()
+    meta, files = await _load_meta_or_404(store, kit_id)
+    schema_file, pdf_file = _resolve_meta_names(meta)
+    if pdf_file not in files:
+        raise HTTPException(status_code=409, detail=f"Kit {kit_id} has no {pdf_file} to extract from")
+    if schema_file in files and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f'"{schema_file}" already exists for kit "{kit_id}"; re-extracting '
+                   "would overwrite it (pass force=true to replace it)",
+        )
+
+    script = _repo_root() / "scripts" / "authoring" / "extract_form.py"
+    if not script.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="The extraction script is not present on this server "
+                   "(the image must include scripts/authoring + scripts/bakeoff)",
+        )
+
+    try:
+        pdf_bytes = await store.load_pdf_bytes(kit_id, pdf_file)
+    except (FormKitNotFound, FormKitStoreError) as exc:
+        raise HTTPException(status_code=502, detail="Unable to read the kit PDF") from exc
+
+    instructions_bytes: Optional[bytes] = None
+    if instructions_pdf is not None and (instructions_pdf.filename or "") != "":
+        instructions_bytes = await _read_upload_pdf(
+            instructions_pdf, settings.EXTRACTOR_MAX_PDF_MB
+        )
+
+    async with _extract_semaphore:
+        tmp_dir = tempfile.mkdtemp(prefix=f"extract_{kit_id}_")
+        try:
+            tmp = Path(tmp_dir)
+            pdf_path = tmp / "form.pdf"
+            out_path = tmp / "schema.json"
+            pdf_path.write_bytes(pdf_bytes)
+            cmd = [
+                sys.executable, str(script),
+                "--pdf", str(pdf_path),
+                "--out", str(out_path),
+                "--model", settings.EXTRACTOR_MODEL,
+            ]
+            if instructions_bytes is not None:
+                instructions_path = tmp / "instructions.pdf"
+                instructions_path.write_bytes(instructions_bytes)
+                cmd += ["--instructions-pdf", str(instructions_path)]
+
+            def _run() -> subprocess.CompletedProcess:
+                return subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=settings.EXTRACTOR_TIMEOUT_SEC,
+                    cwd=str(_repo_root()),
+                    env={**os.environ, "PYTHONUTF8": "1"},
+                )
+
+            _log.info("editor_extract_start", kit_id=kit_id,
+                      model=settings.EXTRACTOR_MODEL,
+                      with_instructions=instructions_bytes is not None)
+            try:
+                proc = await anyio.to_thread.run_sync(_run)
+            except subprocess.TimeoutExpired as exc:
+                _log.error("editor_extract_timeout", kit_id=kit_id,
+                           timeout_s=settings.EXTRACTOR_TIMEOUT_SEC)
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"Extraction timed out after "
+                           f"{settings.EXTRACTOR_TIMEOUT_SEC:g}s",
+                ) from exc
+
+            lines = [ln for ln in (proc.stdout + proc.stderr).splitlines() if ln.strip()]
+            last_line = lines[-1] if lines else "(no output)"
+            if proc.returncode != 0 or not out_path.exists():
+                _log.error("editor_extract_failed", kit_id=kit_id,
+                           exit_code=proc.returncode, detail=last_line[:400])
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Extraction failed (exit {proc.returncode}): {last_line[:400]}",
+                )
+
+            try:
+                schema = json.loads(out_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Extractor wrote an unreadable schema: {exc}",
+                ) from exc
+            if not isinstance(schema, dict) or not isinstance(schema.get("fields"), list):
+                raise HTTPException(
+                    status_code=502,
+                    detail="Extractor produced a schema without a fields list",
+                )
+
+            try:
+                await store.put_schema(kit_id, schema, schema_file)
+            except FormKitStoreError as exc:
+                raise HTTPException(
+                    status_code=502, detail="Extraction succeeded but the schema "
+                                            "could not be stored",
+                ) from exc
+
+            field_count = len(schema.get("fields", []))
+            # The detail line names the temp --out path; show the store name.
+            clean_detail = last_line.replace(str(out_path), schema_file)
+            _log.info("editor_extract_done", kit_id=kit_id, fields=field_count, role=role)
+            return ExtractResponse(
+                ok=True, detail=clean_detail, schemaFile=schema_file,
+                fieldCount=field_count,
+            )
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -154,6 +154,12 @@ class FormKitStore:
 	) -> None:
 		raise NotImplementedError
 
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		"""Write a kit's form PDF (the author-tier onboarding, bd 92qe.3)."""
+		raise NotImplementedError
+
 	async def list_kit_files(self) -> dict[str, list[str]]:
 		"""Map every kit id to the filenames at its root (one storage listing).
 
@@ -306,6 +312,27 @@ class LocalFormKitStore(FormKitStore):
 	) -> None:
 		schema_file = safe_filename(schema_file, "schema.json")
 		await self._write_json(self._kit_dir(kit_id) / schema_file, schema)
+
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		pdf_file = safe_filename(pdf_file, "form.pdf")
+		path = self._kit_dir(kit_id) / pdf_file
+
+		def _write() -> None:
+			path.parent.mkdir(parents=True, exist_ok=True)
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+			try:
+				tmp.write_bytes(data)
+				os.replace(tmp, path)
+			finally:
+				if tmp.exists():
+					tmp.unlink(missing_ok=True)
+
+		try:
+			await anyio.to_thread.run_sync(_write)
+		except OSError as exc:
+			raise FormKitStoreError(f"Unable to write {pdf_file}: {exc}") from exc
 
 	async def _write_json(self, path: Path, data: dict) -> None:
 		"""Atomic JSON write: temp file in the same dir, then os.replace.
@@ -475,6 +502,24 @@ class GCSFormKitStore(FormKitStore):
 	) -> None:
 		schema_file = safe_filename(schema_file, "schema.json")
 		await self._upload_json(self._build_blob_path(kit_id, schema_file), schema)
+
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		pdf_file = safe_filename(pdf_file, "form.pdf")
+		blob_path = self._build_blob_path(kit_id, pdf_file)
+
+		def _upload() -> None:
+			blob = self._bucket.blob(blob_path)
+			blob.cache_control = "no-cache"
+			blob.upload_from_string(data, content_type="application/pdf")
+
+		try:
+			await anyio.to_thread.run_sync(_upload)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
 
 	async def _upload_json(self, blob_path: str, data: dict) -> None:
 		"""Upload a JSON blob with no-cache so a re-pull after a save is never
