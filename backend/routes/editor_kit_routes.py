@@ -668,6 +668,19 @@ async def extract_editor_kit(
                 instructions_path.write_bytes(instructions_bytes)
                 cmd += ["--instructions-pdf", str(instructions_path)]
 
+            # Pass the RESOLVED auth mode to the subprocess so the extractor's
+            # provider (llm_providers.py) picks the same client the gate above
+            # authorized. settings.VERTEXAI is the source of truth (config.py
+            # defaults it True when unset); without pinning it here, the child
+            # would re-read a possibly-unset VERTEXAI env with the opposite
+            # default and could take the key path the gate did not require
+            # (bd polyglot-pdf-fyq4).
+            child_env = {
+                **os.environ,
+                "PYTHONUTF8": "1",
+                "VERTEXAI": "true" if settings.VERTEXAI else "false",
+            }
+
             def _run() -> subprocess.CompletedProcess:
                 return subprocess.run(
                     cmd,
@@ -677,7 +690,7 @@ async def extract_editor_kit(
                     errors="replace",
                     timeout=settings.EXTRACTOR_TIMEOUT_SEC,
                     cwd=str(_repo_root()),
-                    env={**os.environ, "PYTHONUTF8": "1"},
+                    env=child_env,
                 )
 
             _log.info("editor_extract_start", kit_id=kit_id,

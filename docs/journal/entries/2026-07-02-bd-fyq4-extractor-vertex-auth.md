@@ -37,6 +37,16 @@ to how `backend/config.py` reads VERTEXAI (and every other bool flag: `.lower()
 never diverge. (The first draft accepted `1`/`yes` too; fresh-eyes prep flagged
 that as a latent backend-vs-extractor split, tightened to match config.)
 
+**Subprocess auth pinning (`backend/routes/editor_kit_routes.py`).** The route
+also pins `VERTEXAI` in the extractor subprocess env from its own
+`settings.VERTEXAI`, so the child provider reads the SAME resolved auth mode the
+gate authorized. Without this there is a latent default-divergence: the gate
+reads `settings.VERTEXAI` (config defaults it True when unset) while the provider
+re-reads `os.getenv("VERTEXAI")` (defaults to the key path when unset) -- so an
+unset VERTEXAI would let the gate open but the provider take the key path and
+KeyError. The deploy always sets VERTEXAI explicitly, so it never bites in
+practice, but pinning it removes the footgun. (Flagged during fresh-eyes round 2.)
+
 **Route config gate (`backend/routes/editor_kit_routes.py:610`).** Fixing the
 provider alone was NOT enough, and fresh-eyes caught exactly this: the hosted
 `/kits/{id}/extract` route had a pre-existing gate (from bd 92qe.3) that 503'd
