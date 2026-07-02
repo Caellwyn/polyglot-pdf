@@ -14,6 +14,13 @@
 #   ./deploy-demo.sh                     # republish (complete kits only)
 #
 # Env: FORM_KITS_BUCKET (default: the demo bucket), FORM_KITS_PREFIX.
+#
+# DEFAULTS DIVERGE ON PURPOSE -- read before bypassing deploy-demo.sh: this
+# script defaults to the DEMO bucket (contractors work on the demo channel),
+# while a bare deploy-all.sh defaults to the PROD bucket. Republish via
+# deploy-demo.sh (which pins the demo bucket) or export FORM_KITS_BUCKET
+# yourself; otherwise you could pull from demo and publish to prod
+# (Opus review note, PR #283).
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
