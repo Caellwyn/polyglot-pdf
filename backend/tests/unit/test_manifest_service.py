@@ -1,6 +1,10 @@
-"""Unit tests for manifest_service helpers using inline schemas."""
+"""Unit tests for manifest_service helpers using inline schemas,
+plus the JIT token-budget guard against the real I-90 schema."""
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +15,38 @@ from backend.services.manifest_service import (
     get_next_field_schema,
     should_include_schema_in_response,
 )
+
+# The documented JIT manifest token budget: a single part's manifest must fit
+# well inside the system instruction (see docs/components/jit-schema.md).
+JIT_MANIFEST_TOKEN_BUDGET = 500
+
+_I90_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
+)
+
+
+def _load_i90_schema() -> dict:
+    with open(_I90_SCHEMA_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _build_part_data_with_fields(schema: dict, part: dict) -> dict:
+    """Resolve a part's section_ids -> field ids -> field dicts (the shape
+    generate_part_manifest consumes), mirroring the JIT manifest path."""
+    part_data = {"id": part["id"], "label": part["label"], "fields": []}
+    for section_id in part.get("section_ids", []):
+        section = next(
+            (s for s in schema.get("sections", []) if s["id"] == section_id), None
+        )
+        if not section:
+            continue
+        for field_id in section.get("fields", []):
+            field = next(
+                (f for f in schema.get("fields", []) if f["id"] == field_id), None
+            )
+            if field:
+                part_data["fields"].append(field)
+    return part_data
 
 
 @pytest.fixture()
@@ -69,4 +105,32 @@ def test_should_include_schema_in_response_tracks_loaded_state():
     loaded.add("field_1")
     assert should_include_schema_in_response("field_1", loaded) is False
     assert should_include_schema_in_response("field_2", loaded) is True
+
+
+def test_i90_part_manifests_stay_under_jit_token_budget():
+    """Every real I-90 part's manifest must fit the documented JIT budget.
+
+    Guards the budget the deleted manual validation script
+    (backend/test_jit_system_e2e.py, bd polyglot-pdf-o0pc) used to check by
+    hand: if the schema or the manifest text format grows, this catches the
+    regression automatically.
+    """
+    schema = _load_i90_schema()
+    parts = schema.get("parts", [])
+    assert parts, "I-90 schema has no parts -- schema shape changed?"
+
+    checked = 0
+    for part in parts:
+        part_data = _build_part_data_with_fields(schema, part)
+        if not part_data["fields"]:
+            # e.g. I-90 part_7 is an instructions-only part with no sections
+            continue
+        checked += 1
+        manifest = generate_part_manifest(part_data, [])
+        tokens = estimate_manifest_tokens(manifest)
+        assert tokens < JIT_MANIFEST_TOKEN_BUDGET, (
+            f"part {part['id']} manifest is {tokens} tokens "
+            f"(budget {JIT_MANIFEST_TOKEN_BUDGET})"
+        )
+    assert checked > 0, "no I-90 part resolved any fields -- schema shape changed?"
 

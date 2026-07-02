@@ -780,10 +780,13 @@ class FormFillingService:
         """
         Change the language used for filling form field values mid-session.
 
-        Updates self._fill_language, which per-turn context builders read live
-        (see callback_handler -- bd polyglot-pdf-uogm), so subsequent turns pick
-        up the new language without a session reset. Then prompts Gemini to
-        acknowledge the change to the user.
+        Updates self._fill_language, then prompts Gemini to acknowledge the
+        change to the user. In DTI mode the per-turn field-guidance render
+        reads the live value (see callback_handler -- bd polyglot-pdf-uogm),
+        so subsequent turns pick up the new language without a reset. In
+        legacy/JIT modes (USE_DTI=false) the active session keeps its original
+        system instruction, so the new language reliably applies only from the
+        next section switch or reconnect.
 
         Args:
             new_language: The new language to use (e.g., "Spanish", "French", "Japanese")

@@ -31,13 +31,15 @@ which bypasses the cache).
   `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `SECRETARY_TIMEOUT_S`, `FORM_KITS_MODE`,
   `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_PREFIX`,
   `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`,
-  `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`, `EXTRACTOR_MAX_PDF_MB`.
+  `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`, `EXTRACTOR_MAX_PDF_MB`,
+  `VAD_START_SENSITIVITY` (default `HIGH`) / `VAD_END_SENSITIVITY` (default
+  `LOW`).
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
   (`WS_IDLE_TIMEOUT_SEC` 120, `WS_PING_INTERVAL_SEC` 15, `WS_CHUNK_MS` 20,
-  `WS_MAX_AUDIO_FRAME_BYTES` 32000), `MAX_UPLOAD_MB` 5, the
-  `VAD_*` sensitivity knobs, and the prompt templates.
+  `WS_MAX_AUDIO_FRAME_BYTES` 32000), `MAX_UPLOAD_MB` 5, and the prompt
+  templates.
 
 ## Feature flags
 

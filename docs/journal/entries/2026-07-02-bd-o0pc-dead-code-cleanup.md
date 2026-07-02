@@ -69,7 +69,15 @@ other suite exercises; the backend count rose 1171 -> 1176.
 - `planning_documents/` strays -- historical archive area, left as is.
 
 **Assess:** exit-criteria scorecard + fresh-eyes rounds recorded in the PR
-body / merge ping per closeout.
+body / merge ping per closeout. Codex round 1 (PR #288) returned 4 findings,
+all adopted: the VAD sensitivity knobs were mis-documented as code constants
+(they are env-overridable, START default HIGH) in technical_guide +
+config-deployment; a callback_handler docstring still advertised the deleted
+old update format; the change_fill_language docstring was qualified for
+legacy/JIT modes (live fill-language read is DTI-only); and the deleted
+manual JIT token-budget check was replaced with an automated pytest guard
+(test_i90_part_manifests_stay_under_jit_token_budget) against the real I-90
+schema -- strictly better than the uncollected script it replaces.
 
 ## Lessons
 

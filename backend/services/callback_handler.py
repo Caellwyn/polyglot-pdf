@@ -967,9 +967,9 @@ class CallbackHandler:
     def _parse_update_arguments(self, arguments: Any) -> Dict[str, Any]:
         """Parse raw update arguments into normalized dict.
 
-        HALLUCINATION_REDUCTION (Oct 30, 2025): Now supports single-field format.
-        New format: {"field_id": "firstName", "value": "Alice"}
-        Old format: {"updates": {"firstName": "Alice", "lastName": "Smith"}} (commented out)
+        HALLUCINATION_REDUCTION: only the single-field format is accepted --
+        {"field_id": "firstName", "value": "Alice"}. Anything else returns an
+        empty payload (the update is rejected).
         """
         updates_payload: Dict[str, Any] = {}
 

@@ -43,8 +43,9 @@ Cloud Run host it's built against). Backend config is env-driven via
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
 `AUDIO_IN_RATE=16000`,
-`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
-`VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
+`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. The VAD
+sensitivity knobs ARE env-overridable: `VAD_START_SENSITIVITY` (default
+`HIGH`) / `VAD_END_SENSITIVITY` (default `LOW`). The list is not
 exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
 `WS_IDLE_TIMEOUT_SEC` (`120`) -- the idle watchdog closes a WebSocket connection
 after this many seconds with no received message (audio, ping, or control).
