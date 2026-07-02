@@ -1438,7 +1438,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								aria-label="Listening"
 								role="status"
 							>
-								<span className="vff-listening-ear" aria-hidden="true">👂</span>
+								{/* Ear glyph via an ASCII-safe Unicode escape (U+1F442) so the
+								    .tsx source stays ASCII per AGENTS.md; it still renders the ear
+								    emoji at runtime. Language-neutral -- no word to translate. */}
+								<span className="vff-listening-ear" aria-hidden="true">{'\u{1F442}'}</span>
 								<span className="vff-mic-meter">
 									<span
 										className="vff-mic-meter-bar"

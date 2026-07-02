@@ -206,12 +206,16 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// a ref, and flush to state on a rAF loop. Decay to 0 after ~250ms of no frames
 	// so a flat meter reads as "no audio reaching the backend".
 	//
-	// Only runs while the meter is rendered (connected) -- no perpetual rAF through
-	// the pre-connect / paused / reconnect-failed states (Codex PR #203). Tears down
-	// + unsubscribes on leaving `connected` (effect re-runs on `status`).
+	// Only runs while the meter is rendered -- no perpetual rAF through the
+	// pre-connect / paused / reconnect-failed states (Codex PR #203). Tears down
+	// + unsubscribes on leaving a send-capable state (effect re-runs on `status`).
+	// MUST match the listening-indicator gate (`isListening`, below): the meter is
+	// nested in that badge, so if the badge renders during `switching_section` but
+	// this effect stops re-subscribing there, the nested meter freezes (Codex PR
+	// #278). Both cover the send-capable states from shouldSendMicChunk.
 	useEffect(() => {
 		const s = status.toLowerCase()
-		const meterVisible = s === 'connected' || s.startsWith('connected ')
+		const meterVisible = s === 'connected' || s.startsWith('connected ') || s === 'switching_section'
 		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
@@ -1226,7 +1230,10 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 									aria-label="Listening"
 									role="status"
 								>
-									<span className="vff-listening-ear" aria-hidden="true">👂</span>
+									{/* Ear glyph via an ASCII-safe Unicode escape (U+1F442) so the
+									    .tsx source stays ASCII per AGENTS.md; it still renders the
+									    ear emoji at runtime. Language-neutral. */}
+									<span className="vff-listening-ear" aria-hidden="true">{'\u{1F442}'}</span>
 									<span className="vff-mic-meter">
 										<span
 											className="vff-mic-meter-bar"

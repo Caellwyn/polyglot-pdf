@@ -24,11 +24,16 @@ was an unreliable proxy that could read true across a pause/disconnect. The net
 effect matched the report: lit at the wrong times, dark when actually listening.
 
 The fix replaces that badge with a single, language-neutral indicator gated on
-`isConnected`:
+a dedicated `isListening` flag -- the send-capable states from
+`shouldSendMicChunk` (`connected` / `switching_section`), NOT the broader
+`isConnected` (which stays true through `reconnecting`, where the mic gate drops
+all audio). See the Codex round-2 note below.
 
-- An **ear glyph (U+1F442)** paired with the existing live mic-energy meter,
-  wrapped in one `.vff-listening` element. Shown only while connected (i.e.
-  actually listening), hidden when paused/disconnected -- the reverse of the old
+- An **ear glyph (U+1F442, written as an ASCII-safe `'\u{1F442}'` escape so the
+  .tsx source stays ASCII per AGENTS.md)** paired with the existing live
+  mic-energy meter, wrapped in one `.vff-listening` element. Shown only while
+  listening (connected / switching-section), hidden when
+  paused/disconnected/reconnecting -- the reverse of the old
   behavior.
 - **Combined the two cues** so the previously-standalone mic-energy bar now
   carries meaning: grey bar = mic alive but audio gated (PTT-muted / silence),
@@ -97,9 +102,18 @@ already stale before this sprint and are out of scope here.
 ## Files touched
 
 - `frontend/src/demo/VoiceOverlay.tsx` -- replaced the reversed `vff-vad-indicator`
-  "Listening" badge with the `vff-listening` ear+meter indicator gated on
-  `isConnected`; removed the dead vad-indicator CSS + `vff-vad-pulse` keyframe;
-  re-pointed the `--sending` green-bar rule to `.vff-listening--sending`.
+  "Listening" badge with the `vff-listening` ear+meter indicator gated on a new
+  `isListening` flag (send-capable states, not `isConnected`); removed the dead
+  vad-indicator CSS + `vff-vad-pulse` keyframe; re-pointed the `--sending`
+  green-bar rule to `.vff-listening--sending`. The desktop energy-meter effect
+  already subscribed through `switching_section`, so its nested meter does not
+  freeze.
 - `frontend/src/demo/VoiceOverlayMobile.tsx` -- same ear+meter indicator in the
-  expanded panel's status row; added `.vff-listening` CSS (kept the
-  `vff-vad-pulse` keyframe, still used by the FAB speech-dot).
+  expanded panel's status row, gated on `isListening`; added `.vff-listening` CSS
+  (kept the `vff-vad-pulse` keyframe, still used by the FAB speech-dot); widened
+  the energy-meter subscription's `meterVisible` to include `switching_section`
+  so the nested meter keeps ticking while the badge is shown mid-switch (Codex
+  round-2 fix).
+- `frontend/src/demo/VoiceOverlayListeningIndicator.test.tsx` -- new render test
+  pinning the gate (connected / switching_section -> shown; paused / disconnected
+  / reconnecting -> hidden) for both overlays.

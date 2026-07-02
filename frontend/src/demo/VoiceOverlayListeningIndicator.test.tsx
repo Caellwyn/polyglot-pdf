@@ -21,7 +21,7 @@
 //
 // Mobile note: the indicator lives in the EXPANDED panel, so the test expands
 // it (the FAB is collapsed by default). The desktop panel is always expanded.
-import { render, cleanup, waitFor, within, fireEvent } from '@testing-library/react'
+import { render, cleanup, within, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
@@ -128,6 +128,12 @@ const LIVE_STATE = {
 
 describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => {
   beforeEach(() => {
+    // Fake timers so the overlay's connect-poll loop (a 5s setTimeout loop in
+    // handleConnect, reached for the not-yet-live statuses) never runs in real
+    // time or leaks past the test (Codex PR #278). These are render-only gate
+    // assertions -- we render, assert synchronously, and unmount; the poll loop
+    // is abandoned without ticking the clock.
+    vi.useFakeTimers()
     const store: Record<string, string> = {}
     vi.stubGlobal('sessionStorage', {
       getItem: (k: string) => store[k] ?? null,
@@ -146,6 +152,7 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     cleanup()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   function renderDesktop(status: string) {
@@ -160,7 +167,9 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
   }
 
   // Mobile: the indicator is inside the expanded panel; expand the FAB first.
-  async function renderMobileExpanded(status: string) {
+  // fireEvent flushes the state update synchronously (act), so the panel is
+  // present immediately -- no waitFor (which would stall under fake timers).
+  function renderMobileExpanded(status: string) {
     const utils = render(
       <VoiceOverlayMobile
         schema={MINIMAL_SCHEMA}
@@ -172,9 +181,7 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     const fab = utils.container.querySelector('.vff-fab') as HTMLElement
     expect(fab).toBeTruthy()
     fireEvent.click(fab)
-    await waitFor(() => {
-      expect(utils.container.querySelector('.vff-panel-mobile')).toBeTruthy()
-    })
+    expect(utils.container.querySelector('.vff-panel-mobile')).toBeTruthy()
     return utils
   }
 
@@ -209,20 +216,25 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     expect(listeningEl(container)).toBeNull()
   })
 
-  it('mobile: SHOWS when connected', async () => {
-    const { container } = await renderMobileExpanded('connected')
+  it('mobile: SHOWS when connected', () => {
+    const { container } = renderMobileExpanded('connected')
     const el = listeningEl(container)
     expect(el).toBeTruthy()
     expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeTruthy()
   })
 
-  it('mobile: HIDDEN when paused', async () => {
-    const { container } = await renderMobileExpanded('paused')
+  it('mobile: SHOWS during switching_section (audio still flows)', () => {
+    const { container } = renderMobileExpanded('switching_section')
+    expect(listeningEl(container)).toBeTruthy()
+  })
+
+  it('mobile: HIDDEN when paused', () => {
+    const { container } = renderMobileExpanded('paused')
     expect(listeningEl(container)).toBeNull()
   })
 
-  it('mobile: HIDDEN while reconnecting (Codex PR #278)', async () => {
-    const { container } = await renderMobileExpanded('reconnecting')
+  it('mobile: HIDDEN while reconnecting (Codex PR #278)', () => {
+    const { container } = renderMobileExpanded('reconnecting')
     expect(listeningEl(container)).toBeNull()
   })
 })
