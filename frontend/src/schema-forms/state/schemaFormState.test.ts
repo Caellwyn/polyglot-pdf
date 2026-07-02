@@ -1130,5 +1130,29 @@ describe('SchemaFormStateManager', () => {
       const after = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
       expect(after.fieldValues['field-1']).toBeUndefined()
     })
+
+    it('PRESERVES the marker when the value migrates between []-alias variants (bd polyglot-pdf-5k52)', () => {
+      // The marker was written under the bracketed key (field-1[]); the model
+      // then re-fills the unbracketed id. The carry-forward must apply the same
+      // []-alias fallback as markFieldsSteered, or the marker is dropped and the
+      // backend re-steers the field once more than the invariant allows.
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1[]'])
+      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
+      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
+    })
+
+    it('PRESERVES the marker in the reverse direction (unbracketed -> bracketed)', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v2')
+      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
+    })
   })
 })

@@ -217,7 +217,16 @@ export class SchemaFormStateManager {
     // already-adjudicated field would emit steered:false on the next validator
     // payload and the backend could re-steer it, breaking the max-resteer invariant.
     // Preserve it unless the incoming FieldValue explicitly sets its own.
-    const priorSteered = state.fieldValues[fieldId]?.steered;
+    // Read via the same `[]`-alias fallback as markFieldsSteered: the marker may
+    // sit under the bracketed/unbracketed variant of this id (Gemini drops/adds
+    // the bracket), and an exact-key read would drop it when the value migrates
+    // between variants (bd polyglot-pdf-5k52).
+    const priorSteered = (
+      state.fieldValues[fieldId] ??
+      state.fieldValues[
+        fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]'
+      ]
+    )?.steered;
 
     // If value is already a FieldValue, use it directly (normalize its .value)
     // Otherwise, wrap it
