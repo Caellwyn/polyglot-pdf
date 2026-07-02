@@ -3,10 +3,12 @@ from __future__ import annotations
 """Form kit storage helpers for loading schemas/PDFs in dev and prod."""
 
 import json
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 import anyio
 import structlog
@@ -111,6 +113,16 @@ class FormKitStore:
 	# (Codex P1, round 5 -- fail closed). Subclasses override.
 	allow_convention_fallback: bool = True
 
+	# Whether the PUBLIC read routes must additionally require the kit's LIVE
+	# metadata status to be "complete" before serving (Codex P1, PR #279). The
+	# deploy-time manifest gate alone is not enough once the store is WRITABLE:
+	# a contractor reverting a published kit to draft (to polish it) must
+	# unpublish it IMMEDIATELY, else their work-in-progress saves would stream
+	# to voice users through the still-listed manifest entry. True for GCS (the
+	# shared, editor-writable store). False for local: local mode is ungated by
+	# design (drafts are intentionally servable in dev).
+	enforce_complete_on_public_reads: bool = False
+
 	async def load_schema(self, kit_id: str, schema_file: str = "schema.json") -> dict:
 		raise NotImplementedError
 
@@ -119,6 +131,41 @@ class FormKitStore:
 
 	async def load_manifest(self, manifest_file: str = "index.json") -> dict:
 		raise NotImplementedError
+
+	# --- editor write/list surface (bd polyglot-pdf-92qe.1) ------------------
+	# The hosted schema-editor needs to SEE drafts (the complete-only manifest
+	# hides them by design) and to write schemas/metadata back. These methods are
+	# additive -- the read contract above is unchanged and the voice app never
+	# calls them.
+
+	async def load_metadata(self, kit_id: str) -> Optional[dict]:
+		"""The kit's metadata.json as a dict, or None when absent/unparseable.
+
+		Parse failures degrade to None (not an exception) so one malformed kit
+		cannot take down a catalogue listing that reads metadata per kit.
+		"""
+		raise NotImplementedError
+
+	async def put_metadata(self, kit_id: str, metadata: dict) -> None:
+		raise NotImplementedError
+
+	async def put_schema(
+		self, kit_id: str, schema: dict, schema_file: str = "schema.json"
+	) -> None:
+		raise NotImplementedError
+
+	async def list_kit_files(self) -> dict[str, list[str]]:
+		"""Map every kit id to the filenames at its root (one storage listing).
+
+		This is the editor catalogue's source of truth: unlike the manifest it
+		includes DRAFT kits, and the filename lists let the caller derive
+		hasSchema/hasPdf without a per-file existence probe (expensive on GCS).
+		"""
+		raise NotImplementedError
+
+	async def list_kit_ids(self) -> list[str]:
+		"""Every kit id in the store, drafts included (sorted)."""
+		return sorted((await self.list_kit_files()).keys())
 
 
 class LocalFormKitStore(FormKitStore):
@@ -235,6 +282,80 @@ class LocalFormKitStore(FormKitStore):
 		# path would get the same guarantees); the generated rows are already clean.
 		return normalize_manifest({"forms": forms})
 
+	# --- editor write/list surface (bd polyglot-pdf-92qe.1) ------------------
+
+	async def load_metadata(self, kit_id: str) -> Optional[dict]:
+		path = self._kit_dir(kit_id) / "metadata.json"
+
+		def _read() -> Optional[dict]:
+			if not path.exists():
+				return None
+			try:
+				loaded = json.loads(path.read_text(encoding="utf-8"))
+			except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+				return None
+			return loaded if isinstance(loaded, dict) else None
+
+		return await anyio.to_thread.run_sync(_read)
+
+	async def put_metadata(self, kit_id: str, metadata: dict) -> None:
+		await self._write_json(self._kit_dir(kit_id) / "metadata.json", metadata)
+
+	async def put_schema(
+		self, kit_id: str, schema: dict, schema_file: str = "schema.json"
+	) -> None:
+		schema_file = safe_filename(schema_file, "schema.json")
+		await self._write_json(self._kit_dir(kit_id) / schema_file, schema)
+
+	async def _write_json(self, path: Path, data: dict) -> None:
+		"""Atomic JSON write: temp file in the same dir, then os.replace.
+
+		A concurrent reader (the editor re-pulling, the voice app filling) must
+		never see a half-written schema -- the same temp+rename discipline the
+		dev extraction endpoint uses (extractEndpoint.ts).
+		"""
+
+		def _write() -> None:
+			path.parent.mkdir(parents=True, exist_ok=True)
+			# Per-WRITE unique temp name: the pid alone is constant for the
+			# process, so two concurrent saves of the same file would collide on
+			# one temp path (one thread clobbers the other's temp; the loser's
+			# os.replace then FileNotFoundErrors) -- same lesson as the dev
+			# extraction endpoint's request counter (Codex P1 r2, PR #279).
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
+			try:
+				tmp.write_text(
+					json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+					encoding="utf-8",
+				)
+				os.replace(tmp, path)
+			finally:
+				if tmp.exists():
+					tmp.unlink(missing_ok=True)
+
+		try:
+			await anyio.to_thread.run_sync(_write)
+		except OSError as exc:
+			raise FormKitStoreError(f"Unable to write {path.name}: {exc}") from exc
+
+	async def list_kit_files(self) -> dict[str, list[str]]:
+		def _scan() -> dict[str, list[str]]:
+			if not self.root.exists():
+				return {}
+			out: dict[str, list[str]] = {}
+			for kit_dir in self.root.iterdir():
+				if not kit_dir.is_dir():
+					continue
+				out[kit_dir.name] = sorted(
+					f.name for f in kit_dir.iterdir() if f.is_file()
+				)
+			return out
+
+		try:
+			return await anyio.to_thread.run_sync(_scan)
+		except OSError as exc:
+			raise FormKitStoreError(f"Unable to list form kits: {exc}") from exc
+
 
 class GCSFormKitStore(FormKitStore):
 	"""Form kit store using authenticated Google Cloud Storage client."""
@@ -244,6 +365,11 @@ class GCSFormKitStore(FormKitStore):
 	# (Codex P1, round 5). Local mode synthesizes its manifest, so it keeps the
 	# base default (True).
 	allow_convention_fallback: bool = False
+
+	# The shared GCS store is editor-writable (bd 92qe.1), so public reads must
+	# honor the LIVE metadata status -- a kit reverted to draft unpublishes
+	# immediately instead of serving work-in-progress saves (Codex P1, PR #279).
+	enforce_complete_on_public_reads: bool = True
 
 	def __init__(self, bucket_name: str, prefix: Optional[str] = None):
 		from google.cloud import storage
@@ -310,6 +436,90 @@ class GCSFormKitStore(FormKitStore):
 		# raises FormKitStoreError) so the resolver/list route never see a malformed
 		# manifest (Codex P1, round 5).
 		return normalize_manifest(raw)
+
+	# --- editor write/list surface (bd polyglot-pdf-92qe.1) ------------------
+
+	async def load_metadata(self, kit_id: str) -> Optional[dict]:
+		blob_path = self._build_blob_path(kit_id, "metadata.json")
+
+		def _download() -> Optional[bytes]:
+			blob = self._bucket.blob(blob_path)
+			try:
+				return blob.download_as_bytes()
+			except self._not_found_exc:
+				return None
+
+		# Wrap NON-NotFound storage failures (transient service errors,
+		# permission problems) as FormKitStoreError like every other GCS method:
+		# callers catch only FormKitStoreError, so a raw google exception here
+		# would surface as an uncaught 500 (Codex P1, PR #279).
+		try:
+			data = await anyio.to_thread.run_sync(_download)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+		if data is None:
+			return None
+		try:
+			loaded = json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError):
+			return None
+		return loaded if isinstance(loaded, dict) else None
+
+	async def put_metadata(self, kit_id: str, metadata: dict) -> None:
+		await self._upload_json(self._build_blob_path(kit_id, "metadata.json"), metadata)
+
+	async def put_schema(
+		self, kit_id: str, schema: dict, schema_file: str = "schema.json"
+	) -> None:
+		schema_file = safe_filename(schema_file, "schema.json")
+		await self._upload_json(self._build_blob_path(kit_id, schema_file), schema)
+
+	async def _upload_json(self, blob_path: str, data: dict) -> None:
+		"""Upload a JSON blob with no-cache so a re-pull after a save is never
+		stale (the editor's save->reload round trip)."""
+
+		def _upload() -> None:
+			blob = self._bucket.blob(blob_path)
+			blob.cache_control = "no-cache"
+			blob.upload_from_string(
+				json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+				content_type="application/json",
+			)
+
+		try:
+			await anyio.to_thread.run_sync(_upload)
+		except Exception as exc:  # google API errors are env-specific; fail closed
+			raise FormKitStoreError(
+				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+
+	async def list_kit_files(self) -> dict[str, list[str]]:
+		"""One flat listing under the prefix, grouped into kit_id -> filenames.
+
+		Unlike the manifest this includes DRAFT kits -- exactly what the
+		token-gated editor catalogue needs. Blobs nested deeper than
+		<prefix>/<kit>/<file> are ignored (kits are flat by convention).
+		"""
+		base = f"{self.prefix}/" if self.prefix else ""
+
+		def _scan() -> dict[str, list[str]]:
+			out: dict[str, list[str]] = {}
+			for blob in self._client.list_blobs(self.bucket_name, prefix=base):
+				rel = blob.name[len(base):]
+				parts = rel.split("/")
+				if len(parts) != 2 or not parts[0] or not parts[1]:
+					continue  # the manifest itself, folder markers, deep nesting
+				out.setdefault(parts[0], []).append(parts[1])
+			return {k: sorted(v) for k, v in out.items()}
+
+		try:
+			return await anyio.to_thread.run_sync(_scan)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to list gs://{self.bucket_name}/{base}: {exc}"
+			) from exc
 
 
 @lru_cache(maxsize=1)
