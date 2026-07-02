@@ -65,7 +65,8 @@ built with `npm run build:hosted` (`VITE_DELIVERY_MODE=hosted`, config in
 
 - Open the hosted URL, enter the **access code** you were given (remembered per
   browser). The code maps to a tier: **editor** (polish provided forms) or
-  **author** (also onboard PDFs + run extraction -- UI lands with bd 92qe.3).
+  **author** (also: upload a blank form PDF to add it to the workspace, and run
+  the server-side extraction on it -- both from the catalogue).
 - The catalogue shows every kit in the shared workspace, drafts included.
 - Cmd/Ctrl+S saves back to the shared store; **Mark complete** flips the kit's
   status (the server validates the schema first -- a broken schema is refused
