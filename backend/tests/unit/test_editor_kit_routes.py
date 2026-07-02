@@ -62,6 +62,9 @@ def _settings(editor=None, author=None, **overrides):
         EXTRACTOR_TIMEOUT_SEC=60.0,
         EXTRACTOR_MAX_PDF_MB=25.0,
         GEMINI_API_KEY="fake-key",
+        # Default to AI Studio auth in tests (a key is present above); the
+        # Vertex/ADC path is exercised explicitly where it matters (bd fyq4).
+        VERTEXAI=False,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -1114,15 +1117,39 @@ def test_extract_unconfigured_is_503(client, monkeypatch):
     assert c.post(
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
     ).status_code == 503
-    # No API key anywhere -> 503.
+    # No API key AND no Vertex -> 503 (genuinely no way to authenticate).
     monkeypatch.setattr(
         ekr, "get_settings",
-        lambda: _settings(editor="edit-tok", author="auth-tok", GEMINI_API_KEY=None),
+        lambda: _settings(editor="edit-tok", author="auth-tok",
+                          GEMINI_API_KEY=None, VERTEXAI=False),
     )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert c.post(
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
     ).status_code == 503
+
+
+def test_extract_vertex_without_key_passes_the_config_gate(client, monkeypatch):
+    # The Cloud Run reality (bd fyq4): VERTEXAI=true, a service account, and NO
+    # GEMINI_API_KEY. The config gate must NOT 503 -- extraction authenticates
+    # via ADC. We stub the subprocess so this asserts the GATE opens, not a real
+    # extraction (that path is covered by test_extract_runs_and_stores_the_draft).
+    c, store, root = client
+    _make_kit(root, "fresh")
+    monkeypatch.setattr(
+        ekr, "get_settings",
+        lambda: _settings(editor="edit-tok", author="auth-tok",
+                          GEMINI_API_KEY=None, VERTEXAI=True),
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        ekr.subprocess, "run", _fake_extractor(dict(VALID_SCHEMA)),
+    )
+    resp = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    # Not the 503 "not configured" -- the gate opened and the (stubbed) run ran.
+    assert resp.status_code == 200, resp.text
 
 
 def test_status_rejects_unknown_values(client):

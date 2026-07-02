@@ -168,10 +168,33 @@ class GeminiProvider:
         extract_json, normalize_schema = _parse_helpers()
 
         timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "600000"))
-        client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=timeout_ms),
-        )
+        http_opts = types.HttpOptions(timeout=timeout_ms)
+        # Auth: Vertex AI (ADC / service account, no API key) when VERTEXAI is
+        # set -- this is how the hosted extractor runs on Cloud Run, which has a
+        # service account but no GEMINI_API_KEY (bd polyglot-pdf-92qe). Otherwise
+        # (local dev / the offline bakeoff harness) fall back to the AI Studio
+        # key. The gemini-2.5 model ids resolve identically on Vertex (verified
+        # against the demo project's ADC), so no model-name remap is needed.
+        # Mirrors the live voice adapter's Vertex client construction. The
+        # truthy test (`.lower() == "true"`) is the same one backend/config.py
+        # uses; the only intentional difference is the default when VERTEXAI is
+        # UNSET -- config defaults it True (a deployed backend is Vertex), this
+        # defaults to the key path (a bare local/bakeoff run uses the key). The
+        # hosted route pins VERTEXAI into this subprocess's env from
+        # settings.VERTEXAI, so that default-polarity gap can never surface on
+        # the path that matters (bd polyglot-pdf-fyq4).
+        if os.getenv("VERTEXAI", "").lower() == "true":
+            client = genai.Client(
+                vertexai=True,
+                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+                http_options=http_opts,
+            )
+        else:
+            client = genai.Client(
+                api_key=os.environ["GEMINI_API_KEY"],
+                http_options=http_opts,
+            )
         contents: list = []
         if pdf_path:
             contents.append(types.Part.from_bytes(

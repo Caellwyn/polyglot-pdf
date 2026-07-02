@@ -607,10 +607,16 @@ async def extract_editor_kit(
             detail="Hosted extraction needs a gemini-* EXTRACTOR_MODEL "
                    "(the local claude CLI is not available on the server)",
         )
-    if not (settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
+    # Extraction is "configured" if it can authenticate to Gemini AT ALL: either
+    # Vertex AI (ADC / service account -- how Cloud Run runs, no key) OR an AI
+    # Studio key (local dev). The provider picks the same way (llm_providers.py),
+    # so this gate must not demand a key when VERTEXAI is on, or it would 503
+    # before ever reaching the working Vertex path (bd polyglot-pdf-fyq4).
+    if not (settings.VERTEXAI or settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
         raise HTTPException(
             status_code=503,
-            detail="Hosted extraction is not configured (no GEMINI_API_KEY)",
+            detail="Hosted extraction is not configured (set VERTEXAI=true for "
+                   "service-account auth, or provide a GEMINI_API_KEY)",
         )
 
     store = get_form_kit_store()
@@ -662,6 +668,19 @@ async def extract_editor_kit(
                 instructions_path.write_bytes(instructions_bytes)
                 cmd += ["--instructions-pdf", str(instructions_path)]
 
+            # Pass the RESOLVED auth mode to the subprocess so the extractor's
+            # provider (llm_providers.py) picks the same client the gate above
+            # authorized. settings.VERTEXAI is the source of truth (config.py
+            # defaults it True when unset); without pinning it here, the child
+            # would re-read a possibly-unset VERTEXAI env with the opposite
+            # default and could take the key path the gate did not require
+            # (bd polyglot-pdf-fyq4).
+            child_env = {
+                **os.environ,
+                "PYTHONUTF8": "1",
+                "VERTEXAI": "true" if settings.VERTEXAI else "false",
+            }
+
             def _run() -> subprocess.CompletedProcess:
                 return subprocess.run(
                     cmd,
@@ -671,7 +690,7 @@ async def extract_editor_kit(
                     errors="replace",
                     timeout=settings.EXTRACTOR_TIMEOUT_SEC,
                     cwd=str(_repo_root()),
-                    env={**os.environ, "PYTHONUTF8": "1"},
+                    env=child_env,
                 )
 
             _log.info("editor_extract_start", kit_id=kit_id,
