@@ -92,7 +92,9 @@ body / merge ping per closeout.
   `technical_guide.md` (tunables list; added the dev-only
   `POST /dev/console-log` route row), `scripts/README.md` (removed
   nonexistent `start_testing.*`/`gen_types.sh` sections; added
-  `dev-local.ps1`).
+  `dev-local.ps1`), `standards/testing.md` (fresh-eyes round-1 catch: its
+  duplicate-basename example cited the deleted `scripts/test_section_switching.py`
+  and the removed backend-root `test_*.py` pair; rewritten to current state).
 - Reviewed + left: the remaining docs flagged STALE by the freshness checker
   (si-reduction, stateless-architecture, terminology, validation-delegation,
   ws-protocol, voice-ai, websocket-routing, tool-call-flow,

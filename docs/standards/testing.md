@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
+*Last updated: 2026-07-02 (bd polyglot-pdf-o0pc: the duplicate-basename example and the "probe scripts outside testpaths" passage updated after the dead-code cleanup deleted the cited `scripts/test_*.py` probes and relocated `backend/test_manifest_generation.py` into `backend/tests/unit/`). Prior: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -43,11 +43,13 @@ ignored. `.coveragerc` sets `source = backend` (so untested modules show at 0%
 rather than hiding) with `omit = backend/tests/*` to keep test files out.
 
 `--import-mode=importlib` lets duplicate test basenames coexist without
-`__init__.py` packaging (e.g. a `test_section_switching.py` under both `scripts/`
-and `backend/tests/unit/`). `norecursedirs` plus the scoped `testpaths` keep the
-**probe scripts** out: files named `test_*.py` under `scripts/` and the two
-`backend/test_*.py` modules are standalone `python <file>` scripts (`__main__` /
-required CLI args), **not** pytest suites — do not let them get collected.
+`__init__.py` packaging. `norecursedirs` plus the scoped `testpaths` keep
+**probe scripts** out of collection: a `test_*.py` file outside `backend/tests/`
+or `tests/` (e.g. a probe under `scripts/` or `backend/scripts/`) is a
+standalone `python <file>` script (`__main__` / required CLI args), **not** a
+pytest suite — do not let it get collected, and do not park real pytest files
+outside the two `testpaths` roots (they silently never run; bd polyglot-pdf-o0pc
+relocated one such orphan).
 
 There are **two collected suites** under `testpaths`:
 
