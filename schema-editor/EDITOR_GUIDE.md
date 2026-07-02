@@ -193,6 +193,22 @@ separate, future work.
 - **Validation** - Patterns, formats, constraints
 - **Conditional Logic** - `show_if` (reactive) and `controls_fields` (trigger-side)
 
+### Move Through the Fields Fast
+
+The review loop has its own navigation (works in local and hosted mode):
+
+- **Next to review** (button above the field list) or **N** -- jump to the
+  next field whose icon is yellow/red, wrapping past the end; a search filter
+  narrows what it cycles through.
+- **Arrow Up / Arrow Down** -- step through the visible field list.
+- **Esc** -- deselect (shows the form-level metadata panel).
+- None of these fire while you are typing in a text box.
+
+A save/reload failure shows as a red banner above the editor -- your work and
+the open form stay untouched; fix the issue (or dismiss) and save again.
+Hosted sessions also get a one-time 3-step guide; reopen it any time with the
+header's **Help** button.
+
 ### Save Your Work
 
 - **Cmd+S** (Mac) or **Ctrl+S** (Windows/Linux)

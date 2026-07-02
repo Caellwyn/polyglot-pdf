@@ -3,6 +3,7 @@ import { FormSelector } from './components/FormSelector';
 import { FormCatalogue } from './components/FormCatalogue';
 import { RemoteCatalogue } from './components/RemoteCatalogue';
 import { AccessCodeGate } from './components/AccessCodeGate';
+import { HostedGuide, hasSeenGuide } from './components/HostedGuide';
 import { PDFViewer } from './components/PDFViewer';
 import { FieldList } from './components/FieldList';
 import { FieldEditor } from './components/FieldEditor';
@@ -84,6 +85,13 @@ export const App: React.FC = () => {
   const [groupSelection, setGroupSelection] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Save/reload failures are NON-blocking: they render as a dismissible banner
+  // over the live editor instead of the full-screen error state, whose Dismiss
+  // drops the schema -- a failed save must never cost the work being saved
+  // (bd 92qe.5).
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  // First-run guide (hosted): shown once per browser, reopenable via Help.
+  const [guideOpen, setGuideOpen] = React.useState(false);
   // The File System Access handle the human picked: once set, saves write
   // straight to that file with no re-prompt (bd s1e2). Cleared on form switch.
   const fileHandleRef = React.useRef<FsFileHandle | null>(null);
@@ -110,6 +118,7 @@ export const App: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    setSaveError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-loaded form in edit mode (bd s4dp.4)
@@ -148,6 +157,7 @@ export const App: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    setSaveError(null);
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     setViewMode('edit'); // start a freshly-opened kit in edit mode (bd s4dp.4)
@@ -223,6 +233,7 @@ export const App: React.FC = () => {
     const seq = ++openSeqRef.current;
     setLoading(true);
     setError(null);
+    setSaveError(null);
     setSelectedFieldId(null);
     setGroupSelection([]);
     setViewMode('edit');
@@ -450,13 +461,13 @@ export const App: React.FC = () => {
           setSavedFileName('the shared workspace');
           markSaved();
         }
-        setError(null);
+        setSaveError(null);
       } catch (err) {
         if (err instanceof AuthError) {
           handleAuthExpired();
           return;
         }
-        setError(err instanceof Error ? err.message : 'Failed to save schema');
+        setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
         console.error('Failed to save schema remotely:', err);
       } finally {
         setSaving(false);
@@ -469,7 +480,7 @@ export const App: React.FC = () => {
       const name = suggestedFileName();
       saveSchema(schema, name);
       markSaved();
-      setError(null);
+      setSaveError(null);
       return;
     }
 
@@ -485,10 +496,10 @@ export const App: React.FC = () => {
       await writeSchemaToHandle(handle, schema);
       setSavedFileName(handle.name);
       markSaved();
-      setError(null);
+      setSaveError(null);
     } catch (err) {
       if (isUserAbort(err)) return; // human cancelled the picker -- no-op
-      setError(err instanceof Error ? err.message : 'Failed to save schema');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
       console.error('Failed to save schema:', err);
     }
   }, [schema, selectedForm, fsAccess, suggestedFileName, markSaved,
@@ -509,9 +520,9 @@ export const App: React.FC = () => {
     try {
       const reloaded = await readSchemaFromHandle(handle);
       loadSchemaState(reloaded); // fresh baseline -> history cleared
-      setError(null);
+      setSaveError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reload schema');
+      setSaveError(err instanceof Error ? err.message : 'Failed to reload schema');
       console.error('Failed to reload schema from file:', err);
     }
   }, [hasUnsavedChanges, loadSchemaState]);
@@ -552,6 +563,12 @@ export const App: React.FC = () => {
   React.useEffect(() => () => {
     if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
   }, []);
+
+  // First-run guide: hosted contractors get the 3-step overlay once per
+  // browser, after the access code validates (bd 92qe.5).
+  React.useEffect(() => {
+    if (hosted && role && !hasSeenGuide()) setGuideOpen(true);
+  }, [hosted, role]);
 
   // Warn on page unload if unsaved changes
   React.useEffect(() => {
@@ -596,6 +613,15 @@ export const App: React.FC = () => {
             ) : null}
           </div>
           <div className="flex gap-2">
+            {hosted && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setGuideOpen(true)}
+                title="Reopen the getting-started guide"
+              >
+                Help
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               onClick={undo}
@@ -695,6 +721,46 @@ export const App: React.FC = () => {
           <FormSelector selectedForm={selectedForm} onSelectForm={handleSelectForm} />
         )}
       </header>
+
+      {/* Non-blocking save/reload failure banner: the editor (and the unsaved
+          work) stays fully alive underneath (bd 92qe.5). */}
+      {saveError && (
+        <div
+          role="alert"
+          className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center gap-3"
+        >
+          <svg
+            className="w-4 h-4 text-red-600 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span className="text-sm text-red-800 flex-1">{saveError}</span>
+          <button
+            type="button"
+            onClick={() => setSaveError(null)}
+            aria-label="Dismiss save error"
+            className="text-red-400 hover:text-red-600 shrink-0"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {guideOpen && <HostedGuide onClose={() => setGuideOpen(false)} />}
 
       {/* Main Content */}
       {loading && (
@@ -813,6 +879,7 @@ export const App: React.FC = () => {
                 schema={schema}
                 selectedFieldId={selectedFieldId}
                 onSelectField={setSelectedFieldId}
+                onDeselect={() => setSelectedFieldId(null)}
                 onReorderFields={handleReorderFields}
                 onMoveOption={handleMoveOption}
                 groupSelection={groupSelection}
