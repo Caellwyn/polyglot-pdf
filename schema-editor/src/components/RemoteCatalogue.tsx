@@ -76,6 +76,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       // never disagree. Client-side on purpose: a server-side re-implementation
       // of checkFieldComplete would drift. Fine at current catalogue scale.
       const withSchema = entries.filter((e) => e.hasSchema);
+      // A 401 during this scan (code revoked between the list call and the
+      // per-kit fetches) is an AUTH state, not a broken schema -- it must
+      // route to onAuthError, never paint every card with a misleading
+      // "schema unreadable" error (fresh-eyes gap 1). Flag-and-resolve rather
+      // than rethrow: with several kits, more than one fetch can reject, and
+      // a rethrow through Promise.all would leave the siblings' rejections
+      // unhandled.
+      let authFailed = false;
       const computed = await Promise.all(withSchema.map(async (e) => {
         try {
           const schema = await loadRemoteSchema(e.id);
@@ -90,11 +98,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
             schemaError: false,
             version: versionInfoFromSchema(schema),
           }] as const;
-        } catch {
+        } catch (err) {
+          if (err instanceof AuthError) authFailed = true;
           return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
         }
       }));
       if (seq !== refreshSeq.current) return;
+      if (authFailed) {
+        onAuthError?.();
+        return;
+      }
       setProgress(Object.fromEntries(computed));
     } catch (err) {
       if (seq !== refreshSeq.current) return;

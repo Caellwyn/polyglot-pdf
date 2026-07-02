@@ -117,6 +117,36 @@ describe('RemoteCatalogue', () => {
     expect(screen.queryByText(/Invalid or missing/)).not.toBeInTheDocument();
   });
 
+  it('routes a 401 DURING THE PROGRESS SCAN to onAuthError, not a schema error', async () => {
+    // The list call succeeds, but the code is revoked before the per-kit
+    // schema fetches -- the auth state must reach onAuthError, never masquerade
+    // as "schema unreadable" on every card (fresh-eyes gap 1).
+    vi.mocked(loadRemoteSchema).mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId={null} role="editor"
+        onAuthError={onAuthError}
+      />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+    expect(screen.queryByText(/unreadable/)).not.toBeInTheDocument();
+  });
+
+  it('a plain per-kit schema failure still shows the unreadable notice (not auth)', async () => {
+    vi.mocked(loadRemoteSchema).mockRejectedValue(new Error('boom'));
+    const onAuthError = vi.fn();
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId={null} role="editor"
+        onAuthError={onAuthError}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/unreadable/).length).toBeGreaterThan(0));
+    expect(onAuthError).not.toHaveBeenCalled();
+  });
+
   it('shows the empty-workspace message when the store has no kits', async () => {
     vi.mocked(listRemoteKits).mockResolvedValue([]);
     render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);

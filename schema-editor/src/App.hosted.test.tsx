@@ -117,6 +117,20 @@ describe('App hosted mode (bd 92qe.2)', () => {
     expect(window.localStorage.getItem('schema-editor.accessCode')).toBeNull();
   });
 
+  it('a NON-auth probe failure (e.g. 503) keeps the stored code and shows why', async () => {
+    // Only a REFUSED code may be wiped: a transient server-side issue (surface
+    // unconfigured, network blip) must not log every returning contractor out
+    // (fresh-eyes gap 2). The error is shown even though the probe was silent.
+    window.localStorage.setItem('schema-editor.accessCode', 'still-good');
+    vi.mocked(probeSession).mockRejectedValue(
+      new Error('The editor surface is not configured on this server'),
+    );
+    render(<App />);
+    await screen.findByLabelText('Access code');
+    expect(window.localStorage.getItem('schema-editor.accessCode')).toBe('still-good');
+    expect(screen.getByText(/not configured/)).toBeInTheDocument();
+  });
+
   it('opens a kit from the remote catalogue: schema + PDF via the routes', async () => {
     await passGate();
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
@@ -177,6 +191,37 @@ describe('App hosted mode (bd 92qe.2)', () => {
     vi.mocked(probeSession).mockRejectedValue(new AuthError()); // stored code is dead too
     fireEvent.keyDown(window, { key: 's', metaKey: true });
     await waitFor(() => expect(screen.getByLabelText('Access code')).toBeInTheDocument());
+  });
+
+  it('unsaved edits SURVIVE a 401 gate round trip and save under the new code', async () => {
+    // Deliberate behavior (fresh-eyes gap 4, resolved as keep-the-work): a code
+    // rotation mid-polish must not destroy a contractor's unsaved edits. After
+    // re-entering a valid code the editor resumes where it was, and the save
+    // goes through re-authenticated with the NEW code.
+    await passGate();
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('edit-field')); // dirty the schema
+
+    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new AuthError());
+    vi.mocked(probeSession).mockRejectedValueOnce(new AuthError()); // stored code dead
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    const input = await screen.findByLabelText('Access code');
+
+    // Re-enter a (new) valid code -- probeSession succeeds again.
+    vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
+    vi.mocked(saveRemoteSchema).mockResolvedValue(undefined);
+    fireEvent.change(input, { target: { value: 'rotated-code' } });
+    fireEvent.click(screen.getByText('Open the workspace'));
+
+    // The open kit + dirty edit are still there (no teardown)...
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+    expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
+    // ...and the save now lands with the edited field intact.
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    await waitFor(() => expect(saveRemoteSchema).toHaveBeenCalledTimes(2));
+    const [, saved] = vi.mocked(saveRemoteSchema).mock.calls[1];
+    expect((saved as FormSchema).fields[0]).toMatchObject({ spoken_name: 'edited' });
   });
 
   it('non-hosted default renders the local catalogue path unchanged', async () => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  getAccessCode, setAccessCode, clearAccessCode, probeSession,
+  AuthError, getAccessCode, setAccessCode, clearAccessCode, probeSession,
   type EditorRole,
 } from '../utils/remoteKitStore';
 
@@ -44,11 +44,16 @@ export const AccessCodeGate: React.FC<AccessCodeGateProps> = ({ onReady }) => {
       const session = await probeSession();
       onReady(session.role);
     } catch (err) {
-      clearAccessCode();
+      // Only a REFUSED code (401 -> AuthError) invalidates the stored value.
+      // Any other failure -- the surface unconfigured server-side (503), a
+      // network blip -- must NOT wipe a code that may be perfectly fine, or a
+      // transient server issue would log every returning contractor out
+      // (fresh-eyes gap 2). Those errors are shown even on the silent probe,
+      // so the human sees the real cause instead of a bare code form.
+      const refused = err instanceof AuthError;
+      if (refused) clearAccessCode();
       setProbingStored(false);
-      // A silently-probed stale code just falls back to the form, no error
-      // banner; an explicit submit shows why it was refused.
-      if (!silent) {
+      if (!silent || !refused) {
         setError(err instanceof Error ? err.message : 'Could not validate the access code');
       }
     } finally {

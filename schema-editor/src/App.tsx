@@ -184,6 +184,14 @@ export const App: React.FC = () => {
   // the access gate. The gate re-probes the stored code, finds it dead, clears
   // it, and shows the entry form -- so the contractor lands on "enter your code"
   // rather than a dead editor.
+  //
+  // DELIBERATE: this does NOT tear down the open kit or dirty edits. A code
+  // rotation mid-polish must not destroy a contractor's unsaved work -- after
+  // re-entering a valid code they resume exactly where they were and can save.
+  // Nothing stale is trusted: every subsequent request re-authenticates with
+  // the NEW code server-side; the in-memory schema/PDF are display state only.
+  // (Fresh-eyes flagged the asymmetry vs the kit-switch teardowns; keeping the
+  // work is the chosen behavior, locked by a test in App.hosted.test.tsx.)
   const handleAuthExpired = React.useCallback(() => {
     setRole(null);
   }, []);
