@@ -91,15 +91,15 @@ describe('is_checked / is_empty / is_not_empty', () => {
     expect(shouldShowField(notEmpty, { t: 'hi' }, [t])).toBe(true);
     expect(shouldShowField(notEmpty, {}, [t])).toBe(false);
   });
-  // is_empty/is_not_empty on a checkbox-group ARRAY: the preview matches the
-  // RUNTIME bug-for-bug (bd polyglot-pdf-rigd) -- the runtime treats an array as a
-  // plain value, so an empty [] is NOT is_empty. The preview shows what production
-  // actually does, not a corrected variant.
-  it('is_empty / is_not_empty on a checkbox-group array (runtime parity: array != empty)', () => {
+  // is_empty/is_not_empty on a checkbox-group ARRAY: an empty selection ([]) IS
+  // empty, mirroring the is_checked array branch. Parity with the runtime fix
+  // (bd polyglot-pdf-rigd) -- the old scalar-only checks inverted the semantics
+  // for arrays ([] was "not empty" because it is not null/undefined/'').
+  it('is_empty / is_not_empty on a checkbox-group array (runtime parity: [] IS empty)', () => {
     const empty = field({ id: 'e', show_if: { field: 'cbg', operator: 'is_empty' } });
     const notEmpty = field({ id: 'n', show_if: { field: 'cbg', operator: 'is_not_empty' } });
-    expect(shouldShowField(empty, { cbg: [] }, fields)).toBe(false);     // [] is not null/undefined/''
-    expect(shouldShowField(notEmpty, { cbg: [] }, fields)).toBe(true);
+    expect(shouldShowField(empty, { cbg: [] }, fields)).toBe(true);      // empty selection IS empty
+    expect(shouldShowField(notEmpty, { cbg: [] }, fields)).toBe(false);
     expect(shouldShowField(empty, { cbg: ['x'] }, fields)).toBe(false);
     expect(shouldShowField(notEmpty, { cbg: ['x'] }, fields)).toBe(true);
     // unset (undefined) IS empty

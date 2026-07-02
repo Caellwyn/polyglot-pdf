@@ -81,15 +81,14 @@ export function evaluateCondition(
       return triggerValue === true;
 
     case 'is_empty':
-      // Match the runtime exactly (no array special-case): the runtime treats a
-      // checkbox-group array as a plain value, so an empty [] is NOT is_empty
-      // (an array is not null/undefined/''). This is arguably a runtime bug, but
-      // the preview's job is to show what production ACTUALLY does -- bug-for-bug
-      // parity -- not a corrected variant (bd polyglot-pdf-rigd tracks the runtime
-      // fix). No real schema uses is_empty/is_not_empty show_if today.
+      // Match the runtime (bd polyglot-pdf-rigd): a checkbox-group value is an
+      // array, and an empty selection ([]) IS empty -- mirroring the is_checked
+      // array branch above. Scalars keep the null/undefined/'' check.
+      if (Array.isArray(triggerValue)) return triggerValue.length === 0;
       return triggerValue === null || triggerValue === undefined || triggerValue === '';
 
     case 'is_not_empty':
+      if (Array.isArray(triggerValue)) return triggerValue.length > 0;
       return triggerValue !== null && triggerValue !== undefined && triggerValue !== '';
 
     case 'in':

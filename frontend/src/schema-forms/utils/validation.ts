@@ -541,9 +541,18 @@ export function shouldShowField(
       return triggerValue === true;
 
     case "is_empty":
+      // A checkbox-group value is an array: an empty selection ([]) IS empty.
+      // Without this branch an [] fell through to the scalar checks (an array is
+      // not null/undefined/""), inverting the semantics (bd polyglot-pdf-rigd).
+      if (Array.isArray(triggerValue)) {
+        return triggerValue.length === 0;
+      }
       return triggerValue === null || triggerValue === undefined || triggerValue === "";
 
     case "is_not_empty":
+      if (Array.isArray(triggerValue)) {
+        return triggerValue.length > 0;
+      }
       return triggerValue !== null && triggerValue !== undefined && triggerValue !== "";
 
     case "in":

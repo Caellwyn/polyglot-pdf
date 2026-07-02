@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-06-29. See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`. Prior 2026-06-28: see [../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md](../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md) for the `equals`/`not_equals` checkbox-group (array-trigger) membership fix in `shouldShowField`.*
+*Last updated: 2026-07-02. See [../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md](../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md) for the `is_empty`/`is_not_empty` checkbox-group (array-trigger) fix in `shouldShowField` (bd rigd) and the `steered` carry-forward `[]`-alias fix in `updateField` (bd 5k52). Prior 2026-06-29: see [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -140,4 +140,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-06-29. See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`. Prior 2026-06-28: see [../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md](../journal/entries/2026-06-28-bd-vq4m-showif-equals-checkbox-group.md) for the `equals`/`not_equals` checkbox-group (array-trigger) membership fix in `shouldShowField`.*
+*Last updated: 2026-07-02. See [../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md](../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md) for the `is_empty`/`is_not_empty` checkbox-group (array-trigger) fix in `shouldShowField` (bd rigd) and the `steered` carry-forward `[]`-alias fix in `updateField` (bd 5k52). Prior 2026-06-29: see [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`.*

@@ -499,7 +499,10 @@ class CallbackHandler:
         form_values = await self._request_form_state_from_client(field_ids)
 
         # Convert to ultra-compact format: field_id:value:status|field_id:value:status
-        # Only include fields with values. Empty fields are omitted.
+        # Only ANSWERED fields are included; unanswered (value None/missing) are
+        # omitted. Falsy answers are still answers -- a standalone checkbox stored
+        # as False, a numeric 0, or an explicit empty string ("not applicable")
+        # must stay visible to the model (bd polyglot-pdf-gihj).
         # Status: "confirmed" or "unconfirmed"
         # Example: "firstName:John:confirmed|lastName:Doe:unconfirmed"
         compact_lines = []
@@ -507,8 +510,9 @@ class CallbackHandler:
             if isinstance(field_data, dict):
                 value = field_data.get("value")
 
-                # Skip empty fields (not in response = empty)
-                if not value:
+                # Skip unanswered fields (not in response = empty). Only None /
+                # missing counts as unanswered -- never falsy values.
+                if value is None:
                     continue
 
                 confirmed = field_data.get("confirmed", False)
@@ -517,7 +521,7 @@ class CallbackHandler:
                 compact_lines.append(f"{field_id}:{value}:{status}")
             else:
                 # Legacy format (shouldn't happen but handle it)
-                if field_data:  # Only include if has value
+                if field_data is not None:  # Only include if answered
                     compact_lines.append(f"{field_id}:{field_data}:unconfirmed")
 
         compact_state = "|".join(compact_lines) if compact_lines else "No fields filled"
