@@ -167,7 +167,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     log_info "═══════════════════════════════════════════════════════════"
     echo ""
     
-    cd "$BACKEND_DIR"
+    # Build from the REPO ROOT (bd 92qe.3): the Dockerfile moved from backend/
+    # to the root so the image can copy scripts/authoring + scripts/bakeoff --
+    # the PDF->schema pipeline the hosted extraction route spawns. .gcloudignore
+    # keeps the Cloud Build upload lean (no PDFs/node_modules/docs).
+    cd "$SCRIPT_DIR"
 
     # No local-dependency self-heal here (unlike the frontend): the backend image
     # is built fresh by Cloud Build on every deploy, and the Dockerfile runs
@@ -182,11 +186,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         aiplatform.googleapis.com \
         storage.googleapis.com \
         --project "$POLYGLOT_PROJECT_NAME"
-    
+
     # Build the image using Cloud Build
     IMAGE_URL="gcr.io/$POLYGLOT_PROJECT_NAME/$BACKEND_SERVICE_NAME"
-    log_info "Building container image: $IMAGE_URL..."
-    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME"
+    log_info "Building container image: $IMAGE_URL (repo-root context)..."
+    gcloud builds submit --tag "$IMAGE_URL" --project "$POLYGLOT_PROJECT_NAME" "$SCRIPT_DIR"
     
     # Deploy to Cloud Run
     log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."

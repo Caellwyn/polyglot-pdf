@@ -321,7 +321,9 @@ class LocalFormKitStore(FormKitStore):
 
 		def _write() -> None:
 			path.parent.mkdir(parents=True, exist_ok=True)
-			tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+			# Per-write nonce, same reason as _write_json (Codex P1 r2, PR #279):
+			# a pid-only temp name collides under two concurrent writes.
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
 			try:
 				tmp.write_bytes(data)
 				os.replace(tmp, path)

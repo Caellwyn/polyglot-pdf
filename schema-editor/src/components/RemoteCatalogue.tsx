@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  AuthError, listRemoteKits, loadRemoteSchema, setRemoteStatus,
+  AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
+  onboardRemoteKit, setRemoteStatus,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { getCompletionStats } from '../utils/validation';
@@ -61,6 +62,24 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // Monotonic token: a slow progress load from a superseded refresh must not
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
+  // Author tier (bd 92qe.3): id of the kit currently extracting (ONE at a
+  // time -- the server also serializes), elapsed seconds for progress, and the
+  // per-kit optional instructions PDF picked but not yet sent.
+  const [extractingId, setExtractingId] = React.useState<string | null>(null);
+  const [extractElapsed, setExtractElapsed] = React.useState(0);
+  const [instructionsPdfByKit, setInstructionsPdfByKit] =
+    React.useState<Record<string, File>>({});
+  const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
+  const isAuthor = role === 'author';
+
+  // Elapsed-seconds ticker while an extraction runs (it takes minutes; a dead
+  // button with no feedback reads as a hang).
+  React.useEffect(() => {
+    if (extractingId === null) return;
+    setExtractElapsed(0);
+    const t = window.setInterval(() => setExtractElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [extractingId]);
 
   // Last SAVED in-editor stats per kit (the FormCatalogue editedProgress
   // pattern -- Codex P1, PR #280): liveProgress only covers the kit that is
@@ -183,6 +202,59 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     }
   }, [refresh, onAuthError]);
 
+  // Author tier (bd 92qe.3): upload a blank form PDF -> a new draft kit in the
+  // shared store (the hosted counterpart of the local drag-drop onboarding).
+  const handleUploadPdf = React.useCallback(async (file: File) => {
+    setNotice(null);
+    setError(null);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setError('Pick an AcroForm PDF file to add a form.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await onboardRemoteKit(file);
+      await refresh();
+      setNotice(`Added "${created.id}" -- run the extraction to produce its schema, then open it here.`);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError?.();
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to add form');
+      setBusy(false);
+    }
+  }, [refresh, onAuthError]);
+
+  // Author tier (bd 92qe.3): run the server-side PDF -> schema extraction for
+  // a schemaless kit. Minutes-long synchronous call; the ticker shows elapsed.
+  const handleRunExtraction = React.useCallback(async (kit: RemoteKitEntry) => {
+    if (extractingId !== null) return;
+    setNotice(null);
+    setError(null);
+    setExtractingId(kit.id);
+    try {
+      const instructionsPdf = instructionsPdfByKit[kit.id];
+      const result = await extractRemoteKit(kit.id, { instructionsPdf });
+      await refresh();
+      setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+      setInstructionsPdfByKit((prev) => {
+        const next = { ...prev };
+        delete next[kit.id];
+        return next;
+      });
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError?.();
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setExtractingId(null);
+    }
+  }, [refresh, onAuthError, extractingId, instructionsPdfByKit]);
+
   const summary = React.useMemo(() => {
     let complete = 0, inProgress = 0, noSchema = 0;
     for (const k of kits) {
@@ -196,9 +268,35 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   return (
     <div data-testid="remote-catalogue" className="p-4 bg-white border-b border-gray-200">
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn-secondary" onClick={() => void refresh(true)} disabled={busy}>
+        <button className="btn btn-secondary" onClick={() => void refresh(true)} disabled={busy || extractingId !== null}>
           Refresh
         </button>
+        {/* Author tier: onboard a new form by uploading its blank PDF. */}
+        {isAuthor && (
+          <>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              data-testid="upload-pdf-input"
+              disabled={busy || extractingId !== null}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleUploadPdf(f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={busy || extractingId !== null}
+              title="Upload a blank AcroForm PDF to add a new form to the shared workspace"
+            >
+              Add a form (PDF)
+            </button>
+          </>
+        )}
         <span className="text-sm text-gray-500">
           {busy && kits.length === 0
             ? 'Loading the shared form catalogue...'
@@ -328,6 +426,61 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         Mark complete
                       </button>
                     )}
+                  </div>
+                )}
+
+                {/* Author tier (bd 92qe.3): a schemaless kit WITH a PDF can be
+                    extracted server-side. Editor-tier users see neither this
+                    nor the upload control -- the server also refuses them. */}
+                {isAuthor && !kit.hasSchema && kit.hasPdf && (
+                  <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                    <label
+                      className="text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+                      title="Optional: attach the form's official instructions PDF to enrich each field's help text"
+                    >
+                      <input
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        className="hidden"
+                        disabled={busy || extractingId !== null}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          const isPdf = (file: File) =>
+                            file.type === 'application/pdf'
+                            || file.name.toLowerCase().endsWith('.pdf');
+                          if (f && !isPdf(f)) {
+                            setError('The instructions file must be a PDF.');
+                            setInstructionsPdfByKit((prev) => {
+                              const next = { ...prev };
+                              delete next[kit.id];
+                              return next;
+                            });
+                            e.target.value = '';
+                            return;
+                          }
+                          setError(null);
+                          setInstructionsPdfByKit((prev) => {
+                            const next = { ...prev };
+                            if (f) next[kit.id] = f; else delete next[kit.id];
+                            return next;
+                          });
+                          e.target.value = '';
+                        }}
+                      />
+                      {instructionsPdfByKit[kit.id]
+                        ? `instructions: ${instructionsPdfByKit[kit.id].name}`
+                        : '+ instructions PDF'}
+                    </label>
+                    <button
+                      className="btn-sm btn-primary text-xs"
+                      onClick={() => void handleRunExtraction(kit)}
+                      disabled={busy || extractingId !== null}
+                      title="Run the automated PDF -> schema extraction on the server (takes a few minutes)"
+                    >
+                      {extractingId === kit.id
+                        ? `Extracting... ${extractElapsed}s`
+                        : 'Run extraction'}
+                    </button>
                   </div>
                 )}
               </li>
