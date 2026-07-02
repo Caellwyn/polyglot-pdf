@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.manifest_service import (
+from backend.services.manifest_service import (
     estimate_manifest_tokens,
     format_manifest_for_context,
     generate_part_manifest,

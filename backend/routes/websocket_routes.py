@@ -222,11 +222,10 @@ async def _handle_fill_session(
 	# mutate the SAME value without nonlocal threading across the callback boundary.
 	# CRITICAL: this is reset on MEANINGFUL activity only -- control messages and a
 	# real user turn -- NOT on raw inbound audio frames. In native VAD mode the
-	# client streams continuous audio incl. silence, so resetting on audio bytes (the
-	# pre-l3a.4 behavior) meant a walk-away with the mic open never timed out and
-	# burned Gemini's 15-min audio session. Background noise streams as audio but
-	# does NOT produce a native-VAD input transcription, so it no longer keeps the
-	# session alive.
+	# client streams continuous audio incl. silence, so resetting on audio bytes
+	# would mean a walk-away with the mic open never times out and burns Gemini's
+	# 15-min audio session. Background noise streams as audio but does NOT produce
+	# a native-VAD input transcription, so it does not keep the session alive.
 	last_rx = [time.time()]
 
 	# Register the user-activity callback BEFORE start_session so it is wired into

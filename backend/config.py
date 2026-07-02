@@ -121,8 +121,7 @@ class Settings(BaseModel):
 	# docs/standards/voice-and-vad.md.
 	DISABLE_GEMINI_VAD: bool = os.getenv("DISABLE_GEMINI_VAD", "false").lower() == "true"
 	GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
-	PROACTIVE_AUDIO: bool = False  # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable to ignore dirty/choppy audio DEPRECATED: gemini doesn't use tools when this is True.
-	
+
 	# Audio settings
 	AUDIO_IN_RATE: int = 16000
 	AUDIO_OUT_RATE: int = 24000
@@ -136,7 +135,6 @@ class Settings(BaseModel):
 	# UNDER the frontend's VALIDATOR_GATE_TIMEOUT_MS (6s) so the backend frees the loop
 	# and returns clean before the client's gate gives up.
 	VALIDATOR_TIMEOUT_SEC: float = 4.0
-	WS_MAX_OUTBOX: int = 100
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
 	# === JIT (Just-In-Time) Schema Loading Settings ===
@@ -436,14 +434,7 @@ class Settings(BaseModel):
 		str(Path(__file__).resolve().parents[1] / "form-kits")
 	)
 	FORM_KITS_GCS_BUCKET: str | None = os.getenv("FORM_KITS_GCS_BUCKET")
-	FORM_KITS_REMOTE_BASE_URL: str | None = os.getenv("FORM_KITS_REMOTE_BASE_URL")
 	FORM_KITS_REMOTE_PREFIX: str = os.getenv("FORM_KITS_REMOTE_PREFIX", "form-kits")
-	FORM_KITS_REMOTE_TIMEOUT_SEC: float = float(os.getenv("FORM_KITS_REMOTE_TIMEOUT_SEC", "30"))
-
-
-	# Bump this when parser behavior/logic changes in a breaking way so
-	# sessions can be re-parsed automatically when code updates.
-	PARSER_VERSION: str = "v2"
 
 	# === SYSTEM INSTRUCTION TEMPLATE ===
 	# Main instruction set that controls AI behavior for form filling
@@ -654,8 +645,8 @@ class Settings(BaseModel):
 	# Triggered by: session start (DTI), language selection change, section switching
 	# Placeholders: {spoken_language}, {next_field_hint}, {current_field_guidance}
 	# {current_field_guidance} is the DTI injection channel for field 1 (epic
-	# polyglot-pdf-13w7, bd polyglot-pdf-j748): the static SI no longer carries any
-	# field data, so field 1's exact field_id + guidance ride here, rendered by the
+	# polyglot-pdf-13w7, bd polyglot-pdf-j748): the static SI carries no field
+	# data, so field 1's exact field_id + guidance ride here, rendered by the
 	# same render_field_guidance() that delivers fields 2..N in the confirm_field
 	# response. The caller passes "" in non-DTI mode (legacy/JIT still carry field
 	# data in the SI), so this suffix is a no-op there.
@@ -685,9 +676,7 @@ class Settings(BaseModel):
 	# Sent by the frontend watchdog when the conversation stalls (bd zy3).
 	# Consumed by FormFillingService.send_recovery_prompt -- levels escalate.
 	# These are SCRIPTS/instructions for Gemini to act on aloud, not user turns.
-	# Dropped in commit 7a30ad4 (every level then raised AttributeError);
-	# restored from that commit's parent, L3 wording re-authored because the
-	# old "Connect to Voice" button no longer exists. ASCII-only (scar #6).
+	# ASCII-only (scar #6).
 
 	# Level 1: Re-prompt for the current field
 	RECOVERY_PROMPT_LEVEL_1: str = (

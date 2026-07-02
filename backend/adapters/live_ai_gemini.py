@@ -29,7 +29,7 @@ from backend.ports.live_ai_port import ILiveAI, LiveAISession
 
 
 # ============================================================================
-# LOGGING TAG GUIDE (ASCII tags for easy log scanning; was emoji -- bd polyglot-pdf-bw8)
+# LOGGING TAG GUIDE (ASCII tags for easy log scanning -- bd polyglot-pdf-bw8)
 # ============================================================================
 # [send] Initial message/prompt sent to Gemini
 # [ok] Operation completed successfully  
@@ -547,8 +547,7 @@ class LiveAIGemini(ILiveAI):
             form_session_id: Overall form filling session ID (persists across Gemini sessions)
             form_id: Form identifier (e.g., "I-90")
             current_section_id: Current section ID (the user-facing navigation unit;
-                see docs/standards/terminology.md -- this was historically mis-named
-                "part", a section-state naming bug, bd polyglot-pdf-gfb.4)
+                "section", never "part" -- see docs/standards/terminology.md)
         """
         self._form_session_id = form_session_id
         self._form_id = form_id
@@ -948,9 +947,9 @@ class LiveAIGemini(ILiveAI):
             # Emit a session-end cost summary now that the background session loop
             # has been cancelled/awaited -- the _session_total_* counters are final
             # (emitting earlier would race _run_session_loop still updating them).
-            # The session TOTAL was previously lost on finalize (it only lived in
-            # self._session_total_*); per-turn token/cost is logged during the
-            # session. Counts/costs/ids ONLY -- never field values/transcripts
+            # The session TOTAL lives only in self._session_total_*, so this is
+            # the one place it reaches the logs; per-turn token/cost is logged
+            # during the session. Counts/costs/ids ONLY -- never field values/transcripts
             # (bd hjo / no-PII). Emit AT MOST ONCE per session (finalize() can be
             # entered more than once / concurrently) and only if a session actually
             # billed tokens. The logger is already bound with instance_id + model,
@@ -1184,13 +1183,6 @@ class LiveAIGemini(ILiveAI):
             "tools": tools_config,
         }
 
-        # HALLUCINATION_REDUCTION (Oct 30, 2025): Enable proactive audio
-        # This helps Gemini ignore dirty/choppy audio and background conversation
-        if settings.PROACTIVE_AUDIO:
-            config["proactivity"] = {
-                "proactive_audio": True
-            }
-        
         # Enable automatic voice activity detection for realtime audio input
         # This allows Gemini to detect when user starts/stops speaking
         try:

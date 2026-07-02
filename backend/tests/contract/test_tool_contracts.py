@@ -238,10 +238,9 @@ async def _drive_fill_then_confirm(model: str) -> dict:
     "model",
     [
         MODEL_NATIVE_STANDARD,
-        # 3.1 was previously xfail'd ("skips update_form_fields ~50%") -- that was
-        # the UNTYPED update_form_fields.value param under genai 2.8.0, not a model
-        # regression. With value typed "string" (bd polyglot-pdf-wpw.4) 3.1 emits
-        # the call reliably (4/4 full SI, 2026-06-11), so it is a real gate now.
+        # 3.1 emits update_form_fields reliably as long as the value param is
+        # typed "string" (bd polyglot-pdf-wpw.4) -- an untyped value param makes
+        # it skip the call ~50% of the time. A real gate for both models.
         MODEL_NATIVE_PREMIUM,
     ],
     ids=["2.5-standard", "3.1-premium"],

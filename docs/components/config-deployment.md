@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-02. Added the hosted-editor deploy section (two Hosting targets, deploy-editor.sh, pull-form-kits.sh, 1Gi memory, semicolon CORS origins -- bd 92qe.4) and the hosted-extraction knobs (EXTRACTOR_MODEL/TIMEOUT/MAX_PDF_MB) + the repo-root image build (bd 92qe.3), and the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
+*Last updated: 2026-07-02. Dead-config cleanup (bd polyglot-pdf-o0pc): removed `PROACTIVE_AUDIO`, `WS_MAX_OUTBOX`, `PARSER_VERSION`, `FORM_KITS_REMOTE_BASE_URL`, and `FORM_KITS_REMOTE_TIMEOUT_SEC` from `Settings` (none were read anywhere); the `DISABLE_GEMINI_VAD` flag row now matches the code (env-overridable, default `false` = native VAD). Also 2026-07-02: added the hosted-editor deploy section (two Hosting targets, deploy-editor.sh, pull-form-kits.sh, 1Gi memory, semicolon CORS origins -- bd 92qe.4) and the hosted-extraction knobs (EXTRACTOR_MODEL/TIMEOUT/MAX_PDF_MB) + the repo-root image build (bd 92qe.3), and the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -29,16 +29,15 @@ which bypasses the cache).
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
   `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `SECRETARY_TIMEOUT_S`, `FORM_KITS_MODE`,
-  `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
-  `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`,
+  `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_PREFIX`,
   `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`,
   `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`, `EXTRACTOR_MAX_PDF_MB`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
-  an env var): `PROACTIVE_AUDIO`, the audio rates
+  an env var): the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
   (`WS_IDLE_TIMEOUT_SEC` 120, `WS_PING_INTERVAL_SEC` 15, `WS_CHUNK_MS` 20,
-  `WS_MAX_OUTBOX` 100, `WS_MAX_AUDIO_FRAME_BYTES` 32000), `MAX_UPLOAD_MB` 5, the
-  `VAD_*` sensitivity knobs, `PARSER_VERSION`, and the prompt templates.
+  `WS_MAX_AUDIO_FRAME_BYTES` 32000), `MAX_UPLOAD_MB` 5, the
+  `VAD_*` sensitivity knobs, and the prompt templates.
 
 ## Feature flags
 
@@ -47,8 +46,7 @@ which bypasses the cache).
 | `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 2.5 standard (default for its audio-path behavior), `true` → 3.1 premium (opt-in; now tool-call-reliable since the untyped-param fix, `bd polyglot-pdf-wpw.4`). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
 | `USE_JIT_SCHEMA` | `false` | Send a field **manifest** + load each full field schema just-in-time (token reduction), using `JIT_SYSTEM_INSTRUCTION` instead of `SYSTEM_INSTRUCTION`. See [schema-forms.md](schema-forms.md). |
-| `DISABLE_GEMINI_VAD` | `True` (code constant, CRITICAL) | Turns off Gemini auto-VAD; the client drives turn-taking with manual `activity_start/end`. See [voice-and-vad.md](../standards/voice-and-vad.md). |
-| `PROACTIVE_AUDIO` | `False` (code constant) | DEPRECATED — Gemini stops calling tools when on. See [voice-and-vad.md](../standards/voice-and-vad.md#hallucination-reduction). |
+| `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 
 ## Form-kit storage (`FORM_KITS_MODE`)
 

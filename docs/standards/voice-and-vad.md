@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-06-29. bd polyglot-pdf-fa4x: reviewed for the thinking-indicator native-VAD START (wpw.5 follow-up). The native START rides `input_transcription` -> `on_user_activity`, which DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the default in the table below) -- confirmed on the deployed Vertex model and live E2E. No VAD-path behavior changed; the `agent_processing` wire type is registered in [ws-protocol.md](ws-protocol.md). Prior: 2026-06-17. bd zivv: native VAD and the manual turn signals (activity_start/activity_end/audio_stream_end) are MUTUALLY EXCLUSIVE -- under native VAD the client sends NO manual signal (connection.ts sendActivityStart AND sendActivityEnd both `if (nativeVad) return`), and PTT-mute streams SILENCE (not nothing) so native VAD finds the turn boundary; this fixed "Gemini stops responding after PTT press" and supersedes the bd-6vo audio_stream_end-on-release approach. See the SPEC section below and [journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md](../journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md). The mic-energy meter (bd s3zv) reads the send gate, it does not alter it.*
+*Last updated: 2026-07-02. bd polyglot-pdf-o0pc: the dead `PROACTIVE_AUDIO` config flag (hardwired `False`) was removed; the no-proactive-audio rule itself is unchanged (see Hallucination reduction below). Prior: 2026-06-29. bd polyglot-pdf-fa4x: reviewed for the thinking-indicator native-VAD START (wpw.5 follow-up). The native START rides `input_transcription` -> `on_user_activity`, which DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the default in the table below) -- confirmed on the deployed Vertex model and live E2E. No VAD-path behavior changed; the `agent_processing` wire type is registered in [ws-protocol.md](ws-protocol.md). Prior: 2026-06-17. bd zivv: native VAD and the manual turn signals (activity_start/activity_end/audio_stream_end) are MUTUALLY EXCLUSIVE -- under native VAD the client sends NO manual signal (connection.ts sendActivityStart AND sendActivityEnd both `if (nativeVad) return`), and PTT-mute streams SILENCE (not nothing) so native VAD finds the turn boundary; this fixed "Gemini stops responding after PTT press" and supersedes the bd-6vo audio_stream_end-on-release approach. See the SPEC section below and [journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md](../journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md). The mic-energy meter (bd s3zv) reads the send gate, it does not alter it.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -276,8 +276,11 @@ Two independent language axes — don't conflate them:
 
 ## Hallucination reduction
 
-Two standing mitigations (both marked HALLUCINATION_REDUCTION in config.py):
+Two standing mitigations:
 - **Single-field updates only.** `update_form_fields` takes ONE field per call;
-  multi-field updates raised hallucination rates.
-- **`PROACTIVE_AUDIO = False`.** Enabling it made Gemini ignore dirty/choppy audio
-  but also stop calling tools — deprecated, left off.
+  multi-field updates raised hallucination rates. (Marked HALLUCINATION_REDUCTION
+  in config.py.)
+- **No proactive audio.** Gemini's `proactive_audio` connect option is never set:
+  enabling it made Gemini ignore dirty/choppy audio but also stop calling tools,
+  so the adapter must not turn it on. (The old `PROACTIVE_AUDIO` config flag was
+  removed as dead code — it was hardwired `False`.)

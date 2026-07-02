@@ -973,35 +973,13 @@ class CallbackHandler:
         """
         updates_payload: Dict[str, Any] = {}
 
-        # NEW SINGLE-FIELD FORMAT: {"field_id": "...", "value": "..."}
+        # Single-field format: {"field_id": "...", "value": "..."}
         if isinstance(arguments, dict) and "field_id" in arguments:
             field_id = arguments.get("field_id")
             value = arguments.get("value")
             if field_id is not None:
                 updates_payload = {str(field_id): value}
             return updates_payload
-
-        # OLD MULTI-FIELD FORMAT (preserved for potential revert)
-        # raw_updates: Any = arguments
-        #
-        # if isinstance(arguments, dict) and "updates" in arguments:
-        #     raw_updates = arguments["updates"]
-        #
-        # if isinstance(raw_updates, str):
-        #     try:
-        #         updates_payload = json.loads(raw_updates)
-        #     except json.JSONDecodeError:
-        #         updates_payload = {}
-        # elif isinstance(raw_updates, dict):
-        #     updates_payload = raw_updates
-        # elif isinstance(raw_updates, list):
-        #     updates_payload = {}
-        #     for item in raw_updates:
-        #         if isinstance(item, dict):
-        #             name = item.get("display_name") or item.get("name") or item.get("id")
-        #             value = item.get("value")
-        #             if name is not None:
-        #                 updates_payload[str(name)] = value
 
         return updates_payload
     

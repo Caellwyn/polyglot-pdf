@@ -32,7 +32,7 @@ def _client() -> genai.Client:
 
 
 # The adapter's connect-config, trimmed to the fields it actually sets by default
-# (PROACTIVE_AUDIO off, CONTEXT_COMPRESSION off, native VAD => no 'disabled').
+# (proactive audio off, CONTEXT_COMPRESSION off, native VAD => no 'disabled').
 BASE_CONFIG = {
     "response_modalities": ["AUDIO"],
     "tools": [
