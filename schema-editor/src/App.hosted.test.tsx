@@ -17,7 +17,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { FormSchema } from './types/schema';
 
-vi.mock('./components/PDFViewer', () => ({ PDFViewer: () => <div data-testid="pdf" /> }));
+// The mock renders pdfPath so tests can assert WHICH blob URL the viewer got
+// (the blob-URL lifecycle regression below keys on it).
+vi.mock('./components/PDFViewer', () => ({
+  PDFViewer: ({ pdfPath }: { pdfPath: string }) => (
+    <div data-testid="pdf">{pdfPath}</div>
+  ),
+}));
 vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="list" /> }));
 vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div data-testid="vp" /> }));
 // FieldEditor is mocked with an edit button so a test can dirty the schema.
@@ -42,6 +48,11 @@ const SCHEMA: FormSchema = {
 
 const KIT = {
   id: 'draft-kit', label: 'Draft Form', status: 'draft' as const, hasSchema: true,
+  hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf',
+};
+
+const KIT_B = {
+  id: 'second-kit', label: 'Second Form', status: 'draft' as const, hasSchema: true,
   hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf',
 };
 
@@ -191,6 +202,41 @@ describe('App hosted mode (bd 92qe.2)', () => {
     vi.mocked(probeSession).mockRejectedValue(new AuthError()); // stored code is dead too
     fireEvent.keyDown(window, { key: 's', metaKey: true });
     await waitFor(() => expect(screen.getByLabelText('Access code')).toBeInTheDocument());
+  });
+
+  it('a failed kit-B open keeps kit A pointing at a LIVE blob URL (fresh-eyes r2)', async () => {
+    // Opening kit B while A is open must not revoke A's PDF blob URL until
+    // B's fetches SUCCEED: if B's PDF fetch 401s, the auth-drop path preserves
+    // the open kit -- which must still render, not point at a revoked URL.
+    const revoke = vi.fn();
+    const origRevoke = URL.revokeObjectURL;
+    URL.revokeObjectURL = revoke as typeof URL.revokeObjectURL;
+    try {
+      vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+      vi.mocked(loadRemotePdfBlobUrl).mockResolvedValueOnce('blob:kit-a');
+      await passGate();
+      fireEvent.click(screen.getByText('Draft Form'));
+      await waitFor(() =>
+        expect(screen.getByTestId('pdf')).toHaveTextContent('blob:kit-a'));
+
+      // Open kit B: schema loads, but the PDF fetch answers 401.
+      vi.mocked(loadRemotePdfBlobUrl).mockRejectedValueOnce(new AuthError());
+      vi.mocked(probeSession).mockRejectedValueOnce(new AuthError());
+      fireEvent.click(screen.getByText('Second Form'));
+      const input = await screen.findByLabelText('Access code');
+
+      // Kit A's URL was never revoked mid-open...
+      expect(revoke).not.toHaveBeenCalledWith('blob:kit-a');
+
+      // ...and after re-auth the preserved kit A still renders its LIVE URL.
+      vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
+      fireEvent.change(input, { target: { value: 'new-code' } });
+      fireEvent.click(screen.getByText('Open the workspace'));
+      await waitFor(() =>
+        expect(screen.getByTestId('pdf')).toHaveTextContent('blob:kit-a'));
+    } finally {
+      URL.revokeObjectURL = origRevoke;
+    }
   });
 
   it('unsaved edits SURVIVE a 401 gate round trip and save under the new code', async () => {

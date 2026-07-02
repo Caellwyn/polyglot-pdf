@@ -218,11 +218,17 @@ export const App: React.FC = () => {
       if (!loaded) {
         throw new Error(`${entry.label} has no schema yet.`);
       }
-      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       let pdfUrl = '';
       if (entry.hasPdf) {
         pdfUrl = (await loadRemotePdfBlobUrl(entry.id)) ?? '';
       }
+      // Swap the blob URL only now that BOTH fetches succeeded. Revoking the
+      // prior kit's URL BEFORE the fetches (the old order) meant any mid-open
+      // failure -- especially a 401, whose auth-drop path deliberately
+      // preserves the open kit -- left the still-displayed prior kit pointing
+      // at a dead URL: a silently broken PDF viewer after re-auth
+      // (fresh-eyes r2).
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = pdfUrl || null;
 
       loadSchemaState(loaded); // fresh baseline -> history cleared
