@@ -235,11 +235,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// terminal reconnect-failure (Codex PR #203). The effect re-runs on `status`, so
 	// it tears down the rAF + unsubscribes the moment we leave `connected`.
 	useEffect(() => {
-		// Same "is the meter rendered?" condition as the JSX below (connected /
-		// switching / reconnecting). Only then do we wake the rAF loop.
+		// MUST match the listening-indicator gate (`isListening` below): the meter is
+		// nested inside that badge, so it is only rendered while `connected*`. Waking
+		// the rAF loop / holding the energy callback for `switching_section` or
+		// `reconnecting` -- where the badge is hidden -- is per-frame work for an
+		// element that cannot render (Codex PR #278 round 3).
 		const s = status.toLowerCase()
 		const meterVisible = s === 'connected' || s.startsWith('connected ')
-			|| s === 'switching_section' || s.startsWith('reconnecting')
 		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
@@ -1367,6 +1369,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}, [])
 
 	const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section' || status.toLowerCase().startsWith('reconnecting')
+	// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio is
+	// actually reaching the backend -- i.e. a steady `connected` session. We
+	// deliberately do NOT include the transient turn-taking states:
+	//   - `reconnecting`: `isConnected` stays true for the status dot, but the mic
+	//     gate (shouldSendMicChunk) drops all audio, so a "listening" cue there is
+	//     misleading (Codex PR #278);
+	//   - `switching_section`: the AI-initiated swap keeps the socket up, but the
+	//     reconnecting `startSection()` path sets `switching_section` BEFORE it
+	//     closes + reopens the socket, so audio can be dropped in that sub-second
+	//     window; rather than a fragile per-render socket probe, we just hide the
+	//     cue during the switch (briefly not showing "listening" mid-switch is
+	//     harmless and honest -- Codex PR #278 round 3).
+	// This keeps the gate a pure, reactive function of `status` and lets the
+	// mic-energy meter effect below share the exact same visibility condition.
+	const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 	const isPausedState = status.toLowerCase() === 'paused'
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'
@@ -1401,13 +1418,6 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						<span className="vff-status-text">
 							{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
 						</span>
-						{/* VAD speech detection indicator */}
-						{vad.userSpeaking && !pushToTalkMode && !nativeVad && (
-							<span className="vff-vad-indicator" title="Voice detected">
-								<span className="vff-vad-light"></span>
-								<span className="vff-vad-label">Listening</span>
-							</span>
-						)}
 						{/* Thinking indicator (bd polyglot-pdf-wpw.5): calm animated dots
 						    while the agent processes a turn, so the app never looks frozen
 						    during a slow turn / secretary lookup. Language-neutral (no word
@@ -1419,19 +1429,35 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								<span className="vff-thinking-dot"></span>
 							</span>
 						)}
-						{/* Live mic-energy meter (bd polyglot-pdf-s3zv): shows the mic is
-						    alive and whether audio is actually reaching the backend. */}
-						{isConnected && (
+						{/* Listening indicator (bd polyglot-pdf-1dvp): an ear glyph paired
+						    with the live mic-energy meter. Shown ONLY while connected (i.e.
+						    actually listening) -- hidden when paused/disconnected, which
+						    fixes the old reversed badge that lit "Listening" precisely when
+						    it was NOT. Language-neutral: the ear glyph replaces the English
+						    word so it reads the same across all 18 spoken languages. The
+						    meter still distinguishes mic-alive-but-gated (grey bar) from
+						    audio-reaching-the-backend (green, --sending). Gated on
+						    `isListening` (send-capable states) not `isConnected`, so it
+						    stays hidden while reconnecting. */}
+						{isListening && (
 							<span
-								className={`vff-mic-meter${micSending ? ' vff-mic-meter--sending' : ''}`}
+								className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
 								title={micSending
-									? `Sending audio (energy ${micEnergy.toFixed(0)})`
-									: `Mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+									? `Listening -- sending audio (energy ${micEnergy.toFixed(0)})`
+									: `Listening -- mic active, not sending (energy ${micEnergy.toFixed(0)})`}
+								aria-label="Listening"
+								role="status"
 							>
-								<span
-									className="vff-mic-meter-bar"
-									style={{ width: `${Math.min(100, micEnergy)}%` }}
-								></span>
+								{/* Ear glyph via an ASCII-safe Unicode escape (U+1F442) so the
+								    .tsx source stays ASCII per AGENTS.md; it still renders the ear
+								    emoji at runtime. Language-neutral -- no word to translate. */}
+								<span className="vff-listening-ear" aria-hidden="true">{'\u{1F442}'}</span>
+								<span className="vff-mic-meter">
+									<span
+										className="vff-mic-meter-bar"
+										style={{ width: `${Math.min(100, micEnergy)}%` }}
+									></span>
+								</span>
 							</span>
 						)}
 					</div>
@@ -1722,43 +1748,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				}
 
 				/* VAD Speech Detection Indicator */
-				.vff-vad-indicator {
-					display: flex;
+				/* Listening indicator (bd polyglot-pdf-1dvp): ear glyph + live
+				   mic-energy meter, shown only while connected. Language-neutral. */
+				.vff-listening {
+					display: inline-flex;
 					align-items: center;
 					gap: 6px;
-					padding: 4px 12px;
-					background: #d1fae5;
+					padding: 4px 10px;
+					background: #f3f4f6;
 					border-radius: 12px;
-					border: 1px solid #10b981;
+					border: 1px solid #d1d5db;
+					transition: background 120ms ease, border-color 120ms ease;
 				}
 
-				.vff-vad-label {
-					font-size: 12px;
-					color: #059669;
-					font-weight: 600;
-					text-transform: uppercase;
-					letter-spacing: 0.5px;
+				.vff-listening--sending {
+					background: #d1fae5;
+					border-color: #10b981;
 				}
 
-				.vff-vad-light {
-					display: inline-block;
-					width: 10px;
-					height: 10px;
-					border-radius: 50%;
-					background: #10b981;
-					animation: vff-vad-pulse 1s ease-in-out infinite;
-					box-shadow: 0 0 4px #10b981;
-				}
-
-				@keyframes vff-vad-pulse {
-					0%, 100% {
-						opacity: 1;
-						box-shadow: 0 0 4px #10b981;
-					}
-					50% {
-						opacity: 0.6;
-						box-shadow: 0 0 12px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
-					}
+				.vff-listening-ear {
+					font-size: 14px;
+					line-height: 1;
 				}
 
 				/* Thinking indicator (bd polyglot-pdf-wpw.5): three calm pulsing dots
@@ -1811,7 +1821,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					transition: width 80ms linear, background 120ms ease;
 				}
 
-				.vff-mic-meter--sending .vff-mic-meter-bar {
+				.vff-listening--sending .vff-mic-meter-bar {
 					background: #10b981;
 					box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 				}
