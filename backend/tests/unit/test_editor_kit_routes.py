@@ -1059,6 +1059,35 @@ def test_extract_failure_maps_to_502_and_stores_nothing(client, monkeypatch):
         _run(store.load_schema("fresh"))
 
 
+def test_extract_invalid_draft_failure_detail_scrubs_temp_path(client, monkeypatch):
+    # An INVALID draft (a common, expected outcome) exits 1 AFTER writing the
+    # temp --out path into its message -- the FAILURE detail must scrub the
+    # internal temp path exactly like the success path does (Opus fallback
+    # review, PR #282).
+    c, _store, root = client
+    _make_kit(root, "fresh")
+
+    def _invalid_run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump({"fields": []}, fh)
+        return SimpleNamespace(
+            returncode=1,
+            stdout=f"[INVALID] wrote {out_path} -- validation failed",
+            stderr="",
+        )
+
+    monkeypatch.setattr(ekr.subprocess, "run", _invalid_run)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert "extract_" not in detail and ".tmp" not in detail
+    assert "Temp" not in detail and "\\" not in detail.replace("\n", "")
+    assert "schema.json" in detail  # the scrub substitutes the store name
+
+
 def test_extract_unconfigured_is_503(client, monkeypatch):
     c, _store, root = client
     _make_kit(root, "fresh")

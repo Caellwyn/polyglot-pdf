@@ -690,6 +690,15 @@ async def extract_editor_kit(
 
             lines = [ln for ln in (proc.stdout + proc.stderr).splitlines() if ln.strip()]
             last_line = lines[-1] if lines else "(no output)"
+            # Scrub the internal temp paths from the pipeline's detail line on
+            # EVERY path -- an INVALID draft (a common, expected outcome) exits
+            # 1 with the temp --out path in its message, and the failure detail
+            # must not leak internals the success path scrubs (Opus fallback
+            # review, PR #282). Same discipline as the dev endpoint.
+            last_line = (last_line
+                         .replace(str(out_path), schema_file)
+                         .replace(str(tmp), "")
+                         .replace(tmp_dir, ""))
             if proc.returncode != 0 or not out_path.exists():
                 _log.error("editor_extract_failed", kit_id=kit_id,
                            exit_code=proc.returncode, detail=last_line[:400])
@@ -720,11 +729,10 @@ async def extract_editor_kit(
                 ) from exc
 
             field_count = len(schema.get("fields", []))
-            # The detail line names the temp --out path; show the store name.
-            clean_detail = last_line.replace(str(out_path), schema_file)
+            # last_line was already scrubbed of temp paths above.
             _log.info("editor_extract_done", kit_id=kit_id, fields=field_count, role=role)
             return ExtractResponse(
-                ok=True, detail=clean_detail, schemaFile=schema_file,
+                ok=True, detail=last_line, schemaFile=schema_file,
                 fieldCount=field_count,
             )
         finally:
