@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-06-12. bd polyglot-pdf-c5t (GoAway), 4sv7 (VAD env-parse hardening), vmxx (resume reconnect), w3ic/jbxm (empty-field confirm) all landed; none change the risk classification of their surfaces.*
+*Last updated: 2026-07-02. bd polyglot-pdf-o0pc (dead-code cleanup): the `form_models.py` row no longer cites the deleted `tool_models.py`/`websocket_models.py` siblings (both removed -- zero importers). No risk classification changed. See [../journal/entries/2026-07-02-bd-o0pc-dead-code-cleanup.md](../journal/entries/2026-07-02-bd-o0pc-dead-code-cleanup.md).*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
