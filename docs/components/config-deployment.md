@@ -156,7 +156,7 @@ stages):
   gated, so a draft is absent from GCS *and* the served manifest.
 - **Frontend** — built via `FRONTEND_BUILD_CMD` (set by the wrapper: prod
   `npm run build:schema` → `.env.production`; demo `npm run build:schema:demo`
-  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting`. The
+  → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting:app`. The
   bare `npm run build` is NOT used: it loads `.env.production` under the default
   Vite config, whose Firebase keys differ per channel — a demo built that way dies
   with `auth/invalid-api-key`.

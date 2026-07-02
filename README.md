@@ -413,11 +413,14 @@ build loads `frontend/.env.demo`; production loads `frontend/.env.production`.
 > [`CLAUDE.md`](CLAUDE.md) "Deployment / promotion").
 
 The underlying npm scripts in `frontend/` build then call `firebase deploy`
-directly: `npm run deploy:demo` is hosting-only (`--only hosting`), while
-`npm run deploy` (production) runs an unscoped `firebase deploy` that ships every
-configured target (hosting **and** Firestore rules). Prefer the top-level scripts:
-`deploy-demo.sh` runs a separate `firebase deploy --only firestore:rules` step so
-the demo path ships rules too (the hosting-only `npm run deploy:demo` would not).
+directly, pinned to the voice-app hosting target (`hosting` is an array of named
+targets since the hosted schema editor got its own site -- bd 92qe.4):
+`npm run deploy:demo` ships `--only hosting:app`, and `npm run deploy`
+(production) ships `--only firestore:rules,hosting:app`. Neither touches the
+editor site (that ships only via `deploy-editor.sh`). Prefer the top-level
+scripts: `deploy-demo.sh` runs a separate `firebase deploy --only
+firestore:rules` step so the demo path ships rules too (the app-only
+`npm run deploy:demo` would not).
 
 ### Backend (Google Cloud Run)
 
