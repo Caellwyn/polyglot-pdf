@@ -967,41 +967,19 @@ class CallbackHandler:
     def _parse_update_arguments(self, arguments: Any) -> Dict[str, Any]:
         """Parse raw update arguments into normalized dict.
 
-        HALLUCINATION_REDUCTION (Oct 30, 2025): Now supports single-field format.
-        New format: {"field_id": "firstName", "value": "Alice"}
-        Old format: {"updates": {"firstName": "Alice", "lastName": "Smith"}} (commented out)
+        HALLUCINATION_REDUCTION: only the single-field format is accepted --
+        {"field_id": "firstName", "value": "Alice"}. Anything else returns an
+        empty payload (the update is rejected).
         """
         updates_payload: Dict[str, Any] = {}
 
-        # NEW SINGLE-FIELD FORMAT: {"field_id": "...", "value": "..."}
+        # Single-field format: {"field_id": "...", "value": "..."}
         if isinstance(arguments, dict) and "field_id" in arguments:
             field_id = arguments.get("field_id")
             value = arguments.get("value")
             if field_id is not None:
                 updates_payload = {str(field_id): value}
             return updates_payload
-
-        # OLD MULTI-FIELD FORMAT (preserved for potential revert)
-        # raw_updates: Any = arguments
-        #
-        # if isinstance(arguments, dict) and "updates" in arguments:
-        #     raw_updates = arguments["updates"]
-        #
-        # if isinstance(raw_updates, str):
-        #     try:
-        #         updates_payload = json.loads(raw_updates)
-        #     except json.JSONDecodeError:
-        #         updates_payload = {}
-        # elif isinstance(raw_updates, dict):
-        #     updates_payload = raw_updates
-        # elif isinstance(raw_updates, list):
-        #     updates_payload = {}
-        #     for item in raw_updates:
-        #         if isinstance(item, dict):
-        #             name = item.get("display_name") or item.get("name") or item.get("id")
-        #             value = item.get("value")
-        #             if name is not None:
-        #                 updates_payload[str(name)] = value
 
         return updates_payload
     

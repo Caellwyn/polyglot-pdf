@@ -62,11 +62,9 @@ Options:
 - `-BackendOnly`: Only start backend
 - `-FrontendOnly`: Only start frontend
 
-### `start_testing.bat` / `start_testing.sh`
-Launches manual testing environment with test page
-
-### `gen_types.sh`
-Generate TypeScript types from Python models
+### `dev-local.ps1` (PowerShell)
+The canonical local test stack (backend + frontend), wrapped by the `/run-local`
+skill. See `docs/doctrine/promotion-tiers.md`.
 
 ---
 
@@ -74,10 +72,10 @@ Generate TypeScript types from Python models
 
 | Task | Windows | Bash |
 |------|---------|------|
+| Local test stack | `.\scripts\dev-local.ps1` | `bash scripts/dev-local.sh` |
 | Start backend | `scripts\start_backend.bat` | `bash scripts/start_backend.sh` |
 | Fix venv | `scripts\fix_venv.bat` | `bash scripts/fix_venv.sh` |
 | Full dev env | `.\scripts\dev_env.ps1` | N/A |
-| Run tests | `scripts\start_testing.bat` | `bash scripts/start_testing.sh` |
 
 ---
 
@@ -115,5 +113,4 @@ chmod +x scripts/*.sh
 ## 📚 Related Documentation
 
 - **Backend Setup:** See `README.md` in root directory
-- **Manual Testing:** See `planning_documents/MANUAL_TESTING_GUIDE.md`
-- **Architecture:** See `planning_documents/AI_ONBOARDING.md`
+- **Doc map:** See `docs/INDEX.md` (canonical); architecture overview in `CLAUDE.md`

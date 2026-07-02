@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-01. Added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1). Prior: added the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`) to the route table (bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row now records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-02. Dead-code cleanup (bd polyglot-pdf-o0pc): dropped the removed `PROACTIVE_AUDIO` constant from the tunables list and added the dev-only `POST /dev/console-log` route to the route table. Prior: 2026-07-01, added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1), and the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`, bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -42,9 +42,10 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
 them in source, not via environment):
-`PROACTIVE_AUDIO=False` (deprecated), `AUDIO_IN_RATE=16000`,
-`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`,
-`VAD_START_SENSITIVITY`/`VAD_END_SENSITIVITY` (`LOW`). The list is not
+`AUDIO_IN_RATE=16000`,
+`AUDIO_OUT_RATE=24000`, `WS_CHUNK_MS=20`, `MAX_UPLOAD_MB=5`. The VAD
+sensitivity knobs ARE env-overridable: `VAD_START_SENSITIVITY` (default
+`HIGH`) / `VAD_END_SENSITIVITY` (default `LOW`). The list is not
 exhaustive -- additional WS/VAD tuning constants live in `config.py`. Also there:
 `WS_IDLE_TIMEOUT_SEC` (`120`) -- the idle watchdog closes a WebSocket connection
 after this many seconds with no received message (audio, ping, or control).
@@ -76,6 +77,7 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
+| POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |
 
 ## Gotchas
 

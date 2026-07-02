@@ -778,48 +778,32 @@ class FormFillingService:
 
     async def change_fill_language(self, new_language: str):
         """
-        Change the language used for filling form field values.
-        
-        This sends a system instruction update to Gemini to change the language
-        requirement for field values, then prompts it to acknowledge the change.
-        
+        Change the language used for filling form field values mid-session.
+
+        Updates self._fill_language, then prompts Gemini to acknowledge the
+        change to the user. In DTI mode the per-turn field-guidance render
+        reads the live value (see callback_handler -- bd polyglot-pdf-uogm),
+        so subsequent turns pick up the new language without a reset. In
+        legacy/JIT modes (USE_DTI=false) the active session keeps its original
+        system instruction, so the new language reliably applies only from the
+        next section switch or reconnect.
+
         Args:
             new_language: The new language to use (e.g., "Spanish", "French", "Japanese")
         """
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
             return
-        
-        # Update internal state
+
         old_language = self._fill_language
         self._fill_language = new_language
-        
-        # Send system instruction update to change the language requirement
-        system_update = (
-            f"LANGUAGE UPDATE:\n"
-            f"The form field fill language has been changed from {old_language} to {new_language}.\n"
-            f"From now on, you MUST fill ALL form field values in {new_language}.\n"
-            f"You can still converse with the user in any language they speak, but all field values "
-            f"must be in {new_language} when you call update_form_fields."
-        )
-        
-        _log.info("change_fill_language_sending_system_update", 
+
+        _log.info("change_fill_language",
                  old_language=old_language,
                  new_language=new_language,
                  session_id=self._session_id)
-        
-        # NOTE: System instruction updates are no longer sent during active sessions.
-        # To change languages, we would need to reset the connection and create a new session.
-        # For now, this method is deprecated. The language should be set at session creation time.
-        # TODO: Implement proper language switching by resetting the Gemini connection with new system instructions.
-        
-        # Send a prompt for Gemini to acknowledge the change to the user
+
         acknowledgment_prompt = f"Acknowledge the language change to {new_language} naturally to the user."
-        
-        _log.info("change_fill_language_sending_acknowledgment_prompt", 
-                 new_language=new_language,
-                 session_id=self._session_id)
-        
         await self._live_ai.send_text_message(acknowledgment_prompt)
 
     def build_form_context_message(

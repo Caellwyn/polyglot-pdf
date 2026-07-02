@@ -59,9 +59,6 @@ async def log_disclaimer_acceptance(
 		client_ip=client_ip,
 	)
 
-	# TODO: Optionally persist to database for long-term audit trail
-	# Example: await db.disclaimer_logs.insert_one({...})
-
 	return {
 		"status": "logged",
 		"timestamp": iso_timestamp,
